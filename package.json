@@ -1,0 +1,54 @@
+{
+  "name": "neotoma",
+  "version": "1.0.0",
+  "description": "MCP server for extensible object storage and file management",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "type-check": "tsc --noEmit",
+    "start:http": "node dist/actions.js",
+    "dev:http": "tsx watch src/actions.ts",
+    "start:ws": "node dist/mcp_ws_bridge.js",
+    "dev:ws": "tsx watch src/mcp_ws_bridge.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "memory",
+    "storage",
+    "chatgpt"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "openai": "^4.0.0",
+    "@supabase/supabase-js": "^2.39.3",
+    "dotenv": "^16.4.1",
+    "zod": "^3.22.4",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.2.0",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0",
+    "eslint": "^8.56.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.3",
+    "@types/express": "^4.17.25",
+    "@types/cors": "^2.8.17",
+    "@types/morgan": "^1.9.7",
+    "@types/multer": "^1.4.13"
+  }
+}
