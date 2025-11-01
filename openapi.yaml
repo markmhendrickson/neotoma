@@ -1,0 +1,528 @@
+openapi: 3.1.0
+info:
+  title: Neotoma API
+  version: 1.0.0
+  description: REST wrapper for Neotoma enabling ChatGPT Actions.
+servers:
+  - url: https://your-tunnel-url.trycloudflare.com
+    description: Update this URL with your Cloudflare Tunnel URL (run `cloudflared tunnel --url http://localhost:8080`)
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    StoreRecordRequest:
+      type: object
+      required: [type, properties]
+      properties:
+        type:
+          type: string
+          description: Record type identifier (e.g., note, transaction)
+        properties:
+          type: object
+          additionalProperties: true
+          minProperties: 0
+          properties: {}
+          description: REQUIRED - Arbitrary key/value properties stored in JSONB. Must be an object. Can be empty.
+        file_urls:
+          type: array
+          items: { type: string }
+          description: Optional array of storage paths for associated files
+        embedding:
+          type: array
+          items: { type: number }
+          description: |
+            RECOMMENDED: Generate 1536-dimensional embedding client-side using OpenAI text-embedding-3-small before calling this endpoint.
+            - Generate from: JSON.stringify(properties) plus space plus type
+            - If you generate and include this field, must be non-empty array of exactly 1536 numbers.
+            - Do NOT send empty array. Omit field entirely if not generating client-side.
+            - Server will auto-generate if omitted (requires OPENAI_API_KEY on server).
+            Generation example: Use OpenAI embeddings.create with model text-embedding-3-small and input JSON.stringify(properties) plus space plus type
+    StoreRecordsRequest:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreRecordRequest'
+          minItems: 1
+          maxItems: 100
+          description: Array of records to create (1-100 items)
+    UpdateRecordRequest:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Record ID to update
+        type:
+          type: string
+          description: Optional - Update the record type
+        properties:
+          type: object
+          additionalProperties: true
+          minProperties: 0
+          properties: {}
+          description: Properties to update (merges with existing)
+        file_urls:
+          type: array
+          items: { type: string }
+          description: Optional array of storage paths for associated files
+        embedding:
+          type: array
+          items: { type: number }
+          description: |
+            RECOMMENDED: Generate 1536-dimensional embedding client-side using OpenAI text-embedding-3-small before calling.
+            - Generate from: JSON.stringify(updated properties) plus space plus updated type or existing type
+            - If provided, must be non-empty array of exactly 1536 numbers.
+            - Do NOT send empty array. Omit field entirely if not generating.
+            - Server auto-generates if omitted (requires OPENAI_API_KEY on server).
+    RetrieveRecordsRequest:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Filter by record type
+        properties:
+          type: object
+          additionalProperties: true
+          minProperties: 0
+          properties: {}
+          description: Filter by property values (simple top-level key matching)
+        limit:
+          type: integer
+          description: Maximum number of results (default 100, max 500)
+        search:
+          type: array
+          items: { type: string }
+          description: Search terms for fuzzy/semantic matching (requires query_embedding for semantic mode)
+        search_mode:
+          type: string
+          enum: [semantic, keyword, both]
+          default: both
+          description: Search mode - semantic uses vector embeddings, keyword uses text matching, both combines results
+        similarity_threshold:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.3
+          description: Minimum cosine similarity score for semantic search (0 = no similarity, 1 = identical). Typical scores range 0.3-0.5 for related content.
+        query_embedding:
+          type: array
+          items: { type: number }
+          description: |
+            RECOMMENDED: Generate 1536-dimensional embedding client-side using OpenAI text-embedding-3-small from search terms.
+            - Generate from: search.join with space separator or search array elements combined
+            - If you generate and include this field, must be non-empty array of exactly 1536 numbers.
+            - Do NOT send empty array. Omit field entirely if not generating client-side.
+            - Server will auto-generate if omitted (requires OPENAI_API_KEY on server).
+            Generation example: Use OpenAI embeddings.create with model text-embedding-3-small and input search.join with space separator
+    DeleteRecordRequest:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Record ID to delete
+    DeleteRecordResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        deleted_id:
+          type: string
+    DeleteRecordsRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          items: { type: string }
+          minItems: 1
+          maxItems: 100
+          description: Array of record IDs to delete (1-100 items)
+    DeleteRecordsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        deleted_ids:
+          type: array
+          items: { type: string }
+        count:
+          type: integer
+          description: Number of records deleted
+    UploadFileRequest:
+      type: object
+      required: [record_id, file]
+      properties:
+        record_id:
+          type: string
+          description: Record ID to associate file with
+        bucket:
+          type: string
+          description: Storage bucket name (optional, defaults to 'files')
+        file:
+          type: string
+          format: binary
+          description: File to upload
+    FileUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Signed URL for accessing the file
+    Record:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+          minProperties: 0
+          properties: {}
+          description: Arbitrary key/value properties stored in JSONB
+        file_urls:
+          type: array
+          items: { type: string }
+        embedding:
+          type: array
+          items: { type: number }
+          description: 1536-dimensional embedding vector (if provided). Note: Embeddings are excluded from responses to reduce payload size.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+paths:
+  /store_record:
+    post:
+      summary: Create new record
+      description: >
+        RECOMMENDED: Generate embedding client-side using OpenAI text-embedding-3-small before calling.
+        Input should be JSON.stringify(properties) plus space plus type.
+        Server auto-generates if omitted. Body must include type and properties (object).
+        Use the example as a template.
+      operationId: storeRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreRecordRequest'
+            example:
+              type: note
+              properties:
+                title: "Test note"
+                content: "This is a stored test note."
+      responses:
+        '200':
+          description: Created record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /store_records:
+    post:
+      summary: Create multiple records in bulk
+      description: >
+        RECOMMENDED: Generate embeddings client-side for each record using OpenAI text-embedding-3-small before calling.
+        Server auto-generates if omitted. Accepts an array of records (1-100 items).
+      operationId: storeRecords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreRecordsRequest'
+            example:
+              records:
+                - type: note
+                  properties:
+                    title: "First note"
+                    content: "Content of first note"
+                - type: note
+                  properties:
+                    title: "Second note"
+                    content: "Content of second note"
+      responses:
+        '200':
+          description: Summary of created records (excludes embeddings to reduce response size)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  records:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        type:
+                          type: string
+                        created_at:
+                          type: string
+                          format: date-time
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /update_record:
+    post:
+      summary: Update existing record
+      description: >
+        RECOMMENDED: Generate embedding client-side if properties/type change using OpenAI text-embedding-3-small before calling.
+        Input should be JSON.stringify(updated properties) plus space plus type.
+        Server auto-generates if omitted. Provide the id of the record and partial fields to update.
+      operationId: updateRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRecordRequest'
+            example:
+              id: "f2d0f8e3-7f5d-4a3b-a3bb-9d9d5b7f0b11"
+              type: "updated_type"
+              properties:
+                title: "Updated Title"
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /retrieve_records:
+    post:
+      summary: Retrieve records with optional semantic search
+      description: >
+        Filter by type and/or match property values. RECOMMENDED: Generate query_embedding client-side from search terms using OpenAI text-embedding-3-small before calling.
+        Server auto-generates if omitted. Use search_mode to control semantic vs keyword matching.
+      operationId: retrieveRecords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetrieveRecordsRequest'
+            examples:
+              client_provides_embedding:
+                summary: Client generates embedding (recommended for production)
+                description: Generate query_embedding client-side for better control and cost management
+                value:
+                  type: note
+                  search: ["workout", "exercise"]
+                  search_mode: semantic
+                  query_embedding: [0.012, -0.034, 0.056]
+                  similarity_threshold: 0.7
+                  limit: 10
+              server_generates_embedding:
+                summary: Server generates embedding (requires OPENAI_API_KEY)
+                description: Omit query_embedding to let server generate it automatically
+                value:
+                  type: note
+                  search: ["workout", "exercise"]
+                  search_mode: semantic
+                  similarity_threshold: 0.7
+                  limit: 10
+      responses:
+        '200':
+          description: Array of records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Record'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /delete_record:
+    post:
+      summary: Delete record
+      description: Permanently remove a record by id.
+      operationId: deleteRecord
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRecordRequest'
+            example:
+              id: "f2d0f8e3-7f5d-4a3b-a3bb-9d9d5b7f0b11"
+      responses:
+        '200':
+          description: Delete result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteRecordResponse'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /delete_records:
+    post:
+      summary: Delete multiple records in bulk
+      description: Permanently remove multiple records by their IDs (1-100 records per request).
+      operationId: deleteRecords
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteRecordsRequest'
+            example:
+              ids:
+                - "f2d0f8e3-7f5d-4a3b-a3bb-9d9d5b7f0b11"
+                - "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      responses:
+        '200':
+          description: Delete result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteRecordsResponse'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /upload_file:
+    post:
+      summary: Upload file and associate with record
+      description: Send multipart/form-data with fields 'record_id' and 'file'.
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UploadFileRequest'
+      responses:
+        '200':
+          description: Updated record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Record'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Record not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /get_file_url:
+    get:
+      summary: Get signed file URL
+      description: Provide a storage path like "files/<record_id>/<filename>".
+      operationId: getFileUrl
+      parameters:
+        - in: query
+          name: file_path
+          required: true
+          schema: { type: string }
+        - in: query
+          name: expires_in
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Signed URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUrlResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+
+
+
