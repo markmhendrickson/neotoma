@@ -208,7 +208,109 @@ components:
       properties:
         error:
           type: string
+    GroomPreviewRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items: { type: object, additionalProperties: true }
+          minItems: 1
+          maxItems: 2000
+    GroomPreviewResponse:
+      type: object
+      properties:
+        normalized:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreRecordRequest'
+        suggestions:
+          type: object
+          properties:
+            existingTypes:
+              type: array
+              items: { type: string }
+            dateFields:
+              type: array
+              items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
 paths:
+  /types:
+    get:
+      summary: List existing record types
+      operationId: listTypes
+      responses:
+        '200':
+          description: Distinct record types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  types:
+                    type: array
+                    items: { type: string }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /groom/preview:
+    post:
+      summary: Normalize preview for raw CSV rows
+      operationId: groomPreview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroomPreviewRequest' }
+      responses:
+        '200':
+          description: Normalized rows with suggestions and warnings
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroomPreviewResponse' }
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /groom/finalize:
+    post:
+      summary: Finalize and save normalized records in batches
+      operationId: groomFinalize
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreRecordsRequest' }
+      responses:
+        '200':
+          description: Save summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  count: { type: integer }
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /store_record:
     post:
       summary: Create new record

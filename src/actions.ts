@@ -8,12 +8,38 @@ import { supabase } from './db.js';
 import { config } from './config.js';
 import { generateEmbedding, getRecordText } from './embeddings.js';
 import fs from 'fs';
+import path from 'path';
+import { detectDateFields, normalizeRow, standardizeType } from './normalize.js';
 
 const app = express();
-app.use(helmet());
+// Configure CSP to allow CDN scripts for the uploader and API connects
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com'],
+      connectSrc: ["'self'", 'http:', 'https:'],
+      imgSrc: ["'self'", 'data:'],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
+      objectSrc: ["'none'"],
+    },
+  },
+}));
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
+
+// Serve static uploader UI
+const uploaderDir = path.join(process.cwd(), 'public', 'uploader');
+if (fs.existsSync(uploaderDir)) {
+  // Serve at root
+  app.use('/', express.static(uploaderDir));
+  app.use('/uploader', express.static(uploaderDir));
+}
+
+// Favicon (no-auth) to avoid 401 noise when not present on disk
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Basic redaction helpers for safer debug logs
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
@@ -125,6 +151,250 @@ const DeleteRecordsSchema = z.object({
 });
 
 // Endpoints
+app.get('/types', async (req, res) => {
+  const { data, error } = await supabase.from('records').select('type').limit(1000);
+  if (error) {
+    logError('SupabaseError:types', req, error);
+    return res.status(500).json({ error: error.message });
+  }
+  const set = new Set<string>();
+  (data || []).forEach((r: any) => { if (r.type) set.add(r.type); });
+  return res.json({ types: Array.from(set).sort() });
+});
+
+app.post('/groom/preview', async (req, res) => {
+  const schema = z.object({ rows: z.array(z.record(z.unknown())).min(1).max(2000) });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:groom_preview', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { rows } = parsed.data as any;
+  const { data: typeRows } = await supabase.from('records').select('type').limit(1000);
+  const existingTypes = Array.from(new Set((typeRows || []).map((r: any) => r.type).filter(Boolean))).sort();
+
+  const normalized = (rows as Array<Record<string, unknown>>).map((row: Record<string, unknown>) => normalizeRow(row, existingTypes));
+  const allWarnings = normalized.flatMap(r => r.warnings);
+  const dateFieldsSet = new Set<string>();
+  rows.slice(0, 50).forEach((r: any) => detectDateFields(r).forEach(f => dateFieldsSet.add(f)));
+
+  return res.json({ normalized, suggestions: { existingTypes, dateFields: Array.from(dateFieldsSet) }, warnings: allWarnings });
+});
+
+app.post('/groom/finalize', async (req, res) => {
+  const parsed = StoreRecordsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:groom_finalize', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { records } = parsed.data;
+
+  // Chunk into 25
+  let total = 0;
+  for (let i = 0; i < records.length; i += 25) {
+    const slice = records.slice(i, i + 25);
+    // Prepare embeddings conditionally (reuse store_records logic lightly)
+    const prepared = await Promise.all(slice.map(async r => {
+      let embedding: number[] | null = null;
+      if (Array.isArray(r.embedding) && r.embedding.length > 0) {
+        embedding = r.embedding;
+      } else if (!r.embedding && config.openaiApiKey) {
+        const text = getRecordText(r.type, r.properties);
+        embedding = await generateEmbedding(text);
+      }
+      const out: any = { type: r.type, properties: r.properties, file_urls: r.file_urls || [] };
+      if (embedding) out.embedding = embedding;
+      return out;
+    }));
+
+    const { data, error } = await supabase.from('records').insert(prepared).select('id');
+    if (error) {
+      logError('SupabaseError:groom_finalize', req, error);
+      return res.status(500).json({ error: error.message, saved: total });
+    }
+    total += data?.length || 0;
+  }
+  logDebug('Success:groom_finalize', req, { count: total });
+  return res.json({ success: true, count: total });
+});
+
+// Lightweight assistant endpoint to help propose normalization guidance
+app.post('/groom/assist', async (req, res) => {
+  const schema = z.object({
+    messages: z.array(z.object({ role: z.enum(['user','assistant','system']), content: z.string() })).min(1),
+    sample: z.array(z.record(z.unknown())).optional(),
+    existingTypes: z.array(z.string()).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:groom_assist', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  if (!config.openaiApiKey) {
+    return res.status(400).json({ error: 'OPENAI_API_KEY not configured on server' });
+  }
+  const { messages, sample, existingTypes } = parsed.data;
+
+  const sys = {
+    role: 'system',
+    content: [
+      'You assist with normalizing CSV rows into Neotoma records.',
+      'Tasks:',
+      '- Infer or map types to an existing set when possible.',
+      '- Propose field transforms, especially datetimes to ISO 8601 UTC.',
+      '- Return concise, actionable suggestions.',
+      '',
+      'CRITICAL OUTPUT FORMAT:',
+      'Respond with a short natural-language summary AND a machine-readable JSON block.',
+      'JSON schema:',
+      '{"actions":[{"type":"set_type","to":"note"},{"type":"map_type","mappings":[{"from":"Red band","to":"exercise"}]},{"type":"set_field","field":"Assistance","to":"${value}!"},{"type":"map_value","field":"Difficulty","mappings":[{"from":"Moderate","to":"Medium"}]},{"type":"append","field":"Assistance","suffix":"!"},{"type":"date_to_iso","field":"Created at"}]}',
+      'Place the JSON inside a single fenced ```json code block. Keep within 2,000 tokens.',
+    ].join('\n')
+  } as const;
+
+  const toolContext = {
+    existingTypes: existingTypes || [],
+    sample: (sample || []).slice(0, 25),
+  };
+
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [sys, ...messages, { role: 'user', content: `Context: ${JSON.stringify(toolContext).slice(0, 6000)}` }],
+        temperature: 0.2,
+      }),
+    });
+    if (!resp.ok) {
+      const text = await resp.text();
+      logError('OpenAIError:groom_assist', req, text);
+      return res.status(502).json({ error: 'Upstream model error' });
+    }
+    const data = await resp.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    return res.json({ message: { role: 'assistant', content } });
+  } catch (e: any) {
+    logError('Exception:groom_assist', req, e);
+    return res.status(500).json({ error: 'Assistant failed' });
+  }
+});
+
+// Transform endpoint: accepts staged rows and optional instruction, returns modified rows or downloadable file
+app.post('/groom/transform', async (req, res) => {
+  const schema = z.object({
+    rows: z.array(z.record(z.unknown())).min(1).max(20000),
+    instruction: z.string().optional(),
+    return: z.enum(['json', 'file']).optional().default('json'),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:groom_transform', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { rows, instruction } = parsed.data as any;
+
+  // Normalize input shape first
+  let normalizedRows = rows.map((r: any) => {
+    if (r && typeof r === 'object' && 'properties' in r && 'type' in r) {
+      return { type: r.type, properties: r.properties, file_urls: r.file_urls || [] };
+    }
+    // Raw row → infer minimal structure
+    return { type: r.type || 'unknown', properties: r, file_urls: [] };
+  });
+
+  // If instruction present and OpenAI configured, try LLM-based transform
+  if (instruction && typeof instruction === 'string' && config.openaiApiKey) {
+    const sys = {
+      role: 'system',
+      content: [
+        'You transform staged CSV rows into Neotoma records.',
+        'Return ONLY a single JSON object with this exact shape, with concrete values (no placeholders):',
+        '{"rows":[{"type":"<string>","properties":{...},"file_urls":["/path"...]}]}',
+        'Rules:',
+        '- Preserve fields unless instructed to modify.',
+        '- Convert any datetime-like strings to ISO 8601 UTC when instructed.',
+        '- Ensure every item has a string "type" and object "properties".',
+        '- Rows array length MUST equal input length; do not add/remove rows.',
+        '- Do NOT include commentary, Markdown, or code fences. Output raw JSON only.',
+      ].join('\n')
+    } as const;
+    function sanitizeRows(rowsIn: any[]) {
+      return rowsIn.map((r: any) => ({
+        type: String(r?.type ?? 'unknown'),
+        file_urls: Array.isArray(r?.file_urls) ? r.file_urls : [],
+        properties: Object.fromEntries(
+          Object.entries((r?.properties as Record<string, unknown>) ?? {})
+            .filter(([k]) => /day|date|created|updated|time|name|assistance/i.test(String(k)))
+            .slice(0, 40)
+            .map(([k, v]) => [k, typeof v === 'string' ? (v as string).slice(0, 200) : v])
+        ),
+      }));
+    }
+    const safeRows = sanitizeRows(normalizedRows).slice(0, 200);
+    const user = {
+      role: 'user',
+      content: JSON.stringify({ instruction, rows: safeRows }).slice(0, 120000)
+    } as const;
+    try {
+      const ac = new AbortController();
+      const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000', 10);
+      const t0 = Date.now();
+      const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [sys, user],
+        }),
+        signal: ac.signal,
+      });
+      clearTimeout(timeout);
+      logWarn('LLMTiming', req, { ms: Date.now() - t0, payload_bytes: JSON.stringify(user).length });
+      if (resp.ok) {
+        const data = await resp.json();
+        const content: string = data.choices?.[0]?.message?.content || '';
+        const jsonText = content;
+        try {
+          const parsed = JSON.parse(jsonText);
+          if (parsed && Array.isArray(parsed.rows)) {
+            normalizedRows = parsed.rows.map((r: any) => ({
+              type: String(r?.type ?? 'unknown'),
+              properties: typeof r?.properties === 'object' && r?.properties !== null ? r.properties : {},
+              file_urls: Array.isArray(r?.file_urls) ? r.file_urls : [],
+            }));
+          }
+        } catch (e) {
+          // ignore parse errors, fallback to normalizedRows
+          logWarn('LLMTransformParseError', req, { message: (e as any)?.message });
+        }
+      } else {
+        const text = await resp.text();
+        logWarn('LLMTransformUpstreamError', req, { status: resp.status, text });
+      }
+    } catch (e: any) {
+      logWarn('LLMTransformException', req, { message: e?.message, name: e?.name });
+    }
+  }
+
+  if ((parsed.data as any).return === 'file') {
+    const payload = JSON.stringify({ rows: normalizedRows });
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="normalized.json"');
+    return res.send(payload);
+  }
+  return res.json({ rows: normalizedRows });
+});
 app.post('/store_record', async (req, res) => {
   const parsed = StoreSchema.safeParse(req.body);
   if (!parsed.success) {

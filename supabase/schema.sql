@@ -1,5 +1,6 @@
--- Enable pgvector extension for semantic search
 CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgcrypto for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Create records table
 CREATE TABLE IF NOT EXISTS records (
@@ -59,6 +60,18 @@ CREATE POLICY "Service role can do everything" ON records
   TO service_role
   USING (true)
   WITH CHECK (true);
+
+-- Public read access
+DROP POLICY IF EXISTS "public read" ON records;
+CREATE POLICY "public read" ON records
+  FOR SELECT USING ( true );
+
+-- Authenticated users can insert/update/delete
+DROP POLICY IF EXISTS "public write" ON records;
+CREATE POLICY "public write" ON records
+  FOR ALL
+  USING      ( auth.role() = 'authenticated' )
+  WITH CHECK ( auth.role() = 'authenticated' );
 
 
 
