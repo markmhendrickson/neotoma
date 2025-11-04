@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CSV Uploader</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%231f6feb'/%3E%3Ctext x='8' y='11' text-anchor='middle' font-family='Arial' font-size='9' fill='white'%3Ec%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/uploader/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+  <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+</head>
+<body>
+  <header>
+    <h1>CSV Uploader</h1>
+    <div class="settings">
+      <label>API Base URL <input id="apiBase" placeholder="http://localhost:8080" /></label>
+      <label>Bearer Token <input id="token" placeholder="ACTIONS_BEARER_TOKEN" /></label>
+      <button id="saveSettings">Save</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>Select CSV</h2>
+      <input type="file" id="file" accept=".csv,text/csv" />
+      <button id="parseBtn">Parse</button>
+      <button id="normalizeBtn">Normalize Preview</button>
+      <button id="finalizeBtn">Finalize (Chunked)</button>
+      <button id="clearBtn" title="Forget cached CSV from this browser">Clear Cached CSV</button>
+      <button id="transformBtn" title="Send current preview to API and apply response">Transform (API)</button>
+      <div id="transformStatus" class="status-indicator"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Existing Types</h2>
+      <ul id="types"></ul>
+    </section>
+
+    <section class="panel wide">
+      <h2>Preview</h2>
+      <div id="grid"></div>
+    </section>
+
+    <section class="panel wide"></section>
+  </main>
+
+  <aside id="chatColumn" class="chat-column">
+    <h2>Assistant</h2>
+    <div id="chat" class="chat"></div>
+    <div class="chat-input">
+      <textarea id="chatInput" rows="3" placeholder="Ask for normalization suggestions..."></textarea>
+      <button id="chatSend">Send</button>
+    </div>
+  </aside>
+
+  <script src="/uploader/app.js"></script>
+</body>
+</html>
+

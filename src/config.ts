@@ -13,17 +13,23 @@ if (env === 'production') {
 }
 
 function getSupabaseConfig() {
-  // Production uses PROD_* variables
+  const buildUrl = (projectId: string | undefined, fallbackUrl: string | undefined) => {
+    if (projectId) return `https://${projectId}.supabase.co`;
+    return fallbackUrl || '';
+  };
+
   if (env === 'production') {
+    const prodId = process.env.PROD_SUPABASE_PROJECT_ID || process.env.SUPABASE_PROJECT_ID;
     return {
-      url: process.env.PROD_SUPABASE_URL || process.env.SUPABASE_URL || '',
+      url: buildUrl(prodId, process.env.PROD_SUPABASE_URL || process.env.SUPABASE_URL),
       key: process.env.PROD_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '',
     };
   }
 
   // Development/test uses DEV_* or generic variables
+  const devId = process.env.DEV_SUPABASE_PROJECT_ID || process.env.SUPABASE_PROJECT_ID;
   return {
-    url: process.env.DEV_SUPABASE_URL || process.env.SUPABASE_URL || '',
+    url: buildUrl(devId, process.env.DEV_SUPABASE_URL || process.env.SUPABASE_URL),
     key: process.env.DEV_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY || '',
   };
 }

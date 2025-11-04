@@ -36,7 +36,7 @@ This MCP server extends ChatGPT's contextual memory by providing flexible storag
 ### 2) Run Database Schema
 - In the project dashboard, open "SQL Editor"
 - Create a new query and paste the contents of `supabase/schema.sql`
-- Run it to create the `records` table, GIN indexes, and triggers
+- Run it to create the `records` table, indexes, triggers, enable extensions, and apply RLS policies
 
 ### 3) Create Storage Bucket
 - In Supabase → Storage, click "New bucket"
@@ -125,6 +125,13 @@ npm test   # runs live queries against Supabase
   - `GET /openapi.yaml` (serves the spec)
   - `GET /health` (simple readiness check)
 - Auth: all other routes require `Authorization: Bearer <ACTIONS_BEARER_TOKEN>`
+
+### CSV Uploader UI
+
+- Visit `http://localhost:8080/`.
+- Set API base and bearer token in the header.
+- Workflow: Select CSV → Parse → Normalize Preview → Finalize (chunked saves).
+- Endpoints used: `GET /types`, `POST /groom/preview`, `POST /groom/finalize`.
 
 Quick checks:
 ```
