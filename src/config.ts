@@ -1,4 +1,5 @@
 import dotenv from 'dotenv';
+import { getPlaidConfig } from './config/plaid.js';
 
 const env = process.env.NODE_ENV || 'development';
 
@@ -43,6 +44,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
   httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
   environment: env,
+  plaid: getPlaidConfig(),
 };
 
 if (!config.supabaseUrl || !config.supabaseKey) {
@@ -54,5 +56,7 @@ if (!config.supabaseUrl || !config.supabaseKey) {
     `or use generic SUPABASE_URL and SUPABASE_SERVICE_KEY for backward compatibility.`
   );
 }
+
+export { type PlaidConfig, type PlaidEnvironment } from './config/plaid.js';
 
 

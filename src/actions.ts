@@ -4,12 +4,28 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import multer from 'multer';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { supabase } from './db.js';
 import { config } from './config.js';
 import { generateEmbedding, getRecordText } from './embeddings.js';
 import fs from 'fs';
 import path from 'path';
-import { detectDateFields, normalizeRow, standardizeType } from './normalize.js';
+import { detectDateFields, normalizeRow } from './normalize.js';
+import { createRecordFromUploadedFile } from './services/file_analysis.js';
+import { createLinkToken, exchangePublicToken, buildPlaidItemContext, isPlaidConfigured, normalizePlaidError } from './integrations/plaid/client.js';
+import {
+  listPlaidItems as listPlaidItemsFromStore,
+  getPlaidItemById,
+  getPlaidItemByItemId,
+  syncPlaidItem,
+  upsertPlaidItem as persistPlaidItem,
+  redactPlaidItem,
+  previewPlaidItemSync,
+  type PlaidSyncSummary,
+  type SanitizedPlaidItem,
+  type PlaidPreviewSummary,
+} from './services/plaid_sync.js';
+import type { AccountBase } from 'plaid';
 
 const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -18,11 +34,12 @@ app.use(helmet({
     useDefaults: true,
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://cdn.jsdelivr.net', 'https://unpkg.com'],
+      scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://unpkg.com', 'https://cdn.plaid.com'],
       connectSrc: ["'self'", 'http:', 'https:'],
       imgSrc: ["'self'", 'data:'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
       objectSrc: ["'none'"],
+      frameSrc: ["'self'", 'https://cdn.plaid.com'],
     },
   },
 }));
@@ -38,10 +55,34 @@ if (fs.existsSync(uploaderDir)) {
   app.use('/uploader', express.static(uploaderDir));
 }
 
+// Serve static sandbox UI
+const sandboxDir = path.join(process.cwd(), 'public', 'sandbox');
+if (fs.existsSync(sandboxDir)) {
+  app.use('/sandbox', express.static(sandboxDir));
+}
+
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
 
 // Basic redaction helpers for safer debug logs
+const SENSITIVE_FIELDS = new Set([
+  'token',
+  'access_token',
+  'accessToken',
+  'public_token',
+  'publicToken',
+  'bearer_token',
+  'bearerToken',
+  'password',
+  'secret',
+  'api_key',
+  'apiKey',
+  'client_secret',
+  'clientSecret',
+  'authorization',
+  'Authorization',
+]);
+
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...headers } as Record<string, unknown>;
   if (clone.authorization) clone.authorization = '[REDACTED]';
@@ -49,14 +90,35 @@ function redactHeaders(headers: Record<string, unknown>): Record<string, unknown
   return clone;
 }
 
+function redactSensitiveFields(obj: unknown): unknown {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map(redactSensitiveFields);
+  }
+
+  const redacted = { ...(obj as Record<string, unknown>) };
+  for (const key in redacted) {
+    const lowerKey = key.toLowerCase();
+    if (SENSITIVE_FIELDS.has(key) || SENSITIVE_FIELDS.has(lowerKey)) {
+      redacted[key] = '[REDACTED]';
+    } else if (typeof redacted[key] === 'object' && redacted[key] !== null) {
+      redacted[key] = redactSensitiveFields(redacted[key]);
+    }
+  }
+  return redacted;
+}
+
 function logDebug(event: string, req: express.Request, extra?: Record<string, unknown>): void {
   const safe = {
     method: req.method,
     path: req.path,
-    query: req.query,
+    query: redactSensitiveFields(req.query),
     headers: redactHeaders(req.headers as Record<string, unknown>),
-    body: req.body,
-    ...extra,
+    body: redactSensitiveFields(req.body),
+    ...(extra ? redactSensitiveFields(extra) as Record<string, unknown> : {}),
   };
   // eslint-disable-next-line no-console
   console.debug(`[DEBUG] ${event}`, safe);
@@ -66,9 +128,10 @@ function logWarn(event: string, req: express.Request, extra?: Record<string, unk
   const safe = {
     method: req.method,
     path: req.path,
-    query: req.query,
-    body: req.body,
-    ...extra,
+    query: redactSensitiveFields(req.query),
+    headers: redactHeaders(req.headers as Record<string, unknown>),
+    body: redactSensitiveFields(req.body),
+    ...(extra ? redactSensitiveFields(extra) as Record<string, unknown> : {}),
   };
   // eslint-disable-next-line no-console
   console.warn(`[WARN] ${event}`, safe);
@@ -78,13 +141,40 @@ function logError(event: string, req: express.Request, error: unknown, extra?: R
   const payload = {
     method: req.method,
     path: req.path,
-    query: req.query,
-    body: req.body,
-    error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : error,
-    ...extra,
+    query: redactSensitiveFields(req.query),
+    headers: redactHeaders(req.headers as Record<string, unknown>),
+    body: redactSensitiveFields(req.body),
+    error: error instanceof Error ? { name: error.name, message: error.message, stack: error.stack } : redactSensitiveFields(error),
+    ...(extra ? redactSensitiveFields(extra) as Record<string, unknown> : {}),
   };
   // eslint-disable-next-line no-console
   console.error(`[ERROR] ${event}`, payload);
+}
+
+function plaidConfiguredOrError(res: express.Response): boolean {
+  if (isPlaidConfigured()) {
+    return true;
+  }
+  res.status(500).json({ error: 'Plaid integration not configured on server' });
+  return false;
+}
+
+function summarizePlaidAccount(account: AccountBase) {
+  const balances = account.balances || {};
+  return {
+    account_id: account.account_id,
+    name: account.name,
+    official_name: account.official_name,
+    mask: account.mask,
+    type: account.type,
+    subtype: account.subtype,
+    balances: {
+      available: balances.available ?? null,
+      current: balances.current ?? null,
+      iso_currency_code: balances.iso_currency_code ?? null,
+      unofficial_currency_code: balances.unofficial_currency_code ?? null,
+    },
+  };
 }
 
 // Public health endpoint (no auth)
@@ -95,25 +185,36 @@ app.get('/health', (_req, res) => {
 // Simple bearer token auth middleware with bypass for openapi, health, and preflight
 const AUTH_TOKEN = process.env.ACTIONS_BEARER_TOKEN || '';
 app.use((req, res, next) => {
-  // Allow OpenAPI spec, health checks, and CORS preflight without auth
-  if (req.method === 'OPTIONS' || (req.method === 'GET' && (req.path === '/openapi.yaml' || req.path === '/health'))) {
+  if (
+    req.method === 'OPTIONS' ||
+    (req.method === 'GET' && (
+      req.path === '/openapi.yaml' ||
+      req.path === '/health' ||
+      req.path === '/sandbox/config' ||
+      req.path === '/import/plaid/link_demo' ||
+      req.path === '/plaid/link_demo'
+    ))
+  ) {
     return next();
   }
   if (!AUTH_TOKEN) {
     logError('AuthConfigMissing', req, new Error('ACTIONS_BEARER_TOKEN missing'));
     return res.status(500).json({ error: 'Server not configured: ACTIONS_BEARER_TOKEN missing' });
   }
-  const auth = req.headers.authorization || '';
-  if (!auth.startsWith('Bearer ')) {
-    logWarn('AuthMissingBearer', req);
-    return res.status(401).json({ error: 'Missing Bearer token' });
+
+  const headerAuth = req.headers.authorization || '';
+
+  if (headerAuth.startsWith('Bearer ')) {
+    const token = headerAuth.slice('Bearer '.length);
+    if (token !== AUTH_TOKEN) {
+      logWarn('AuthInvalidToken', req);
+      return res.status(403).json({ error: 'Invalid token' });
+    }
+    return next();
   }
-  const token = auth.slice('Bearer '.length);
-  if (token !== AUTH_TOKEN) {
-    logWarn('AuthInvalidToken', req);
-    return res.status(403).json({ error: 'Invalid token' });
-  }
-  next();
+
+  logWarn('AuthMissingBearer', req);
+  return res.status(401).json({ error: 'Missing Bearer token' });
 });
 
 // Schemas
@@ -275,7 +376,11 @@ app.post('/groom/assist', async (req, res) => {
       logError('OpenAIError:groom_assist', req, text);
       return res.status(502).json({ error: 'Upstream model error' });
     }
-    const data = await resp.json();
+    const data = await resp.json() as {
+      choices?: Array<{
+        message?: { content?: string };
+      }>;
+    };
     const content = data.choices?.[0]?.message?.content || '';
     return res.json({ message: { role: 'assistant', content } });
   } catch (e: any) {
@@ -296,15 +401,31 @@ app.post('/groom/transform', async (req, res) => {
     logWarn('ValidationError:groom_transform', req, { issues: parsed.error.issues });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { rows, instruction } = parsed.data as any;
+  const { rows, instruction } = parsed.data;
 
   // Normalize input shape first
-  let normalizedRows = rows.map((r: any) => {
-    if (r && typeof r === 'object' && 'properties' in r && 'type' in r) {
-      return { type: r.type, properties: r.properties, file_urls: r.file_urls || [] };
+  let normalizedRows = rows.map((row) => {
+    if (row && typeof row === 'object' && 'properties' in row && 'type' in row) {
+      const withStructure = row as Record<string, unknown> & {
+        type?: unknown;
+        file_urls?: unknown;
+        properties?: unknown;
+      };
+      return {
+        type: String(withStructure.type ?? 'unknown'),
+        properties:
+          typeof withStructure.properties === 'object' && withStructure.properties !== null
+            ? (withStructure.properties as Record<string, unknown>)
+            : {},
+        file_urls: Array.isArray(withStructure.file_urls) ? withStructure.file_urls : [],
+      };
     }
     // Raw row → infer minimal structure
-    return { type: r.type || 'unknown', properties: r, file_urls: [] };
+    return {
+      type: String((row as { type?: unknown }).type ?? 'unknown'),
+      properties: row,
+      file_urls: [],
+    };
   });
 
   // If instruction present and OpenAI configured, try LLM-based transform
@@ -323,18 +444,23 @@ app.post('/groom/transform', async (req, res) => {
         '- Do NOT include commentary, Markdown, or code fences. Output raw JSON only.',
       ].join('\n')
     } as const;
-    function sanitizeRows(rowsIn: any[]) {
-      return rowsIn.map((r: any) => ({
-        type: String(r?.type ?? 'unknown'),
-        file_urls: Array.isArray(r?.file_urls) ? r.file_urls : [],
+    const sanitizeRows = (rowsIn: Array<Record<string, unknown>>) => rowsIn.map((row) => {
+      const candidate = row as {
+        type?: unknown;
+        file_urls?: unknown;
+        properties?: Record<string, unknown>;
+      };
+      return {
+        type: String(candidate?.type ?? 'unknown'),
+        file_urls: Array.isArray(candidate?.file_urls) ? (candidate.file_urls as string[]) : [],
         properties: Object.fromEntries(
-          Object.entries((r?.properties as Record<string, unknown>) ?? {})
+          Object.entries(candidate?.properties ?? {})
             .filter(([k]) => /day|date|created|updated|time|name|assistance/i.test(String(k)))
             .slice(0, 40)
             .map(([k, v]) => [k, typeof v === 'string' ? (v as string).slice(0, 200) : v])
         ),
-      }));
-    }
+      };
+    });
     const safeRows = sanitizeRows(normalizedRows).slice(0, 200);
     const user = {
       role: 'user',
@@ -362,7 +488,11 @@ app.post('/groom/transform', async (req, res) => {
       clearTimeout(timeout);
       logWarn('LLMTiming', req, { ms: Date.now() - t0, payload_bytes: JSON.stringify(user).length });
       if (resp.ok) {
-        const data = await resp.json();
+        const data = await resp.json() as {
+          choices?: Array<{
+            message?: { content?: string };
+          }>;
+        };
         const content: string = data.choices?.[0]?.message?.content || '';
         const jsonText = content;
         try {
@@ -395,6 +525,312 @@ app.post('/groom/transform', async (req, res) => {
   }
   return res.json({ rows: normalizedRows });
 });
+
+// Expose only safe sandbox defaults for UI auto-fill
+app.get('/sandbox/config', async (_req, res) => {
+  const userId = config.plaid.linkDefaults?.userId || '';
+  const clientName = config.plaid.linkDefaults?.clientName || '';
+  return res.json({
+    user_id_default: userId,
+    client_name_default: clientName,
+    products_default: (config.plaid.products || []).join(','),
+    redirect_uri_default: config.plaid.redirectUri || '',
+  });
+});
+
+app.post('/import/plaid/link_token', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+
+  const schema = z.object({
+    user_id: z.string().min(1).optional(),
+    client_name: z.string().min(1).optional(),
+    access_token: z.string().optional(),
+    products: z.array(z.string()).min(1).optional(),
+    redirect_uri: z.string().url().optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:plaid_link_token', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const response = await createLinkToken({
+      userId: parsed.data.user_id || config.plaid.linkDefaults?.userId || '',
+      clientName: parsed.data.client_name || config.plaid.linkDefaults?.clientName,
+      accessToken: parsed.data.access_token,
+      products: parsed.data.products,
+      redirectUri: parsed.data.redirect_uri,
+    });
+    logDebug('Success:plaid_link_token', req, { request_id: response.request_id });
+    return res.json(response);
+  } catch (error) {
+    logError('PlaidError:plaid_link_token', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
+app.post('/import/plaid/exchange_public_token', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+
+  const schema = z.object({
+    public_token: z.string().min(1),
+    trigger_initial_sync: z.boolean().optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:plaid_exchange_public_token', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const exchangeResult = await exchangePublicToken(parsed.data.public_token);
+    const context = await buildPlaidItemContext(exchangeResult.accessToken);
+
+    const storedItem = await persistPlaidItem({
+      itemId: exchangeResult.itemId,
+      accessToken: exchangeResult.accessToken,
+      environment: config.plaid.environment,
+      products: config.plaid.products,
+      countryCodes: config.plaid.countryCodes,
+      institutionId: context.item.institution_id ?? null,
+      institutionName: context.institution?.name ?? null,
+      webhookStatus: context.item.webhook ?? null,
+    });
+
+    let syncSummary: PlaidSyncSummary | null = null;
+    if (parsed.data.trigger_initial_sync) {
+      syncSummary = await syncPlaidItem({
+        plaidItemId: storedItem.id,
+        forceFullSync: true,
+      });
+    }
+
+    const response = {
+      item: redactPlaidItem(storedItem),
+      institution: context.institution
+        ? {
+            id: context.institution.institution_id,
+            name: context.institution.name,
+            url: context.institution.url,
+            primary_color: context.institution.primary_color,
+          }
+        : context.item.institution_id
+        ? {
+            id: context.item.institution_id,
+            name: storedItem.institution_name,
+          }
+        : null,
+      accounts: context.accounts.map((account) => summarizePlaidAccount(account)),
+      request_id: exchangeResult.requestId,
+      initial_sync: syncSummary,
+    };
+
+    logDebug('Success:plaid_exchange_public_token', req, {
+      item_id: storedItem.item_id,
+      plaid_item_id: storedItem.id,
+      trigger_initial_sync: Boolean(parsed.data.trigger_initial_sync),
+    });
+
+    return res.json(response);
+  } catch (error) {
+    logError('PlaidError:plaid_exchange_public_token', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
+app.post('/import/plaid/sync', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+
+  const schema = z.object({
+    plaid_item_id: z.string().uuid().optional(),
+    item_id: z.string().optional(),
+    sync_all: z.boolean().optional().default(false),
+    force_full_sync: z.boolean().optional().default(false),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:plaid_sync', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  if (parsed.data.sync_all && (parsed.data.plaid_item_id || parsed.data.item_id)) {
+    return res
+      .status(400)
+      .json({ error: 'sync_all cannot be combined with plaid_item_id or item_id' });
+  }
+
+  try {
+    const rawTargets = [];
+
+    if (parsed.data.sync_all) {
+      const items = await listPlaidItemsFromStore();
+      rawTargets.push(...items);
+    } else if (parsed.data.plaid_item_id) {
+      const item = await getPlaidItemById(parsed.data.plaid_item_id);
+      if (!item) {
+        return res.status(404).json({ error: 'Plaid item not found' });
+      }
+      rawTargets.push(item);
+    } else if (parsed.data.item_id) {
+      const item = await getPlaidItemByItemId(parsed.data.item_id);
+      if (!item) {
+        return res.status(404).json({ error: 'Plaid item not found' });
+      }
+      rawTargets.push(item);
+    } else {
+      return res.status(400).json({ error: 'Provide plaid_item_id, item_id, or set sync_all to true' });
+    }
+
+    if (rawTargets.length === 0) {
+      return res.status(404).json({ error: 'No Plaid items available to sync' });
+    }
+
+    const results: Array<{ item: SanitizedPlaidItem; summary: PlaidSyncSummary }> = [];
+    for (const item of rawTargets) {
+      const summary = await syncPlaidItem({
+        plaidItemId: item.id,
+        forceFullSync: parsed.data.force_full_sync,
+      });
+      const refreshed = (await getPlaidItemById(item.id)) ?? item;
+      const sanitized = redactPlaidItem(refreshed);
+      results.push({ item: sanitized, summary });
+    }
+
+    logDebug('Success:plaid_sync', req, {
+      count: results.length,
+      sync_all: parsed.data.sync_all,
+      force_full_sync: parsed.data.force_full_sync,
+    });
+
+    return res.json({ results });
+  } catch (error) {
+    logError('PlaidError:plaid_sync', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
+app.get('/import/plaid/items', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+
+  const schema = z.object({
+    plaid_item_id: z.string().uuid().optional(),
+    item_id: z.string().optional(),
+  });
+
+  const parsed = schema.safeParse(req.query);
+  if (!parsed.success) {
+    logWarn('ValidationError:plaid_items', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    let items;
+    if (parsed.data.plaid_item_id) {
+      const item = await getPlaidItemById(parsed.data.plaid_item_id);
+      if (!item) {
+        return res.status(404).json({ error: 'Plaid item not found' });
+      }
+      items = [item];
+    } else if (parsed.data.item_id) {
+      const item = await getPlaidItemByItemId(parsed.data.item_id);
+      if (!item) {
+        return res.status(404).json({ error: 'Plaid item not found' });
+      }
+      items = [item];
+    } else {
+      items = await listPlaidItemsFromStore();
+    }
+
+    const sanitized = items.map((item) => redactPlaidItem(item));
+    logDebug('Success:plaid_items', req, { count: sanitized.length });
+    return res.json({ items: sanitized });
+  } catch (error) {
+    logError('PlaidError:plaid_items', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
+app.post('/import/plaid/preview_sync', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+
+  const schema = z.object({
+    plaid_item_id: z.string().uuid().optional(),
+    item_id: z.string().optional(),
+    all: z.boolean().optional().default(false),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:plaid_preview_sync', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const targets: string[] = [];
+
+    if (parsed.data.all) {
+      const allItems = await listPlaidItemsFromStore();
+      targets.push(...allItems.map((item) => item.id));
+    } else if (parsed.data.plaid_item_id) {
+      targets.push(parsed.data.plaid_item_id);
+    } else if (parsed.data.item_id) {
+      const item = await getPlaidItemByItemId(parsed.data.item_id);
+      if (!item) {
+        return res.status(404).json({ error: 'Plaid item not found' });
+      }
+      targets.push(item.id);
+    } else {
+      return res.status(400).json({ error: 'Provide plaid_item_id, item_id, or set all=true' });
+    }
+
+    const previews: PlaidPreviewSummary[] = [];
+    for (const id of targets) {
+      const preview = await previewPlaidItemSync(id);
+      previews.push(preview);
+    }
+
+    logDebug('Success:plaid_preview_sync', req, { count: previews.length });
+    return res.json({ previews, count: previews.length });
+  } catch (error) {
+    logError('PlaidError:plaid_preview_sync', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
 app.post('/store_record', async (req, res) => {
   const parsed = StoreSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -502,7 +938,7 @@ app.post('/update_record', async (req, res) => {
   }
   const { id, type, properties, file_urls, embedding: providedEmbedding } = parsed.data;
 
-  let updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
   // Fetch existing record to determine if we need to regenerate embedding
   const { data: existing } = await supabase
@@ -795,6 +1231,7 @@ app.post('/retrieve_records', async (req, res) => {
   // Remove embeddings from response to reduce size (ChatGPT Actions has response size limits)
   const resultsWithoutEmbeddings = results.map((rec: any) => {
     const { embedding, ...rest } = rec;
+    void embedding;
     return rest;
   });
   
@@ -842,23 +1279,41 @@ app.post('/delete_records', async (req, res) => {
 // File endpoints
 const upload = multer({ dest: '/tmp' });
 app.post('/upload_file', upload.single('file'), async (req, res) => {
-  const schema = z.object({ record_id: z.string(), bucket: z.string().optional() });
+  const schema = z.object({
+    record_id: z.string().uuid().optional(),
+    bucket: z.string().optional(),
+    properties: z.union([z.string(), z.record(z.unknown())]).optional(),
+  });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
     logWarn('ValidationError:upload_file', req, { issues: parsed.error.issues });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { record_id, bucket } = parsed.data;
 
-  const { data: recordData, error: fetchError } = await supabase
-    .from('records')
-    .select('type, file_urls')
-    .eq('id', record_id)
-    .single();
-  if (fetchError || !recordData) {
-    logWarn('NotFound:upload_file', req, { record_id, fetchError });
-    return res.status(404).json({ error: 'Record not found' });
+  const { record_id, bucket, properties } = parsed.data;
+
+  let overrideProperties: Record<string, unknown> | undefined;
+  if (typeof properties === 'string') {
+    if (properties.trim().length === 0) {
+      logWarn('ValidationError:upload_file:properties_empty', req);
+      return res.status(400).json({ error: 'properties must be valid JSON object when provided' });
+    }
+    try {
+      const parsedProperties = JSON.parse(properties);
+      if (!parsedProperties || typeof parsedProperties !== 'object' || Array.isArray(parsedProperties)) {
+        logWarn('ValidationError:upload_file:properties_shape', req, { properties: parsedProperties });
+        return res.status(400).json({ error: 'properties must be a JSON object' });
+      }
+      overrideProperties = parsedProperties as Record<string, unknown>;
+    } catch (error) {
+      logWarn('ValidationError:upload_file:properties_parse', req, { error: error instanceof Error ? error.message : String(error) });
+      return res.status(400).json({ error: 'properties must be valid JSON' });
+    }
+  } else if (properties && typeof properties === 'object' && !Array.isArray(properties)) {
+    overrideProperties = properties as Record<string, unknown>;
   }
+
+  let existingFileUrls: string[] = [];
 
   const bucketName = bucket || 'files';
   const tmpPath = req.file?.path;
@@ -866,14 +1321,37 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
     logWarn('ValidationError:upload_file:missing_file', req);
     return res.status(400).json({ error: 'Missing file' });
   }
-  const fileExt = (req.file?.originalname || 'bin').split('.').pop();
-  const fileName = `${record_id}/${Date.now()}.${fileExt}`;
 
   const fileBuffer = fs.readFileSync(tmpPath);
+  fs.unlinkSync(tmpPath);
+
+  const originalName = req.file?.originalname || 'upload.bin';
+  const mimeType = req.file?.mimetype || 'application/octet-stream';
+  const fileSize = req.file?.size ?? fileBuffer.length;
+
+  const recordId = record_id ?? randomUUID();
+
+  const safeBase = path.basename(originalName).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 100) || 'file';
+  const ext = path.extname(safeBase) || '.bin';
+  const baseName = safeBase.endsWith(ext) ? safeBase.slice(0, safeBase.length - ext.length) : safeBase;
+  const fileName = `${recordId}/${Date.now()}-${baseName.replace(/\.+/g, '-')}${ext}`;
+
+  if (record_id) {
+    const { data: recordData, error: fetchError } = await supabase
+      .from('records')
+      .select('file_urls')
+      .eq('id', record_id)
+      .single();
+    if (fetchError || !recordData) {
+      logWarn('NotFound:upload_file', req, { record_id, fetchError });
+      return res.status(404).json({ error: 'Record not found' });
+    }
+    existingFileUrls = Array.isArray(recordData.file_urls) ? (recordData.file_urls as string[]) : [];
+  }
+
   const { data: uploadData, error: uploadError } = await supabase.storage
     .from(bucketName)
     .upload(fileName, fileBuffer, { upsert: false });
-  fs.unlinkSync(tmpPath);
 
   if (uploadError) {
     logError('SupabaseStorageError:upload_file', req, uploadError, { bucket: bucketName, fileName });
@@ -881,21 +1359,42 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
   }
 
   const filePath = uploadData.path;
-  const updatedFileUrls = [...(recordData.file_urls || []), filePath];
 
-  const { data: updated, error: updateError } = await supabase
-    .from('records')
-    .update({ file_urls: updatedFileUrls })
-    .eq('id', record_id)
-    .select()
-    .single();
-  if (updateError) {
-    logError('SupabaseError:upload_file:update_row', req, updateError);
-    return res.status(500).json({ error: updateError.message });
+  if (record_id) {
+    const updatedFileUrls = [...existingFileUrls, filePath];
+
+    const { data: updated, error: updateError } = await supabase
+      .from('records')
+      .update({ file_urls: updatedFileUrls })
+      .eq('id', record_id)
+      .select()
+      .single();
+
+    if (updateError) {
+      logError('SupabaseError:upload_file:update_row', req, updateError);
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    logDebug('Success:upload_file', req, { record_id, filePath });
+    return res.json(updated);
   }
 
-  logDebug('Success:upload_file', req, { record_id, filePath });
-  return res.json(updated);
+  try {
+    const created = await createRecordFromUploadedFile({
+      recordId,
+      buffer: fileBuffer,
+      fileName: originalName,
+      mimeType,
+      fileSize,
+      fileUrl: filePath,
+      overrideProperties,
+    });
+    logDebug('Success:upload_file:create', req, { record_id: created.id, filePath });
+    return res.status(201).json(created);
+  } catch (error) {
+    logError('SupabaseError:upload_file:create_record', req, error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create record from file' });
+  }
 });
 
 app.get('/get_file_url', async (req, res) => {
@@ -926,6 +1425,282 @@ app.get('/get_file_url', async (req, res) => {
 app.get('/openapi.yaml', (req, res) => {
   res.type('text/yaml');
   res.sendFile(process.cwd() + '/openapi.yaml');
+});
+
+app.get('/import/plaid/link_demo', async (req, res) => {
+  if (!plaidConfiguredOrError(res)) {
+    return;
+  }
+  const token = req.query.token;
+  const hasValidToken = AUTH_TOKEN && token && token === AUTH_TOKEN;
+
+  const userId = config.plaid.linkDefaults?.userId;
+  if (!userId) {
+    return res.status(500).send('PLAID_LINK_USER_ID is required to use the demo');
+  }
+
+  try {
+    const linkToken = await createLinkToken({
+      userId,
+      clientName: config.plaid.linkDefaults?.clientName,
+    });
+
+    const tokenJson = JSON.stringify(linkToken.link_token);
+
+    const html = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plaid Link Demo</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0b0d10; color: #e6e6e6; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #11161d; padding: 32px; border-radius: 12px; max-width: 520px; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }
+    h1 { margin-top: 0; font-size: 24px; }
+    p { color: #9ca3af; }
+    button { background: #1f6feb; border: none; border-radius: 8px; color: #fff; padding: 10px 18px; font-size: 15px; cursor: pointer; }
+    button:hover { background: #2c7ce6; }
+    pre { margin-top: 16px; background: #0b1020; padding: 12px; border-radius: 8px; color: #c7d2fe; overflow-x: auto; }
+    .notice { font-size: 13px; margin-top: 12px; color: #9ca3af; }
+    .actions { margin-top: 16px; display: grid; gap: 8px; }
+    .actions button.secondary { background: #2563eb; }
+  </style>
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+</head>
+<body>
+  <div class="card">
+    <h1>Connect a bank account</h1>
+    <p>This demo uses the Plaid sandbox. Click the button to launch Plaid Link. After approval, the public token is automatically exchanged with the server.</p>
+    <label style="display:block;margin:16px 0 0 0;font-size:13px;color:#9ca3af;">
+      Bearer token (optional)
+      <input id=\"token-input\" type=\"password\" placeholder=\"ACTIONS_BEARER_TOKEN\" style=\"width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid #1f2937;background:#0b1020;color:#e6e6e6;\" />
+    </label>
+    <button id="link-button">Launch Plaid Link</button>
+    <div class="notice" id="auth-notice"></div>
+    <div class="notice" id="cache-info" hidden></div>
+    <div class="actions" id="item-actions" hidden>
+      <strong>Server actions for this item:</strong>
+      <button id="preview-btn" class="secondary">Preview upcoming sync</button>
+      <button id="sync-btn" class="secondary">Trigger sync</button>
+      <button id="clear-cache" class="secondary">Clear cached connection</button>
+    </div>
+    <pre id="exchange-result" hidden></pre>
+  </div>
+  <script>
+    const SANDBOX_BEARER_KEY = 'sandbox_bearer';
+    const tokenInput = document.getElementById('token-input');
+    const noticeEl = document.getElementById('auth-notice');
+    const urlToken = new URLSearchParams(window.location.search).get('token') || '';
+    let bearerToken = urlToken;
+
+    if (!bearerToken) {
+      try {
+        const cachedToken = localStorage.getItem(SANDBOX_BEARER_KEY);
+        if (cachedToken) bearerToken = cachedToken;
+      } catch (err) {
+        console.warn('Failed to read cached bearer token', err);
+      }
+    }
+
+    if (tokenInput) {
+      tokenInput.value = bearerToken;
+    }
+
+    if (bearerToken) {
+      try {
+        localStorage.setItem(SANDBOX_BEARER_KEY, bearerToken);
+      } catch (err) {
+        console.warn('Failed to persist bearer token', err);
+      }
+    }
+
+    function normalizedToken() {
+      return (bearerToken || '').trim();
+    }
+    function hasBearer() {
+      return normalizedToken().length > 0;
+    }
+
+    const storageKey = 'plaid_demo_last_item';
+    const resultEl = document.getElementById('exchange-result');
+    const actionsEl = document.getElementById('item-actions');
+    const cacheInfoEl = document.getElementById('cache-info');
+    const previewBtn = document.getElementById('preview-btn');
+    const syncBtn = document.getElementById('sync-btn');
+    const clearBtn = document.getElementById('clear-cache');
+    let lastItemId = null;
+
+    function updateAuthNotice() {
+      if (hasBearer()) {
+        noticeEl.textContent = 'Bearer token loaded. Server requests will include authorization automatically.';
+      } else {
+        noticeEl.textContent = 'Provide a bearer token to enable automatic exchange and server actions. (This should match the sandbox API token.)';
+      }
+    }
+
+    function updateActionsVisibility() {
+      if (!actionsEl) return;
+      actionsEl.hidden = !(lastItemId && hasBearer());
+    }
+
+    updateAuthNotice();
+    updateActionsVisibility();
+
+    function updateCacheInfo(payload) {
+      if (!payload) {
+        cacheInfoEl.hidden = true;
+        cacheInfoEl.textContent = '';
+        return;
+      }
+      const lastConnected = new Date(payload.timestamp || Date.now()).toLocaleString();
+      cacheInfoEl.hidden = false;
+      cacheInfoEl.textContent = 'Cached Plaid item ' + (payload.itemId || '(unknown)') + ' from ' + lastConnected;
+    }
+
+    function showActions(itemId) {
+      lastItemId = itemId;
+      updateActionsVisibility();
+    }
+
+    function persistCache(data) {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(data));
+        updateCacheInfo(data);
+      } catch (err) {
+        console.warn('Failed to persist cache', err);
+      }
+    }
+
+    (function hydrateCache() {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed?.itemId) {
+          showActions(parsed.itemId);
+          updateCacheInfo(parsed);
+          if (parsed.response) {
+            resultEl.hidden = false;
+            resultEl.textContent = JSON.stringify(parsed.response, null, 2);
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to read cache', err);
+      }
+    })();
+
+    async function callServerEndpoint(path) {
+      const authToken = normalizedToken();
+      if (!lastItemId || !authToken) return;
+      resultEl.hidden = false;
+      resultEl.textContent = 'Calling ' + path + '...';
+      try {
+        const resp = await fetch(path, {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + authToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ plaid_item_id: lastItemId }),
+        });
+        const text = await resp.text();
+        let payload;
+        try { payload = JSON.parse(text); } catch { payload = text; }
+        resultEl.textContent = JSON.stringify({ status: resp.status, response: payload }, null, 2);
+      } catch (err) {
+        resultEl.textContent = 'Request failed: ' + err.message;
+      }
+    }
+
+    previewBtn?.addEventListener('click', () => callServerEndpoint('/import/plaid/preview_sync'));
+    syncBtn?.addEventListener('click', () => callServerEndpoint('/import/plaid/sync'));
+    clearBtn?.addEventListener('click', () => {
+      localStorage.removeItem(storageKey);
+      lastItemId = null;
+      updateActionsVisibility();
+      updateCacheInfo(null);
+      resultEl.hidden = true;
+      resultEl.textContent = '';
+    });
+
+    const handler = Plaid.create({
+      token: ${tokenJson},
+      onSuccess(public_token, metadata) {
+        resultEl.hidden = false;
+        resultEl.textContent = 'Exchanging public token...';
+        if (!hasBearer()) {
+          const payload = { public_token, metadata };
+          resultEl.textContent = JSON.stringify(payload, null, 2);
+          persistCache({ timestamp: Date.now(), itemId: metadata?.item?.item_id, response: payload });
+          return;
+        }
+        const authToken = normalizedToken();
+        fetch('/import/plaid/exchange_public_token', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + authToken,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ public_token }),
+        }).then(async (resp) => {
+          const text = await resp.text();
+          let payload;
+          try { payload = JSON.parse(text); } catch { payload = text; }
+          const responseWrapper = { status: resp.status, response: payload };
+          resultEl.textContent = JSON.stringify(responseWrapper, null, 2);
+          const itemId = payload?.item?.id || payload?.item?.plaidItemId || payload?.plaidItemId || metadata?.item?.item_id;
+          if (itemId) {
+            persistCache({ timestamp: Date.now(), itemId, response: responseWrapper });
+            showActions(itemId);
+          }
+        }).catch((err) => {
+          resultEl.textContent = 'Exchange failed: ' + err.message;
+        });
+      },
+      onExit(err) {
+        if (err) {
+          console.error('Plaid Link errored', err);
+          alert('Plaid Link exited with error: ' + (err.display_message || err.error_message || err.error_code));
+        }
+      }
+    });
+    document.getElementById('link-button').addEventListener('click', () => handler.open());
+
+    if (tokenInput) {
+      tokenInput.addEventListener('input', () => {
+        bearerToken = tokenInput.value.trim();
+        try {
+          if (bearerToken) {
+            localStorage.setItem(SANDBOX_BEARER_KEY, bearerToken);
+          } else {
+            localStorage.removeItem(SANDBOX_BEARER_KEY);
+          }
+        } catch (err) {
+          console.warn('Failed to persist bearer token', err);
+        }
+        updateAuthNotice();
+        updateActionsVisibility();
+      });
+    }
+  </script>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
+  } catch (error) {
+    logError('PlaidError:plaid_link_demo', req, error as any);
+    const normalized = normalizePlaidError(error) || {
+      type: 'unknown_error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+    return res.status(502).json({ error: normalized });
+  }
+});
+
+app.get('/plaid/link_demo', (req, res) => {
+  const token = typeof req.query.token === 'string' ? `?token=${encodeURIComponent(req.query.token)}` : '';
+  return res.redirect(302, `/import/plaid/link_demo${token}`);
 });
 
 const httpPort = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT, 10) : (config.port || 3000);
