@@ -20,7 +20,13 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
-    try { child.kill('SIGTERM'); } catch (_) {}
+    if (!child.killed) {
+      try {
+        child.kill('SIGTERM');
+      } catch (error) {
+        // ignore cleanup error
+      }
+    }
   });
 
   // stdio → client

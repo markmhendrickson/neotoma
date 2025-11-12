@@ -18,9 +18,17 @@ export interface NeotomaRecord {
 
 export async function initDatabase(): Promise<void> {
   try {
-    const { error } = await supabase.from('records').select('id').limit(1);
+    const tablesToCheck = [
+      { table: 'records', columns: 'id' },
+      { table: 'plaid_items', columns: 'id' },
+      { table: 'plaid_sync_runs', columns: 'id' },
+    ] as const;
+
+    for (const { table, columns } of tablesToCheck) {
+      const { error } = await supabase.from(table).select(columns).limit(1);
     if (error && error.code !== 'PGRST116') {
       throw error;
+      }
     }
   } catch (error) {
     console.error('Database connection failed:', error);
