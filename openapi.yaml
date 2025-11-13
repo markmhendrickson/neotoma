@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: REST wrapper for Neotoma enabling ChatGPT Actions.
 servers:
-  - url: https://your-tunnel-url.trycloudflare.com
-    description: Update this URL with your Cloudflare Tunnel URL (run `cloudflared tunnel --url http://localhost:8080`)
+  - url: https://dev.neotoma.io
+    description: Cloudflare Tunnel URL
 security:
   - bearerAuth: []
 components:
@@ -428,6 +428,53 @@ components:
         count:
           type: integer
           description: Number of items previewed
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, assistant, system]
+        content:
+          type: string
+      required: [role, content]
+    ChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          minItems: 1
+        model:
+          type: string
+          description: Optional model override (default: gpt-4o-mini)
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          description: Optional temperature override (default: 0.7)
+    ChatResponse:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+        records_queried:
+          type: array
+          items:
+            $ref: '#/components/schemas/Record'
+          description: Records that were queried during the conversation (if any)
+        function_calls:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              arguments:
+                type: object
+                additionalProperties: true
+          description: Function calls made during the conversation (if any)
 paths:
   /types:
     get:
@@ -824,6 +871,43 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '401':
           description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /chat:
+    post:
+      summary: Chat with AI assistant that can query records
+      description: |
+        Conversational interface that uses OpenAI function calling to intelligently query records from the Neotoma database.
+        The assistant will automatically use the retrieve_records function when the user asks about stored data.
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+            example:
+              messages:
+                - role: user
+                  content: "Show me all my transactions"
+      responses:
+        '200':
+          description: Assistant response with optional records
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChatResponse' }
+        '400':
+          description: Invalid payload or OPENAI_API_KEY not configured
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Upstream OpenAI API error
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

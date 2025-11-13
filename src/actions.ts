@@ -47,12 +47,10 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
-// Serve static uploader UI
-const uploaderDir = path.join(process.cwd(), 'public', 'uploader');
-if (fs.existsSync(uploaderDir)) {
-  // Serve at root
-  app.use('/', express.static(uploaderDir));
-  app.use('/uploader', express.static(uploaderDir));
+// Serve static files from public/ at root
+const publicDir = path.join(process.cwd(), 'public');
+if (fs.existsSync(publicDir)) {
+  app.use('/', express.static(publicDir));
 }
 
 // Serve static sandbox UI
@@ -1422,6 +1420,372 @@ app.get('/get_file_url', async (req, res) => {
   return res.json({ url: data.signedUrl });
 });
 
+// Helper function to execute retrieve_records logic (reusable for chat endpoint)
+async function executeRetrieveRecords(params: {
+  type?: string;
+  properties?: Record<string, unknown>;
+  limit?: number;
+  search?: string[];
+  search_mode?: 'semantic' | 'keyword' | 'both';
+  similarity_threshold?: number;
+  query_embedding?: number[];
+}): Promise<any[]> {
+  const { type, properties, limit, search, search_mode = 'both', similarity_threshold = 0.3, query_embedding: providedQueryEmbedding } = params;
+
+  let results: any[] = [];
+  const finalLimit = limit ?? 100;
+
+  // Semantic search (vector similarity)
+  if (search && (search_mode === 'semantic' || search_mode === 'both')) {
+    let query_embedding: number[] | undefined = providedQueryEmbedding;
+    if (!query_embedding && config.openaiApiKey) {
+      const searchText = search.join(' ');
+      const generated = await generateEmbedding(searchText);
+      query_embedding = generated || undefined;
+    }
+
+    if (query_embedding && query_embedding.length === 1536) {
+      let embeddingQuery = supabase.from('records').select('*').not('embedding', 'is', null);
+      
+      if (type) {
+        embeddingQuery = embeddingQuery.eq('type', type);
+      }
+
+      const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
+
+      if (!fetchError && candidates) {
+        const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
+        
+        const scoredCandidates = candidates
+          .map((rec: any) => {
+            let recEmbedding = rec.embedding;
+            
+            if (!recEmbedding) return null;
+            
+            if (typeof recEmbedding === 'string') {
+              try {
+                recEmbedding = JSON.parse(recEmbedding);
+              } catch {
+                return null;
+              }
+            }
+            
+            if (!Array.isArray(recEmbedding) || recEmbedding.length !== 1536) {
+              return null;
+            }
+            
+            const dotProduct = query_embedding.reduce((sum, val, i) => sum + val * recEmbedding[i], 0);
+            const recNorm = Math.sqrt(recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0));
+            const similarity = dotProduct / (queryNorm * recNorm);
+            
+            return { ...rec, similarity };
+          })
+          .filter((rec: any) => rec !== null)
+          .sort((a: any, b: any) => b.similarity - a.similarity);
+        
+        const semanticMatches = scoredCandidates
+          .filter((rec: any) => rec.similarity >= similarity_threshold)
+          .slice(0, finalLimit);
+
+        if (search_mode === 'semantic') {
+          results = semanticMatches;
+        } else {
+          results = semanticMatches;
+        }
+      }
+    }
+  }
+
+  // Keyword search
+  if (search && (search_mode === 'keyword' || search_mode === 'both')) {
+    let keywordQuery = supabase.from('records').select('*');
+    
+    if (type) {
+      keywordQuery = keywordQuery.eq('type', type);
+    }
+
+    const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(finalLimit * 2);
+    
+    if (!keywordError && keywordCandidates) {
+      const searchText = search.join(' ').toLowerCase();
+      const keywordMatches = keywordCandidates.filter((rec: any) => {
+        const typeMatch = rec.type?.toLowerCase().includes(searchText);
+        const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
+        const propsMatch = propsText.includes(searchText);
+        return typeMatch || propsMatch;
+      }).slice(0, finalLimit);
+
+      if (search_mode === 'keyword') {
+        results = keywordMatches;
+      } else {
+        const resultMap = new Map();
+        results.forEach((r: any) => resultMap.set(r.id, r));
+        keywordMatches.forEach((r: any) => {
+          if (!resultMap.has(r.id)) {
+            resultMap.set(r.id, r);
+          }
+        });
+        results = Array.from(resultMap.values()).slice(0, finalLimit);
+      }
+    }
+  }
+
+  // No search mode
+  if (!search) {
+    let query = supabase.from('records').select('*');
+    if (type) query = query.eq('type', type);
+    query = query.order('created_at', { ascending: false }).limit(finalLimit);
+
+    const { data, error } = await query;
+    if (!error) {
+      results = data || [];
+    }
+  }
+
+  // Filter by exact property matches
+  if (properties) {
+    results = results.filter((rec: any) => {
+      return Object.entries(properties).every(([key, value]) => {
+        const recValue = (rec.properties as Record<string, unknown>)?.[key];
+        return recValue === value;
+      });
+    });
+  }
+
+  // Remove embeddings from response
+  return results.map((rec: any) => {
+    const { embedding, ...rest } = rec;
+    void embedding;
+    return rest;
+  });
+}
+
+app.post('/chat', async (req, res) => {
+  const schema = z.object({
+    messages: z.array(z.object({
+      role: z.enum(['user', 'assistant', 'system']),
+      content: z.string(),
+    })).min(1),
+    model: z.string().optional(),
+    temperature: z.number().min(0).max(2).optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:chat', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  if (!config.openaiApiKey) {
+    return res.status(400).json({ error: 'OPENAI_API_KEY not configured on server' });
+  }
+
+  const { messages, model = 'gpt-4o-mini', temperature = 0.7 } = parsed.data;
+
+  const systemMessage = {
+    role: 'system' as const,
+    content: `You are a helpful assistant for the Neotoma database system. You help users query and understand their stored records.
+
+When a user asks about records, data, or information that might be stored in the database, use the retrieve_records function to fetch relevant records. Then provide a helpful response based on the retrieved data.
+
+Guidelines:
+- Use retrieve_records when the user asks about stored data, records, or information
+- Extract search terms from the user's query for semantic/keyword search
+- If the user mentions a specific record type, use the type parameter
+- Provide clear, concise answers based on the retrieved records
+- If no records are found, let the user know
+- Be conversational and helpful`,
+  };
+
+  const retrieveRecordsFunction = {
+    name: 'retrieve_records',
+    description: 'Query records from the Neotoma database by type, properties, or semantic/keyword search',
+    parameters: {
+      type: 'object',
+      properties: {
+        type: {
+          type: 'string',
+          description: 'Filter by record type (e.g., "transaction", "note", "exercise")',
+        },
+        properties: {
+          type: 'object',
+          description: 'Filter by exact property value matches',
+          additionalProperties: true,
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum number of results (default: 10, max: 50 for chat)',
+          minimum: 1,
+          maximum: 50,
+        },
+        search: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Search terms for semantic/keyword matching',
+        },
+        search_mode: {
+          type: 'string',
+          enum: ['semantic', 'keyword', 'both'],
+          description: 'Search mode: semantic (vector similarity), keyword (text matching), or both (default: both)',
+        },
+        similarity_threshold: {
+          type: 'number',
+          description: 'Minimum similarity score for semantic search (0-1, default: 0.3)',
+          minimum: 0,
+          maximum: 1,
+        },
+      },
+      required: [],
+    },
+  };
+
+  try {
+    // Use a more flexible message type for OpenAI API
+    type ChatMessage = {
+      role: 'system' | 'user' | 'assistant' | 'function';
+      content: string;
+      name?: string;
+    };
+
+    const chatMessages: ChatMessage[] = [systemMessage, ...messages];
+    const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
+    const recordsQueried: any[] = [];
+    const maxIterations = 5;
+    let iteration = 0;
+
+    while (iteration < maxIterations) {
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${config.openaiApiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: chatMessages.filter(m => m.role !== 'function').map(m => ({
+            role: m.role,
+            content: m.content,
+          })),
+          functions: [retrieveRecordsFunction],
+          function_call: 'auto',
+          temperature,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        logError('OpenAIError:chat', req, text);
+        return res.status(502).json({ error: 'Upstream model error' });
+      }
+
+      const data = await response.json() as {
+        choices?: Array<{
+          message?: {
+            role?: string;
+            content?: string | null;
+            function_call?: {
+              name?: string;
+              arguments?: string;
+            };
+          };
+        }>;
+      };
+
+      const choice = data.choices?.[0];
+      if (!choice?.message) {
+        return res.status(502).json({ error: 'Invalid response from model' });
+      }
+
+      const message = choice.message;
+      if (message.role && message.content !== null && message.content !== undefined) {
+        chatMessages.push({
+          role: message.role as 'assistant' | 'user' | 'system',
+          content: message.content || '',
+        });
+      }
+
+      // If function call, execute it
+      if (message.function_call?.name && message.function_call?.arguments) {
+        const functionName = message.function_call.name;
+        const functionArgs = message.function_call.arguments;
+
+        if (functionName === 'retrieve_records') {
+          try {
+            const args = JSON.parse(functionArgs);
+            const records = await executeRetrieveRecords({
+              type: args.type,
+              properties: args.properties,
+              limit: Math.min(args.limit || 10, 50), // Cap at 50 for chat
+              search: args.search,
+              search_mode: args.search_mode || 'both',
+              similarity_threshold: args.similarity_threshold || 0.3,
+            });
+
+            recordsQueried.push(...records);
+
+            functionCalls.push({
+              name: functionName,
+              arguments: functionArgs,
+              result: records,
+            });
+
+            // Add function result to conversation
+            chatMessages.push({
+              role: 'function',
+              name: functionName,
+              content: JSON.stringify(records),
+            });
+
+            iteration++;
+            continue; // Continue to next iteration to get final response
+          } catch (error) {
+            logError('FunctionExecutionError:chat', req, error);
+            chatMessages.push({
+              role: 'function',
+              name: functionName,
+              content: JSON.stringify({ error: 'Failed to retrieve records' }),
+            });
+            iteration++;
+            continue;
+          }
+        }
+      }
+
+      // If no function call, we have the final response
+      const assistantMessage = {
+        role: 'assistant' as const,
+        content: message.content || '',
+      };
+
+      return res.json({
+        message: assistantMessage,
+        records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+        function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
+          name: fc.name,
+          arguments: JSON.parse(fc.arguments),
+        })) : undefined,
+      });
+    }
+
+    // If we've exhausted iterations, return the last message
+    const lastMessage = chatMessages[chatMessages.length - 1];
+    return res.json({
+      message: {
+        role: 'assistant',
+        content: typeof lastMessage.content === 'string' ? lastMessage.content : 'Unable to complete request',
+      },
+      records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+      function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
+        name: fc.name,
+        arguments: JSON.parse(fc.arguments),
+      })) : undefined,
+    });
+  } catch (error) {
+    logError('Exception:chat', req, error);
+    return res.status(500).json({ error: 'Chat failed' });
+  }
+});
+
 app.get('/openapi.yaml', (req, res) => {
   res.type('text/yaml');
   res.sendFile(process.cwd() + '/openapi.yaml');
@@ -1431,9 +1795,6 @@ app.get('/import/plaid/link_demo', async (req, res) => {
   if (!plaidConfiguredOrError(res)) {
     return;
   }
-  const token = req.query.token;
-  const hasValidToken = AUTH_TOKEN && token && token === AUTH_TOKEN;
-
   const userId = config.plaid.linkDefaults?.userId;
   if (!userId) {
     return res.status(500).send('PLAID_LINK_USER_ID is required to use the demo');
@@ -1473,7 +1834,7 @@ app.get('/import/plaid/link_demo', async (req, res) => {
     <p>This demo uses the Plaid sandbox. Click the button to launch Plaid Link. After approval, the public token is automatically exchanged with the server.</p>
     <label style="display:block;margin:16px 0 0 0;font-size:13px;color:#9ca3af;">
       Bearer token (optional)
-      <input id=\"token-input\" type=\"password\" placeholder=\"ACTIONS_BEARER_TOKEN\" style=\"width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid #1f2937;background:#0b1020;color:#e6e6e6;\" />
+      <input id="token-input" type="password" placeholder="ACTIONS_BEARER_TOKEN" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1px solid #1f2937;background:#0b1020;color:#e6e6e6;" />
     </label>
     <button id="link-button">Launch Plaid Link</button>
     <div class="notice" id="auth-notice"></div>
