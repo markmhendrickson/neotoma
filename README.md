@@ -475,6 +475,7 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 | `plaid_list_items` | List stored Plaid items (metadata only) | `plaid_item_id?`, `item_id?` | Array of Plaid items without access tokens | `src/services/plaid_sync.test.ts` |
 | `plaid_preview_sync` | Preview Plaid item change counts without persisting | `plaid_item_id?`, `item_id?`, `all?` | Preview summary per item | — |
 | `plaid_link_demo` | Serve Plaid Link sandbox demo page | `token` query (bearer token) | HTML page response | — |
+| `chat` | Conversational interface with OpenAI function calling to query records | `messages` (array), `model?`, `temperature?` | Assistant message with optional records_queried and function_calls | — |
 
 ---
 
