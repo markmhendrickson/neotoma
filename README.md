@@ -170,7 +170,7 @@ Use the tunnel URL as your API base. Update the sandbox UI, Plaid demo link (`ht
 If you own a domain managed by Cloudflare:
 
 1. Create a named tunnel: `cloudflared tunnel create neotoma`
-2. Route your domain/subdomain: `cloudflared tunnel route dns neotoma api.example.com`
+2. Route your domain/subdomain: `cloudflared tunnel route dns neotoma dev.neotoma.io`
 3. Create `~/.cloudflared/neotoma.yml` containing:
    ```yaml
    url: http://localhost:8080
@@ -179,7 +179,7 @@ If you own a domain managed by Cloudflare:
    ```
 4. Run the tunnel: `cloudflared tunnel run neotoma`
 
-Now your API is reachable at `https://api.example.com`, so update the sandbox UI and Plaid demo link to `https://api.example.com/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}`.
+Now your API is reachable at `https://dev.neotoma.io`, so update the sandbox UI and Plaid demo link to `https://dev.neotoma.io/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}`.
 
 ### Plaid Integration
 
