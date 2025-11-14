@@ -51,6 +51,8 @@ app.use(morgan('dev'));
 const publicDir = path.join(process.cwd(), 'public');
 if (fs.existsSync(publicDir)) {
   app.use('/', express.static(publicDir));
+  // Serve index.html for all non-API routes (SPA routing) - but only after auth middleware
+  // This will be handled after auth middleware runs
 }
 
 // Serve static sandbox UI
@@ -2062,6 +2064,38 @@ app.get('/import/plaid/link_demo', async (req, res) => {
 app.get('/plaid/link_demo', (req, res) => {
   const token = typeof req.query.token === 'string' ? `?token=${encodeURIComponent(req.query.token)}` : '';
   return res.redirect(302, `/import/plaid/link_demo${token}`);
+});
+
+// SPA fallback - serve index.html for non-API routes (must be after all API routes)
+app.get('*', (req, res, next) => {
+  // Skip if it's an API route, sandbox, or import route
+  if (
+    req.path.startsWith('/api') ||
+    req.path.startsWith('/sandbox') ||
+    req.path.startsWith('/import') ||
+    req.path.startsWith('/plaid') ||
+    req.path.startsWith('/retrieve_records') ||
+    req.path.startsWith('/store_record') ||
+    req.path.startsWith('/store_records') ||
+    req.path.startsWith('/update_record') ||
+    req.path.startsWith('/delete_record') ||
+    req.path.startsWith('/delete_records') ||
+    req.path.startsWith('/upload_file') ||
+    req.path.startsWith('/get_file_url') ||
+    req.path.startsWith('/chat') ||
+    req.path.startsWith('/types') ||
+    req.path.startsWith('/groom') ||
+    req.path.startsWith('/openapi.yaml') ||
+    req.path.startsWith('/health')
+  ) {
+    return next();
+  }
+  const indexPath = path.join(publicDir, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    next();
+  }
 });
 
 const httpPort = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT, 10) : (config.port || 3000);
