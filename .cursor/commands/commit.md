@@ -1,2 +1,2 @@
 # commit
-Run entire tests suite and resolve any errors as necessary. Proceed to analyze all uncommitted files for security vulnerabilities and patch as necessary. Then proceed to git add and commit with detailed commit message that represents their functional changes, and push to origin.
+Run entire tests suite and resolve any errors as necessary. Proceed to analyze all uncommitted files for security vulnerabilities and patch as necessary. Then proceed to git add and commit with commit message that represents their functional changes, and push to origin. Generate the most detailed, multi-line commit message possible given changes and constraints.

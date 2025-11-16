@@ -20,13 +20,22 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'frontend/index.html'),
       },
+      output: {
+        // Ensure workers are built correctly
+        worker: {
+          format: 'es',
+        },
+      },
     },
   },
+  worker: {
+    format: 'es',
+  },
   server: {
-    port: 5173,
+    port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: `http://localhost:${process.env.HTTP_PORT || '8080'}`,
         changeOrigin: true,
       },
     },

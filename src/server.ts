@@ -212,9 +212,45 @@ export class NeotomaServer {
       ],
     }));
 
+    // Handle encrypted requests (from WebSocket bridge)
+    this.server.setRequestHandler(
+      { method: 'encrypted_request' } as any,
+      async (request: any) => {
+        // MCP server acts as blind router - just pass through encrypted payload
+        // The actual decryption/encryption happens in browser/ChatGPT client
+        const { encryptedPayload } = request.params || {};
+        
+        if (!encryptedPayload) {
+          throw new McpError(ErrorCode.InvalidParams, 'Missing encryptedPayload');
+        }
+
+        // Return encrypted payload as-is (blind routing)
+        // In practice, this would be forwarded to the actual tool handler
+        // but for now we maintain the encrypted envelope structure
+        return {
+          encryptedPayload,
+          // Note: Actual tool execution would happen in browser via local datastore
+          // This is just a routing layer
+        };
+      }
+    );
+
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
         const { name, arguments: args } = request.params;
+
+        // Check if this is an encrypted request wrapper
+        if (name === 'encrypted_request' && (args as any)?.encryptedPayload) {
+          // Blind routing - return encrypted payload as-is
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                encryptedPayload: (args as any).encryptedPayload,
+              }),
+            }],
+          };
+        }
 
         switch (name) {
           case 'store_record':
