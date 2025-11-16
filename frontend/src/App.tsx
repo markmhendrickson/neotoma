@@ -5,14 +5,18 @@ import { ChatPanel } from '@/components/ChatPanel';
 import { RecordsTable } from '@/components/RecordsTable';
 import { RecordDetailsPanel } from '@/components/RecordDetailsPanel';
 import { useSettings } from '@/hooks/useSettings';
-import { fetchRecords, fetchTypes, searchRecords } from '@/lib/api';
+import { useKeys } from '@/hooks/useKeys';
+import { useDatastore } from '@/hooks/useDatastore';
 import { normalizeRecord, STATUS_ORDER } from '@/types/record';
 import type { NeotomaRecord } from '@/types/record';
 import { useToast } from '@/components/ui/use-toast';
+import { localToNeotoma } from '@/utils/record_conversion';
 
 function App() {
   const { settings } = useSettings();
   const { toast } = useToast();
+  const { x25519, ed25519, loading: keysLoading } = useKeys();
+  const datastore = useDatastore(x25519, ed25519);
   const [allRecords, setAllRecords] = useState<NeotomaRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<NeotomaRecord[]>([]);
   const [types, setTypes] = useState<string[]>([]);
@@ -20,43 +24,45 @@ function App() {
   const [selectedType, setSelectedType] = useState('');
 
   const loadRecords = useCallback(async () => {
-    if (!settings.bearerToken) {
-      toast({
-        title: 'Bearer Token required',
-        description: 'Please set your Bearer Token in settings',
-        variant: 'destructive',
-      });
+    if (!datastore.initialized || keysLoading) {
       return;
     }
 
     try {
-      const data = await fetchRecords(settings.apiBase, settings.bearerToken);
-      setAllRecords(data.map(normalizeRecord));
+      const localRecords = await datastore.queryRecords();
+      const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
+      setAllRecords(neotomaRecords);
+
+      // Extract unique types
+      const uniqueTypes = Array.from(new Set(neotomaRecords.map(r => r.type))).sort();
+      setTypes(uniqueTypes);
     } catch (error) {
       toast({
-        title: 'Error fetching records',
-        description: error instanceof Error ? error.message : 'Failed to fetch records',
+        title: 'Error loading records',
+        description: error instanceof Error ? error.message : 'Failed to load records',
         variant: 'destructive',
       });
       setAllRecords([]);
     }
-  }, [settings, toast]);
+  }, [datastore, keysLoading, toast]);
 
   const loadTypes = useCallback(async () => {
-    if (!settings.bearerToken) return;
-
-    try {
-      const data = await fetchTypes(settings.apiBase, settings.bearerToken);
-      setTypes(data);
-    } catch (error) {
-      console.error('Error fetching types:', error);
+    // Types are now loaded from local records
+    if (allRecords.length > 0) {
+      const uniqueTypes = Array.from(new Set(allRecords.map(r => r.type))).sort();
+      setTypes(uniqueTypes);
     }
-  }, [settings]);
+  }, [allRecords]);
 
   useEffect(() => {
-    loadRecords();
+    if (datastore.initialized && !keysLoading) {
+      loadRecords();
+    }
+  }, [datastore.initialized, keysLoading, loadRecords]);
+
+  useEffect(() => {
     loadTypes();
-  }, [loadRecords, loadTypes]);
+  }, [loadTypes]);
 
   useEffect(() => {
     let recordsToFilter = allRecords;
@@ -84,18 +90,25 @@ function App() {
       return;
     }
 
-    if (!settings.bearerToken) {
+    if (!datastore.initialized) {
       toast({
-        title: 'Bearer Token required',
-        description: 'Please set your Bearer Token in settings',
+        title: 'Datastore not ready',
+        description: 'Please wait for datastore to initialize',
         variant: 'destructive',
       });
       return;
     }
 
     try {
-      const data = await searchRecords(settings.apiBase, settings.bearerToken, query);
-      setAllRecords(data.map(normalizeRecord));
+      // Simple text search (can be enhanced with vector search)
+      const localRecords = await datastore.queryRecords();
+      const queryLower = query.toLowerCase();
+      const filtered = localRecords.filter(record => {
+        const text = JSON.stringify(record.properties).toLowerCase();
+        return text.includes(queryLower) || record.type.toLowerCase().includes(queryLower);
+      });
+      const neotomaRecords = filtered.map(localToNeotoma).map(normalizeRecord);
+      setAllRecords(neotomaRecords);
     } catch (error) {
       toast({
         title: 'Search failed',

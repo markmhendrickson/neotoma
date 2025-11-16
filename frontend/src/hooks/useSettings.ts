@@ -2,7 +2,7 @@ import { useState } from 'react';
 
 export interface Settings {
   apiBase: string;
-  bearerToken: string;
+  bearerToken: string; // Derived from Ed25519 public key
 }
 
 export function useSettings() {
@@ -20,16 +20,24 @@ export function useSettings() {
     }
   });
 
-  const saveSettings = (newSettings: Settings) => {
+  const saveSettings = (newSettings: Partial<Settings>) => {
     try {
-      localStorage.setItem('apiBase', newSettings.apiBase);
-      localStorage.setItem('bearerToken', newSettings.bearerToken);
-      setSettings(newSettings);
+      if (newSettings.apiBase !== undefined) {
+        localStorage.setItem('apiBase', newSettings.apiBase);
+      }
+      if (newSettings.bearerToken !== undefined) {
+        localStorage.setItem('bearerToken', newSettings.bearerToken);
+      }
+      setSettings(prev => ({ ...prev, ...newSettings }));
     } catch (e) {
       console.warn('Failed to save settings', e);
     }
   };
 
-  return { settings, saveSettings };
+  const updateBearerToken = (token: string) => {
+    saveSettings({ bearerToken: token });
+  };
+
+  return { settings, saveSettings, updateBearerToken };
 }
 
