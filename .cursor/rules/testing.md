@@ -2,7 +2,17 @@
 
 ## Automatic Browser Testing for User-Facing Changes
 
-Whenever you make changes to user-facing code (frontend components, hooks, UI logic), you MUST automatically test the changes in a browser to verify they work correctly.
+**CRITICAL: This rule MUST be followed automatically. Do NOT wait for the user to ask you to test.**
+
+Whenever you make changes to user-facing code (frontend components, hooks, UI logic), you MUST automatically test the changes in a browser to verify they work correctly **immediately after making the changes**, before considering the task complete.
+
+### Workflow Integration
+
+After making any changes to files listed in "When to Test" below:
+1. **STOP** and do not mark the task as complete
+2. **IMMEDIATELY** run the testing process (steps 1-7 below)
+3. **ONLY** after testing is complete and passing, consider the changes done
+4. Report testing results in your response
 
 ## When to Test
 
@@ -18,6 +28,8 @@ Test automatically when modifying:
 - `vite.config.ts` - Build configuration affecting UI
 
 ## Testing Process
+
+**Execute these steps automatically after making frontend changes:**
 
 1. **Check if dev server is running:**
    - Use branch-based port from `scripts/get-branch-ports.js`
@@ -117,12 +129,25 @@ Use browser MCP extension tools:
 
 ## Reporting
 
-After testing, report:
-- What was tested
-- Test results (pass/fail)
+After testing, **ALWAYS** report in your response:
+- What was tested (list the specific functionality)
+- Test results (pass/fail for each test)
 - Any issues found and how they were fixed (frontend and backend)
 - Confirmation that functionality works correctly
 - Note any backend issues that were resolved
+
+**Do not skip this reporting step.** The user should see evidence that testing was performed.
+
+## Reminder Checklist
+
+Before marking any frontend changes as complete, verify:
+- [ ] Testing process (steps 1-7) was executed
+- [ ] Browser console has no errors related to your changes
+- [ ] UI components render correctly
+- [ ] User interactions work as expected
+- [ ] Settings/state persists correctly (if applicable)
+- [ ] No regressions in existing functionality
+- [ ] Testing results were reported in your response
 
 This ensures user-facing changes are verified before being considered complete, including proper frontend-backend integration.
 

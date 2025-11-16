@@ -136,6 +136,14 @@ type Toast = Omit<ToasterToast, 'id'>;
 function toast({ ...props }: Toast) {
   const id = genId();
 
+  // Log errors to console
+  if (props.variant === 'destructive') {
+    const errorMessage = props.description 
+      ? `${props.title || 'Error'}: ${props.description}`
+      : props.title || 'Error';
+    console.error('[Toast Error]', errorMessage);
+  }
+
   const update = (props: ToasterToast) =>
     dispatch({
       type: 'UPDATE_TOAST',

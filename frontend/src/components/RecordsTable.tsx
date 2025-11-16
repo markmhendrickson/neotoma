@@ -281,9 +281,11 @@ export function RecordsTable({
               <TableRow>
                 <TableCell
                   colSpan={table.getAllLeafColumns().length}
-                  className="h-24 text-center text-sm text-muted-foreground"
+                  className="h-24 text-center"
                 >
-                  No records found.
+                  <div className="text-sm text-muted-foreground">
+                    No records found.
+                  </div>
                 </TableCell>
               </TableRow>
             )}

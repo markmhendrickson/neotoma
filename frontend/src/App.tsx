@@ -1,10 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Header } from '@/components/Header';
 import { ChatPanel } from '@/components/ChatPanel';
 import { RecordsTable } from '@/components/RecordsTable';
 import { RecordDetailsPanel } from '@/components/RecordDetailsPanel';
-import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
 import { useDatastore } from '@/hooks/useDatastore';
 import { normalizeRecord, STATUS_ORDER } from '@/types/record';
@@ -13,7 +12,6 @@ import { useToast } from '@/components/ui/use-toast';
 import { localToNeotoma } from '@/utils/record_conversion';
 
 function App() {
-  const { settings } = useSettings();
   const { toast } = useToast();
   const { x25519, ed25519, loading: keysLoading } = useKeys();
   const datastore = useDatastore(x25519, ed25519);
@@ -22,6 +20,9 @@ function App() {
   const [types, setTypes] = useState<string[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(null);
   const [selectedType, setSelectedType] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
+  const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
 
   const loadRecords = useCallback(async () => {
     if (!datastore.initialized || keysLoading) {
@@ -37,14 +38,16 @@ function App() {
       const uniqueTypes = Array.from(new Set(neotomaRecords.map(r => r.type))).sort();
       setTypes(uniqueTypes);
     } catch (error) {
-      toast({
-        title: 'Error loading records',
-        description: error instanceof Error ? error.message : 'Failed to load records',
-        variant: 'destructive',
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load records';
+      console.error('[Records Loading Error]', errorMessage, error);
       setAllRecords([]);
+      // Show error in chat
+      if (chatPanelErrorRef.current) {
+        chatPanelErrorRef.current(errorMessage);
+      }
     }
-  }, [datastore, keysLoading, toast]);
+  }, [datastore, keysLoading]);
+
 
   const loadTypes = useCallback(async () => {
     // Types are now loaded from local records
@@ -110,11 +113,12 @@ function App() {
       const neotomaRecords = filtered.map(localToNeotoma).map(normalizeRecord);
       setAllRecords(neotomaRecords);
     } catch (error) {
-      toast({
-        title: 'Search failed',
-        description: error instanceof Error ? error.message : 'Search failed',
-        variant: 'destructive',
-      });
+      const errorMessage = error instanceof Error ? error.message : 'Search failed';
+      console.error('[Search Error]', errorMessage, error);
+      // Show error in chat
+      if (chatPanelErrorRef.current) {
+        chatPanelErrorRef.current(errorMessage);
+      }
     }
   };
 
@@ -122,15 +126,44 @@ function App() {
     setSelectedType(type);
   };
 
-  const handleFileUploaded = useCallback(async () => {
-    await Promise.all([loadRecords(), loadTypes()]);
-  }, [loadRecords, loadTypes]);
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const related = e.relatedTarget as Node | null;
+    if (!related || !e.currentTarget.contains(related)) {
+      setIsDragging(false);
+    }
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (chatPanelFileUploadRef.current) {
+      chatPanelFileUploadRef.current(e.dataTransfer.files);
+    }
+  }, []);
 
   return (
-    <div className="h-screen max-h-screen bg-background flex flex-col overflow-hidden">
+    <div 
+      className="h-screen max-h-screen bg-background flex flex-col overflow-hidden relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
       <Header />
       <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-        <ChatPanel onFileUploaded={handleFileUploaded} />
+        <ChatPanel 
+          onFileUploaded={loadRecords} 
+          onFileUploadRef={chatPanelFileUploadRef}
+          onErrorRef={chatPanelErrorRef}
+        />
         <main className="flex-1 min-h-0 max-h-full overflow-hidden">
           <RecordsTable
             records={filteredRecords}
@@ -143,6 +176,17 @@ function App() {
       </div>
       <RecordDetailsPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       <Toaster />
+      {/* Full-page drag overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
+          <div className="bg-background/95 backdrop-blur-sm rounded-lg px-8 py-6 border-2 border-primary shadow-lg">
+            <div className="text-center">
+              <div className="text-2xl font-semibold text-primary mb-2">Drop files to upload</div>
+              <div className="text-sm text-muted-foreground">Release to add files to your records</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

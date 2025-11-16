@@ -1,7 +1,25 @@
 import type { NeotomaRecord } from '@/types/record';
 
+/**
+ * Normalize API base URL to use Vite proxy in development
+ * If apiBase is the current origin (dev mode), use /api prefix for proxy
+ * Otherwise, use the provided apiBase as-is
+ */
+function normalizeApiUrl(apiBase: string, endpoint: string): string {
+  // If apiBase is the current origin (development), use /api proxy
+  if (apiBase === window.location.origin || apiBase === '') {
+    return `/api${endpoint}`;
+  }
+  // If apiBase already includes /api, don't duplicate it
+  if (apiBase.includes('/api')) {
+    return `${apiBase}${endpoint}`;
+  }
+  // For custom API bases, use as-is
+  return `${apiBase}${endpoint}`;
+}
+
 export async function fetchRecords(apiBase: string, bearerToken: string): Promise<NeotomaRecord[]> {
-  const response = await fetch(`${apiBase}/retrieve_records`, {
+  const response = await fetch(normalizeApiUrl(apiBase, '/retrieve_records'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -31,7 +49,7 @@ export async function searchRecords(
   bearerToken: string,
   query: string
 ): Promise<NeotomaRecord[]> {
-  const response = await fetch(`${apiBase}/retrieve_records`, {
+  const response = await fetch(normalizeApiUrl(apiBase, '/retrieve_records'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -64,7 +82,7 @@ export async function fetchTypes(apiBase: string, bearerToken: string): Promise<
   }
 
   try {
-    const response = await fetch(`${apiBase}/types`, {
+    const response = await fetch(normalizeApiUrl(apiBase, '/types'), {
       headers: {
         'Authorization': `Bearer ${bearerToken}`,
       },
@@ -96,9 +114,7 @@ export async function uploadFile(
   const formData = new FormData();
   formData.append('file', file);
 
-  // Use /api prefix for Vite proxy
-  const apiUrl = apiBase.includes('/api') ? `${apiBase}/upload_file` : `${apiBase}/api/upload_file`;
-  const response = await fetch(apiUrl, {
+  const response = await fetch(normalizeApiUrl(apiBase, '/upload_file'), {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${bearerToken}`,
@@ -129,7 +145,7 @@ export async function sendChatMessage(
   bearerToken: string,
   messages: Array<{ role: string; content: string }>
 ): Promise<{ message: { content: string }; records_queried?: NeotomaRecord[] }> {
-  const response = await fetch(`${apiBase}/chat`, {
+  const response = await fetch(normalizeApiUrl(apiBase, '/chat'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -152,13 +168,47 @@ export async function sendChatMessage(
   return response.json();
 }
 
+export async function analyzeFile(
+  apiBase: string,
+  bearerToken: string,
+  file: File
+): Promise<{ type: string; properties: Record<string, unknown> }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(normalizeApiUrl(apiBase, '/analyze_file'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${bearerToken}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    let errorMessage = 'Analysis failed';
+    if (response.status === 401 || response.status === 403) {
+      errorMessage = 'Unauthorized - check your Bearer Token';
+    } else {
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.error || errorMessage;
+      } catch (e) {
+        errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      }
+    }
+    throw new Error(errorMessage);
+  }
+
+  return response.json();
+}
+
 export async function getFileUrl(
   apiBase: string,
   bearerToken: string,
   filePath: string
 ): Promise<string> {
   const response = await fetch(
-    `${apiBase}/get_file_url?file_path=${encodeURIComponent(`files/${filePath}`)}`,
+    `${normalizeApiUrl(apiBase, '/get_file_url')}?file_path=${encodeURIComponent(`files/${filePath}`)}`,
     {
       headers: {
         'Authorization': `Bearer ${bearerToken}`,
