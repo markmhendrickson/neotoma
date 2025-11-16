@@ -1,4 +1,5 @@
 import { supabase, type NeotomaRecord } from '../db.js';
+import { generateRecordSummary } from './summary.js';
 
 export type MergeStrategy = 'replace' | 'merge';
 
@@ -99,6 +100,12 @@ export async function upsertExternalRecord(
       updateData.embedding = embedding;
     }
 
+    // Generate summary
+    const summary = await generateRecordSummary(type, mergedProperties, updatedFileUrls);
+    if (summary) {
+      updateData.summary = summary;
+    }
+
     const { data, error } = await supabase
       .from('records')
       .update(updateData)
@@ -127,6 +134,12 @@ export async function upsertExternalRecord(
   const insertEmbedding = await maybeBuildEmbedding(type, propertiesWithExternal);
   if (insertEmbedding) {
     insertPayload.embedding = insertEmbedding;
+  }
+
+  // Generate summary
+  const summary = await generateRecordSummary(type, propertiesWithExternal, payload.fileUrls ?? []);
+  if (summary) {
+    insertPayload.summary = summary;
   }
 
   const { data, error } = await supabase

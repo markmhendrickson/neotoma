@@ -109,11 +109,15 @@ function App() {
     setSelectedType(type);
   };
 
+  const handleFileUploaded = useCallback(async () => {
+    await Promise.all([loadRecords(), loadTypes()]);
+  }, [loadRecords, loadTypes]);
+
   return (
     <div className="h-screen max-h-screen bg-background flex flex-col overflow-hidden">
       <Header />
       <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-        <ChatPanel onFileUploaded={loadRecords} />
+        <ChatPanel onFileUploaded={handleFileUploaded} />
         <main className="flex-1 min-h-0 max-h-full overflow-hidden">
           <RecordsTable
             records={filteredRecords}

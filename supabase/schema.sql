@@ -23,6 +23,17 @@ BEGIN
   END IF;
 END $$;
 
+-- Add summary column if it doesn't exist (for existing tables)
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'records' AND column_name = 'summary'
+  ) THEN
+    ALTER TABLE records ADD COLUMN summary TEXT;
+  END IF;
+END $$;
+
 -- Create GIN index on type for fast filtering
 CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
 

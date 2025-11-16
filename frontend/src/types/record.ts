@@ -5,6 +5,7 @@ export interface NeotomaRecord {
   updated_at: string;
   file_urls: string[];
   properties: Record<string, unknown>;
+  summary?: string | null;
   _status?: 'Uploading' | 'Failed' | 'Ready';
   _tempId?: string;
   _fileName?: string;

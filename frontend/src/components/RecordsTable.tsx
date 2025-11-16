@@ -5,11 +5,15 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import type { NeotomaRecord } from '@/types/record';
 import { STATUS_ORDER } from '@/types/record';
 
@@ -38,7 +42,6 @@ export function RecordsTable({
   const tableInstanceRef = useRef<any>(null);
   const tableBuiltRef = useRef<boolean>(false);
   const pendingRecordsRef = useRef<NeotomaRecord[]>(records);
-  const hiddenColumnsRef = useRef<string[]>([]);
   const [isTableReady, setIsTableReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
@@ -47,7 +50,8 @@ export function RecordsTable({
     () => types.filter((type) => type && type.trim().length > 0),
     [types]
   );
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>(['_status', 'id', 'created_at', 'updated_at', 'file_urls']);
+  const hiddenColumnsRef = useRef<string[]>(hiddenColumns);
 
   useEffect(() => {
     (window as any).__neotomaTypes = types;
@@ -71,6 +75,16 @@ export function RecordsTable({
       },
       { title: 'ID', field: 'id', width: 200, sorter: 'string' },
       { title: 'Type', field: 'type', width: 150, sorter: 'string' },
+      {
+        title: 'Summary',
+        field: 'summary',
+        width: 400,
+        sorter: 'string',
+        formatter: (cell: any) => {
+          const value = cell.getValue();
+          return value || '—';
+        },
+      },
       {
         title: 'Created',
         field: 'created_at',
@@ -117,13 +131,19 @@ export function RecordsTable({
 
   const applyColumnVisibility = (hiddenList: string[]) => {
     if (!tableInstanceRef.current) return;
+    console.log('[RecordsTable] Applying column visibility:', { hiddenList, columnOptions });
     columnOptions.forEach(({ field }) => {
       const column = tableInstanceRef.current.getColumn(field);
-      if (!column) return;
+      if (!column) {
+        console.warn(`[RecordsTable] Column not found: ${field}`);
+        return;
+      }
       if (hiddenList.includes(field)) {
         column.hide();
+        console.log(`[RecordsTable] Hiding column: ${field}`);
       } else {
         column.show();
+        console.log(`[RecordsTable] Showing column: ${field}`);
       }
     });
   };
@@ -181,7 +201,7 @@ export function RecordsTable({
               // Silently ignore - table might not be fully ready
             }
           }
-          applyColumnVisibility(hiddenColumnsRef.current);
+          applyColumnVisibility(hiddenColumns);
         }, 100);
       });
 
@@ -198,13 +218,13 @@ export function RecordsTable({
         setIsTableReady(false);
       }
     };
-  }, [onRecordClick]); // Remove records from deps - we'll update separately
+  }, [onRecordClick, columnDefinitions]); // Re-initialize table when column definitions change
 
   useEffect(() => {
     hiddenColumnsRef.current = hiddenColumns;
     if (!tableInstanceRef.current || !isTableReady) return;
     applyColumnVisibility(hiddenColumns);
-  }, [hiddenColumns, isTableReady]);
+  }, [hiddenColumns, isTableReady, columnOptions]);
 
   // Update table data when records change - only after table is built
   useEffect(() => {

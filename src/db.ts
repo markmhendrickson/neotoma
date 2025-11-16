@@ -12,6 +12,7 @@ export interface NeotomaRecord {
   properties: Record<string, unknown>;
   file_urls: string[];
   embedding?: number[] | null;
+  summary?: string | null;
   created_at: string;
   updated_at: string;
 }

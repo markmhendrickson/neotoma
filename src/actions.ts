@@ -12,6 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { detectDateFields, normalizeRow } from './normalize.js';
 import { createRecordFromUploadedFile } from './services/file_analysis.js';
+import { generateRecordSummary } from './services/summary.js';
 import { createLinkToken, exchangePublicToken, buildPlaidItemContext, isPlaidConfigured, normalizePlaidError } from './integrations/plaid/client.js';
 import {
   listPlaidItems as listPlaidItemsFromStore,
@@ -850,6 +851,9 @@ app.post('/store_record', async (req, res) => {
     embedding = await generateEmbedding(recordText);
   }
 
+  // Generate summary
+  const summary = await generateRecordSummary(type, properties, file_urls || []);
+
   const insertData: Record<string, unknown> = {
     type,
     properties,
@@ -857,6 +861,9 @@ app.post('/store_record', async (req, res) => {
   };
   if (embedding) {
     insertData.embedding = embedding;
+  }
+  if (summary) {
+    insertData.summary = summary;
   }
 
   const { data, error } = await supabase
@@ -881,7 +888,7 @@ app.post('/store_records', async (req, res) => {
 
   const { records } = parsed.data;
 
-  // Generate embeddings for records that don't have them
+  // Generate embeddings and summaries for records that don't have them
   const insertDataPromises = records.map(async ({ type, properties, file_urls, embedding: providedEmbedding }) => {
     // Filter out empty arrays - they're invalid for PostgreSQL vector type
     let embedding: number[] | null = null;
@@ -892,6 +899,9 @@ app.post('/store_records', async (req, res) => {
       embedding = await generateEmbedding(recordText);
     }
 
+    // Generate summary
+    const summary = await generateRecordSummary(type, properties, file_urls || []);
+
     const recordData: Record<string, unknown> = {
       type,
       properties,
@@ -899,6 +909,9 @@ app.post('/store_records', async (req, res) => {
     };
     if (embedding) {
       recordData.embedding = embedding;
+    }
+    if (summary) {
+      recordData.summary = summary;
     }
     return recordData;
   });
@@ -940,10 +953,10 @@ app.post('/update_record', async (req, res) => {
 
   const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
-  // Fetch existing record to determine if we need to regenerate embedding
+  // Fetch existing record to determine if we need to regenerate embedding and summary
   const { data: existing } = await supabase
     .from('records')
-    .select('type, properties, embedding')
+    .select('type, properties, embedding, file_urls')
     .eq('id', id)
     .single();
 
@@ -988,6 +1001,20 @@ app.post('/update_record', async (req, res) => {
 
   if (file_urls !== undefined) {
     updateData.file_urls = file_urls;
+  }
+
+  // Regenerate summary when type, properties, or file_urls change (similar to embedding logic)
+  if ((type !== undefined || properties !== undefined || file_urls !== undefined) && config.openaiApiKey) {
+    const newType = type !== undefined ? type : existing?.type || '';
+    // Use merged properties if properties were updated, otherwise use existing
+    const newProperties = properties !== undefined 
+      ? (updateData.properties as Record<string, unknown> || (existing?.properties as Record<string, unknown> || {}))
+      : (existing?.properties as Record<string, unknown> || {});
+    const newFileUrls = file_urls !== undefined ? file_urls : (existing?.file_urls as string[] || []);
+    const generatedSummary = await generateRecordSummary(newType, newProperties, newFileUrls);
+    if (generatedSummary) {
+      updateData.summary = generatedSummary;
+    }
   }
 
   const { data, error } = await supabase
