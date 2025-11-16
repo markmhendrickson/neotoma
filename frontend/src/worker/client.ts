@@ -47,21 +47,38 @@ export class DatastoreWorkerClient {
     const message: RPCRequest = { method, params } as RPCRequest;
 
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { resolve, reject });
-
-      this.worker.postMessage({
-        id,
-        method: message.method,
-        params: message.params,
-      });
-
-      // Timeout after 60 seconds (longer for SQLite initialization)
-      setTimeout(() => {
+      const timeoutId = setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('Request timeout'));
+          const timeoutError = new Error(`Request timeout for ${method}`);
+          console.error('[Worker Client] Request timeout:', { id, method, params });
+          reject(timeoutError);
         }
       }, 60000);
+
+      this.pendingRequests.set(id, { 
+        resolve: (value) => {
+          clearTimeout(timeoutId);
+          resolve(value);
+        }, 
+        reject: (error) => {
+          clearTimeout(timeoutId);
+          reject(error);
+        }
+      });
+
+      try {
+        this.worker.postMessage({
+          id,
+          method: message.method,
+          params: message.params,
+        });
+      } catch (error) {
+        clearTimeout(timeoutId);
+        this.pendingRequests.delete(id);
+        console.error('[Worker Client] Failed to post message:', error);
+        reject(new Error(`Failed to send request to worker: ${error instanceof Error ? error.message : 'Unknown error'}`));
+      }
     });
   }
 

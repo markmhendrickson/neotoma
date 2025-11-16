@@ -176,30 +176,38 @@ export async function analyzeFile(
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(normalizeApiUrl(apiBase, '/analyze_file'), {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${bearerToken}`,
-    },
-    body: formData,
-  });
+  try {
+    const response = await fetch(normalizeApiUrl(apiBase, '/analyze_file'), {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${bearerToken}`,
+      },
+      body: formData,
+    });
 
-  if (!response.ok) {
-    let errorMessage = 'Analysis failed';
-    if (response.status === 401 || response.status === 403) {
-      errorMessage = 'Unauthorized - check your Bearer Token';
-    } else {
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch (e) {
-        errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    if (!response.ok) {
+      let errorMessage = 'Analysis failed';
+      if (response.status === 401 || response.status === 403) {
+        errorMessage = 'Unauthorized - check your Bearer Token';
+      } else {
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
       }
+      throw new Error(errorMessage);
     }
-    throw new Error(errorMessage);
-  }
 
-  return response.json();
+    return response.json();
+  } catch (error) {
+    // Handle network errors (connection refused, etc.)
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      throw new Error('Backend server is not available. Please ensure the backend is running.');
+    }
+    throw error;
+  }
 }
 
 export async function getFileUrl(

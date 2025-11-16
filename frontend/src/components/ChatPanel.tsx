@@ -172,7 +172,11 @@ export function ChatPanel({
             }
           } catch (error) {
             // If API analysis fails, fall back to local processing
-            console.warn('API analysis failed, using local processing:', error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            // Only log if it's not a connection error (those are expected if backend is down)
+            if (!errorMessage.includes('not available') && !errorMessage.includes('Failed to fetch')) {
+              console.warn('[File Upload] API analysis failed, using local processing:', error);
+            }
             localRecord = await processFileLocally({ file });
           }
         } else {
@@ -181,7 +185,13 @@ export function ChatPanel({
         }
         
         // Store in local datastore
-        await datastore.putRecord(localRecord);
+        try {
+          await datastore.putRecord(localRecord);
+        } catch (putError) {
+          const putErrorMessage = putError instanceof Error ? putError.message : 'Failed to save record';
+          console.error('[File Upload] Failed to save record to datastore:', putError);
+          throw new Error(`Failed to save record: ${putErrorMessage}`);
+        }
         
         setUploadProgress((prev) =>
           prev.map((u) => (u.file === file ? { ...u, status: 'success' as const } : u))
@@ -199,13 +209,21 @@ export function ChatPanel({
           setUploadProgress((prev) => prev.filter((u) => u.file !== file));
         }, 2000);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[File Upload] Error processing file:', file.name, error);
+        
         setUploadProgress((prev) =>
           prev.map((u) => (u.file === file ? { ...u, status: 'error' as const } : u))
         );
-        addMessage(
-          'assistant',
-          `Failed to process "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
-        );
+        
+        // Determine if it's a timeout or other error
+        const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Request timeout');
+        const displayMessage = isTimeout
+          ? `Failed to process "${file.name}": Datastore operation timed out. The file may still be processing.`
+          : `Failed to process "${file.name}": ${errorMessage}`;
+        
+        addMessage('assistant', `Error: ${displayMessage}`);
+        
         setTimeout(() => {
           setUploadProgress((prev) => prev.filter((u) => u.file !== file));
         }, 3000);

@@ -10,14 +10,18 @@ export function useSettings() {
   const [settings, setSettings] = useState<Settings>(() => {
     try {
       const apiSyncEnabled = localStorage.getItem('apiSyncEnabled');
+      // Default to current origin in development (uses Vite proxy)
+      // Only use stored value if it exists and is different from default
+      const storedApiBase = localStorage.getItem('apiBase');
+      const defaultApiBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
       return {
-        apiBase: localStorage.getItem('apiBase') || 'http://localhost:8080',
+        apiBase: storedApiBase || defaultApiBase,
         bearerToken: localStorage.getItem('bearerToken') || '',
         apiSyncEnabled: apiSyncEnabled !== null ? apiSyncEnabled === 'true' : false,
       };
     } catch {
       return {
-        apiBase: 'http://localhost:8080',
+        apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080',
         bearerToken: '',
         apiSyncEnabled: false,
       };
