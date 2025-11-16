@@ -15,10 +15,7 @@ export async function storeEmbedding(recordId: string, embedding: number[]): Pro
   const stmt = db.prepare('UPDATE records SET embedding = ? WHERE id = ?');
   
   try {
-    stmt.bind({
-      1: JSON.stringify(embedding),
-      2: recordId,
-    });
+    stmt.bind([JSON.stringify(embedding), recordId] as readonly string[]);
     stmt.step();
   } finally {
     stmt.finalize();
@@ -33,7 +30,7 @@ export async function getEmbedding(recordId: string): Promise<number[] | null> {
   const stmt = db.prepare('SELECT embedding FROM records WHERE id = ?');
   
   try {
-    stmt.bind({ 1: recordId });
+    stmt.bind([recordId]);
 
     if (stmt.step()) {
       const row = stmt.get({ embedding: null as string | null }) as { embedding: string | null };
@@ -92,15 +89,13 @@ export async function searchVectors(options: VectorSearchOptions): Promise<Local
 
   const sql = `SELECT * FROM records ${whereClause}`;
   const stmt = db.prepare(sql);
-  const bindings: Record<number, unknown> = {};
-  params.forEach((param, i) => {
-    bindings[i + 1] = param;
-  });
 
   const results: Array<{ record: LocalRecord; similarity: number }> = [];
 
   try {
-    stmt.bind(bindings);
+    if (params.length > 0) {
+      stmt.bind(params as readonly (string | number | null | boolean | undefined)[]);
+    }
 
     while (stmt.step()) {
       const row = stmt.get({

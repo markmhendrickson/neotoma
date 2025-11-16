@@ -1448,6 +1448,37 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
   }
 });
 
+app.post('/analyze_file', upload.single('file'), async (req, res) => {
+  const tmpPath = req.file?.path;
+  if (!tmpPath) {
+    logWarn('ValidationError:analyze_file:missing_file', req);
+    return res.status(400).json({ error: 'Missing file' });
+  }
+
+  const fileBuffer = fs.readFileSync(tmpPath);
+  fs.unlinkSync(tmpPath);
+
+  const originalName = req.file?.originalname || 'upload.bin';
+  const mimeType = req.file?.mimetype || 'application/octet-stream';
+  const fileSize = req.file?.size ?? fileBuffer.length;
+
+  try {
+    const { analyzeFileForRecord } = await import('./services/file_analysis.js');
+    const analysis = await analyzeFileForRecord({
+      buffer: fileBuffer,
+      fileName: originalName,
+      mimeType,
+      fileSize,
+    });
+
+    logDebug('Success:analyze_file', req, { fileName: originalName, type: analysis.type });
+    return res.json(analysis);
+  } catch (error) {
+    logError('Error:analyze_file', req, error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to analyze file' });
+  }
+});
+
 app.get('/get_file_url', async (req, res) => {
   const schema = z.object({ file_path: z.string(), expires_in: z.coerce.number().optional() });
   const parsed = schema.safeParse(req.query);

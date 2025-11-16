@@ -45,13 +45,31 @@ if (args.length === 0) {
 }
 
 const [command, ...commandArgs] = args;
-const child = spawn(command, commandArgs, {
-  stdio: 'inherit',
-  shell: true,
-  env: { ...process.env },
-});
 
-child.on('exit', (code) => {
-  process.exit(code || 0);
-});
+// Special handling for concurrently - ensure commands are passed correctly
+if (command === 'concurrently' || command === 'npx' && commandArgs[0] === 'concurrently') {
+  // If using npx concurrently, adjust accordingly
+  const actualCommand = command === 'npx' ? 'npx' : command;
+  const actualArgs = command === 'npx' ? ['concurrently', ...commandArgs.slice(1)] : commandArgs;
+  
+  const child = spawn(actualCommand, actualArgs, {
+    stdio: 'inherit',
+    shell: false, // Don't use shell for concurrently to preserve arguments
+    env: { ...process.env },
+  });
+  
+  child.on('exit', (code) => {
+    process.exit(code || 0);
+  });
+} else {
+  const child = spawn(command, commandArgs, {
+    stdio: 'inherit',
+    shell: true,
+    env: { ...process.env },
+  });
+  
+  child.on('exit', (code) => {
+    process.exit(code || 0);
+  });
+}
 

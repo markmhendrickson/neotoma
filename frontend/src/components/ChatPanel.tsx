@@ -1,44 +1,98 @@
-import { useState, useEffect, useRef, type DragEvent } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { ArrowUp } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
-import { uploadFile, sendChatMessage } from '@/lib/api';
+import { useDatastore } from '@/hooks/useDatastore';
+import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
+import { processFileLocally } from '@/utils/file_processing';
 import type { NeotomaRecord } from '@/types/record';
+import type { LocalRecord } from '@/store/types';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
   recordsQueried?: NeotomaRecord[];
+  isError?: boolean;
+  errorCount?: number;
 }
 
-export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
+export function ChatPanel({ 
+  onFileUploaded, 
+  onFileUploadRef,
+  onErrorRef,
+}: { 
+  onFileUploaded?: () => void;
+  onFileUploadRef?: React.MutableRefObject<((files: FileList | null) => Promise<void>) | null>;
+  onErrorRef?: React.MutableRefObject<((error: string) => void) | null>;
+}) {
   const { settings } = useSettings();
-  const { bearerToken: keysBearerToken } = useKeys();
+  const { bearerToken: keysBearerToken, x25519, ed25519 } = useKeys();
+  const datastore = useDatastore(x25519, ed25519);
   // Use bearer token from keys hook if available, fallback to settings
   const bearerToken = keysBearerToken || settings.bearerToken;
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
       content:
-        'Welcome to **Neotoma**—your personal operating system for ingesting files, structuring their contents, and recalling the things you have captured. Ask me questions like "Summarize my latest uploads" or "Show workout logs from last week." To add new information, drag files into the chat or drop them on the page and I will import and categorize them for you.',
+        'Welcome to **Neotoma**—your personal operating system for ingesting files, structuring their contents, and recalling the things you have captured. Ask me questions like "Summarize my latest uploads" or "Show workout logs from last week." To add new information, drag files into the chat, drop them on the page, or paste them from your clipboard and I will import and categorize them for you.',
       timestamp: new Date(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<
     Array<{ file: File; status: 'pending' | 'success' | 'error'; name: string }>
   >([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleFileUploadRef = useRef<typeof handleFileUpload | null>(null);
+  const errorCountsRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Handle paste events for file uploads
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      // Don't handle paste if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const files: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === 'file') {
+          const file = item.getAsFile();
+          if (file) {
+            files.push(file);
+          }
+        }
+      }
+
+      if (files.length > 0) {
+        e.preventDefault();
+        // Create a FileList-like object from the files array
+        const dataTransfer = new DataTransfer();
+        files.forEach(file => dataTransfer.items.add(file));
+        handleFileUploadRef.current?.(dataTransfer.files);
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
+  }, []); // handleFileUploadRef is stable, latest function is accessed via ref
 
   const escapeHtml = (value: string) =>
     value
@@ -60,8 +114,17 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    if (!bearerToken) {
-      addMessage('assistant', 'Please set your Bearer Token in the settings above to upload files.');
+    if (!datastore.initialized) {
+      const errorMsg = datastore.error 
+        ? `Datastore initialization failed: ${datastore.error.message}. Please check the console for details.`
+        : 'Datastore is initializing. Please wait a moment and try again.';
+      console.warn('[File Upload] Datastore not ready:', {
+        initialized: datastore.initialized,
+        error: datastore.error,
+        hasX25519: !!x25519,
+        hasEd25519: !!ed25519,
+      });
+      addMessage('assistant', errorMsg);
       return;
     }
 
@@ -75,13 +138,62 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
 
     for (const file of fileArray) {
       try {
-        await uploadFile(settings.apiBase, bearerToken, file);
+        let localRecord: LocalRecord;
+        
+        // Try to get AI analysis from API if bearer token is available
+        if (bearerToken) {
+          try {
+            if (settings.apiSyncEnabled) {
+              // Full sync: upload and get analyzed record
+              const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file);
+              // Convert API record to local record format with AI-analyzed type and properties
+              localRecord = {
+                id: analyzedRecord.id,
+                type: analyzedRecord.type,
+                properties: analyzedRecord.properties,
+                file_urls: analyzedRecord.file_urls,
+                embedding: analyzedRecord.embedding || null,
+                created_at: analyzedRecord.created_at,
+                updated_at: analyzedRecord.updated_at,
+              };
+            } else {
+              // Analysis only: get AI analysis without storing in API
+              const analysis = await analyzeFile(settings.apiBase, bearerToken, file);
+              // Process file locally and merge with AI analysis
+              const basicRecord = await processFileLocally({ file });
+              localRecord = {
+                ...basicRecord,
+                type: analysis.type,
+                properties: {
+                  ...basicRecord.properties,
+                  ...analysis.properties,
+                },
+              };
+            }
+          } catch (error) {
+            // If API analysis fails, fall back to local processing
+            console.warn('API analysis failed, using local processing:', error);
+            localRecord = await processFileLocally({ file });
+          }
+        } else {
+          // Process file locally without API analysis
+          localRecord = await processFileLocally({ file });
+        }
+        
+        // Store in local datastore
+        await datastore.putRecord(localRecord);
+        
         setUploadProgress((prev) =>
           prev.map((u) => (u.file === file ? { ...u, status: 'success' as const } : u))
         );
-        addMessage('assistant', `File "${file.name}" uploaded successfully.`);
+        
+        const message = settings.apiSyncEnabled
+          ? `File "${file.name}" analyzed and saved locally with type "${localRecord.type}".`
+          : `File "${file.name}" saved locally.`;
+        addMessage('assistant', message);
+        
         if (onFileUploaded) {
-          setTimeout(() => onFileUploaded(), 500);
+          setTimeout(() => onFileUploaded(), 100);
         }
         setTimeout(() => {
           setUploadProgress((prev) => prev.filter((u) => u.file !== file));
@@ -92,7 +204,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
         );
         addMessage(
           'assistant',
-          `Failed to upload "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
+          `Failed to process "${file.name}": ${error instanceof Error ? error.message : 'Unknown error'}`
         );
         setTimeout(() => {
           setUploadProgress((prev) => prev.filter((u) => u.file !== file));
@@ -101,31 +213,75 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
     }
   };
 
+  // Keep handleFileUpload ref up to date
+  handleFileUploadRef.current = handleFileUpload;
+  // Also expose to parent component if provided
+  if (onFileUploadRef) {
+    onFileUploadRef.current = handleFileUpload;
+  }
+
   const addMessage = (role: 'user' | 'assistant', content: string, recordsQueried?: NeotomaRecord[]) => {
-    setMessages((prev) => [...prev, { role, content, timestamp: new Date(), recordsQueried }]);
-  };
-
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const related = e.relatedTarget as Node | null;
-    if (!related || !e.currentTarget.contains(related)) {
-      setIsDragging(false);
+    const isError = role === 'assistant' && (
+      content.toLowerCase().startsWith('error:') || 
+      content.toLowerCase().startsWith('error ') ||
+      content.toLowerCase().includes('error:') ||
+      content.toLowerCase().includes('failed')
+    );
+    
+    if (isError) {
+      // Track error counts
+      const errorKey = content.toLowerCase();
+      const currentCount = errorCountsRef.current.get(errorKey) || 0;
+      const newCount = currentCount + 1;
+      errorCountsRef.current.set(errorKey, newCount);
+      
+      // Check if this error already exists in messages
+      setMessages((prev) => {
+        const errorIndex = prev.findIndex(
+          (msg) => msg.isError && msg.content.toLowerCase() === errorKey
+        );
+        
+        if (errorIndex >= 0) {
+          // Update existing error message with new count
+          const updated = [...prev];
+          updated[errorIndex] = {
+            ...updated[errorIndex],
+            errorCount: newCount,
+            timestamp: new Date(), // Update timestamp to show it's recent
+          };
+          return updated;
+        } else {
+          // Add new error message
+          return [...prev, { 
+            role, 
+            content, 
+            timestamp: new Date(), 
+            recordsQueried,
+            isError: true,
+            errorCount: 1,
+          }];
+        }
+      });
+      
+      console.error('[Chat Error]', content, newCount > 1 ? `(occurred ${newCount} times)` : '');
+    } else {
+      // Regular message
+      setMessages((prev) => [...prev, { role, content, timestamp: new Date(), recordsQueried }]);
     }
   };
 
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    handleFileUpload(e.dataTransfer.files);
+  // Expose error handler via ref
+  const handleError = useRef<((error: string) => void) | null>(null);
+  handleError.current = (error: string) => {
+    console.error('[Error]', error);
+    addMessage('assistant', `Error: ${error}`);
   };
+  
+  useEffect(() => {
+    if (onErrorRef) {
+      onErrorRef.current = handleError.current;
+    }
+  }, [onErrorRef]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
@@ -158,9 +314,6 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
     <aside className="w-[400px] shrink-0 bg-background border-r flex flex-col overflow-hidden">
       <div
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 relative"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
       >
         {messages.map((msg, idx) => (
           <div
@@ -173,10 +326,18 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
               className={`px-3 py-2 rounded-xl text-sm ${
                 msg.role === 'user'
                   ? 'bg-primary text-primary-foreground rounded-br-sm'
+                  : msg.isError
+                  ? 'bg-destructive/10 text-destructive border border-destructive/20 rounded-bl-sm'
                   : 'bg-muted text-foreground rounded-bl-sm'
               }`}
-              dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
-            />
+            >
+              <div dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+              {msg.isError && msg.errorCount && msg.errorCount > 1 && (
+                <div className="text-xs text-destructive/70 mt-1 font-medium">
+                  (occurred {msg.errorCount} times)
+                </div>
+              )}
+            </div>
             {msg.recordsQueried && msg.recordsQueried.length > 0 && (
               <div className="px-2.5 py-1.5 bg-accent text-accent-foreground rounded-md text-xs font-semibold mt-2">
                 Found {msg.recordsQueried.length} record{msg.recordsQueried.length !== 1 ? 's' : ''}
@@ -199,11 +360,6 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
           </div>
         )}
         <div ref={messagesEndRef} />
-        <div
-          className={`absolute inset-0 pointer-events-none border-2 border-dashed rounded-lg transition-colors ${
-            isDragging ? 'border-primary bg-accent/10' : 'border-transparent'
-          }`}
-        />
       </div>
       <div className="flex gap-2 p-4 border-t shrink-0">
         <Input
@@ -227,7 +383,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
           onChange={(e) => handleFileUpload(e.target.files)}
         />
         <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
-          Send
+          <ArrowUp className="h-4 w-4" />
         </Button>
       </div>
       {uploadProgress.length > 0 && (
