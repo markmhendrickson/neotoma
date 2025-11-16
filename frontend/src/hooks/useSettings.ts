@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export interface Settings {
   apiBase: string;
@@ -20,7 +20,7 @@ export function useSettings() {
     }
   });
 
-  const saveSettings = (newSettings: Partial<Settings>) => {
+  const saveSettings = useCallback((newSettings: Partial<Settings>) => {
     try {
       if (newSettings.apiBase !== undefined) {
         localStorage.setItem('apiBase', newSettings.apiBase);
@@ -32,11 +32,11 @@ export function useSettings() {
     } catch (e) {
       console.warn('Failed to save settings', e);
     }
-  };
+  }, []);
 
-  const updateBearerToken = (token: string) => {
+  const updateBearerToken = useCallback((token: string) => {
     saveSettings({ bearerToken: token });
-  };
+  }, [saveSettings]);
 
   return { settings, saveSettings, updateBearerToken };
 }

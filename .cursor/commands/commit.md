@@ -1,5 +1,7 @@
 # commit
-Run entire tests suite and resolve any errors as necessary. Proceed to analyze all uncommitted files for security vulnerabilities and patch as necessary. 
+Run entire tests suite and resolve any errors as necessary. Proceed to analyze all uncommitted files for security vulnerabilities and patch as necessary.
+
+**UI TESTING**: If any frontend files were modified (`frontend/src/**`), automatically follow the Testing Rule (`.cursor/rules/testing.md`) to verify user-facing changes work correctly in the browser before committing. 
 
 **IMPORTANT**: Before committing, ensure all changes are staged:
 1. Run `git add -A` to stage all changes (including any made during security analysis)
@@ -14,5 +16,7 @@ Run entire tests suite and resolve any errors as necessary. Proceed to analyze a
 5. If the new branch name already exists, append a number suffix or use alternative
 
 Then proceed to git commit with commit message that represents their functional changes, and push to origin. Generate the most detailed, multi-line commit message possible given changes and constraints.
+
+**WORKTREE COMPATIBILITY:** If working in a Git worktree (created via branch command), commits work exactly the same way. Commits made in worktrees are automatically visible in all worktrees since they share the same .git directory. Branch renaming logic works the same in worktrees.
 
 After committing, verify no unstaged changes remain with `git status`. If any files were missed, amend the commit with `git add <file> && git commit --amend --no-edit`.

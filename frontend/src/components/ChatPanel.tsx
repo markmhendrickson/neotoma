@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useSettings } from '@/hooks/useSettings';
+import { useKeys } from '@/hooks/useKeys';
 import { uploadFile, sendChatMessage } from '@/lib/api';
 import type { NeotomaRecord } from '@/types/record';
 
@@ -15,6 +16,9 @@ interface ChatMessage {
 
 export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
   const { settings } = useSettings();
+  const { bearerToken: keysBearerToken } = useKeys();
+  // Use bearer token from keys hook if available, fallback to settings
+  const bearerToken = keysBearerToken || settings.bearerToken;
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
@@ -56,7 +60,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
-    if (!settings.bearerToken) {
+    if (!bearerToken) {
       addMessage('assistant', 'Please set your Bearer Token in the settings above to upload files.');
       return;
     }
@@ -71,7 +75,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
 
     for (const file of fileArray) {
       try {
-        await uploadFile(settings.apiBase, settings.bearerToken, file);
+        await uploadFile(settings.apiBase, bearerToken, file);
         setUploadProgress((prev) =>
           prev.map((u) => (u.file === file ? { ...u, status: 'success' as const } : u))
         );
@@ -131,7 +135,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
     addMessage('user', userMessage);
     setIsLoading(true);
 
-    if (!settings.bearerToken) {
+    if (!bearerToken) {
       setIsLoading(false);
       addMessage('assistant', 'Please set your Bearer Token in the settings above to use the chat feature.');
       return;
@@ -141,7 +145,7 @@ export function ChatPanel({ onFileUploaded }: { onFileUploaded?: () => void }) {
       const messagesToSend = messages
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const response = await sendChatMessage(settings.apiBase, settings.bearerToken, messagesToSend);
+      const response = await sendChatMessage(settings.apiBase, bearerToken, messagesToSend);
       addMessage('assistant', response.message?.content || 'No response received', response.records_queried || undefined);
     } catch (error) {
       addMessage('assistant', `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`);

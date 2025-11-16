@@ -55,13 +55,13 @@ export class DatastoreWorkerClient {
         params: message.params,
       });
 
-      // Timeout after 30 seconds
+      // Timeout after 60 seconds (longer for SQLite initialization)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
           reject(new Error('Request timeout'));
         }
-      }, 30000);
+      }, 60000);
     });
   }
 

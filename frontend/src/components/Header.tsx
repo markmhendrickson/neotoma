@@ -1,15 +1,17 @@
 import { useKeys } from '@/hooks/useKeys';
 import { useSettings } from '@/hooks/useSettings';
 import { KeyManagementDialog } from './KeyManagementDialog';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 export function Header() {
   const { bearerToken, maskedPrivateKey, loading, importKeys, exportKeys, regenerateKeys } = useKeys();
   const { updateBearerToken } = useSettings();
+  const lastBearerTokenRef = useRef<string>('');
 
-  // Update bearer token in settings when keys are loaded
+  // Update bearer token in settings when keys are loaded (only if changed)
   useEffect(() => {
-    if (bearerToken && !loading) {
+    if (bearerToken && !loading && bearerToken !== lastBearerTokenRef.current) {
+      lastBearerTokenRef.current = bearerToken;
       updateBearerToken(bearerToken);
     }
   }, [bearerToken, loading, updateBearerToken]);

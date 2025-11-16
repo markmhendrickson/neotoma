@@ -96,7 +96,9 @@ export async function uploadFile(
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${apiBase}/upload_file`, {
+  // Use /api prefix for Vite proxy
+  const apiUrl = apiBase.includes('/api') ? `${apiBase}/upload_file` : `${apiBase}/api/upload_file`;
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${bearerToken}`,

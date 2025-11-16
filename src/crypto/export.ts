@@ -19,6 +19,32 @@ export function exportKeyPair(
 }
 
 /**
+ * Export both X25519 and Ed25519 key pairs together
+ */
+export function exportKeyPairs(
+  x25519KeyPair: X25519KeyPair,
+  ed25519KeyPair: Ed25519KeyPair
+): { x25519: KeyExport; ed25519: KeyExport } {
+  return {
+    x25519: exportKeyPair(x25519KeyPair),
+    ed25519: exportKeyPair(ed25519KeyPair),
+  };
+}
+
+/**
+ * Import both X25519 and Ed25519 key pairs from exported format
+ */
+export function importKeyPairs(exported: { x25519: KeyExport; ed25519: KeyExport }): {
+  x25519: X25519KeyPair;
+  ed25519: Ed25519KeyPair;
+} {
+  return {
+    x25519: importKeyPair(exported.x25519) as X25519KeyPair,
+    ed25519: importKeyPair(exported.ed25519) as Ed25519KeyPair,
+  };
+}
+
+/**
  * Import keypair from JSON format
  * Validates key format and structure for security
  */
