@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  ColumnDef,
+  SortingState,
+  VisibilityState,
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+} from '@tanstack/react-table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -7,21 +16,11 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { NeotomaRecord } from '@/types/record';
 import { STATUS_ORDER } from '@/types/record';
-
-declare global {
-  interface Window {
-    Tabulator: any;
-  }
-}
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface RecordsTableProps {
   records: NeotomaRecord[];
@@ -38,11 +37,6 @@ export function RecordsTable({
   onSearch,
   onTypeFilter,
 }: RecordsTableProps) {
-  const tableRef = useRef<HTMLDivElement>(null);
-  const tableInstanceRef = useRef<any>(null);
-  const tableBuiltRef = useRef<boolean>(false);
-  const pendingRecordsRef = useRef<NeotomaRecord[]>(records);
-  const [isTableReady, setIsTableReady] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
   const ALL_TYPES_VALUE = '__all__';
@@ -50,67 +44,119 @@ export function RecordsTable({
     () => types.filter((type) => type && type.trim().length > 0),
     [types]
   );
-  const [hiddenColumns, setHiddenColumns] = useState<string[]>(['_status', 'id', 'created_at', 'updated_at', 'file_urls']);
-  const hiddenColumnsRef = useRef<string[]>(hiddenColumns);
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'updated_at', desc: true },
+  ]);
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
-  useEffect(() => {
-    (window as any).__neotomaTypes = types;
-  }, [types]);
+  const columnLabels: Record<string, string> = useMemo(
+    () => ({
+      _status: 'Status',
+      id: 'ID',
+      type: 'Type',
+      created_at: 'Created',
+      updated_at: 'Updated',
+      file_urls: 'Files',
+    }),
+    []
+  );
 
-  const columnDefinitions = useMemo(
+  const columns = useMemo<ColumnDef<NeotomaRecord>[]>(
     () => [
       {
-        title: 'Status',
-        field: '_status',
-        width: 120,
-        sorter: (a: string, b: string) =>
-          (STATUS_ORDER[a as keyof typeof STATUS_ORDER] ?? STATUS_ORDER.Ready) -
-          (STATUS_ORDER[b as keyof typeof STATUS_ORDER] ?? STATUS_ORDER.Ready),
-        formatter: (cell: any) => {
-          const value = cell.getValue() || 'Ready';
+        accessorKey: '_status',
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-3 h-8 data-[state=open]:bg-accent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          >
+            Status
+            {column.getIsSorted() === 'desc' ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === 'asc' ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        ),
+        sortingFn: (rowA, rowB, columnId) => {
+          const a = rowA.getValue<string>(columnId) || 'Ready';
+          const b = rowB.getValue<string>(columnId) || 'Ready';
+          return (
+            (STATUS_ORDER[a as keyof typeof STATUS_ORDER] ?? STATUS_ORDER.Ready) -
+            (STATUS_ORDER[b as keyof typeof STATUS_ORDER] ?? STATUS_ORDER.Ready)
+          );
+        },
+        cell: ({ row }) => {
+          const value = row.original._status || 'Ready';
           if (value === 'Uploading') return 'Uploading…';
           if (value === 'Failed') return 'Failed';
           return 'Ready';
         },
       },
-      { title: 'ID', field: 'id', width: 200, sorter: 'string' },
-      { title: 'Type', field: 'type', width: 150, sorter: 'string' },
       {
-        title: 'Summary',
-        field: 'summary',
-        width: 400,
-        sorter: 'string',
-        formatter: (cell: any) => {
-          const value = cell.getValue();
-          return value || '—';
-        },
+        accessorKey: 'id',
+        header: 'ID',
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span>,
       },
       {
-        title: 'Created',
-        field: 'created_at',
-        width: 180,
-        sorter: (a: string, b: string) => new Date(a).getTime() - new Date(b).getTime(),
-        formatter: (cell: any) => {
-          const date = new Date(cell.getValue());
-          return date.toLocaleString();
-        },
+        accessorKey: 'type',
+        header: 'Type',
       },
       {
-        title: 'Updated',
-        field: 'updated_at',
-        width: 180,
-        sorter: (a: string, b: string) => new Date(a).getTime() - new Date(b).getTime(),
-        formatter: (cell: any) => {
-          const date = new Date(cell.getValue());
-          return date.toLocaleString();
-        },
+        accessorKey: 'created_at',
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-3 h-8 data-[state=open]:bg-accent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          >
+            Created
+            {column.getIsSorted() === 'desc' ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === 'asc' ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        ),
+        sortingFn: 'datetime',
+        cell: ({ row }) =>
+          row.original.created_at ? new Date(row.original.created_at).toLocaleString() : '—',
       },
       {
-        title: 'Files',
-        field: 'file_urls',
-        width: 100,
-        formatter: (cell: any) => {
-          const urls = cell.getValue() || [];
+        accessorKey: 'updated_at',
+        header: ({ column }) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="-ml-3 h-8 data-[state=open]:bg-accent"
+            onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          >
+            Updated
+            {column.getIsSorted() === 'desc' ? (
+              <ArrowDown className="ml-2 h-4 w-4" />
+            ) : column.getIsSorted() === 'asc' ? (
+              <ArrowUp className="ml-2 h-4 w-4" />
+            ) : (
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            )}
+          </Button>
+        ),
+        sortingFn: 'datetime',
+        cell: ({ row }) =>
+          row.original.updated_at ? new Date(row.original.updated_at).toLocaleString() : '—',
+      },
+      {
+        accessorKey: 'file_urls',
+        header: 'Files',
+        cell: ({ row }) => {
+          const urls = row.original.file_urls || [];
           return urls.length > 0 ? `${urls.length} file(s)` : '—';
         },
       },
@@ -118,157 +164,18 @@ export function RecordsTable({
     []
   );
 
-  const columnOptions = useMemo(
-    () =>
-      columnDefinitions
-        .filter((col) => typeof col.field === 'string')
-        .map((col) => ({
-          field: col.field as string,
-          title: col.title as string,
-        })),
-    [columnDefinitions]
-  );
-
-  const applyColumnVisibility = (hiddenList: string[]) => {
-    if (!tableInstanceRef.current) return;
-    console.log('[RecordsTable] Applying column visibility:', { hiddenList, columnOptions });
-    columnOptions.forEach(({ field }) => {
-      const column = tableInstanceRef.current.getColumn(field);
-      if (!column) {
-        console.warn(`[RecordsTable] Column not found: ${field}`);
-        return;
-      }
-      if (hiddenList.includes(field)) {
-        column.hide();
-        console.log(`[RecordsTable] Hiding column: ${field}`);
-      } else {
-        column.show();
-        console.log(`[RecordsTable] Showing column: ${field}`);
-      }
-    });
-  };
-
-  useEffect(() => {
-    if (!tableRef.current) return;
-
-    // Wait for Tabulator to be available
-    const initTable = () => {
-      if (!window.Tabulator) {
-        setTimeout(initTable, 100);
-        return;
-      }
-
-      const TabulatorClass = window.Tabulator;
-      if (!tableRef.current) return;
-
-      const columns = columnDefinitions.map((column) => ({ ...column }));
-
-      const table = new TabulatorClass(tableRef.current, {
-        data: [], // Start with empty data, set it after table is built
-        layout: 'fitColumns',
-        height: tableRef.current.clientHeight,
-        selectable: 1,
-        movableColumns: true,
-        virtualDom: true,
-        virtualDomBuffer: 300,
-        columns: columns,
-        rowFormatter: (row: any) => {
-          const data = row.getData();
-          const el = row.getElement();
-          el.classList.remove('row-uploading', 'row-error');
-          if (data._status === 'Uploading') {
-            el.classList.add('row-uploading');
-          } else if (data._status === 'Failed') {
-            el.classList.add('row-error');
-          }
-        },
-      });
-
-      table.on('rowClick', (_e: any, row: any) => {
-        onRecordClick(row.getData());
-      });
-
-      // Wait for table to be built before allowing data updates
-      table.on('tableBuilt', () => {
-        tableBuiltRef.current = true;
-        setIsTableReady(true);
-        // Set pending records after table is built - use setTimeout to ensure table is fully ready
-        setTimeout(() => {
-          if (pendingRecordsRef.current.length > 0 && tableInstanceRef.current && tableBuiltRef.current) {
-            try {
-              tableInstanceRef.current.setData(pendingRecordsRef.current);
-            } catch (error) {
-              // Silently ignore - table might not be fully ready
-            }
-          }
-          applyColumnVisibility(hiddenColumns);
-        }, 100);
-      });
-
-      tableInstanceRef.current = table;
-    };
-
-    initTable();
-
-    return () => {
-      if (tableInstanceRef.current) {
-        tableInstanceRef.current.destroy();
-        tableInstanceRef.current = null;
-        tableBuiltRef.current = false;
-        setIsTableReady(false);
-      }
-    };
-  }, [onRecordClick, columnDefinitions]); // Re-initialize table when column definitions change
-
-  useEffect(() => {
-    hiddenColumnsRef.current = hiddenColumns;
-    if (!tableInstanceRef.current || !isTableReady) return;
-    applyColumnVisibility(hiddenColumns);
-  }, [hiddenColumns, isTableReady, columnOptions]);
-
-  // Update table data when records change - only after table is built
-  useEffect(() => {
-    pendingRecordsRef.current = records;
-    
-    if (!tableInstanceRef.current || !isTableReady) {
-      return;
-    }
-
-    // Use requestAnimationFrame to ensure table is ready
-    requestAnimationFrame(() => {
-      if (tableInstanceRef.current && isTableReady) {
-        try {
-          tableInstanceRef.current.setData(records);
-        } catch (error) {
-          // Silently ignore - table might not be fully ready
-        }
-      }
-    });
-  }, [records, isTableReady]);
-
-  // Handle resize - only set up after table is built
-  useEffect(() => {
-    if (!tableRef.current || !tableInstanceRef.current || !isTableReady) {
-      // Wait for table to be built before setting up resize observer
-      return;
-    }
-
-    const resizeObserver = new ResizeObserver(() => {
-      if (tableInstanceRef.current && tableRef.current && isTableReady) {
-        try {
-          tableInstanceRef.current.setHeight(tableRef.current.clientHeight);
-        } catch (error) {
-          // Silently ignore - table might not be fully ready
-        }
-      }
-    });
-
-    resizeObserver.observe(tableRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, [isTableReady]); // Re-run when table is built
+  const table = useReactTable({
+    data: records,
+    columns,
+    state: {
+      sorting,
+      columnVisibility,
+    },
+    onSortingChange: setSorting,
+    onColumnVisibilityChange: setColumnVisibility,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -279,15 +186,6 @@ export function RecordsTable({
     const normalized = type === ALL_TYPES_VALUE ? '' : type;
     setSelectedType(normalized);
     onTypeFilter(normalized);
-  };
-
-  const handleColumnVisibilityChange = (field: string, visible: boolean) => {
-    setHiddenColumns((prev) => {
-      if (!visible) {
-        return prev.includes(field) ? prev : [...prev, field];
-      }
-      return prev.filter((f) => f !== field);
-    });
   };
 
   return (
@@ -301,33 +199,40 @@ export function RecordsTable({
             onChange={(e) => handleSearch(e.target.value)}
             className="w-[300px]"
           />
-          <Select value={selectedType || ALL_TYPES_VALUE} onValueChange={handleTypeChange}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_TYPES_VALUE}>All Types</SelectItem>
-              {selectableTypes.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline">
+                {selectedType ? `Type: ${selectedType}` : 'All Types'}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-48">
+              <DropdownMenuLabel>Filter by type</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={selectedType || ALL_TYPES_VALUE}
+                onValueChange={handleTypeChange}
+              >
+                <DropdownMenuRadioItem value={ALL_TYPES_VALUE}>All Types</DropdownMenuRadioItem>
+                {selectableTypes.map((type) => (
+                  <DropdownMenuRadioItem key={type} value={type}>
+                    {type}
+                  </DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">Columns</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              {columnOptions.map(({ field, title }) => (
+              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              {table.getAllLeafColumns().map((column) => (
                 <DropdownMenuCheckboxItem
-                  key={field}
-                  checked={!hiddenColumns.includes(field)}
-                  onCheckedChange={(checked) =>
-                    handleColumnVisibilityChange(field, Boolean(checked))
-                  }
+                  key={column.id}
+                  checked={column.getIsVisible()}
+                  onCheckedChange={() => column.toggleVisibility()}
                 >
-                  {title}
+                  {columnLabels[column.id] || column.id}
                 </DropdownMenuCheckboxItem>
               ))}
             </DropdownMenuContent>
@@ -337,7 +242,54 @@ export function RecordsTable({
           {records.length} record{records.length !== 1 ? 's' : ''}
         </div>
       </div>
-      <div ref={tableRef} className="flex-1 min-h-0 max-h-full border rounded-lg overflow-auto" />
+      <div className="flex-1 min-h-0 max-h-full overflow-hidden rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow key={headerGroup.id}>
+                {headerGroup.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(header.column.columnDef.header, header.getContext())}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {table.getRowModel().rows.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() ? 'selected' : undefined}
+                  onClick={() => onRecordClick(row.original)}
+                  className={cn(
+                    'cursor-pointer',
+                    row.original._status === 'Uploading' && 'bg-amber-50',
+                    row.original._status === 'Failed' && 'bg-red-50'
+                  )}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={table.getAllLeafColumns().length}
+                  className="h-24 text-center text-sm text-muted-foreground"
+                >
+                  No records found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -575,5 +575,5 @@ Without this variable (or other provider configuration), clients must provide em
 
 ## License
 
-ISC
+MIT
 

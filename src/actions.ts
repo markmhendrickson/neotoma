@@ -26,6 +26,10 @@ import {
   type SanitizedPlaidItem,
   type PlaidPreviewSummary,
 } from './services/plaid_sync.js';
+import { ensurePublicKeyRegistered, getPublicKey, isBearerTokenValid } from './services/public_key_registry.js';
+import { verifyRequest, parseAuthHeader } from './crypto/auth.js';
+import { encryptResponseMiddleware } from './middleware/encrypt_response.js';
+import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
 
 const app = express();
@@ -183,9 +187,9 @@ app.get('/health', (_req, res) => {
   return res.json({ ok: true });
 });
 
-// Simple bearer token auth middleware with bypass for openapi, health, and preflight
-const AUTH_TOKEN = process.env.ACTIONS_BEARER_TOKEN || '';
-app.use((req, res, next) => {
+// Public key-based authentication middleware
+app.use(async (req, res, next) => {
+  // Bypass auth for public endpoints
   if (
     req.method === 'OPTIONS' ||
     (req.method === 'GET' && (
@@ -198,25 +202,45 @@ app.use((req, res, next) => {
   ) {
     return next();
   }
-  if (!AUTH_TOKEN) {
-    logError('AuthConfigMissing', req, new Error('ACTIONS_BEARER_TOKEN missing'));
-    return res.status(500).json({ error: 'Server not configured: ACTIONS_BEARER_TOKEN missing' });
-  }
 
   const headerAuth = req.headers.authorization || '';
 
-  if (headerAuth.startsWith('Bearer ')) {
-    const token = headerAuth.slice('Bearer '.length);
-    if (token !== AUTH_TOKEN) {
-      logWarn('AuthInvalidToken', req);
-      return res.status(403).json({ error: 'Invalid token' });
-    }
-    return next();
+  if (!headerAuth.startsWith('Bearer ')) {
+    logWarn('AuthMissingBearer', req);
+    return res.status(401).json({ error: 'Missing Bearer token' });
   }
 
-  logWarn('AuthMissingBearer', req);
-  return res.status(401).json({ error: 'Missing Bearer token' });
+  const bearerToken = headerAuth.slice('Bearer '.length).trim();
+  
+  // Bearer token is now base64url-encoded Ed25519 public key
+  // Auto-register if not exists (first-time user)
+  ensurePublicKeyRegistered(bearerToken);
+
+  if (!isBearerTokenValid(bearerToken)) {
+    logWarn('AuthInvalidToken', req);
+    return res.status(403).json({ error: 'Invalid bearer token (public key)' });
+  }
+
+  // Optional: Verify signature if provided
+  const { signature } = parseAuthHeader(headerAuth);
+  if (signature && req.body) {
+    const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    const isValid = verifyRequest(bodyString, signature, bearerToken);
+    if (!isValid) {
+      logWarn('AuthInvalidSignature', req);
+      return res.status(403).json({ error: 'Invalid request signature' });
+    }
+  }
+
+  // Attach public key to request for encryption service
+  (req as any).publicKey = getPublicKey(bearerToken);
+  (req as any).bearerToken = bearerToken;
+
+  return next();
 });
+
+// Response encryption middleware (applies to all authenticated routes)
+app.use(encryptResponseMiddleware);
 
 // Schemas
 const StoreSchema = z.object({
@@ -2123,6 +2147,11 @@ app.get('*', (req, res, next) => {
   } else {
     next();
   }
+});
+
+// Initialize encryption service
+initServerKeys().catch(err => {
+  console.error('Failed to initialize encryption service:', err);
 });
 
 const httpPort = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT, 10) : (config.port || 3000);

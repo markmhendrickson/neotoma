@@ -13,7 +13,12 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: JWT
+      bearerFormat: base64url
+      description: |
+        Bearer token is a base64url-encoded Ed25519 public key.
+        The corresponding private key is used by the client to decrypt responses.
+        For ChatGPT Actions, use the public key (base64url-encoded) as the bearer token.
+        Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
     StoreRecordRequest:
       type: object
