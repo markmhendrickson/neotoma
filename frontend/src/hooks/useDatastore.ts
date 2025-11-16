@@ -27,7 +27,7 @@ export function useDatastore(
     async function init() {
       try {
         // Create worker client
-        const workerUrl = new URL('./worker/db.worker.ts', import.meta.url);
+        const workerUrl = new URL('../worker/db.worker.ts', import.meta.url);
         workerClient = new DatastoreWorkerClient(workerUrl);
 
         // Initialize database

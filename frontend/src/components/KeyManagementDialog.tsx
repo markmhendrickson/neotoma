@@ -8,13 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
-import type { KeyExport } from '../../../src/crypto/types.js';
-
 interface KeyManagementDialogProps {
   maskedPrivateKey: string;
   bearerToken: string;
-  onImport: (keyExport: KeyExport) => Promise<boolean>;
-  onExport: () => Promise<KeyExport | null>;
+  onImport: (keyExports: { x25519: any; ed25519: any }) => Promise<boolean>;
+  onExport: () => Promise<{ x25519: any; ed25519: any } | null>;
   onRegenerate: () => Promise<boolean>;
 }
 
@@ -51,8 +49,8 @@ export function KeyManagementDialog({
 
   const handleImport = async () => {
     try {
-      const keyExport = JSON.parse(importText) as KeyExport;
-      const success = await onImport(keyExport);
+      const keyExports = JSON.parse(importText) as { x25519: any; ed25519: any };
+      const success = await onImport(keyExports);
       if (success) {
         toast({
           title: 'Keys imported',
@@ -106,10 +104,13 @@ export function KeyManagementDialog({
           Keys
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" aria-describedby="key-management-description">
         <DialogHeader>
           <DialogTitle>Key Management</DialogTitle>
         </DialogHeader>
+        <p id="key-management-description" className="sr-only">
+          Manage your cryptographic keys: view masked private key, export/import keys, or regenerate new keys.
+        </p>
         <div className="space-y-4">
           <div>
             <Label>Private Key (masked)</Label>
