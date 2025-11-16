@@ -6,6 +6,13 @@ Run entire tests suite and resolve any errors as necessary. Proceed to analyze a
 2. Verify staged changes with `git status` to ensure nothing is missed
 3. If any files were modified after the initial `git add`, run `git add -A` again right before committing
 
+**BRANCH RENAMING**: Before committing, check if current branch starts with "chat-". If so:
+1. Generate the commit message first (as described below)
+2. Use the commit message to generate a descriptive branch name using the branch naming logic (sanitize, add prefix like feat/fix/refactor/etc.)
+3. Rename the current branch to the new descriptive name using `git branch -m <new-name>`
+4. Ensure we're not on main/master before renaming (skip if on protected branch)
+5. If the new branch name already exists, append a number suffix or use alternative
+
 Then proceed to git commit with commit message that represents their functional changes, and push to origin. Generate the most detailed, multi-line commit message possible given changes and constraints.
 
 After committing, verify no unstaged changes remain with `git status`. If any files were missed, amend the commit with `git add <file> && git commit --amend --no-edit`.
