@@ -12,7 +12,7 @@ export function Header() {
   const [token, setToken] = useState(settings.bearerToken);
 
   const handleSave = () => {
-    saveSettings({ apiBase: apiBase.trim() || window.location.origin, bearerToken: token.trim() });
+    saveSettings({ apiBase: apiBase.trim() || 'http://localhost:8080', bearerToken: token.trim() });
     toast({
       title: 'Settings saved',
       description: 'Settings have been saved successfully.',

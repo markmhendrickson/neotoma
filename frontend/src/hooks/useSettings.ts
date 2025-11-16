@@ -9,12 +9,12 @@ export function useSettings() {
   const [settings, setSettings] = useState<Settings>(() => {
     try {
       return {
-        apiBase: localStorage.getItem('apiBase') || window.location.origin,
+        apiBase: localStorage.getItem('apiBase') || 'http://localhost:8080',
         bearerToken: localStorage.getItem('bearerToken') || '',
       };
     } catch {
       return {
-        apiBase: window.location.origin,
+        apiBase: 'http://localhost:8080',
         bearerToken: '',
       };
     }

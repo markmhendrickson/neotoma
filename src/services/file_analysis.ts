@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { supabase, type NeotomaRecord } from '../db.js';
 import { config } from '../config.js';
 import { generateEmbedding, getRecordText } from '../embeddings.js';
+import { generateRecordSummary } from './summary.js';
 
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
@@ -11,6 +12,7 @@ const MAX_PREVIEW_CHARS = 8000;
 export interface FileAnalysisResult {
   type: string;
   properties: Record<string, unknown>;
+  summary?: string;
 }
 
 interface AnalyzeFileOptions {
@@ -26,7 +28,7 @@ interface CreateRecordFromFileOptions extends AnalyzeFileOptions {
   overrideProperties?: Record<string, unknown>;
 }
 
-function extractPreview(buffer: Buffer): string {
+export function extractPreview(buffer: Buffer): string {
   if (buffer.length === 0) {
     return '';
   }
@@ -108,9 +110,8 @@ export async function analyzeFileForRecord(options: AnalyzeFileOptions): Promise
   if (!openai || !preview) {
     return {
       type: fallbackTypeFromName(fileName, mimeType),
-      properties: {
-        summary: 'Automatic analysis unavailable; using basic metadata only.',
-      },
+      properties: {},
+      summary: 'Automatic analysis unavailable; using basic metadata only.',
     };
   }
 
@@ -121,7 +122,7 @@ export async function analyzeFileForRecord(options: AnalyzeFileOptions): Promise
     'The "type" should be a concise noun (e.g. invoice, receipt, statement, contract, resume, report).',
     '',
     'The "properties" object MUST include:',
-    '1. summary: A short sentence describing the document content',
+    '1. summary: A concise, noun-oriented sentence describing the document (e.g., "RSS feed...", "Electronic ticket...", "Outline of architecture..."). Start with a noun phrase, avoid "This document is..." or "The document appears to be...".',
     '2. All structured fields you can reliably extract from the file content, filename, or metadata, such as:',
     '   - Dates: creation_date, due_date, transaction_date, expiration_date, etc.',
     '   - Financial: amount, total, subtotal, tax, currency, account_number, routing_number',
@@ -162,35 +163,43 @@ export async function analyzeFileForRecord(options: AnalyzeFileOptions): Promise
     if (!rawContent) {
       return {
         type: fallbackTypeFromName(fileName, mimeType),
-        properties: {
-          summary: 'No analysis returned; falling back to metadata.',
-        },
+        properties: {},
+        summary: 'No analysis returned; falling back to metadata.',
       };
     }
 
     const cleaned = stripCodeFence(rawContent);
-    const parsed = JSON.parse(cleaned) as Partial<FileAnalysisResult>;
+    const parsed = JSON.parse(cleaned) as Partial<FileAnalysisResult & { properties?: Record<string, unknown> }>;
     const resultType = typeof parsed.type === 'string' && parsed.type ? parsed.type : fallbackTypeFromName(fileName, mimeType);
     const resultProps = parsed.properties && typeof parsed.properties === 'object' && !Array.isArray(parsed.properties)
       ? (parsed.properties as Record<string, unknown>)
-      : { summary: 'Model response lacked structured properties; metadata only.' };
+      : {};
 
-    if (!('summary' in resultProps)) {
-      resultProps.summary = 'Summary unavailable from model.';
+    // Extract summary from properties if present, otherwise use fallback
+    let summary: string | undefined;
+    if (resultProps.summary && typeof resultProps.summary === 'string') {
+      summary = resultProps.summary;
+      // Remove summary from properties so it doesn't get stored there
+      delete resultProps.summary;
+    } else if (parsed.summary && typeof parsed.summary === 'string') {
+      summary = parsed.summary;
+    } else {
+      summary = 'Summary unavailable from model.';
     }
 
     return {
       type: resultType,
       properties: resultProps,
+      summary,
     };
   } catch (error) {
     console.error('File analysis failed, falling back to metadata:', error);
     return {
       type: fallbackTypeFromName(fileName, mimeType),
       properties: {
-        summary: 'Analysis failed; using metadata only.',
         error: error instanceof Error ? error.message : 'Unknown analysis error',
       },
+      summary: 'Analysis failed; using metadata only.',
     };
   }
 }
@@ -208,11 +217,13 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
 
   let analyzedType = overrideType;
   let analyzedProperties = normalizedOverride;
+  let summary: string | undefined;
 
   if (!overrideProperties) {
     const analysis = await analyzeFileForRecord({ buffer, fileName, mimeType, fileSize });
     analyzedType = analysis.type || analyzedType;
     analyzedProperties = analysis.properties || {};
+    summary = analysis.summary;
   }
 
   if (!analyzedType || typeof analyzedType !== 'string') {
@@ -232,6 +243,14 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
     }
   }
 
+  // Generate a proper summary using generateRecordSummary (includes file analysis)
+  // This ensures we get a comprehensive summary even if analyzeFileForRecord didn't return a good one
+  // Note: We use the file buffer we already have instead of re-downloading from storage
+  // since the file was just uploaded and might not be immediately available via storage API
+  let finalSummary = summary;
+  // Skip generateRecordSummary for now during file upload since we already have the file content
+  // and analyzeFileForRecord should have provided a summary. We can enhance this later if needed.
+
   const insertPayload: Record<string, unknown> = {
     id: insertId,
     type: analyzedType,
@@ -243,6 +262,10 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
     insertPayload.embedding = embedding;
   }
 
+  if (finalSummary) {
+    insertPayload.summary = finalSummary;
+  }
+
   const { data, error } = await supabase
     .from('records')
     .insert(insertPayload)
@@ -250,6 +273,13 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
     .single();
 
   if (error) {
+    console.error('Failed to insert record:', {
+      error: error.message,
+      code: (error as any).code,
+      details: (error as any).details,
+      hint: (error as any).hint,
+      payload: { ...insertPayload, embedding: insertPayload.embedding ? `[${(insertPayload.embedding as number[]).length} dimensions]` : null },
+    });
     throw error;
   }
 

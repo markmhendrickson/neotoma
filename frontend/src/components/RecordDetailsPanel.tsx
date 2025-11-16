@@ -69,6 +69,12 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
           <div className="text-xs text-muted-foreground mb-1 font-semibold">Type</div>
           <div className="text-sm">{record.type || '—'}</div>
         </div>
+        {record.summary && (
+          <div className="mb-4">
+            <div className="text-xs text-muted-foreground mb-1 font-semibold">Summary</div>
+            <div className="text-sm whitespace-pre-wrap break-words">{record.summary}</div>
+          </div>
+        )}
         <div className="mb-4">
           <div className="text-xs text-muted-foreground mb-1 font-semibold">Status</div>
           <div className="text-sm">{statusDisplay}</div>

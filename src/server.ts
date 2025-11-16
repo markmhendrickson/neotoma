@@ -9,6 +9,7 @@ import {
 import { supabase, type NeotomaRecord } from './db.js';
 import { z } from 'zod';
 import { generateEmbedding, getRecordText } from './embeddings.js';
+import { generateRecordSummary } from './services/summary.js';
 import { config } from './config.js';
 import { createRecordFromUploadedFile } from './services/file_analysis.js';
 import { randomUUID } from 'node:crypto';
@@ -272,6 +273,9 @@ export class NeotomaServer {
       embedding = await generateEmbedding(recordText);
     }
 
+    // Generate summary
+    const summary = await generateRecordSummary(type, properties, file_urls || []);
+
     const insertData: Record<string, unknown> = {
       type,
       properties,
@@ -279,6 +283,9 @@ export class NeotomaServer {
     };
     if (embedding) {
       insertData.embedding = embedding;
+    }
+    if (summary) {
+      insertData.summary = summary;
     }
 
     const { data, error } = await supabase
@@ -305,10 +312,10 @@ export class NeotomaServer {
 
     const parsed = schema.parse(args);
 
-    // Fetch existing record to determine if we need to regenerate embedding
+    // Fetch existing record to determine if we need to regenerate embedding and summary
     const { data: existing } = await supabase
       .from('records')
-      .select('type, properties, embedding')
+      .select('type, properties, embedding, file_urls')
       .eq('id', parsed.id)
       .single();
 
@@ -352,6 +359,20 @@ export class NeotomaServer {
 
     if (parsed.file_urls !== undefined) {
       updateData.file_urls = parsed.file_urls;
+    }
+
+    // Regenerate summary when type, properties, or file_urls change (similar to embedding logic)
+    if ((parsed.type !== undefined || parsed.properties !== undefined || parsed.file_urls !== undefined) && config.openaiApiKey) {
+      const newType = parsed.type !== undefined ? parsed.type : existing?.type || '';
+      // Use merged properties if properties were updated, otherwise use existing
+      const newProperties = parsed.properties !== undefined 
+        ? (updateData.properties as Record<string, unknown> || (existing?.properties as Record<string, unknown> || {}))
+        : (existing?.properties as Record<string, unknown> || {});
+      const newFileUrls = parsed.file_urls !== undefined ? parsed.file_urls : (existing?.file_urls as string[] || []);
+      const generatedSummary = await generateRecordSummary(newType, newProperties, newFileUrls);
+      if (generatedSummary) {
+        updateData.summary = generatedSummary;
+      }
     }
 
     const { data, error } = await supabase
