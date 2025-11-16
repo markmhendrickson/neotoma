@@ -33,10 +33,16 @@ export default defineConfig({
   },
   server: {
     port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
+    },
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.HTTP_PORT || '8080'}`,
         changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
     headers: {

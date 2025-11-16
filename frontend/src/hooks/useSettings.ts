@@ -3,19 +3,23 @@ import { useState, useCallback } from 'react';
 export interface Settings {
   apiBase: string;
   bearerToken: string; // Derived from Ed25519 public key
+  apiSyncEnabled: boolean; // Whether to sync records to API
 }
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(() => {
     try {
+      const apiSyncEnabled = localStorage.getItem('apiSyncEnabled');
       return {
         apiBase: localStorage.getItem('apiBase') || window.location.origin,
         bearerToken: localStorage.getItem('bearerToken') || '',
+        apiSyncEnabled: apiSyncEnabled !== null ? apiSyncEnabled === 'true' : false,
       };
     } catch {
       return {
         apiBase: window.location.origin,
         bearerToken: '',
+        apiSyncEnabled: false,
       };
     }
   });
@@ -27,6 +31,9 @@ export function useSettings() {
       }
       if (newSettings.bearerToken !== undefined) {
         localStorage.setItem('bearerToken', newSettings.bearerToken);
+      }
+      if (newSettings.apiSyncEnabled !== undefined) {
+        localStorage.setItem('apiSyncEnabled', String(newSettings.apiSyncEnabled));
       }
       setSettings(prev => ({ ...prev, ...newSettings }));
     } catch (e) {

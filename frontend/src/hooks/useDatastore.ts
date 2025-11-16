@@ -25,7 +25,11 @@ export function useDatastore(
     let workerClient: DatastoreWorkerClient | null = null;
 
     async function init() {
+      if (!x25519Key || !ed25519Key) {
+        return;
+      }
       try {
+        console.log('[Datastore] Starting initialization...');
         // Create worker client
         const workerUrl = new URL('../worker/db.worker.ts', import.meta.url);
         workerClient = new DatastoreWorkerClient(workerUrl);
@@ -36,10 +40,16 @@ export function useDatastore(
         setClient(workerClient);
         setInitialized(true);
         setError(null);
+        console.log('[Datastore] Initialization complete');
       } catch (err) {
         const error = err instanceof Error ? err : new Error('Failed to initialize datastore');
         setError(error);
-        console.error('Datastore initialization error:', error);
+        console.error('[Datastore] Initialization error:', error);
+        console.error('[Datastore] Error details:', {
+          message: error.message,
+          stack: error.stack,
+          cause: err,
+        });
       }
     }
 
