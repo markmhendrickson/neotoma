@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
+import { useSettings } from '@/hooks/useSettings';
 interface KeyManagementDialogProps {
   maskedPrivateKey: string;
   bearerToken: string;
@@ -24,6 +25,7 @@ export function KeyManagementDialog({
   onRegenerate,
 }: KeyManagementDialogProps) {
   const { toast } = useToast();
+  const { settings, saveSettings } = useSettings();
   const [importText, setImportText] = useState('');
   const [open, setOpen] = useState(false);
 
@@ -101,17 +103,34 @@ export function KeyManagementDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          Keys
+          Settings
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl" aria-describedby="key-management-description">
+      <DialogContent className="max-w-2xl" aria-describedby="settings-description">
         <DialogHeader>
-          <DialogTitle>Key Management</DialogTitle>
+          <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
-        <p id="key-management-description" className="sr-only">
-          Manage your cryptographic keys: view masked private key, export/import keys, or regenerate new keys.
+        <p id="settings-description" className="sr-only">
+          Manage settings: enable/disable API sync, view keys, export/import keys, or regenerate new keys.
         </p>
         <div className="space-y-4">
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                id="apiSyncEnabled"
+                checked={settings.apiSyncEnabled}
+                onChange={(e) => saveSettings({ apiSyncEnabled: e.target.checked })}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="apiSyncEnabled" className="font-normal cursor-pointer">
+                Enable API Sync
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground ml-6">
+              When enabled, records will be synced to the API after being saved locally. When disabled, records are stored locally only.
+            </p>
+          </div>
           <div>
             <Label>Private Key (masked)</Label>
             <Input value={maskedPrivateKey} readOnly className="font-mono text-xs" />

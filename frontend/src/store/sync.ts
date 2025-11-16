@@ -41,7 +41,7 @@ export async function syncPush(
   const deltas: SyncDelta[] = [];
 
   try {
-    stmt.bind({ 1: sinceVersion });
+    stmt.bind([sinceVersion]);
 
     while (stmt.step()) {
       const row = stmt.get({
@@ -105,7 +105,7 @@ export async function syncPull(
 
       // Check for conflicts (simplified: last-write-wins)
       const existing = db.prepare('SELECT * FROM records WHERE id = ?');
-      existing.bind({ 1: record.id });
+      existing.bind([record.id]);
 
       if (existing.step()) {
         const existingRow = existing.get({
@@ -128,7 +128,7 @@ export async function syncPull(
       // Apply delta
       if (delta.operation === 'delete') {
         const deleteStmt = db.prepare('DELETE FROM records WHERE id = ?');
-        deleteStmt.bind({ 1: record.id });
+        deleteStmt.bind([record.id]);
         deleteStmt.step();
         deleteStmt.finalize();
       } else {
@@ -136,15 +136,15 @@ export async function syncPull(
           INSERT OR REPLACE INTO records (id, type, properties, file_urls, embedding, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `);
-        putStmt.bind({
-          1: record.id,
-          2: record.type,
-          3: JSON.stringify(record.properties),
-          4: JSON.stringify(record.file_urls),
-          5: record.embedding ? JSON.stringify(record.embedding) : null,
-          6: record.created_at,
-          7: record.updated_at,
-        });
+        putStmt.bind([
+          record.id,
+          record.type,
+          JSON.stringify(record.properties),
+          JSON.stringify(record.file_urls),
+          record.embedding ? JSON.stringify(record.embedding) : null,
+          record.created_at,
+          record.updated_at,
+        ] as readonly (string | null)[]);
         putStmt.step();
         putStmt.finalize();
       }
@@ -154,14 +154,14 @@ export async function syncPull(
         INSERT OR IGNORE INTO sync_deltas (id, version, operation, record_id, encrypted_payload, timestamp)
         VALUES (?, ?, ?, ?, ?, ?)
       `);
-      deltaStmt.bind({
-        1: delta.id,
-        2: delta.version,
-        3: delta.operation,
-        4: delta.record_id,
-        5: delta.encrypted_payload,
-        6: delta.timestamp,
-      });
+      deltaStmt.bind([
+        delta.id,
+        delta.version,
+        delta.operation,
+        delta.record_id,
+        delta.encrypted_payload,
+        delta.timestamp,
+      ] as readonly (string | number)[]);
       deltaStmt.step();
       deltaStmt.finalize();
 
@@ -212,14 +212,14 @@ export async function createDelta(
     INSERT INTO sync_deltas (id, version, operation, record_id, encrypted_payload, timestamp)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-  stmt.bind({
-    1: delta.id,
-    2: delta.version,
-    3: delta.operation,
-    4: delta.record_id,
-    5: delta.encrypted_payload,
-    6: delta.timestamp,
-  });
+  stmt.bind([
+    delta.id,
+    delta.version,
+    delta.operation,
+    delta.record_id,
+    delta.encrypted_payload,
+    delta.timestamp,
+  ] as readonly (string | number)[]);
   stmt.step();
   stmt.finalize();
 

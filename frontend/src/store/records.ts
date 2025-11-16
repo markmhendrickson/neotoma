@@ -16,15 +16,15 @@ export async function putRecord(record: LocalRecord): Promise<void> {
   `);
 
   try {
-    stmt.bind({
-      1: record.id,
-      2: record.type,
-      3: JSON.stringify(record.properties),
-      4: JSON.stringify(record.file_urls),
-      5: record.embedding ? JSON.stringify(record.embedding) : null,
-      6: record.created_at,
-      7: record.updated_at,
-    });
+    stmt.bind([
+      record.id,
+      record.type,
+      JSON.stringify(record.properties),
+      JSON.stringify(record.file_urls),
+      record.embedding ? JSON.stringify(record.embedding) : null,
+      record.created_at,
+      record.updated_at,
+    ] as readonly (string | null)[]);
 
     stmt.step();
   } finally {
@@ -40,7 +40,7 @@ export async function getRecord(id: string): Promise<LocalRecord | null> {
   const stmt = db.prepare('SELECT * FROM records WHERE id = ?');
   
   try {
-    stmt.bind({ 1: id });
+    stmt.bind([id]);
 
     if (stmt.step()) {
       const row = stmt.get({
@@ -86,21 +86,18 @@ export async function getRecord(id: string): Promise<LocalRecord | null> {
 export async function queryRecords(options: QueryOptions = {}): Promise<LocalRecord[]> {
   const db = getDB();
   const conditions: string[] = [];
-  const bindings: Record<number, unknown> = {};
-  let paramIndex = 1;
+  const params: unknown[] = [];
 
   if (options.type) {
     conditions.push('type = ?');
-    bindings[paramIndex++] = options.type;
+    params.push(options.type);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const limit = options.limit || 100;
   const offset = options.offset || 0;
 
-  bindings[paramIndex++] = limit;
-  bindings[paramIndex++] = offset;
-
+  // Build SQL with proper parameter placeholders
   const sql = `
     SELECT * FROM records
     ${whereClause}
@@ -112,7 +109,10 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
   const records: LocalRecord[] = [];
 
   try {
-    stmt.bind(bindings);
+    // Bind all parameters in order: WHERE params first, then LIMIT, then OFFSET
+    // Use array format for positional parameters (SQLite WASM accepts arrays for positional binding)
+    const allParams = [...params, limit, offset] as readonly (string | number | null | boolean | undefined)[];
+    stmt.bind(allParams);
 
     while (stmt.step()) {
       const row = stmt.get({
@@ -172,7 +172,7 @@ export async function deleteRecord(id: string): Promise<void> {
   const stmt = db.prepare('DELETE FROM records WHERE id = ?');
   
   try {
-    stmt.bind({ 1: id });
+    stmt.bind([id]);
     stmt.step();
   } finally {
     stmt.finalize();
@@ -184,15 +184,11 @@ export async function deleteRecord(id: string): Promise<void> {
  */
 export async function deleteRecords(ids: string[]): Promise<void> {
   const db = getDB();
-  const placeholders = ids.map((_, i) => `?${i + 1}`).join(',');
+  const placeholders = ids.map(() => '?').join(',');
   const stmt = db.prepare(`DELETE FROM records WHERE id IN (${placeholders})`);
   
   try {
-    const bindings: Record<number, string> = {};
-    ids.forEach((id, i) => {
-      bindings[i + 1] = id;
-    });
-    stmt.bind(bindings);
+    stmt.bind(ids as readonly string[]);
     stmt.step();
   } finally {
     stmt.finalize();
