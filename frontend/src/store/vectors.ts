@@ -101,6 +101,7 @@ export async function searchVectors(options: VectorSearchOptions): Promise<Local
       const row = stmt.get({
         id: '',
         type: '',
+        summary: null as string | null,
         properties: '',
         file_urls: '',
         embedding: null as string | null,
@@ -109,6 +110,7 @@ export async function searchVectors(options: VectorSearchOptions): Promise<Local
       }) as {
         id: string;
         type: string;
+        summary: string | null;
         properties: string;
         file_urls: string;
         embedding: string | null;
@@ -125,6 +127,7 @@ export async function searchVectors(options: VectorSearchOptions): Promise<Local
             record: {
               id: row.id,
               type: row.type,
+              summary: row.summary,
               properties: JSON.parse(row.properties),
               file_urls: JSON.parse(row.file_urls),
               embedding,

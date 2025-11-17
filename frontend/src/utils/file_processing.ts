@@ -4,6 +4,7 @@
  */
 
 import type { LocalRecord } from '../store/types';
+import { isCsvLike, parseCsvRows } from './csv.js';
 
 function randomUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -20,17 +21,48 @@ function randomUUID(): string {
 export interface ProcessFileOptions {
   file: File;
   recordId?: string;
+  csvRowRecordsEnabled?: boolean;
+}
+
+export interface ProcessFileResult {
+  primaryRecord: LocalRecord;
+  additionalRecords: LocalRecord[];
+}
+
+async function readFileArrayBuffer(file: File): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === 'function') {
+    try {
+      return await file.arrayBuffer();
+    } catch {
+      // Fall through to other strategies
+    }
+  }
+  if (typeof file.text === 'function') {
+    const text = await file.text();
+    return new TextEncoder().encode(text).buffer;
+  }
+  if (typeof Blob !== 'undefined') {
+    const blob = new Blob([file]);
+    if (typeof blob.arrayBuffer === 'function') {
+      return blob.arrayBuffer();
+    }
+  }
+  if (typeof Response !== 'undefined') {
+    const response = new Response(file as unknown as BodyInit);
+    return response.arrayBuffer();
+  }
+  throw new Error('File APIs are not available in this environment');
 }
 
 /**
  * Process a file and create a local record
  * This is a simplified version that works entirely locally
  */
-export async function processFileLocally(options: ProcessFileOptions): Promise<LocalRecord> {
-  const { file, recordId } = options;
+export async function processFileLocally(options: ProcessFileOptions): Promise<ProcessFileResult> {
+  const { file, recordId, csvRowRecordsEnabled } = options;
   
   // Read file as buffer
-  const arrayBuffer = await file.arrayBuffer();
+  const arrayBuffer = await readFileArrayBuffer(file);
   const buffer = new Uint8Array(arrayBuffer);
   
   // Extract basic metadata
@@ -41,25 +73,35 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<L
   // Determine type from filename/mime type
   const type = inferTypeFromFile(fileName, mimeType);
   
-  // Extract text preview if possible
-  let textPreview = '';
-  if (mimeType.startsWith('text/') || mimeType === 'application/json') {
-    try {
-      const decoder = new TextDecoder('utf-8', { fatal: false });
-      textPreview = decoder.decode(buffer.slice(0, 8000));
-    } catch (e) {
-      // Ignore decode errors
-    }
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  let fullText = '';
+  try {
+    fullText = decoder.decode(buffer);
+  } catch {
+    fullText = '';
   }
+
+  const textPreview = fullText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 20)
+    .join('\n');
   
+  const previewLine = textPreview
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  const summary = previewLine
+    ? previewLine.slice(0, 200)
+    : `File "${fileName}" (${formatFileSize(fileSize)}, ${mimeType || 'unknown type'})`;
+
   // Create properties with metadata
   const properties: Record<string, unknown> = {
     filename: fileName,
     file_size: fileSize,
     mime_type: mimeType,
-    summary: textPreview 
-      ? `File: ${fileName} (${formatFileSize(fileSize)})`
-      : `File: ${fileName} (${formatFileSize(fileSize)}, ${mimeType})`,
   };
   
   // Add text preview if available
@@ -73,15 +115,69 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<L
   const now = new Date().toISOString();
   const id = recordId || randomUUID();
   
-  return {
+  const baseRecord: LocalRecord = {
     id,
     type,
+    summary,
     properties,
     file_urls: [fileUrl],
     embedding: null, // Embeddings can be generated later if needed
     created_at: now,
     updated_at: now,
   };
+
+  const additionalRecords: LocalRecord[] = [];
+
+  if (csvRowRecordsEnabled && isCsvLike(fileName, mimeType)) {
+    const { rows, truncated, headers } = parseCsvRows(fullText);
+    const parentType = 'dataset';
+    const parentSummary = `Dataset from ${fileName}`;
+    const sourceMetadata = {
+      name: fileName,
+      size: fileSize,
+      mime_type: mimeType,
+      file_url: fileUrl,
+    };
+
+    baseRecord.type = parentType;
+    baseRecord.summary = parentSummary;
+
+    if (rows.length > 0) {
+      baseRecord.properties = {
+        ...baseRecord.properties,
+        source_file: sourceMetadata,
+        csv_headers: headers,
+        csv_rows: {
+          linked_records: rows.length,
+          truncated,
+          relationship: 'contains_row',
+        },
+      };
+
+      rows.forEach((row, index) => {
+        const rowId = randomUUID();
+        additionalRecords.push({
+          id: rowId,
+          type: 'dataset_row',
+          summary: `Row ${index + 1} from ${fileName}`,
+          properties: {
+            ...row,
+            csv_origin: {
+              parent_record_id: baseRecord.id,
+              row_index: index,
+              file_url: fileUrl,
+            },
+          },
+          file_urls: [fileUrl],
+          embedding: null,
+          created_at: now,
+          updated_at: now,
+        });
+      });
+    }
+  }
+
+  return { primaryRecord: baseRecord, additionalRecords };
 }
 
 /**

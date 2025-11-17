@@ -21,6 +21,7 @@ This MCP server extends ChatGPT's contextual memory by providing flexible storag
 
 **Database Schema**:
 - Single `records` table with `id`, `type`, `properties` (JSONB), `file_urls`, `created_at`, `updated_at`
+- `record_relationships` table that links parent/child records (e.g., CSV files to their parsed rows)
 - GIN indexes on `type` and `properties` for fast filtering
 
 ---
@@ -144,6 +145,7 @@ npm test   # runs live queries against Supabase
 - Visit `http://localhost:8080/`.
 - Set API base and bearer token in the header.
 - Workflow: Select CSV → Parse → Normalize Preview → Finalize (chunked saves).
+- CSV uploads automatically create one record per row (plus parent-child relationships) unless you disable **Settings → Create per-row records for CSV uploads**. The parent dataset keeps a `csv_rows` summary with counts and truncation metadata, and the browser datastore mirrors this structure even when API Sync is disabled.
 - Endpoints used: `GET /types`, `POST /groom/preview`, `POST /groom/finalize`.
 
 ### API Sandbox UI
@@ -153,6 +155,22 @@ npm test   # runs live queries against Supabase
 - Select any endpoint from the dropdown to view dynamically generated form fields based on the OpenAPI spec.
 - Fill in parameters and request body fields, then execute requests to test endpoints.
 - View formatted request and response payloads with syntax highlighting.
+
+### Parallel dev servers
+
+- Commands that rely on `scripts/with-branch-ports.js` (`npm run dev:ui`, `npm run dev:http`, `npm run dev:full`, `npm run dev:ws`) probe for open ports on every invocation.
+- The git-branch hash still supplies deterministic base ports, but if a port is occupied the script automatically increments—up to 30 attempts—before giving up.
+- Each launch prints a line such as `[with-branch-ports] branch=my-feature http=8082 (base+2) vite=5175 (base+1) ws=8083 (base)` so you always know which stack owns which ports.
+- This removes manual bookkeeping when you need to run multiple backend/frontend stacks simultaneously. To force specific values, set `HTTP_PORT`, `VITE_PORT`, and `WS_PORT` before running the command.
+
+### Sample Records for Frontend Debugging
+
+- Enable automatic seeding by adding `VITE_AUTO_SEED_RECORDS=true` to `.env.development.local` (or any Vite env file).
+- Start the UI (`npm run dev:ui` or `npm run dev:full`) and open `http://localhost:<VITE_PORT>`. The first load seeds eight representative records (notes, datasets, tasks, etc.) into the browser datastore so the chat sidebar, records table, and details panel have data immediately.
+- Seeding happens only once per browser profile. Clear the marker via DevTools if you want to reseed:
+  - `localStorage.removeItem('neotoma.sampleSeeded')`
+  - or run `window.resetNeotomaSampleMarker()` / `window.seedNeotomaSamples({ force: true })` from the console (available in development builds).
+- To remove the sample data entirely, clear the Neotoma IndexedDB database or use the existing datastore reset workflow you prefer.
 
 #### Expose the API via Cloudflare Tunnel (optional)
 
@@ -390,12 +408,28 @@ You can also use the API Sandbox UI (`http://localhost:8080/sandbox`) to test th
 
 | Method | Path | Purpose | Tests |
 |--------|------|---------|-------|
-| `POST` | `/import/plaid/link_token` | Create link tokens for Plaid Link | `src/integrations/plaid/plaid.integration.test.ts` (token exchange) |
-| `POST` | `/import/plaid/exchange_public_token` | Persist Plaid items and (optionally) run initial sync | `src/integrations/plaid/plaid.integration.test.ts`, `src/services/plaid_sync.test.ts` |
-| `POST` | `/import/plaid/sync` | Manually trigger Plaid sync | `src/integrations/plaid/plaid.integration.test.ts`, `src/services/plaid_sync.test.ts` |
-| `POST` | `/import/plaid/preview_sync` | Preview upcoming sync counts for one or all items | — |
-| `GET` | `/import/plaid/items` | Retrieve stored Plaid items | `src/services/plaid_sync.test.ts` |
-| `GET` | `/import/plaid/link_demo` – Serve Plaid Link sandbox demo (append `?token=<ACTIONS_BEARER_TOKEN>` to auto-exchange the public_token and enable cached preview/sync actions) | — |
+| `GET` | `/types` | List canonical record types plus any custom types stored in Supabase | — |
+| `POST` | `/groom/preview` | Normalize up to 2,000 CSV rows and highlight inferred date fields | — |
+| `POST` | `/groom/finalize` | Persist normalized rows in 25-record batches (embeddings auto-generated when configured) | — |
+| `POST` | `/groom/assist` | Ask the LLM for normalization guidance plus machine-readable actions | — |
+| `POST` | `/groom/transform` | Apply bulk transformations to staged rows or download the transformed JSON | — |
+| `GET` | `/sandbox/config` | Return Plaid sandbox defaults for the in-browser API sandbox UI | — |
+| `POST` | `/store_record` | Create a single record (MCP tool parity) | `src/index.test.ts` |
+| `POST` | `/store_records` | Create 1–100 records at once | `src/index.test.ts` |
+| `POST` | `/update_record` | Merge properties/file URLs into an existing record, regenerating embeddings when needed | `src/index.test.ts` |
+| `POST` | `/retrieve_records` | Query records with keyword+semantic search plus property filters | `src/index.test.ts` |
+| `POST` | `/delete_record` | Delete a single record by id | `src/index.test.ts` |
+| `POST` | `/delete_records` | Delete 1–100 records by id | `src/index.test.ts` |
+| `POST` | `/upload_file` | Upload a file, auto-analyze it, and create or update records (CSV uploads fan out per row) | `src/index.test.ts` |
+| `POST` | `/analyze_file` | Analyze a file without persisting it to estimate `type`, `summary`, and structured metadata | — |
+| `GET` | `/get_file_url` | Generate a signed Supabase Storage URL for a stored file | `src/index.test.ts` |
+| `POST` | `/chat` | Call the OpenAI function-calling assistant that can invoke `retrieve_records` | — |
+| `POST` | `/import/plaid/link_token` | Create sandbox Plaid Link tokens (UI + MCP parity) | `src/integrations/plaid/plaid.integration.test.ts` |
+| `POST` | `/import/plaid/exchange_public_token` | Persist Plaid items and optionally trigger an initial sync | `src/integrations/plaid/plaid.integration.test.ts`, `src/services/plaid_sync.test.ts` |
+| `POST` | `/import/plaid/sync` | Force a sync for one Plaid item or all stored items | `src/integrations/plaid/plaid.integration.test.ts`, `src/services/plaid_sync.test.ts` |
+| `POST` | `/import/plaid/preview_sync` | Show upcoming added/modified/removed transactions without persisting | — |
+| `GET` | `/import/plaid/items` | List stored Plaid metadata (no access tokens) | `src/services/plaid_sync.test.ts` |
+| `GET` | `/import/plaid/link_demo` | Serve the Plaid sandbox demo page (auto exchanges tokens when a bearer token is provided) | — |
 
 All responses omit Plaid access tokens. Errors from Plaid are normalized for safe logging.
 
@@ -476,6 +510,23 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 | `plaid_preview_sync` | Preview Plaid item change counts without persisting | `plaid_item_id?`, `item_id?`, `all?` | Preview summary per item | — |
 | `plaid_link_demo` | Serve Plaid Link sandbox demo page | `token` query (bearer token) | HTML page response | — |
 | `chat` | Conversational interface with OpenAI function calling to query records | `messages` (array), `model?`, `temperature?` | Assistant message with optional records_queried and function_calls | — |
+
+---
+
+### Developer scripts
+
+| Script | Purpose | Tests / Validation |
+|--------|---------|--------------------|
+| `scripts/with-branch-ports.js` | Deterministically assigns HTTP/Vite/WS ports per git branch and evicts stale dev servers before spawning `npm run dev:*` commands. | Manual smoke via `npm run dev:ui`, `npm run dev:http`, or `npm run dev:full` |
+| `scripts/prune-merged-branches.js` | Deletes local branches that are fully merged into a target branch while protecting main/dev/current branches. | Manual smoke via `npm run branches:prune` |
+
+---
+
+## Canonical Record Types
+
+- All record ingestion APIs normalize `type` values against a canonical taxonomy that covers finance, productivity, health, knowledge, and media scenarios. Aliases like `transactions`, `workout`, or `bank_account` automatically map to their canonical identifiers.
+- Custom types remain supported—unknown inputs are sanitized to lowercase `snake_case`, and fuzzy matching keeps historical bespoke values stable.
+- Review `docs/record-types.md` for the full list (category, description, suggested properties, aliases) and update both the doc and `src/config/record_types.ts` when extending the vocabulary.
 
 ---
 

@@ -12,6 +12,10 @@ export function localToNeotoma(local: LocalRecord): NeotomaRecord {
   return {
     id: local.id,
     type: local.type,
+    summary:
+      local.summary ??
+      (typeof local.properties?.summary === 'string' ? (local.properties.summary as string) : null) ??
+      null,
     properties: local.properties,
     file_urls: local.file_urls,
     embedding: local.embedding,
@@ -28,6 +32,7 @@ export function neotomaToLocal(neotoma: NeotomaRecord): LocalRecord {
   return {
     id: neotoma.id,
     type: neotoma.type,
+    summary: neotoma.summary ?? null,
     properties: neotoma.properties,
     file_urls: neotoma.file_urls || [],
     embedding: neotoma.embedding || null,

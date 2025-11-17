@@ -133,12 +133,13 @@ export async function syncPull(
         deleteStmt.finalize();
       } else {
         const putStmt = db.prepare(`
-          INSERT OR REPLACE INTO records (id, type, properties, file_urls, embedding, created_at, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT OR REPLACE INTO records (id, type, summary, properties, file_urls, embedding, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `);
         putStmt.bind([
           record.id,
           record.type,
+          record.summary ?? null,
           JSON.stringify(record.properties),
           JSON.stringify(record.file_urls),
           record.embedding ? JSON.stringify(record.embedding) : null,

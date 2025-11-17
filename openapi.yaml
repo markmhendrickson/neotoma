@@ -175,6 +175,9 @@ components:
         properties:
           type: string
           description: "Optional JSON object to use as properties when creating a new record. If provided, automatic analysis is skipped."
+        csv_row_records:
+          type: boolean
+          description: "Optional flag for CSV uploads. Defaults to true. Set to false to skip creating per-row records linked to the dataset."
         file:
           type: string
           format: binary
@@ -244,6 +247,78 @@ components:
         warnings:
           type: array
           items: { type: string }
+    GroomAssistRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          minItems: 1
+        sample:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        existingTypes:
+          type: array
+          items: { type: string }
+    GroomAssistResponse:
+      type: object
+      properties:
+        message:
+          $ref: '#/components/schemas/ChatMessage'
+    GroomTransformRequest:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+          minItems: 1
+        instruction:
+          type: string
+          description: Optional natural-language instruction for the transformation model
+        return:
+          type: string
+          enum: [json, file]
+          default: json
+          description: Choose "file" to download a JSON payload instead of inline response
+    GroomTransformResponse:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/StoreRecordRequest'
+    SandboxConfigResponse:
+      type: object
+      properties:
+        user_id_default:
+          type: string
+        client_name_default:
+          type: string
+        products_default:
+          type: string
+          description: Comma-separated products list
+        redirect_uri_default:
+          type: string
+    AnalyzeFileResponse:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Inferred canonical record type
+        properties:
+          type: object
+          additionalProperties: true
+          description: Structured fields extracted from the file
+        summary:
+          type: string
+          description: Human-readable summary of the file contents
     PlaidLinkTokenRequest:
       type: object
       properties:
@@ -555,6 +630,77 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+  /groom/assist:
+    post:
+      summary: Get AI-assisted normalization guidance for staged rows
+      operationId: groomAssist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroomAssistRequest' }
+      responses:
+        '200':
+          description: Assistant response with structured guidance
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroomAssistResponse' }
+        '400':
+          description: Invalid payload or model unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Upstream OpenAI API error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /groom/transform:
+    post:
+      summary: Apply bulk transformations to staged rows (optionally returning a file)
+      operationId: groomTransform
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GroomTransformRequest' }
+      responses:
+        '200':
+          description: Transformed rows (JSON response; if `return=file` a downloadable JSON file is sent)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GroomTransformResponse' }
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Upstream OpenAI API error during transformation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /sandbox/config:
+    get:
+      summary: Provide safe default values for the Sandbox UI
+      operationId: sandboxConfig
+      security: []
+      responses:
+        '200':
+          description: Default Plaid sandbox configuration values
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SandboxConfigResponse' }
   /store_record:
     post:
       summary: Create new record
@@ -812,7 +958,8 @@ paths:
         If `record_id` is provided, the file is appended to the existing record's `file_urls`.
         When `record_id` is omitted, the server analyzes the file (via OpenAI when available) to infer `type` and `properties`,
         creates a new record, and associates the uploaded file. Provide an optional `properties` JSON field to bypass analysis
-        and supply record properties manually.
+        and supply record properties manually. CSV uploads default to creating one record per row (set `csv_row_records=false`
+        to skip) plus relationships back to the originating dataset record.
       operationId: uploadFile
       requestBody:
         required: true
@@ -840,6 +987,43 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '401':
           description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /analyze_file:
+    post:
+      summary: Analyze a file without storing it to infer type, summary, and properties
+      operationId: analyzeFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File to analyze
+              required: [file]
+      responses:
+        '200':
+          description: Analysis result describing the inferred record type and metadata
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalyzeFileResponse' }
+        '400':
+          description: Missing file or invalid payload
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Missing or invalid bearer token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Analysis service failure
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -916,7 +1100,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-  /plaid/link_token:
+  /import/plaid/link_token:
     post:
       summary: Create Plaid Link token
       operationId: plaidCreateLinkToken
@@ -946,7 +1130,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaidErrorResponse' }
-  /plaid/exchange_public_token:
+  /import/plaid/exchange_public_token:
     post:
       summary: Exchange Plaid public token and persist item
       operationId: plaidExchangePublicToken
@@ -976,7 +1160,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaidErrorResponse' }
-  /plaid/sync:
+  /import/plaid/sync:
     post:
       summary: Trigger Plaid sync
       operationId: plaidSync
@@ -1011,7 +1195,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaidErrorResponse' }
-  /plaid/items:
+  /import/plaid/items:
     get:
       summary: List stored Plaid items
       operationId: plaidListItems
@@ -1050,7 +1234,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaidErrorResponse' }
-  /plaid/preview_sync:
+  /import/plaid/preview_sync:
     post:
       summary: Preview upcoming Plaid sync changes without persisting results
       operationId: plaidPreviewSync
@@ -1085,11 +1269,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PlaidErrorResponse' }
-  /plaid/link_demo:
+  /import/plaid/link_demo:
     get:
       summary: Serve Plaid Link sandbox demo page
       description: Returns an HTML page that initializes Plaid Link with a freshly-minted sandbox link token.
       operationId: plaidLinkDemo
+      security: []
       responses:
         '200':
           description: Plaid Link demo page

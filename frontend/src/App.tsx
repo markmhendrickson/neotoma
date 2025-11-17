@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
 import { Toaster } from '@/components/ui/toaster';
-import { Header } from '@/components/Header';
+import { Toaster as SonnerToaster } from 'sonner';
 import { ChatPanel } from '@/components/ChatPanel';
 import { RecordsTable } from '@/components/RecordsTable';
 import { RecordDetailsPanel } from '@/components/RecordDetailsPanel';
@@ -10,6 +10,8 @@ import { normalizeRecord, STATUS_ORDER } from '@/types/record';
 import type { NeotomaRecord } from '@/types/record';
 import { useToast } from '@/components/ui/use-toast';
 import { localToNeotoma } from '@/utils/record_conversion';
+import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
+import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
 
 function App() {
   const { toast } = useToast();
@@ -23,6 +25,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
+  const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS === 'true';
 
   const loadRecords = useCallback(async () => {
     if (!datastore.initialized || keysLoading) {
@@ -62,6 +65,57 @@ function App() {
       loadRecords();
     }
   }, [datastore.initialized, keysLoading, loadRecords]);
+
+  useEffect(() => {
+    if (!autoSeedEnabled || !datastore.initialized || keysLoading) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function populateSamples() {
+      try {
+        const seeded = await seedLocalRecords(datastore);
+        if (seeded && !cancelled) {
+          await loadRecords();
+          toast({
+            title: 'Sample records added',
+            description: 'Clear the sample marker or reset storage to remove them.',
+          });
+        }
+      } catch (error) {
+        console.error('[Sample Records] Failed to seed data:', error);
+      }
+    }
+
+    populateSamples();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [autoSeedEnabled, datastore, keysLoading, loadRecords, toast]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || !datastore.initialized) {
+      return;
+    }
+
+    const devWindow = window as typeof window & {
+      seedNeotomaSamples?: (options?: { force?: boolean }) => Promise<void>;
+      resetNeotomaSampleMarker?: () => void;
+    };
+
+    devWindow.seedNeotomaSamples = async (options?: { force?: boolean }) => {
+      await seedLocalRecords(datastore, { force: options?.force ?? true });
+      await loadRecords();
+    };
+    devWindow.resetNeotomaSampleMarker = () => resetSeedMarker();
+
+    return () => {
+      delete devWindow.seedNeotomaSamples;
+      delete devWindow.resetNeotomaSampleMarker;
+    };
+  }, [datastore, loadRecords]);
 
   useEffect(() => {
     loadTypes();
@@ -107,8 +161,14 @@ function App() {
       const localRecords = await datastore.queryRecords();
       const queryLower = query.toLowerCase();
       const filtered = localRecords.filter(record => {
-        const text = JSON.stringify(record.properties).toLowerCase();
-        return text.includes(queryLower) || record.type.toLowerCase().includes(queryLower);
+        const searchableParts = [
+          record.type,
+          record.summary ?? '',
+          record.id,
+          JSON.stringify(record.properties ?? {}),
+          ...(record.file_urls ?? []),
+        ];
+        return searchableParts.some((part) => part.toLowerCase().includes(queryLower));
       });
       const neotomaRecords = filtered.map(localToNeotoma).map(normalizeRecord);
       setAllRecords(neotomaRecords);
@@ -157,9 +217,9 @@ function App() {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <Header />
       <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
         <ChatPanel 
+          datastore={datastore}
           onFileUploaded={loadRecords} 
           onFileUploadRef={chatPanelFileUploadRef}
           onErrorRef={chatPanelErrorRef}
@@ -176,6 +236,19 @@ function App() {
       </div>
       <RecordDetailsPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
       <Toaster />
+      <SonnerToaster
+        duration={4000}
+        position="bottom-right"
+        visibleToasts={Number.POSITIVE_INFINITY}
+        toastOptions={{
+          classNames: {
+            toast: 'bg-background border border-border shadow-lg',
+            title: 'text-foreground font-medium',
+            description: 'text-muted-foreground',
+          },
+        }}
+      />
+      <FloatingSettingsButton />
       {/* Full-page drag overlay */}
       {isDragging && (
         <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">

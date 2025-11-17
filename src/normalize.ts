@@ -1,3 +1,5 @@
+import { normalizeRecordType } from './config/record_types.js';
+
 export function levenshtein(a: string, b: string): number {
   const s = a.toLowerCase();
   const t = b.toLowerCase();
@@ -74,18 +76,25 @@ export function inferTypeFromHeaders(row: Record<string, unknown>): string | und
 }
 
 export function standardizeType(input: string, existingTypes: string[]): string {
-  if (!input) return 'unknown';
-  const norm = input.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  // Exact (case-insensitive)
-  const exact = existingTypes.find(t => t.toLowerCase() === input.toLowerCase());
+  const resolution = normalizeRecordType(input);
+  if (resolution.match === 'canonical' || resolution.match === 'alias') {
+    return resolution.type;
+  }
+
+  const candidate = resolution.type || 'unknown';
+
+  const exact = existingTypes.find(t => t.toLowerCase() === candidate.toLowerCase());
   if (exact) return exact;
-  // Fuzzy (distance <= 2)
-  let best = input;
+
+  let best = candidate;
   let bestDist = Infinity;
   for (const t of existingTypes) {
-    const d = levenshtein(norm, t.toLowerCase());
-    if (d < bestDist) { best = t; bestDist = d; }
+    const d = levenshtein(candidate, t.toLowerCase());
+    if (d < bestDist) {
+      best = t;
+      bestDist = d;
+    }
   }
-  return bestDist <= 2 ? best : input;
+  return bestDist <= 2 ? best : candidate;
 }
 

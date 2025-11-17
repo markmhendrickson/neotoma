@@ -8,10 +8,20 @@ import { DatastoreWorkerClient } from '../worker/client.js';
 import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
 import type { LocalRecord, QueryOptions, VectorSearchOptions } from '../store/types.js';
 
+export interface DatastoreAPI {
+  initialized: boolean;
+  error: Error | null;
+  getRecord: (id: string) => Promise<LocalRecord | null>;
+  putRecord: (record: LocalRecord) => Promise<void>;
+  queryRecords: (options?: QueryOptions) => Promise<LocalRecord[]>;
+  deleteRecord: (id: string) => Promise<void>;
+  searchVectors: (options: VectorSearchOptions) => Promise<LocalRecord[]>;
+}
+
 export function useDatastore(
   x25519Key: X25519KeyPair | null,
   ed25519Key: Ed25519KeyPair | null
-) {
+): DatastoreAPI {
   const [client, setClient] = useState<DatastoreWorkerClient | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [error, setError] = useState<Error | null>(null);

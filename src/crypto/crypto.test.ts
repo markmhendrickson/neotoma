@@ -328,6 +328,7 @@ describe('Integration: Full Flow', () => {
 
     // Simulate server verification
     const publicKey = parseBearerToken(bearerToken);
+    expect(publicKey).toBeTruthy();
     const isValid = verifyRequest(requestBody, signature, bearerToken);
     expect(isValid).toBe(true);
   });

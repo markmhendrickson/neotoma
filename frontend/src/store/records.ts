@@ -11,14 +11,15 @@ import type { LocalRecord, QueryOptions } from './types.js';
 export async function putRecord(record: LocalRecord): Promise<void> {
   const db = getDB();
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO records (id, type, properties, file_urls, embedding, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO records (id, type, summary, properties, file_urls, embedding, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   try {
     stmt.bind([
       record.id,
       record.type,
+      record.summary ?? null,
       JSON.stringify(record.properties),
       JSON.stringify(record.file_urls),
       record.embedding ? JSON.stringify(record.embedding) : null,
@@ -46,6 +47,7 @@ export async function getRecord(id: string): Promise<LocalRecord | null> {
       const row = stmt.get({
         id: '',
         type: '',
+        summary: null as string | null,
         properties: '',
         file_urls: '',
         embedding: null as string | null,
@@ -54,6 +56,7 @@ export async function getRecord(id: string): Promise<LocalRecord | null> {
       }) as {
         id: string;
         type: string;
+        summary: string | null;
         properties: string;
         file_urls: string;
         embedding: string | null;
@@ -65,6 +68,7 @@ export async function getRecord(id: string): Promise<LocalRecord | null> {
         return {
           id: row.id,
           type: row.type,
+          summary: row.summary,
           properties: JSON.parse(row.properties),
           file_urls: JSON.parse(row.file_urls),
           embedding: row.embedding ? JSON.parse(row.embedding) : null,
@@ -118,6 +122,7 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
       const row = stmt.get({
         id: '',
         type: '',
+        summary: null as string | null,
         properties: '',
         file_urls: '',
         embedding: null as string | null,
@@ -126,6 +131,7 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
       }) as {
         id: string;
         type: string;
+        summary: string | null;
         properties: string;
         file_urls: string;
         embedding: string | null;
@@ -137,6 +143,7 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
         records.push({
           id: row.id,
           type: row.type,
+          summary: row.summary,
           properties: JSON.parse(row.properties),
           file_urls: JSON.parse(row.file_urls),
           embedding: row.embedding ? JSON.parse(row.embedding) : null,
