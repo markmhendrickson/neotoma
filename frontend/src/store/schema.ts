@@ -8,6 +8,7 @@ export const CREATE_RECORDS_TABLE = `
   CREATE TABLE IF NOT EXISTS records (
     id TEXT PRIMARY KEY,
     type TEXT NOT NULL,
+    summary TEXT,
     properties TEXT NOT NULL,
     file_urls TEXT NOT NULL,
     embedding TEXT,

@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { supabase } from './db.js';
 import { config } from './config.js';
+import { listCanonicalRecordTypes, normalizeRecordType } from './config/record_types.js';
 import { generateEmbedding, getRecordText } from './embeddings.js';
 import fs from 'fs';
 import path from 'path';
@@ -31,6 +32,7 @@ import { verifyRequest, parseAuthHeader } from './crypto/auth.js';
 import { encryptResponseMiddleware } from './middleware/encrypt_response.js';
 import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
+import { isCsvLike, parseCsvRows } from './utils/csv.js';
 
 const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -87,6 +89,9 @@ const SENSITIVE_FIELDS = new Set([
   'authorization',
   'Authorization',
 ]);
+
+const CANONICAL_RECORD_TYPES = listCanonicalRecordTypes();
+const CANONICAL_RECORD_TYPE_IDS = CANONICAL_RECORD_TYPES.map(def => def.id);
 
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...headers } as Record<string, unknown>;
@@ -285,7 +290,12 @@ app.get('/types', async (req, res) => {
   }
   const set = new Set<string>();
   (data || []).forEach((r: any) => { if (r.type) set.add(r.type); });
-  return res.json({ types: Array.from(set).sort() });
+  const custom = Array.from(set).filter(type => !CANONICAL_RECORD_TYPE_IDS.includes(type)).sort();
+  return res.json({
+    types: [...CANONICAL_RECORD_TYPE_IDS, ...custom],
+    canonical: CANONICAL_RECORD_TYPES,
+    custom,
+  });
 });
 
 app.post('/groom/preview', async (req, res) => {
@@ -321,14 +331,15 @@ app.post('/groom/finalize', async (req, res) => {
     const slice = records.slice(i, i + 25);
     // Prepare embeddings conditionally (reuse store_records logic lightly)
     const prepared = await Promise.all(slice.map(async r => {
+      const canonicalType = normalizeRecordType(r.type).type;
       let embedding: number[] | null = null;
       if (Array.isArray(r.embedding) && r.embedding.length > 0) {
         embedding = r.embedding;
       } else if (!r.embedding && config.openaiApiKey) {
-        const text = getRecordText(r.type, r.properties);
+        const text = getRecordText(canonicalType, r.properties);
         embedding = await generateEmbedding(text);
       }
-      const out: any = { type: r.type, properties: r.properties, file_urls: r.file_urls || [] };
+      const out: any = { type: canonicalType, properties: r.properties, file_urls: r.file_urls || [] };
       if (embedding) out.embedding = embedding;
       return out;
     }));
@@ -864,6 +875,7 @@ app.post('/store_record', async (req, res) => {
   }
 
   const { type, properties, file_urls, embedding: providedEmbedding } = parsed.data;
+  const normalizedType = normalizeRecordType(type).type;
 
   // Generate embedding if not provided and OpenAI is configured
   // Filter out empty arrays - they're invalid for PostgreSQL vector type
@@ -871,15 +883,15 @@ app.post('/store_record', async (req, res) => {
   if (providedEmbedding && Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
     embedding = providedEmbedding;
   } else if (!providedEmbedding && config.openaiApiKey) {
-    const recordText = getRecordText(type, properties);
+    const recordText = getRecordText(normalizedType, properties);
     embedding = await generateEmbedding(recordText);
   }
 
   // Generate summary
-  const summary = await generateRecordSummary(type, properties, file_urls || []);
+  const summary = await generateRecordSummary(normalizedType, properties, file_urls || []);
 
   const insertData: Record<string, unknown> = {
-    type,
+    type: normalizedType,
     properties,
     file_urls: file_urls || [],
   };
@@ -914,20 +926,21 @@ app.post('/store_records', async (req, res) => {
 
   // Generate embeddings and summaries for records that don't have them
   const insertDataPromises = records.map(async ({ type, properties, file_urls, embedding: providedEmbedding }) => {
+    const normalizedType = normalizeRecordType(type).type;
     // Filter out empty arrays - they're invalid for PostgreSQL vector type
     let embedding: number[] | null = null;
     if (providedEmbedding && Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
       embedding = providedEmbedding;
     } else if (!providedEmbedding && config.openaiApiKey) {
-      const recordText = getRecordText(type, properties);
+      const recordText = getRecordText(normalizedType, properties);
       embedding = await generateEmbedding(recordText);
     }
 
     // Generate summary
-    const summary = await generateRecordSummary(type, properties, file_urls || []);
+    const summary = await generateRecordSummary(normalizedType, properties, file_urls || []);
 
     const recordData: Record<string, unknown> = {
-      type,
+      type: normalizedType,
       properties,
       file_urls: file_urls || [],
     };
@@ -984,8 +997,10 @@ app.post('/update_record', async (req, res) => {
     .eq('id', id)
     .single();
 
+  let normalizedUpdateType: string | undefined;
   if (type !== undefined) {
-    updateData.type = type;
+    normalizedUpdateType = normalizeRecordType(type).type;
+    updateData.type = normalizedUpdateType;
   }
 
   // Generate new embedding if:
@@ -1001,7 +1016,7 @@ app.post('/update_record', async (req, res) => {
       updateData.embedding = null;
     }
   } else if ((properties !== undefined || type !== undefined) && config.openaiApiKey) {
-    const newType = type !== undefined ? type : existing?.type || '';
+    const newType = type !== undefined ? (normalizedUpdateType || normalizeRecordType(type).type) : existing?.type || '';
     const newProperties = properties !== undefined ? properties : existing?.properties || {};
     const recordText = getRecordText(newType, newProperties as Record<string, unknown>);
     const generatedEmbedding = await generateEmbedding(recordText);
@@ -1029,7 +1044,7 @@ app.post('/update_record', async (req, res) => {
 
   // Regenerate summary when type, properties, or file_urls change (similar to embedding logic)
   if ((type !== undefined || properties !== undefined || file_urls !== undefined) && config.openaiApiKey) {
-    const newType = type !== undefined ? type : existing?.type || '';
+    const newType = type !== undefined ? (normalizedUpdateType || normalizeRecordType(type).type) : existing?.type || '';
     // Use merged properties if properties were updated, otherwise use existing
     const newProperties = properties !== undefined 
       ? (updateData.properties as Record<string, unknown> || (existing?.properties as Record<string, unknown> || {}))
@@ -1067,6 +1082,7 @@ app.post('/retrieve_records', async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
   const { type, properties, limit, search, search_mode, similarity_threshold, query_embedding: providedQueryEmbedding } = parsed.data;
+  const normalizedType = type ? normalizeRecordType(type).type : undefined;
 
   let results: any[] = [];
   const finalLimit = limit ?? 100;
@@ -1085,7 +1101,7 @@ app.post('/retrieve_records', async (req, res) => {
         if (search_mode === 'semantic') {
           // Switch to keyword mode if semantic was required
           const keywordQuery = supabase.from('records').select('*');
-          if (type) keywordQuery.eq('type', type);
+          if (normalizedType) keywordQuery.eq('type', normalizedType);
           const { data: keywordCandidates } = await keywordQuery.limit(finalLimit * 2);
           const searchTextLower = search.join(' ').toLowerCase();
           const keywordMatches = (keywordCandidates || []).filter((rec: any) => {
@@ -1115,8 +1131,8 @@ app.post('/retrieve_records', async (req, res) => {
       // Note: For better performance at scale, create a PostgreSQL function using pgvector operators
       let embeddingQuery = supabase.from('records').select('*').not('embedding', 'is', null);
       
-      if (type) {
-        embeddingQuery = embeddingQuery.eq('type', type);
+      if (normalizedType) {
+        embeddingQuery = embeddingQuery.eq('type', normalizedType);
       }
 
       // Fetch more candidates than limit to filter by similarity
@@ -1139,7 +1155,7 @@ app.post('/retrieve_records', async (req, res) => {
         logDebug('SemanticSearch:retrieve_records', req, { 
           candidates_count: candidates.length, 
           similarity_threshold,
-          type_filter: type || 'all',
+          type_filter: normalizedType || 'all',
           sample_embedding: embeddingInfo
         });
         
@@ -1221,8 +1237,8 @@ app.post('/retrieve_records', async (req, res) => {
   if (search && (search_mode === 'keyword' || search_mode === 'both')) {
     let keywordQuery = supabase.from('records').select('*');
     
-    if (type) {
-      keywordQuery = keywordQuery.eq('type', type);
+    if (normalizedType) {
+      keywordQuery = keywordQuery.eq('type', normalizedType);
     }
 
     // Fetch candidates and filter by keyword match
@@ -1258,7 +1274,7 @@ app.post('/retrieve_records', async (req, res) => {
   // No search mode: use existing logic
   if (!search) {
     let query = supabase.from('records').select('*');
-    if (type) query = query.eq('type', type);
+    if (normalizedType) query = query.eq('type', normalizedType);
     query = query.order('created_at', { ascending: false }).limit(finalLimit);
 
     const { data, error } = await query;
@@ -1327,6 +1343,61 @@ app.post('/delete_records', async (req, res) => {
   return res.json({ success: true, deleted_ids: ids, count: ids.length });
 });
 
+type NormalizedCsvRowResult = ReturnType<typeof normalizeRow>;
+
+interface PreparedCsvRow {
+  normalized: NormalizedCsvRowResult;
+  rowIndex: number;
+}
+
+async function persistCsvRowRecords(
+  rows: PreparedCsvRow[],
+  parentRecordId: string,
+  filePath: string
+): Promise<Array<{ id: string; row_index: number }>> {
+  if (!rows.length) {
+    return [];
+  }
+
+  const preparedEntries = rows.map(({ normalized, rowIndex }) => {
+    const canonicalType = normalizeRecordType(normalized.type).type;
+    const rowId = randomUUID();
+    const baseProperties = (normalized.properties ?? {}) as Record<string, unknown>;
+    const properties = {
+      ...baseProperties,
+      csv_origin: {
+        parent_record_id: parentRecordId,
+        row_index: rowIndex,
+        file_url: filePath,
+      },
+    };
+    return {
+      payload: {
+        id: rowId,
+        type: canonicalType,
+        properties,
+        file_urls: [filePath],
+      },
+      rowIndex,
+    };
+  });
+
+  const created: Array<{ id: string; row_index: number }> = [];
+  for (let i = 0; i < preparedEntries.length; i += 25) {
+    const chunk = preparedEntries.slice(i, i + 25);
+    const insertPayload = chunk.map(entry => entry.payload);
+    const { error } = await supabase.from('records').insert(insertPayload);
+    if (error) {
+      throw error;
+    }
+    chunk.forEach(entry => {
+      created.push({ id: entry.payload.id as string, row_index: entry.rowIndex });
+    });
+  }
+
+  return created;
+}
+
 // File endpoints
 const upload = multer({ dest: '/tmp' });
 app.post('/upload_file', upload.single('file'), async (req, res) => {
@@ -1334,6 +1405,7 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
     record_id: z.string().uuid().optional(),
     bucket: z.string().optional(),
     properties: z.union([z.string(), z.record(z.unknown())]).optional(),
+    csv_row_records: z.coerce.boolean().optional(),
   });
   const parsed = schema.safeParse(req.body);
   if (!parsed.success) {
@@ -1342,6 +1414,7 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
   }
 
   const { record_id, bucket, properties } = parsed.data;
+  const csvRowsPreference = parsed.data.csv_row_records ?? true;
 
   let overrideProperties: Record<string, unknown> | undefined;
   if (typeof properties === 'string') {
@@ -1381,6 +1454,50 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
   const fileSize = req.file?.size ?? fileBuffer.length;
 
   const recordId = record_id ?? randomUUID();
+
+  const isCsvFileUpload = isCsvLike(originalName, mimeType);
+  const shouldGenerateCsvRows = isCsvFileUpload && csvRowsPreference;
+  let preparedCsvRows: PreparedCsvRow[] = [];
+  let csvRowsMeta: { truncated: boolean } | null = null;
+  const csvRowWarnings: string[] = [];
+
+  if (shouldGenerateCsvRows) {
+    try {
+      const parsedCsv = parseCsvRows(fileBuffer);
+      if (parsedCsv.rows.length === 0) {
+        logWarn('UploadFile:csv_rows_empty', req, { file: originalName });
+      } else {
+        const { data: typeRows, error: typeFetchError } = await supabase
+          .from('records')
+          .select('type')
+          .limit(1000);
+        if (typeFetchError) {
+          logError('SupabaseError:upload_file:csv_types', req, typeFetchError);
+        } else {
+          const existingTypes = Array.from(
+            new Set(((typeRows || []) as Array<{ type: string | null }>).map(row => row.type).filter(Boolean))
+          ) as string[];
+          csvRowsMeta = { truncated: parsedCsv.truncated };
+          preparedCsvRows = parsedCsv.rows.map((row, index) => {
+            const normalized = normalizeRow(row, existingTypes);
+            if (csvRowWarnings.length < 10 && normalized.warnings.length > 0) {
+              const remainingSlots = 10 - csvRowWarnings.length;
+              normalized.warnings.slice(0, remainingSlots).forEach(warning => {
+                csvRowWarnings.push(`Row ${index + 1}: ${warning}`);
+              });
+            }
+            return { normalized, rowIndex: index };
+          });
+        }
+      }
+    } catch (error) {
+      logError('UploadFile:csv_parse_failed', req, error, { file: originalName });
+    }
+  }
+
+  if (csvRowWarnings.length) {
+    logWarn('UploadFile:csv_row_warnings', req, { warnings: csvRowWarnings });
+  }
 
   const safeBase = path.basename(originalName).replace(/[^a-zA-Z0-9._-]+/g, '-').slice(0, 100) || 'file';
   const ext = path.extname(safeBase) || '.bin';
@@ -1440,8 +1557,61 @@ app.post('/upload_file', upload.single('file'), async (req, res) => {
       fileUrl: filePath,
       overrideProperties,
     });
+    let responseRecord = created;
+
+    if (shouldGenerateCsvRows && preparedCsvRows.length > 0) {
+      try {
+        const insertedRows = await persistCsvRowRecords(preparedCsvRows, created.id, filePath);
+        if (insertedRows.length > 0) {
+          const relationshipPayload = insertedRows.map(row => ({
+            source_id: created.id,
+            target_id: row.id,
+            relationship: 'contains_row',
+            metadata: { row_index: row.row_index },
+          }));
+          const { error: relationshipError } = await supabase
+            .from('record_relationships')
+            .insert(relationshipPayload);
+          if (relationshipError) {
+            logError('SupabaseError:upload_file:relationships', req, relationshipError);
+          }
+
+          const mergedProperties = {
+            ...(created.properties as Record<string, unknown>),
+            csv_rows: {
+              linked_records: insertedRows.length,
+              truncated: csvRowsMeta?.truncated ?? false,
+              relationship: 'contains_row',
+            },
+          };
+
+          const { data: updatedDataset, error: datasetUpdateError } = await supabase
+            .from('records')
+            .update({ properties: mergedProperties })
+            .eq('id', created.id)
+            .select()
+            .single();
+
+          if (datasetUpdateError) {
+            logError('SupabaseError:upload_file:update_csv_summary', req, datasetUpdateError);
+            responseRecord = { ...created, properties: mergedProperties };
+          } else if (updatedDataset) {
+            responseRecord = updatedDataset as typeof created;
+          }
+
+          logDebug('Success:upload_file:csv_rows', req, {
+            parent_record_id: created.id,
+            row_count: insertedRows.length,
+            truncated: csvRowsMeta?.truncated ?? false,
+          });
+        }
+      } catch (csvRowError) {
+        logError('SupabaseError:upload_file:csv_rows', req, csvRowError);
+      }
+    }
+
     logDebug('Success:upload_file:create', req, { record_id: created.id, filePath });
-    return res.status(201).json(created);
+    return res.status(201).json(responseRecord);
   } catch (error) {
     logError('SupabaseError:upload_file:create_record', req, error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create record from file' });

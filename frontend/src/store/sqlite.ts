@@ -43,6 +43,7 @@ export async function initSQLite(
   // Create schema
   const schemaSQL = getSchemaSQL();
   db.exec(schemaSQL);
+  ensureSummaryColumn(db);
 
   return db;
 }
@@ -55,5 +56,16 @@ export function getDB(): Database {
     throw new Error('Database not initialized. Call initSQLite() first.');
   }
   return db;
+}
+
+function ensureSummaryColumn(database: Database) {
+  try {
+    database.exec('ALTER TABLE records ADD COLUMN summary TEXT;');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('duplicate column name')) {
+      console.warn('Failed to ensure summary column exists:', error);
+    }
+  }
 }
 

@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { generateEmbedding, getRecordText } from './embeddings.js';
 import { generateRecordSummary } from './services/summary.js';
 import { config } from './config.js';
+import { normalizeRecordType } from './config/record_types.js';
 import { createRecordFromUploadedFile } from './services/file_analysis.js';
 import { randomUUID } from 'node:crypto';
 import { buildPlaidItemContext, createLinkToken, exchangePublicToken, isPlaidConfigured } from './integrations/plaid/client.js';
@@ -298,6 +299,7 @@ export class NeotomaServer {
     });
 
     const { type, properties, file_urls, embedding: providedEmbedding } = schema.parse(args);
+    const normalizedType = normalizeRecordType(type).type;
 
     // Generate embedding if not provided and OpenAI is configured
     // Filter out empty arrays - they're invalid for PostgreSQL vector type
@@ -305,15 +307,15 @@ export class NeotomaServer {
     if (providedEmbedding && Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
       embedding = providedEmbedding;
     } else if (!providedEmbedding && config.openaiApiKey) {
-      const recordText = getRecordText(type, properties);
+      const recordText = getRecordText(normalizedType, properties);
       embedding = await generateEmbedding(recordText);
     }
 
     // Generate summary
-    const summary = await generateRecordSummary(type, properties, file_urls || []);
+    const summary = await generateRecordSummary(normalizedType, properties, file_urls || []);
 
     const insertData: Record<string, unknown> = {
-      type,
+      type: normalizedType,
       properties,
       file_urls: file_urls || [],
     };
@@ -359,8 +361,10 @@ export class NeotomaServer {
       updated_at: new Date().toISOString(),
     };
 
+    let normalizedUpdateType: string | undefined;
     if (parsed.type !== undefined) {
-      updateData.type = parsed.type;
+      normalizedUpdateType = normalizeRecordType(parsed.type).type;
+      updateData.type = normalizedUpdateType;
     }
 
     // Generate new embedding if:
@@ -376,7 +380,7 @@ export class NeotomaServer {
         updateData.embedding = null;
       }
     } else if ((parsed.properties !== undefined || parsed.type !== undefined) && config.openaiApiKey) {
-      const newType = parsed.type !== undefined ? parsed.type : existing?.type || '';
+      const newType = parsed.type !== undefined ? (normalizedUpdateType || normalizeRecordType(parsed.type).type) : existing?.type || '';
       const newProperties = parsed.properties !== undefined ? parsed.properties : (existing?.properties as Record<string, unknown>) || {};
       const recordText = getRecordText(newType, newProperties);
       const generatedEmbedding = await generateEmbedding(recordText);
@@ -399,7 +403,7 @@ export class NeotomaServer {
 
     // Regenerate summary when type, properties, or file_urls change (similar to embedding logic)
     if ((parsed.type !== undefined || parsed.properties !== undefined || parsed.file_urls !== undefined) && config.openaiApiKey) {
-      const newType = parsed.type !== undefined ? parsed.type : existing?.type || '';
+      const newType = parsed.type !== undefined ? (normalizedUpdateType || normalizeRecordType(parsed.type).type) : existing?.type || '';
       // Use merged properties if properties were updated, otherwise use existing
       const newProperties = parsed.properties !== undefined 
         ? (updateData.properties as Record<string, unknown> || (existing?.properties as Record<string, unknown> || {}))
@@ -438,6 +442,7 @@ export class NeotomaServer {
     });
 
     const { type, properties, limit, search, search_mode, similarity_threshold, query_embedding: providedQueryEmbedding } = schema.parse(args);
+    const normalizedType = type ? normalizeRecordType(type).type : undefined;
 
     let results: NeotomaRecord[] = [];
     const finalLimit = limit || 100;
@@ -467,8 +472,8 @@ export class NeotomaServer {
       if (query_embedding) {
         let embeddingQuery = supabase.from('records').select('*').not('embedding', 'is', null);
         
-        if (type) {
-          embeddingQuery = embeddingQuery.eq('type', type);
+        if (normalizedType) {
+          embeddingQuery = embeddingQuery.eq('type', normalizedType);
         }
 
         const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
@@ -510,8 +515,8 @@ export class NeotomaServer {
     if (search && search_mode !== 'semantic') {
       let keywordQuery = supabase.from('records').select('*');
       
-      if (type) {
-        keywordQuery = keywordQuery.eq('type', type);
+      if (normalizedType) {
+        keywordQuery = keywordQuery.eq('type', normalizedType);
       }
 
       const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(finalLimit * 2);
@@ -549,8 +554,8 @@ export class NeotomaServer {
     if (!search) {
       let query = supabase.from('records').select('*');
 
-      if (type) {
-        query = query.eq('type', type);
+      if (normalizedType) {
+        query = query.eq('type', normalizedType);
       }
 
       if (limit) {

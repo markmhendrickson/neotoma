@@ -17,7 +17,7 @@ export function Header() {
   }, [bearerToken, loading, updateBearerToken]);
 
   return (
-    <header className="flex justify-between items-center px-4 py-3 border-b bg-background shrink-0 flex-shrink-0">
+    <header className="flex justify-between items-center px-6 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm shrink-0 flex-shrink-0">
       <div className="flex items-center gap-4">
         <h1 className="text-lg font-semibold m-0">Neotoma</h1>
         {!loading && maskedPrivateKey && (

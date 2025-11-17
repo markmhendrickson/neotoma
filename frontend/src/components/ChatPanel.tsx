@@ -1,15 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { ArrowUp } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowUp, Plus } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
-import { useDatastore } from '@/hooks/useDatastore';
+import type { DatastoreAPI } from '@/hooks/useDatastore';
 import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
+import { formatRelativeTime } from '@/utils/time';
 import type { NeotomaRecord } from '@/types/record';
 import type { LocalRecord } from '@/store/types';
+import { toast as notify } from 'sonner';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -20,37 +21,163 @@ interface ChatMessage {
   errorCount?: number;
 }
 
-export function ChatPanel({ 
-  onFileUploaded, 
-  onFileUploadRef,
-  onErrorRef,
-}: { 
+const CHAT_MESSAGES_STORAGE_KEY = 'chatPanelMessages';
+
+const getStoredMessages = (): ChatMessage[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((msg) => ({
+        ...msg,
+        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+      }))
+      .filter(
+        (msg): msg is ChatMessage =>
+          (msg.role === 'assistant' || msg.role === 'user') &&
+          typeof msg.content === 'string' &&
+          msg.timestamp instanceof Date && !Number.isNaN(msg.timestamp.valueOf())
+      );
+  } catch (error) {
+    console.warn('[ChatPanel] Failed to restore chat history:', error);
+    return [];
+  }
+};
+
+interface ChatPanelProps {
+  datastore: DatastoreAPI;
   onFileUploaded?: () => void;
   onFileUploadRef?: React.MutableRefObject<((files: FileList | null) => Promise<void>) | null>;
   onErrorRef?: React.MutableRefObject<((error: string) => void) | null>;
-}) {
+}
+
+export function ChatPanel({ 
+  datastore,
+  onFileUploaded, 
+  onFileUploadRef,
+  onErrorRef,
+}: ChatPanelProps) {
+  const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
   const { settings } = useSettings();
-  const { bearerToken: keysBearerToken, x25519, ed25519 } = useKeys();
-  const datastore = useDatastore(x25519, ed25519);
+  const { bearerToken: keysBearerToken } = useKeys();
   // Use bearer token from keys hook if available, fallback to settings
   const bearerToken = keysBearerToken || settings.bearerToken;
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content:
-        'Welcome to **Neotoma**—your personal operating system for ingesting files, structuring their contents, and recalling the things you have captured. Ask me questions like "Summarize my latest uploads" or "Show workout logs from last week." To add new information, drag files into the chat, drop them on the page, or paste them from your clipboard and I will import and categorize them for you.',
-      timestamp: new Date(),
-    },
-  ]);
+  const CHAT_PANEL_WIDTH_KEY = 'chatPanelWidth';
+  const DEFAULT_CHAT_WIDTH = 420;
+  const MIN_CHAT_WIDTH = 300;
+  const MAX_CHAT_WIDTH = 680;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages());
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_CHAT_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<
-    Array<{ file: File; status: 'pending' | 'success' | 'error'; name: string }>
-  >([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const handleFileUploadRef = useRef<typeof handleFileUpload | null>(null);
   const errorCountsRef = useRef<Map<string, number>>(new Map());
+  const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
+  const datastoreWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const isResizingRef = useRef(false);
+
+  useIsomorphicLayoutEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const storedWidth = window.localStorage.getItem(CHAT_PANEL_WIDTH_KEY);
+      if (!storedWidth) return;
+      const parsed = Number.parseInt(storedWidth, 10);
+      if (!Number.isNaN(parsed)) {
+        setPanelWidth(Math.min(Math.max(parsed, MIN_CHAT_WIDTH), MAX_CHAT_WIDTH));
+      }
+    } catch (error) {
+      console.warn('[ChatPanel] Failed to read stored width:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(panelWidth));
+  }, [panelWidth]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const serializable = messages.map((msg) => ({
+        ...msg,
+        timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp,
+      }));
+      window.localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(serializable));
+    } catch (error) {
+      console.warn('[ChatPanel] Failed to persist chat history:', error);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!isResizingRef.current || !panelRef.current) return;
+      const rect = panelRef.current.getBoundingClientRect();
+      const nextWidth = Math.min(
+        Math.max(event.clientX - rect.left, MIN_CHAT_WIDTH),
+        MAX_CHAT_WIDTH
+      );
+      setPanelWidth(nextWidth);
+    };
+
+    const stopResizing = () => {
+      if (!isResizingRef.current) return;
+      isResizingRef.current = false;
+      setIsResizing(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('select-none');
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResizing);
+    window.addEventListener('mouseleave', stopResizing);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResizing);
+      window.removeEventListener('mouseleave', stopResizing);
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.body.classList.remove('select-none');
+      isResizingRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (errorCountsRef.current.size > 0) return;
+    const existingErrors = new Map<string, number>();
+    messages.forEach((msg) => {
+      if (msg.isError) {
+        const key = msg.content.toLowerCase();
+        existingErrors.set(key, msg.errorCount ?? 1);
+      }
+    });
+    errorCountsRef.current = existingErrors;
+  }, [messages]);
+
+  const handleResizeStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    isResizingRef.current = true;
+    setIsResizing(true);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.body.classList.add('select-none');
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -111,6 +238,23 @@ export function ChatPanel({
       .replace(/`(.+?)`/g, '<code>$1</code>');
   };
 
+  const isCsvFile = (file: File) => {
+    const type = (file.type || '').toLowerCase();
+    const name = (file.name || '').toLowerCase();
+    return type.includes('csv') || name.endsWith('.csv');
+  };
+
+  const autoResizeTextarea = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 320)}px`;
+  };
+
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [input]);
+
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
 
@@ -121,35 +265,40 @@ export function ChatPanel({
       console.warn('[File Upload] Datastore not ready:', {
         initialized: datastore.initialized,
         error: datastore.error,
-        hasX25519: !!x25519,
-        hasEd25519: !!ed25519,
       });
       addMessage('assistant', errorMsg);
       return;
     }
 
     const fileArray = Array.from(files);
-    const newUploads = fileArray.map((file) => ({
-      file,
-      status: 'pending' as const,
-      name: file.name,
-    }));
-    setUploadProgress((prev) => [...prev, ...newUploads]);
 
-    for (const file of fileArray) {
+    const processFile = async (file: File) => {
+      const toastId = notify.loading(`Uploading ${file.name}`, {
+        description: settings.apiSyncEnabled
+          ? 'Analyzing via API and saving to datastore'
+          : 'Processing locally',
+        duration: 60000,
+      });
+      uploadToastIdsRef.current.set(file, toastId);
+
       try {
         let localRecord: LocalRecord;
+        let additionalLocalRecords: LocalRecord[] = [];
         
         // Try to get AI analysis from API if bearer token is available
         if (bearerToken) {
           try {
             if (settings.apiSyncEnabled) {
               // Full sync: upload and get analyzed record
-              const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file);
+              const csvRowPreference = isCsvFile(file) ? settings.csvRowRecordsEnabled : undefined;
+              const uploadOptions =
+                typeof csvRowPreference === 'boolean' ? { csvRowRecords: csvRowPreference } : undefined;
+              const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file, uploadOptions);
               // Convert API record to local record format with AI-analyzed type and properties
               localRecord = {
                 id: analyzedRecord.id,
                 type: analyzedRecord.type,
+                summary: analyzedRecord.summary ?? null,
                 properties: analyzedRecord.properties,
                 file_urls: analyzedRecord.file_urls,
                 embedding: analyzedRecord.embedding || null,
@@ -160,15 +309,20 @@ export function ChatPanel({
               // Analysis only: get AI analysis without storing in API
               const analysis = await analyzeFile(settings.apiBase, bearerToken, file);
               // Process file locally and merge with AI analysis
-              const basicRecord = await processFileLocally({ file });
+              const basicResult = await processFileLocally({
+                file,
+                csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
+              });
               localRecord = {
-                ...basicRecord,
+                ...basicResult.primaryRecord,
                 type: analysis.type,
+                summary: analysis.summary ?? basicResult.primaryRecord.summary,
                 properties: {
-                  ...basicRecord.properties,
+                  ...basicResult.primaryRecord.properties,
                   ...analysis.properties,
                 },
               };
+              additionalLocalRecords = basicResult.additionalRecords;
             }
           } catch (error) {
             // If API analysis fails, fall back to local processing
@@ -177,44 +331,58 @@ export function ChatPanel({
             if (!errorMessage.includes('not available') && !errorMessage.includes('Failed to fetch')) {
               console.warn('[File Upload] API analysis failed, using local processing:', error);
             }
-            localRecord = await processFileLocally({ file });
+            const basicResult = await processFileLocally({
+              file,
+              csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
+            });
+            localRecord = basicResult.primaryRecord;
+            additionalLocalRecords = basicResult.additionalRecords;
           }
         } else {
           // Process file locally without API analysis
-          localRecord = await processFileLocally({ file });
+          const basicResult = await processFileLocally({
+            file,
+            csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
+          });
+          localRecord = basicResult.primaryRecord;
+          additionalLocalRecords = basicResult.additionalRecords;
         }
         
-        // Store in local datastore
+        const recordsToSave = [localRecord, ...additionalLocalRecords];
+        // Store in local datastore (serialize writes to avoid OPFS handle conflicts)
+        const enqueue = datastoreWriteQueueRef.current.then(async () => {
+          for (const record of recordsToSave) {
+            await datastore.putRecord(record);
+          }
+        });
+        datastoreWriteQueueRef.current = enqueue.catch(() => {});
         try {
-          await datastore.putRecord(localRecord);
+          await enqueue;
         } catch (putError) {
           const putErrorMessage = putError instanceof Error ? putError.message : 'Failed to save record';
           console.error('[File Upload] Failed to save record to datastore:', putError);
           throw new Error(`Failed to save record: ${putErrorMessage}`);
         }
-        
-        setUploadProgress((prev) =>
-          prev.map((u) => (u.file === file ? { ...u, status: 'success' as const } : u))
-        );
-        
+
+        const createdRowsMessage =
+          additionalLocalRecords.length > 0
+            ? ` Created ${additionalLocalRecords.length} row records.`
+            : '';
         const message = settings.apiSyncEnabled
-          ? `File "${file.name}" analyzed and saved locally with type "${localRecord.type}".`
-          : `File "${file.name}" saved locally.`;
+          ? `File "${file.name}" analyzed and saved locally with type "${localRecord.type}".${createdRowsMessage}`
+          : `File "${file.name}" saved locally.${createdRowsMessage}`;
+
+        notify.success(`Saved ${file.name}`, {
+          id: toastId,
+          description: message.replace(`File "${file.name}" `, ''),
+          duration: 4000,
+        });
+        uploadToastIdsRef.current.delete(file);
+
         addMessage('assistant', message);
-        
-        if (onFileUploaded) {
-          setTimeout(() => onFileUploaded(), 100);
-        }
-        setTimeout(() => {
-          setUploadProgress((prev) => prev.filter((u) => u.file !== file));
-        }, 2000);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('[File Upload] Error processing file:', file.name, error);
-        
-        setUploadProgress((prev) =>
-          prev.map((u) => (u.file === file ? { ...u, status: 'error' as const } : u))
-        );
         
         // Determine if it's a timeout or other error
         const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Request timeout');
@@ -222,12 +390,21 @@ export function ChatPanel({
           ? `Failed to process "${file.name}": Datastore operation timed out. The file may still be processing.`
           : `Failed to process "${file.name}": ${errorMessage}`;
         
+        notify.error(`Failed ${file.name}`, {
+          id: toastId,
+          description: displayMessage.replace(`Failed to process "${file.name}": `, ''),
+          duration: 6000,
+        });
+        uploadToastIdsRef.current.delete(file);
+
         addMessage('assistant', `Error: ${displayMessage}`);
-        
-        setTimeout(() => {
-          setUploadProgress((prev) => prev.filter((u) => u.file !== file));
-        }, 3000);
       }
+    };
+
+    await Promise.all(fileArray.map((file) => processFile(file)));
+
+    if (onFileUploaded) {
+      setTimeout(() => onFileUploaded(), 100);
     }
   };
 
@@ -328,11 +505,30 @@ export function ChatPanel({
     }
   };
 
+  const triggerFileDialog = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
-    <aside className="w-[400px] shrink-0 bg-background border-r flex flex-col overflow-hidden">
+    <aside
+      ref={panelRef}
+      className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden"
+      style={{ width: panelWidth }}
+    >
       <div
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-3 relative"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize chat panel"
+        onMouseDown={handleResizeStart}
+        className="absolute right-0 top-0 z-10 h-full w-2 cursor-col-resize"
       >
+        <div
+          className={`absolute inset-y-1/3 right-0 w-[3px] rounded-full transition-colors ${
+            isResizing ? 'bg-primary' : 'bg-border/70 hover:bg-primary/60'
+          }`}
+        />
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-3">
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -341,12 +537,12 @@ export function ChatPanel({
             }`}
           >
             <div
-              className={`px-3 py-2 rounded-xl text-sm ${
+              className={`px-3.5 py-2.5 rounded-xl text-sm shadow-sm ${
                 msg.role === 'user'
-                  ? 'bg-primary text-primary-foreground rounded-br-sm'
+                  ? 'bg-primary text-primary-foreground rounded-br-sm shadow-none'
                   : msg.isError
                   ? 'bg-destructive/10 text-destructive border border-destructive/20 rounded-bl-sm'
-                  : 'bg-muted text-foreground rounded-bl-sm'
+                  : 'bg-card text-foreground border border-border/60 rounded-bl-sm'
               }`}
             >
               <div dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
@@ -361,8 +557,11 @@ export function ChatPanel({
                 Found {msg.recordsQueried.length} record{msg.recordsQueried.length !== 1 ? 's' : ''}
               </div>
             )}
-            <div className="text-xs text-muted-foreground px-1">
-              {msg.timestamp.toLocaleTimeString()}
+            <div
+              className="text-xs text-muted-foreground px-1"
+              title={msg.timestamp.toLocaleString()}
+            >
+              {formatRelativeTime(msg.timestamp)}
             </div>
           </div>
         ))}
@@ -379,65 +578,59 @@ export function ChatPanel({
         )}
         <div ref={messagesEndRef} />
       </div>
-      <div className="flex gap-2 p-4 border-t shrink-0">
-        <Input
-          type="text"
-          placeholder="Ask about your records..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          className="flex-1"
-        />
-        <input
-          type="file"
-          ref={fileInputRef}
-          multiple
-          className="hidden"
-          onChange={(e) => handleFileUpload(e.target.files)}
-        />
-        <Button onClick={handleSend} disabled={isLoading || !input.trim()}>
-          <ArrowUp className="h-4 w-4" />
-        </Button>
-      </div>
-      {uploadProgress.length > 0 && (
-        <div className="flex flex-col gap-1 p-4 border-t max-h-[150px] overflow-y-auto">
-          {uploadProgress.map((upload, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between gap-2 px-2 py-1 bg-muted rounded text-xs"
-            >
-              <span className="flex-1 truncate">{upload.name}</span>
-              <Badge
-                variant={
-                  upload.status === 'success'
-                    ? 'default'
-                    : upload.status === 'error'
-                    ? 'destructive'
-                    : 'secondary'
-                }
-                className={
-                  upload.status === 'pending'
-                    ? 'bg-blue-500 hover:bg-blue-500 text-white border-blue-500'
-                    : upload.status === 'success'
-                    ? 'bg-green-500 hover:bg-green-500 text-white border-green-500'
-                    : ''
-                }
+      <div className="p-4 shrink-0 bg-transparent">
+        <div className="rounded-[28px] border border-border/70 bg-background shadow-sm px-4 py-3 space-y-3 shadow-[0_-20px_30px_-15px_rgba(241,245,249,0.9)]">
+          <Textarea
+            ref={textareaRef}
+            placeholder="Create, update or analyze records..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            className="min-h-[72px] max-h-[320px] resize-none border-none bg-transparent px-0 text-base text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground overflow-hidden"
+            style={{ height: 'auto' }}
+            onInput={autoResizeTextarea}
+          />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 rounded-full border border-border/70 bg-white text-muted-foreground shadow-none hover:bg-white"
+                onClick={triggerFileDialog}
+                disabled={isLoading}
               >
-                {upload.status === 'pending'
-                  ? 'Uploading...'
-                  : upload.status === 'success'
-                  ? '✓'
-                  : '✗'}
-              </Badge>
+                <Plus className="h-4 w-4" />
+                <span className="sr-only">Attach files</span>
+              </Button>
             </div>
-          ))}
+            <div className="flex items-center gap-3">
+              <Button
+                type="button"
+                size="icon"
+                onClick={handleSend}
+                disabled={isLoading || !input.trim()}
+                className="h-9 w-9 rounded-full bg-[#8f8f8f] text-white shadow-none hover:bg-[#828282] disabled:bg-muted disabled:text-muted-foreground"
+              >
+                <ArrowUp className="h-4 w-4" />
+                <span className="sr-only">Send message</span>
+              </Button>
+            </div>
+          </div>
+          <input
+            type="file"
+            ref={fileInputRef}
+            multiple
+            className="hidden"
+            onChange={(e) => handleFileUpload(e.target.files)}
+          />
         </div>
-      )}
+      </div>
     </aside>
   );
 }

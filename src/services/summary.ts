@@ -5,7 +5,7 @@ import { extractPreview } from './file_analysis.js';
 
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
-const MAX_PREVIEW_CHARS = 8000;
+const MAX_PREVIEW_CHARS = 2000;
 
 interface FileContent {
   fileName: string;
@@ -102,7 +102,7 @@ export async function generateRecordSummary(
       fileContents.forEach((file, idx) => {
         fileInfo.push(`\nFile ${idx + 1}: ${file.fileName} (${file.mimeType || 'unknown type'}, ${file.fileSize || 0} bytes)`);
         if (file.preview) {
-          fileInfo.push(`Content preview: ${file.preview.slice(0, 2000)}`);
+          fileInfo.push(`Content preview: ${file.preview.slice(0, MAX_PREVIEW_CHARS)}`);
         } else {
           fileInfo.push('(Binary file - no text content)');
         }

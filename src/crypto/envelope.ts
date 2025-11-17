@@ -7,7 +7,7 @@
 
 import { x25519 } from '@noble/curves/ed25519.js';
 import { randomBytes } from '@noble/hashes/utils.js';
-import type { EncryptedEnvelope, X25519KeyPair, Ed25519KeyPair } from './types.js';
+import type { EncryptedEnvelope, Ed25519KeyPair } from './types.js';
 
 const AES_GCM_KEY_LENGTH = 32; // 256 bits
 const AES_GCM_NONCE_LENGTH = 12; // 96 bits for GCM
@@ -116,7 +116,7 @@ async function deriveAESKey(sharedSecret: Uint8Array): Promise<CryptoKey> {
       hash: 'SHA-256',
     },
     keyMaterial,
-    { name: 'AES-GCM', length: 256 },
+    { name: 'AES-GCM', length: AES_GCM_KEY_LENGTH * 8 },
     true, // extractable: true - needed to export key for encryption
     ['encrypt', 'decrypt']
   );
@@ -185,7 +185,7 @@ async function decryptAESKey(encryptedKey: Uint8Array, sharedSecret: Uint8Array)
   return crypto.subtle.importKey(
     'raw',
     decrypted,
-    { name: 'AES-GCM', length: 256 },
+    { name: 'AES-GCM', length: AES_GCM_KEY_LENGTH * 8 },
     false,
     ['encrypt', 'decrypt']
   );

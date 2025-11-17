@@ -63,6 +63,32 @@ CREATE TRIGGER update_records_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+-- Relationships between records
+CREATE TABLE IF NOT EXISTS record_relationships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+  target_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+  relationship TEXT NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_record_relationships_source ON record_relationships(source_id);
+CREATE INDEX IF NOT EXISTS idx_record_relationships_target ON record_relationships(target_id);
+
+ALTER TABLE record_relationships ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - record_relationships" ON record_relationships;
+CREATE POLICY "Service role full access - record_relationships" ON record_relationships
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - record_relationships" ON record_relationships;
+CREATE POLICY "public read - record_relationships" ON record_relationships
+  FOR SELECT USING ( true );
+
 -- Row Level Security: Allow service role full access
 ALTER TABLE records ENABLE ROW LEVEL SECURITY;
 

@@ -109,10 +109,14 @@ export async function fetchTypes(apiBase: string, bearerToken: string): Promise<
 export async function uploadFile(
   apiBase: string,
   bearerToken: string,
-  file: File
+  file: File,
+  options?: { csvRowRecords?: boolean }
 ): Promise<NeotomaRecord> {
   const formData = new FormData();
   formData.append('file', file);
+  if (typeof options?.csvRowRecords === 'boolean') {
+    formData.append('csv_row_records', String(options.csvRowRecords));
+  }
 
   const response = await fetch(normalizeApiUrl(apiBase, '/upload_file'), {
     method: 'POST',
@@ -172,7 +176,7 @@ export async function analyzeFile(
   apiBase: string,
   bearerToken: string,
   file: File
-): Promise<{ type: string; properties: Record<string, unknown> }> {
+): Promise<{ type: string; properties: Record<string, unknown>; summary?: string }> {
   const formData = new FormData();
   formData.append('file', file);
 

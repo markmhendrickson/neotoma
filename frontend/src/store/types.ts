@@ -5,6 +5,7 @@
 export interface LocalRecord {
   id: string;
   type: string;
+  summary?: string | null;
   properties: Record<string, unknown>;
   file_urls: string[];
   embedding?: number[] | null;

@@ -21,6 +21,7 @@ export async function initDatabase(): Promise<void> {
   try {
     const tablesToCheck = [
       { table: 'records', columns: 'id' },
+      { table: 'record_relationships', columns: 'id' },
       { table: 'plaid_items', columns: 'id' },
       { table: 'plaid_sync_runs', columns: 'id' },
     ] as const;

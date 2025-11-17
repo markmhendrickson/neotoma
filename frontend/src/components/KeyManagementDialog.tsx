@@ -2,7 +2,7 @@
  * Key management dialog for importing/exporting keys
  */
 
-import { useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,7 @@ interface KeyManagementDialogProps {
   onImport: (keyExports: { x25519: any; ed25519: any }) => Promise<boolean>;
   onExport: () => Promise<{ x25519: any; ed25519: any } | null>;
   onRegenerate: () => Promise<boolean>;
+  trigger?: ReactNode;
 }
 
 export function KeyManagementDialog({
@@ -23,11 +24,27 @@ export function KeyManagementDialog({
   onImport,
   onExport,
   onRegenerate,
+  trigger,
 }: KeyManagementDialogProps) {
   const { toast } = useToast();
   const { settings, saveSettings } = useSettings();
   const [importText, setImportText] = useState('');
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleOpenRequest = () => {
+      setOpen(true);
+    };
+
+    window.addEventListener('open-settings', handleOpenRequest);
+    return () => {
+      window.removeEventListener('open-settings', handleOpenRequest);
+    };
+  }, []);
 
   const handleExport = async () => {
     try {
@@ -102,9 +119,11 @@ export function KeyManagementDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          Settings
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" size="sm">
+            Settings
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-2xl" aria-describedby="settings-description">
         <DialogHeader>
@@ -129,6 +148,23 @@ export function KeyManagementDialog({
             </div>
             <p className="text-xs text-muted-foreground ml-6">
               When enabled, records will be synced to the API after being saved locally. When disabled, records are stored locally only.
+            </p>
+          </div>
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <input
+                type="checkbox"
+                id="csvRowRecordsEnabled"
+                checked={settings.csvRowRecordsEnabled}
+                onChange={(e) => saveSettings({ csvRowRecordsEnabled: e.target.checked })}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="csvRowRecordsEnabled" className="font-normal cursor-pointer">
+                Create per-row records for CSV uploads
+              </Label>
+            </div>
+            <p className="text-xs text-muted-foreground ml-6">
+              When enabled, CSV uploads create one record per row plus relationships linking them to the source file.
             </p>
           </div>
           <div>

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { supabase, type NeotomaRecord } from '../db.js';
 import { config } from '../config.js';
 import { generateEmbedding, getRecordText } from '../embeddings.js';
-import { generateRecordSummary } from './summary.js';
+import { normalizeRecordType } from '../config/record_types.js';
 
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
@@ -235,9 +235,11 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
   const insertId = options.recordId ?? randomUUID();
 
   let embedding: number[] | null = null;
+  const canonicalType = normalizeRecordType(analyzedType).type;
+
   if (config.openaiApiKey) {
     try {
-      embedding = await generateEmbedding(getRecordText(analyzedType, finalProperties));
+      embedding = await generateEmbedding(getRecordText(canonicalType, finalProperties));
     } catch (error) {
       console.warn('Embedding generation failed for uploaded file record', error);
     }
@@ -247,13 +249,13 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
   // This ensures we get a comprehensive summary even if analyzeFileForRecord didn't return a good one
   // Note: We use the file buffer we already have instead of re-downloading from storage
   // since the file was just uploaded and might not be immediately available via storage API
-  let finalSummary = summary;
+  const finalSummary = summary;
   // Skip generateRecordSummary for now during file upload since we already have the file content
   // and analyzeFileForRecord should have provided a summary. We can enhance this later if needed.
 
   const insertPayload: Record<string, unknown> = {
     id: insertId,
-    type: analyzedType,
+    type: canonicalType,
     properties: finalProperties,
     file_urls: [fileUrl],
   };
