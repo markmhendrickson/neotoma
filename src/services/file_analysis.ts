@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { PDFParse } from 'pdf-parse';
 import { randomUUID } from 'node:crypto';
 import { supabase, type NeotomaRecord } from '../db.js';
 import { config } from '../config.js';
@@ -8,6 +9,7 @@ import { normalizeRecordType } from '../config/record_types.js';
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
 const MAX_PREVIEW_CHARS = 8000;
+const PDF_SIGNATURE = Buffer.from('%PDF-');
 
 export interface FileAnalysisResult {
   type: string;
@@ -37,6 +39,45 @@ export function extractPreview(buffer: Buffer): string {
     return '';
   }
   return text.slice(0, MAX_PREVIEW_CHARS);
+}
+
+function looksLikePdf(buffer: Buffer, fileName?: string, mimeType?: string): boolean {
+  if (mimeType?.toLowerCase().includes('pdf')) {
+    return true;
+  }
+  if (fileName?.toLowerCase().endsWith('.pdf')) {
+    return true;
+  }
+  if (buffer.length >= PDF_SIGNATURE.length && buffer.subarray(0, PDF_SIGNATURE.length).equals(PDF_SIGNATURE)) {
+    return true;
+  }
+  return false;
+}
+
+async function extractPdfPreview(buffer: Buffer): Promise<string | null> {
+  const parser = new PDFParse({ data: buffer });
+  try {
+    const { text } = await parser.getText();
+    if (!text || !text.trim()) {
+      return null;
+    }
+    return text.slice(0, MAX_PREVIEW_CHARS);
+  } catch (error) {
+    console.warn('PDF preview extraction failed; falling back to binary text', error);
+    return null;
+  } finally {
+    await parser.destroy().catch(() => {});
+  }
+}
+
+export async function buildFilePreview(buffer: Buffer, options: { fileName?: string; mimeType?: string } = {}): Promise<string> {
+  if (looksLikePdf(buffer, options.fileName, options.mimeType)) {
+    const pdfText = await extractPdfPreview(buffer);
+    if (pdfText) {
+      return pdfText;
+    }
+  }
+  return extractPreview(buffer);
 }
 
 function stripCodeFence(raw: string): string {
@@ -105,7 +146,7 @@ function mergeMetadata(properties: Record<string, unknown>, metadata: Record<str
 
 export async function analyzeFileForRecord(options: AnalyzeFileOptions): Promise<FileAnalysisResult> {
   const { buffer, fileName, mimeType, fileSize } = options;
-  const preview = extractPreview(buffer);
+  const preview = await buildFilePreview(buffer, { fileName, mimeType });
 
   if (!openai || !preview) {
     return {

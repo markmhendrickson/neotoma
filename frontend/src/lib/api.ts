@@ -144,10 +144,19 @@ export async function uploadFile(
   return response.json();
 }
 
+export type RecentRecordReference = {
+  id: string;
+  persisted?: boolean;
+  payload?: Record<string, unknown>;
+};
+
 export async function sendChatMessage(
   apiBase: string,
   bearerToken: string,
-  messages: Array<{ role: string; content: string }>
+  payload: {
+    messages: Array<{ role: string; content: string }>;
+    recentRecords?: RecentRecordReference[];
+  }
 ): Promise<{ message: { content: string }; records_queried?: NeotomaRecord[] }> {
   const response = await fetch(normalizeApiUrl(apiBase, '/chat'), {
     method: 'POST',
@@ -156,7 +165,8 @@ export async function sendChatMessage(
       'Authorization': `Bearer ${bearerToken}`,
     },
     body: JSON.stringify({
-      messages,
+      messages: payload.messages,
+      recent_records: payload.recentRecords?.length ? payload.recentRecords : undefined,
     }),
   });
 
@@ -214,13 +224,31 @@ export async function analyzeFile(
   }
 }
 
-export async function getFileUrl(
-  apiBase: string,
-  bearerToken: string,
-  filePath: string
-): Promise<string> {
+const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
+
+function buildStoragePath(filePath: string): string {
+  const trimmed = filePath.trim().replace(/^\/+/, '');
+  if (!trimmed) {
+    return '';
+  }
+  if (trimmed.startsWith('files/')) {
+    return trimmed;
+  }
+  return `files/${trimmed}`;
+}
+
+export async function getFileUrl(apiBase: string, bearerToken: string, filePath: string): Promise<string> {
+  if (ABSOLUTE_URL_PATTERN.test(filePath)) {
+    return filePath;
+  }
+
+  const storagePath = buildStoragePath(filePath);
+  if (!storagePath) {
+    return '';
+  }
+
   const response = await fetch(
-    `${normalizeApiUrl(apiBase, '/get_file_url')}?file_path=${encodeURIComponent(`files/${filePath}`)}`,
+    `${normalizeApiUrl(apiBase, '/get_file_url')}?file_path=${encodeURIComponent(storagePath)}`,
     {
       headers: {
         'Authorization': `Bearer ${bearerToken}`,

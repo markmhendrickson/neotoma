@@ -140,22 +140,6 @@ npm test   # runs live queries against Supabase
   - `GET /health` (simple readiness check)
 - Auth: all other routes require `Authorization: Bearer <ACTIONS_BEARER_TOKEN>`
 
-### CSV Uploader UI
-
-- Visit `http://localhost:8080/`.
-- Set API base and bearer token in the header.
-- Workflow: Select CSV → Parse → Normalize Preview → Finalize (chunked saves).
-- CSV uploads automatically create one record per row (plus parent-child relationships) unless you disable **Settings → Create per-row records for CSV uploads**. The parent dataset keeps a `csv_rows` summary with counts and truncation metadata, and the browser datastore mirrors this structure even when API Sync is disabled.
-- Endpoints used: `GET /types`, `POST /groom/preview`, `POST /groom/finalize`.
-
-### API Sandbox UI
-
-- Visit `http://localhost:8080/sandbox`.
-- Set API base and bearer token in the header.
-- Select any endpoint from the dropdown to view dynamically generated form fields based on the OpenAPI spec.
-- Fill in parameters and request body fields, then execute requests to test endpoints.
-- View formatted request and response payloads with syntax highlighting.
-
 ### Parallel dev servers
 
 - Commands that rely on `scripts/with-branch-ports.js` (`npm run dev:ui`, `npm run dev:http`, `npm run dev:full`, `npm run dev:ws`) probe for open ports on every invocation.
@@ -181,7 +165,7 @@ npm run dev:http
 cloudflared tunnel --url http://localhost:8080
 ```
 
-Use the tunnel URL as your API base. Update the sandbox UI, Plaid demo link (`https://<tunnel>/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}`), or any remote client accordingly.
+Use the tunnel URL as your API base. Update the Plaid demo link (`https://<tunnel>/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}`) or any remote client accordingly.
 
 ##### Custom domain via Cloudflare
 
@@ -197,7 +181,7 @@ If you own a domain managed by Cloudflare:
    ```
 4. Run the tunnel: `cloudflared tunnel run neotoma`
 
-Now your API is reachable at `https://dev.neotoma.io`, so update the sandbox UI and Plaid demo link to `https://dev.neotoma.io/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}`.
+Now your API is reachable at `https://dev.neotoma.io`, so update the Plaid demo link to `https://dev.neotoma.io/import/plaid/link_demo?token=${ACTIONS_BEARER_TOKEN}` and refresh any remote clients accordingly.
 
 ### Plaid Integration
 
@@ -389,14 +373,6 @@ curl -X GET http://localhost:8080/plaid/items \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-#### Using the Sandbox UI
-
-You can also use the API Sandbox UI (`http://localhost:8080/sandbox`) to test these endpoints interactively:
-1. Set your API base URL and bearer token
-2. Select a Plaid endpoint from the dropdown
-3. Fill in the form fields (dynamically generated from OpenAPI spec)
-4. Execute and view the response
-
 ### MCP tools
 
 - `plaid_create_link_token` → Create a Plaid Link token without exposing secrets.
@@ -409,11 +385,6 @@ You can also use the API Sandbox UI (`http://localhost:8080/sandbox`) to test th
 | Method | Path | Purpose | Tests |
 |--------|------|---------|-------|
 | `GET` | `/types` | List canonical record types plus any custom types stored in Supabase | — |
-| `POST` | `/groom/preview` | Normalize up to 2,000 CSV rows and highlight inferred date fields | — |
-| `POST` | `/groom/finalize` | Persist normalized rows in 25-record batches (embeddings auto-generated when configured) | — |
-| `POST` | `/groom/assist` | Ask the LLM for normalization guidance plus machine-readable actions | — |
-| `POST` | `/groom/transform` | Apply bulk transformations to staged rows or download the transformed JSON | — |
-| `GET` | `/sandbox/config` | Return Plaid sandbox defaults for the in-browser API sandbox UI | — |
 | `POST` | `/store_record` | Create a single record (MCP tool parity) | `src/index.test.ts` |
 | `POST` | `/store_records` | Create 1–100 records at once | `src/index.test.ts` |
 | `POST` | `/update_record` | Merge properties/file URLs into an existing record, regenerating embeddings when needed | `src/index.test.ts` |

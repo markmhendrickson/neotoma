@@ -8,6 +8,9 @@ CREATE TABLE IF NOT EXISTS records (
   type TEXT NOT NULL,
   properties JSONB NOT NULL DEFAULT '{}',
   file_urls JSONB DEFAULT '[]',
+  external_source TEXT,
+  external_id TEXT,
+  external_hash TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -46,6 +49,11 @@ CREATE INDEX IF NOT EXISTS idx_records_embedding ON records USING ivfflat (embed
 -- Create index on created_at for sorting
 CREATE INDEX IF NOT EXISTS idx_records_created_at ON records(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_records_external_id ON records ((properties->>'external_id'));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_records_external_source_id_unique
+  ON records (external_source, external_id)
+  WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_records_external_hash ON records (external_hash)
+  WHERE external_hash IS NOT NULL;
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -175,6 +183,83 @@ ALTER TABLE plaid_sync_runs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Service role full access - plaid_sync_runs" ON plaid_sync_runs;
 CREATE POLICY "Service role full access - plaid_sync_runs" ON plaid_sync_runs
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- External connectors table
+CREATE TABLE IF NOT EXISTS external_connectors (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider TEXT NOT NULL,
+  provider_type TEXT NOT NULL,
+  account_identifier TEXT,
+  account_label TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  capabilities JSONB NOT NULL DEFAULT '[]',
+  oauth_scopes JSONB NOT NULL DEFAULT '[]',
+  secrets_envelope TEXT,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  sync_cursor JSONB,
+  last_successful_sync TIMESTAMP WITH TIME ZONE,
+  last_error JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_connectors_provider ON external_connectors(provider);
+CREATE INDEX IF NOT EXISTS idx_external_connectors_status ON external_connectors(status);
+CREATE INDEX IF NOT EXISTS idx_external_connectors_account_identifier ON external_connectors(account_identifier)
+  WHERE account_identifier IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_external_connectors_provider_account
+  ON external_connectors(provider, account_identifier)
+  WHERE account_identifier IS NOT NULL;
+
+DROP TRIGGER IF EXISTS update_external_connectors_updated_at ON external_connectors;
+CREATE TRIGGER update_external_connectors_updated_at
+  BEFORE UPDATE ON external_connectors
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE external_connectors ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - external_connectors" ON external_connectors;
+CREATE POLICY "Service role full access - external_connectors" ON external_connectors
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- External sync runs (generic connectors)
+CREATE TABLE IF NOT EXISTS external_sync_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  connector_id UUID NOT NULL REFERENCES external_connectors(id) ON DELETE CASCADE,
+  sync_type TEXT NOT NULL DEFAULT 'incremental',
+  status TEXT NOT NULL DEFAULT 'pending',
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  completed_at TIMESTAMP WITH TIME ZONE,
+  stats JSONB NOT NULL DEFAULT '{}',
+  cursor JSONB,
+  error JSONB,
+  trace_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_external_sync_runs_connector ON external_sync_runs(connector_id);
+CREATE INDEX IF NOT EXISTS idx_external_sync_runs_started_at ON external_sync_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_external_sync_runs_status ON external_sync_runs(status);
+
+DROP TRIGGER IF EXISTS update_external_sync_runs_updated_at ON external_sync_runs;
+CREATE TRIGGER update_external_sync_runs_updated_at
+  BEFORE UPDATE ON external_sync_runs
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE external_sync_runs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - external_sync_runs" ON external_sync_runs;
+CREATE POLICY "Service role full access - external_sync_runs" ON external_sync_runs
   FOR ALL
   TO service_role
   USING (true)

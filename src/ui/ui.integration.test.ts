@@ -71,7 +71,11 @@ describe('UI Integration Tests', () => {
         backendServer = spawn('npm', ['run', 'dev:http'], {
           stdio: 'pipe',
           shell: true,
-          env: { ...process.env, HTTP_PORT: backendPort },
+          env: {
+            ...process.env,
+            HTTP_PORT: backendPort,
+            NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
+          },
         });
         // Wait for server to start - retry health check
         for (let i = 0; i < 10; i++) {
@@ -94,7 +98,11 @@ describe('UI Integration Tests', () => {
         frontendServer = spawn('npm', ['run', 'dev:ui'], {
           stdio: 'pipe',
           shell: true,
-          env: { ...process.env, VITE_PORT: frontendPort },
+          env: {
+            ...process.env,
+            VITE_PORT: frontendPort,
+            NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
+          },
         });
         // Wait for server to start
         await new Promise((resolve) => setTimeout(resolve, 5000));

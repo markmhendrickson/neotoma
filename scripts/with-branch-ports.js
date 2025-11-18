@@ -14,6 +14,7 @@ import path from 'path';
 const BASE_HTTP_PORT = 8080;
 const BASE_VITE_PORT = 5173;
 const BASE_WS_PORT = 8081;
+const OWNER_PID_ENV = 'BRANCH_PORTS_OWNER_PID';
 
 function getGitBranch() {
   try {
@@ -116,20 +117,28 @@ async function terminateProcess(pid) {
   }
 }
 
-function isPortAvailable(port) {
+function listenOnHost(port, host) {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
-    server.on('error', (err) => {
+    server.once('error', (err) => {
       if (err.code === 'EADDRINUSE' || err.code === 'EACCES') {
         resolve(false);
         return;
       }
       reject(err);
     });
-    server.listen(port, '0.0.0.0', () => {
+    server.listen({ port, host, exclusive: true }, () => {
       server.close(() => resolve(true));
     });
   });
+}
+
+async function isPortAvailable(port) {
+  const ipv6 = await listenOnHost(port, '::');
+  if (!ipv6) {
+    return false;
+  }
+  return listenOnHost(port, '0.0.0.0');
 }
 
 async function findOpenPort(basePort, reserved = new Set()) {
@@ -197,7 +206,7 @@ async function assignPorts(previousPorts) {
 const childSignalHandlers = new Set();
 
 function registerChildProcess(child, ports) {
-  if (!child || typeof child.pid !== 'number') {
+  if (!child || typeof child.pid !== 'number' || !ports) {
     return;
   }
 
@@ -241,7 +250,8 @@ function registerChildProcess(child, ports) {
   }
 }
 
-function spawnCommand(command, commandArgs, ports) {
+function spawnCommand(command, commandArgs, ports, options = {}) {
+  const { skipRegister = false } = options;
   const isNpxConcurrently = command === 'npx' && commandArgs[0] === 'concurrently';
   const isConcurrently = command === 'concurrently' || isNpxConcurrently;
 
@@ -255,7 +265,9 @@ function spawnCommand(command, commandArgs, ports) {
       env: { ...process.env },
     });
 
-    registerChildProcess(child, ports);
+    if (!skipRegister) {
+      registerChildProcess(child, ports);
+    }
 
     child.on('exit', (code) => {
       process.exit(code || 0);
@@ -269,11 +281,33 @@ function spawnCommand(command, commandArgs, ports) {
     env: { ...process.env },
   });
 
-  registerChildProcess(child, ports);
+  if (!skipRegister) {
+    registerChildProcess(child, ports);
+  }
 
   child.on('exit', (code) => {
     process.exit(code || 0);
   });
+}
+
+function parsePortEnv(name, base) {
+  const raw = process.env[name];
+  if (!raw) {
+    throw new Error(`[with-branch-ports] Missing ${name} in environment for nested invocation`);
+  }
+  const port = Number(raw);
+  if (Number.isNaN(port)) {
+    throw new Error(`[with-branch-ports] Invalid ${name} value "${raw}"`);
+  }
+  return { port, offset: port - base };
+}
+
+function buildPortsFromEnv() {
+  return {
+    http: parsePortEnv('HTTP_PORT', BASE_HTTP_PORT),
+    vite: parsePortEnv('VITE_PORT', BASE_VITE_PORT),
+    ws: parsePortEnv('WS_PORT', BASE_WS_PORT),
+  };
 }
 
 async function main() {
@@ -281,6 +315,17 @@ async function main() {
   if (args.length === 0) {
     console.error('Usage: node scripts/with-branch-ports.js <command> [args...]');
     process.exit(1);
+  }
+
+  const ownerPid = Number(process.env[OWNER_PID_ENV]);
+  const isReentrant = Number.isFinite(ownerPid) && ownerPid !== process.pid;
+
+  if (isReentrant) {
+    console.log('[with-branch-ports] Nested invocation detected; reusing assigned ports');
+    const ports = buildPortsFromEnv();
+    const [command, ...commandArgs] = args;
+    spawnCommand(command, commandArgs, ports, { skipRegister: true });
+    return;
   }
 
   const previousState = readStateFile();
@@ -301,6 +346,7 @@ async function main() {
   process.env.PORT = String(vite.port);
   process.env.BRANCH_PORTS_FILE = STATE_FILE;
   process.env.BRANCH_NAME = BRANCH;
+  process.env[OWNER_PID_ENV] = process.env[OWNER_PID_ENV] || String(process.pid);
 
   const describeOffset = ({ offset }) => (offset === 0 ? 'base' : `base+${offset}`);
   console.log(

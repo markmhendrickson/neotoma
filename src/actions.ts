@@ -11,7 +11,7 @@ import { listCanonicalRecordTypes, normalizeRecordType } from './config/record_t
 import { generateEmbedding, getRecordText } from './embeddings.js';
 import fs from 'fs';
 import path from 'path';
-import { detectDateFields, normalizeRow } from './normalize.js';
+import { normalizeRow } from './normalize.js';
 import { createRecordFromUploadedFile } from './services/file_analysis.js';
 import { generateRecordSummary } from './services/summary.js';
 import { createLinkToken, exchangePublicToken, buildPlaidItemContext, isPlaidConfigured, normalizePlaidError } from './integrations/plaid/client.js';
@@ -27,14 +27,23 @@ import {
   type SanitizedPlaidItem,
   type PlaidPreviewSummary,
 } from './services/plaid_sync.js';
+import { providerCatalog, getProviderDefinition } from './integrations/providers/index.js';
+import {
+  createConnector,
+  listConnectors as listExternalConnectors,
+  type ExternalConnector,
+  type ConnectorSecrets,
+} from './services/connectors.js';
+import { runConnectorSync, runAllConnectorSyncs } from './services/importers.js';
 import { ensurePublicKeyRegistered, getPublicKey, isBearerTokenValid } from './services/public_key_registry.js';
 import { verifyRequest, parseAuthHeader } from './crypto/auth.js';
 import { encryptResponseMiddleware } from './middleware/encrypt_response.js';
 import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
 import { isCsvLike, parseCsvRows } from './utils/csv.js';
+import { serializeChatMessagesForOpenAI, type ChatMessage } from './utils/chat.js';
 
-const app = express();
+export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
 app.use(helmet({
   contentSecurityPolicy: {
@@ -53,20 +62,6 @@ app.use(helmet({
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
-
-// Serve static files from public/ at root
-const publicDir = path.join(process.cwd(), 'public');
-if (fs.existsSync(publicDir)) {
-  app.use('/', express.static(publicDir));
-  // Serve index.html for all non-API routes (SPA routing) - but only after auth middleware
-  // This will be handled after auth middleware runs
-}
-
-// Serve static sandbox UI
-const sandboxDir = path.join(process.cwd(), 'public', 'sandbox');
-if (fs.existsSync(sandboxDir)) {
-  app.use('/sandbox', express.static(sandboxDir));
-}
 
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get('/favicon.ico', (_req, res) => res.status(204).end());
@@ -161,6 +156,11 @@ function logError(event: string, req: express.Request, error: unknown, extra?: R
   console.error(`[ERROR] ${event}`, payload);
 }
 
+function sanitizeConnector(connector: ExternalConnector) {
+  const { secretsEnvelope, ...rest } = connector;
+  return rest;
+}
+
 function plaidConfiguredOrError(res: express.Response): boolean {
   if (isPlaidConfigured()) {
     return true;
@@ -200,7 +200,6 @@ app.use(async (req, res, next) => {
     (req.method === 'GET' && (
       req.path === '/openapi.yaml' ||
       req.path === '/health' ||
-      req.path === '/sandbox/config' ||
       req.path === '/import/plaid/link_demo' ||
       req.path === '/plaid/link_demo'
     ))
@@ -271,6 +270,7 @@ const RetrieveSchema = z.object({
   search_mode: z.enum(['semantic', 'keyword', 'both']).optional().default('both'),
     similarity_threshold: z.number().min(0).max(1).optional().default(0.3),
   query_embedding: z.array(z.number()).optional(),
+  ids: z.array(z.string().uuid()).min(1).max(100).optional(),
 });
 
 const StoreRecordsSchema = z.object({
@@ -279,6 +279,23 @@ const StoreRecordsSchema = z.object({
 
 const DeleteRecordsSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
+});
+
+const ProviderLinkSchema = z.object({
+  account_identifier: z.string().min(1).optional(),
+  account_label: z.string().min(1).optional(),
+  provider_type: z.enum(['social', 'productivity']).optional(),
+  capabilities: z.array(z.string()).optional(),
+  oauth_scopes: z.array(z.string()).optional(),
+  metadata: z.record(z.unknown()).optional(),
+  secrets: z.record(z.unknown()).optional(),
+});
+
+const ProviderSyncSchema = z.object({
+  connector_id: z.string().uuid().optional(),
+  sync_type: z.enum(['initial', 'incremental']).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+  max_pages: z.number().int().positive().max(50).optional(),
 });
 
 // Endpoints
@@ -298,280 +315,97 @@ app.get('/types', async (req, res) => {
   });
 });
 
-app.post('/groom/preview', async (req, res) => {
-  const schema = z.object({ rows: z.array(z.record(z.unknown())).min(1).max(2000) });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn('ValidationError:groom_preview', req, { issues: parsed.error.issues });
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const { rows } = parsed.data as any;
-  const { data: typeRows } = await supabase.from('records').select('type').limit(1000);
-  const existingTypes = Array.from(new Set((typeRows || []).map((r: any) => r.type).filter(Boolean))).sort();
-
-  const normalized = (rows as Array<Record<string, unknown>>).map((row: Record<string, unknown>) => normalizeRow(row, existingTypes));
-  const allWarnings = normalized.flatMap(r => r.warnings);
-  const dateFieldsSet = new Set<string>();
-  rows.slice(0, 50).forEach((r: any) => detectDateFields(r).forEach(f => dateFieldsSet.add(f)));
-
-  return res.json({ normalized, suggestions: { existingTypes, dateFields: Array.from(dateFieldsSet) }, warnings: allWarnings });
+app.get('/import/providers', (_req, res) => {
+  return res.json({ providers: providerCatalog });
 });
 
-app.post('/groom/finalize', async (req, res) => {
-  const parsed = StoreRecordsSchema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn('ValidationError:groom_finalize', req, { issues: parsed.error.issues });
-    return res.status(400).json({ error: parsed.error.flatten() });
+app.get('/connectors', async (req, res) => {
+  try {
+    const connectors = await listExternalConnectors();
+    return res.json({
+      connectors: connectors.map(sanitizeConnector),
+    });
+  } catch (error) {
+    logError('ConnectorError:list', req, error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list connectors' });
   }
-  const { records } = parsed.data;
-
-  // Chunk into 25
-  let total = 0;
-  for (let i = 0; i < records.length; i += 25) {
-    const slice = records.slice(i, i + 25);
-    // Prepare embeddings conditionally (reuse store_records logic lightly)
-    const prepared = await Promise.all(slice.map(async r => {
-      const canonicalType = normalizeRecordType(r.type).type;
-      let embedding: number[] | null = null;
-      if (Array.isArray(r.embedding) && r.embedding.length > 0) {
-        embedding = r.embedding;
-      } else if (!r.embedding && config.openaiApiKey) {
-        const text = getRecordText(canonicalType, r.properties);
-        embedding = await generateEmbedding(text);
-      }
-      const out: any = { type: canonicalType, properties: r.properties, file_urls: r.file_urls || [] };
-      if (embedding) out.embedding = embedding;
-      return out;
-    }));
-
-    const { data, error } = await supabase.from('records').insert(prepared).select('id');
-    if (error) {
-      logError('SupabaseError:groom_finalize', req, error);
-      return res.status(500).json({ error: error.message, saved: total });
-    }
-    total += data?.length || 0;
-  }
-  logDebug('Success:groom_finalize', req, { count: total });
-  return res.json({ success: true, count: total });
 });
 
-// Lightweight assistant endpoint to help propose normalization guidance
-app.post('/groom/assist', async (req, res) => {
-  const schema = z.object({
-    messages: z.array(z.object({ role: z.enum(['user','assistant','system']), content: z.string() })).min(1),
-    sample: z.array(z.record(z.unknown())).optional(),
-    existingTypes: z.array(z.string()).optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+app.post('/import/:provider/link', async (req, res) => {
+  const providerId = req.params.provider;
+  const definition = getProviderDefinition(providerId);
+  if (!definition) {
+    return res.status(404).json({ error: `Unknown provider: ${providerId}` });
+  }
+
+  const parsed = ProviderLinkSchema.safeParse(req.body);
   if (!parsed.success) {
-    logWarn('ValidationError:groom_assist', req, { issues: parsed.error.issues });
+    logWarn('ValidationError:connector_link', req, { issues: parsed.error.issues, provider: providerId });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  if (!config.openaiApiKey) {
-    return res.status(400).json({ error: 'OPENAI_API_KEY not configured on server' });
-  }
-  const { messages, sample, existingTypes } = parsed.data;
-
-  const sys = {
-    role: 'system',
-    content: [
-      'You assist with normalizing CSV rows into Neotoma records.',
-      'Tasks:',
-      '- Infer or map types to an existing set when possible.',
-      '- Propose field transforms, especially datetimes to ISO 8601 UTC.',
-      '- Return concise, actionable suggestions.',
-      '',
-      'CRITICAL OUTPUT FORMAT:',
-      'Respond with a short natural-language summary AND a machine-readable JSON block.',
-      'JSON schema:',
-      '{"actions":[{"type":"set_type","to":"note"},{"type":"map_type","mappings":[{"from":"Red band","to":"exercise"}]},{"type":"set_field","field":"Assistance","to":"${value}!"},{"type":"map_value","field":"Difficulty","mappings":[{"from":"Moderate","to":"Medium"}]},{"type":"append","field":"Assistance","suffix":"!"},{"type":"date_to_iso","field":"Created at"}]}',
-      'Place the JSON inside a single fenced ```json code block. Keep within 2,000 tokens.',
-    ].join('\n')
-  } as const;
-
-  const toolContext = {
-    existingTypes: existingTypes || [],
-    sample: (sample || []).slice(0, 25),
-  };
 
   try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [sys, ...messages, { role: 'user', content: `Context: ${JSON.stringify(toolContext).slice(0, 6000)}` }],
-        temperature: 0.2,
-      }),
+    const connector = await createConnector({
+      provider: providerId,
+      providerType: parsed.data.provider_type ?? definition.providerType,
+      capabilities: parsed.data.capabilities ?? definition.capabilities,
+      oauthScopes: parsed.data.oauth_scopes ?? definition.oauthScopes ?? [],
+      accountIdentifier: parsed.data.account_identifier ?? null,
+      accountLabel: parsed.data.account_label ?? definition.displayName,
+      metadata: parsed.data.metadata ?? {},
+      secrets: (parsed.data.secrets as ConnectorSecrets | undefined) ?? null,
     });
-    if (!resp.ok) {
-      const text = await resp.text();
-      logError('OpenAIError:groom_assist', req, text);
-      return res.status(502).json({ error: 'Upstream model error' });
-    }
-    const data = await resp.json() as {
-      choices?: Array<{
-        message?: { content?: string };
-      }>;
-    };
-    const content = data.choices?.[0]?.message?.content || '';
-    return res.json({ message: { role: 'assistant', content } });
-  } catch (e: any) {
-    logError('Exception:groom_assist', req, e);
-    return res.status(500).json({ error: 'Assistant failed' });
+    logDebug('Success:connector_link', req, { connector_id: connector.id, provider: providerId });
+    return res.status(201).json({
+      connector: sanitizeConnector(connector),
+      provider: definition,
+    });
+  } catch (error) {
+    logError('ConnectorError:link', req, error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to create connector' });
   }
 });
 
-// Transform endpoint: accepts staged rows and optional instruction, returns modified rows or downloadable file
-app.post('/groom/transform', async (req, res) => {
-  const schema = z.object({
-    rows: z.array(z.record(z.unknown())).min(1).max(20000),
-    instruction: z.string().optional(),
-    return: z.enum(['json', 'file']).optional().default('json'),
-  });
-  const parsed = schema.safeParse(req.body);
+app.post('/import/:provider/sync', async (req, res) => {
+  const providerId = req.params.provider;
+  const definition = getProviderDefinition(providerId);
+  if (!definition) {
+    return res.status(404).json({ error: `Unknown provider: ${providerId}` });
+  }
+
+  const parsed = ProviderSyncSchema.safeParse(req.body);
   if (!parsed.success) {
-    logWarn('ValidationError:groom_transform', req, { issues: parsed.error.issues });
+    logWarn('ValidationError:connector_sync', req, { issues: parsed.error.issues, provider: providerId });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { rows, instruction } = parsed.data;
 
-  // Normalize input shape first
-  let normalizedRows = rows.map((row) => {
-    if (row && typeof row === 'object' && 'properties' in row && 'type' in row) {
-      const withStructure = row as Record<string, unknown> & {
-        type?: unknown;
-        file_urls?: unknown;
-        properties?: unknown;
-      };
-      return {
-        type: String(withStructure.type ?? 'unknown'),
-        properties:
-          typeof withStructure.properties === 'object' && withStructure.properties !== null
-            ? (withStructure.properties as Record<string, unknown>)
-            : {},
-        file_urls: Array.isArray(withStructure.file_urls) ? withStructure.file_urls : [],
-      };
-    }
-    // Raw row → infer minimal structure
-    return {
-      type: String((row as { type?: unknown }).type ?? 'unknown'),
-      properties: row,
-      file_urls: [],
-    };
-  });
-
-  // If instruction present and OpenAI configured, try LLM-based transform
-  if (instruction && typeof instruction === 'string' && config.openaiApiKey) {
-    const sys = {
-      role: 'system',
-      content: [
-        'You transform staged CSV rows into Neotoma records.',
-        'Return ONLY a single JSON object with this exact shape, with concrete values (no placeholders):',
-        '{"rows":[{"type":"<string>","properties":{...},"file_urls":["/path"...]}]}',
-        'Rules:',
-        '- Preserve fields unless instructed to modify.',
-        '- Convert any datetime-like strings to ISO 8601 UTC when instructed.',
-        '- Ensure every item has a string "type" and object "properties".',
-        '- Rows array length MUST equal input length; do not add/remove rows.',
-        '- Do NOT include commentary, Markdown, or code fences. Output raw JSON only.',
-      ].join('\n')
-    } as const;
-    const sanitizeRows = (rowsIn: Array<Record<string, unknown>>) => rowsIn.map((row) => {
-      const candidate = row as {
-        type?: unknown;
-        file_urls?: unknown;
-        properties?: Record<string, unknown>;
-      };
-      return {
-        type: String(candidate?.type ?? 'unknown'),
-        file_urls: Array.isArray(candidate?.file_urls) ? (candidate.file_urls as string[]) : [],
-        properties: Object.fromEntries(
-          Object.entries(candidate?.properties ?? {})
-            .filter(([k]) => /day|date|created|updated|time|name|assistance/i.test(String(k)))
-            .slice(0, 40)
-            .map(([k, v]) => [k, typeof v === 'string' ? (v as string).slice(0, 200) : v])
-        ),
-      };
-    });
-    const safeRows = sanitizeRows(normalizedRows).slice(0, 200);
-    const user = {
-      role: 'user',
-      content: JSON.stringify({ instruction, rows: safeRows }).slice(0, 120000)
-    } as const;
-    try {
-      const ac = new AbortController();
-      const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000', 10);
-      const t0 = Date.now();
-      const timeout = setTimeout(() => ac.abort(), LLM_TIMEOUT_MS);
-      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.openaiApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-          messages: [sys, user],
-        }),
-        signal: ac.signal,
+  try {
+    if (parsed.data.connector_id) {
+      const result = await runConnectorSync({
+        connectorId: parsed.data.connector_id,
+        syncType: parsed.data.sync_type,
+        limit: parsed.data.limit,
+        maxPages: parsed.data.max_pages,
       });
-      clearTimeout(timeout);
-      logWarn('LLMTiming', req, { ms: Date.now() - t0, payload_bytes: JSON.stringify(user).length });
-      if (resp.ok) {
-        const data = await resp.json() as {
-          choices?: Array<{
-            message?: { content?: string };
-          }>;
-        };
-        const content: string = data.choices?.[0]?.message?.content || '';
-        const jsonText = content;
-        try {
-          const parsed = JSON.parse(jsonText);
-          if (parsed && Array.isArray(parsed.rows)) {
-            normalizedRows = parsed.rows.map((r: any) => ({
-              type: String(r?.type ?? 'unknown'),
-              properties: typeof r?.properties === 'object' && r?.properties !== null ? r.properties : {},
-              file_urls: Array.isArray(r?.file_urls) ? r.file_urls : [],
-            }));
-          }
-        } catch (e) {
-          // ignore parse errors, fallback to normalizedRows
-          logWarn('LLMTransformParseError', req, { message: (e as any)?.message });
-        }
-      } else {
-        const text = await resp.text();
-        logWarn('LLMTransformUpstreamError', req, { status: resp.status, text });
-      }
-    } catch (e: any) {
-      logWarn('LLMTransformException', req, { message: e?.message, name: e?.name });
+      return res.json({ provider: definition, results: [result] });
     }
-  }
 
-  if ((parsed.data as any).return === 'file') {
-    const payload = JSON.stringify({ rows: normalizedRows });
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', 'attachment; filename="normalized.json"');
-    return res.send(payload);
+    const results = await runAllConnectorSyncs({
+      provider: providerId,
+      limitPerConnector: parsed.data.limit,
+      maxPages: parsed.data.max_pages,
+    });
+    return res.json({ provider: definition, results });
+  } catch (error) {
+    logError('ConnectorError:sync', req, error);
+    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to sync provider' });
   }
-  return res.json({ rows: normalizedRows });
 });
 
-// Expose only safe sandbox defaults for UI auto-fill
-app.get('/sandbox/config', async (_req, res) => {
-  const userId = config.plaid.linkDefaults?.userId || '';
-  const clientName = config.plaid.linkDefaults?.clientName || '';
-  return res.json({
-    user_id_default: userId,
-    client_name_default: clientName,
-    products_default: (config.plaid.products || []).join(','),
-    redirect_uri_default: config.plaid.redirectUri || '',
-  });
+app.post('/import/:provider/webhook', async (req, res) => {
+  const providerId = req.params.provider;
+  logDebug('ConnectorWebhook', req, { provider: providerId });
+  return res.status(202).json({ ok: true });
 });
 
 app.post('/import/plaid/link_token', async (req, res) => {
@@ -1081,11 +915,29 @@ app.post('/retrieve_records', async (req, res) => {
     logWarn('ValidationError:retrieve_records', req, { issues: parsed.error.issues });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { type, properties, limit, search, search_mode, similarity_threshold, query_embedding: providedQueryEmbedding } = parsed.data;
+  const { type, properties, limit, search, search_mode, similarity_threshold, query_embedding: providedQueryEmbedding, ids } = parsed.data;
   const normalizedType = type ? normalizeRecordType(type).type : undefined;
 
-  let results: any[] = [];
+  const resultMap = new Map<string, any>();
+  const appendResults = (records: any[]) => {
+    for (const record of records) {
+      const id = record?.id;
+      if (!id || resultMap.has(id)) continue;
+      resultMap.set(id, record);
+    }
+  };
   const finalLimit = limit ?? 100;
+  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
+
+  if (hasIdFilter) {
+    try {
+      const idMatches = await fetchRecordsByIds(ids, normalizedType);
+      appendResults(idMatches);
+    } catch (error) {
+      logError('SupabaseError:retrieve_records:ids', req, error);
+      return res.status(500).json({ error: (error as any)?.message || 'Database error' });
+    }
+  }
 
   // Semantic search (vector similarity)
   if (search && (search_mode === 'semantic' || search_mode === 'both')) {
@@ -1223,12 +1075,7 @@ app.post('/retrieve_records', async (req, res) => {
           threshold: similarity_threshold
         });
 
-        if (search_mode === 'semantic') {
-          results = semanticMatches;
-        } else {
-          // Will merge with keyword results below
-          results = semanticMatches;
-        }
+        appendResults(semanticMatches);
       }
     }
   }
@@ -1255,24 +1102,12 @@ app.post('/retrieve_records', async (req, res) => {
         return typeMatch || propsMatch;
       }).slice(0, finalLimit);
 
-      if (search_mode === 'keyword') {
-        results = keywordMatches;
-      } else {
-        // Merge semantic and keyword results, deduplicate by ID
-        const resultMap = new Map();
-        results.forEach((r: any) => resultMap.set(r.id, r));
-        keywordMatches.forEach((r: any) => {
-          if (!resultMap.has(r.id)) {
-            resultMap.set(r.id, r);
-          }
-        });
-        results = Array.from(resultMap.values()).slice(0, finalLimit);
-      }
+      appendResults(keywordMatches);
     }
   }
 
   // No search mode: use existing logic
-  if (!search) {
+  if (!search && !hasIdFilter) {
     let query = supabase.from('records').select('*');
     if (normalizedType) query = query.eq('type', normalizedType);
     query = query.order('created_at', { ascending: false }).limit(finalLimit);
@@ -1282,9 +1117,10 @@ app.post('/retrieve_records', async (req, res) => {
       logError('SupabaseError:retrieve_records', req, error, { code: (error as any).code });
       return res.status(500).json({ error: error.message });
     }
-    results = data || [];
+    appendResults(data || []);
   }
 
+  let results = Array.from(resultMap.values());
   // Filter by exact property matches (if specified)
   if (properties) {
     results = results.filter((rec: any) => {
@@ -1294,6 +1130,7 @@ app.post('/retrieve_records', async (req, res) => {
       });
     });
   }
+  results = results.slice(0, finalLimit);
 
   // Remove embeddings from response to reduce size (ChatGPT Actions has response size limits)
   const resultsWithoutEmbeddings = results.map((rec: any) => {
@@ -1674,6 +1511,26 @@ app.get('/get_file_url', async (req, res) => {
   return res.json({ url: data.signedUrl });
 });
 
+async function fetchRecordsByIds(ids: string[], type?: string): Promise<any[]> {
+  if (!ids.length) {
+    return [];
+  }
+  let query = supabase.from('records').select('*').in('id', ids);
+  if (type) {
+    query = query.eq('type', type);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw error;
+  }
+  const orderMap = new Map(ids.map((id, index) => [id, index]));
+  return (data ?? []).sort((a, b) => {
+    const aIndex = orderMap.get(a.id) ?? 0;
+    const bIndex = orderMap.get(b.id) ?? 0;
+    return aIndex - bIndex;
+  });
+}
+
 // Helper function to execute retrieve_records logic (reusable for chat endpoint)
 async function executeRetrieveRecords(params: {
   type?: string;
@@ -1683,11 +1540,25 @@ async function executeRetrieveRecords(params: {
   search_mode?: 'semantic' | 'keyword' | 'both';
   similarity_threshold?: number;
   query_embedding?: number[];
+  ids?: string[];
 }): Promise<any[]> {
-  const { type, properties, limit, search, search_mode = 'both', similarity_threshold = 0.3, query_embedding: providedQueryEmbedding } = params;
+  const { type, properties, limit, search, search_mode = 'both', similarity_threshold = 0.3, query_embedding: providedQueryEmbedding, ids } = params;
 
-  let results: any[] = [];
+  const resultMap = new Map<string, any>();
+  const appendResults = (records: any[]) => {
+    for (const record of records) {
+      const id = record?.id;
+      if (!id || resultMap.has(id)) continue;
+      resultMap.set(id, record);
+    }
+  };
+
   const finalLimit = limit ?? 100;
+
+  if (ids && ids.length > 0) {
+    const idMatches = await fetchRecordsByIds(ids, type);
+    appendResults(idMatches);
+  }
 
   // Semantic search (vector similarity)
   if (search && (search_mode === 'semantic' || search_mode === 'both')) {
@@ -1740,12 +1611,7 @@ async function executeRetrieveRecords(params: {
         const semanticMatches = scoredCandidates
           .filter((rec: any) => rec.similarity >= similarity_threshold)
           .slice(0, finalLimit);
-
-        if (search_mode === 'semantic') {
-          results = semanticMatches;
-        } else {
-          results = semanticMatches;
-        }
+        appendResults(semanticMatches);
       }
     }
   }
@@ -1768,35 +1634,24 @@ async function executeRetrieveRecords(params: {
         const propsMatch = propsText.includes(searchText);
         return typeMatch || propsMatch;
       }).slice(0, finalLimit);
-
-      if (search_mode === 'keyword') {
-        results = keywordMatches;
-      } else {
-        const resultMap = new Map();
-        results.forEach((r: any) => resultMap.set(r.id, r));
-        keywordMatches.forEach((r: any) => {
-          if (!resultMap.has(r.id)) {
-            resultMap.set(r.id, r);
-          }
-        });
-        results = Array.from(resultMap.values()).slice(0, finalLimit);
-      }
+      appendResults(keywordMatches);
     }
   }
 
   // No search mode
-  if (!search) {
+  if (!search && !(ids && ids.length > 0)) {
     let query = supabase.from('records').select('*');
     if (type) query = query.eq('type', type);
     query = query.order('created_at', { ascending: false }).limit(finalLimit);
 
     const { data, error } = await query;
-    if (!error) {
-      results = data || [];
+    if (!error && data) {
+      appendResults(data);
     }
   }
 
   // Filter by exact property matches
+  let results = Array.from(resultMap.values());
   if (properties) {
     results = results.filter((rec: any) => {
       return Object.entries(properties).every(([key, value]) => {
@@ -1805,6 +1660,7 @@ async function executeRetrieveRecords(params: {
       });
     });
   }
+  results = results.slice(0, finalLimit);
 
   // Remove embeddings from response
   return results.map((rec: any) => {
@@ -1812,6 +1668,12 @@ async function executeRetrieveRecords(params: {
     void embedding;
     return rest;
   });
+}
+
+function extractUUIDs(text: string): string[] {
+  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const matches = text.match(uuidRegex);
+  return matches ? Array.from(new Set(matches)) : [];
 }
 
 app.post('/chat', async (req, res) => {
@@ -1822,6 +1684,11 @@ app.post('/chat', async (req, res) => {
     })).min(1),
     model: z.string().optional(),
     temperature: z.number().min(0).max(2).optional(),
+    recent_records: z.array(z.object({
+      id: z.string().min(1),
+      persisted: z.boolean().optional(),
+      payload: z.record(z.unknown()).optional(),
+    })).optional(),
   });
 
   const parsed = schema.safeParse(req.body);
@@ -1834,7 +1701,13 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'OPENAI_API_KEY not configured on server' });
   }
 
-  const { messages, model = 'gpt-4o-mini', temperature = 0.7 } = parsed.data;
+  const { messages, model = 'gpt-4o-mini', temperature = 0.7, recent_records: recentRecordsInput = [] } = parsed.data;
+
+  // Extract UUIDs from the last user message
+  const lastUserMessage = messages[messages.length - 1];
+  const mentionedUUIDs = lastUserMessage?.role === 'user' 
+    ? extractUUIDs(lastUserMessage.content || '')
+    : [];
 
   const systemMessage = {
     role: 'system' as const,
@@ -1844,6 +1717,7 @@ When a user asks about records, data, or information that might be stored in the
 
 Guidelines:
 - Use retrieve_records when the user asks about stored data, records, or information
+- If the user mentions a specific record ID (UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), extract it and use the ids parameter to fetch that exact record
 - Extract search terms from the user's query for semantic/keyword search
 - If the user mentions a specific record type, use the type parameter
 - Provide clear, concise answers based on the retrieved records
@@ -1888,26 +1762,105 @@ Guidelines:
           minimum: 0,
           maximum: 1,
         },
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Explicit record IDs (UUIDs) to fetch. Use this when the user mentions a specific ID, or when referencing recently created records. This is the most direct way to retrieve a record by its identifier.',
+        },
       },
       required: [],
     },
   };
 
   try {
-    // Use a more flexible message type for OpenAI API
-    type ChatMessage = {
-      role: 'system' | 'user' | 'assistant' | 'function';
-      content: string;
-      name?: string;
+    const chatMessages: ChatMessage[] = [systemMessage];
+    const sanitizeRecord = (record: any) => {
+      if (!record) return null;
+      const { embedding, ...rest } = record;
+      void embedding;
+      return rest;
     };
 
-    const chatMessages: ChatMessage[] = [systemMessage, ...messages];
+    const persistedRecentFromInput = recentRecordsInput
+      .filter(record => record.persisted !== false)
+      .map(record => record.id);
+    
+    // Merge mentioned UUIDs with recent records (prioritize mentioned ones)
+    const allRelevantIds = [
+      ...mentionedUUIDs,
+      ...persistedRecentFromInput
+    ].filter((id, index, arr) => arr.indexOf(id) === index); // dedupe
+    
+    const persistedRecent = allRelevantIds;
+    const inlineRecent = recentRecordsInput
+      .filter(record => record.persisted === false && record.payload && typeof record.payload === 'object')
+      .map(record => ({
+        id: record.id,
+        ...(record.payload as Record<string, unknown>),
+      }));
+
+    let persistedRecentRecords: any[] = [];
+    if (persistedRecent.length > 0) {
+      try {
+        persistedRecentRecords = await fetchRecordsByIds(persistedRecent);
+      } catch (error) {
+        logError('SupabaseError:chat:recent_records', req, error);
+      }
+    }
+
+    const combinedRecentRecords = [
+      ...persistedRecentRecords.map(sanitizeRecord).filter(Boolean),
+      ...inlineRecent.map(sanitizeRecord).filter(Boolean),
+    ] as any[];
+    const recentRecordCatalog: any[] = [];
+    const seenRecentIds = new Set<string>();
+    combinedRecentRecords.forEach((rec) => {
+      if (!rec?.id || seenRecentIds.has(rec.id)) {
+        return;
+      }
+      seenRecentIds.add(rec.id);
+      recentRecordCatalog.push(rec);
+    });
+
+    const MAX_RECENT_CONTEXT = 5;
+    if (recentRecordCatalog.length > 0) {
+      const contextLines = recentRecordCatalog.slice(0, MAX_RECENT_CONTEXT).map((rec, index) => {
+        const props = rec.properties ? JSON.stringify(rec.properties).slice(0, 280) : '';
+        const summary = rec.summary || '';
+        return `${index + 1}. ID: ${rec.id} | Type: ${rec.type || 'unknown'} | Summary: ${summary || props || 'No summary available'}`;
+      }).join('\n');
+
+      const persistedInstruction = persistedRecent.length
+        ? `When the user references these records (e.g., "it", "that file", "the thing I just saved"), OR when they mention a specific UUID, call retrieve_records with ids [${persistedRecent.join(', ')}] to fetch the exact objects. If the user mentions a UUID that matches one of these IDs, use it.`
+        : '';
+      const inlineInstruction = inlineRecent.length
+        ? 'Some records are only available inline (not yet synced). Their payload is already provided above—cite them directly without calling retrieve_records.'
+        : '';
+      const mentionedUUIDsInstruction = mentionedUUIDs.length > 0 && !persistedRecentFromInput.some(id => mentionedUUIDs.includes(id))
+        ? `The user mentioned UUID(s): ${mentionedUUIDs.join(', ')}. Use retrieve_records with ids parameter to fetch these records directly.`
+        : '';
+
+      chatMessages.push({
+        role: 'system',
+        content: `Recent session records (highest priority first):\n${contextLines}\n\n${[persistedInstruction, inlineInstruction, mentionedUUIDsInstruction].filter(Boolean).join(' ')}`.trim(),
+      });
+    } else if (mentionedUUIDs.length > 0) {
+      // No recent records, but user mentioned UUIDs - add instruction to use them
+      const mentionedUUIDsInstruction = `The user mentioned UUID(s): ${mentionedUUIDs.join(', ')}. Use retrieve_records with ids parameter to fetch these records directly.`;
+      chatMessages.push({
+        role: 'system',
+        content: mentionedUUIDsInstruction,
+      });
+    }
+
+    chatMessages.push(...messages);
     const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
-    const recordsQueried: any[] = [];
+    const recordsQueried: any[] = recentRecordCatalog.length > 0 ? [...recentRecordCatalog] : [];
     const maxIterations = 5;
     let iteration = 0;
 
     while (iteration < maxIterations) {
+      const openAIMessages = serializeChatMessagesForOpenAI(chatMessages);
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -1916,10 +1869,7 @@ Guidelines:
         },
         body: JSON.stringify({
           model,
-          messages: chatMessages.filter(m => m.role !== 'function').map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: openAIMessages,
           functions: [retrieveRecordsFunction],
           function_call: 'auto',
           temperature,
@@ -1973,6 +1923,7 @@ Guidelines:
               search: args.search,
               search_mode: args.search_mode || 'both',
               similarity_threshold: args.similarity_threshold || 0.3,
+              ids: Array.isArray(args.ids) ? args.ids.slice(0, 50) : undefined,
             });
 
             recordsQueried.push(...records);
@@ -2319,44 +2270,15 @@ app.get('/plaid/link_demo', (req, res) => {
 });
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
-app.get('*', (req, res, next) => {
-  // Skip if it's an API route, sandbox, or import route
-  if (
-    req.path.startsWith('/api') ||
-    req.path.startsWith('/sandbox') ||
-    req.path.startsWith('/import') ||
-    req.path.startsWith('/plaid') ||
-    req.path.startsWith('/retrieve_records') ||
-    req.path.startsWith('/store_record') ||
-    req.path.startsWith('/store_records') ||
-    req.path.startsWith('/update_record') ||
-    req.path.startsWith('/delete_record') ||
-    req.path.startsWith('/delete_records') ||
-    req.path.startsWith('/upload_file') ||
-    req.path.startsWith('/get_file_url') ||
-    req.path.startsWith('/chat') ||
-    req.path.startsWith('/types') ||
-    req.path.startsWith('/groom') ||
-    req.path.startsWith('/openapi.yaml') ||
-    req.path.startsWith('/health')
-  ) {
-    return next();
-  }
-  const indexPath = path.join(publicDir, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    next();
-  }
-});
-
 // Initialize encryption service
 initServerKeys().catch(err => {
   console.error('Failed to initialize encryption service:', err);
 });
 
+if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== '1') {
 const httpPort = process.env.HTTP_PORT ? parseInt(process.env.HTTP_PORT, 10) : (config.port || 3000);
 app.listen(httpPort, () => {
   // eslint-disable-next-line no-console
   console.log(`HTTP Actions listening on :${httpPort}`);
 });
+}

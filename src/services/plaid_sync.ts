@@ -289,10 +289,19 @@ async function completeSyncRun(
 function toExternalRecords(
   records: NormalizedPlaidRecord[],
   generateEmbedding: boolean
-): { type: string; externalId: string; properties: Record<string, unknown>; generateEmbedding: boolean }[] {
+): {
+  type: string;
+  externalSource: string;
+  externalId?: string;
+  externalHash?: string;
+  properties: Record<string, unknown>;
+  generateEmbedding: boolean;
+}[] {
   return records.map((record) => ({
     type: record.type,
+    externalSource: record.externalSource,
     externalId: record.externalId,
+    externalHash: record.externalHash,
     properties: record.properties,
     generateEmbedding,
   }));
@@ -371,7 +380,9 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
     let removedCount = 0;
     for (const removedTx of removed) {
       const externalId = `plaid:transaction:${removedTx.transaction_id}`;
-      const updated = await markExternalRecordRemoved('transaction', externalId);
+      const updated = await markExternalRecordRemoved('transaction', 'plaid', {
+        externalId,
+      });
       if (updated) {
         removedCount += 1;
       }

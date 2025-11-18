@@ -14,15 +14,17 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { NeotomaRecord } from '@/types/record';
 import { STATUS_ORDER } from '@/types/record';
-import { ArrowUpDown, ArrowUp, ArrowDown, Info } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Eye, Info, MoreHorizontal, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStorageQuota } from '@/hooks/useStorageQuota';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from '@/components/ui/sheet';
@@ -48,8 +50,11 @@ interface RecordsTableProps {
   records: NeotomaRecord[];
   types: string[];
   onRecordClick: (record: NeotomaRecord) => void;
+  onDeleteRecord: (record: NeotomaRecord) => Promise<void> | void;
+  onDeleteRecords: (records: NeotomaRecord[]) => Promise<void> | void;
   onSearch: (query: string) => void;
   onTypeFilter: (type: string) => void;
+  isLoading?: boolean;
 }
 
 const EMPTY_TABLE_MESSAGE = [
@@ -58,13 +63,18 @@ const EMPTY_TABLE_MESSAGE = [
   'To add new information, drag files into the chat, drop them on the page, or paste them from your clipboard and I will import and categorize them for you.',
 ];
 
+const SKELETON_ROW_COUNT = 6;
+
 const COLUMN_VISIBILITY_STORAGE_KEY = 'recordsTableColumnVisibility';
+const COLUMN_ORDER_STORAGE_KEY = 'recordsTableColumnOrder';
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = Object.freeze({
   _status: false,
   id: false,
   updated_at: false,
   file_urls: false,
 });
+
+const ROW_INTERACTIVE_ATTR = 'data-row-interactive';
 
 const getStoredColumnVisibility = (): VisibilityState => {
   if (typeof window === 'undefined') {
@@ -87,12 +97,74 @@ const getStoredColumnVisibility = (): VisibilityState => {
   }
 };
 
+const getStoredColumnOrder = (defaultOrder: string[]): string[] => {
+  if (typeof window === 'undefined') {
+    return [...defaultOrder];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) {
+      return [...defaultOrder];
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [...defaultOrder];
+    }
+    const normalized = parsed.filter((value): value is string => typeof value === 'string');
+    const deduped = normalized.filter((value, index) => normalized.indexOf(value) === index);
+    const valid = deduped.filter((value) => defaultOrder.includes(value));
+    const missing = defaultOrder.filter((value) => !valid.includes(value));
+    return [...valid, ...missing];
+  } catch (error) {
+    console.warn('[RecordsTable] Failed to restore column order', error);
+    return [...defaultOrder];
+  }
+};
+
+const mergeColumnOrder = (currentOrder: string[], defaultOrder: string[]) => {
+  const filtered = currentOrder.filter((value) => defaultOrder.includes(value));
+  const missing = defaultOrder.filter((value) => !filtered.includes(value));
+  return [...filtered, ...missing];
+};
+
+const ensureSelectColumnFirst = (order: string[]): string[] => {
+  if (!Array.isArray(order)) {
+    return order;
+  }
+  const existingIndex = order.indexOf('select');
+  if (existingIndex === 0) {
+    return order;
+  }
+  if (existingIndex > 0) {
+    const next = [...order];
+    next.splice(existingIndex, 1);
+    next.unshift('select');
+    return next;
+  }
+  return ['select', ...order];
+};
+
+const getColumnIdentifier = (column: ColumnDef<NeotomaRecord>): string | null => {
+  const accessor = (column as { accessorKey?: string }).accessorKey;
+  if (typeof accessor === 'string') {
+    return accessor;
+  }
+  if (typeof column.id === 'string') {
+    return column.id;
+  }
+  return null;
+};
+
 export function RecordsTable({
   records,
   types,
   onRecordClick,
+  onDeleteRecord,
+  onDeleteRecords,
   onSearch,
   onTypeFilter,
+  isLoading = false,
 }: RecordsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
@@ -105,20 +177,10 @@ export function RecordsTable({
     { id: 'updated_at', desc: true },
   ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
-  const [storageInfoOpen, setStorageInfoOpen] = useState(false);
-  const { settings } = useSettings();
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
-    } catch (error) {
-      console.warn('[RecordsTable] Failed to persist column visibility', error);
-    }
-  }, [columnVisibility]);
-
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const columnLabels: Record<string, string> = useMemo(
     () => ({
+      select: 'Select',
       type: 'Type',
       summary: 'Summary',
       created_at: 'Created',
@@ -126,22 +188,95 @@ export function RecordsTable({
       file_urls: 'Files',
       _status: 'Status',
       id: 'ID',
+      actions: 'Actions',
     }),
     []
   );
 
+  const toggleRecordSelection = useCallback((recordId: string, checked: boolean) => {
+    setSelectedRowIds((current) => {
+      if (checked) {
+        if (current.includes(recordId)) {
+          return current;
+        }
+        return [...current, recordId];
+      }
+      return current.filter((id) => id !== recordId);
+    });
+  }, []);
+
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (!checked) {
+        setSelectedRowIds([]);
+        return;
+      }
+      setSelectedRowIds(records.map((record) => record.id));
+    },
+    [records]
+  );
+
+  useEffect(() => {
+    setSelectedRowIds((current) => current.filter((id) => records.some((record) => record.id === id)));
+  }, [records]);
+
+  const isAllSelected = records.length > 0 && selectedRowIds.length === records.length;
+  const isPartiallySelected = selectedRowIds.length > 0 && !isAllSelected;
+
   const columns = useMemo<ColumnDef<NeotomaRecord>[]>(
     () => [
       {
+        id: 'select',
+        header: () => (
+          <input
+            type="checkbox"
+            aria-label="Select all records"
+            className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            checked={isAllSelected}
+            ref={(input) => {
+              if (!input) return;
+              input.indeterminate = isPartiallySelected;
+            }}
+            onChange={(event) => handleSelectAll(event.target.checked)}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            aria-label={`Select record ${row.original.id}`}
+            className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            checked={selectedRowIds.includes(row.original.id)}
+            onChange={(event) => {
+              event.stopPropagation();
+              toggleRecordSelection(row.original.id, event.target.checked);
+            }}
+            onClick={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
+          />
+        ),
+        enableSorting: false,
+        size: 38,
+      },
+      {
         accessorKey: 'type',
         header: 'Type',
+        cell: ({ row }) => {
+          const value = row.original.type;
+          return value ? <span className="truncate block" title={value}>{value}</span> : '—';
+        },
       },
       {
         accessorKey: 'summary',
         header: 'Summary',
         cell: ({ row }) => {
           const value = row.original.summary;
-          return value ? <span className="text-sm">{value}</span> : '—';
+          return value ? <span className="text-sm truncate block" title={value}>{value}</span> : '—';
         },
       },
       {
@@ -233,11 +368,66 @@ export function RecordsTable({
       {
         accessorKey: 'id',
         header: 'ID',
-        cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span>,
+        cell: ({ row }) => <span className="font-mono text-xs truncate block" title={row.original.id}>{row.original.id}</span>,
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        cell: ({ row }) => (
+          <RowActions
+            record={row.original}
+            onViewDetails={onRecordClick}
+            onDeleteRecord={onDeleteRecord}
+          />
+        ),
+        size: 60,
       },
     ],
+    [handleSelectAll, isAllSelected, isPartiallySelected, onDeleteRecord, onRecordClick, records.length, selectedRowIds, toggleRecordSelection]
+  );
+
+  const columnIds = useMemo(
+    () => columns.map((column) => getColumnIdentifier(column)).filter((id): id is string => Boolean(id)),
+    [columns]
+  );
+  const [columnOrder, setColumnOrderState] = useState<string[]>(() =>
+    ensureSelectColumnFirst(getStoredColumnOrder(columnIds))
+  );
+  const setColumnOrder = useCallback(
+    (updater: React.SetStateAction<string[]>) => {
+      setColumnOrderState((current) => {
+        const next = typeof updater === 'function' ? (updater as (prev: string[]) => string[])(current) : updater;
+        return ensureSelectColumnFirst(next);
+      });
+    },
     []
   );
+  const [storageInfoOpen, setStorageInfoOpen] = useState(false);
+  const { settings } = useSettings();
+  const [draggingColumnId, setDraggingColumnId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
+    } catch (error) {
+      console.warn('[RecordsTable] Failed to persist column visibility', error);
+    }
+  }, [columnVisibility]);
+
+  useEffect(() => {
+    setColumnOrder((current) => mergeColumnOrder(current, columnIds));
+  }, [columnIds, setColumnOrder]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(columnOrder));
+    } catch (error) {
+      console.warn('[RecordsTable] Failed to persist column order', error);
+    }
+  }, [columnOrder]);
 
   const table = useReactTable({
     data: records,
@@ -245,12 +435,43 @@ export function RecordsTable({
     state: {
       sorting,
       columnVisibility,
+      columnOrder,
     },
     onSortingChange: setSorting,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  const handleRowClick = useCallback(
+    (event: React.MouseEvent<HTMLTableRowElement>, record: NeotomaRecord) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+
+      if (target.closest(`[${ROW_INTERACTIVE_ATTR}="true"]`)) {
+        return;
+      }
+
+      const nativeEvent = event.nativeEvent;
+      const path =
+        (typeof nativeEvent.composedPath === 'function' ? nativeEvent.composedPath() : []) ||
+        [];
+      const isInteractivePath = path.some(
+        (node) =>
+          node instanceof HTMLElement && node.getAttribute?.(ROW_INTERACTIVE_ATTR) === 'true'
+      );
+
+      if (isInteractivePath) {
+        return;
+      }
+
+      onRecordClick(record);
+    },
+    [onRecordClick]
+  );
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -301,7 +522,84 @@ export function RecordsTable({
     return `${formatBytes(usage)} of ${formatBytes(quota)} (${percentText})`;
   }, [formatBytes, quotaSupported, quotaLoading, usage, quota, usagePercent]);
 
-  const showWelcomeEmptyState = records.length === 0 && !searchQuery.trim() && !selectedType;
+  const isInitialLoading = isLoading && records.length === 0;
+  const showWelcomeEmptyState = !isInitialLoading && records.length === 0 && !searchQuery.trim() && !selectedType;
+  const visibleColumns = table.getVisibleLeafColumns();
+  const skeletonColumns = visibleColumns.length > 0 ? visibleColumns : table.getAllLeafColumns();
+  const recordCountLabel = isInitialLoading ? 'Loading records…' : `${records.length} record${records.length === 1 ? '' : 's'}`;
+  const quotaLabel = isInitialLoading ? 'Calculating usage…' : quotaMessage;
+
+  const handleDragStart = useCallback(
+    (event: React.DragEvent, columnId: string) => {
+      setDraggingColumnId(columnId);
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', columnId);
+    },
+    []
+  );
+
+  const handleDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const handleDrop = useCallback(
+    (event: React.DragEvent, targetColumnId: string) => {
+      event.preventDefault();
+      const draggedId = draggingColumnId || event.dataTransfer.getData('text/plain');
+      if (!draggedId || draggedId === targetColumnId) {
+        setDraggingColumnId(null);
+        return;
+      }
+      setColumnOrder((current) => {
+        const nextOrder = current.filter((id) => id !== draggedId);
+        const targetIndex = nextOrder.indexOf(targetColumnId);
+        if (targetIndex === -1) {
+          return mergeColumnOrder([...current], columnIds);
+        }
+        nextOrder.splice(targetIndex, 0, draggedId);
+        return nextOrder;
+      });
+      setDraggingColumnId(null);
+    },
+    [columnIds, draggingColumnId]
+  );
+
+  const handleDragEnd = useCallback(() => {
+    setDraggingColumnId(null);
+  }, []);
+
+  const moveColumn = useCallback((columnId: string, direction: 'left' | 'right') => {
+    setColumnOrder((current) => {
+      const index = current.indexOf(columnId);
+      if (index === -1) return current;
+      const targetIndex =
+        direction === 'left' ? Math.max(index - 1, 0) : Math.min(index + 1, current.length - 1);
+      if (targetIndex === index) return current;
+      const nextOrder = [...current];
+      const [removed] = nextOrder.splice(index, 1);
+      nextOrder.splice(targetIndex, 0, removed);
+      return nextOrder;
+    });
+  }, []);
+
+  const selectedRecords = useMemo(
+    () => records.filter((record) => selectedRowIds.includes(record.id)),
+    [records, selectedRowIds]
+  );
+  const selectedCount = selectedRecords.length;
+
+  const handleDeleteSelected = useCallback(() => {
+    if (selectedCount === 0) return;
+    const maybePromise = onDeleteRecords(selectedRecords);
+    if (isPromise(maybePromise)) {
+      maybePromise
+        .then(() => setSelectedRowIds([]))
+        .catch(() => {});
+      return;
+    }
+    setSelectedRowIds([]);
+  }, [onDeleteRecords, selectedCount, selectedRecords]);
 
   return (
     <div className="flex flex-col h-full max-h-full gap-4 p-4 overflow-hidden">
@@ -340,12 +638,12 @@ export function RecordsTable({
               <Button variant="outline">Columns</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
               {table.getAllLeafColumns().map((column) => (
                 <DropdownMenuCheckboxItem
                   key={column.id}
                   checked={column.getIsVisible()}
-                  onCheckedChange={() => column.toggleVisibility()}
+                  onCheckedChange={(checked) => column.toggleVisibility(checked === true)}
+                  onSelect={(event) => event.preventDefault()}
                 >
                   {columnLabels[column.id] || column.id}
                 </DropdownMenuCheckboxItem>
@@ -353,12 +651,18 @@ export function RecordsTable({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="text-sm text-muted-foreground flex flex-wrap gap-2 items-center">
-          <span>
-            {records.length} record{records.length !== 1 ? 's' : ''}
-          </span>
-          <span className="text-muted-foreground/80 flex items-center gap-1" aria-live="polite">
-            • {quotaMessage}
+        <div className="flex flex-col items-end gap-2 text-sm text-muted-foreground">
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-foreground font-medium">{selectedCount} selected</span>
+              <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
+                Delete selected
+              </Button>
+            </div>
+          )}
+          <span className="flex flex-wrap gap-2 items-center justify-end text-muted-foreground/80" aria-live="polite">
+            <span>{recordCountLabel}</span>
+            <span>• {quotaLabel}</span>
             <Sheet open={storageInfoOpen} onOpenChange={setStorageInfoOpen}>
               <SheetTrigger asChild>
                 <button
@@ -418,27 +722,68 @@ export function RecordsTable({
       </div>
       <div className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden">
         <div className="h-full overflow-auto">
-          <Table>
+          <Table className="[table-layout:fixed] w-full">
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (
                 <TableRow key={headerGroup.id}>
                   {headerGroup.headers.map((header) => (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    <TableHead
+                      key={header.id}
+                      draggable={!header.isPlaceholder}
+                      onDragStart={(event) => {
+                        if (header.isPlaceholder) return;
+                        handleDragStart(event, header.column.id);
+                      }}
+                      onDragOver={(event) => {
+                        if (header.isPlaceholder) return;
+                        handleDragOver(event);
+                      }}
+                      onDrop={(event) => {
+                        if (header.isPlaceholder) return;
+                        handleDrop(event, header.column.id);
+                      }}
+                      onDragEnd={handleDragEnd}
+                      onKeyDown={(event) => {
+                        if (header.isPlaceholder) return;
+                        if (event.key === 'ArrowLeft') {
+                          event.preventDefault();
+                          moveColumn(header.column.id, 'left');
+                        } else if (event.key === 'ArrowRight') {
+                          event.preventDefault();
+                          moveColumn(header.column.id, 'right');
+                        }
+                      }}
+                      tabIndex={header.isPlaceholder ? undefined : 0}
+                      className={cn(draggingColumnId && header.column.id === draggingColumnId && 'opacity-60')}
+                      data-column-id={header.column.id}
+                    >
+                      {header.isPlaceholder ? null : (
+                        <div className="flex items-center gap-2">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                        </div>
+                      )}
                     </TableHead>
                   ))}
                 </TableRow>
               ))}
             </TableHeader>
             <TableBody>
-              {table.getRowModel().rows.length ? (
+              {isInitialLoading ? (
+                Array.from({ length: SKELETON_ROW_COUNT }).map((_, index) => (
+                  <TableRow key={`skeleton-${index}`} className="pointer-events-none">
+                    {skeletonColumns.map((column) => (
+                      <TableCell key={`${column.id}-${index}`}>
+                        <div className="h-4 w-full animate-pulse rounded bg-muted" />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : table.getRowModel().rows.length ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() ? 'selected' : undefined}
-                    onClick={() => onRecordClick(row.original)}
+                    onClick={(event) => handleRowClick(event, row.original)}
                     className={cn(
                       'cursor-pointer',
                       row.original._status === 'Uploading' && 'bg-amber-50',
@@ -480,4 +825,67 @@ export function RecordsTable({
       </div>
     </div>
   );
+}
+
+interface RowActionsProps {
+  record: NeotomaRecord;
+  onViewDetails: (record: NeotomaRecord) => void;
+  onDeleteRecord: (record: NeotomaRecord) => void;
+}
+
+function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) {
+  const handleDelete = () => {
+    const maybePromise = onDeleteRecord(record);
+    if (isPromise(maybePromise)) {
+      maybePromise.catch(() => {});
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 p-0"
+          {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+          aria-label={`Open actions menu for record ${record.id}`}
+        >
+          <MoreHorizontal className="h-4 w-4" />
+          <span className="sr-only">Open actions</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44" onPointerDownOutside={(event) => event.preventDefault()}>
+        <DropdownMenuItem
+          onSelect={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onViewDetails(record);
+          }}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          View details
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onSelect={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleDelete();
+          }}
+        >
+          <Trash2 className="mr-2 h-4 w-4" />
+          Delete record
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function isPromise<T = unknown>(value: unknown): value is Promise<T> {
+  return typeof value === 'object' && value !== null && 'then' in value && typeof (value as { then?: unknown }).then === 'function';
 }

@@ -11,6 +11,9 @@ export interface NeotomaRecord {
   type: string;
   properties: Record<string, unknown>;
   file_urls: string[];
+  external_source?: string | null;
+  external_id?: string | null;
+  external_hash?: string | null;
   embedding?: number[] | null;
   summary?: string | null;
   created_at: string;
@@ -24,6 +27,8 @@ export async function initDatabase(): Promise<void> {
       { table: 'record_relationships', columns: 'id' },
       { table: 'plaid_items', columns: 'id' },
       { table: 'plaid_sync_runs', columns: 'id' },
+      { table: 'external_connectors', columns: 'id' },
+      { table: 'external_sync_runs', columns: 'id' },
     ] as const;
 
     for (const { table, columns } of tablesToCheck) {

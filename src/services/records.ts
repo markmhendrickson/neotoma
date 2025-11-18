@@ -5,7 +5,9 @@ export type MergeStrategy = 'replace' | 'merge';
 
 export interface ExternalRecordInput {
   type: string;
-  externalId: string;
+  externalSource: string;
+  externalId?: string;
+  externalHash?: string;
   properties: Record<string, unknown>;
   fileUrls?: string[];
   mergeStrategy?: MergeStrategy;
@@ -19,18 +21,23 @@ export interface UpsertResult {
   record: NeotomaRecord;
 }
 
-function ensureExternalId(
+function ensureExternalIdentifiers(
   properties: Record<string, unknown>,
-  externalId: string
+  externalSource: string,
+  externalId?: string,
+  externalHash?: string
 ): Record<string, unknown> {
-  if (properties.external_id === externalId) {
-    return properties;
-  }
-
-  return {
+  const next: Record<string, unknown> = {
     ...properties,
-    external_id: externalId,
+    external_source: externalSource,
   };
+  if (externalId) {
+    next.external_id = externalId;
+  }
+  if (externalHash) {
+    next.external_hash = externalHash;
+  }
+  return next;
 }
 
 function mergeProperties(
@@ -51,8 +58,21 @@ export async function upsertExternalRecord(
   payload: ExternalRecordInput,
   embeddingBuilder?: (record: { type: string; properties: Record<string, unknown> }) => Promise<number[] | null>
 ): Promise<UpsertResult> {
-  const { type, externalId, mergeStrategy = 'replace' } = payload;
-  const propertiesWithExternal = ensureExternalId(payload.properties, externalId);
+  const { type, externalSource, externalId, externalHash, mergeStrategy = 'replace' } = payload;
+
+  if (!externalSource) {
+    throw new Error('externalSource is required for external record upserts');
+  }
+  if (!externalId && !externalHash) {
+    throw new Error('externalId or externalHash is required for external record upserts');
+  }
+
+  const propertiesWithExternal = ensureExternalIdentifiers(
+    payload.properties,
+    externalSource,
+    externalId,
+    externalHash
+  );
 
   const maybeBuildEmbedding = async (recordType: string, recordProps: Record<string, unknown>) => {
     if (!payload.generateEmbedding || !embeddingBuilder) return null;
@@ -65,25 +85,33 @@ export async function upsertExternalRecord(
     }
   };
 
-  const { data: existing, error: fetchError } = await supabase
+  let recordQuery = supabase
     .from('records')
     .select('id, properties, file_urls')
-    .eq('type', type)
-    .eq('properties->>external_id', externalId)
-    .maybeSingle();
+    .eq('external_source', externalSource);
+
+  if (externalId) {
+    recordQuery = recordQuery.eq('external_id', externalId);
+  } else {
+    recordQuery = recordQuery.eq('external_hash', externalHash);
+  }
+
+  const { data: existing, error: fetchError } = await recordQuery.maybeSingle();
 
   if (fetchError && fetchError.code !== 'PGRST116') {
     throw fetchError;
   }
 
   if (existing) {
-    const mergedProperties = ensureExternalId(
+    const mergedProperties = ensureExternalIdentifiers(
       mergeProperties(
         (existing.properties as Record<string, unknown>) ?? null,
         propertiesWithExternal,
         mergeStrategy
       ),
-      externalId
+      externalSource,
+      externalId,
+      externalHash
     );
 
     const updatedFileUrls =
@@ -92,6 +120,9 @@ export async function upsertExternalRecord(
     const updateData: Record<string, unknown> = {
       properties: mergedProperties,
       file_urls: updatedFileUrls,
+      external_source: externalSource,
+      external_id: externalId ?? null,
+      external_hash: externalHash ?? null,
       updated_at: new Date().toISOString(),
     };
 
@@ -129,6 +160,9 @@ export async function upsertExternalRecord(
     type,
     properties: propertiesWithExternal,
     file_urls: payload.fileUrls ?? [],
+    external_source: externalSource,
+    external_id: externalId ?? null,
+    external_hash: externalHash ?? null,
   };
 
   const insertEmbedding = await maybeBuildEmbedding(type, propertiesWithExternal);
@@ -174,14 +208,24 @@ export async function upsertExternalRecords(
 
 export async function markExternalRecordRemoved(
   type: string,
-  externalId: string,
+  externalSource: string,
+  identifiers: { externalId?: string; externalHash?: string },
   removedAt: string = new Date().toISOString()
 ): Promise<NeotomaRecord | null> {
+  if (!identifiers.externalId && !identifiers.externalHash) {
+    throw new Error('externalId or externalHash is required to mark a record removed');
+  }
+
   const { data: existing, error: fetchError } = await supabase
     .from('records')
     .select('id, properties')
     .eq('type', type)
-    .eq('properties->>external_id', externalId)
+    .eq('external_source', externalSource)
+    .match(
+      identifiers.externalId
+        ? { external_id: identifiers.externalId }
+        : { external_hash: identifiers.externalHash }
+    )
     .maybeSingle();
 
   if (fetchError && fetchError.code !== 'PGRST116') {

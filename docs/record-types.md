@@ -36,6 +36,26 @@ Neotoma accepts arbitrary record types, but downstream analytics, embeddings, an
 | `meal` | Food logs and nutrition captures. | `name`, `calories`, `macros`, `consumed_at`, `items` | food_log, nutrition |
 | `sleep_session` | Bedtime tracking entries. | `start_time`, `end_time`, `duration`, `quality`, `notes` | sleep, rest |
 
+**Example (`exercise`)**
+
+```json
+{
+  "type": "exercise",
+  "summary": "5 x 3 front squats at 205 lbs (RPE 8)",
+  "properties": {
+    "name": "Front squat",
+    "sets": 5,
+    "reps": 3,
+    "weight_lbs": 205,
+    "rpe": 8,
+    "duration_minutes": 28,
+    "muscle_group": "legs",
+    "notes": "Paused each rep, focus on staying upright."
+  },
+  "created_at": "2025-02-12T14:33:00Z"
+}
+```
+
 ## Media & Files
 
 | Type | Description | Primary Properties | Aliases |

@@ -18,7 +18,8 @@
     "dev:full": "node scripts/with-branch-ports.js npx concurrently 'npm run dev:http' 'npm run dev:ui'",
     "branches:prune": "node scripts/prune-merged-branches.js",
     "start:ws": "node dist/mcp_ws_bridge.js",
-    "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts"
+    "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts",
+    "import:connector": "tsx scripts/run-importers.ts"
   },
   "keywords": [
     "mcp",
@@ -56,6 +57,7 @@
     "multer": "^1.4.5-lts.2",
     "openai": "^4.0.0",
     "papaparse": "^5.5.3",
+    "pdf-parse": "^2.4.5",
     "plaid": "^39.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -74,6 +76,8 @@
     "@types/morgan": "^1.9.7",
     "@types/multer": "^1.4.13",
     "@types/node": "^20.10.6",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/pdfkit": "^0.17.3",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
     "@typescript-eslint/eslint-plugin": "^6.17.0",
@@ -83,6 +87,7 @@
     "concurrently": "^8.2.2",
     "eslint": "^8.56.0",
     "jsdom": "^27.2.0",
+    "pdfkit": "^0.17.2",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.7.1",
