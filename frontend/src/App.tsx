@@ -6,22 +6,69 @@ import { RecordsTable } from '@/components/RecordsTable';
 import { RecordDetailsPanel } from '@/components/RecordDetailsPanel';
 import { useKeys } from '@/hooks/useKeys';
 import { useDatastore } from '@/hooks/useDatastore';
-import { normalizeRecord, STATUS_ORDER } from '@/types/record';
-import type { NeotomaRecord } from '@/types/record';
+import { normalizeRecord, STATUS_ORDER, type NeotomaRecord } from '@/types/record';
 import { useToast } from '@/components/ui/use-toast';
 import { localToNeotoma } from '@/utils/record_conversion';
 import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
 import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
+import { configureLocalFileEncryption, deleteLocalFile, isLocalFilePath } from '@/utils/local_files';
+
+const tokenizeQuery = (query: string): string[] =>
+  query
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+
+const collectSearchableStrings = (value: unknown, acc: string[]) => {
+  if (value === null || value === undefined) return;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    acc.push(String(value).toLowerCase());
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectSearchableStrings(item, acc));
+    return;
+  }
+  if (typeof value === 'object') {
+    Object.entries(value as Record<string, unknown>).forEach(([key, val]) => {
+      acc.push(key.toLowerCase());
+      collectSearchableStrings(val, acc);
+    });
+  }
+};
+
+const buildRecordSearchStrings = (record: NeotomaRecord): string[] => {
+  const parts: string[] = [];
+  [record.type, record.summary ?? '', record.id, ...(record.file_urls ?? [])].forEach((value) => {
+    if (typeof value === 'string' && value.trim()) {
+      parts.push(value.toLowerCase());
+    }
+  });
+  collectSearchableStrings(record.properties ?? {}, parts);
+  return parts;
+};
 
 function App() {
   const { toast } = useToast();
   const { x25519, ed25519, loading: keysLoading } = useKeys();
+  useEffect(() => {
+    if (!x25519 || !ed25519) {
+      return;
+    }
+    configureLocalFileEncryption(x25519, ed25519).catch((error) => {
+      console.error('[Local Files] Failed to configure encryption', error);
+    });
+  }, [x25519, ed25519]);
+
   const datastore = useDatastore(x25519, ed25519);
   const [allRecords, setAllRecords] = useState<NeotomaRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<NeotomaRecord[]>([]);
   const [types, setTypes] = useState<string[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(null);
   const [selectedType, setSelectedType] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [recordsLoading, setRecordsLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
@@ -32,6 +79,7 @@ function App() {
       return;
     }
 
+    setRecordsLoading(true);
     try {
       const localRecords = await datastore.queryRecords();
       const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
@@ -48,6 +96,8 @@ function App() {
       if (chatPanelErrorRef.current) {
         chatPanelErrorRef.current(errorMessage);
       }
+    } finally {
+      setRecordsLoading(false);
     }
   }, [datastore, keysLoading]);
 
@@ -121,8 +171,26 @@ function App() {
     loadTypes();
   }, [loadTypes]);
 
+  const recordMatchesQuery = useCallback((record: NeotomaRecord, query: string) => {
+    const tokens = tokenizeQuery(query);
+    if (tokens.length === 0) return true;
+
+    const searchableStrings = buildRecordSearchStrings(record);
+    if (searchableStrings.length === 0) {
+      return false;
+    }
+
+    return tokens.every((token) =>
+      searchableStrings.some((field) => field.includes(token))
+    );
+  }, []);
+
   useEffect(() => {
-    let recordsToFilter = allRecords;
+    let recordsToFilter = [...allRecords];
+
+    if (searchQuery.trim()) {
+      recordsToFilter = recordsToFilter.filter((record) => recordMatchesQuery(record, searchQuery));
+    }
 
     if (selectedType) {
       recordsToFilter = recordsToFilter.filter((r) => r.type === selectedType);
@@ -139,52 +207,72 @@ function App() {
     });
 
     setFilteredRecords(recordsToFilter);
-  }, [allRecords, selectedType]);
+  }, [allRecords, selectedType, searchQuery, recordMatchesQuery]);
 
-  const handleSearch = async (query: string) => {
-    if (!query.trim()) {
-      loadRecords();
-      return;
-    }
-
-    if (!datastore.initialized) {
-      toast({
-        title: 'Datastore not ready',
-        description: 'Please wait for datastore to initialize',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    try {
-      // Simple text search (can be enhanced with vector search)
-      const localRecords = await datastore.queryRecords();
-      const queryLower = query.toLowerCase();
-      const filtered = localRecords.filter(record => {
-        const searchableParts = [
-          record.type,
-          record.summary ?? '',
-          record.id,
-          JSON.stringify(record.properties ?? {}),
-          ...(record.file_urls ?? []),
-        ];
-        return searchableParts.some((part) => part.toLowerCase().includes(queryLower));
-      });
-      const neotomaRecords = filtered.map(localToNeotoma).map(normalizeRecord);
-      setAllRecords(neotomaRecords);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Search failed';
-      console.error('[Search Error]', errorMessage, error);
-      // Show error in chat
-      if (chatPanelErrorRef.current) {
-        chatPanelErrorRef.current(errorMessage);
-      }
-    }
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
   };
 
   const handleTypeFilter = (type: string) => {
     setSelectedType(type);
   };
+
+  const handleDeleteRecords = useCallback(
+    async (recordsToDelete: NeotomaRecord[]) => {
+      if (!datastore.initialized) {
+        toast({
+          title: 'Datastore not ready',
+          description: 'Wait for local datastore initialization before deleting records.',
+          variant: 'destructive',
+        });
+        throw new Error('Datastore not initialized');
+      }
+
+      if (recordsToDelete.length === 0) {
+        return;
+      }
+
+      try {
+        const localFileRemovals = recordsToDelete.flatMap((record) =>
+          (record.file_urls || [])
+            .filter(isLocalFilePath)
+            .map((filePath) =>
+              deleteLocalFile(filePath).catch((error) =>
+                console.warn('[Records] Failed to remove local file', { filePath, error })
+              )
+            )
+        );
+        await Promise.all(recordsToDelete.map((record) => datastore.deleteRecord(record.id)));
+        await Promise.all(localFileRemovals);
+        if (selectedRecord && recordsToDelete.some((record) => record.id === selectedRecord.id)) {
+          setSelectedRecord(null);
+        }
+        await loadRecords();
+        const description =
+          recordsToDelete.length === 1
+            ? `Removed ${recordsToDelete[0].summary ?? recordsToDelete[0].id}.`
+            : `Removed ${recordsToDelete.length} records.`;
+        toast({
+          title: recordsToDelete.length === 1 ? 'Record deleted' : 'Records deleted',
+          description,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        toast({
+          title: 'Failed to delete records',
+          description: message,
+          variant: 'destructive',
+        });
+        throw error;
+      }
+    },
+    [datastore, loadRecords, selectedRecord, toast]
+  );
+
+  const handleDeleteRecord = useCallback(
+    (record: NeotomaRecord) => handleDeleteRecords([record]),
+    [handleDeleteRecords]
+  );
 
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -229,8 +317,11 @@ function App() {
             records={filteredRecords}
             types={types}
             onRecordClick={setSelectedRecord}
+            onDeleteRecord={handleDeleteRecord}
+            onDeleteRecords={handleDeleteRecords}
             onSearch={handleSearch}
             onTypeFilter={handleTypeFilter}
+            isLoading={recordsLoading}
           />
         </main>
       </div>

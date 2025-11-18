@@ -12,6 +12,7 @@ export function formatRelativeTime(date: Date): string {
   }
 
   const divisions: Array<[number, Intl.RelativeTimeFormatUnit]> = [
+    [60, 'seconds'],
     [60, 'minutes'],
     [24, 'hours'],
     [7, 'days'],

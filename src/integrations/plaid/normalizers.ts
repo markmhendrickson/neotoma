@@ -7,7 +7,9 @@ import type {
 
 export interface NormalizedPlaidRecord {
   type: 'account' | 'transaction';
-  externalId: string;
+  externalSource: 'plaid';
+  externalId?: string;
+  externalHash?: string;
   properties: Record<string, unknown>;
 }
 
@@ -95,6 +97,7 @@ export function normalizeAccount({
 
   return {
     type: 'account',
+    externalSource: 'plaid',
     externalId,
     properties,
   };
@@ -220,6 +223,7 @@ export function normalizeTransaction({
 
   return {
     type: 'transaction',
+    externalSource: 'plaid',
     externalId,
     properties,
   };

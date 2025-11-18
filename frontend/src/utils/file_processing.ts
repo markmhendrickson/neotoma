@@ -5,6 +5,8 @@
 
 import type { LocalRecord } from '../store/types';
 import { isCsvLike, parseCsvRows } from './csv.js';
+import { normalizeRecordType } from '../../../src/config/record_types.ts';
+import { persistLocalRecordFile } from './local_files';
 
 function randomUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -71,7 +73,7 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
   const fileSize = file.size;
   
   // Determine type from filename/mime type
-  const type = inferTypeFromFile(fileName, mimeType);
+  const type = normalizeRecordType(inferTypeFromFile(fileName, mimeType)).type;
   
   const decoder = new TextDecoder('utf-8', { fatal: false });
   let fullText = '';
@@ -104,16 +106,18 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
     mime_type: mimeType,
   };
   
-  // Add text preview if available
-  if (textPreview) {
-    properties.text_preview = textPreview.slice(0, 2000); // Limit preview size
-  }
-  
-  // Create file URL (local reference - in a real implementation, this might be a blob URL)
-  const fileUrl = `local://${recordId || randomUUID()}/${fileName}`;
-  
   const now = new Date().toISOString();
   const id = recordId || randomUUID();
+
+  const persistedPath = await persistLocalRecordFile({
+    recordId: id,
+    fileName,
+    data: buffer,
+  }).catch((error) => {
+    console.warn('[processFileLocally] Failed to persist file locally', error);
+    return null;
+  });
+  const fileUrl = persistedPath ?? `local://${id}/${fileName}`;
   
   const baseRecord: LocalRecord = {
     id,

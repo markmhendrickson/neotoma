@@ -41,6 +41,7 @@ export const config = {
   supabaseUrl: supabaseConfig.url,
   supabaseKey: supabaseConfig.key,
   openaiApiKey: process.env.OPENAI_API_KEY || '',
+  connectorSecretKey: process.env.CONNECTOR_SECRET_KEY || process.env.CONNECTOR_SECRETS_KEY || '',
   port: parseInt(process.env.PORT || '3000', 10),
   httpPort: parseInt(process.env.HTTP_PORT || '8080', 10),
   environment: env,

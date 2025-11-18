@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useRef, MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Plus } from 'lucide-react';
@@ -22,6 +22,16 @@ interface ChatMessage {
 }
 
 const CHAT_MESSAGES_STORAGE_KEY = 'chatPanelMessages';
+const RECENT_RECORDS_STORAGE_KEY = 'chatPersistedRecentRecords';
+const MAX_RECENT_RECORDS = 200;
+const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+const extractUUIDs = (text: string): string[] => {
+  if (!text) return [];
+  const matches = text.match(UUID_REGEX);
+  if (!matches) return [];
+  return Array.from(new Set(matches.map((match) => match.toLowerCase())));
+};
 
 const getStoredMessages = (): ChatMessage[] => {
   if (typeof window === 'undefined') return [];
@@ -48,6 +58,58 @@ const getStoredMessages = (): ChatMessage[] => {
   }
 };
 
+type RecentRecordPayload = Pick<
+  LocalRecord,
+  'id' | 'type' | 'summary' | 'properties' | 'file_urls' | 'created_at' | 'updated_at'
+>;
+
+type SessionRecentRecord = {
+  id: string;
+  persisted: boolean;
+  payload?: RecentRecordPayload;
+  createdAt: string;
+};
+
+const loadPersistedRecentRecords = (): SessionRecentRecord[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_RECORDS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    const seen = new Set<string>();
+    const cleaned: SessionRecentRecord[] = [];
+    for (const entry of parsed) {
+      if (!entry || typeof entry.id !== 'string') continue;
+      if (seen.has(entry.id)) continue;
+      seen.add(entry.id);
+      cleaned.push({
+        id: entry.id,
+        persisted: entry.persisted === false ? false : true,
+        payload:
+          entry.payload && typeof entry.payload === 'object'
+            ? (entry.payload as RecentRecordPayload)
+            : undefined,
+        createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString(),
+      });
+    }
+    return cleaned;
+  } catch (error) {
+    console.warn('[ChatPanel] Failed to load recent records:', error);
+    return [];
+  }
+};
+
+const serializeLocalRecord = (record: LocalRecord): RecentRecordPayload => ({
+  id: record.id,
+  type: record.type,
+  summary: record.summary ?? null,
+  properties: record.properties,
+  file_urls: record.file_urls,
+  created_at: record.created_at,
+  updated_at: record.updated_at,
+});
+
 interface ChatPanelProps {
   datastore: DatastoreAPI;
   onFileUploaded?: () => void;
@@ -55,13 +117,31 @@ interface ChatPanelProps {
   onErrorRef?: React.MutableRefObject<((error: string) => void) | null>;
 }
 
+const clampPanelWidth = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+const getStoredPanelWidth = (key: string, fallback: number, min: number, max: number) => {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const storedWidth = window.localStorage.getItem(key);
+    if (!storedWidth) return fallback;
+    const parsed = Number.parseFloat(storedWidth);
+    if (!Number.isNaN(parsed)) {
+      return clampPanelWidth(parsed, min, max);
+    }
+    return fallback;
+  } catch (error) {
+    console.warn('[ChatPanel] Failed to read stored width:', error);
+    return fallback;
+  }
+};
+
 export function ChatPanel({ 
   datastore,
   onFileUploaded, 
   onFileUploadRef,
   onErrorRef,
 }: ChatPanelProps) {
-  const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken } = useKeys();
   // Use bearer token from keys hook if available, fallback to settings
@@ -71,7 +151,8 @@ export function ChatPanel({
   const MIN_CHAT_WIDTH = 300;
   const MAX_CHAT_WIDTH = 680;
   const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages());
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_CHAT_WIDTH);
+  const [panelWidth, setPanelWidth] = useState(() =>
+    getStoredPanelWidth(CHAT_PANEL_WIDTH_KEY, DEFAULT_CHAT_WIDTH, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH));
   const [isResizing, setIsResizing] = useState(false);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -84,24 +165,117 @@ export function ChatPanel({
   const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
   const datastoreWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const isResizingRef = useRef(false);
+  const recentRecordsRef = useRef<SessionRecentRecord[]>(
+    typeof window === 'undefined' ? [] : loadPersistedRecentRecords()
+  );
 
-  useIsomorphicLayoutEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const storedWidth = window.localStorage.getItem(CHAT_PANEL_WIDTH_KEY);
-      if (!storedWidth) return;
-      const parsed = Number.parseInt(storedWidth, 10);
-      if (!Number.isNaN(parsed)) {
-        setPanelWidth(Math.min(Math.max(parsed, MIN_CHAT_WIDTH), MAX_CHAT_WIDTH));
-      }
-    } catch (error) {
-      console.warn('[ChatPanel] Failed to read stored width:', error);
+  useEffect(() => {
+    if (recentRecordsRef.current.length > MAX_RECENT_RECORDS) {
+      recentRecordsRef.current = recentRecordsRef.current.slice(0, MAX_RECENT_RECORDS);
+      persistRecentRecordsToStorage(recentRecordsRef.current);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+const persistRecentRecordsToStorage = (records: SessionRecentRecord[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(RECENT_RECORDS_STORAGE_KEY, JSON.stringify(records));
+  } catch (error) {
+    console.warn('[ChatPanel] Failed to persist recent records:', error);
+  }
+};
+
+const mergeRecentRecords = (
+  recentRecordsRef: MutableRefObject<SessionRecentRecord[]>,
+  incoming: SessionRecentRecord[]
+) => {
+  if (!incoming.length) {
+    return;
+  }
+
+  const normalize = (entry: SessionRecentRecord): SessionRecentRecord => ({
+    id: entry.id,
+    persisted: entry.persisted,
+    payload: entry.persisted ? undefined : entry.payload,
+    createdAt: entry.createdAt || new Date().toISOString(),
+  });
+
+  const merged = new Map<string, SessionRecentRecord>();
+
+  recentRecordsRef.current.forEach((entry) => {
+    if (!entry?.id) return;
+    merged.set(entry.id, normalize(entry));
+  });
+
+  incoming.forEach((entry) => {
+    if (!entry?.id) return;
+    const normalized = normalize(entry);
+    const existing = merged.get(entry.id);
+    if (existing) {
+      const createdAt =
+        new Date(normalized.createdAt).getTime() >= new Date(existing.createdAt).getTime()
+          ? normalized.createdAt
+          : existing.createdAt;
+      merged.set(entry.id, {
+        id: entry.id,
+        persisted: normalized.persisted,
+        payload: normalized.persisted ? undefined : normalized.payload ?? existing.payload,
+        createdAt,
+      });
+    } else {
+      merged.set(entry.id, normalized);
+    }
+  });
+
+  const ordered = Array.from(merged.values())
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, MAX_RECENT_RECORDS);
+
+  recentRecordsRef.current = ordered;
+  persistRecentRecordsToStorage(ordered);
+};
+
+  const registerRecentRecord = (record: LocalRecord, persistedFlag: boolean) => {
+    if (!record?.id) return;
+    const payload = persistedFlag ? undefined : serializeLocalRecord(record);
+    const newEntry: SessionRecentRecord = {
+      id: record.id,
+      persisted: persistedFlag,
+      payload,
+      createdAt: new Date().toISOString(),
+    };
+    mergeRecentRecords(recentRecordsRef, [newEntry]);
+  };
+
+  const registerInlineLocalRecords = (records: LocalRecord[]) => {
+    if (!records.length) return;
+    const entries = records
+      .filter((record) => Boolean(record?.id))
+      .map((record) => ({
+        id: record.id,
+        persisted: false,
+        payload: serializeLocalRecord(record),
+        createdAt: new Date().toISOString(),
+      }));
+    mergeRecentRecords(recentRecordsRef, entries);
+  };
+
+  const getRecentRecordsForRequest = () => {
+    return recentRecordsRef.current.map((entry) => ({
+      id: entry.id,
+      persisted: entry.persisted,
+      ...(entry.persisted ? {} : entry.payload ? { payload: entry.payload } : {}),
+    }));
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(panelWidth));
+    try {
+      window.localStorage.setItem(CHAT_PANEL_WIDTH_KEY, String(panelWidth));
+    } catch (error) {
+      console.warn('[ChatPanel] Failed to persist width:', error);
+    }
   }, [panelWidth]);
 
   useEffect(() => {
@@ -122,10 +296,7 @@ export function ChatPanel({
     const handleMouseMove = (event: MouseEvent) => {
       if (!isResizingRef.current || !panelRef.current) return;
       const rect = panelRef.current.getBoundingClientRect();
-      const nextWidth = Math.min(
-        Math.max(event.clientX - rect.left, MIN_CHAT_WIDTH),
-        MAX_CHAT_WIDTH
-      );
+      const nextWidth = clampPanelWidth(event.clientX - rect.left, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH);
       setPanelWidth(nextWidth);
     };
 
@@ -364,6 +535,9 @@ export function ChatPanel({
           throw new Error(`Failed to save record: ${putErrorMessage}`);
         }
 
+        const recordPersisted = Boolean(settings.apiSyncEnabled);
+        recordsToSave.forEach((record) => registerRecentRecord(record, recordPersisted));
+
         const createdRowsMessage =
           additionalLocalRecords.length > 0
             ? ` Created ${additionalLocalRecords.length} row records.`
@@ -493,10 +667,40 @@ export function ChatPanel({
     }
 
     try {
-      const messagesToSend = messages
-        .map((m) => ({ role: m.role, content: m.content }));
+      const messagesToSend = [
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        { role: 'user' as const, content: userMessage },
+      ];
 
-      const response = await sendChatMessage(settings.apiBase, bearerToken, messagesToSend);
+      const mentionedIds = extractUUIDs(userMessage);
+      if (mentionedIds.length) {
+        if (datastore.initialized) {
+          const inlineRecords: LocalRecord[] = [];
+          for (const id of mentionedIds) {
+            try {
+              const record = await datastore.getRecord(id);
+              if (record) {
+                inlineRecords.push(record);
+              }
+            } catch (error) {
+              console.warn('[ChatPanel] Failed to load local record for chat', { id, error });
+            }
+          }
+          if (inlineRecords.length > 0) {
+            registerInlineLocalRecords(inlineRecords);
+          }
+        } else {
+          console.warn('[ChatPanel] Datastore not initialized; cannot hydrate local records for IDs', {
+            ids: mentionedIds,
+          });
+        }
+      }
+
+      const recentRecordsPayload = getRecentRecordsForRequest();
+      const response = await sendChatMessage(settings.apiBase, bearerToken, {
+        messages: messagesToSend,
+        recentRecords: recentRecordsPayload,
+      });
       addMessage('assistant', response.message?.content || 'No response received', response.records_queried || undefined);
     } catch (error) {
       addMessage('assistant', `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`);

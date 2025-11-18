@@ -27,6 +27,8 @@ import {
   type PlaidSyncSummary,
 } from './services/plaid_sync.js';
 import type { AccountBase } from 'plaid';
+import { providerCatalog, getProviderDefinition } from './integrations/providers/index.js';
+import { runConnectorSync, runAllConnectorSyncs } from './services/importers.js';
 
 export class NeotomaServer {
   private server: Server;
@@ -211,6 +213,29 @@ export class NeotomaServer {
             },
           },
         },
+        {
+          name: 'list_provider_catalog',
+          description: 'List external provider metadata (capabilities, scopes, popularity).',
+          inputSchema: {
+            type: 'object',
+            properties: {},
+          },
+        },
+        {
+          name: 'sync_provider_imports',
+          description: 'Trigger an import sync for a provider (optionally a specific connector).',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              provider: { type: 'string', description: 'Provider identifier (e.g., x, instagram, gmail)' },
+              connector_id: { type: 'string', description: 'Specific connector UUID' },
+              sync_type: { type: 'string', enum: ['initial', 'incremental'], description: 'Sync strategy override' },
+              limit: { type: 'number', description: 'Max records per fetch page' },
+              max_pages: { type: 'number', description: 'Maximum pages per sync run' },
+            },
+            required: ['provider'],
+          },
+        },
       ],
     }));
 
@@ -275,6 +300,10 @@ export class NeotomaServer {
             return await this.plaidSync(args);
           case 'plaid_list_items':
             return await this.plaidListItems(args);
+          case 'list_provider_catalog':
+            return await this.listProviderCatalog();
+          case 'sync_provider_imports':
+            return await this.syncProviderImports(args);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
@@ -946,6 +975,44 @@ export class NeotomaServer {
 
     const sanitized = items.map((item) => this.sanitizePlaidItem(item));
     return this.buildTextResponse(sanitized);
+  }
+
+  private async listProviderCatalog(): Promise<{ content: Array<{ type: string; text: string }> }> {
+    return this.buildTextResponse(providerCatalog);
+  }
+
+  private async syncProviderImports(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      provider: z.string(),
+      connector_id: z.string().uuid().optional(),
+      sync_type: z.enum(['initial', 'incremental']).optional(),
+      limit: z.number().int().positive().optional(),
+      max_pages: z.number().int().positive().optional(),
+    });
+    const parsed = schema.parse(args ?? {});
+    const definition = getProviderDefinition(parsed.provider);
+    if (!definition) {
+      throw new McpError(ErrorCode.InvalidParams, `Unknown provider: ${parsed.provider}`);
+    }
+
+    if (parsed.connector_id) {
+      const result = await runConnectorSync({
+        connectorId: parsed.connector_id,
+        syncType: parsed.sync_type,
+        limit: parsed.limit,
+        maxPages: parsed.max_pages,
+      });
+      return this.buildTextResponse({ provider: definition, results: [result] });
+    }
+
+    const results = await runAllConnectorSyncs({
+      provider: parsed.provider,
+      limitPerConnector: parsed.limit,
+      maxPages: parsed.max_pages,
+    });
+    return this.buildTextResponse({ provider: definition, results });
   }
 
   private setupErrorHandler(): void {
