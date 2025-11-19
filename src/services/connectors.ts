@@ -130,6 +130,13 @@ function mapSyncRun(row: any): ExternalSyncRun {
 
 let cachedSecretKey: Buffer | null = null;
 
+function requireSupabaseClient() {
+  if (!supabase) {
+    throw new Error('Supabase client not initialized (USE_LOCAL_STORAGE mode)');
+  }
+  return supabase;
+}
+
 function getConnectorSecretKey(): Buffer {
   if (cachedSecretKey) {
     return cachedSecretKey;
@@ -195,7 +202,8 @@ export function decryptConnectorSecrets(envelope: string | null | undefined): Co
 export async function createConnector(input: CreateConnectorInput): Promise<ExternalConnector> {
   const secretsEnvelope = encryptConnectorSecrets(input.secrets);
 
-  const { data, error } = await supabase
+  const client = requireSupabaseClient();
+  const { data, error } = await client
     .from('external_connectors')
     .insert({
       provider: input.provider,
@@ -244,7 +252,8 @@ export async function updateConnector(
     return connector;
   }
 
-  const { data, error } = await supabase
+  const client = requireSupabaseClient();
+  const { data, error } = await client
     .from('external_connectors')
     .update(payload)
     .eq('id', connectorId)
@@ -259,7 +268,8 @@ export async function updateConnector(
 }
 
 export async function getConnectorById(connectorId: string): Promise<ExternalConnector | null> {
-  const { data, error } = await supabase
+  const client = requireSupabaseClient();
+  const { data, error } = await client
     .from('external_connectors')
     .select('*')
     .eq('id', connectorId)
@@ -276,7 +286,8 @@ export async function listConnectors(filter?: {
   provider?: string;
   status?: ConnectorStatus;
 }): Promise<ExternalConnector[]> {
-  let query = supabase.from('external_connectors').select('*').order('created_at', { ascending: false });
+  const client = requireSupabaseClient();
+  let query = client.from('external_connectors').select('*').order('created_at', { ascending: false });
 
   if (filter?.provider) {
     query = query.eq('provider', filter.provider);
@@ -307,6 +318,25 @@ export async function saveConnectorSecrets(
   secrets: ConnectorSecrets | null
 ): Promise<ExternalConnector> {
   return updateConnector(connectorId, { secrets });
+}
+
+export async function getConnectorByProviderAccount(
+  provider: string,
+  accountIdentifier: string
+): Promise<ExternalConnector | null> {
+  const client = requireSupabaseClient();
+  const { data, error } = await client
+    .from('external_connectors')
+    .select('*')
+    .eq('provider', provider)
+    .eq('account_identifier', accountIdentifier)
+    .maybeSingle();
+
+  if (error && error.code !== 'PGRST116') {
+    throw error;
+  }
+
+  return data ? mapConnector(data) : null;
 }
 
 export async function startExternalSyncRun(

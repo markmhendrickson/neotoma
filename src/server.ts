@@ -29,6 +29,7 @@ import {
 import type { AccountBase } from 'plaid';
 import { providerCatalog, getProviderDefinition } from './integrations/providers/index.js';
 import { runConnectorSync, runAllConnectorSyncs } from './services/importers.js';
+import { recordMatchesKeywordSearch } from './actions.js';
 
 export class NeotomaServer {
   private server: Server;
@@ -555,13 +556,10 @@ export class NeotomaServer {
       }
 
       if (keywordCandidates) {
-        const searchText = search.join(' ').toLowerCase();
-        const keywordMatches = keywordCandidates.filter((rec: NeotomaRecord) => {
-          const typeMatch = rec.type?.toLowerCase().includes(searchText);
-          const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
-          const propsMatch = propsText.includes(searchText);
-          return typeMatch || propsMatch;
-        }).slice(0, finalLimit);
+        const searchTerms = search.map(term => term.toLowerCase());
+        const keywordMatches = keywordCandidates.filter((rec: NeotomaRecord) => 
+          recordMatchesKeywordSearch(rec, searchTerms)
+        ).slice(0, finalLimit);
 
         if (results.length === 0) {
           results = keywordMatches;

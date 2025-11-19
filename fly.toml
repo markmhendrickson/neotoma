@@ -20,3 +20,10 @@ primary_region = 'lhr'
   memory = '1gb'
   cpu_kind = 'shared'
   cpus = 1
+
+# Scheduled importers
+# Fly.io doesn't support cron directly. Use one of:
+# 1. Fly Machines with scheduled tasks (flyctl machines run --schedule)
+# 2. External cron service (GitHub Actions, cron-job.org) calling HTTP endpoint
+# 3. Always-on machine running internal scheduler
+# See docs/importers.md for scheduling options

@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef, MutableRefObject } from 'react';
+import { useState, useEffect, useRef, useMemo, MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Plus } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
 import type { DatastoreAPI } from '@/hooks/useDatastore';
-import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
+import { uploadFile, sendChatMessage } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
 import { formatRelativeTime } from '@/utils/time';
 import type { NeotomaRecord } from '@/types/record';
@@ -19,12 +19,46 @@ interface ChatMessage {
   recordsQueried?: NeotomaRecord[];
   isError?: boolean;
   errorCount?: number;
+  isIntro?: boolean;
 }
 
 const CHAT_MESSAGES_STORAGE_KEY = 'chatPanelMessages';
 const RECENT_RECORDS_STORAGE_KEY = 'chatPersistedRecentRecords';
 const MAX_RECENT_RECORDS = 200;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+const INTRO_MESSAGE_CONTENT =
+  'Neotoma remembers your data for rapid and comprehensive analysis with AI agents.\n\nCreate some records and start asking questions about them here.\n\nRecords are stored entirely on your device unless you opt for cloud storage.';
+
+const createIntroMessage = (): ChatMessage => ({
+  role: 'assistant',
+  content: INTRO_MESSAGE_CONTENT,
+  timestamp: new Date(),
+  isIntro: true,
+});
+
+const ensureIntroMessage = (messages: ChatMessage[]): ChatMessage[] => {
+  const hasIntro = messages.some(
+    (msg) => msg.isIntro || msg.content === INTRO_MESSAGE_CONTENT
+  );
+  if (hasIntro) {
+    return messages;
+  }
+  return [createIntroMessage(), ...messages];
+};
+
+const hashPrivateKey = (key?: Uint8Array | null) => {
+  if (!key || key.length === 0) return 'anonymous';
+  let hash = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    hash ^= key[i];
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16);
+};
+
+const getChatStorageKey = (privateKey?: Uint8Array | null) =>
+  `${CHAT_MESSAGES_STORAGE_KEY}:${hashPrivateKey(privateKey)}`;
 
 const extractUUIDs = (text: string): string[] => {
   if (!text) return [];
@@ -33,15 +67,15 @@ const extractUUIDs = (text: string): string[] => {
   return Array.from(new Set(matches.map((match) => match.toLowerCase())));
 };
 
-const getStoredMessages = (): ChatMessage[] => {
-  if (typeof window === 'undefined') return [];
+const getStoredMessages = (storageKey: string): ChatMessage[] => {
+  if (typeof window === 'undefined') return [createIntroMessage()];
   try {
-    const raw = window.localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed
+    const normalized = parsed
       .map((msg) => ({
         ...msg,
         timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
@@ -52,9 +86,10 @@ const getStoredMessages = (): ChatMessage[] => {
           typeof msg.content === 'string' &&
           msg.timestamp instanceof Date && !Number.isNaN(msg.timestamp.valueOf())
       );
+    return ensureIntroMessage(normalized);
   } catch (error) {
     console.warn('[ChatPanel] Failed to restore chat history:', error);
-    return [];
+    return [createIntroMessage()];
   }
 };
 
@@ -136,21 +171,23 @@ const getStoredPanelWidth = (key: string, fallback: number, min: number, max: nu
   }
 };
 
-export function ChatPanel({ 
+export function ChatPanel({
   datastore,
-  onFileUploaded, 
+  onFileUploaded,
   onFileUploadRef,
   onErrorRef,
 }: ChatPanelProps) {
   const { settings } = useSettings();
-  const { bearerToken: keysBearerToken } = useKeys();
+  const { bearerToken: keysBearerToken, ed25519 } = useKeys();
   // Use bearer token from keys hook if available, fallback to settings
   const bearerToken = keysBearerToken || settings.bearerToken;
+  const apiSyncEnabled = settings.apiSyncEnabled ?? settings.cloudStorageEnabled;
+  const chatStorageKey = useMemo(() => getChatStorageKey(ed25519?.privateKey ?? null), [ed25519?.privateKey]);
   const CHAT_PANEL_WIDTH_KEY = 'chatPanelWidth';
   const DEFAULT_CHAT_WIDTH = 420;
   const MIN_CHAT_WIDTH = 300;
   const MAX_CHAT_WIDTH = 680;
-  const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages());
+  const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages(chatStorageKey));
   const [panelWidth, setPanelWidth] = useState(() =>
     getStoredPanelWidth(CHAT_PANEL_WIDTH_KEY, DEFAULT_CHAT_WIDTH, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH));
   const [isResizing, setIsResizing] = useState(false);
@@ -165,6 +202,7 @@ export function ChatPanel({
   const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
   const datastoreWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const isResizingRef = useRef(false);
+  const activeChatStorageKeyRef = useRef(chatStorageKey);
   const recentRecordsRef = useRef<SessionRecentRecord[]>(
     typeof window === 'undefined' ? [] : loadPersistedRecentRecords()
   );
@@ -279,13 +317,23 @@ const mergeRecentRecords = (
   }, [panelWidth]);
 
   useEffect(() => {
+    if (chatStorageKey === activeChatStorageKeyRef.current) {
+      return;
+    }
+    const storedMessages = getStoredMessages(chatStorageKey);
+    activeChatStorageKeyRef.current = chatStorageKey;
+    errorCountsRef.current = new Map();
+    setMessages(storedMessages);
+  }, [chatStorageKey]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const serializable = messages.map((msg) => ({
         ...msg,
         timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp,
       }));
-      window.localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, JSON.stringify(serializable));
+      window.localStorage.setItem(activeChatStorageKeyRef.current, JSON.stringify(serializable));
     } catch (error) {
       console.warn('[ChatPanel] Failed to persist chat history:', error);
     }
@@ -445,7 +493,7 @@ const mergeRecentRecords = (
 
     const processFile = async (file: File) => {
       const toastId = notify.loading(`Uploading ${file.name}`, {
-        description: settings.apiSyncEnabled
+        description: apiSyncEnabled
           ? 'Analyzing via API and saving to datastore'
           : 'Processing locally',
         duration: 60000,
@@ -456,45 +504,25 @@ const mergeRecentRecords = (
         let localRecord: LocalRecord;
         let additionalLocalRecords: LocalRecord[] = [];
         
-        // Try to get AI analysis from API if bearer token is available
-        if (bearerToken) {
+        // Try to sync via API when bearer token is available and cloud sync is enabled
+        if (bearerToken && apiSyncEnabled) {
           try {
-            if (settings.apiSyncEnabled) {
-              // Full sync: upload and get analyzed record
-              const csvRowPreference = isCsvFile(file) ? settings.csvRowRecordsEnabled : undefined;
-              const uploadOptions =
-                typeof csvRowPreference === 'boolean' ? { csvRowRecords: csvRowPreference } : undefined;
-              const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file, uploadOptions);
-              // Convert API record to local record format with AI-analyzed type and properties
-              localRecord = {
-                id: analyzedRecord.id,
-                type: analyzedRecord.type,
-                summary: analyzedRecord.summary ?? null,
-                properties: analyzedRecord.properties,
-                file_urls: analyzedRecord.file_urls,
-                embedding: analyzedRecord.embedding || null,
-                created_at: analyzedRecord.created_at,
-                updated_at: analyzedRecord.updated_at,
-              };
-            } else {
-              // Analysis only: get AI analysis without storing in API
-              const analysis = await analyzeFile(settings.apiBase, bearerToken, file);
-              // Process file locally and merge with AI analysis
-              const basicResult = await processFileLocally({
-                file,
-                csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
-              });
-              localRecord = {
-                ...basicResult.primaryRecord,
-                type: analysis.type,
-                summary: analysis.summary ?? basicResult.primaryRecord.summary,
-                properties: {
-                  ...basicResult.primaryRecord.properties,
-                  ...analysis.properties,
-                },
-              };
-              additionalLocalRecords = basicResult.additionalRecords;
-            }
+            // Full sync: upload and get analyzed record
+            const csvRowPreference = isCsvFile(file) ? settings.csvRowRecordsEnabled : undefined;
+            const uploadOptions =
+              typeof csvRowPreference === 'boolean' ? { csvRowRecords: csvRowPreference } : undefined;
+            const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file, uploadOptions);
+            // Convert API record to local record format with AI-analyzed type and properties
+            localRecord = {
+              id: analyzedRecord.id,
+              type: analyzedRecord.type,
+              summary: analyzedRecord.summary ?? null,
+              properties: analyzedRecord.properties,
+              file_urls: analyzedRecord.file_urls,
+              embedding: analyzedRecord.embedding || null,
+              created_at: analyzedRecord.created_at,
+              updated_at: analyzedRecord.updated_at,
+            };
           } catch (error) {
             // If API analysis fails, fall back to local processing
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -535,16 +563,28 @@ const mergeRecentRecords = (
           throw new Error(`Failed to save record: ${putErrorMessage}`);
         }
 
-        const recordPersisted = Boolean(settings.apiSyncEnabled);
+        const recordPersisted = Boolean(apiSyncEnabled);
         recordsToSave.forEach((record) => registerRecentRecord(record, recordPersisted));
 
         const createdRowsMessage =
           additionalLocalRecords.length > 0
             ? ` Created ${additionalLocalRecords.length} row records.`
             : '';
-        const message = settings.apiSyncEnabled
+        let localMessage = `File "${file.name}" saved locally`;
+        if (localRecord.summary) {
+          localMessage += `: ${localRecord.summary}`;
+          if (!createdRowsMessage) {
+            localMessage += '.';
+          }
+        } else {
+          localMessage += '.';
+        }
+        if (createdRowsMessage && !localMessage.trim().endsWith('.')) {
+          localMessage += '.';
+        }
+        const message = apiSyncEnabled
           ? `File "${file.name}" analyzed and saved locally with type "${localRecord.type}".${createdRowsMessage}`
-          : `File "${file.name}" saved locally.${createdRowsMessage}`;
+          : `${localMessage}${createdRowsMessage}`;
 
         notify.success(`Saved ${file.name}`, {
           id: toastId,
@@ -660,6 +700,15 @@ const mergeRecentRecords = (
     addMessage('user', userMessage);
     setIsLoading(true);
 
+    if (!apiSyncEnabled) {
+      setIsLoading(false);
+      addMessage(
+        'assistant',
+        'Chat unavailable while API sync is disabled. Enable Cloud Storage in Settings to ask questions about your data.'
+      );
+      return;
+    }
+
     if (!bearerToken) {
       setIsLoading(false);
       addMessage('assistant', 'Please set your Bearer Token in the settings above to use the chat feature.');
@@ -668,7 +717,9 @@ const mergeRecentRecords = (
 
     try {
       const messagesToSend = [
-        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...messages
+          .filter((m) => !m.isIntro)
+          .map((m) => ({ role: m.role, content: m.content })),
         { role: 'user' as const, content: userMessage },
       ];
 
@@ -716,7 +767,7 @@ const mergeRecentRecords = (
   return (
     <aside
       ref={panelRef}
-      className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden"
+      className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden overflow-x-hidden"
       style={{ width: panelWidth }}
     >
       <div
@@ -732,7 +783,7 @@ const mergeRecentRecords = (
           }`}
         />
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 flex flex-col gap-3">
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -783,22 +834,26 @@ const mergeRecentRecords = (
         <div ref={messagesEndRef} />
       </div>
       <div className="p-4 shrink-0 bg-transparent">
-        <div className="rounded-[28px] border border-border/70 bg-background shadow-sm px-4 py-3 space-y-3 shadow-[0_-20px_30px_-15px_rgba(241,245,249,0.9)]">
-          <Textarea
-            ref={textareaRef}
-            placeholder="Create, update or analyze records..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            className="min-h-[72px] max-h-[320px] resize-none border-none bg-transparent px-0 text-base text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground overflow-hidden"
-            style={{ height: 'auto' }}
-            onInput={autoResizeTextarea}
-          />
+        <div
+          className="group/composer rounded-[28px] border border-border/70 bg-background shadow-sm px-4 py-3 space-y-3 shadow-[0_-20px_30px_-15px_rgba(241,245,249,0.9)] transform origin-bottom transition-all duration-300 focus-within:-translate-y-2"
+        >
+          <div className="transition-[min-height] duration-300 min-h-[72px] group-focus-within/composer:min-h-[144px]">
+            <Textarea
+              ref={textareaRef}
+              placeholder="Message about records..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              className="min-h-[72px] max-h-[320px] resize-none border-none bg-transparent px-0 text-base text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground overflow-hidden"
+              style={{ height: 'auto' }}
+              onInput={autoResizeTextarea}
+            />
+          </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Button

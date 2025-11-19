@@ -72,7 +72,7 @@ export async function runConnectorSync(options: RunConnectorSyncOptions): Promis
       : undefined;
 
   let cursor: ProviderCursor | null = connector.syncCursor ?? null;
-  let since = options.sinceOverride ?? connector.lastSuccessfulSync ?? null;
+  const since = options.sinceOverride ?? connector.lastSuccessfulSync ?? null;
   let created = 0;
   let updated = 0;
   let removed = 0;

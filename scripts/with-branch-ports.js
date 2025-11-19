@@ -272,6 +272,14 @@ function spawnCommand(command, commandArgs, ports, options = {}) {
     child.on('exit', (code) => {
       process.exit(code || 0);
     });
+
+    child.on('error', (error) => {
+      // Ignore EPIPE errors - these can occur when child processes exit
+      if (error.code === 'EPIPE') {
+        return;
+      }
+      console.error('[with-branch-ports] Child process error:', error);
+    });
     return;
   }
 

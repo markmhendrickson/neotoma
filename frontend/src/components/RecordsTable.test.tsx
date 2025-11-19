@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -23,19 +23,23 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof RecordsTable
   const onDeleteRecords = vi.fn();
   const onSearch = vi.fn();
   const onTypeFilter = vi.fn();
+  const props: React.ComponentProps<typeof RecordsTable> = {
+    records: [baseRecord],
+    totalCount: 1,
+    types: ['note', 'task'],
+    onRecordClick,
+    onDeleteRecord,
+    onDeleteRecords,
+    onSearch,
+    onTypeFilter,
+    ...overrides,
+  };
 
-  const result = render(
-    <RecordsTable
-      records={[baseRecord]}
-      types={['note', 'task']}
-      onRecordClick={onRecordClick}
-      onDeleteRecord={onDeleteRecord}
-      onDeleteRecords={onDeleteRecords}
-      onSearch={onSearch}
-      onTypeFilter={onTypeFilter}
-      {...overrides}
-    />
-  );
+  if (overrides.totalCount === undefined) {
+    props.totalCount = props.records.length;
+  }
+
+  const result = render(<RecordsTable {...props} />);
 
   return {
     ...result,
@@ -139,6 +143,33 @@ describe('RecordsTable', () => {
     expect(getVisibleColumnOrder()[1]).toBe('summary');
   });
 
+  it('resizes columns and persists widths to localStorage', async () => {
+    const firstRender = renderTable();
+
+    const summaryHeader = screen.getByRole('columnheader', { name: /Summary/ });
+    const resizeHandle = within(summaryHeader).getByLabelText('Resize Summary column');
+
+    fireEvent.mouseDown(resizeHandle, { clientX: 100 });
+    await act(async () => {
+      window.dispatchEvent(new MouseEvent('mousemove', { clientX: 200 }));
+      window.dispatchEvent(new MouseEvent('mouseup'));
+    });
+
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem('recordsTableColumnWidths') ?? '{}');
+      expect(stored.summary).toBeGreaterThan(0);
+    });
+    const stored = JSON.parse(window.localStorage.getItem('recordsTableColumnWidths') ?? '{}');
+    const storedWidth = stored.summary;
+    expect(summaryHeader.style.width).toBe(`${storedWidth}px`);
+
+    firstRender.unmount();
+    renderTable();
+
+    const rerenderedSummaryHeader = screen.getByRole('columnheader', { name: /Summary/ });
+    expect(rerenderedSummaryHeader.style.width).toBe(`${storedWidth}px`);
+  });
+
   it('opens the actions menu and triggers onRecordClick when View details is selected', async () => {
     const user = userEvent.setup();
     const { onRecordClick } = renderTable();
@@ -204,6 +235,54 @@ describe('RecordsTable', () => {
     await user.click(deleteSelectedButton);
 
     expect(onDeleteRecords).toHaveBeenCalledWith([recordTwo]);
+  });
+
+  it('renders empty placeholder with upload shortcut when no records exist', async () => {
+    const user = userEvent.setup();
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+
+    renderTable({ records: [], totalCount: 0 });
+
+    expect(screen.getByText('No records yet')).toBeInTheDocument();
+    const uploadButton = screen.getByRole('button', { name: 'Upload file' });
+    await user.click(uploadButton);
+
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('keeps empty placeholder visible during refetches after first load', () => {
+    const props: React.ComponentProps<typeof RecordsTable> = {
+      records: [],
+      totalCount: 0,
+      types: [],
+      onRecordClick: vi.fn(),
+      onDeleteRecord: vi.fn(),
+      onDeleteRecords: vi.fn(),
+      onSearch: vi.fn(),
+      onTypeFilter: vi.fn(),
+      isLoading: true,
+    };
+
+    const { rerender } = render(<RecordsTable {...props} />);
+
+    expect(screen.queryByText('No records yet')).not.toBeInTheDocument();
+
+    rerender(<RecordsTable {...props} isLoading={false} />);
+    expect(screen.getByText('No records yet')).toBeInTheDocument();
+
+    rerender(<RecordsTable {...props} isLoading />);
+    expect(screen.getByText('No records yet')).toBeInTheDocument();
+  });
+
+  it('opens the learn more sheet from the empty state', async () => {
+    const user = userEvent.setup();
+    renderTable({ records: [], totalCount: 0 });
+
+    const learnMoreButton = screen.getByRole('button', { name: 'Learn more' });
+    await user.click(learnMoreButton);
+
+    expect(await screen.findByText('What can I store?')).toBeInTheDocument();
   });
 });
 

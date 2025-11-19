@@ -98,8 +98,9 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limit = options.limit || 100;
-  const offset = options.offset || 0;
+  // Use LIMIT -1 (SQLite) when no explicit limit is provided so we return all records
+  const limit = options.limit ?? -1;
+  const offset = options.offset ?? 0;
 
   // Build SQL with proper parameter placeholders
   const sql = `
@@ -169,6 +170,41 @@ export async function queryRecords(options: QueryOptions = {}): Promise<LocalRec
   }
 
   return records;
+}
+
+/**
+ * Count total records (optionally filtered)
+ */
+export async function countRecords(options: QueryOptions = {}): Promise<number> {
+  const db = getDB();
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options.type) {
+    conditions.push('type = ?');
+    params.push(options.type);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+  const sql = `
+    SELECT COUNT(*) as count
+    FROM records
+    ${whereClause}
+  `;
+
+  const stmt = db.prepare(sql);
+  try {
+    if (params.length > 0) {
+    stmt.bind(params as readonly (string | number | null | boolean | undefined)[]);
+    }
+    if (stmt.step()) {
+      const row = stmt.get({ count: 0 }) as { count: number };
+      return typeof row.count === 'number' ? row.count : Number(row.count) || 0;
+    }
+    return 0;
+  } finally {
+    stmt.finalize();
+  }
 }
 
 /**

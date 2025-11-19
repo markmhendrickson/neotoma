@@ -28,12 +28,16 @@ Create and switch to a worktree for this chat session, allowing parallel work on
    - Handle branch conflicts by trying alternative branch names (append `-1`, `-2`, etc., max 5 retries)
    - Handle path conflicts by appending number suffix to identifier
 
-5. **Switch to Worktree:**
+5. **Copy Environment Files:**
+   - After provisioning the worktree directory, copy `.env` (and `.env.dev` if present) from the source repo root into the worktree so dev servers share identical secrets
+   - Guard each copy with `test -f` or `[ -f ... ]` before running `cp` to avoid errors when the file is absent
+
+6. **Switch to Worktree:**
    - Change directory to worktree path: `cd "$WORKTREE_PATH"`
    - Verify branch is correct: `git branch --show-current`
    - Confirm worktree is active
 
-6. **Error Handling:**
+7. **Error Handling:**
    - **Branch Conflicts:** If branch already checked out elsewhere, automatically try alternative branch name with numeric suffix (e.g., `-1`, `-2`). Max 5 retries to avoid infinite loops.
    - **Path Conflicts:** If worktree path exists, append number suffix to identifier and retry.
    - **Git Errors:** If worktree creation fails after retries, fallback to simple branch switch in current directory: `git checkout -b "$BRANCH_NAME"`
@@ -86,6 +90,16 @@ done
 if [ "$SUCCESS" = false ]; then
     # Fallback to simple branch switch
     git checkout -b "$BRANCH_NAME"
+fi
+```
+
+**Environment Sync:**
+```bash
+if [ -f "$MAIN_REPO/.env" ]; then
+    cp "$MAIN_REPO/.env" "$WORKTREE_PATH/.env"
+fi
+if [ -f "$MAIN_REPO/.env.dev" ]; then
+    cp "$MAIN_REPO/.env.dev" "$WORKTREE_PATH/.env.dev"
 fi
 ```
 

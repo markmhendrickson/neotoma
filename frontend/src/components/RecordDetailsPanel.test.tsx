@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import userEvent from '@testing-library/user-event';
-import { describe, it, beforeEach, expect, vi } from 'vitest';
+import { describe, it, beforeEach, expect, vi, type MockInstance } from 'vitest';
 import type { NeotomaRecord } from '@/types/record';
 import { RecordDetailsPanel } from './RecordDetailsPanel';
 
@@ -19,6 +19,7 @@ const settingsMock = {
   apiBase: 'http://localhost:8080',
   bearerToken: 'test-token',
   apiSyncEnabled: true,
+  cloudStorageEnabled: true,
   csvRowRecordsEnabled: true,
 };
 
@@ -53,7 +54,10 @@ const baseRecord: NeotomaRecord = {
   _status: 'Ready',
 };
 
-let windowOpenSpy: ReturnType<typeof vi.spyOn>;
+let windowOpenSpy: MockInstance<
+  [url?: string | URL | undefined, target?: string | undefined, features?: string | undefined],
+  Window | null
+>;
 
 describe('RecordDetailsPanel file handling', () => {
   beforeEach(() => {
@@ -61,6 +65,8 @@ describe('RecordDetailsPanel file handling', () => {
     vi.clearAllMocks();
     settingsMock.apiBase = 'http://localhost:8080';
     settingsMock.bearerToken = 'test-token';
+    settingsMock.apiSyncEnabled = true;
+    settingsMock.cloudStorageEnabled = true;
     windowOpenSpy = vi.spyOn(window, 'open').mockReturnValue(null);
   });
 
@@ -98,6 +104,25 @@ describe('RecordDetailsPanel file handling', () => {
         '_blank',
         'noopener,noreferrer'
       )
+    );
+  });
+
+  it('blocks Supabase file access when API sync is disabled', async () => {
+    settingsMock.apiSyncEnabled = false;
+    settingsMock.cloudStorageEnabled = false;
+
+    render(<RecordDetailsPanel record={{ ...baseRecord, file_urls: ['abc/file.pdf'] }} onClose={() => {}} />);
+
+    const user = userEvent.setup();
+    const button = await screen.findByRole('button', { name: 'Open file abc/file.pdf' });
+    await user.click(button);
+
+    expect(mocks.mockGetFileUrl).not.toHaveBeenCalled();
+    expect(mocks.mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Unable to open file',
+        description: expect.stringMatching(/Opening stored files unavailable while Cloud Storage is disabled/i),
+      })
     );
   });
 
@@ -175,7 +200,7 @@ describe('RecordDetailsPanel file handling', () => {
     expect(previewElement.tagName).toBe('OBJECT');
   });
 
-  it('allows toggling nested properties in the JSON viewer', async () => {
+  it('renders nested properties inline inside the viewer', () => {
     render(
       <RecordDetailsPanel
         record={{
@@ -190,11 +215,9 @@ describe('RecordDetailsPanel file handling', () => {
       />
     );
 
-    const user = userEvent.setup();
-    expect(screen.getByText(/deep-value/)).toBeInTheDocument();
-    const toggle = screen.getByRole('button', { name: 'Toggle level1' });
-    await user.click(toggle);
-    expect(screen.queryByText(/deep-value/)).not.toBeInTheDocument();
+    expect(screen.getAllByText(/level1/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/level2/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/deep-value/).length).toBeGreaterThan(0);
   });
 });
 

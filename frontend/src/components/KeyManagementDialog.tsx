@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { useSettings } from '@/hooks/useSettings';
+import { Copy } from 'lucide-react';
 interface KeyManagementDialogProps {
   maskedPrivateKey: string;
   bearerToken: string;
@@ -94,6 +95,27 @@ export function KeyManagementDialog({
     }
   };
 
+  const handleCopyPrivateKey = async () => {
+    try {
+      const keyExport = await onExport();
+      const privateKey = keyExport?.ed25519?.privateKey;
+      if (!privateKey) {
+        throw new Error('Private key unavailable');
+      }
+      await navigator.clipboard.writeText(privateKey);
+      toast({
+        title: 'Private key copied',
+        description: 'Store it securely—anyone with this key can decrypt your data.',
+      });
+    } catch (error) {
+      toast({
+        title: 'Copy failed',
+        description: error instanceof Error ? error.message : 'Unable to copy private key',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleRegenerate = async () => {
     if (!confirm('Are you sure? This will generate new keys and you will lose access to data encrypted with the old keys.')) {
       return;
@@ -147,7 +169,7 @@ export function KeyManagementDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground ml-6">
-              When enabled, records will be synced to the API after being saved locally. When disabled, records are stored locally only.
+              When enabled, records sync to the API after being saved locally. Disabling this enforces local-only mode—uploads, chat, and remote file access will not contact Supabase.
             </p>
           </div>
           <div>
@@ -169,7 +191,23 @@ export function KeyManagementDialog({
           </div>
           <div>
             <Label>Private Key (masked)</Label>
-            <Input value={maskedPrivateKey} readOnly className="font-mono text-xs" />
+            <div className="flex items-center gap-2">
+              <Input value={maskedPrivateKey} readOnly className="font-mono text-xs" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleCopyPrivateKey}
+                className="shrink-0"
+                aria-label="Copy private key"
+              >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Copies the full Ed25519 private key (base64url). Keep it secret—anyone with this key can access your vault.
+            </p>
           </div>
           <div>
             <Label>Bearer Token (for ChatGPT Actions)</Label>

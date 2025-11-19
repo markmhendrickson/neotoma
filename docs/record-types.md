@@ -20,7 +20,7 @@ Neotoma accepts arbitrary record types, but downstream analytics, embeddings, an
 | --- | --- | --- | --- |
 | `note` | Free-form text, journals, scratchpads. | `title`, `content`, `tags`, `source`, `summary` | journal, memo |
 | `document` | Structured files, specs, PDFs, knowledge assets. | `title`, `summary`, `source`, `tags`, `link` | doc, file, pdf |
-| `message` | Emails, DMs, chat transcripts. | `channel`, `sender`, `recipient`, `subject`, `body` | email, dm, sms |
+| `message` | Emails, DMs, chat transcripts. | `thread_id`, `channel`, `sender`, `recipient`, `subject`, `body`, `engagement_stats` | email, dm, sms |
 | `task` | Action items with status. | `title`, `status`, `due_date`, `assignee`, `priority` | todo, action_item |
 | `project` | Multi-step initiatives. | `name`, `status`, `owner`, `start_date`, `due_date` | initiative, program |
 | `goal` | Outcome targets or OKRs. | `name`, `metric`, `target_value`, `deadline`, `category` | objective, okr |
@@ -60,7 +60,7 @@ Neotoma accepts arbitrary record types, but downstream analytics, embeddings, an
 
 | Type | Description | Primary Properties | Aliases |
 | --- | --- | --- | --- |
-| `file_asset` | Generic uploaded assets (images, videos, binaries). | `file_name`, `mime_type`, `size`, `checksum`, `source` | file, attachment, asset |
+| `media_asset` | Generic uploaded assets (images, videos, binaries). | `file_name`, `mime_type`, `size`, `url`, `checksum`, `engagement_stats` | file_asset, file, attachment, asset |
 
 ## Data & Datasets
 
