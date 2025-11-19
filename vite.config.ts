@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const enableDevCrossOriginIsolation =
+  process.env.VITE_ENABLE_CROSS_ORIGIN_ISOLATION !== 'false';
 
 export default defineConfig({
   plugins: [react()],
@@ -45,10 +47,12 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
-    headers: {
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-      'Cross-Origin-Opener-Policy': 'same-origin',
-    },
+    headers: enableDevCrossOriginIsolation
+      ? {
+          'Cross-Origin-Embedder-Policy': 'require-corp',
+          'Cross-Origin-Opener-Policy': 'same-origin',
+        }
+      : undefined,
     fs: {
       allow: ['..'],
     },

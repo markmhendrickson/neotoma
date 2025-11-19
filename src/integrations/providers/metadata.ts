@@ -2,6 +2,16 @@ import type { ProviderCapability } from './types.js';
 
 export type ProviderCategory = 'social' | 'productivity';
 
+export interface ProviderOAuthDefinition {
+  authorizationUrl: string;
+  tokenUrl: string;
+  scopes: string[];
+  usePkce?: boolean;
+  accessType?: string;
+  prompt?: string;
+  userInfoUrl?: string;
+}
+
 export interface ProviderDefinition {
   id: string;
   displayName: string;
@@ -11,6 +21,7 @@ export interface ProviderDefinition {
   popularityRank: number;
   oauthScopes?: string[];
   notes?: string;
+  oauth?: ProviderOAuthDefinition;
 }
 
 export const providerCatalog: ProviderDefinition[] = [
@@ -30,7 +41,27 @@ export const providerCatalog: ProviderDefinition[] = [
   { id: 'whatsapp-business', displayName: 'WhatsApp Business', providerType: 'social', capabilities: ['messages'], defaultRecordType: 'message', popularityRank: 14 },
   { id: 'wechat', displayName: 'WeChat', providerType: 'social', capabilities: ['messages'], defaultRecordType: 'message', popularityRank: 15 },
   { id: 'line', displayName: 'Line', providerType: 'social', capabilities: ['messages'], defaultRecordType: 'message', popularityRank: 16 },
-  { id: 'gmail', displayName: 'Gmail', providerType: 'productivity', capabilities: ['email'], defaultRecordType: 'message', popularityRank: 17, oauthScopes: ['https://www.googleapis.com/auth/gmail.readonly'] },
+  {
+    id: 'gmail',
+    displayName: 'Gmail',
+    providerType: 'productivity',
+    capabilities: ['email'],
+    defaultRecordType: 'message',
+    popularityRank: 17,
+    oauthScopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+    oauth: {
+      authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+      scopes: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+      usePkce: true,
+      accessType: 'offline',
+      prompt: 'consent',
+      userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
+    },
+  },
   { id: 'outlook', displayName: 'Outlook / Exchange Online', providerType: 'productivity', capabilities: ['email'], defaultRecordType: 'message', popularityRank: 18, oauthScopes: ['Mail.Read'] },
   { id: 'microsoft-teams', displayName: 'Microsoft Teams', providerType: 'productivity', capabilities: ['messages'], defaultRecordType: 'message', popularityRank: 19, oauthScopes: ['ChannelMessage.Read.All'] },
   { id: 'slack', displayName: 'Slack', providerType: 'productivity', capabilities: ['messages'], defaultRecordType: 'message', popularityRank: 20, oauthScopes: ['channels:history', 'groups:history'] },
@@ -66,4 +97,7 @@ export const providerCatalog: ProviderDefinition[] = [
 export function getProviderDefinition(id: string): ProviderDefinition | undefined {
   return providerCatalog.find((definition) => definition.id === id);
 }
+
+
+
 

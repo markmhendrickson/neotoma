@@ -1,5 +1,77 @@
 # External Importers
 
+Neotoma ingests data from third-party services through modular **connectors**. Each connector knows how to authenticate, fetch updates, normalize records, and store them inside the canonical `records` table.
+
+## Connector schema recap
+
+- `external_connectors` stores provider metadata, encrypted secrets (AES-256-GCM), cursor positions, and status fields.
+- `external_sync_runs` tracks importer executions (start/completion timestamps, counts, cursor snapshots).
+- `records` exposes `external_source`, `external_id`, and `external_hash` columns so imports can upsert deterministically.
+
+## OAuth-capable providers
+
+Some providers (starting with Gmail) require OAuth instead of manual token entry. Provider definitions in `src/integrations/providers/metadata.ts` now describe their OAuth needs (authorization URL, token URL, scopes, PKCE requirement, etc.).
+
+### Environment variables
+
+| Variable | Description |
+| --- | --- |
+| `GOOGLE_OAUTH_CLIENT_ID` | OAuth client ID created in Google Cloud Console |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth client secret |
+| `GOOGLE_OAUTH_REDIRECT_URI` *(optional)* | Override callback URL if it is not `http(s)://<api-host>/oauth/google/callback` |
+| `PUBLIC_URL` *(optional)* | Public base URL for the HTTP Actions server; used to build callback URLs |
+
+> **Note:** Leave `GOOGLE_OAUTH_REDIRECT_URI` empty during local development. The server will default to `http://localhost:<HTTP_PORT>/oauth/google/callback`.
+
+### Flow
+
+1. Frontend POSTs `POST /oauth/:provider/start` with the user’s bearer token to obtain an authorization URL (state + PKCE challenge are generated).
+2. User is redirected to the provider’s OAuth consent page.
+3. Provider calls `GET /oauth/:provider/callback` with the authorization code.
+4. The server exchanges the code for tokens, fetches the user's profile (email), and upserts or updates an `external_connectors` row with encrypted secrets.
+5. The user is redirected back to the UI with `?oauth=success&provider=gmail`.
+
+State entries expire after 10 minutes and are tied to the bearer token used to initiate the flow.
+
+### HTTP endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/oauth/:provider/start` | Returns `authorization_url` for the provider |
+| `GET` | `/oauth/:provider/callback` | Handles provider redirects, exchanges codes, and persists connectors |
+
+Existing management endpoints remain:
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/import/providers` | List registered providers + capabilities |
+| `GET` | `/connectors` | List stored connectors (secrets redacted) |
+| `POST` | `/import/:provider/link` | Manual token/linking flow (non-OAuth providers) |
+| `POST` | `/import/:provider/sync` | Trigger importer runs |
+| `DELETE` | `/connectors/:id` | Remove a connector |
+
+## Running importers
+
+- CLI: `npm run import:connector -- --connector-id <uuid>` or `--provider gmail`.
+- HTTP/MCP: `/import/:provider/sync` or `sync_external_connector` tool.
+
+Each run updates `external_sync_runs`, maintains cursors, and uses `upsertExternalRecords` so repeated syncs stay idempotent.
+
+## Frontend UX
+
+`frontend/src/components/KeyManagementDialog.tsx` now exposes an “Integrations” tab:
+
+- OAuth-ready providers (e.g., Gmail) show a single **Connect** button that launches the OAuth flow.
+- Legacy/manual providers still expose the token form for backfilling credentials.
+- The list of connected integrations shows status, labels, and last sync timestamps with quick **Sync**/**Delete** actions.
+
+## Testing
+
+- `src/services/__tests__/oauth_state.test.ts` covers PKCE state creation and expiration.
+- Provider client tests live under `src/integrations/providers/__tests__`.
+
+# External Importers
+
 Neotoma ingests social and productivity data from the same pipeline, using **connectors** that wrap each provider’s API. Connectors persist OAuth credentials (encrypted), cursors, and sync history so that the importer service can run initial backfills and incremental refreshes without custom code for every source.
 
 ## Provider Catalog (popularity order)
@@ -136,4 +208,7 @@ Use the provided CLI or Fly.io cron (see README) to run `npm run import:connecto
 ### Webhooks
 
 `POST /import/:provider/webhook` currently acknowledges events and logs payloads; provider-specific webhook validators can hook into this endpoint to trigger immediate incremental syncs in a follow-up release.
+
+
+
 

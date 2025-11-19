@@ -111,6 +111,13 @@ export class DatastoreWorkerClient {
   }
 
   /**
+   * Count records
+   */
+  async count(options?: QueryOptions): Promise<number> {
+    return (await this.call('local.count', { options })) as number;
+  }
+
+  /**
    * Delete a record
    */
   async delete(id: string): Promise<void> {

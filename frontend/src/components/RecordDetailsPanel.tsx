@@ -14,7 +14,108 @@ import { Button } from '@/components/ui/button';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { createLocalFileObjectUrl, isLocalFilePath } from '@/utils/local_files';
-import { JsonViewer } from '@/components/JsonViewer';
+import { humanizePropertyKey } from '@/utils/property_keys';
+import { Fragment } from 'react';
+function PropertiesList({
+  data,
+  level = 0,
+}: {
+  data: Record<string, unknown>;
+  level?: number;
+}) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return <div className="text-sm text-muted-foreground">—</div>;
+  }
+
+  const entries = Object.entries(data)
+    .filter(([, value]) => !isValueEmpty(value))
+    .sort(([a], [b]) =>
+      humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
+    );
+
+  if (entries.length === 0) {
+    return <div className="text-sm text-muted-foreground">—</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {entries.map(([key, value]) => (
+        <PropertyEntry key={`${level}-${key}`} label={humanizePropertyKey(key)} value={value} level={level} />
+      ))}
+    </div>
+  );
+}
+
+function PropertyEntry({
+  label,
+  value,
+  level,
+}: {
+  label: string;
+  value: unknown;
+  level: number;
+}) {
+  const paddingLeft = level * 16;
+  const isObject = value && typeof value === 'object' && !Array.isArray(value);
+
+  return (
+    <div className="space-y-1" style={{ paddingLeft }}>
+      <div className="text-xs font-medium text-muted-foreground">{label}</div>
+      {renderPropertyValue(value, level)}
+      {isObject && (
+        <div className="border-l border-border/50 pl-4 mt-2">
+          <PropertiesList data={value as Record<string, unknown>} level={level + 1} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isValueEmpty(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return value.trim().length === 0;
+  if (Array.isArray(value)) return value.length === 0 || value.every(isValueEmpty);
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).every(isValueEmpty);
+  }
+  return false;
+}
+
+function renderPropertyValue(value: unknown, level: number): JSX.Element {
+  if (value === null || value === undefined) {
+    return <div className="text-sm text-muted-foreground">—</div>;
+  }
+
+  if (Array.isArray(value)) {
+    const nonEmptyItems = value.filter((item) => !isValueEmpty(item));
+    if (nonEmptyItems.length === 0) {
+      return <div className="text-sm text-muted-foreground">—</div>;
+    }
+
+    return (
+      <div className="space-y-1">
+        {nonEmptyItems.map((item, idx) => (
+          <Fragment key={`${level}-arr-${idx}`}>
+            {typeof item === 'object' && item !== null ? (
+              <div className="border-l border-border/50 pl-4">
+                <PropertiesList data={item as Record<string, unknown>} level={level + 1} />
+              </div>
+            ) : (
+              <div className="text-sm break-words">{String(item)}</div>
+            )}
+          </Fragment>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof value === 'object') {
+    return <PropertiesList data={value as Record<string, unknown>} level={level + 1} />;
+  }
+
+  return <div className="text-sm break-words">{String(value)}</div>;
+}
+import { ApiAccessError, getApiAccessDisabledMessage } from '@/utils/api_access';
 
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
@@ -75,6 +176,7 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
   const [previewError, setPreviewError] = useState<string | null>(null);
   const previewCleanupRef = useRef<(() => void) | null>(null);
   const { apiBase, bearerToken } = settings;
+  const apiDisabledFilesMessage = getApiAccessDisabledMessage('Opening stored files');
 
   useEffect(() => {
     let cancelled = false;
@@ -85,13 +187,14 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
 
     const fetchUrls = async () => {
       const urls: Record<string, string> = {};
+      const allowRemoteFetch = Boolean(settings.cloudStorageEnabled && apiBase && bearerToken);
       await Promise.all(
         record.file_urls.map(async (filePath) => {
           if (isAbsoluteUrl(filePath) || isLocalFilePath(filePath)) {
             urls[filePath] = filePath;
             return;
           }
-          if (!apiBase || !bearerToken) {
+          if (!allowRemoteFetch) {
             return;
           }
           try {
@@ -114,12 +217,15 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
     return () => {
       cancelled = true;
     };
-  }, [record, apiBase, bearerToken]);
+  }, [record, apiBase, bearerToken, settings.cloudStorageEnabled]);
 
   const status = record?._status || 'Ready';
   const statusDisplay = status === 'Uploading' ? 'Uploading…' : status;
   const createdMeta = getDateMeta(record?.created_at);
   const updatedMeta = getDateMeta(record?.updated_at);
+  const hasRemoteFiles = Boolean(
+    record?.file_urls?.some((filePath) => !isAbsoluteUrl(filePath) && !isLocalFilePath(filePath))
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -226,6 +332,7 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
           bearerToken,
           fileUrls,
           cacheFileUrl,
+          cloudStorageEnabled: settings.cloudStorageEnabled,
         });
 
         if (typeof window === 'undefined') {
@@ -275,6 +382,7 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
           bearerToken,
           fileUrls,
           cacheFileUrl,
+          cloudStorageEnabled: settings.cloudStorageEnabled,
         });
         applyPreviewSource(filePath, source);
       } catch (error) {
@@ -409,6 +517,9 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
               ) : (
                 <div className="text-sm">—</div>
               )}
+              {!settings.cloudStorageEnabled && hasRemoteFiles && (
+                <p className="mt-2 text-xs text-muted-foreground/80">{apiDisabledFilesMessage}</p>
+              )}
             </div>
             {(previewLoading || previewSource || previewError) && (
               <div className="mb-4 rounded border border-border/70 bg-muted/40">
@@ -466,7 +577,7 @@ export function RecordDetailsPanel({ record, onClose }: RecordDetailsPanelProps)
             )}
             <div className="mb-4">
               <div className="text-xs text-muted-foreground mb-1 font-semibold">Properties</div>
-              <JsonViewer data={record.properties || {}} />
+              <PropertiesList data={record.properties || {}} />
             </div>
             {record._error && (
               <div className="mb-4 border-l-3 border-destructive pl-2">
@@ -502,6 +613,7 @@ interface ResolveFileSourceParams {
   bearerToken: string;
   fileUrls: Record<string, string>;
   cacheFileUrl?: (filePath: string, url: string) => void;
+  cloudStorageEnabled: boolean;
 }
 
 async function resolveFileSource(params: ResolveFileSourceParams): Promise<FileSource> {
@@ -538,6 +650,9 @@ async function resolveRemoteFileSource(params: ResolveFileSourceParams): Promise
   const cached = fileUrls[filePath];
   if (cached) {
     return { url: cached };
+  }
+  if (!params.cloudStorageEnabled) {
+    throw new ApiAccessError('Opening stored files');
   }
   if (!apiBase || !bearerToken) {
     throw new Error('Set API base URL and Bearer Token to open stored files.');

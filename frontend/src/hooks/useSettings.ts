@@ -3,8 +3,9 @@ import { useCallback, useSyncExternalStore } from 'react';
 export interface Settings {
   apiBase: string;
   bearerToken: string; // Derived from Ed25519 public key
-  apiSyncEnabled: boolean; // Whether to sync records to API
+  cloudStorageEnabled: boolean; // Whether to store files/records in Supabase
   csvRowRecordsEnabled: boolean; // Whether CSV uploads expand to per-row records
+  apiSyncEnabled: boolean; // Legacy alias for cloudStorageEnabled
 }
 
 function getStorage(): Storage | null {
@@ -21,24 +22,39 @@ function getStorage(): Storage | null {
 function readSettingsFromStorage(): Settings {
   const storage = getStorage();
   try {
-    const apiSyncEnabled = storage?.getItem('apiSyncEnabled');
+    const cloudStorageEnabledValue = storage?.getItem('cloudStorageEnabled');
+    const legacyApiSyncEnabled = storage?.getItem('apiSyncEnabled');
     const csvRowRecordsEnabled = storage?.getItem('csvRowRecordsEnabled');
     const storedApiBase = storage?.getItem('apiBase');
     const defaultApiBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+    const resolvedCloudSetting = cloudStorageEnabledValue ?? legacyApiSyncEnabled;
     return {
       apiBase: storedApiBase || defaultApiBase,
       bearerToken: storage?.getItem('bearerToken') || '',
-      apiSyncEnabled: apiSyncEnabled !== null ? apiSyncEnabled === 'true' : false,
+      cloudStorageEnabled: resolvedCloudSetting !== null ? resolvedCloudSetting === 'true' : false,
+      apiSyncEnabled: resolvedCloudSetting !== null ? resolvedCloudSetting === 'true' : false,
       csvRowRecordsEnabled: csvRowRecordsEnabled !== null ? csvRowRecordsEnabled === 'true' : true,
     };
   } catch {
     return {
       apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080',
       bearerToken: '',
+      cloudStorageEnabled: false,
       apiSyncEnabled: false,
       csvRowRecordsEnabled: true,
     };
   }
+}
+
+function normalizeSettingsPatch(partial: Partial<Settings>): Partial<Settings> {
+  const normalized = { ...partial };
+  if (normalized.apiSyncEnabled !== undefined && normalized.cloudStorageEnabled === undefined) {
+    normalized.cloudStorageEnabled = normalized.apiSyncEnabled;
+  }
+  if (normalized.cloudStorageEnabled !== undefined && normalized.apiSyncEnabled === undefined) {
+    normalized.apiSyncEnabled = normalized.cloudStorageEnabled;
+  }
+  return normalized;
 }
 
 type SettingsListener = () => void;
@@ -47,22 +63,24 @@ let cachedSettings: Settings = readSettingsFromStorage();
 const listeners = new Set<SettingsListener>();
 
 function persistSettings(partial: Partial<Settings>) {
+  const normalized = normalizeSettingsPatch(partial);
   const storage = getStorage();
   if (!storage) {
     return;
   }
   try {
-    if (partial.apiBase !== undefined) {
-      storage.setItem('apiBase', partial.apiBase);
+    if (normalized.apiBase !== undefined) {
+      storage.setItem('apiBase', normalized.apiBase);
     }
-    if (partial.bearerToken !== undefined) {
-      storage.setItem('bearerToken', partial.bearerToken);
+    if (normalized.bearerToken !== undefined) {
+      storage.setItem('bearerToken', normalized.bearerToken);
     }
-    if (partial.apiSyncEnabled !== undefined) {
-      storage.setItem('apiSyncEnabled', String(partial.apiSyncEnabled));
+    if (normalized.cloudStorageEnabled !== undefined) {
+      storage.setItem('cloudStorageEnabled', String(normalized.cloudStorageEnabled));
+      storage.setItem('apiSyncEnabled', String(normalized.cloudStorageEnabled));
     }
-    if (partial.csvRowRecordsEnabled !== undefined) {
-      storage.setItem('csvRowRecordsEnabled', String(partial.csvRowRecordsEnabled));
+    if (normalized.csvRowRecordsEnabled !== undefined) {
+      storage.setItem('csvRowRecordsEnabled', String(normalized.csvRowRecordsEnabled));
     }
   } catch (error) {
     console.warn('Failed to persist settings', error);
@@ -70,7 +88,8 @@ function persistSettings(partial: Partial<Settings>) {
 }
 
 function updateCachedSettings(partial: Partial<Settings>) {
-  cachedSettings = { ...cachedSettings, ...partial };
+  const normalized = normalizeSettingsPatch(partial);
+  cachedSettings = { ...cachedSettings, ...normalized };
   listeners.forEach(listener => listener());
 }
 

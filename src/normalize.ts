@@ -69,9 +69,79 @@ export function normalizeRow(
 
 export function inferTypeFromHeaders(row: Record<string, unknown>): string | undefined {
   const keys = Object.keys(row).map(k => k.toLowerCase());
-  if (keys.some(k => k.includes('exercise'))) return 'exercise';
-  if (keys.some(k => k.includes('note'))) return 'note';
-  if (keys.some(k => k.includes('transaction'))) return 'transaction';
+  const values = Object.values(row).map(v => String(v).toLowerCase());
+  
+  // Finance types
+  if (keys.some(k => k.includes('transaction') || k.includes('merchant') || (k.includes('amount') && keys.some(k2 => k2.includes('date'))))) {
+    return 'transaction';
+  }
+  if (keys.some(k => k.includes('invoice') || k.includes('bill') || (k.includes('amount') && k.includes('due')))) {
+    return 'invoice';
+  }
+  if (keys.some(k => k.includes('receipt') || (k.includes('merchant') && keys.some(k2 => k2.includes('total'))))) {
+    return 'receipt';
+  }
+  if (keys.some(k => k.includes('statement') || (k.includes('balance') && keys.some(k2 => k2.includes('period'))))) {
+    return 'statement';
+  }
+  if (keys.some(k => k.includes('account') && (k.includes('balance') || k.includes('institution')))) {
+    return 'account';
+  }
+  if (keys.some(k => k.includes('subscription') || k.includes('recurring') || (k.includes('renewal') && k.includes('date')))) {
+    return 'subscription';
+  }
+  if (keys.some(k => k.includes('budget') || (k.includes('spending') && k.includes('plan')))) {
+    return 'budget';
+  }
+  
+  // Health types
+  if (keys.some(k => k.includes('exercise') || k.includes('workout') || k.includes('repetitions') || k.includes('reps') || k.includes('sets') || k.includes('rpe'))) {
+    return 'exercise';
+  }
+  if (keys.some(k => k.includes('meal') || k.includes('food') || k.includes('calories') || k.includes('nutrition'))) {
+    return 'meal';
+  }
+  if (keys.some(k => k.includes('sleep') || (k.includes('bedtime') && k.includes('wake')))) {
+    return 'sleep_session';
+  }
+  if (keys.some(k => k.includes('measurement') || k.includes('biometric') || (k.includes('weight') && k.includes('height')))) {
+    return 'measurement';
+  }
+  
+  // Productivity types
+  if (keys.some(k => k.includes('task') || k.includes('todo') || (k.includes('status') && keys.some(k2 => k2.includes('due'))))) {
+    return 'task';
+  }
+  if (keys.some(k => k.includes('project') || k.includes('initiative') || (k.includes('owner') && keys.some(k2 => k2.includes('start'))))) {
+    return 'project';
+  }
+  if (keys.some(k => k.includes('goal') || k.includes('objective') || k.includes('okr'))) {
+    return 'goal';
+  }
+  if (keys.some(k => k.includes('event') || k.includes('meeting') || k.includes('appointment') || (k.includes('start') && k.includes('time') && keys.some(k2 => k2.includes('location'))))) {
+    return 'event';
+  }
+  if (keys.some(k => k.includes('note') || k.includes('memo') || k.includes('journal') || (k.includes('content') && keys.some(k2 => k2.includes('title'))))) {
+    return 'note';
+  }
+  
+  // Knowledge types
+  if (keys.some(k => k.includes('contact') || k.includes('person') || (k.includes('email') && keys.some(k2 => k2.includes('phone'))))) {
+    return 'contact';
+  }
+  if (keys.some(k => k.includes('message') || k.includes('email') || k.includes('dm') || (k.includes('sender') && keys.some(k2 => k2.includes('recipient'))))) {
+    return 'message';
+  }
+  if (keys.some(k => k.includes('document') || k.includes('pdf') || (k.includes('title') && keys.some(k2 => k2.includes('link'))))) {
+    return 'document';
+  }
+  
+  // Fallback: check for common patterns in values
+  if (values.some(v => v.includes('exercise') || v.includes('workout'))) return 'exercise';
+  if (values.some(v => v.includes('transaction') || v.includes('purchase'))) return 'transaction';
+  if (values.some(v => v.includes('task') || v.includes('todo'))) return 'task';
+  if (values.some(v => v.includes('note') || v.includes('memo'))) return 'note';
+  
   return undefined;
 }
 

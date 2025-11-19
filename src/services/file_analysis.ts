@@ -1,10 +1,10 @@
 import OpenAI from 'openai';
-import { PDFParse } from 'pdf-parse';
 import { randomUUID } from 'node:crypto';
 import { supabase, type NeotomaRecord } from '../db.js';
 import { config } from '../config.js';
 import { generateEmbedding, getRecordText } from '../embeddings.js';
 import { normalizeRecordType } from '../config/record_types.js';
+import { sanitizeRecordProperties } from '../utils/property_sanitizer.js';
 
 const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
 
@@ -54,8 +54,47 @@ function looksLikePdf(buffer: Buffer, fileName?: string, mimeType?: string): boo
   return false;
 }
 
+type PdfParseConstructor = new (options: { data: Buffer }) => {
+  getText(): Promise<{ text?: string }>;
+  destroy(): Promise<void>;
+};
+
+let cachedPdfParseConstructor: PdfParseConstructor | null = null;
+let pdfParseLoadFailed = false;
+
+async function loadPdfParse(): Promise<PdfParseConstructor | null> {
+  if (cachedPdfParseConstructor) {
+    return cachedPdfParseConstructor;
+  }
+  if (pdfParseLoadFailed) {
+    return null;
+  }
+  try {
+    const module = await import('pdf-parse');
+    const ctor =
+      (module as { PDFParse?: PdfParseConstructor }).PDFParse ??
+      ((module as { default?: PdfParseConstructor }).default ?? null);
+    if (!ctor) {
+      console.warn('pdf-parse module missing PDFParse export');
+      pdfParseLoadFailed = true;
+      return null;
+    }
+    cachedPdfParseConstructor = ctor;
+    return cachedPdfParseConstructor;
+  } catch (error) {
+    console.warn('Failed to load pdf-parse; PDF previews disabled', error);
+    pdfParseLoadFailed = true;
+    return null;
+  }
+}
+
 async function extractPdfPreview(buffer: Buffer): Promise<string | null> {
-  const parser = new PDFParse({ data: buffer });
+  const PdfParse = await loadPdfParse();
+  if (!PdfParse) {
+    return null;
+  }
+
+  const parser = new PdfParse({ data: buffer });
   try {
     const { text } = await parser.getText();
     if (!text || !text.trim()) {
@@ -210,7 +249,28 @@ export async function analyzeFileForRecord(options: AnalyzeFileOptions): Promise
     }
 
     const cleaned = stripCodeFence(rawContent);
-    const parsed = JSON.parse(cleaned) as Partial<FileAnalysisResult & { properties?: Record<string, unknown> }>;
+    let parsed: Partial<FileAnalysisResult & { properties?: Record<string, unknown> }>;
+    
+    try {
+      parsed = JSON.parse(cleaned) as Partial<FileAnalysisResult & { properties?: Record<string, unknown> }>;
+    } catch (parseError) {
+      // Log the error with context for debugging
+      const errorPos = parseError instanceof SyntaxError && parseError.message.match(/position (\d+)/);
+      const position = errorPos ? parseInt(errorPos[1], 10) : -1;
+      const contextStart = Math.max(0, position - 100);
+      const contextEnd = Math.min(cleaned.length, position + 100);
+      
+      console.warn('JSON parse error in file analysis:', {
+        error: parseError instanceof Error ? parseError.message : String(parseError),
+        position,
+        contentLength: cleaned.length,
+        context: cleaned.slice(contextStart, contextEnd),
+        fileName,
+      });
+      
+      // Re-throw to be caught by outer catch block
+      throw parseError;
+    }
     const resultType = typeof parsed.type === 'string' && parsed.type ? parsed.type : fallbackTypeFromName(fileName, mimeType);
     const resultProps = parsed.properties && typeof parsed.properties === 'object' && !Array.isArray(parsed.properties)
       ? (parsed.properties as Record<string, unknown>)
@@ -271,7 +331,8 @@ export async function createRecordFromUploadedFile(options: CreateRecordFromFile
     analyzedType = fallbackTypeFromName(fileName, mimeType);
   }
 
-  const finalProperties = mergeMetadata(analyzedProperties, metadata);
+  const mergedProperties = mergeMetadata(analyzedProperties, metadata);
+  const finalProperties = sanitizeRecordProperties(mergedProperties);
 
   const insertId = options.recordId ?? randomUUID();
 

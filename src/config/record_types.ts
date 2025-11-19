@@ -89,7 +89,7 @@ const definitions: ReadonlyArray<RecordTypeDefinition> = [
     label: 'Message',
     description: 'Emails, DMs, chat transcripts.',
     category: 'knowledge',
-    primaryProperties: ['channel', 'sender', 'recipient', 'subject', 'body'],
+    primaryProperties: ['thread_id', 'channel', 'sender', 'recipient', 'subject', 'body', 'engagement_stats'],
     aliases: ['email', 'dm', 'sms'],
   },
   {
@@ -165,12 +165,12 @@ const definitions: ReadonlyArray<RecordTypeDefinition> = [
     aliases: ['sleep', 'rest'],
   },
   {
-    id: 'file_asset',
-    label: 'File Asset',
-    description: 'Generic uploaded assets (images, videos, binaries).',
+    id: 'media_asset',
+    label: 'Media Asset',
+    description: 'Uploaded files, images, videos, or remote media.',
     category: 'media',
-    primaryProperties: ['file_name', 'mime_type', 'size', 'checksum', 'source'],
-    aliases: ['file', 'attachment', 'asset'],
+    primaryProperties: ['file_name', 'mime_type', 'size', 'url', 'checksum', 'engagement_stats'],
+    aliases: ['file_asset', 'file', 'attachment', 'asset'],
   },
   {
     id: 'dataset',

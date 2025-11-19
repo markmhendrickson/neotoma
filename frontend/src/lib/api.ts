@@ -106,12 +106,21 @@ export async function fetchTypes(apiBase: string, bearerToken: string): Promise<
   }
 }
 
+export interface UploadFileResponse extends NeotomaRecord {
+  row_records?: Array<{
+    id: string;
+    row_index: number;
+    summary: string;
+    type: string;
+  }>;
+}
+
 export async function uploadFile(
   apiBase: string,
   bearerToken: string,
   file: File,
   options?: { csvRowRecords?: boolean }
-): Promise<NeotomaRecord> {
+): Promise<UploadFileResponse> {
   const formData = new FormData();
   formData.append('file', file);
   if (typeof options?.csvRowRecords === 'boolean') {

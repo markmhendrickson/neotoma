@@ -64,6 +64,7 @@ function App() {
   const datastore = useDatastore(x25519, ed25519);
   const [allRecords, setAllRecords] = useState<NeotomaRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<NeotomaRecord[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [types, setTypes] = useState<string[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(null);
   const [selectedType, setSelectedType] = useState('');
@@ -81,9 +82,13 @@ function App() {
 
     setRecordsLoading(true);
     try {
-      const localRecords = await datastore.queryRecords();
+      const [localRecords, totalCount] = await Promise.all([
+        datastore.queryRecords(),
+        datastore.countRecords(),
+      ]);
       const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
       setAllRecords(neotomaRecords);
+      setTotalRecords(totalCount);
 
       // Extract unique types
       const uniqueTypes = Array.from(new Set(neotomaRecords.map(r => r.type))).sort();
@@ -277,7 +282,11 @@ function App() {
   const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+    // Only show overlay when files are being dragged, not UI elements
+    const hasFiles = e.dataTransfer.types.includes('Files');
+    if (hasFiles) {
+      setIsDragging(true);
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: DragEvent<HTMLDivElement>) => {
@@ -315,6 +324,7 @@ function App() {
         <main className="flex-1 min-h-0 max-h-full overflow-hidden">
           <RecordsTable
             records={filteredRecords}
+          totalCount={totalRecords}
             types={types}
             onRecordClick={setSelectedRecord}
             onDeleteRecord={handleDeleteRecord}
@@ -322,6 +332,7 @@ function App() {
             onSearch={handleSearch}
             onTypeFilter={handleTypeFilter}
             isLoading={recordsLoading}
+            onFileUploadRef={chatPanelFileUploadRef}
           />
         </main>
       </div>
@@ -330,7 +341,7 @@ function App() {
       <SonnerToaster
         duration={4000}
         position="bottom-right"
-        visibleToasts={Number.POSITIVE_INFINITY}
+        visibleToasts={10}
         toastOptions={{
           classNames: {
             toast: 'bg-background border border-border shadow-lg',

@@ -114,6 +114,7 @@ ACTIONS_BEARER_TOKEN=dev-token-or-random
 PLAID_PRODUCTS=transactions,balance
 PLAID_COUNTRY_CODES=US,CA
 PLAID_WEBHOOK_URL=https://example.com/plaid/webhook
+CONNECTOR_SECRET_KEY=your32byteconnectorsecret
 ```
 
 ### 5) Install Dependencies and Verify
@@ -146,6 +147,20 @@ npm test   # runs live queries against Supabase
 - The git-branch hash still supplies deterministic base ports, but if a port is occupied the script automatically increments—up to 30 attempts—before giving up.
 - Each launch prints a line such as `[with-branch-ports] branch=my-feature http=8082 (base+2) vite=5175 (base+1) ws=8083 (base)` so you always know which stack owns which ports.
 - This removes manual bookkeeping when you need to run multiple backend/frontend stacks simultaneously. To force specific values, set `HTTP_PORT`, `VITE_PORT`, and `WS_PORT` before running the command.
+
+### Full-stack dev serve with diagnostics
+
+- Run `npm run dev:serve &` (or use Cursor’s background flag) so the HTTP server and Vite UI boot without blocking the rest of your shell/chat session.
+- The command shares the same branch-aware ports as other `dev:*` scripts via `run-dev-task` + `with-branch-ports`.
+- Startup fails fast when Supabase env vars (`DEV_SUPABASE_URL`/`DEV_SUPABASE_SERVICE_KEY` or generic fallbacks) are missing, mirroring the runtime requirement from `src/config.ts`.
+- Boot watchdogs surface common errors (missing env, port collisions, missing deps, broken Vite config) before the processes exit, so terminal output already tells you what to fix.
+- Override the watchdog window via `DEV_SERVE_BOOT_TIMEOUT_MS` (milliseconds) if a slower machine needs more than the default 60 seconds.
+
+### Strict Offline Mode
+
+- Toggle off **Sync records to API** in the UI settings to enforce a local-only vault.
+- While disabled, the frontend never contacts Supabase: uploads, chat, AI file analysis, signed URL generation, and connector syncs all short-circuit to local fallbacks.
+- Any feature that requires the API surfaces inline messaging so users know why cloud functionality is unavailable.
 
 ### Sample Records for Frontend Debugging
 
@@ -401,6 +416,11 @@ curl -X GET http://localhost:8080/plaid/items \
 | `POST` | `/import/plaid/preview_sync` | Show upcoming added/modified/removed transactions without persisting | — |
 | `GET` | `/import/plaid/items` | List stored Plaid metadata (no access tokens) | `src/services/plaid_sync.test.ts` |
 | `GET` | `/import/plaid/link_demo` | Serve the Plaid sandbox demo page (auto exchanges tokens when a bearer token is provided) | — |
+| `GET` | `/import/providers` | List supported external providers, capabilities, and scopes sorted by popularity | `src/integrations/providers/__tests__/clients.test.ts` |
+| `POST` | `/import/:provider/link` | Register a connector (stores encrypted OAuth secrets, metadata, cursor) | `src/services/connectors.ts`, `src/integrations/providers/__tests__/clients.test.ts` |
+| `POST` | `/import/:provider/sync` | Trigger importer orchestration for one provider or connector | `src/services/importers.ts`, `src/integrations/providers/__tests__/clients.test.ts` |
+| `POST` | `/import/:provider/webhook` | Receive provider webhooks (currently acknowledges + logs payloads) | — |
+| `GET` | `/connectors` | List registered connectors (secrets redacted) | `src/services/connectors.ts` |
 
 All responses omit Plaid access tokens. Errors from Plaid are normalized for safe logging.
 
@@ -413,6 +433,17 @@ The Vitest suite includes:
 - `src/integrations/plaid/plaid.integration.test.ts` – live sandbox flow (skipped automatically unless Plaid sandbox credentials are configured).
 
 Set `PLAID_CLIENT_ID`, `PLAID_SECRET`, and `PLAID_ENV=sandbox` to exercise integration tests.
+
+---
+
+### External Importers
+
+- Provider catalog + runbooks live in `docs/importers.md` (popularity-ranked social + productivity sources mapped to canonical record types).
+- Secrets are encrypted with AES-256-GCM using `CONNECTOR_SECRET_KEY` (32+ chars). Set this env var anywhere you plan to register connectors or run importers.
+- Register connectors via `POST /import/:provider/link` (or MCP `sync_provider_imports` tool), inspect them with `GET /connectors`, and trigger syncs via `POST /import/:provider/sync`.
+- CLI entry point: `npm run import:connector -- --provider gmail --max-pages 5` or `--connector-id <uuid>` for targeted runs. Ideal for cron/Fly.io schedules.
+- Importer runs persist status/metrics in `external_sync_runs`, while connectors store cursors, capabilities, and metadata in `external_connectors`.
+- Records now include `external_source`, `external_id`, and `external_hash` columns so new imports can upsert or soft-delete (`markExternalRecordRemoved`) deterministically.
 
 ---
 
@@ -481,6 +512,8 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 | `plaid_preview_sync` | Preview Plaid item change counts without persisting | `plaid_item_id?`, `item_id?`, `all?` | Preview summary per item | — |
 | `plaid_link_demo` | Serve Plaid Link sandbox demo page | `token` query (bearer token) | HTML page response | — |
 | `chat` | Conversational interface with OpenAI function calling to query records | `messages` (array), `model?`, `temperature?` | Assistant message with optional records_queried and function_calls | — |
+| `list_provider_catalog` | Return metadata for every supported importer provider | — | Provider definitions array | `src/integrations/providers/__tests__/clients.test.ts` |
+| `sync_provider_imports` | Run importer orchestration for a provider/connector | `provider`, `connector_id?`, `sync_type?`, `limit?`, `max_pages?` | Sync summaries per connector | `src/services/importers.ts`, `src/integrations/providers/__tests__/clients.test.ts` |
 
 ---
 
@@ -490,6 +523,7 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 |--------|---------|--------------------|
 | `scripts/with-branch-ports.js` | Deterministically assigns HTTP/Vite/WS ports per git branch and evicts stale dev servers before spawning `npm run dev:*` commands. | Manual smoke via `npm run dev:ui`, `npm run dev:http`, or `npm run dev:full` |
 | `scripts/prune-merged-branches.js` | Deletes local branches that are fully merged into a target branch while protecting main/dev/current branches. | Manual smoke via `npm run branches:prune` |
+| `scripts/run-importers.ts` | CLI entry point for running connector imports (cron/CI friendly). | Manual smoke via `npm run import:connector` |
 
 ---
 

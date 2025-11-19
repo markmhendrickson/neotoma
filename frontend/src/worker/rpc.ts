@@ -8,6 +8,7 @@ import {
   putRecord,
   getRecord,
   queryRecords,
+  countRecords,
   deleteRecord,
   deleteRecords,
   searchVectors,
@@ -56,6 +57,13 @@ export async function handleRPCRequest(message: RPCMessage): Promise<RPCResponse
         if (!initialized) throw new Error('Database not initialized');
         const { options } = message.params as { options?: QueryOptions };
         result = await queryRecords(options);
+        break;
+      }
+
+      case 'local.count': {
+        if (!initialized) throw new Error('Database not initialized');
+        const { options } = message.params as { options?: QueryOptions };
+        result = await countRecords(options);
         break;
       }
 

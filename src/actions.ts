@@ -157,7 +157,8 @@ function logError(event: string, req: express.Request, error: unknown, extra?: R
 }
 
 function sanitizeConnector(connector: ExternalConnector) {
-  const { secretsEnvelope, ...rest } = connector;
+  const { secretsEnvelope: _secretsEnvelope, ...rest } = connector;
+  void _secretsEnvelope;
   return rest;
 }
 
@@ -327,7 +328,9 @@ app.get('/connectors', async (req, res) => {
     });
   } catch (error) {
     logError('ConnectorError:list', req, error);
-    return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list connectors' });
+    const message = error instanceof Error ? error.message : 'Failed to list connectors';
+    const status = message.includes('Supabase client not initialized') ? 503 : 500;
+    return res.status(status).json({ error: message });
   }
 });
 
@@ -1855,7 +1858,7 @@ Guidelines:
 
     chatMessages.push(...messages);
     const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
-    const recordsQueried: any[] = recentRecordCatalog.length > 0 ? [...recentRecordCatalog] : [];
+    const recordsQueried: any[] = [];
     const maxIterations = 5;
     let iteration = 0;
 

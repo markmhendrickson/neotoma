@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import path from 'node:path';
 import { exportKeyPairs, importKeyPairs, maskPrivateKey } from '../crypto/export.js';
 import { generateX25519KeyPair, generateEd25519KeyPair, deriveBearerToken } from '../crypto/keys.js';
 import { normalizeRecord, STATUS_ORDER } from '../../frontend/src/types/record.js';
@@ -20,6 +21,49 @@ import type { NeotomaRecord } from '../../frontend/src/types/record.js';
 import type { LocalRecord } from '../../frontend/src/store/types.js';
 
 const execAsync = promisify(exec);
+
+const BRANCH_PORTS_SENTINEL = path.join(process.cwd(), '.branch-ports', 'ui-integration-tests.json');
+
+function buildBackendEnv(port: string): NodeJS.ProcessEnv {
+  const supabaseUrl =
+    process.env.DEV_SUPABASE_URL ||
+    process.env.SUPABASE_URL ||
+    'https://example.supabase.co';
+  const supabaseKey =
+    process.env.DEV_SUPABASE_SERVICE_KEY ||
+    process.env.SUPABASE_SERVICE_KEY ||
+    'test-service-role-key';
+  const connectorSecret =
+    process.env.CONNECTOR_SECRET_KEY ||
+    process.env.CONNECTOR_SECRETS_KEY ||
+    'test-connector-secret-test-connector-secret';
+
+  return {
+    ...process.env,
+    HTTP_PORT: port,
+    PORT: port,
+    NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
+    BRANCH_PORTS_FILE: process.env.BRANCH_PORTS_FILE || BRANCH_PORTS_SENTINEL,
+    DEV_SUPABASE_URL: process.env.DEV_SUPABASE_URL || supabaseUrl,
+    DEV_SUPABASE_SERVICE_KEY: process.env.DEV_SUPABASE_SERVICE_KEY || supabaseKey,
+    SUPABASE_URL: process.env.SUPABASE_URL || supabaseUrl,
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || supabaseKey,
+    ACTIONS_BEARER_TOKEN: process.env.ACTIONS_BEARER_TOKEN || 'test-bearer-token',
+    CONNECTOR_SECRET_KEY: connectorSecret,
+    CONNECTOR_SECRETS_KEY: connectorSecret,
+  };
+}
+
+function buildFrontendEnv(port: string, apiPort: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    VITE_PORT: port,
+    PORT: port,
+    NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
+    BRANCH_PORTS_FILE: process.env.BRANCH_PORTS_FILE || BRANCH_PORTS_SENTINEL,
+    VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || `http://localhost:${apiPort}`,
+  };
+}
 
 // Message formatting functions (from ChatPanel)
 function escapeHtml(value: string): string {
@@ -71,11 +115,7 @@ describe('UI Integration Tests', () => {
         backendServer = spawn('npm', ['run', 'dev:http'], {
           stdio: 'pipe',
           shell: true,
-          env: {
-            ...process.env,
-            HTTP_PORT: backendPort,
-            NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
-          },
+          env: buildBackendEnv(backendPort),
         });
         // Wait for server to start - retry health check
         for (let i = 0; i < 10; i++) {
@@ -98,11 +138,7 @@ describe('UI Integration Tests', () => {
         frontendServer = spawn('npm', ['run', 'dev:ui'], {
           stdio: 'pipe',
           shell: true,
-          env: {
-            ...process.env,
-            VITE_PORT: frontendPort,
-            NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
-          },
+          env: buildFrontendEnv(frontendPort, backendPort),
         });
         // Wait for server to start
         await new Promise((resolve) => setTimeout(resolve, 5000));

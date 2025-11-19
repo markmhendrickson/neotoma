@@ -140,5 +140,72 @@ describe('HTTP actions endpoints', () => {
       await supabase.from('records').delete().eq('id', created!.id);
     }
   });
+
+  it('omits records_queried when assistant never calls retrieve_records', async () => {
+    const { data: created } = await supabase
+      .from('records')
+      .insert({
+        type: 'chat_recent_record_skip',
+        properties: { title: 'Context only record' },
+      })
+      .select()
+      .single();
+    expect(created).toBeTruthy();
+
+    const openAIResponses = [
+      {
+        choices: [
+          {
+            message: {
+              role: 'assistant',
+              content: 'Noted. Let me know if you need anything else.',
+            },
+          },
+        ],
+      },
+    ];
+
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('api.openai.com/v1/chat/completions')) {
+          const payload = openAIResponses.shift();
+          if (!payload) {
+            throw new Error('No stubbed OpenAI response remaining');
+          }
+          return Promise.resolve(
+            new Response(JSON.stringify(payload), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          );
+        }
+        return originalFetch(input as any, init);
+      });
+
+    try {
+      const response = await fetch(`${baseUrl}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'acknowledge the last upload' }],
+          recent_records: [{ id: created!.id, persisted: true }],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      expect(payload.records_queried).toBeUndefined();
+      expect(openAIResponses).toHaveLength(0);
+    } finally {
+      fetchSpy.mockRestore();
+      await supabase.from('records').delete().eq('id', created!.id);
+    }
+  });
 });
 
