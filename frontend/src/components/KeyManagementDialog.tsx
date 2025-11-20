@@ -15,7 +15,8 @@ interface KeyManagementDialogProps {
   bearerToken: string;
   onImport: (keyExports: { x25519: any; ed25519: any }) => Promise<boolean>;
   onExport: () => Promise<{ x25519: any; ed25519: any } | null>;
-  onRegenerate: () => Promise<boolean>;
+  onRegenerate: (clearDataCallback?: () => Promise<void>) => Promise<boolean>;
+  onBeforeRegenerate?: () => Promise<void>;
   trigger?: ReactNode;
 }
 
@@ -25,6 +26,7 @@ export function KeyManagementDialog({
   onImport,
   onExport,
   onRegenerate,
+  onBeforeRegenerate,
   trigger,
 }: KeyManagementDialogProps) {
   const { toast } = useToast();
@@ -121,7 +123,16 @@ export function KeyManagementDialog({
       return;
     }
 
-    const success = await onRegenerate();
+    // Clear data before regenerating keys
+    if (onBeforeRegenerate) {
+      try {
+        await onBeforeRegenerate();
+      } catch (error) {
+        console.warn('Error clearing data before key regeneration:', error);
+      }
+    }
+
+    const success = await onRegenerate(onBeforeRegenerate);
     if (success) {
       toast({
         title: 'Keys regenerated',
@@ -159,17 +170,17 @@ export function KeyManagementDialog({
             <div className="flex items-center space-x-2 mb-2">
               <input
                 type="checkbox"
-                id="apiSyncEnabled"
-                checked={settings.apiSyncEnabled}
-                onChange={(e) => saveSettings({ apiSyncEnabled: e.target.checked })}
+                id="cloudStorageEnabled"
+                checked={settings.cloudStorageEnabled}
+                onChange={(e) => saveSettings({ cloudStorageEnabled: e.target.checked })}
                 className="h-4 w-4"
               />
-              <Label htmlFor="apiSyncEnabled" className="font-normal cursor-pointer">
-                Enable API Sync
+              <Label htmlFor="cloudStorageEnabled" className="font-normal cursor-pointer">
+                Enable Cloud Storage
               </Label>
             </div>
             <p className="text-xs text-muted-foreground ml-6">
-              When enabled, records sync to the API after being saved locally. Disabling this enforces local-only mode—uploads, chat, and remote file access will not contact Supabase.
+              When enabled, uploads are stored securely in Supabase after local encryption. Disable this to keep files and records confined to the browser (local-only mode).
             </p>
           </div>
           <div>

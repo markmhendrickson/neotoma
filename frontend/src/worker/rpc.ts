@@ -11,6 +11,7 @@ import {
   countRecords,
   deleteRecord,
   deleteRecords,
+  clearAllRecords,
   searchVectors,
 } from '../store/index.js';
 import type { LocalRecord, QueryOptions, VectorSearchOptions } from '../store/types.js';
@@ -80,6 +81,13 @@ export async function handleRPCRequest(message: RPCMessage): Promise<RPCResponse
         const { ids } = message.params as { ids: string[] };
         await deleteRecords(ids);
         result = { success: true, deleted: ids.length };
+        break;
+      }
+
+      case 'local.clearAll': {
+        if (!initialized) throw new Error('Database not initialized');
+        await clearAllRecords();
+        result = { success: true };
         break;
       }
 

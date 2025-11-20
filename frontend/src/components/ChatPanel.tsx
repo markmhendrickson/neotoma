@@ -1,16 +1,18 @@
-import { useState, useEffect, useRef, useMemo, MutableRefObject } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp, Plus } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
 import type { DatastoreAPI } from '@/hooks/useDatastore';
-import { uploadFile, sendChatMessage } from '@/lib/api';
+import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
 import { formatRelativeTime } from '@/utils/time';
 import type { NeotomaRecord } from '@/types/record';
 import type { LocalRecord } from '@/store/types';
 import { toast as notify } from 'sonner';
+import { encryptForStorage, decryptFromStorage, setEncryptionKeys } from '@/store/encryption';
+import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -26,6 +28,7 @@ const CHAT_MESSAGES_STORAGE_KEY = 'chatPanelMessages';
 const RECENT_RECORDS_STORAGE_KEY = 'chatPersistedRecentRecords';
 const MAX_RECENT_RECORDS = 200;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+const ENCRYPTED_PREFIX = 'encrypted:';
 
 const INTRO_MESSAGE_CONTENT =
   'Neotoma remembers your data for rapid and comprehensive analysis with AI agents.\n\nCreate some records and start asking questions about them here.\n\nRecords are stored entirely on your device unless you opt for cloud storage.';
@@ -56,9 +59,60 @@ const hashPrivateKey = (key?: Uint8Array | null) => {
   }
   return (hash >>> 0).toString(16);
 };
+const SUMMARY_FIELD_PRIORITY = [
+  'summary',
+  'title',
+  'name',
+  'description',
+  'note',
+  'subject',
+  'filename',
+  'file_name',
+  'label',
+];
+const MAX_SUMMARY_CHARS = 320;
 
-const getChatStorageKey = (privateKey?: Uint8Array | null) =>
-  `${CHAT_MESSAGES_STORAGE_KEY}:${hashPrivateKey(privateKey)}`;
+const truncateSummary = (value: string) => {
+  if (value.length <= MAX_SUMMARY_CHARS) return value;
+  return `${value.slice(0, MAX_SUMMARY_CHARS - 3)}...`;
+};
+
+const getSummaryFromRecord = (record: LocalRecord): string | null => {
+  if (typeof record.summary === 'string' && record.summary.trim().length > 0) {
+    return truncateSummary(record.summary.trim());
+  }
+  const properties = record.properties || {};
+  for (const field of SUMMARY_FIELD_PRIORITY) {
+    const candidate = properties[field];
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return truncateSummary(candidate.trim());
+    }
+  }
+  const firstStringValue = Object.values(properties).find(
+    (value) => typeof value === 'string' && value.trim().length > 0
+  );
+  if (typeof firstStringValue === 'string') {
+    return truncateSummary(firstStringValue.trim());
+  }
+  if (record.type) {
+    return truncateSummary(`${record.type} record`);
+  }
+  return null;
+};
+
+const appendUploadDetails = (
+  fileName: string,
+  record: LocalRecord,
+  additionalCount: number,
+  destinationLabel: string
+) => {
+  const summarySnippet = getSummaryFromRecord(record) ?? 'Summary unavailable.';
+  const rowsMessage = additionalCount > 0 ? ` Created ${additionalCount} row records.` : '';
+  return `File "${fileName}" was saved ${destinationLabel}: ${summarySnippet}${rowsMessage}`;
+};
+
+const getDestinationLabel = (cloudStorageEnabled: boolean) =>
+  cloudStorageEnabled ? 'to Supabase (cloud storage)' : 'locally';
 
 const extractUUIDs = (text: string): string[] => {
   if (!text) return [];
@@ -67,13 +121,45 @@ const extractUUIDs = (text: string): string[] => {
   return Array.from(new Set(matches.map((match) => match.toLowerCase())));
 };
 
-const getStoredMessages = (storageKey: string): ChatMessage[] => {
+const getStoredMessages = async (x25519: X25519KeyPair | null, ed25519: Ed25519KeyPair | null): Promise<ChatMessage[]> => {
   if (typeof window === 'undefined') return [createIntroMessage()];
   try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
+    const raw = window.localStorage.getItem(CHAT_MESSAGES_STORAGE_KEY);
+    if (!raw) return [createIntroMessage()];
+
+    let parsed: any;
+    
+    // Check if encrypted
+    if (raw.startsWith(ENCRYPTED_PREFIX)) {
+      if (!x25519 || !ed25519) {
+        // Keys not available yet - return empty array, will retry when keys load
+        return [];
+      }
+      
+      try {
+        // Initialize encryption keys
+        await setEncryptionKeys(x25519, ed25519);
+        
+        // Decrypt: remove prefix, decode base64, decrypt
+        const encryptedBase64 = raw.slice(ENCRYPTED_PREFIX.length);
+        const binaryString = atob(encryptedBase64);
+        const encryptedBytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          encryptedBytes[i] = binaryString.charCodeAt(i);
+        }
+        const decryptedBytes = await decryptFromStorage(encryptedBytes);
+        const decryptedText = new TextDecoder().decode(decryptedBytes);
+        parsed = JSON.parse(decryptedText);
+      } catch (error) {
+        console.warn('[ChatPanel] Failed to decrypt chat history:', error);
+        return [createIntroMessage()];
+      }
+    } else {
+      // Legacy unencrypted format
+      parsed = JSON.parse(raw);
+    }
+    
+    if (!Array.isArray(parsed)) return [createIntroMessage()];
 
     const normalized = parsed
       .map((msg) => ({
@@ -171,23 +257,23 @@ const getStoredPanelWidth = (key: string, fallback: number, min: number, max: nu
   }
 };
 
-export function ChatPanel({
+export function ChatPanel({ 
   datastore,
-  onFileUploaded,
+  onFileUploaded, 
   onFileUploadRef,
   onErrorRef,
 }: ChatPanelProps) {
   const { settings } = useSettings();
-  const { bearerToken: keysBearerToken, ed25519 } = useKeys();
+  const { bearerToken: keysBearerToken, x25519, ed25519, loading: keysLoading } = useKeys();
   // Use bearer token from keys hook if available, fallback to settings
   const bearerToken = keysBearerToken || settings.bearerToken;
-  const apiSyncEnabled = settings.apiSyncEnabled ?? settings.cloudStorageEnabled;
-  const chatStorageKey = useMemo(() => getChatStorageKey(ed25519?.privateKey ?? null), [ed25519?.privateKey]);
+  const keyIdentifier = useMemo(() => hashPrivateKey(ed25519?.privateKey ?? null), [ed25519?.privateKey]);
   const CHAT_PANEL_WIDTH_KEY = 'chatPanelWidth';
   const DEFAULT_CHAT_WIDTH = 420;
   const MIN_CHAT_WIDTH = 300;
   const MAX_CHAT_WIDTH = 680;
-  const [messages, setMessages] = useState<ChatMessage[]>(() => getStoredMessages(chatStorageKey));
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [panelWidth, setPanelWidth] = useState(() =>
     getStoredPanelWidth(CHAT_PANEL_WIDTH_KEY, DEFAULT_CHAT_WIDTH, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH));
   const [isResizing, setIsResizing] = useState(false);
@@ -202,10 +288,27 @@ export function ChatPanel({
   const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
   const datastoreWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const isResizingRef = useRef(false);
-  const activeChatStorageKeyRef = useRef(chatStorageKey);
   const recentRecordsRef = useRef<SessionRecentRecord[]>(
     typeof window === 'undefined' ? [] : loadPersistedRecentRecords()
   );
+
+  // Reset messagesLoaded when keys change to trigger reload
+  useEffect(() => {
+    setMessagesLoaded(false);
+  }, [keyIdentifier]);
+
+  // Load messages on mount or when keys become available
+  useEffect(() => {
+    if (messagesLoaded || keysLoading) return;
+    
+    async function loadMessages() {
+      const loaded = await getStoredMessages(x25519 || null, ed25519 || null);
+      setMessages(loaded);
+      setMessagesLoaded(true);
+    }
+    
+    loadMessages();
+  }, [x25519, ed25519, messagesLoaded, keysLoading]);
 
   useEffect(() => {
     if (recentRecordsRef.current.length > MAX_RECENT_RECORDS) {
@@ -317,27 +420,46 @@ const mergeRecentRecords = (
   }, [panelWidth]);
 
   useEffect(() => {
-    if (chatStorageKey === activeChatStorageKeyRef.current) {
-      return;
+    if (typeof window === 'undefined' || !messagesLoaded) return;
+    
+    async function persistMessages() {
+      try {
+        const serializable = messages.map((msg) => ({
+          ...msg,
+          timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp,
+        }));
+        const jsonString = JSON.stringify(serializable);
+        
+        // Encrypt if keys are available
+        if (x25519 && ed25519) {
+          try {
+            await setEncryptionKeys(x25519, ed25519);
+            const jsonBytes = new TextEncoder().encode(jsonString);
+            const encryptedBytes = await encryptForStorage(jsonBytes);
+            // Convert Uint8Array to base64 string (chunked to avoid stack overflow)
+            let binaryString = '';
+            const chunkSize = 8192;
+            for (let i = 0; i < encryptedBytes.length; i += chunkSize) {
+              const chunk = encryptedBytes.slice(i, i + chunkSize);
+              binaryString += String.fromCharCode(...Array.from(chunk));
+            }
+            const encryptedBase64 = btoa(binaryString);
+            window.localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, ENCRYPTED_PREFIX + encryptedBase64);
+          } catch (error) {
+            console.warn('[ChatPanel] Encryption failed, storing unencrypted:', error);
+            window.localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, jsonString);
+          }
+        } else {
+          // No keys available, store unencrypted
+          window.localStorage.setItem(CHAT_MESSAGES_STORAGE_KEY, jsonString);
+        }
+      } catch (error) {
+        console.warn('[ChatPanel] Failed to persist chat history:', error);
+      }
     }
-    const storedMessages = getStoredMessages(chatStorageKey);
-    activeChatStorageKeyRef.current = chatStorageKey;
-    errorCountsRef.current = new Map();
-    setMessages(storedMessages);
-  }, [chatStorageKey]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    try {
-      const serializable = messages.map((msg) => ({
-        ...msg,
-        timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp,
-      }));
-      window.localStorage.setItem(activeChatStorageKeyRef.current, JSON.stringify(serializable));
-    } catch (error) {
-      console.warn('[ChatPanel] Failed to persist chat history:', error);
-    }
-  }, [messages]);
+    
+    persistMessages();
+  }, [messages, x25519, ed25519, messagesLoaded]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -463,16 +585,24 @@ const mergeRecentRecords = (
     return type.includes('csv') || name.endsWith('.csv');
   };
 
-  const autoResizeTextarea = () => {
+  const autoResizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    // Reset height to auto to get accurate scrollHeight
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 320)}px`;
-  };
+    // Set height based on content, capped at max-h-[320px] (320px)
+    const newHeight = Math.min(textarea.scrollHeight, 320);
+    textarea.style.height = `${newHeight}px`;
+  }, []);
 
   useEffect(() => {
     autoResizeTextarea();
-  }, [input]);
+  }, [input, autoResizeTextarea]);
+
+  // Also resize on mount
+  useEffect(() => {
+    autoResizeTextarea();
+  }, [autoResizeTextarea]);
 
   const handleFileUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -492,65 +622,137 @@ const mergeRecentRecords = (
     const fileArray = Array.from(files);
 
     const processFile = async (file: File) => {
+      const hasBearerToken = Boolean(bearerToken);
+      const shouldUseCloudStorage = hasBearerToken && settings.cloudStorageEnabled;
+      const canCallOpenApi = hasBearerToken;
+
       const toastId = notify.loading(`Uploading ${file.name}`, {
-        description: apiSyncEnabled
-          ? 'Analyzing via API and saving to datastore'
-          : 'Processing locally',
+        description: shouldUseCloudStorage
+          ? 'Uploading to API and awaiting analysis…'
+          : canCallOpenApi
+            ? 'Uploading for AI analysis (storing locally)…'
+            : settings.cloudStorageEnabled
+              ? 'Processing locally (Cloud storage requires a Bearer Token)…'
+              : 'Processing locally',
         duration: 60000,
       });
+      const updateUploadToast = (description: string) => {
+        notify.loading(`Uploading ${file.name}`, {
+          id: toastId,
+          description,
+          duration: 60000,
+        });
+      };
       uploadToastIdsRef.current.set(file, toastId);
 
       try {
-        let localRecord: LocalRecord;
+        let localRecord: LocalRecord | null = null;
         let additionalLocalRecords: LocalRecord[] = [];
-        
-        // Try to sync via API when bearer token is available and cloud sync is enabled
-        if (bearerToken && apiSyncEnabled) {
-          try {
-            // Full sync: upload and get analyzed record
-            const csvRowPreference = isCsvFile(file) ? settings.csvRowRecordsEnabled : undefined;
-            const uploadOptions =
-              typeof csvRowPreference === 'boolean' ? { csvRowRecords: csvRowPreference } : undefined;
-            const analyzedRecord = await uploadFile(settings.apiBase, bearerToken, file, uploadOptions);
-            // Convert API record to local record format with AI-analyzed type and properties
-            localRecord = {
-              id: analyzedRecord.id,
-              type: analyzedRecord.type,
-              summary: analyzedRecord.summary ?? null,
-              properties: analyzedRecord.properties,
-              file_urls: analyzedRecord.file_urls,
-              embedding: analyzedRecord.embedding || null,
-              created_at: analyzedRecord.created_at,
-              updated_at: analyzedRecord.updated_at,
-            };
-          } catch (error) {
-            // If API analysis fails, fall back to local processing
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            // Only log if it's not a connection error (those are expected if backend is down)
-            if (!errorMessage.includes('not available') && !errorMessage.includes('Failed to fetch')) {
-              console.warn('[File Upload] API analysis failed, using local processing:', error);
-            }
-            const basicResult = await processFileLocally({
-              file,
-              csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
-            });
-            localRecord = basicResult.primaryRecord;
-            additionalLocalRecords = basicResult.additionalRecords;
-          }
-        } else {
-          // Process file locally without API analysis
+
+        const runLocalProcessing = async (overrides?: {
+          type?: string;
+          summary?: string | null;
+          properties?: Record<string, unknown>;
+        }) => {
+          updateUploadToast(overrides ? 'Applying analysis locally…' : 'Analyzing file locally…');
           const basicResult = await processFileLocally({
             file,
             csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
           });
-          localRecord = basicResult.primaryRecord;
+          updateUploadToast('Preparing local records…');
+          localRecord = {
+            ...basicResult.primaryRecord,
+            ...(overrides?.type ? { type: overrides.type } : {}),
+            ...(overrides ? { summary: overrides.summary ?? basicResult.primaryRecord.summary } : {}),
+            ...(overrides?.properties
+              ? {
+                  properties: {
+                    ...(basicResult.primaryRecord.properties || {}),
+                    ...overrides.properties,
+                  },
+                }
+              : {}),
+          };
           additionalLocalRecords = basicResult.additionalRecords;
+        };
+
+        if (shouldUseCloudStorage) {
+          try {
+              const csvRowPreference = isCsvFile(file) ? settings.csvRowRecordsEnabled : undefined;
+              const uploadOptions =
+                typeof csvRowPreference === 'boolean' ? { csvRowRecords: csvRowPreference } : undefined;
+              updateUploadToast('Uploading file to API and waiting for analysis…');
+              const analyzedRecord = await uploadFile(settings.apiBase, bearerToken!, file, uploadOptions);
+              updateUploadToast('Applying AI-analyzed results locally…');
+              localRecord = {
+                id: analyzedRecord.id,
+                type: analyzedRecord.type,
+                summary: analyzedRecord.summary ?? null,
+                properties: analyzedRecord.properties,
+                file_urls: analyzedRecord.file_urls,
+                embedding: analyzedRecord.embedding || null,
+                created_at: analyzedRecord.created_at,
+                updated_at: analyzedRecord.updated_at,
+              };
+              if (analyzedRecord.row_records && analyzedRecord.row_records.length > 0) {
+                updateUploadToast(`Linking ${analyzedRecord.row_records.length} row records…`);
+                additionalLocalRecords = analyzedRecord.row_records.map(row => ({
+                  id: row.id,
+                  type: row.type,
+                  summary: row.summary,
+                  properties: {
+                    csv_origin: {
+                      parent_record_id: analyzedRecord.id,
+                      row_index: row.row_index,
+                    },
+                  },
+                  file_urls: analyzedRecord.file_urls || [],
+                  embedding: null,
+                  created_at: analyzedRecord.created_at,
+                  updated_at: analyzedRecord.updated_at,
+                }));
+              }
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            if (!errorMessage.includes('not available') && !errorMessage.includes('Failed to fetch')) {
+              console.warn('[File Upload] API upload failed, using local processing:', error);
+            }
+            updateUploadToast('API unavailable, processing locally…');
+            await runLocalProcessing();
+          }
+        } else if (canCallOpenApi) {
+          try {
+            updateUploadToast('Uploading file for AI analysis…');
+            const analysis = await analyzeFile(settings.apiBase, bearerToken!, file);
+            await runLocalProcessing({
+              type: analysis.type,
+              summary: analysis.summary ?? null,
+              properties: analysis.properties,
+            });
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            console.warn('[File Upload] analyze_file failed, falling back to local processing:', errorMessage);
+            updateUploadToast('API unavailable, processing locally…');
+            await runLocalProcessing();
+          }
+        } else {
+          updateUploadToast('Processing file locally…');
+          await runLocalProcessing();
         }
-        
+
+        if (!localRecord) {
+          throw new Error('File processing did not produce a primary record.');
+        }
+
         const recordsToSave = [localRecord, ...additionalLocalRecords];
-        // Store in local datastore (serialize writes to avoid OPFS handle conflicts)
         const enqueue = datastoreWriteQueueRef.current.then(async () => {
-          for (const record of recordsToSave) {
+          for (let index = 0; index < recordsToSave.length; index += 1) {
+            const record = recordsToSave[index];
+            if (recordsToSave.length > 1) {
+              updateUploadToast(`Saving record ${index + 1} of ${recordsToSave.length} locally…`);
+            } else {
+              updateUploadToast('Saving record locally…');
+            }
             await datastore.putRecord(record);
           }
         });
@@ -563,28 +765,17 @@ const mergeRecentRecords = (
           throw new Error(`Failed to save record: ${putErrorMessage}`);
         }
 
-        const recordPersisted = Boolean(apiSyncEnabled);
+        const recordPersisted = shouldUseCloudStorage;
         recordsToSave.forEach((record) => registerRecentRecord(record, recordPersisted));
 
-        const createdRowsMessage =
-          additionalLocalRecords.length > 0
-            ? ` Created ${additionalLocalRecords.length} row records.`
-            : '';
-        let localMessage = `File "${file.name}" saved locally`;
-        if (localRecord.summary) {
-          localMessage += `: ${localRecord.summary}`;
-          if (!createdRowsMessage) {
-            localMessage += '.';
-          }
-        } else {
-          localMessage += '.';
-        }
-        if (createdRowsMessage && !localMessage.trim().endsWith('.')) {
-          localMessage += '.';
-        }
-        const message = apiSyncEnabled
-          ? `File "${file.name}" analyzed and saved locally with type "${localRecord.type}".${createdRowsMessage}`
-          : `${localMessage}${createdRowsMessage}`;
+        updateUploadToast('Finalizing upload…');
+        const destinationLabel = getDestinationLabel(shouldUseCloudStorage);
+        const message = appendUploadDetails(
+          file.name,
+          localRecord,
+          additionalLocalRecords.length,
+          destinationLabel
+        );
 
         notify.success(`Saved ${file.name}`, {
           id: toastId,
@@ -597,13 +788,12 @@ const mergeRecentRecords = (
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('[File Upload] Error processing file:', file.name, error);
-        
-        // Determine if it's a timeout or other error
+
         const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Request timeout');
         const displayMessage = isTimeout
           ? `Failed to process "${file.name}": Datastore operation timed out. The file may still be processing.`
           : `Failed to process "${file.name}": ${errorMessage}`;
-        
+
         notify.error(`Failed ${file.name}`, {
           id: toastId,
           description: displayMessage.replace(`Failed to process "${file.name}": `, ''),
@@ -700,15 +890,6 @@ const mergeRecentRecords = (
     addMessage('user', userMessage);
     setIsLoading(true);
 
-    if (!apiSyncEnabled) {
-      setIsLoading(false);
-      addMessage(
-        'assistant',
-        'Chat unavailable while API sync is disabled. Enable Cloud Storage in Settings to ask questions about your data.'
-      );
-      return;
-    }
-
     if (!bearerToken) {
       setIsLoading(false);
       addMessage('assistant', 'Please set your Bearer Token in the settings above to use the chat feature.');
@@ -767,7 +948,7 @@ const mergeRecentRecords = (
   return (
     <aside
       ref={panelRef}
-      className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden overflow-x-hidden"
+      className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden"
       style={{ width: panelWidth }}
     >
       <div
@@ -783,7 +964,7 @@ const mergeRecentRecords = (
           }`}
         />
       </div>
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-5 flex flex-col gap-3">
+      <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-3">
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -834,13 +1015,11 @@ const mergeRecentRecords = (
         <div ref={messagesEndRef} />
       </div>
       <div className="p-4 shrink-0 bg-transparent">
-        <div
-          className="group/composer rounded-[28px] border border-border/70 bg-background shadow-sm px-4 py-3 space-y-3 shadow-[0_-20px_30px_-15px_rgba(241,245,249,0.9)] transform origin-bottom transition-all duration-300 focus-within:-translate-y-2"
-        >
+        <div className="group/composer rounded-[28px] border border-border/70 bg-background shadow-sm px-4 py-3 space-y-3 shadow-[0_-20px_30px_-15px_rgba(241,245,249,0.9)] transform origin-bottom transition-all duration-300 focus-within:-translate-y-2">
           <div className="transition-[min-height] duration-300 min-h-[72px] group-focus-within/composer:min-h-[144px]">
             <Textarea
               ref={textareaRef}
-              placeholder="Message about records..."
+              placeholder="Ask about records..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -850,7 +1029,6 @@ const mergeRecentRecords = (
                 }
               }}
               className="min-h-[72px] max-h-[320px] resize-none border-none bg-transparent px-0 text-base text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground overflow-hidden"
-              style={{ height: 'auto' }}
               onInput={autoResizeTextarea}
             />
           </div>

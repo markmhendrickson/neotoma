@@ -24,20 +24,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { NeotomaRecord } from '@/types/record';
 import { STATUS_ORDER } from '@/types/record';
-import {
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Eye,
-  Info,
-  MoreHorizontal,
-  Trash2,
-  Plus,
-  UploadCloud,
-  ArrowUpRight,
-  Database,
-  SearchX,
-} from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, Eye, Info, MoreHorizontal, Trash2, Plus, UploadCloud, ArrowUpRight, CloudOff, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useStorageQuota } from '@/hooks/useStorageQuota';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from '@/components/ui/sheet';
@@ -365,9 +352,9 @@ export function RecordsTable({
         ),
         enableSorting: false,
         enableResizing: false,
-        size: 32,
-        minSize: 32,
-        maxSize: 32,
+        size: 38,
+        minSize: 38,
+        maxSize: 38,
       },
       {
         accessorKey: 'type',
@@ -1320,7 +1307,7 @@ export function RecordsTable({
             variant="outline"
             className="h-9 w-9"
             onClick={triggerFileDialog}
-            disabled={isLoading}
+            disabled={isInitialLoading}
           >
             <Plus className="h-4 w-4" />
             <span className="sr-only">Upload files</span>
@@ -1357,13 +1344,8 @@ export function RecordsTable({
             <DropdownMenuTrigger asChild>
               <Button variant="outline">Columns</Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48 max-h-[60vh] overflow-auto">
-              {table
-                .getAllLeafColumns()
-                .filter(
-                  (column, index, self) => self.findIndex((c) => c.id === column.id) === index
-                )
-                .map((column) => (
+            <DropdownMenuContent align="start" className="w-48">
+              {table.getAllLeafColumns().map((column) => (
                 <DropdownMenuCheckboxItem
                   key={column.id}
                   checked={column.getIsVisible()}
@@ -1395,7 +1377,11 @@ export function RecordsTable({
                   aria-label="Local storage details"
                   className="inline-flex items-center justify-center rounded-full p-1 hover:bg-muted transition-colors"
                 >
-                  <Info className="h-4 w-4" />
+                  {settings.cloudStorageEnabled ? (
+                    <CheckCircle className="h-4 w-4" />
+                  ) : (
+                    <CloudOff className="h-4 w-4" />
+                  )}
                 </button>
               </SheetTrigger>
               <SheetContent side="right" className="w-[380px] sm:max-w-[380px]">
@@ -1452,11 +1438,11 @@ export function RecordsTable({
               {showWelcomeEmptyState ? (
                 <EmptyPlaceholder className="max-w-xl space-y-4">
                   <EmptyPlaceholder.Icon>
-                    <Database className="h-6 w-6" />
+                    <UploadCloud className="h-6 w-6" />
                   </EmptyPlaceholder.Icon>
                   <EmptyPlaceholder.Title>No records yet</EmptyPlaceholder.Title>
                   <EmptyPlaceholder.Description>
-                    Get started by uploading files or connecting apps to import data.
+                    Get started by uploading a file or connecting an app.
                   </EmptyPlaceholder.Description>
                   <EmptyPlaceholder.Actions>
                     <div className="flex flex-wrap justify-center gap-3">
@@ -1504,12 +1490,17 @@ export function RecordsTable({
               ) : (
                 <EmptyPlaceholder className="max-w-lg space-y-4">
                   <EmptyPlaceholder.Icon>
-                    <SearchX className="h-6 w-6" />
+                    <UploadCloud className="h-6 w-6" />
                   </EmptyPlaceholder.Icon>
                   <EmptyPlaceholder.Title>No records match</EmptyPlaceholder.Title>
                   <EmptyPlaceholder.Description>
-                    Adjust or remove your search filter to see records.
+                    Adjust your search or filters, or reset them to see all records again.
                   </EmptyPlaceholder.Description>
+                  <EmptyPlaceholder.Actions>
+                    <Button type="button" onClick={triggerFileDialog} disabled={isInitialLoading} className="px-6">
+                      Upload file
+                    </Button>
+                  </EmptyPlaceholder.Actions>
                 </EmptyPlaceholder>
               )}
             </div>

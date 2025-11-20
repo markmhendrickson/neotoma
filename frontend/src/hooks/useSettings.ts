@@ -5,7 +5,6 @@ export interface Settings {
   bearerToken: string; // Derived from Ed25519 public key
   cloudStorageEnabled: boolean; // Whether to store files/records in Supabase
   csvRowRecordsEnabled: boolean; // Whether CSV uploads expand to per-row records
-  apiSyncEnabled: boolean; // Legacy alias for cloudStorageEnabled
 }
 
 function getStorage(): Storage | null {
@@ -32,7 +31,6 @@ function readSettingsFromStorage(): Settings {
       apiBase: storedApiBase || defaultApiBase,
       bearerToken: storage?.getItem('bearerToken') || '',
       cloudStorageEnabled: resolvedCloudSetting !== null ? resolvedCloudSetting === 'true' : false,
-      apiSyncEnabled: resolvedCloudSetting !== null ? resolvedCloudSetting === 'true' : false,
       csvRowRecordsEnabled: csvRowRecordsEnabled !== null ? csvRowRecordsEnabled === 'true' : true,
     };
   } catch {
@@ -40,21 +38,9 @@ function readSettingsFromStorage(): Settings {
       apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080',
       bearerToken: '',
       cloudStorageEnabled: false,
-      apiSyncEnabled: false,
       csvRowRecordsEnabled: true,
     };
   }
-}
-
-function normalizeSettingsPatch(partial: Partial<Settings>): Partial<Settings> {
-  const normalized = { ...partial };
-  if (normalized.apiSyncEnabled !== undefined && normalized.cloudStorageEnabled === undefined) {
-    normalized.cloudStorageEnabled = normalized.apiSyncEnabled;
-  }
-  if (normalized.cloudStorageEnabled !== undefined && normalized.apiSyncEnabled === undefined) {
-    normalized.apiSyncEnabled = normalized.cloudStorageEnabled;
-  }
-  return normalized;
 }
 
 type SettingsListener = () => void;
@@ -63,24 +49,24 @@ let cachedSettings: Settings = readSettingsFromStorage();
 const listeners = new Set<SettingsListener>();
 
 function persistSettings(partial: Partial<Settings>) {
-  const normalized = normalizeSettingsPatch(partial);
   const storage = getStorage();
   if (!storage) {
     return;
   }
   try {
-    if (normalized.apiBase !== undefined) {
-      storage.setItem('apiBase', normalized.apiBase);
+    if (partial.apiBase !== undefined) {
+      storage.setItem('apiBase', partial.apiBase);
     }
-    if (normalized.bearerToken !== undefined) {
-      storage.setItem('bearerToken', normalized.bearerToken);
+    if (partial.bearerToken !== undefined) {
+      storage.setItem('bearerToken', partial.bearerToken);
     }
-    if (normalized.cloudStorageEnabled !== undefined) {
-      storage.setItem('cloudStorageEnabled', String(normalized.cloudStorageEnabled));
-      storage.setItem('apiSyncEnabled', String(normalized.cloudStorageEnabled));
+    if (partial.cloudStorageEnabled !== undefined) {
+      storage.setItem('cloudStorageEnabled', String(partial.cloudStorageEnabled));
+      // Keep legacy key in sync for older builds that still read apiSyncEnabled
+      storage.setItem('apiSyncEnabled', String(partial.cloudStorageEnabled));
     }
-    if (normalized.csvRowRecordsEnabled !== undefined) {
-      storage.setItem('csvRowRecordsEnabled', String(normalized.csvRowRecordsEnabled));
+    if (partial.csvRowRecordsEnabled !== undefined) {
+      storage.setItem('csvRowRecordsEnabled', String(partial.csvRowRecordsEnabled));
     }
   } catch (error) {
     console.warn('Failed to persist settings', error);
@@ -88,8 +74,7 @@ function persistSettings(partial: Partial<Settings>) {
 }
 
 function updateCachedSettings(partial: Partial<Settings>) {
-  const normalized = normalizeSettingsPatch(partial);
-  cachedSettings = { ...cachedSettings, ...normalized };
+  cachedSettings = { ...cachedSettings, ...partial };
   listeners.forEach(listener => listener());
 }
 

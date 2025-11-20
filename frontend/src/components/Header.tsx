@@ -2,10 +2,12 @@ import { useKeys } from '@/hooks/useKeys';
 import { useSettings } from '@/hooks/useSettings';
 import { KeyManagementDialog } from './KeyManagementDialog';
 import { useEffect, useRef } from 'react';
+import { useDatastoreContext } from '@/contexts/DatastoreContext';
 
 export function Header() {
   const { bearerToken, maskedPrivateKey, loading, importKeys, exportKeys, regenerateKeys } = useKeys();
   const { updateBearerToken } = useSettings();
+  const datastore = useDatastoreContext();
   const lastBearerTokenRef = useRef<string>('');
 
   // Update bearer token in settings when keys are loaded (only if changed)
@@ -15,6 +17,12 @@ export function Header() {
       updateBearerToken(bearerToken);
     }
   }, [bearerToken, loading, updateBearerToken]);
+
+  const handleBeforeRegenerate = async () => {
+    if (datastore?.initialized && datastore.clearAll) {
+      await datastore.clearAll();
+    }
+  };
 
   return (
     <header className="flex justify-between items-center px-6 py-4 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 shadow-sm shrink-0 flex-shrink-0">
@@ -34,6 +42,7 @@ export function Header() {
             onImport={importKeys}
             onExport={exportKeys}
             onRegenerate={regenerateKeys}
+            onBeforeRegenerate={handleBeforeRegenerate}
           />
         )}
       </div>

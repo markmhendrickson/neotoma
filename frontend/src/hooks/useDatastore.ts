@@ -16,6 +16,7 @@ export interface DatastoreAPI {
   queryRecords: (options?: QueryOptions) => Promise<LocalRecord[]>;
   countRecords: (options?: QueryOptions) => Promise<number>;
   deleteRecord: (id: string) => Promise<void>;
+  clearAll: () => Promise<void>;
   searchVectors: (options: VectorSearchOptions) => Promise<LocalRecord[]>;
 }
 
@@ -123,6 +124,16 @@ export function useDatastore(
     [client, initialized]
   );
 
+  const clearAll = useCallback(
+    async (): Promise<void> => {
+      if (!client || !initialized) {
+        throw new Error('Datastore not initialized');
+      }
+      await client.clearAll();
+    },
+    [client, initialized]
+  );
+
   const searchVectors = useCallback(
     async (options: VectorSearchOptions): Promise<LocalRecord[]> => {
       if (!client || !initialized) {
@@ -141,6 +152,7 @@ export function useDatastore(
     queryRecords,
     countRecords,
     deleteRecord,
+    clearAll,
     searchVectors,
   };
 }

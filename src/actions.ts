@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { type Request, type Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -42,6 +42,25 @@ import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
 import { isCsvLike, parseCsvRows } from './utils/csv.js';
 import { serializeChatMessagesForOpenAI, type ChatMessage } from './utils/chat.js';
+
+type UploadStatusStage =
+  | 'upload_received'
+  | 'parsing_csv'
+  | 'analyzing'
+  | 'saving_record'
+  | 'generating_rows'
+  | 'linking_rows'
+  | 'complete'
+  | 'attaching_file';
+
+type UploadStatusPayload = {
+  stage: UploadStatusStage;
+  message: string;
+  progress?: {
+    current?: number;
+    total?: number;
+  };
+};
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -157,8 +176,7 @@ function logError(event: string, req: express.Request, error: unknown, extra?: R
 }
 
 function sanitizeConnector(connector: ExternalConnector) {
-  const { secretsEnvelope: _secretsEnvelope, ...rest } = connector;
-  void _secretsEnvelope;
+  const { secretsEnvelope, ...rest } = connector;
   return rest;
 }
 
@@ -1716,13 +1734,17 @@ app.post('/chat', async (req, res) => {
     role: 'system' as const,
     content: `You are a helpful assistant for the Neotoma database system. You help users query and understand their stored records.
 
+CRITICAL RULE: When the user asks "how many records" or "records" without explicitly mentioning a type (e.g., "exercise records", "transaction records"), you MUST call retrieve_records WITHOUT the type parameter to get ALL records. Do NOT filter by type based on recent records or context.
+
 When a user asks about records, data, or information that might be stored in the database, use the retrieve_records function to fetch relevant records. Then provide a helpful response based on the retrieved data.
 
 Guidelines:
 - Use retrieve_records when the user asks about stored data, records, or information
 - If the user mentions a specific record ID (UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), extract it and use the ids parameter to fetch that exact record
 - Extract search terms from the user's query for semantic/keyword search
-- If the user mentions a specific record type, use the type parameter
+- CRITICAL: ONLY use the type parameter if the user explicitly uses words like "exercise records", "transaction records", "all [type] records" in their query. If they just say "records" or "how many records", DO NOT use the type parameter - query ALL records
+- When the user asks about "records" or "how many records" without specifying a type, query ALL records by omitting the type parameter completely
+- Do NOT infer record types from recent records shown in context - those are just examples
 - Provide clear, concise answers based on the retrieved records
 - If no records are found, let the user know
 - Be conversational and helpful`,
@@ -1730,13 +1752,13 @@ Guidelines:
 
   const retrieveRecordsFunction = {
     name: 'retrieve_records',
-    description: 'Query records from the Neotoma database by type, properties, or semantic/keyword search',
+    description: 'Query records from the Neotoma database. IMPORTANT: When the user asks "how many records" or "records" without specifying a type, call this function WITHOUT the type parameter to get ALL records.',
     parameters: {
       type: 'object',
       properties: {
         type: {
           type: 'string',
-          description: 'Filter by record type (e.g., "transaction", "note", "exercise")',
+          description: 'Filter by record type (e.g., "transaction", "note", "exercise"). CRITICAL: ONLY include this parameter if the user explicitly says words like "exercise records", "transaction records", or "all [type] records" in their query. If the user just says "records" or "how many records", DO NOT include this parameter - omit it completely to get ALL records. Do NOT infer the type from recent records or context.',
         },
         properties: {
           type: 'object',
@@ -1834,7 +1856,7 @@ Guidelines:
       }).join('\n');
 
       const persistedInstruction = persistedRecent.length
-        ? `When the user references these records (e.g., "it", "that file", "the thing I just saved"), OR when they mention a specific UUID, call retrieve_records with ids [${persistedRecent.join(', ')}] to fetch the exact objects. If the user mentions a UUID that matches one of these IDs, use it.`
+        ? `When the user references these records (e.g., "it", "that file", "the thing I just saved"), OR when they mention a specific UUID, call retrieve_records with ids [${persistedRecent.join(', ')}] to fetch the exact objects. If the user mentions a UUID that matches one of these IDs, use it. IMPORTANT: The types shown in the recent records above are for reference only. Do NOT use the type parameter unless the user explicitly asks for records of a specific type (e.g., "exercise records", "all transactions"). When the user asks about "records" or "how many records" without specifying a type, query ALL records by omitting the type parameter.`
         : '';
       const inlineInstruction = inlineRecent.length
         ? 'Some records are only available inline (not yet synced). Their payload is already provided above—cite them directly without calling retrieve_records.'

@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Enable COOP/COEP headers by default for OPFS support (can be disabled via env var)
 const enableDevCrossOriginIsolation =
   process.env.VITE_ENABLE_CROSS_ORIGIN_ISOLATION !== 'false';
 

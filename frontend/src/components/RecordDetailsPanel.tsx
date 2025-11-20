@@ -27,11 +27,9 @@ function PropertiesList({
     return <div className="text-sm text-muted-foreground">—</div>;
   }
 
-  const entries = Object.entries(data)
-    .filter(([, value]) => !isValueEmpty(value))
-    .sort(([a], [b]) =>
-      humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
-    );
+  const entries = Object.entries(data).sort(([a], [b]) =>
+    humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
+  );
 
   if (entries.length === 0) {
     return <div className="text-sm text-muted-foreground">—</div>;
@@ -71,37 +69,29 @@ function PropertyEntry({
   );
 }
 
-function isValueEmpty(value: unknown): boolean {
-  if (value === null || value === undefined) return true;
-  if (typeof value === 'string') return value.trim().length === 0;
-  if (Array.isArray(value)) return value.length === 0 || value.every(isValueEmpty);
-  if (typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).every(isValueEmpty);
-  }
-  return false;
-}
-
 function renderPropertyValue(value: unknown, level: number): JSX.Element {
   if (value === null || value === undefined) {
     return <div className="text-sm text-muted-foreground">—</div>;
   }
 
   if (Array.isArray(value)) {
-    const nonEmptyItems = value.filter((item) => !isValueEmpty(item));
-    if (nonEmptyItems.length === 0) {
-      return <div className="text-sm text-muted-foreground">—</div>;
+    if (value.length === 0) {
+      return <div className="text-sm text-muted-foreground">[]</div>;
     }
 
     return (
       <div className="space-y-1">
-        {nonEmptyItems.map((item, idx) => (
+        {value.map((item, idx) => (
           <Fragment key={`${level}-arr-${idx}`}>
             {typeof item === 'object' && item !== null ? (
               <div className="border-l border-border/50 pl-4">
-                <PropertiesList data={item as Record<string, unknown>} level={level + 1} />
+                <PropertiesList
+                  data={item as Record<string, unknown>}
+                  level={level + 1}
+                />
               </div>
             ) : (
-              <div className="text-sm break-words">{String(item)}</div>
+              <div className="text-sm">{String(item)}</div>
             )}
           </Fragment>
         ))}
@@ -110,7 +100,7 @@ function renderPropertyValue(value: unknown, level: number): JSX.Element {
   }
 
   if (typeof value === 'object') {
-    return <PropertiesList data={value as Record<string, unknown>} level={level + 1} />;
+    return <div className="text-sm text-muted-foreground">—</div>;
   }
 
   return <div className="text-sm break-words">{String(value)}</div>;
