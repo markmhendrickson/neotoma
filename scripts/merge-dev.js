@@ -2,9 +2,13 @@
 /**
  * Merge current branch into dev, push dev to origin, then switch back to current branch
  * Uses merge (not rebase) for safety with shared branches
+ * Handles worktree scenarios where dev may be checked out in another worktree
  */
 
 import { execSync } from 'child_process';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { mkdtempSync, rmSync } from 'fs';
 
 function getCurrentBranch() {
   try {
@@ -127,11 +131,79 @@ function pushDev() {
 
 function switchToBranch(branchName) {
   try {
-    console.log(`Switching back to ${branchName}...`);
+    console.log(`Switching to ${branchName}...`);
     execSync(`git checkout ${branchName}`, { stdio: 'inherit' });
     return true;
   } catch (error) {
     console.error(`Error switching to ${branchName}:`, error.message);
+    return false;
+  }
+}
+
+function isInWorktree() {
+  try {
+    const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
+    return gitDir.includes('.git/worktrees');
+  } catch {
+    return false;
+  }
+}
+
+function getMainRepoPath() {
+  try {
+    if (isInWorktree()) {
+      const commonDir = execSync('git rev-parse --git-common-dir', { encoding: 'utf-8' }).trim();
+      return commonDir.replace(/\/\.git$/, '');
+    } else {
+      return execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    }
+  } catch {
+    return null;
+  }
+}
+
+function getWorktreeForBranch(branchName) {
+  try {
+    const worktreeList = execSync('git worktree list', { encoding: 'utf-8' }).trim();
+    const lines = worktreeList.split('\n');
+    for (const line of lines) {
+      // Format: /path/to/worktree  commit-hash [branch-name]
+      const match = line.match(/^(.+?)\s+[a-f0-9]+\s+\[(.+)\]$/);
+      if (match) {
+        const [, path, branch] = match;
+        if (branch === branchName) {
+          return path.trim();
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function createTempWorktreeForBranch(branchName, mainRepoPath) {
+  try {
+    const tempDir = mkdtempSync(join(tmpdir(), 'neotoma-merge-'));
+    console.log(`Creating temporary worktree for ${branchName} at ${tempDir}...`);
+    execSync(`git worktree add "${tempDir}" ${branchName}`, { 
+      stdio: 'inherit',
+      cwd: mainRepoPath 
+    });
+    return tempDir;
+  } catch (error) {
+    console.error(`Error creating temporary worktree:`, error.message);
+    return null;
+  }
+}
+
+function removeWorktree(worktreePath) {
+  try {
+    console.log(`Removing temporary worktree at ${worktreePath}...`);
+    execSync(`git worktree remove "${worktreePath}"`, { stdio: 'inherit' });
+    return true;
+  } catch (error) {
+    console.warn(`Warning: Failed to remove worktree at ${worktreePath}. You may need to remove it manually.`);
     return false;
   }
 }
@@ -156,33 +228,92 @@ if (!ensureDevBranch()) {
   process.exit(1);
 }
 
-if (!switchToBranch('dev')) {
-  process.exit(1);
+// Handle worktree scenario: if dev is checked out in another worktree, create temp worktree
+let tempWorktreePath = null;
+let originalCwd = process.cwd();
+const inWorktree = isInWorktree();
+const mainRepoPath = getMainRepoPath();
+const devWorktreePath = getWorktreeForBranch('dev');
+
+if (devWorktreePath && devWorktreePath !== originalCwd) {
+  console.log(`Dev branch is checked out in another worktree at: ${devWorktreePath}`);
+  console.log('Creating temporary worktree for merge operation...');
+  
+  if (!mainRepoPath) {
+    console.error('Could not determine main repository path.');
+    process.exit(1);
+  }
+  
+  tempWorktreePath = createTempWorktreeForBranch('dev', mainRepoPath);
+  if (!tempWorktreePath) {
+    console.error('Failed to create temporary worktree. Cannot proceed with merge.');
+    process.exit(1);
+  }
+  
+  // Change to temp worktree directory for merge operations
+  process.chdir(tempWorktreePath);
+  console.log(`Switched to temporary worktree at ${tempWorktreePath}\n`);
+} else {
+  // Normal case: switch to dev in current worktree/repo
+  if (!switchToBranch('dev')) {
+    process.exit(1);
+  }
 }
 
 if (!pullLatestDev()) {
   console.warn('Warning: Failed to pull latest dev. Continuing with merge...');
 }
 
-if (!mergeBranch(currentBranch)) {
-  console.error('\nMerge failed. You are currently on dev branch.');
-  console.error('To abort the merge: git merge --abort');
-  console.error('To resolve conflicts: fix conflicts, then git add . && git commit');
-  process.exit(1);
-}
+let mergeSuccess = false;
+let pushSuccess = false;
 
-if (!pushDev()) {
-  console.error('\nPush failed. Dev branch has been merged but not pushed.');
-  console.error('You are currently on dev branch.');
-  console.error('After fixing push issues, switch back with: git checkout', currentBranch);
-  process.exit(1);
-}
+try {
+  if (!mergeBranch(currentBranch)) {
+    console.error('\nMerge failed.');
+    if (tempWorktreePath) {
+      console.error(`You are in temporary worktree at: ${tempWorktreePath}`);
+      console.error('To abort the merge: git merge --abort');
+      console.error('To resolve conflicts: fix conflicts, then git add . && git commit');
+      console.error('After resolving, the temporary worktree will be cleaned up.');
+    } else {
+      console.error('You are currently on dev branch.');
+      console.error('To abort the merge: git merge --abort');
+      console.error('To resolve conflicts: fix conflicts, then git add . && git commit');
+    }
+    process.exit(1);
+  }
+  mergeSuccess = true;
 
-if (!switchToBranch(currentBranch)) {
-  console.error(`\nWarning: Failed to switch back to ${currentBranch}. You are currently on dev branch.`);
-  process.exit(1);
+  if (!pushDev()) {
+    console.error('\nPush failed. Dev branch has been merged but not pushed.');
+    if (tempWorktreePath) {
+      console.error(`You are in temporary worktree at: ${tempWorktreePath}`);
+    } else {
+      console.error('You are currently on dev branch.');
+      console.error('After fixing push issues, switch back with: git checkout', currentBranch);
+    }
+    process.exit(1);
+  }
+  pushSuccess = true;
+} finally {
+  // Clean up temporary worktree if we created one
+  if (tempWorktreePath) {
+    process.chdir(originalCwd);
+    if (!removeWorktree(tempWorktreePath)) {
+      console.warn(`\nWarning: Temporary worktree still exists at ${tempWorktreePath}`);
+      console.warn('You may need to remove it manually with: git worktree remove <path>');
+    }
+  } else if (mergeSuccess && pushSuccess) {
+    // Switch back to original branch only if merge and push succeeded
+    if (!switchToBranch(currentBranch)) {
+      console.error(`\nWarning: Failed to switch back to ${currentBranch}. You are currently on dev branch.`);
+      process.exit(1);
+    }
+  }
 }
 
 console.log(`\nSuccessfully merged ${currentBranch} into dev and pushed to origin.`);
-console.log(`Switched back to ${currentBranch}.`);
+if (!tempWorktreePath) {
+  console.log(`Switched back to ${currentBranch}.`);
+}
 
