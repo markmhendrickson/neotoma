@@ -148,8 +148,26 @@ export function useKeys() {
     }
   }, [state.x25519, state.ed25519]);
 
-  const regenerateKeys = useCallback(async () => {
+  const regenerateKeys = useCallback(async (clearDataCallback?: () => Promise<void>) => {
     try {
+      // Clear all encrypted data before regenerating keys
+      if (clearDataCallback) {
+        try {
+          await clearDataCallback();
+        } catch (error) {
+          console.warn('Error clearing data before key regeneration:', error);
+        }
+      }
+
+      // Clear localStorage data that may be encrypted or key-specific
+      try {
+        localStorage.removeItem('chatPanelMessages');
+        localStorage.removeItem('chatPersistedRecentRecords');
+        // Note: We don't clear settings like apiBase, bearerToken, etc. as those are not encrypted
+      } catch (error) {
+        console.warn('Error clearing localStorage:', error);
+      }
+
       const x25519 = await generateX25519KeyPair();
       const ed25519 = await generateEd25519KeyPair();
       const bearerToken = deriveBearerToken(ed25519.publicKey);

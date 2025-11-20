@@ -132,6 +132,13 @@ export class DatastoreWorkerClient {
   }
 
   /**
+   * Clear all records
+   */
+  async clearAll(): Promise<void> {
+    await this.call('local.clearAll');
+  }
+
+  /**
    * Search vectors
    */
   async searchVectors(options: VectorSearchOptions): Promise<LocalRecord[]> {

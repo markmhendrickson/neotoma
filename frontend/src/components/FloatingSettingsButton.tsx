@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 import { KeyManagementDialog } from './KeyManagementDialog';
 import { useKeys } from '@/hooks/useKeys';
 import { useSettings } from '@/hooks/useSettings';
+import { useDatastoreContext } from '@/contexts/DatastoreContext';
 
 export function FloatingSettingsButton() {
   const { bearerToken, maskedPrivateKey, loading, importKeys, exportKeys, regenerateKeys } = useKeys();
   const { updateBearerToken } = useSettings();
+  const datastore = useDatastoreContext();
   const lastBearerTokenRef = useRef<string>('');
 
   useEffect(() => {
@@ -16,6 +18,12 @@ export function FloatingSettingsButton() {
       updateBearerToken(bearerToken);
     }
   }, [bearerToken, loading, updateBearerToken]);
+
+  const handleBeforeRegenerate = async () => {
+    if (datastore?.initialized && datastore.clearAll) {
+      await datastore.clearAll();
+    }
+  };
 
   if (loading) {
     return null;
@@ -29,6 +37,7 @@ export function FloatingSettingsButton() {
         onImport={importKeys}
         onExport={exportKeys}
         onRegenerate={regenerateKeys}
+        onBeforeRegenerate={handleBeforeRegenerate}
         trigger={
           <Button
             size="icon"

@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
 const settingsMock = {
   apiBase: 'http://localhost:8080',
   bearerToken: 'settings-token',
-  apiSyncEnabled: true,
   cloudStorageEnabled: true,
   csvRowRecordsEnabled: true,
 };
@@ -57,7 +56,7 @@ describe('ChatPanel', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
-    settingsMock.apiSyncEnabled = true;
+    settingsMock.cloudStorageEnabled = true;
     settingsMock.bearerToken = 'settings-token';
     mocks.sendChatMessage.mockReset();
     mocks.uploadFile.mockReset();
@@ -81,7 +80,7 @@ describe('ChatPanel', () => {
     const user = userEvent.setup();
     render(<ChatPanel datastore={datastoreStub} />);
 
-    const input = screen.getByPlaceholderText('Message about records...');
+    const input = screen.getByPlaceholderText('Ask about records...');
     await user.type(input, 'show me its properties');
 
     const sendButton = screen.getByRole('button', { name: /send message/i });
@@ -114,7 +113,7 @@ describe('ChatPanel', () => {
     const user = userEvent.setup();
     render(<ChatPanel datastore={datastoreStub} />);
 
-    const input = screen.getByPlaceholderText('Message about records...');
+    const input = screen.getByPlaceholderText('Ask about records...');
     await user.type(input, `show record ${record.id}`);
 
     const sendButton = screen.getByRole('button', { name: /send message/i });
@@ -136,26 +135,21 @@ describe('ChatPanel', () => {
     ]);
   });
 
-  it('blocks chat requests when API sync is disabled', async () => {
-    settingsMock.apiSyncEnabled = false;
+  it('still sends chat requests when cloud storage is disabled', async () => {
     settingsMock.cloudStorageEnabled = false;
     const user = userEvent.setup();
     render(<ChatPanel datastore={datastoreStub} />);
 
-    const input = screen.getByPlaceholderText('Message about records...');
+    const input = screen.getByPlaceholderText('Ask about records...');
     await user.type(input, 'can you summarize my uploads?');
 
     const sendButton = screen.getByRole('button', { name: /send message/i });
     await user.click(sendButton);
 
-    expect(mocks.sendChatMessage).not.toHaveBeenCalled();
-    expect(
-      screen.getByText(/Chat unavailable while API sync is disabled/i)
-    ).toBeInTheDocument();
+    expect(mocks.sendChatMessage).toHaveBeenCalled();
   });
 
-  it('processes file uploads locally without hitting the API when sync is disabled', async () => {
-    settingsMock.apiSyncEnabled = false;
+  it('processes file uploads locally without hitting the API when cloud storage is disabled', async () => {
     settingsMock.cloudStorageEnabled = false;
     mocks.processFileLocally.mockResolvedValue({
       primaryRecord: {
@@ -183,7 +177,6 @@ describe('ChatPanel', () => {
   });
 
   it('includes the generated summary in the assistant upload confirmation', async () => {
-    settingsMock.apiSyncEnabled = false;
     settingsMock.cloudStorageEnabled = false;
     const summaryText = 'Logo variants from kickoff call';
     mocks.processFileLocally.mockResolvedValue({
@@ -208,7 +201,7 @@ describe('ChatPanel', () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          /File "logo\.jpeg" saved locally: Logo variants from kickoff call\./
+          /File "logo\.jpeg" was saved locally: Logo variants from kickoff call/
         )
       ).toBeInTheDocument();
     });

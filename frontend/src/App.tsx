@@ -10,6 +10,7 @@ import { normalizeRecord, STATUS_ORDER, type NeotomaRecord } from '@/types/recor
 import { useToast } from '@/components/ui/use-toast';
 import { localToNeotoma } from '@/utils/record_conversion';
 import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
+import { DatastoreContext } from '@/contexts/DatastoreContext';
 import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
 import { configureLocalFileEncryption, deleteLocalFile, isLocalFilePath } from '@/utils/local_files';
 
@@ -308,49 +309,50 @@ function App() {
   }, []);
 
   return (
-    <div 
-      className="h-screen max-h-screen bg-background flex flex-col overflow-hidden relative"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-        <ChatPanel 
-          datastore={datastore}
-          onFileUploaded={loadRecords} 
-          onFileUploadRef={chatPanelFileUploadRef}
-          onErrorRef={chatPanelErrorRef}
-        />
-        <main className="flex-1 min-h-0 max-h-full overflow-hidden">
-          <RecordsTable
-            records={filteredRecords}
-          totalCount={totalRecords}
-            types={types}
-            onRecordClick={setSelectedRecord}
-            onDeleteRecord={handleDeleteRecord}
-            onDeleteRecords={handleDeleteRecords}
-            onSearch={handleSearch}
-            onTypeFilter={handleTypeFilter}
-            isLoading={recordsLoading}
+    <DatastoreContext.Provider value={datastore}>
+      <div 
+        className="h-screen max-h-screen bg-background flex flex-col overflow-hidden relative"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
+          <ChatPanel 
+            datastore={datastore}
+            onFileUploaded={loadRecords} 
             onFileUploadRef={chatPanelFileUploadRef}
+            onErrorRef={chatPanelErrorRef}
           />
-        </main>
-      </div>
-      <RecordDetailsPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
-      <Toaster />
-      <SonnerToaster
-        duration={4000}
-        position="bottom-right"
-        visibleToasts={10}
-        toastOptions={{
-          classNames: {
-            toast: 'bg-background border border-border shadow-lg',
-            title: 'text-foreground font-medium',
-            description: 'text-muted-foreground',
-          },
-        }}
-      />
-      <FloatingSettingsButton />
+          <main className="flex-1 min-h-0 max-h-full overflow-hidden">
+            <RecordsTable
+              records={filteredRecords}
+            totalCount={totalRecords}
+              types={types}
+              onRecordClick={setSelectedRecord}
+              onDeleteRecord={handleDeleteRecord}
+              onDeleteRecords={handleDeleteRecords}
+              onSearch={handleSearch}
+              onTypeFilter={handleTypeFilter}
+              isLoading={recordsLoading}
+              onFileUploadRef={chatPanelFileUploadRef}
+            />
+          </main>
+        </div>
+        <RecordDetailsPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+        <Toaster />
+        <SonnerToaster
+          duration={4000}
+          position="bottom-right"
+          visibleToasts={10}
+          toastOptions={{
+            classNames: {
+              toast: 'bg-background border border-border shadow-lg',
+              title: 'text-foreground font-medium',
+              description: 'text-muted-foreground',
+            },
+          }}
+        />
+        <FloatingSettingsButton />
       {/* Full-page drag overlay */}
       {isDragging && (
         <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
@@ -362,7 +364,8 @@ function App() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </DatastoreContext.Provider>
   );
 }
 

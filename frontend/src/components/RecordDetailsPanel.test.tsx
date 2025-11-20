@@ -18,7 +18,6 @@ vi.mock('@/lib/api', () => ({
 const settingsMock = {
   apiBase: 'http://localhost:8080',
   bearerToken: 'test-token',
-  apiSyncEnabled: true,
   cloudStorageEnabled: true,
   csvRowRecordsEnabled: true,
 };
@@ -65,7 +64,6 @@ describe('RecordDetailsPanel file handling', () => {
     vi.clearAllMocks();
     settingsMock.apiBase = 'http://localhost:8080';
     settingsMock.bearerToken = 'test-token';
-    settingsMock.apiSyncEnabled = true;
     settingsMock.cloudStorageEnabled = true;
     windowOpenSpy = vi.spyOn(window, 'open').mockReturnValue(null);
   });
@@ -107,8 +105,7 @@ describe('RecordDetailsPanel file handling', () => {
     );
   });
 
-  it('blocks Supabase file access when API sync is disabled', async () => {
-    settingsMock.apiSyncEnabled = false;
+  it('blocks Supabase file access when cloud storage is disabled', async () => {
     settingsMock.cloudStorageEnabled = false;
 
     render(<RecordDetailsPanel record={{ ...baseRecord, file_urls: ['abc/file.pdf'] }} onClose={() => {}} />);

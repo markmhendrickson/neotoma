@@ -195,7 +195,7 @@ export async function countRecords(options: QueryOptions = {}): Promise<number> 
   const stmt = db.prepare(sql);
   try {
     if (params.length > 0) {
-    stmt.bind(params as readonly (string | number | null | boolean | undefined)[]);
+      stmt.bind(params as readonly (string | number | null | boolean | undefined)[]);
     }
     if (stmt.step()) {
       const row = stmt.get({ count: 0 }) as { count: number };
@@ -236,5 +236,13 @@ export async function deleteRecords(ids: string[]): Promise<void> {
   } finally {
     stmt.finalize();
   }
+}
+
+/**
+ * Delete all records
+ */
+export async function clearAllRecords(): Promise<void> {
+  const db = getDB();
+  db.exec('DELETE FROM records');
 }
 
