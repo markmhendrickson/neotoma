@@ -17,6 +17,11 @@ Run entire tests suite and resolve any errors as necessary. Proceed to analyze a
 
 Then proceed to git commit with commit message that represents their functional changes, and push to origin. Generate the most detailed, multi-line commit message possible given changes and constraints.
 
-**WORKTREE COMPATIBILITY:** If working in a Git worktree (created via branch command), commits work exactly the same way. Commits made in worktrees are automatically visible in all worktrees since they share the same .git directory. Branch renaming logic works the same in worktrees.
+**WORKTREE DETECTION:** Restrict all commit activity to the chat’s current worktree:
+1. Determine the current worktree path with `git rev-parse --show-toplevel`
+2. Run tests, security analysis, staging, and commits only inside that directory
+3. Ignore any other worktrees even if they have pending changes; they are out of scope for this command
+
+**WORKTREE COMPATIBILITY:** Commits made within this worktree remain visible to the shared `.git` directory. Branch renaming logic works the same but must only operate on the branch checked out in the chat’s worktree.
 
 After committing, verify no unstaged changes remain with `git status`. If any files were missed, amend the commit with `git add <file> && git commit --amend --no-edit`.
