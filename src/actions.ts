@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from 'express';
+import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -42,25 +42,6 @@ import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
 import { isCsvLike, parseCsvRows } from './utils/csv.js';
 import { serializeChatMessagesForOpenAI, type ChatMessage } from './utils/chat.js';
-
-type UploadStatusStage =
-  | 'upload_received'
-  | 'parsing_csv'
-  | 'analyzing'
-  | 'saving_record'
-  | 'generating_rows'
-  | 'linking_rows'
-  | 'complete'
-  | 'attaching_file';
-
-type UploadStatusPayload = {
-  stage: UploadStatusStage;
-  message: string;
-  progress?: {
-    current?: number;
-    total?: number;
-  };
-};
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -177,6 +158,7 @@ function logError(event: string, req: express.Request, error: unknown, extra?: R
 
 function sanitizeConnector(connector: ExternalConnector) {
   const { secretsEnvelope, ...rest } = connector;
+  void secretsEnvelope;
   return rest;
 }
 

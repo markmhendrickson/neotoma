@@ -133,12 +133,15 @@ describe('Plaid normalizers', () => {
       account: mockAccount,
     });
 
+    const props = record.properties as any;
+
     expect(record.type).toBe('account');
     expect(record.externalId).toBe(`plaid:account:${mockAccount.account_id}`);
-    expect(record.properties.external_id).toBe(record.externalId);
-    expect(record.properties.provider).toBe('plaid');
-    expect(record.properties.balances.current).toBe(1250);
-    expect(record.properties.institution?.name).toBe('Test Institution');
+    // Properties stay machine-case; UI humanizes as needed
+    expect(props.external_id).toBe(record.externalId);
+    expect(props.provider).toBe('plaid');
+    expect(props.balances.current).toBe(1250);
+    expect(props.institution?.name).toBe('Test Institution');
   });
 
   it('normalizes transactions and includes account snapshot', () => {
@@ -152,13 +155,16 @@ describe('Plaid normalizers', () => {
       transaction: mockTransaction,
     });
 
+    const props = record.properties as any;
+
     expect(record.type).toBe('transaction');
     expect(record.externalId).toBe(`plaid:transaction:${mockTransaction.transaction_id}`);
-    expect(record.properties.external_id).toBe(record.externalId);
-    expect(record.properties.account?.plaid_account_id).toBe(mockAccount.account_id);
-    expect(record.properties.amount).toBeCloseTo(42.13);
-    expect(record.properties.location?.city).toBe('Anytown');
-    expect(record.properties.personal_finance_category?.detailed).toBe('FOOD_AND_DRINK_GROCERIES');
+    // Properties stay machine-case; UI humanizes as needed
+    expect(props.external_id).toBe(record.externalId);
+    expect(props.account?.plaid_account_id).toBe(mockAccount.account_id);
+    expect(props.amount).toBeCloseTo(42.13);
+    expect(props.location?.city).toBe('Anytown');
+    expect(props.personal_finance_category?.detailed).toBe('FOOD_AND_DRINK_GROCERIES');
   });
 });
 
