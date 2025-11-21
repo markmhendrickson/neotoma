@@ -52,6 +52,11 @@ function normalizeInstitution(
   });
 }
 
+type LegacyAccountBase = AccountBase & {
+  status?: string | null;
+  classification?: string | null;
+};
+
 export function normalizeAccount({
   plaidItemId,
   environment,
@@ -62,6 +67,7 @@ export function normalizeAccount({
   const externalId = `plaid:account:${account.account_id}`;
 
   const balances = account.balances || {};
+  const legacyAccount = account as LegacyAccountBase;
 
   const properties = omitUndefined({
     provider: 'plaid',
@@ -85,9 +91,9 @@ export function normalizeAccount({
       iso_currency_code: balances.iso_currency_code ?? undefined,
       unofficial_currency_code: balances.unofficial_currency_code ?? undefined,
     }),
-    status: account.status ?? undefined,
+    status: legacyAccount.status ?? undefined,
     raw: omitUndefined({
-      classification: account.classification,
+      classification: legacyAccount.classification ?? undefined,
       currency_codes: omitUndefined({
         iso: balances.iso_currency_code ?? undefined,
         unofficial: balances.unofficial_currency_code ?? undefined,

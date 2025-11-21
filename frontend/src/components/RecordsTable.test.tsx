@@ -64,6 +64,40 @@ function getVisibleColumnOrder() {
     .filter((value): value is string => Boolean(value));
 }
 
+function getLatestColumnsButton() {
+  const buttons = screen.getAllByRole('button', { name: 'Columns' });
+  return buttons[buttons.length - 1];
+}
+
+async function openColumnsMenu(user: ReturnType<typeof userEvent.setup>) {
+  if (screen.queryByRole('menu')) {
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+  }
+  const columnsButton = getLatestColumnsButton();
+  await user.click(columnsButton);
+  const menu = await screen.findByRole('menu');
+  return { columnsButton, menu };
+}
+
+async function togglePropertyColumn(
+  user: ReturnType<typeof userEvent.setup>,
+  columnLabel: string,
+  options: { closeMenu?: boolean } = { closeMenu: true }
+) {
+  const { menu } = await openColumnsMenu(user);
+  const checkbox = within(menu).getByRole('menuitemcheckbox', { name: columnLabel });
+  await user.click(checkbox);
+  if (options.closeMenu !== false) {
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    });
+  }
+}
+
 describe('RecordsTable', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -85,7 +119,7 @@ describe('RecordsTable', () => {
     const user = userEvent.setup();
     renderTable();
 
-    const columnsButton = screen.getByRole('button', { name: 'Columns' });
+    const columnsButton = getLatestColumnsButton();
     await user.click(columnsButton);
 
     const menu = await screen.findByRole('menu');
@@ -102,7 +136,7 @@ describe('RecordsTable', () => {
     const user = userEvent.setup();
     const firstRender = renderTable();
 
-    const columnsButton = screen.getByRole('button', { name: 'Columns' });
+    const columnsButton = getLatestColumnsButton();
     await user.click(columnsButton);
     const menu = await screen.findByRole('menu');
     const summaryToggle = within(menu).getByRole('menuitemcheckbox', { name: 'Summary' });
@@ -283,6 +317,141 @@ describe('RecordsTable', () => {
     await user.click(learnMoreButton);
 
     expect(await screen.findByText('What can I store?')).toBeInTheDocument();
+  });
+
+  it('displays property columns dynamically from record properties', async () => {
+    const user = userEvent.setup();
+    const recordWithProperties: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_2',
+      properties: {
+        'Full Name': 'John Doe',
+        amount: 100.5,
+        is_active: true,
+      },
+    };
+
+    renderTable({ records: [recordWithProperties] });
+
+    expect(screen.queryByText('Full Name')).not.toBeInTheDocument();
+
+    await togglePropertyColumn(user, 'Full Name');
+    await togglePropertyColumn(user, 'Amount');
+    await togglePropertyColumn(user, 'Is Active');
+
+    expect(await screen.findByText('Full Name')).toBeInTheDocument();
+    expect(await screen.findByText('Amount')).toBeInTheDocument();
+    expect(await screen.findByText('Is Active')).toBeInTheDocument();
+  });
+
+  it('renders property values correctly for different types', async () => {
+    const user = userEvent.setup();
+    const recordWithProperties: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_3',
+      properties: {
+        name: 'Test',
+        count: 42,
+        active: true,
+        tags: ['tag1', 'tag2'],
+      },
+    };
+
+    renderTable({ records: [recordWithProperties] });
+
+    await togglePropertyColumn(user, 'Name');
+    await togglePropertyColumn(user, 'Count');
+    await togglePropertyColumn(user, 'Active');
+    await togglePropertyColumn(user, 'Tags');
+
+    expect(await screen.findByText('Test')).toBeInTheDocument();
+    expect(await screen.findByText('42')).toBeInTheDocument();
+    expect(await screen.findByText('Yes')).toBeInTheDocument();
+    expect(screen.getByText('2 item(s)')).toBeInTheDocument();
+  });
+
+  it('allows toggling property column visibility', async () => {
+    const user = userEvent.setup();
+    const recordWithProperties: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_4',
+      properties: {
+        'Full Name': 'Jane Doe',
+      },
+    };
+
+    renderTable({ records: [recordWithProperties] });
+
+    await togglePropertyColumn(user, 'Full Name');
+    expect(await screen.findByText('Full Name')).toBeInTheDocument();
+    expect(await screen.findByText('Jane Doe')).toBeInTheDocument();
+
+    await togglePropertyColumn(user, 'Full Name');
+
+    expect(screen.queryByText('Full Name')).not.toBeInTheDocument();
+    expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument();
+  });
+
+  it('persists property column visibility preferences', async () => {
+    const user = userEvent.setup();
+    const recordWithProperties: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_5',
+      properties: {
+        'Email Address': 'test@example.com',
+      },
+    };
+
+    const firstRender = renderTable({ records: [recordWithProperties] });
+
+    await togglePropertyColumn(user, 'Email Address');
+    expect((await screen.findAllByText('Email Address'))[0]).toBeInTheDocument();
+
+    firstRender.unmount();
+    renderTable({ records: [recordWithProperties] });
+
+    expect((await screen.findAllByText('Email Address'))[0]).toBeInTheDocument();
+  });
+
+  it('prunes stale property column visibility when records change', async () => {
+    const user = userEvent.setup();
+    const record1: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_6',
+      properties: {
+        old_property: 'value1',
+      },
+    };
+
+    const firstRender = renderTable({ records: [record1] });
+
+    await togglePropertyColumn(user, 'Old Property');
+    expect(await screen.findByText('Old Property')).toBeInTheDocument();
+
+    const record2: NeotomaRecord = {
+      ...baseRecord,
+      id: 'rec_7',
+      properties: {
+        new_property: 'value2',
+      },
+    };
+
+    firstRender.rerender(
+      <RecordsTable
+        records={[record2]}
+        totalCount={1}
+        types={['note']}
+        onRecordClick={vi.fn()}
+        onDeleteRecord={vi.fn()}
+        onDeleteRecords={vi.fn()}
+        onSearch={vi.fn()}
+        onTypeFilter={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('Old Property')).not.toBeInTheDocument();
+    await togglePropertyColumn(user, 'New Property');
+    expect(await screen.findByText('New Property')).toBeInTheDocument();
   });
 });
 

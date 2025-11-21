@@ -7,7 +7,6 @@
  * command directly. Otherwise we delegate to `with-branch-ports` to allocate
  * ports before running the command.
  */
-
 import { spawn } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -26,7 +25,8 @@ if (args.length === 0) {
 
 const hasSharedPorts =
   typeof process.env.BRANCH_PORTS_FILE === 'string' &&
-  process.env.BRANCH_PORTS_FILE.length > 0;
+  process.env.BRANCH_PORTS_FILE.length > 0 &&
+  fs.existsSync(process.env.BRANCH_PORTS_FILE);
 
 const command = hasSharedPorts ? args[0] : 'node';
 const commandArgs = hasSharedPorts ? args.slice(1) : [WITH_BRANCH_SCRIPT, ...args];

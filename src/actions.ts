@@ -729,7 +729,7 @@ app.post('/store_record', async (req, res) => {
 
   const insertData: Record<string, unknown> = {
     type: normalizedType,
-    properties,
+    properties: properties,
     file_urls: file_urls || [],
   };
   if (embedding) {
@@ -764,7 +764,7 @@ app.post('/store_records', async (req, res) => {
   // Generate embeddings and summaries for records that don't have them
   const insertDataPromises = records.map(async ({ type, properties, file_urls, embedding: providedEmbedding }) => {
     const normalizedType = normalizeRecordType(type).type;
-    // Filter out empty arrays - they're invalid for PostgreSQL vector type
+      // Filter out empty arrays - they're invalid for PostgreSQL vector type
     let embedding: number[] | null = null;
     if (providedEmbedding && Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
       embedding = providedEmbedding;
@@ -778,7 +778,7 @@ app.post('/store_records', async (req, res) => {
 
     const recordData: Record<string, unknown> = {
       type: normalizedType,
-      properties,
+      properties: properties,
       file_urls: file_urls || [],
     };
     if (embedding) {
@@ -854,8 +854,10 @@ app.post('/update_record', async (req, res) => {
     }
   } else if ((properties !== undefined || type !== undefined) && config.openaiApiKey) {
     const newType = type !== undefined ? (normalizedUpdateType || normalizeRecordType(type).type) : existing?.type || '';
-    const newProperties = properties !== undefined ? properties : existing?.properties || {};
-    const recordText = getRecordText(newType, newProperties as Record<string, unknown>);
+    const baseProperties = (existing?.properties as Record<string, unknown>) || {};
+    const newProperties =
+      properties !== undefined ? { ...baseProperties, ...properties } : baseProperties;
+    const recordText = getRecordText(newType, newProperties);
     const generatedEmbedding = await generateEmbedding(recordText);
     if (generatedEmbedding) {
       updateData.embedding = generatedEmbedding;
@@ -863,15 +865,6 @@ app.post('/update_record', async (req, res) => {
   }
 
   if (properties !== undefined) {
-    const { data: existing, error: fetchError } = await supabase
-      .from('records')
-      .select('properties')
-      .eq('id', id)
-      .single();
-    if (fetchError) {
-      logError('SupabaseError:update_record:fetch', req, fetchError);
-      return res.status(500).json({ error: fetchError.message });
-    }
     updateData.properties = { ...(existing?.properties as object), ...properties };
   }
 

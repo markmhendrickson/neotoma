@@ -8,14 +8,18 @@ function capitalize(word: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
+/**
+ * Humanizes property keys in the UI, mirroring the backend utility so column
+ * labels stay consistent regardless of where the record originated.
+ */
 export function humanizePropertyKey(rawKey: string): string {
-  if (!rawKey) {
+  if (!rawKey || typeof rawKey !== 'string') {
     return 'Property';
   }
 
   const normalized = rawKey
-    .replace(/[_\-.]+/g, ' ')
-    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/([a-z])([A-Z])/g, '$1 $2') // camelCase -> camel Case
+    .replace(/[_\-.]+/g, ' ') // delimiters -> spaces
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -25,8 +29,8 @@ export function humanizePropertyKey(rawKey: string): string {
 
   return normalized
     .split(' ')
+    .filter(Boolean)
     .map(capitalize)
     .join(' ');
 }
-
 

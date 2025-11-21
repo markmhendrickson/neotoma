@@ -346,7 +346,7 @@ export class NeotomaServer {
 
     const insertData: Record<string, unknown> = {
       type: normalizedType,
-      properties,
+      properties: properties,
       file_urls: file_urls || [],
     };
     if (embedding) {
@@ -411,7 +411,9 @@ export class NeotomaServer {
       }
     } else if ((parsed.properties !== undefined || parsed.type !== undefined) && config.openaiApiKey) {
       const newType = parsed.type !== undefined ? (normalizedUpdateType || normalizeRecordType(parsed.type).type) : existing?.type || '';
-      const newProperties = parsed.properties !== undefined ? parsed.properties : (existing?.properties as Record<string, unknown>) || {};
+      const baseProperties = (existing?.properties as Record<string, unknown>) || {};
+      const newProperties =
+        parsed.properties !== undefined ? { ...baseProperties, ...parsed.properties } : baseProperties;
       const recordText = getRecordText(newType, newProperties);
       const generatedEmbedding = await generateEmbedding(recordText);
       if (generatedEmbedding) {
