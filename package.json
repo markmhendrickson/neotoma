@@ -7,18 +7,18 @@
   "scripts": {
     "build": "tsc",
     "build:ui": "vite build",
-    "dev:ui": "node scripts/with-branch-ports.js vite",
+    "dev:ui": "node scripts/run-dev-task.js vite",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
     "lint": "eslint src --ext .ts",
     "type-check": "tsc --noEmit",
     "start:http": "node dist/actions.js",
-    "dev:http": "node scripts/with-branch-ports.js tsx watch src/actions.ts",
+    "dev:http": "node scripts/run-dev-task.js tsx watch src/actions.ts",
     "dev:full": "node scripts/with-branch-ports.js npx concurrently 'npm run dev:http' 'npm run dev:ui'",
     "branches:prune": "node scripts/prune-merged-branches.js",
     "start:ws": "node dist/mcp_ws_bridge.js",
-    "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts"
+    "dev:ws": "node scripts/run-dev-task.js tsx watch src/mcp_ws_bridge.ts"
   },
   "keywords": [
     "mcp",
