@@ -32,6 +32,7 @@ import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/hooks/useSettings';
 import { formatRelativeTime } from '@/utils/time';
 import { EmptyPlaceholder } from '@/components/EmptyPlaceholder';
+import { humanizePropertyKey } from '@/utils/property_keys';
 
 function renderDateCell(value?: string | null) {
   if (!value) return '—';
@@ -45,6 +46,40 @@ function renderDateCell(value?: string | null) {
       {relative}
     </span>
   );
+}
+
+function renderPropertyValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'string') {
+    return (
+      <span className="text-sm truncate block" title={value}>
+        {value}
+      </span>
+    );
+  }
+  if (typeof value === 'number') {
+    return <span className="text-sm">{value.toLocaleString()}</span>;
+  }
+  if (typeof value === 'boolean') {
+    return <span className="text-sm">{value ? 'Yes' : 'No'}</span>;
+  }
+  if (Array.isArray(value)) {
+    return (
+      <span className="text-sm truncate block" title={JSON.stringify(value)}>
+        {value.length} item(s)
+      </span>
+    );
+  }
+  if (typeof value === 'object') {
+    return (
+      <span className="text-sm truncate block" title={JSON.stringify(value)}>
+        {Object.keys(value).length} key(s)
+      </span>
+    );
+  }
+  return <span className="text-sm">{String(value)}</span>;
 }
 
 interface RecordsTableProps {
@@ -238,9 +273,75 @@ export function RecordsTable({
     { id: 'updated_at', desc: true },
   ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const prevColumnVisibility = useRef(columnVisibility);
+  const propertyKeys = useMemo(() => {
+    const keys = new Set<string>();
+    records.forEach((record) => {
+      if (record.properties && typeof record.properties === 'object' && !Array.isArray(record.properties)) {
+        Object.keys(record.properties).forEach((key) => {
+          if (key && typeof key === 'string') {
+            keys.add(key);
+          }
+        });
+      }
+    });
+    return Array.from(keys).sort((a, b) =>
+      humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
+    );
+  }, [records]);
+
+  useEffect(() => {
+    const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
+    setColumnVisibility((prev) => {
+      const cleaned: VisibilityState = { ...prev };
+      let changed = false;
+      Object.keys(cleaned).forEach((columnId) => {
+        if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
+          delete cleaned[columnId];
+          changed = true;
+        }
+      });
+      return changed ? cleaned : prev;
+    });
+  }, [propertyKeys]);
+
+  useEffect(() => {
+    setColumnVisibility((prev) => {
+      let changed = false;
+      const next: VisibilityState = { ...prev };
+      propertyKeys.forEach((key) => {
+        const columnId = `prop:${key}`;
+        if (!(columnId in next)) {
+          next[columnId] = false;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [propertyKeys]);
+
+  useEffect(() => {
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      const wasVisible = prevColumnVisibility.current[columnId];
+      const isVisible = columnVisibility[columnId];
+      if (!wasVisible && isVisible && tableScrollRef.current) {
+        const container = tableScrollRef.current;
+        const targetLeft = container.scrollWidth;
+        if (typeof container.scrollTo === 'function') {
+          container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        } else {
+          container.scrollLeft = targetLeft;
+        }
+      }
+    });
+    prevColumnVisibility.current = columnVisibility;
+  }, [columnVisibility, propertyKeys]);
+
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-  const columnLabels: Record<string, string> = useMemo(
-    () => ({
+  const columnLabels: Record<string, string> = useMemo(() => {
+    const base: Record<string, string> = {
       select: 'Select',
       type: 'Type',
       summary: 'Summary',
@@ -250,8 +351,35 @@ export function RecordsTable({
       _status: 'Status',
       id: 'ID',
       actions: 'Actions',
-    }),
-    []
+    };
+    propertyKeys.forEach((key) => {
+      base[`prop:${key}`] = humanizePropertyKey(key);
+    });
+    return base;
+  }, [propertyKeys]);
+
+  const propertyColumns = useMemo<ColumnDef<NeotomaRecord>[]>(
+    () =>
+      propertyKeys.map((key) => ({
+        id: `prop:${key}`,
+        accessorFn: (row) => {
+          const props = row.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return undefined;
+          }
+          return (props as Record<string, unknown>)[key];
+        },
+        header: humanizePropertyKey(key),
+        cell: ({ row }) => {
+          const props = row.original.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return '—';
+          }
+          const value = (props as Record<string, unknown>)[key];
+          return renderPropertyValue(value);
+        },
+      })),
+    [propertyKeys]
   );
 
   const toggleRecordSelection = useCallback((recordId: string, checked: boolean) => {
@@ -917,6 +1045,7 @@ export function RecordsTable({
         },
         cell: ({ row }) => <span className="font-mono text-xs truncate block" title={row.original.id}>{row.original.id}</span>,
       },
+      ...propertyColumns,
       {
         id: 'actions',
         header: 'Actions',
@@ -934,7 +1063,17 @@ export function RecordsTable({
         maxSize: 60,
       },
     ],
-    [handleSelectAll, isAllSelected, isPartiallySelected, onDeleteRecord, onRecordClick, records.length, selectedRowIds, toggleRecordSelection]
+    [
+      handleSelectAll,
+      isAllSelected,
+      isPartiallySelected,
+      onDeleteRecord,
+      onRecordClick,
+      propertyColumns,
+      records.length,
+      selectedRowIds,
+      toggleRecordSelection,
+    ]
   );
 
   const columnIds = useMemo(
@@ -1432,7 +1571,7 @@ export function RecordsTable({
         </div>
       </div>
       <div className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden">
-        <div className="h-full overflow-auto">
+        <div className="h-full overflow-auto" ref={tableScrollRef}>
           {showEmptyPlaceholder ? (
             <div className="flex h-full items-center justify-center px-6 py-10">
               {showWelcomeEmptyState ? (

@@ -109,7 +109,8 @@ describe('UI Integration Tests', () => {
 
     // Start backend server if not running
     try {
-      const healthCheck = await globalThis.fetch(`http://localhost:${backendPort}/health`).catch(() => null);
+      const backendHealthUrl = `http://localhost:${backendPort}/health`;
+      const healthCheck = await globalThis.fetch(backendHealthUrl).catch(() => null);
       if (!healthCheck || !healthCheck.ok) {
         console.log(`Starting backend server on port ${backendPort}...`);
         backendServer = spawn('npm', ['run', 'dev:http'], {
@@ -117,13 +118,9 @@ describe('UI Integration Tests', () => {
           shell: true,
           env: buildBackendEnv(backendPort),
         });
-        // Wait for server to start - retry health check
-        for (let i = 0; i < 10; i++) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          const check = await globalThis.fetch(`http://localhost:${backendPort}/health`).catch(() => null);
-          if (check && check.ok) {
-            break;
-          }
+        const ready = await waitForServerReady(backendHealthUrl, 20);
+        if (!ready) {
+          console.warn(`Backend server did not become ready on port ${backendPort}`);
         }
       }
     } catch (error) {
@@ -132,7 +129,8 @@ describe('UI Integration Tests', () => {
 
     // Start frontend server if not running
     try {
-      const frontendCheck = await globalThis.fetch(`http://localhost:${frontendPort}`).catch(() => null);
+      const frontendUrl = `http://localhost:${frontendPort}`;
+      const frontendCheck = await globalThis.fetch(frontendUrl).catch(() => null);
       if (!frontendCheck) {
         console.log(`Starting frontend server on port ${frontendPort}...`);
         frontendServer = spawn('npm', ['run', 'dev:ui'], {
@@ -140,8 +138,10 @@ describe('UI Integration Tests', () => {
           shell: true,
           env: buildFrontendEnv(frontendPort, backendPort),
         });
-        // Wait for server to start
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        const ready = await waitForServerReady(frontendUrl, 30);
+        if (!ready) {
+          console.warn(`Frontend server did not become ready on port ${frontendPort}`);
+        }
       }
     } catch (error) {
       console.warn('Frontend server may already be running or failed to start');
