@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ColumnDef,
   SortingState,
@@ -29,6 +29,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTr
 import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/hooks/useSettings';
 import { formatRelativeTime } from '@/utils/time';
+import { humanizePropertyKey } from '@/utils/property_keys';
 
 function renderDateCell(value?: string | null) {
   if (!value) return '—';
@@ -42,6 +43,28 @@ function renderDateCell(value?: string | null) {
       {relative}
     </span>
   );
+}
+
+function renderPropertyValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'string') {
+    return <span className="text-sm truncate block" title={value}>{value}</span>;
+  }
+  if (typeof value === 'number') {
+    return <span className="text-sm">{value.toLocaleString()}</span>;
+  }
+  if (typeof value === 'boolean') {
+    return <span className="text-sm">{value ? 'Yes' : 'No'}</span>;
+  }
+  if (Array.isArray(value)) {
+    return <span className="text-sm truncate block" title={JSON.stringify(value)}>{value.length} item(s)</span>;
+  }
+  if (typeof value === 'object') {
+    return <span className="text-sm truncate block" title={JSON.stringify(value)}>{Object.keys(value).length} key(s)</span>;
+  }
+  return <span className="text-sm">{String(value)}</span>;
 }
 
 interface RecordsTableProps {
@@ -107,6 +130,58 @@ export function RecordsTable({
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
   const [storageInfoOpen, setStorageInfoOpen] = useState(false);
   const { settings } = useSettings();
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const prevColumnVisibility = useRef(columnVisibility);
+
+  // Derive all unique property keys from records
+  const propertyKeys = useMemo(() => {
+    const keys = new Set<string>();
+    records.forEach((record) => {
+      if (record.properties && typeof record.properties === 'object' && !Array.isArray(record.properties)) {
+        Object.keys(record.properties).forEach((key) => {
+          if (key && typeof key === 'string') {
+            keys.add(key);
+          }
+        });
+      }
+    });
+    return Array.from(keys).sort((a, b) =>
+      humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
+    );
+  }, [records]);
+
+  // Prune stale property column IDs from visibility state
+  useEffect(() => {
+    const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
+    setColumnVisibility((prev) => {
+      const cleaned: VisibilityState = { ...prev };
+      let changed = false;
+      // Remove visibility entries for property columns that no longer exist
+      Object.keys(cleaned).forEach((columnId) => {
+        if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
+          delete cleaned[columnId];
+          changed = true;
+        }
+      });
+      return changed ? cleaned : prev;
+    });
+  }, [propertyKeys]);
+
+  // Hide newly discovered property columns by default
+  useEffect(() => {
+    setColumnVisibility((prev) => {
+      let changed = false;
+      const next: VisibilityState = { ...prev };
+      propertyKeys.forEach((key) => {
+        const columnId = `prop:${key}`;
+        if (!(columnId in next)) {
+          next[columnId] = false;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [propertyKeys]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -117,17 +192,71 @@ export function RecordsTable({
     }
   }, [columnVisibility]);
 
+  useEffect(() => {
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      const wasVisible = prevColumnVisibility.current[columnId];
+      const isVisible = columnVisibility[columnId];
+      if (!wasVisible && isVisible && tableScrollRef.current) {
+        const container = tableScrollRef.current;
+        const targetLeft = container.scrollWidth;
+        if (typeof container.scrollTo === 'function') {
+          container.scrollTo({
+            left: targetLeft,
+            behavior: 'smooth',
+          });
+        } else {
+          container.scrollLeft = targetLeft;
+        }
+      }
+    });
+    prevColumnVisibility.current = columnVisibility;
+  }, [columnVisibility, propertyKeys]);
+
   const columnLabels: Record<string, string> = useMemo(
-    () => ({
-      type: 'Type',
-      summary: 'Summary',
-      created_at: 'Created',
-      updated_at: 'Updated',
-      file_urls: 'Files',
-      _status: 'Status',
-      id: 'ID',
-    }),
-    []
+    () => {
+      const base: Record<string, string> = {
+        type: 'Type',
+        summary: 'Summary',
+        created_at: 'Created',
+        updated_at: 'Updated',
+        file_urls: 'Files',
+        _status: 'Status',
+        id: 'ID',
+      };
+      // Add labels for property columns
+      propertyKeys.forEach((key) => {
+        const propColumnId = `prop:${key}`;
+        base[propColumnId] = humanizePropertyKey(key);
+      });
+      return base;
+    },
+    [propertyKeys]
+  );
+
+  // Create property column definitions
+  const propertyColumns = useMemo<ColumnDef<NeotomaRecord>[]>(
+    () =>
+      propertyKeys.map((key) => ({
+        id: `prop:${key}`,
+        accessorFn: (row) => {
+          const props = row.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return undefined;
+          }
+          return (props as Record<string, unknown>)[key];
+        },
+        header: humanizePropertyKey(key),
+        cell: ({ row }) => {
+          const props = row.original.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return '—';
+          }
+          const value = (props as Record<string, unknown>)[key];
+          return renderPropertyValue(value);
+        },
+      })),
+    [propertyKeys]
   );
 
   const columns = useMemo<ColumnDef<NeotomaRecord>[]>(
@@ -235,8 +364,9 @@ export function RecordsTable({
         header: 'ID',
         cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span>,
       },
+      ...propertyColumns,
     ],
-    []
+    [propertyColumns]
   );
 
   const table = useReactTable({
@@ -339,13 +469,13 @@ export function RecordsTable({
             <DropdownMenuTrigger asChild>
               <Button variant="outline">Columns</Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuContent align="start" className="w-48 max-h-[60vh] overflow-auto">
               <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
               {table.getAllLeafColumns().map((column) => (
                 <DropdownMenuCheckboxItem
                   key={column.id}
                   checked={column.getIsVisible()}
-                  onCheckedChange={() => column.toggleVisibility()}
+                  onCheckedChange={(checked) => column.toggleVisibility(checked === true)}
                 >
                   {columnLabels[column.id] || column.id}
                 </DropdownMenuCheckboxItem>
@@ -417,7 +547,7 @@ export function RecordsTable({
         </div>
       </div>
       <div className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden">
-        <div className="h-full overflow-auto">
+        <div className="h-full overflow-auto" ref={tableScrollRef}>
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((headerGroup) => (

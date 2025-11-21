@@ -1,17 +1,14 @@
 import {
   AccountBase,
   AccountsBalanceGetRequest,
-  AccountsBalanceGetResponse,
   CountryCode,
   Institution,
   InstitutionsGetByIdRequest,
   Item,
   ItemGetRequest,
-  ItemGetResponse,
   ItemPublicTokenExchangeRequest,
   LinkTokenCreateRequest,
   PlaidApi,
-  PlaidApiError,
   PlaidError,
   PlaidEnvironments,
   Products,
@@ -28,23 +25,31 @@ type SyncCursor = string | null | undefined;
 const MAX_SYNC_PAGES = 10;
 const DEFAULT_CLIENT_NAME = 'Neotoma';
 
-const productAllowList = new Set<Products>([
-  'assets',
-  'auth',
-  'balance',
-  'credit_details',
-  'deposit_switch',
-  'employment',
-  'income',
-  'income_verification',
-  'investments',
-  'liabilities',
-  'payment_initiation',
-  'signal',
-  'transactions',
-  'transfer',
-  'wallet',
-]);
+const productAllowList = [
+  Products.Assets,
+  Products.Auth,
+  Products.Balance,
+  Products.CreditDetails,
+  Products.Employment,
+  Products.Income,
+  Products.IncomeVerification,
+  Products.Investments,
+  Products.Liabilities,
+  Products.PaymentInitiation,
+  Products.Signal,
+  Products.Transactions,
+  Products.Transfer,
+] as const;
+
+const productLookup = productAllowList.reduce<Record<string, Products>>((acc, product) => {
+  acc[product.toLowerCase()] = product;
+  return acc;
+}, {});
+
+const countryCodeLookup = Object.values(CountryCode).reduce<Record<string, CountryCode>>((acc, code) => {
+  acc[code.toUpperCase()] = code;
+  return acc;
+}, {});
 
 const environmentBasePaths: Record<PlaidEnvironment, string> = {
   sandbox: PlaidEnvironments.sandbox,
@@ -54,17 +59,16 @@ const environmentBasePaths: Record<PlaidEnvironment, string> = {
 
 function toProducts(input: string[]): Products[] {
   const normalized = input
-    .map((value) => value.trim().toLowerCase())
-    .filter(Boolean) as Products[];
+    .map((value) => productLookup[value.trim().toLowerCase()])
+    .filter((value): value is Products => Boolean(value));
 
-  const filtered = normalized.filter((value) => productAllowList.has(value));
-  return filtered.length > 0 ? filtered : ['transactions'];
+  return normalized.length > 0 ? normalized : [Products.Transactions];
 }
 
 function toCountryCodes(input: string[]): CountryCode[] {
   return input
-    .map((value) => value.trim().toUpperCase())
-    .filter((value) => /^[A-Z]{2}$/.test(value)) as CountryCode[];
+    .map((value) => countryCodeLookup[value.trim().toUpperCase()])
+    .filter((value): value is CountryCode => Boolean(value));
 }
 
 export interface LinkTokenOptions {
@@ -152,7 +156,7 @@ export async function createLinkToken(options: LinkTokenOptions) {
     client_name: clientName,
     products,
     language: 'en',
-    country_codes: countryCodes.length > 0 ? countryCodes : ['US'],
+    country_codes: countryCodes.length > 0 ? countryCodes : [CountryCode.Us],
   };
 
   if (config.plaid.webhookUrl) {
@@ -190,14 +194,14 @@ export async function exchangePublicToken(
   };
 }
 
-export async function fetchItem(accessToken: string): Promise<ItemGetResponse['item']> {
+export async function fetchItem(accessToken: string): Promise<Item> {
   const client = getPlaidClient();
   const request: ItemGetRequest = {
     access_token: accessToken,
   };
 
-  const response: ItemGetResponse = await client.itemGet(request);
-  return response.data.item;
+  const response = await client.itemGet(request);
+  return response.data.item as unknown as Item;
 }
 
 export async function fetchInstitution(
@@ -208,7 +212,7 @@ export async function fetchInstitution(
 
   const request: InstitutionsGetByIdRequest = {
     institution_id: institutionId,
-    country_codes: countryCodes.length > 0 ? countryCodes : ['US'],
+    country_codes: countryCodes.length > 0 ? countryCodes : [CountryCode.Us],
   };
 
   try {
@@ -229,7 +233,7 @@ export async function fetchAccounts(accessToken: string): Promise<AccountBase[]>
     access_token: accessToken,
   };
 
-  const response: AccountsBalanceGetResponse = await client.accountsBalanceGet(request);
+  const response = await client.accountsBalanceGet(request);
   return response.data.accounts;
 }
 
@@ -311,8 +315,8 @@ export interface NormalizedPlaidError {
 }
 
 export function normalizePlaidError(error: unknown): NormalizedPlaidError | undefined {
-  const maybeApiError = error as PlaidApiError;
-  const plaidError: PlaidError | undefined = maybeApiError?.response?.data?.error;
+  const maybeAxiosError = error as { response?: { data?: { error?: PlaidError } } };
+  const plaidError: PlaidError | undefined = maybeAxiosError?.response?.data?.error;
 
   if (!plaidError) {
     return undefined;
@@ -323,7 +327,7 @@ export function normalizePlaidError(error: unknown): NormalizedPlaidError | unde
     code: plaidError.error_code,
     message: plaidError.error_message,
     displayMessage: plaidError.display_message ?? undefined,
-    status: plaidError.status_code ?? undefined,
+    status: plaidError.status ?? undefined,
     requestId: plaidError.request_id ?? undefined,
   };
 }
