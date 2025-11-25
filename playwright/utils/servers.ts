@@ -1,11 +1,19 @@
 import { execFile } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { x25519, ed25519 } from '@noble/curves/ed25519.js';
+import { generateX25519KeyPair, generateEd25519KeyPair, deriveBearerToken } from '../../src/crypto/keys.js';
+import { exportKeyPairs } from '../../src/crypto/export.js';
+import type { KeyExport, X25519KeyPair, Ed25519KeyPair } from '../../src/crypto/types.js';
+import type { LocalRecord } from '../../frontend/src/store/types';
+import { buildSampleRecords } from '../../frontend/src/sample-data/sample-records';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const PLAYWRIGHT_PORT_FILE = path.join(repoRoot, '.branch-ports', 'playwright.json');
 
 type BranchPorts = {
   httpPort: number;
@@ -53,6 +61,54 @@ export async function getBranchPorts(): Promise<BranchPorts> {
   return runGetBranchPorts();
 }
 
+export type KeyExportBundle = {
+  x25519: KeyExport;
+  ed25519: KeyExport;
+};
+
+export type TestCredentials = {
+  bearerToken: string;
+  keyExports: KeyExportBundle;
+};
+
+function deriveDeterministicBytes(seed: string, context: string): Uint8Array {
+  const digest = createHash('sha256').update(`${seed}:${context}`).digest();
+  return new Uint8Array(digest);
+}
+
+function clampX25519PrivateKey(bytes: Uint8Array): Uint8Array {
+  const copy = new Uint8Array(bytes);
+  copy[0] &= 248;
+  copy[31] &= 127;
+  copy[31] |= 64;
+  return copy;
+}
+
+function createDeterministicX25519KeyPair(seed: string): X25519KeyPair {
+  const privateKey = clampX25519PrivateKey(deriveDeterministicBytes(seed, 'x25519'));
+  const publicKey = x25519.getPublicKey(privateKey);
+  return { type: 'x25519', privateKey, publicKey };
+}
+
+function createDeterministicEd25519KeyPair(seed: string): Ed25519KeyPair {
+  const privateKey = deriveDeterministicBytes(seed, 'ed25519');
+  const publicKey = ed25519.getPublicKey(privateKey);
+  return { type: 'ed25519', privateKey, publicKey };
+}
+
+export async function createTestCredentials(): Promise<TestCredentials> {
+  const deterministicSeed = process.env.PLAYWRIGHT_TEST_SEED?.trim();
+  const x25519 = deterministicSeed
+    ? createDeterministicX25519KeyPair(deterministicSeed)
+    : await generateX25519KeyPair();
+  const ed25519 = deterministicSeed
+    ? createDeterministicEd25519KeyPair(deterministicSeed)
+    : await generateEd25519KeyPair();
+  const keyExports = exportKeyPairs(x25519, ed25519);
+  const bearerToken = deriveBearerToken(ed25519.publicKey);
+  return { bearerToken, keyExports };
+}
+
 function ensureValue(...candidates: Array<string | undefined>): string {
   for (const candidate of candidates) {
     if (typeof candidate === 'string' && candidate.trim().length > 0) {
@@ -62,7 +118,10 @@ function ensureValue(...candidates: Array<string | undefined>): string {
   return '';
 }
 
-export function buildBackendEnv(port: number): NodeJS.ProcessEnv {
+export function buildBackendEnv(
+  port: number,
+  options: { bearerToken: string; wsPort?: number },
+): NodeJS.ProcessEnv {
   const supabaseUrl =
     ensureValue(process.env.DEV_SUPABASE_URL, process.env.SUPABASE_URL) ||
     'https://example.supabase.co';
@@ -76,15 +135,16 @@ export function buildBackendEnv(port: number): NodeJS.ProcessEnv {
       process.env.CONNECTOR_SECRET_KEY,
       process.env.CONNECTOR_SECRETS_KEY,
     ) || 'test-connector-secret-test-connector-secret';
-  const bearer =
-    process.env.ACTIONS_BEARER_TOKEN ||
-    randomBytes(32).toString('base64url');
+  const bearer = options.bearerToken;
+  const wsPort = options.wsPort;
 
   return {
     ...process.env,
     NODE_ENV: 'test',
+    BRANCH_PORTS_FILE: PLAYWRIGHT_PORT_FILE,
     HTTP_PORT: String(port),
     PORT: String(port),
+    ...(wsPort ? { WS_PORT: String(wsPort) } : {}),
     ACTIONS_BEARER_TOKEN: bearer,
     CONNECTOR_SECRET_KEY: connectorSecret,
     CONNECTOR_SECRETS_KEY: connectorSecret,
@@ -99,6 +159,7 @@ export function buildBackendEnv(port: number): NodeJS.ProcessEnv {
 export function buildFrontendEnv(
   vitePort: number,
   apiPort: number,
+  wsPort?: number,
 ): NodeJS.ProcessEnv {
   const apiBase =
     process.env.VITE_API_BASE_URL || `http://127.0.0.1:${apiPort}`;
@@ -106,8 +167,11 @@ export function buildFrontendEnv(
   return {
     ...process.env,
     NODE_ENV: 'test',
+    BRANCH_PORTS_FILE: PLAYWRIGHT_PORT_FILE,
     VITE_PORT: String(vitePort),
     PORT: String(vitePort),
+    HTTP_PORT: String(apiPort),
+    ...(wsPort ? { WS_PORT: String(wsPort) } : {}),
     VITE_API_BASE_URL: apiBase,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
   };
@@ -152,7 +216,228 @@ export async function waitForHttp(
   throw new Error(`Timed out waiting for ${url}: ${reason}`);
 }
 
+
+type MockApiServerControls = {
+  seedRecords: (records?: LocalRecord[]) => void;
+  clearRecords: () => void;
+  listRecords: () => LocalRecord[];
+};
+
+export type MockApiServer = MockApiServerControls & {
+  origin: string;
+  close: () => Promise<void>;
+};
+
+function respondJson(res: ServerResponse, status: number, payload: unknown) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function parseJsonBody(req: IncomingMessage): Promise<any> {
+  try {
+    const body = await readRequestBody(req);
+    if (!body.length) {
+      return {};
+    }
+    return JSON.parse(body.toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function buildMockRecord(overrides: Partial<LocalRecord> = {}): LocalRecord {
+  const timestamp = new Date().toISOString();
+  return {
+    id: overrides.id ?? randomUUID(),
+    type: overrides.type ?? 'note',
+    summary:
+      overrides.summary ?? 'Mock record generated during Playwright tests',
+    properties: overrides.properties ?? { source: 'mock-api' },
+    file_urls: overrides.file_urls ?? [],
+    embedding: overrides.embedding ?? null,
+    created_at: overrides.created_at ?? timestamp,
+    updated_at: overrides.updated_at ?? timestamp,
+  };
+}
+
+function filterRecords(
+  records: LocalRecord[],
+  payload: { type?: string; search?: string[]; limit?: number } = {},
+): LocalRecord[] {
+  let results = [...records];
+  if (payload.type) {
+    results = results.filter((record) => record.type === payload.type);
+  }
+  if (Array.isArray(payload.search) && payload.search.length > 0) {
+    const terms = payload.search.map((term) => String(term).toLowerCase());
+    results = results.filter((record) => {
+      const haystack = JSON.stringify(record).toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }
+  if (typeof payload.limit === 'number' && Number.isFinite(payload.limit)) {
+    results = results.slice(0, Math.max(0, payload.limit));
+  }
+  return results;
+}
+
+export async function startMockApiServer(
+  port: number,
+  options: { initialRecords?: LocalRecord[] } = {},
+): Promise<MockApiServer> {
+  let origin = `http://127.0.0.1:${port}`;
+  const recordStore = new Map<string, LocalRecord>();
+
+  const seedRecords = (records: LocalRecord[] = buildSampleRecords()) => {
+    recordStore.clear();
+    for (const record of records) {
+      recordStore.set(record.id, record);
+    }
+  };
+
+  const clearRecords = () => recordStore.clear();
+  const listRecords = () => Array.from(recordStore.values());
+
+  seedRecords(options.initialRecords);
+
+  const matchesRoute = (pathname: string, route: string) => {
+    if (pathname === route) {
+      return true;
+    }
+    if (route.startsWith('/api')) {
+      const trimmed = route.replace(/^\/api/, '') || '/';
+      return pathname === trimmed;
+    }
+    return false;
+  };
+
+  const verboseMockApi = process.env.PLAYWRIGHT_VERBOSE_SERVERS === '1';
+
+  const server = createServer(async (req, res) => {
+    if (!req.url) {
+      respondJson(res, 400, { error: 'Missing URL' });
+      return;
+    }
+
+    const requestUrl = new URL(req.url, origin);
+    if (verboseMockApi) {
+      console.log(`[mock-api] ${req.method ?? 'UNKNOWN'} ${requestUrl.pathname}`);
+    }
+
+    if (req.method === 'GET' && matchesRoute(requestUrl.pathname, '/health')) {
+      respondJson(res, 200, { status: 'ok' });
+      return;
+    }
+
+    if (req.method === 'GET' && matchesRoute(requestUrl.pathname, '/api/types')) {
+      const types = Array.from(
+        new Set(listRecords().map((record) => record.type)),
+      ).sort();
+      respondJson(res, 200, { types });
+      return;
+    }
+
+    if (req.method === 'POST' && matchesRoute(requestUrl.pathname, '/api/retrieve_records')) {
+      const payload = await parseJsonBody(req);
+      respondJson(res, 200, filterRecords(listRecords(), payload));
+      return;
+    }
+
+    if (req.method === 'POST' && matchesRoute(requestUrl.pathname, '/api/chat')) {
+      await parseJsonBody(req);
+      const latestRecord = listRecords()[0];
+      const assistantMessage = latestRecord
+        ? `Mock response referencing record ${
+            latestRecord.summary ?? latestRecord.id
+          }`
+        : 'Mock response with no records available';
+      if (verboseMockApi) {
+        console.log(`[mock-api] <- ${assistantMessage}`);
+      }
+      respondJson(res, 200, {
+        message: { content: assistantMessage },
+        records_queried: filterRecords(listRecords(), { limit: 3 }),
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && matchesRoute(requestUrl.pathname, '/api/upload_file')) {
+      const body = await readRequestBody(req);
+      const created = buildMockRecord({
+        type: 'file_asset',
+        summary: `Uploaded file (${body.length} bytes)`,
+        properties: {
+          size_bytes: body.length,
+          source: 'mock-upload',
+        },
+        file_urls: [`files/${randomUUID()}.bin`],
+      });
+      recordStore.set(created.id, created);
+      respondJson(res, 200, created);
+      return;
+    }
+
+    if (req.method === 'POST' && matchesRoute(requestUrl.pathname, '/api/analyze_file')) {
+      const body = await readRequestBody(req);
+      respondJson(res, 200, {
+        type: 'analysis_result',
+        properties: {
+          bytes: body.length,
+          analyzed_at: new Date().toISOString(),
+        },
+        summary: 'File analyzed via mock API',
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && matchesRoute(requestUrl.pathname, '/api/get_file_url')) {
+      const filePath = requestUrl.searchParams.get('file_path') ?? '';
+      respondJson(res, 200, {
+        url: `${origin}/${filePath.replace(/^\/+/, '')}`,
+      });
+      return;
+    }
+
+    respondJson(res, 404, { error: 'Not Found' });
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, resolve);
+  });
+  const address = server.address();
+  if (address && typeof address === 'object' && 'port' in address) {
+    const addrPort = Number((address as { port: number }).port);
+    if (Number.isFinite(addrPort)) {
+      origin = `http://127.0.0.1:${addrPort}`;
+    }
+  }
+
+  return {
+    origin,
+    seedRecords,
+    clearRecords,
+    listRecords,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      }),
+  };
+}
+
 export { repoRoot };
-
-
-
