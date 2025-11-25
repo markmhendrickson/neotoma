@@ -1,0 +1,185 @@
+{
+  "recordsLifecycle": {
+    "description": "Records table end-to-end CRUD, filtering, uploads, quota surfaces, and empty states.",
+    "components": [
+      "RecordsTable",
+      "RecordDetailsPanel",
+      "EmptyPlaceholder",
+      "useDatastore",
+      "useStorageQuota"
+    ],
+    "states": [
+      "empty datastore",
+      "seeded records (multiple types)",
+      "drag-and-drop upload",
+      "manual upload button",
+      "multi-select delete",
+      "quota threshold > 90%",
+      "empty state rendering",
+      "empty state button interactions",
+      "Learn more sections expand/collapse",
+      "filtered empty state (no matches)"
+    ],
+    "specFile": "records-lifecycle.spec.ts"
+  },
+  "recordDetails": {
+    "description": "Record details side panel interactions, status badges, file affordances, and persistence.",
+    "components": [
+      "RecordDetailsPanel",
+      "RecordsTable"
+    ],
+    "states": [
+      "panel opened via table row click",
+      "status badge transitions (uploading to ready)",
+      "file links (local + remote)",
+      "panel dismissal persistence",
+      "multiple record types display",
+      "file link interactions"
+    ],
+    "specFile": "record-details.spec.ts"
+  },
+  "chatPanel": {
+    "description": "Chat message persistence, uploads, error handling, and inline record references.",
+    "components": [
+      "ChatPanel",
+      "useKeys",
+      "useSettings",
+      "useDatastore"
+    ],
+    "states": [
+      "intro message seed",
+      "encrypted history (keys ready)",
+      "file upload success",
+      "file upload failure + retry",
+      "recent records sidebar",
+      "upload network failures",
+      "upload server errors",
+      "error message formatting",
+      "multiple concurrent upload failures"
+    ],
+    "specFile": "chat-panel.spec.ts"
+  },
+  "settingsAndKeys": {
+    "description": "Floating settings button, key management dialog, import/export flows, Supabase toggles.",
+    "components": [
+      "FloatingSettingsButton",
+      "KeyManagementDialog",
+      "useSettings",
+      "useKeys"
+    ],
+    "states": [
+      "generate keys",
+      "export keys",
+      "import keys",
+      "cloud toggle on/off",
+      "bearer token validation",
+      "invalid key import handling",
+      "key management persistence"
+    ],
+    "specFile": "settings-keys.spec.ts"
+  },
+  "storageAndSchema": {
+    "description": "Seed helpers, schema migrations, worker health, quota banners, and cloud sync.",
+    "components": [
+      "store",
+      "worker",
+      "useStorageQuota",
+      "seedLocalRecords utilities"
+    ],
+    "states": [
+      "first-run schema initialization",
+      "seeded records via helper",
+      "quota usage < 50%",
+      "quota usage > 90%",
+      "background sync in-progress",
+      "cloud storage enabled sync state",
+      "seed marker persistence"
+    ],
+    "specFile": "storage-schema.spec.ts"
+  },
+  "recordsTableColumns": {
+    "description": "Column management: visibility toggles, drag-and-drop reordering, resizing, sorting, and localStorage persistence.",
+    "components": [
+      "RecordsTable",
+      "ColumnHeader",
+      "DropdownMenu"
+    ],
+    "states": [
+      "column visibility toggle via dropdown",
+      "column reordering via drag-and-drop",
+      "column resizing via resize handles",
+      "column sorting via sort buttons",
+      "persistence across page reloads",
+      "column state with filtering"
+    ],
+    "specFile": "records-table-columns.spec.ts"
+  },
+  "errorHandling": {
+    "description": "Error handling for uploads, quota exceeded, decryption failures, and datastore initialization.",
+    "components": [
+      "RecordsTable",
+      "useDatastore",
+      "useStorageQuota",
+      "useKeys"
+    ],
+    "states": [
+      "file upload network failure",
+      "file upload server error (500)",
+      "quota exceeded warning",
+      "decryption error toast",
+      "datastore initialization failure",
+      "error message differentiation",
+      "transient error recovery",
+      "error state persistence"
+    ],
+    "specFile": "error-handling.spec.ts"
+  },
+  "jsonViewer": {
+    "description": "JSON viewer with expand/collapse functionality for record properties.",
+    "components": [
+      "JsonViewer"
+    ],
+    "states": [
+      "primitive values display (strings, numbers, booleans)",
+      "object expand/collapse",
+      "array display with indices",
+      "null/undefined handling"
+    ],
+    "specFile": "json-viewer.spec.ts"
+  },
+  "floatingSettingsButton": {
+    "description": "Floating action button for settings access with positioning and visibility.",
+    "components": [
+      "FloatingSettingsButton",
+      "KeyManagementDialog"
+    ],
+    "states": [
+      "button visibility and positioning",
+      "opens settings dialog",
+      "loading state (button hidden)",
+      "loaded state (button visible)"
+    ],
+    "specFile": "floating-settings-button.spec.ts"
+  },
+  "integration": {
+    "description": "End-to-end integration tests and edge cases across all features.",
+    "components": [
+      "RecordsTable",
+      "RecordDetailsPanel",
+      "ChatPanel",
+      "FloatingSettingsButton",
+      "useDatastore",
+      "useKeys",
+      "useSettings"
+    ],
+    "states": [
+      "complete record lifecycle (upload to delete)",
+      "key rotation scenarios",
+      "offline/online transitions",
+      "rapid successive operations",
+      "storage near capacity handling"
+    ],
+    "specFile": "integration.spec.ts"
+  }
+}
+
