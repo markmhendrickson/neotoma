@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   ColumnDef,
   SortingState,
@@ -85,6 +86,7 @@ function renderPropertyValue(value: unknown): React.ReactNode {
 interface RecordsTableProps {
   records: NeotomaRecord[];
   totalCount: number;
+  displayCount: number;
   types: string[];
   onRecordClick: (record: NeotomaRecord) => void;
   onDeleteRecord: (record: NeotomaRecord) => Promise<void> | void;
@@ -92,6 +94,9 @@ interface RecordsTableProps {
   onSearch: (query: string) => void;
   onTypeFilter: (type: string) => void;
   isLoading?: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   onFileUploadRef?: React.MutableRefObject<((files: FileList | null) => Promise<void>) | null>;
 }
 
@@ -237,6 +242,7 @@ const getStoredColumnWidths = (): Record<string, number> => {
 export function RecordsTable({
   records,
   totalCount,
+  displayCount,
   types,
   onRecordClick,
   onDeleteRecord,
@@ -244,6 +250,9 @@ export function RecordsTable({
   onSearch,
   onTypeFilter,
   isLoading = false,
+  loadingMore = false,
+  hasMore = false,
+  onLoadMore,
   onFileUploadRef,
 }: RecordsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -251,6 +260,7 @@ export function RecordsTable({
   const ALL_TYPES_VALUE = '__all__';
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rowsClickable, setRowsClickable] = useState(true);
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
   
   const triggerFileDialog = useCallback(() => {
     fileInputRef.current?.click();
@@ -272,9 +282,51 @@ export function RecordsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'updated_at', desc: true },
   ]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
+  const [baseColumnVisibility, setBaseColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
+  const [persistColumnVisibility, setPersistColumnVisibility] = useState(false);
   const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const prevColumnVisibility = useRef(columnVisibility);
+  const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
+  const [loadMoreTriggerNode, setLoadMoreTriggerNode] = useState<HTMLDivElement | null>(null);
+  const handleTableScrollRef = useCallback((node: HTMLDivElement | null) => {
+    tableScrollRef.current = node;
+    setScrollContainer(node);
+  }, []);
+  const handleLoadMoreTriggerRef = useCallback((node: HTMLDivElement | null) => {
+    loadMoreTriggerRef.current = node;
+    setLoadMoreTriggerNode(node);
+  }, []);
+  const prevColumnVisibility = useRef<VisibilityState>({});
+  
+  // Infinite scroll: detect when user scrolls near bottom
+  useEffect(() => {
+    if (
+      !onLoadMore ||
+      !hasMore ||
+      loadingMore ||
+      !loadMoreTriggerNode ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMore();
+        }
+      },
+      {
+        root: scrollContainer ?? null,
+        rootMargin: '200px',
+      }
+    );
+
+    observer.observe(loadMoreTriggerNode);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [onLoadMore, hasMore, loadingMore, scrollContainer, loadMoreTriggerNode]);
   const propertyKeys = useMemo(() => {
     const keys = new Set<string>();
     records.forEach((record) => {
@@ -291,33 +343,59 @@ export function RecordsTable({
     );
   }, [records]);
 
+  // Compute columnVisibility synchronously to include all property columns as hidden
+  // This prevents flickering when propertyKeys changes
+  const columnVisibility = useMemo(() => {
+    const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
+    const visibility: VisibilityState = { ...baseColumnVisibility };
+    
+    // Remove stale property columns
+    Object.keys(visibility).forEach((columnId) => {
+      if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
+        delete visibility[columnId];
+      }
+    });
+    
+    // Add new property columns as hidden by default
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      if (!(columnId in visibility)) {
+        visibility[columnId] = false;
+      }
+    });
+    
+    return visibility;
+  }, [baseColumnVisibility, propertyKeys]);
+
+  // Sync baseColumnVisibility when propertyKeys change (for persistence)
   useEffect(() => {
     const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
-    setColumnVisibility((prev) => {
+    setBaseColumnVisibility((prev) => {
       const cleaned: VisibilityState = { ...prev };
       let changed = false;
+      
+      // Remove stale property columns
       Object.keys(cleaned).forEach((columnId) => {
         if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
           delete cleaned[columnId];
           changed = true;
         }
       });
-      return changed ? cleaned : prev;
-    });
-  }, [propertyKeys]);
 
-  useEffect(() => {
-    setColumnVisibility((prev) => {
-      let changed = false;
-      const next: VisibilityState = { ...prev };
+      // Add new property columns as hidden by default
       propertyKeys.forEach((key) => {
         const columnId = `prop:${key}`;
-        if (!(columnId in next)) {
-          next[columnId] = false;
+        if (!(columnId in cleaned)) {
+          cleaned[columnId] = false;
           changed = true;
         }
       });
-      return changed ? next : prev;
+      
+      if (changed) {
+        setPersistColumnVisibility(false);
+        return cleaned;
+      }
+      return prev;
     });
   }, [propertyKeys]);
 
@@ -336,7 +414,11 @@ export function RecordsTable({
         }
       }
     });
-    prevColumnVisibility.current = columnVisibility;
+    const wasPersisting = prevColumnVisibility.current !== columnVisibility;
+    prevColumnVisibility.current = { ...columnVisibility };
+    if (wasPersisting) {
+      setPersistColumnVisibility(true);
+    }
   }, [columnVisibility, propertyKeys]);
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
@@ -1105,13 +1187,16 @@ export function RecordsTable({
   } | null>(null);
 
   useEffect(() => {
+    if (!persistColumnVisibility) {
+      return;
+    }
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
+      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(baseColumnVisibility));
     } catch (error) {
       console.warn('[RecordsTable] Failed to persist column visibility', error);
     }
-  }, [columnVisibility]);
+  }, [baseColumnVisibility, persistColumnVisibility]);
 
   useEffect(() => {
     setColumnOrder((current) => mergeColumnOrder(current, columnIds));
@@ -1144,7 +1229,7 @@ export function RecordsTable({
       columnOrder,
     },
     onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: setBaseColumnVisibility,
     onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -1264,16 +1349,17 @@ export function RecordsTable({
   const showWelcomeEmptyState = !isInitialLoading && records.length === 0 && !searchQuery.trim() && !selectedType;
   const showEmptyPlaceholder = !isInitialLoading && table.getRowModel().rows.length === 0;
   const visibleColumns = table.getVisibleLeafColumns();
-  const skeletonColumns = visibleColumns.length > 0 ? visibleColumns : table.getAllLeafColumns();
+  // Always use visible columns for skeleton to respect column visibility settings
+  const skeletonColumns = visibleColumns;
   const formatRecordCount = useCallback(
     (count: number) => `${count} record${count === 1 ? '' : 's'}`,
     []
   );
   const recordCountLabel = isInitialLoading
     ? 'Loading records…'
-    : records.length === totalCount
-    ? formatRecordCount(totalCount)
-    : `${records.length} of ${formatRecordCount(totalCount)}`;
+    : displayCount === totalCount
+    ? formatRecordCount(displayCount)
+    : `${displayCount} of ${formatRecordCount(totalCount)}`;
   const quotaLabel = isInitialLoading ? 'Calculating usage…' : quotaMessage;
 
   const handleDragStart = useCallback(
@@ -1488,7 +1574,10 @@ export function RecordsTable({
                 <DropdownMenuCheckboxItem
                   key={column.id}
                   checked={column.getIsVisible()}
-                  onCheckedChange={(checked) => column.toggleVisibility(checked === true)}
+                  onCheckedChange={(checked) => {
+                    column.toggleVisibility(checked === true);
+                    setPersistColumnVisibility(true);
+                  }}
                   onSelect={(event) => event.preventDefault()}
                 >
                   {columnLabels[column.id] || column.id}
@@ -1570,8 +1659,11 @@ export function RecordsTable({
           </span>
         </div>
       </div>
-      <div className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden">
-        <div className="h-full overflow-auto" ref={tableScrollRef}>
+      <div
+        className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden"
+        key={`${searchQuery}-${selectedType}`}
+      >
+        <div className="h-full overflow-auto" ref={handleTableScrollRef}>
           {showEmptyPlaceholder ? (
             <div className="flex h-full items-center justify-center px-6 py-10">
               {showWelcomeEmptyState ? (
@@ -1644,11 +1736,12 @@ export function RecordsTable({
               )}
             </div>
           ) : (
-            <Table className="table-fixed w-full">
+            <Fragment>
+              <Table className="table-fixed w-full">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.filter((header) => header.column.getIsVisible()).map((header) => {
                       const width = columnWidths[header.column.id];
                       const style = width ? { width: `${width}px` } : undefined;
                       const resizeLabel = columnLabels[header.column.id] || header.column.id;
@@ -1807,6 +1900,16 @@ export function RecordsTable({
                 )}
               </TableBody>
             </Table>
+            {hasMore && (
+              <div ref={handleLoadMoreTriggerRef} className="h-4 w-full flex-shrink-0" />
+            )}
+            {loadingMore && (
+              <div className="flex items-center justify-center py-4 flex-shrink-0">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading more records...</span>
+              </div>
+            )}
+            </Fragment>
           )}
         </div>
       </div>

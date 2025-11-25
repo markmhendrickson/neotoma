@@ -1,6 +1,9 @@
 import type { LocalRecord } from '@/store/types';
+import { parseCsvRows } from '@/utils/csv';
+import workoutCsvRaw from './sets-medium.csv?raw';
 
 const SAMPLE_SEED_TAG = 'sample_seed';
+const WORKOUT_SAMPLE_FILE = 'sets-medium.csv';
 
 interface SampleRecordTemplate {
   type: string;
@@ -119,7 +122,7 @@ function createRecordId(index: number): string {
 
 export function buildSampleRecords(): LocalRecord[] {
   const now = Date.now();
-  return SAMPLE_RECORD_TEMPLATES.map((template, index) => {
+  const templateRecords = SAMPLE_RECORD_TEMPLATES.map((template, index) => {
     const timestamp = new Date(now - index * 60 * 60 * 1000).toISOString();
     return {
       id: createRecordId(index),
@@ -136,6 +139,138 @@ export function buildSampleRecords(): LocalRecord[] {
       updated_at: timestamp,
     };
   });
+
+  const workoutRecords = buildWorkoutSampleRecords(templateRecords.length);
+
+  return [...templateRecords, ...workoutRecords];
+}
+
+function buildWorkoutSampleRecords(indexOffset: number): LocalRecord[] {
+  if (!workoutCsvRaw || !workoutCsvRaw.trim()) {
+    return [];
+  }
+
+  const { rows, headers, truncated } = parseCsvRows(workoutCsvRaw, 5000);
+  if (rows.length === 0) {
+    return [];
+  }
+
+  const firstTimestamp = sanitizeDate(rows[0]?.['Date'] || rows[0]?.['Created at']);
+  const lastTimestamp = sanitizeDate(rows[rows.length - 1]?.['Date'] || rows[rows.length - 1]?.['Created at']);
+  const datasetTimestamp = firstTimestamp ?? new Date().toISOString();
+  const datasetId = createRecordId(indexOffset + 1);
+
+  const datasetSummaryParts = [
+    `Workout log (${rows.length} sets)`,
+    firstTimestamp && lastTimestamp
+      ? `${formatIsoDate(firstTimestamp)} → ${formatIsoDate(lastTimestamp)}`
+      : null,
+  ].filter(Boolean);
+
+  const datasetRecord: LocalRecord = {
+    id: datasetId,
+    type: 'dataset',
+    summary: datasetSummaryParts.join(' — '),
+    properties: {
+      source_file: WORKOUT_SAMPLE_FILE,
+      row_count: rows.length,
+      headers,
+      truncated,
+      seed_tag: SAMPLE_SEED_TAG,
+      seed_index: indexOffset + 1,
+    },
+    file_urls: [],
+    embedding: null,
+    created_at: datasetTimestamp,
+    updated_at: datasetTimestamp,
+  };
+
+  const rowRecords = rows.map((row, rowIndex) => {
+    const recordTimestamp =
+      sanitizeDate(row['Created at'] || row['Date']) ||
+      new Date(datasetTimestamp ? new Date(datasetTimestamp).getTime() + rowIndex * 1000 : Date.now()).toISOString();
+    return {
+      id: createRecordId(indexOffset + rowIndex + 2),
+      type: 'exercise',
+      summary: buildWorkoutRowSummary(row, rowIndex),
+      properties: {
+        ...row,
+        csv_origin: {
+          file_name: WORKOUT_SAMPLE_FILE,
+          row_index: rowIndex,
+          parent_record_id: datasetId,
+        },
+        seed_tag: SAMPLE_SEED_TAG,
+        seed_index: indexOffset + rowIndex + 2,
+      },
+      file_urls: [],
+      embedding: null,
+      created_at: recordTimestamp,
+      updated_at: recordTimestamp,
+    };
+  });
+
+  return [datasetRecord, ...rowRecords];
+}
+
+function buildWorkoutRowSummary(row: Record<string, string>, index: number): string {
+  const exercise = sanitizeCell(row['Exercise']) || sanitizeCell(row['Name']) || 'Workout set';
+  const dateLabel = sanitizeCell(row['Date']) || sanitizeCell(row['Created at']);
+  const reps = sanitizeCell(row['Repetitions']) || sanitizeCell(row['Range']);
+  const weight = sanitizeCell(row['Weight']);
+  const difficulty = sanitizeCell(row['Difficulty']);
+  const rpe = sanitizeCell(row['RPE']);
+  const notes = sanitizeCell(row['Notes']);
+  const type = sanitizeCell(row['Type']);
+
+  const parts = [
+    dateLabel,
+    exercise,
+    reps ? `${reps} reps` : null,
+    weight,
+    type && !weight ? type : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const extra = [difficulty, rpe ? `RPE ${rpe}` : null].filter(Boolean).join(', ');
+  const summarySegments = [parts, extra, notes].filter(Boolean);
+
+  return summarySegments.join(' — ') || `Workout set #${index + 1}`;
+}
+
+function sanitizeCell(value?: string): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const trimmed = value.toString().trim();
+  if (!trimmed || trimmed === '""') {
+    return null;
+  }
+  return trimmed.replace(/^"|"$/g, '');
+}
+
+function sanitizeDate(value?: string): string | null {
+  const cell = sanitizeCell(value);
+  if (!cell) {
+    return null;
+  }
+  const stripped = cell
+    .replace(/^@+/, '')
+    .replace(/\s*\(https?:\/\/[^\)]+\)/g, '')
+    .trim();
+  if (!stripped) {
+    return null;
+  }
+  const parsed = new Date(stripped);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString();
+}
+
+function formatIsoDate(iso: string): string {
+  return iso.split('T')[0];
 }
 
 export const SAMPLE_RECORD_STORAGE_KEY = 'neotoma.sampleSeeded';

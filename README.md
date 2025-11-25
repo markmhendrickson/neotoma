@@ -375,6 +375,8 @@ curl -X POST http://localhost:8080/retrieve_records \
   }'
 ```
 
+Include `"include_total_count": true` in the payload when you need the exact number of matching records. When set, the response becomes `{"records":[...],"total_count":123}` instead of a bare array so clients can show precise counts while paginating locally.
+
 #### Step 6: List Connected Items
 
 View all stored Plaid items (metadata only, no access tokens):
@@ -403,7 +405,7 @@ curl -X GET http://localhost:8080/plaid/items \
 | `POST` | `/store_record` | Create a single record (MCP tool parity) | `src/index.test.ts` |
 | `POST` | `/store_records` | Create 1–100 records at once | `src/index.test.ts` |
 | `POST` | `/update_record` | Merge properties/file URLs into an existing record, regenerating embeddings when needed | `src/index.test.ts` |
-| `POST` | `/retrieve_records` | Query records with keyword+semantic search plus property filters | `src/index.test.ts` |
+| `POST` | `/retrieve_records` | Query records with keyword+semantic search, property filters, and optional `total_count` metadata | `src/index.test.ts` |
 | `POST` | `/delete_record` | Delete a single record by id | `src/index.test.ts` |
 | `POST` | `/delete_records` | Delete 1–100 records by id | `src/index.test.ts` |
 | `POST` | `/upload_file` | Upload a file, auto-analyze it, and create or update records (CSV uploads fan out per row) | `src/index.test.ts` |
@@ -500,7 +502,7 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 | `store_record` | Create new record with properties and optional files | `type`, `properties`, `file_urls`, `embedding?` | Created record with ID | `src/index.test.ts` |
 | `store_records` | Create multiple records in bulk (1-100) | `records` (array) | Array of created records | `src/index.test.ts` |
 | `update_record` | Update existing record properties/files/embedding | `id`, `properties`, `file_urls`, `embedding?` | Updated record | `src/index.test.ts` |
-| `retrieve_records` | Query records by type, property filters, or semantic search | `type`, `properties`, `limit`, `search?`, `search_mode?`, `query_embedding?`, `similarity_threshold?` | Array of matching records | `src/index.test.ts` |
+| `retrieve_records` | Query records by type, property filters, or semantic search | `type`, `properties`, `limit`, `search?`, `search_mode?`, `query_embedding?`, `similarity_threshold?`, `include_total_count?` | Array of matching records (or `{records,total_count}` when `include_total_count` is true) | `src/index.test.ts` |
 | `delete_record` | Remove record and associated files | `id` | Success confirmation | `src/index.test.ts` |
 | `delete_records` | Remove multiple records in bulk (1-100) | `ids` (array) | Success confirmation with deleted IDs | `src/index.test.ts` |
 | `upload_file` | Upload file, attach to record, or auto-create analyzed record | `file` (multipart), `record_id?`, `properties?`, `bucket?` | Updated or newly created record | `src/index.test.ts` |
@@ -511,7 +513,7 @@ curl -sS https://neotoma.fly.dev/openapi.yaml | head -n 5
 | `plaid_list_items` | List stored Plaid items (metadata only) | `plaid_item_id?`, `item_id?` | Array of Plaid items without access tokens | `src/services/plaid_sync.test.ts` |
 | `plaid_preview_sync` | Preview Plaid item change counts without persisting | `plaid_item_id?`, `item_id?`, `all?` | Preview summary per item | — |
 | `plaid_link_demo` | Serve Plaid Link sandbox demo page | `token` query (bearer token) | HTML page response | — |
-| `chat` | Conversational interface with OpenAI function calling to query records | `messages` (array), `model?`, `temperature?` | Assistant message with optional records_queried and function_calls | — |
+| `chat` | Conversational interface with OpenAI function calling to query records | `messages` (array), `model?`, `temperature?` | Assistant message with optional records_queried, records_total_count, and function_calls | — |
 | `list_provider_catalog` | Return metadata for every supported importer provider | — | Provider definitions array | `src/integrations/providers/__tests__/clients.test.ts` |
 | `sync_provider_imports` | Run importer orchestration for a provider/connector | `provider`, `connector_id?`, `sync_type?`, `limit?`, `max_pages?` | Sync summaries per connector | `src/services/importers.ts`, `src/integrations/providers/__tests__/clients.test.ts` |
 

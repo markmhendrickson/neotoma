@@ -26,6 +26,7 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof RecordsTable
   const props: React.ComponentProps<typeof RecordsTable> = {
     records: [baseRecord],
     totalCount: 1,
+    displayCount: 1,
     types: ['note', 'task'],
     onRecordClick,
     onDeleteRecord,
@@ -37,6 +38,9 @@ function renderTable(overrides: Partial<React.ComponentProps<typeof RecordsTable
 
   if (overrides.totalCount === undefined) {
     props.totalCount = props.records.length;
+  }
+  if (overrides.displayCount === undefined) {
+    props.displayCount = props.totalCount;
   }
 
   const result = render(<RecordsTable {...props} />);
@@ -202,6 +206,26 @@ describe('RecordsTable', () => {
 
     const rerenderedSummaryHeader = screen.getByRole('columnheader', { name: /Summary/ });
     expect(rerenderedSummaryHeader.style.width).toBe(`${storedWidth}px`);
+  });
+
+  it('shows the displayable record count even if only a subset is loaded', () => {
+    renderTable({
+      records: [baseRecord],
+      totalCount: 2741,
+      displayCount: 2741,
+    });
+
+    expect(screen.getByText('2741 records')).toBeInTheDocument();
+  });
+
+  it('shows filtered count against total when filters reduce the dataset', () => {
+    renderTable({
+      records: [baseRecord],
+      totalCount: 2741,
+      displayCount: 200,
+    });
+
+    expect(screen.getByText('200 of 2741 records')).toBeInTheDocument();
   });
 
   it('opens the actions menu and triggers onRecordClick when View details is selected', async () => {
@@ -452,6 +476,32 @@ describe('RecordsTable', () => {
     expect(screen.queryByText('Old Property')).not.toBeInTheDocument();
     await togglePropertyColumn(user, 'New Property');
     expect(await screen.findByText('New Property')).toBeInTheDocument();
+  });
+
+  it('retains manual column visibility toggles when search query is cleared', async () => {
+    const user = userEvent.setup();
+    renderTable();
+
+    const columnsButton = getLatestColumnsButton();
+    await user.click(columnsButton);
+    const menu = await screen.findByRole('menu');
+    const summaryToggle = within(menu).getByRole('menuitemcheckbox', { name: 'Summary' });
+    await user.click(summaryToggle);
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('First note')).not.toBeInTheDocument();
+
+    const searchInput = screen.getByPlaceholderText('Search records...');
+    await user.type(searchInput, 'note');
+    await user.clear(searchInput);
+
+    expect(screen.queryByText('First note')).not.toBeInTheDocument();
+    await user.click(columnsButton);
+    const updatedMenu = await screen.findByRole('menu');
+    expect(within(updatedMenu).getByRole('menuitemcheckbox', { name: 'Summary' })).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
+    await user.keyboard('{Escape}');
   });
 });
 

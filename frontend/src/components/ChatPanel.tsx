@@ -8,8 +8,10 @@ import type { DatastoreAPI } from '@/hooks/useDatastore';
 import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
 import { formatRelativeTime } from '@/utils/time';
-import type { NeotomaRecord } from '@/types/record';
+import { normalizeRecord, type NeotomaRecord } from '@/types/record';
 import type { LocalRecord } from '@/store/types';
+import { localToNeotoma } from '@/utils/record_conversion';
+import { recordMatchesQuery, tokenizeQuery } from '@/utils/record_search';
 import { toast as notify } from 'sonner';
 import { encryptForStorage, decryptFromStorage, setEncryptionKeys } from '@/store/encryption';
 import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
@@ -19,6 +21,7 @@ interface ChatMessage {
   content: string;
   timestamp: Date;
   recordsQueried?: NeotomaRecord[];
+  recordsTotalCount?: number;
   isError?: boolean;
   errorCount?: number;
   isIntro?: boolean;
@@ -29,6 +32,42 @@ const RECENT_RECORDS_STORAGE_KEY = 'chatPersistedRecentRecords';
 const MAX_RECENT_RECORDS = 200;
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 const ENCRYPTED_PREFIX = 'encrypted:';
+const COUNT_QUERY_STOP_WORDS = new Set([
+  'how',
+  'many',
+  'record',
+  'records',
+  'with',
+  'contain',
+  'containing',
+  'in',
+  'any',
+  'value',
+  'values',
+  'the',
+  'a',
+  'an',
+  'are',
+  'is',
+  'there',
+  'currently',
+  'stored',
+  'locally',
+  'local',
+  'do',
+  'does',
+  'of',
+  'have',
+  'has',
+  'show',
+  'please',
+  'maybe',
+  'help',
+  'number',
+  'total',
+  'tell',
+  'give',
+]);
 
 const INTRO_MESSAGE_CONTENT =
   'Neotoma remembers your data for rapid and comprehensive analysis with AI agents.\n\nCreate some records and start asking questions about them here.\n\nRecords are stored entirely on your device unless you opt for cloud storage.';
@@ -77,6 +116,23 @@ const truncateSummary = (value: string) => {
   return `${value.slice(0, MAX_SUMMARY_CHARS - 3)}...`;
 };
 
+const extractKeywordQuery = (message: string): string => {
+  const quoted = Array.from(message.matchAll(/"([^"]+)"/g))
+    .map((match) => match[1]?.trim())
+    .filter(Boolean);
+  if (quoted.length > 0) {
+    return quoted.join(' ');
+  }
+  const tokens = tokenizeQuery(message)
+    .map((token) => token.replace(/[^a-z0-9-]/g, ''))  // Keep hyphens for compound words
+    .filter(Boolean)
+    .filter((token) => !COUNT_QUERY_STOP_WORDS.has(token));
+  
+  // Don't singularize - let fuzzy matching handle variations
+  // The fuzzy matcher already handles "pullups" vs "pull-ups" via normalization
+  return tokens.join(' ');
+};
+
 const getSummaryFromRecord = (record: LocalRecord): string | null => {
   if (typeof record.summary === 'string' && record.summary.trim().length > 0) {
     return truncateSummary(record.summary.trim());
@@ -102,10 +158,16 @@ const getSummaryFromRecord = (record: LocalRecord): string | null => {
 
 const appendUploadDetails = (
   fileName: string,
-  record: LocalRecord,
+  record: LocalRecord | null,
   additionalCount: number,
   destinationLabel: string
 ) => {
+  if (!record) {
+    if (additionalCount > 0) {
+      return `File "${fileName}" was saved ${destinationLabel}: Created ${additionalCount} row records.`;
+    }
+    return `File "${fileName}" was saved ${destinationLabel}.`;
+  }
   const summarySnippet = getSummaryFromRecord(record) ?? 'Summary unavailable.';
   const rowsMessage = additionalCount > 0 ? ` Created ${additionalCount} row records.` : '';
   return `File "${fileName}" was saved ${destinationLabel}: ${summarySnippet}${rowsMessage}`;
@@ -233,9 +295,12 @@ const serializeLocalRecord = (record: LocalRecord): RecentRecordPayload => ({
 
 interface ChatPanelProps {
   datastore: DatastoreAPI;
-  onFileUploaded?: () => void;
+  onFileUploaded?: (recordId: string) => void | Promise<void>;
   onFileUploadRef?: React.MutableRefObject<((files: FileList | null) => Promise<void>) | null>;
   onErrorRef?: React.MutableRefObject<((error: string) => void) | null>;
+  activeSearchQuery?: string;
+  activeTypeFilter?: string;
+  allRecords?: NeotomaRecord[];
 }
 
 const clampPanelWidth = (value: number, min: number, max: number) =>
@@ -257,11 +322,14 @@ const getStoredPanelWidth = (key: string, fallback: number, min: number, max: nu
   }
 };
 
-export function ChatPanel({ 
+export function ChatPanel({
   datastore,
-  onFileUploaded, 
+  onFileUploaded,
   onFileUploadRef,
   onErrorRef,
+  activeSearchQuery,
+  activeTypeFilter,
+  allRecords,
 }: ChatPanelProps) {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, x25519, ed25519, loading: keysLoading } = useKeys();
@@ -286,7 +354,6 @@ export function ChatPanel({
   const handleFileUploadRef = useRef<typeof handleFileUpload | null>(null);
   const errorCountsRef = useRef<Map<string, number>>(new Map());
   const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
-  const datastoreWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
   const isResizingRef = useRef(false);
   const recentRecordsRef = useRef<SessionRecentRecord[]>(
     typeof window === 'undefined' ? [] : loadPersistedRecentRecords()
@@ -660,19 +727,25 @@ const mergeRecentRecords = (
             csvRowRecordsEnabled: settings.csvRowRecordsEnabled,
           });
           updateUploadToast('Preparing local records…');
-          localRecord = {
-            ...basicResult.primaryRecord,
-            ...(overrides?.type ? { type: overrides.type } : {}),
-            ...(overrides ? { summary: overrides.summary ?? basicResult.primaryRecord.summary } : {}),
-            ...(overrides?.properties
-              ? {
-                  properties: {
-                    ...(basicResult.primaryRecord.properties || {}),
-                    ...overrides.properties,
-                  },
-                }
-              : {}),
-          };
+          if (basicResult.primaryRecord) {
+            localRecord = {
+              ...basicResult.primaryRecord,
+              ...(overrides?.type ? { type: overrides.type } : {}),
+              ...(overrides
+                ? { summary: overrides.summary ?? basicResult.primaryRecord.summary }
+                : {}),
+              ...(overrides?.properties
+                ? {
+                    properties: {
+                      ...(basicResult.primaryRecord.properties || {}),
+                      ...overrides.properties,
+                    },
+                  }
+                : {}),
+            };
+          } else {
+            localRecord = null;
+          }
           additionalLocalRecords = basicResult.additionalRecords;
         };
 
@@ -740,12 +813,15 @@ const mergeRecentRecords = (
           await runLocalProcessing();
         }
 
-        if (!localRecord) {
-          throw new Error('File processing did not produce a primary record.');
+        const recordsToSave = localRecord
+          ? [localRecord, ...additionalLocalRecords]
+          : additionalLocalRecords;
+        if (recordsToSave.length === 0) {
+          throw new Error('File processing did not produce any records.');
         }
-
-        const recordsToSave = [localRecord, ...additionalLocalRecords];
-        const enqueue = datastoreWriteQueueRef.current.then(async () => {
+        
+        // Save records sequentially so they appear in the table one by one
+        try {
           for (let index = 0; index < recordsToSave.length; index += 1) {
             const record = recordsToSave[index];
             if (recordsToSave.length > 1) {
@@ -754,11 +830,12 @@ const mergeRecentRecords = (
               updateUploadToast('Saving record locally…');
             }
             await datastore.putRecord(record);
+            
+            // Notify parent to append this record to the table
+            if (onFileUploaded) {
+              await onFileUploaded(record.id);
+            }
           }
-        });
-        datastoreWriteQueueRef.current = enqueue.catch(() => {});
-        try {
-          await enqueue;
         } catch (putError) {
           const putErrorMessage = putError instanceof Error ? putError.message : 'Failed to save record';
           console.error('[File Upload] Failed to save record to datastore:', putError);
@@ -805,11 +882,8 @@ const mergeRecentRecords = (
       }
     };
 
+    // Process files in parallel, but each file saves records sequentially
     await Promise.all(fileArray.map((file) => processFile(file)));
-
-    if (onFileUploaded) {
-      setTimeout(() => onFileUploaded(), 100);
-    }
   };
 
   // Keep handleFileUpload ref up to date
@@ -819,7 +893,12 @@ const mergeRecentRecords = (
     onFileUploadRef.current = handleFileUpload;
   }
 
-  const addMessage = (role: 'user' | 'assistant', content: string, recordsQueried?: NeotomaRecord[]) => {
+  const addMessage = (
+    role: 'user' | 'assistant',
+    content: string,
+    recordsQueried?: NeotomaRecord[],
+    recordsTotalCount?: number
+  ) => {
     const isError = role === 'assistant' && (
       content.toLowerCase().startsWith('error:') || 
       content.toLowerCase().startsWith('error ') ||
@@ -865,7 +944,17 @@ const mergeRecentRecords = (
       console.error('[Chat Error]', content, newCount > 1 ? `(occurred ${newCount} times)` : '');
     } else {
       // Regular message
-      setMessages((prev) => [...prev, { role, content, timestamp: new Date(), recordsQueried }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role,
+          content,
+          timestamp: new Date(),
+          recordsQueried,
+          recordsTotalCount:
+            typeof recordsTotalCount === 'number' ? recordsTotalCount : undefined,
+        },
+      ]);
     }
   };
 
@@ -886,9 +975,77 @@ const mergeRecentRecords = (
     if (!input.trim() || isLoading) return;
 
     const userMessage = input.trim();
+    const keywordQuery = extractKeywordQuery(userMessage);
+    const normalizedMessage = userMessage.toLowerCase();
+    const trimmedSearch = activeSearchQuery?.trim() ?? '';
+    const normalizedSearch = trimmedSearch.toLowerCase();
+    const mentionsSearchTerm =
+      normalizedSearch.length > 0 && normalizedMessage.includes(normalizedSearch);
+    const mentionsHowMany = /how many\b/i.test(normalizedMessage);
+    const mentionsHowAbout = /how about\b/i.test(normalizedMessage);
+    const mentionsWhatAbout = /what about\b/i.test(normalizedMessage);
+    const mentionsShowMe = /show me\b/i.test(normalizedMessage);
+    const searchQueryForCount =
+      keywordQuery.trim().length > 0
+        ? keywordQuery.trim()
+        : trimmedSearch.length > 0
+        ? trimmedSearch
+        : '';
     setInput('');
     addMessage('user', userMessage);
     setIsLoading(true);
+
+    // Handle local record count queries scoped to the current filters
+    // Recognize explicit count queries ("how many records", "records", etc.)
+    // and implicit queries ("how about X", "what about X", "show me X", or just "X")
+    const hasExplicitCountPattern =
+      /how many\b[\s\S]*\brecords?/i.test(userMessage) ||
+      /^records?$/i.test(userMessage.trim()) ||
+      (mentionsHowMany && (mentionsSearchTerm || keywordQuery.length > 0));
+    
+    // Implicit count queries: simple queries with keywords that suggest looking up records
+    const hasImplicitCountPattern =
+      (mentionsHowAbout || mentionsWhatAbout || mentionsShowMe) && 
+      keywordQuery.length > 0 &&
+      /\brecords?\b/i.test(userMessage); // Must mention "record" or "records"
+    
+    // Short queries with keywords (likely asking about specific records)
+    // But exclude queries about properties, details, etc.
+    const isPropertyQuery = /\b(properties|details|property|info|information|show|tell|describe)\b/i.test(userMessage);
+    const isShortKeywordQuery = 
+      keywordQuery.length > 0 && 
+      userMessage.trim().split(/\s+/).length <= 5 &&
+      !isPropertyQuery;
+    
+    const isCountQuery = hasExplicitCountPattern || hasImplicitCountPattern || isShortKeywordQuery;
+    if (isCountQuery && datastore.initialized) {
+      try {
+        const hasSearchFilter = searchQueryForCount.length > 0;
+        const hasTypeFilter = Boolean(activeTypeFilter?.trim());
+        const queryOptions = hasTypeFilter ? { type: activeTypeFilter } : undefined;
+        const localRecords = await datastore.queryRecords(queryOptions);
+        let recordsToEvaluate = localRecords.map((record) => normalizeRecord(localToNeotoma(record)));
+
+        if (hasTypeFilter) {
+          recordsToEvaluate = recordsToEvaluate.filter((record) => record.type === activeTypeFilter);
+        }
+
+        if (hasSearchFilter) {
+          recordsToEvaluate = recordsToEvaluate.filter((record) =>
+            recordMatchesQuery(record, searchQueryForCount)
+          );
+        }
+
+        const localCount = recordsToEvaluate.length;
+        const countMessage = `There are currently **${localCount} record${localCount === 1 ? '' : 's'}** stored locally. If you need more details about any specific records, feel free to ask!`;
+        addMessage('assistant', countMessage, undefined, localCount);
+        setIsLoading(false);
+        return;
+      } catch (error) {
+        console.error('[ChatPanel] Failed to count local records', error);
+        // Fall through to API call
+      }
+    }
 
     if (!bearerToken) {
       setIsLoading(false);
@@ -929,11 +1086,29 @@ const mergeRecentRecords = (
       }
 
       const recentRecordsPayload = getRecentRecordsForRequest();
+      
+      // If cloud storage is disabled, fetch all local records to pass to chat endpoint
+      let localRecordsPayload: NeotomaRecord[] | undefined = undefined;
+      if (!settings.cloudStorageEnabled && datastore.initialized) {
+        try {
+          const localRecords = await datastore.queryRecords();
+          localRecordsPayload = localRecords.map(localToNeotoma);
+        } catch (error) {
+          console.error('[ChatPanel] Failed to fetch local records for chat', error);
+        }
+      }
+
       const response = await sendChatMessage(settings.apiBase, bearerToken, {
         messages: messagesToSend,
         recentRecords: recentRecordsPayload,
+        localRecords: localRecordsPayload,
       });
-      addMessage('assistant', response.message?.content || 'No response received', response.records_queried || undefined);
+      addMessage(
+        'assistant',
+        response.message?.content || 'No response received',
+        response.records_queried || undefined,
+        response.records_total_count
+      );
     } catch (error) {
       addMessage('assistant', `Error: ${error instanceof Error ? error.message : 'Failed to send message'}`);
     } finally {
@@ -988,9 +1163,15 @@ const mergeRecentRecords = (
                 </div>
               )}
             </div>
-            {msg.recordsQueried && msg.recordsQueried.length > 0 && (
+            {(msg.recordsQueried?.length || typeof msg.recordsTotalCount === 'number') && (
               <div className="px-2.5 py-1.5 bg-accent text-accent-foreground rounded-md text-xs font-semibold mt-2">
-                Found {msg.recordsQueried.length} record{msg.recordsQueried.length !== 1 ? 's' : ''}
+                {(() => {
+                  const total =
+                    typeof msg.recordsTotalCount === 'number'
+                      ? msg.recordsTotalCount
+                      : msg.recordsQueried?.length ?? 0;
+                  return `Found ${total} record${total === 1 ? '' : 's'}`;
+                })()}
               </div>
             )}
             <div

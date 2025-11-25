@@ -28,7 +28,7 @@ export interface ProcessFileOptions {
 }
 
 export interface ProcessFileResult {
-  primaryRecord: LocalRecord;
+  primaryRecord: LocalRecord | null;
   additionalRecords: LocalRecord[];
 }
 
@@ -120,7 +120,7 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
   });
   const fileUrl = persistedPath ?? `local://${id}/${fileName}`;
   
-  const baseRecord: LocalRecord = {
+  let baseRecord: LocalRecord = {
     id,
     type,
     summary,
@@ -131,9 +131,11 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
     updated_at: now,
   };
 
+  let primaryRecord: LocalRecord | null = baseRecord;
   const additionalRecords: LocalRecord[] = [];
 
-  if (csvRowRecordsEnabled && isCsvLike(fileName, mimeType)) {
+  const csvProcessingEnabled = Boolean(csvRowRecordsEnabled && isCsvLike(fileName, mimeType));
+  if (csvProcessingEnabled) {
     const { rows, truncated, headers } = parseCsvRows(fullText);
     const parentType = 'dataset';
     const parentSummary = summarizeDatasetRecord({
@@ -143,27 +145,24 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
       headers,
       sampleRows: rows.slice(0, 5),
     });
-    const sourceMetadata = {
-      name: fileName,
-      size: fileSize,
-      mime_type: mimeType,
-      file_url: fileUrl,
+    baseRecord = {
+      ...baseRecord,
+      type: parentType,
+      summary: parentSummary,
     };
 
-    baseRecord.type = parentType;
-    baseRecord.summary = parentSummary;
-
     if (rows.length > 0) {
-      baseRecord.properties = {
-        ...baseRecord.properties,
-        source_file: sourceMetadata,
-        csv_headers: headers,
-        csv_rows: {
-          linked_records: rows.length,
-          truncated,
-          relationship: 'contains_row',
-        },
+      primaryRecord = null;
+
+      const baseCsvOrigin: Record<string, unknown> = {
+        file_url: fileUrl,
+        file_name: fileName,
+        file_size: fileSize,
+        mime_type: mimeType,
       };
+      if (primaryRecord) {
+        baseCsvOrigin.parent_record_id = primaryRecord.id;
+      }
 
       rows.forEach((row, index) => {
         const rowId = randomUUID();
@@ -181,9 +180,8 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
           properties: {
             ...row,
             csv_origin: {
-              parent_record_id: baseRecord.id,
+              ...baseCsvOrigin,
               row_index: index,
-              file_url: fileUrl,
             },
           },
           file_urls: [fileUrl],
@@ -195,7 +193,7 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
     }
   }
 
-  return { primaryRecord: baseRecord, additionalRecords };
+  return { primaryRecord, additionalRecords };
 }
 
 /**
