@@ -1,0 +1,10 @@
+{
+  "pid": 23856,
+  "branch": "fix-debug-issue-gpENr",
+  "timestamp": 1764047396412,
+  "ports": {
+    "http": 8112,
+    "vite": 5192,
+    "ws": 8113
+  }
+}
