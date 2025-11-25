@@ -7,3 +7,5 @@ dist/
 *.code-workspace
 
 
+playwright/report/
+playwright/test-results/
