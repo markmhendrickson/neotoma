@@ -12,6 +12,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, ChildProcess } from 'child_process';
 import { promisify } from 'util';
 import { exec } from 'child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { exportKeyPairs, importKeyPairs, maskPrivateKey } from '../crypto/export.js';
 import { generateX25519KeyPair, generateEd25519KeyPair, deriveBearerToken } from '../crypto/keys.js';
@@ -19,10 +20,31 @@ import { normalizeRecord, STATUS_ORDER } from '../../frontend/src/types/record.j
 import { localToNeotoma, neotomaToLocal } from '../../frontend/src/utils/record_conversion.js';
 import type { NeotomaRecord } from '../../frontend/src/types/record.js';
 import type { LocalRecord } from '../../frontend/src/store/types.js';
+import { setTimeout as wait } from 'node:timers/promises';
 
 const execAsync = promisify(exec);
 
 const BRANCH_PORTS_SENTINEL = path.join(process.cwd(), '.branch-ports', 'ui-integration-tests.json');
+
+function ensureBranchPortsFile(frontendPort: string, backendPort: string): void {
+  try {
+    const wsPort = String(Number(backendPort) + 1);
+    const data = {
+      pid: process.pid,
+      branch: process.env.BRANCH_NAME || 'ui-integration-tests',
+      timestamp: Date.now(),
+      ports: {
+        http: Number(backendPort),
+        vite: Number(frontendPort),
+        ws: Number(wsPort),
+      },
+    };
+    fs.mkdirSync(path.dirname(BRANCH_PORTS_SENTINEL), { recursive: true });
+    fs.writeFileSync(BRANCH_PORTS_SENTINEL, JSON.stringify(data, null, 2));
+  } catch (error) {
+    console.warn('Failed to write branch ports sentinel file', error);
+  }
+}
 
 function buildBackendEnv(port: string): NodeJS.ProcessEnv {
   const supabaseUrl =
@@ -38,10 +60,13 @@ function buildBackendEnv(port: string): NodeJS.ProcessEnv {
     process.env.CONNECTOR_SECRETS_KEY ||
     'test-connector-secret-test-connector-secret';
 
+  const wsPort = String(Number(port) + 1);
+
   return {
     ...process.env,
     HTTP_PORT: port,
     PORT: port,
+    WS_PORT: process.env.WS_PORT || wsPort,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
     BRANCH_PORTS_FILE: process.env.BRANCH_PORTS_FILE || BRANCH_PORTS_SENTINEL,
     DEV_SUPABASE_URL: process.env.DEV_SUPABASE_URL || supabaseUrl,
@@ -55,10 +80,14 @@ function buildBackendEnv(port: string): NodeJS.ProcessEnv {
 }
 
 function buildFrontendEnv(port: string, apiPort: string): NodeJS.ProcessEnv {
+  const wsPort = String(Number(apiPort) + 1);
+
   return {
     ...process.env,
     VITE_PORT: port,
     PORT: port,
+    WS_PORT: process.env.WS_PORT || wsPort,
+    VITE_WS_PORT: process.env.VITE_WS_PORT || wsPort,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
     BRANCH_PORTS_FILE: process.env.BRANCH_PORTS_FILE || BRANCH_PORTS_SENTINEL,
     VITE_API_BASE_URL: process.env.VITE_API_BASE_URL || `http://localhost:${apiPort}`,
@@ -90,6 +119,21 @@ describe('UI Integration Tests', () => {
   let frontendPort: string = '5173';
   let backendPort: string = '8080';
 
+  async function waitForServerReady(url: string, retries = 20, intervalMs = 1000): Promise<boolean> {
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        const response = await globalThis.fetch(url, { method: 'GET' });
+        if (response.ok) {
+          return true;
+        }
+      } catch {
+        // Ignore until max retries reached
+      }
+      await wait(intervalMs);
+    }
+    return false;
+  }
+
   beforeAll(async () => {
     // Get branch-based ports
     try {
@@ -106,6 +150,8 @@ describe('UI Integration Tests', () => {
     } catch (error) {
       console.warn('Could not get branch ports, using defaults');
     }
+
+    ensureBranchPortsFile(frontendPort, backendPort);
 
     // Start backend server if not running
     try {

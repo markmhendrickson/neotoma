@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -21,6 +21,10 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
     },
+    exclude: [
+      ...configDefaults.exclude,
+      'playwright/tests/**/*',
+    ],
   },
 });
 
