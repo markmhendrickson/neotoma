@@ -351,6 +351,7 @@ async function main() {
   process.env.HTTP_PORT = String(http.port);
   process.env.VITE_PORT = String(vite.port);
   process.env.WS_PORT = String(ws.port);
+  process.env.VITE_WS_PORT = String(ws.port); // Expose to Vite frontend
   process.env.PORT = String(vite.port);
   process.env.BRANCH_PORTS_FILE = STATE_FILE;
   process.env.BRANCH_NAME = BRANCH;

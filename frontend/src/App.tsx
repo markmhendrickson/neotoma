@@ -54,6 +54,28 @@ function App() {
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
   const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS !== 'false';
 
+  // Expose error trigger function for testing
+  useEffect(() => {
+    (window as any).triggerError = (message: string, count: number = 1) => {
+      if (!chatPanelErrorRef.current) {
+        console.warn('[triggerError] Error handler not available yet');
+        return;
+      }
+      for (let i = 0; i < count; i++) {
+        // Use setTimeout to space out multiple triggers slightly
+        setTimeout(() => {
+          if (chatPanelErrorRef.current) {
+            chatPanelErrorRef.current(message);
+          }
+        }, i * 10); // 10ms delay between triggers
+      }
+      console.log(`[triggerError] Triggered error "${message}" ${count} time(s)`);
+    };
+    return () => {
+      delete (window as any).triggerError;
+    };
+  }, []);
+
   const loadRecords = useCallback(async (reset: boolean = true) => {
     if (!datastoreInitialized || keysLoading) {
       return;

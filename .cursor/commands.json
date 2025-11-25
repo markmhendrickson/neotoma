@@ -18,6 +18,13 @@
       "shell": {
         "command": "bash -lc 'set -euo pipefail; LOG_FILE=\"/tmp/neotoma-dev-serve.log\"; if pgrep -f scripts/dev-serve.js >/dev/null 2>&1; then echo \"[debug] Stopping existing dev-serve instance...\"; pkill -f scripts/dev-serve.js >/dev/null 2>&1 || true; sleep 1; fi; echo \"[debug] Starting dev-serve in background (logs: $LOG_FILE)...\"; nohup npm run dev:serve >\"$LOG_FILE\" 2>&1 & PID=$!; sleep 2; echo \"[debug] dev-serve running with PID $PID. Monitor logs via: tail -f $LOG_FILE\"; cat .cursor/commands/debug.md'"
       }
+    },
+    {
+      "name": "Setup: Copy Env File",
+      "description": "Copy .env file from main repository to this worktree",
+      "shell": {
+        "command": "npm run copy:env"
+      }
     }
   ]
 }
