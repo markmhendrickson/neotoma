@@ -10,6 +10,7 @@ import { normalizeRecord, STATUS_ORDER, type NeotomaRecord } from '@/types/recor
 import { useToast } from '@/components/ui/use-toast';
 import { localToNeotoma } from '@/utils/record_conversion';
 import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
+import { cn } from '@/lib/utils';
 import { DatastoreContext } from '@/contexts/DatastoreContext';
 import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
 import { configureLocalFileEncryption, deleteLocalFile, isLocalFilePath } from '@/utils/local_files';
@@ -72,6 +73,7 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [recordsLoading, setRecordsLoading] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
+  const [forceCompactLayout, setForceCompactLayout] = useState(false);
   const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
   const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS === 'true';
@@ -215,6 +217,23 @@ function App() {
     setFilteredRecords(recordsToFilter);
   }, [allRecords, selectedType, searchQuery, recordMatchesQuery]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const handleLayoutToggle = () => {
+      if (typeof document === 'undefined') {
+        return;
+      }
+      setForceCompactLayout(document.body.dataset.compactLayout === '1');
+    };
+    handleLayoutToggle();
+    window.addEventListener('neotoma:compact-layout-change', handleLayoutToggle);
+    return () => {
+      window.removeEventListener('neotoma:compact-layout-change', handleLayoutToggle);
+    };
+  }, []);
+
   const handleSearch = (query: string) => {
     setSearchQuery(query);
   };
@@ -317,13 +336,20 @@ function App() {
         onDrop={handleDrop}
       >
         <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-          <ChatPanel 
-            datastore={datastore}
-            onFileUploaded={loadRecords} 
-            onFileUploadRef={chatPanelFileUploadRef}
-            onErrorRef={chatPanelErrorRef}
-          />
-          <main className="flex-1 min-h-0 max-h-full overflow-hidden">
+          {!forceCompactLayout && (
+            <ChatPanel 
+              datastore={datastore}
+              onFileUploaded={loadRecords} 
+              onFileUploadRef={chatPanelFileUploadRef}
+              onErrorRef={chatPanelErrorRef}
+            />
+          )}
+          <main
+            className={cn(
+              'flex-1 min-h-0 max-h-full overflow-hidden',
+              forceCompactLayout && 'max-w-full w-full'
+            )}
+          >
             <RecordsTable
               records={filteredRecords}
             totalCount={totalRecords}

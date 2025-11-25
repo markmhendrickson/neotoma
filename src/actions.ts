@@ -42,6 +42,7 @@ import { initServerKeys } from './services/encryption_service.js';
 import type { AccountBase } from 'plaid';
 import { isCsvLike, parseCsvRows } from './utils/csv.js';
 import { serializeChatMessagesForOpenAI, type ChatMessage } from './utils/chat.js';
+import { applyWorktreeSuffix } from '../worktreeSuffix.js';
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -248,6 +249,71 @@ app.use(async (req, res, next) => {
 app.use(encryptResponseMiddleware);
 
 // Schemas
+const VISUALIZATION_GRAPH_TYPES = ['line', 'bar', 'stacked_bar', 'scatter'] as const;
+const VisualizationSuggestionSchema = z.object({
+  graph_type: z.enum(VISUALIZATION_GRAPH_TYPES),
+  justification: z.string().min(1),
+  title: z.string().optional(),
+  dataset_label: z.string().optional(),
+  summary: z.string().optional(),
+  record_ids: z.array(z.string().min(1)).min(1).max(200).optional(),
+  dimension: z.object({
+    field: z.string().min(1),
+    label: z.string().optional(),
+    kind: z.enum(['time', 'category']).optional(),
+  }).optional(),
+  measures: z.array(z.object({
+    field: z.string().min(1),
+    label: z.string().optional(),
+    aggregate: z.enum(['sum', 'avg', 'mean', 'count', 'min', 'max']).optional(),
+    color: z.string().optional(),
+  })).min(1).max(4).optional(),
+  filters: z.array(z.object({
+    field: z.string().min(1),
+    operator: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between']),
+    value: z.union([
+      z.string(),
+      z.number(),
+      z.array(z.union([z.string(), z.number()])).min(1).max(2),
+    ]),
+  })).max(5).optional(),
+  notes: z.string().optional(),
+}).strict();
+
+type VisualizationSuggestion = z.infer<typeof VisualizationSuggestionSchema>;
+
+function normalizeVisualizationSuggestion(
+  suggestion: VisualizationSuggestion
+) {
+  return {
+    graphType: suggestion.graph_type,
+    justification: suggestion.justification,
+    title: suggestion.title ?? undefined,
+    datasetLabel: suggestion.dataset_label ?? undefined,
+    summary: suggestion.summary ?? undefined,
+    recordIds: suggestion.record_ids ?? undefined,
+    dimensionField: suggestion.dimension
+      ? {
+          key: suggestion.dimension.field,
+          label: suggestion.dimension.label ?? undefined,
+          kind: suggestion.dimension.kind ?? undefined,
+        }
+      : undefined,
+    measureFields: suggestion.measures?.map((measure) => ({
+      key: measure.field,
+      label: measure.label ?? undefined,
+      aggregate: measure.aggregate ?? undefined,
+      color: measure.color ?? undefined,
+    })),
+    filters: suggestion.filters?.map((filter) => ({
+      key: filter.field,
+      operator: filter.operator,
+      value: filter.value,
+    })),
+    notes: suggestion.notes ?? undefined,
+  };
+}
+
 const StoreSchema = z.object({
   type: z.string(),
   properties: z.record(z.unknown()).default({}),
@@ -1722,7 +1788,13 @@ Guidelines:
 - Do NOT infer record types from recent records shown in context - those are just examples
 - Provide clear, concise answers based on the retrieved records
 - If no records are found, let the user know
-- Be conversational and helpful`,
+- Be conversational and helpful
+
+Visualization guidance:
+- When a user explicitly asks for a graph, trend, comparison over time, percentages by category, or otherwise references data that would clearly benefit from a chart, call the suggest_visualization function.
+- Only suggest charts that can be satisfied by the records you have referenced (recent context or retrieve_records results). Include record_ids so the client can source the underlying rows.
+- Limit graph types to line, bar, stacked_bar, or scatter. Favor the simplest representation that answers the question.
+- Provide axis hints via dimension/measures, and include a short justification for why the chart is useful.`, 
   };
 
   const retrieveRecordsFunction = {
@@ -1769,6 +1841,100 @@ Guidelines:
         },
       },
       required: [],
+    },
+  };
+
+  const suggestVisualizationFunction = {
+    name: 'suggest_visualization',
+    description: 'Describe a graph visualization that would help the user interpret the referenced records or metrics. Use this when the user requests a chart or when a chart would materially clarify numeric comparisons or trends.',
+    parameters: {
+      type: 'object',
+      properties: {
+        graph_type: {
+          type: 'string',
+          description: 'Graph primitive to render.',
+          enum: Array.from(VISUALIZATION_GRAPH_TYPES),
+        },
+        justification: {
+          type: 'string',
+          description: 'One-sentence reason this chart helps answer the user.',
+        },
+        title: {
+          type: 'string',
+          description: 'Optional chart title.',
+        },
+        dataset_label: {
+          type: 'string',
+          description: 'Name for dataset (e.g., Transactions Q1).',
+        },
+        summary: {
+          type: 'string',
+          description: 'Optional short description of what the chart will show.',
+        },
+        record_ids: {
+          type: 'array',
+          description: 'Record IDs involved in the visualization (reference existing records queried).',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: 200,
+        },
+        dimension: {
+          type: 'object',
+          description: 'Field used for x-axis or grouping.',
+          properties: {
+            field: { type: 'string' },
+            label: { type: 'string' },
+            kind: { type: 'string', enum: ['time', 'category'] },
+          },
+          required: ['field'],
+        },
+        measures: {
+          type: 'array',
+          description: 'Numeric fields plotted on the chart.',
+          items: {
+            type: 'object',
+            properties: {
+              field: { type: 'string' },
+              label: { type: 'string' },
+              aggregate: { type: 'string', enum: ['sum', 'avg', 'mean', 'count', 'min', 'max'] },
+              color: { type: 'string' },
+            },
+            required: ['field'],
+          },
+          minItems: 1,
+          maxItems: 4,
+        },
+        filters: {
+          type: 'array',
+          description: 'Optional filters applied before plotting.',
+          items: {
+            type: 'object',
+            properties: {
+              field: { type: 'string' },
+              operator: { type: 'string', enum: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'between'] },
+              value: {
+                anyOf: [
+                  { type: 'string' },
+                  { type: 'number' },
+                  {
+                    type: 'array',
+                    items: { anyOf: [{ type: 'string' }, { type: 'number' }] },
+                    minItems: 1,
+                    maxItems: 2,
+                  },
+                ],
+              },
+            },
+            required: ['field', 'operator', 'value'],
+          },
+          maxItems: 5,
+        },
+        notes: {
+          type: 'string',
+          description: 'Extra implementation hints for the client.',
+        },
+      },
+      required: ['graph_type', 'justification'],
     },
   };
 
@@ -1856,6 +2022,7 @@ Guidelines:
     chatMessages.push(...messages);
     const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
     const recordsQueried: any[] = [];
+    let visualizationSuggestion: ReturnType<typeof normalizeVisualizationSuggestion> | null = null;
     const maxIterations = 5;
     let iteration = 0;
 
@@ -1870,7 +2037,7 @@ Guidelines:
         body: JSON.stringify({
           model,
           messages: openAIMessages,
-          functions: [retrieveRecordsFunction],
+          functions: [retrieveRecordsFunction, suggestVisualizationFunction],
           function_call: 'auto',
           temperature,
         }),
@@ -1953,6 +2120,36 @@ Guidelines:
             iteration++;
             continue;
           }
+        } else if (functionName === 'suggest_visualization') {
+          try {
+            const args = JSON.parse(functionArgs);
+            const parsed = VisualizationSuggestionSchema.safeParse(args);
+            if (parsed.success) {
+              visualizationSuggestion = normalizeVisualizationSuggestion(parsed.data);
+            } else {
+              logWarn('VisualizationSuggestion:validation_failed', req, { issues: parsed.error.issues });
+            }
+            chatMessages.push({
+              role: 'function',
+              name: functionName,
+              content: JSON.stringify({ acknowledged: true }),
+            });
+            functionCalls.push({
+              name: functionName,
+              arguments: functionArgs,
+            });
+            iteration++;
+            continue;
+          } catch (error) {
+            logError('FunctionExecutionError:visualization', req, error, { args: functionArgs });
+            chatMessages.push({
+              role: 'function',
+              name: functionName,
+              content: JSON.stringify({ error: 'Failed to parse visualization suggestion' }),
+            });
+            iteration++;
+            continue;
+          }
         }
       }
 
@@ -1965,6 +2162,7 @@ Guidelines:
       return res.json({
         message: assistantMessage,
         records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+        visualization: visualizationSuggestion ?? undefined,
         function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
           name: fc.name,
           arguments: JSON.parse(fc.arguments),
@@ -1980,6 +2178,7 @@ Guidelines:
         content: typeof lastMessage.content === 'string' ? lastMessage.content : 'Unable to complete request',
       },
       records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+      visualization: visualizationSuggestion ?? undefined,
       function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
         name: fc.name,
         arguments: JSON.parse(fc.arguments),
@@ -2013,12 +2212,13 @@ app.get('/import/plaid/link_demo', async (req, res) => {
 
     const tokenJson = JSON.stringify(linkToken.link_token);
 
+    const htmlTitle = applyWorktreeSuffix('Plaid Link Demo');
     const html = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Plaid Link Demo</title>
+  <title>${htmlTitle}</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; background: #0b0d10; color: #e6e6e6; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
     .card { background: #11161d; padding: 32px; border-radius: 12px; max-width: 520px; box-shadow: 0 12px 40px rgba(0,0,0,0.35); }

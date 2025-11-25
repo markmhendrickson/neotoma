@@ -1,0 +1,11 @@
+# Cursor Rules for Neotoma
+
+## Git Workflow
+
+### Pulling from dev branch
+When asked to pull recent changes from the dev branch (on main worktree) into the current worktree, use:
+```bash
+git fetch origin dev && git merge origin/dev
+```
+
+This fetches the latest `dev` branch from origin and merges it into the current branch without switching branches.
