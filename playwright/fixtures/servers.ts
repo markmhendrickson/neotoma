@@ -6,6 +6,10 @@ import {
   getBranchPorts,
   waitForHttp,
   repoRoot,
+  createTestCredentials,
+  startMockApiServer,
+  type KeyExportBundle,
+  type MockApiServer,
 } from '../utils/servers.js';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -16,6 +20,8 @@ type RunningServers = {
   apiUrl: string;
   uiUrl: string;
   bearerToken: string;
+  keyExports: KeyExportBundle;
+  mockApi?: MockApiServer;
 };
 
 function drainStream(child: ChildProcessWithoutNullStreams, label: string) {
@@ -35,9 +41,14 @@ function drainStream(child: ChildProcessWithoutNullStreams, label: string) {
 }
 
 async function startServers(): Promise<RunningServers> {
+  const useMockApi = process.env.PLAYWRIGHT_USE_MOCK_API !== '0';
   const ports = await getBranchPorts();
-  const backendEnv = buildBackendEnv(ports.httpPort);
-  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort);
+  const credentials = await createTestCredentials();
+  const backendEnv = buildBackendEnv(ports.httpPort, {
+    bearerToken: credentials.bearerToken,
+    wsPort: ports.wsPort,
+  });
+  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort, ports.wsPort);
 
   const backend = spawn(npmCommand, ['run', 'dev:http'], {
     cwd: repoRoot,
@@ -45,8 +56,13 @@ async function startServers(): Promise<RunningServers> {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   drainStream(backend, 'backend');
-
   await waitForHttp(`http://127.0.0.1:${ports.httpPort}/health`);
+
+  let mockApi: MockApiServer | undefined;
+  if (useMockApi) {
+    mockApi = await startMockApiServer(0);
+    await waitForHttp(`${mockApi.origin}/health`);
+  }
 
   const frontend = spawn(npmCommand, ['run', 'dev:ui'], {
     cwd: repoRoot,
@@ -55,17 +71,19 @@ async function startServers(): Promise<RunningServers> {
   });
   drainStream(frontend, 'frontend');
 
-  await waitForHttp(`http://127.0.0.1:${ports.vitePort}`);
+  await waitForHttp(`http://localhost:${ports.vitePort}`);
 
   const apiUrl = `http://127.0.0.1:${ports.httpPort}/api`;
-  const uiUrl = `http://127.0.0.1:${ports.vitePort}`;
+  const uiUrl = `http://localhost:${ports.vitePort}`;
 
   return {
     backend,
     frontend,
     apiUrl,
     uiUrl,
-    bearerToken: backendEnv.ACTIONS_BEARER_TOKEN ?? '',
+    bearerToken: credentials.bearerToken,
+    keyExports: credentials.keyExports,
+    mockApi,
   };
 }
 
@@ -88,6 +106,8 @@ type ServersFixture = {
   apiBaseUrl: string;
   uiBaseUrl: string;
   bearerToken: string;
+  keyExports: KeyExportBundle;
+  mockApi?: MockApiServer;
 };
 
 export const test = base.extend<
@@ -99,12 +119,18 @@ export const test = base.extend<
       process.env.PLAYWRIGHT_UI_BASE_URL = servers.uiUrl;
       process.env.PLAYWRIGHT_API_BASE_URL = servers.apiUrl;
       process.env.ACTIONS_BEARER_TOKEN = servers.bearerToken;
+      process.env.NEOTOMA_TEST_KEY_EXPORTS = JSON.stringify(
+        servers.keyExports,
+      );
 
       try {
         await use(servers);
       } finally {
         terminate(servers.frontend);
         terminate(servers.backend);
+        if (servers.mockApi) {
+          await servers.mockApi.close();
+        }
       }
     },
     { scope: 'worker', auto: true },
@@ -124,6 +150,18 @@ export const test = base.extend<
   bearerToken: [
     async ({ servers }, use) => {
       await use(servers.bearerToken);
+    },
+    { scope: 'worker' },
+  ],
+  keyExports: [
+    async ({ servers }, use) => {
+      await use(servers.keyExports);
+    },
+    { scope: 'worker' },
+  ],
+  mockApi: [
+    async ({ servers }, use) => {
+      await use(servers.mockApi);
     },
     { scope: 'worker' },
   ],

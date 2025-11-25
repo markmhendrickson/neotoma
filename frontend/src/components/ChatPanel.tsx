@@ -14,6 +14,12 @@ import { toast as notify } from 'sonner';
 import { encryptForStorage, decryptFromStorage, setEncryptionKeys } from '@/store/encryption';
 import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
 
+declare global {
+  interface Window {
+    __NEOTOMA_LAST_ASSISTANT_MESSAGE?: string;
+  }
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -49,6 +55,9 @@ const ensureIntroMessage = (messages: ChatMessage[]): ChatMessage[] => {
   }
   return [createIntroMessage(), ...messages];
 };
+
+const hasNonIntroMessages = (messages: ChatMessage[]): boolean =>
+  messages.some((msg) => !msg.isIntro);
 
 const hashPrivateKey = (key?: Uint8Array | null) => {
   if (!key || key.length === 0) return 'anonymous';
@@ -272,7 +281,7 @@ export function ChatPanel({
   const DEFAULT_CHAT_WIDTH = 420;
   const MIN_CHAT_WIDTH = 300;
   const MAX_CHAT_WIDTH = 680;
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([createIntroMessage()]);
   const [messagesLoaded, setMessagesLoaded] = useState(false);
   const [panelWidth, setPanelWidth] = useState(() =>
     getStoredPanelWidth(CHAT_PANEL_WIDTH_KEY, DEFAULT_CHAT_WIDTH, MIN_CHAT_WIDTH, MAX_CHAT_WIDTH));
@@ -303,7 +312,12 @@ export function ChatPanel({
     
     async function loadMessages() {
       const loaded = await getStoredMessages(x25519 || null, ed25519 || null);
-      setMessages(loaded);
+      setMessages((prev) => {
+        if (hasNonIntroMessages(prev)) {
+          return prev;
+        }
+        return loaded;
+      });
       setMessagesLoaded(true);
     }
     
@@ -317,6 +331,15 @@ export function ChatPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const lastAssistant = [...messages].reverse().find((msg) => msg.role === 'assistant');
+    if (lastAssistant) {
+      window.__NEOTOMA_LAST_ASSISTANT_MESSAGE = lastAssistant.content;
+    }
+  }, [messages]);
 
 const persistRecentRecordsToStorage = (records: SessionRecentRecord[]) => {
   if (typeof window === 'undefined') return;
@@ -820,6 +843,10 @@ const mergeRecentRecords = (
   }
 
   const addMessage = (role: 'user' | 'assistant', content: string, recordsQueried?: NeotomaRecord[]) => {
+    if (typeof window !== 'undefined' && role === 'assistant') {
+      window.__NEOTOMA_LAST_ASSISTANT_MESSAGE = content;
+    }
+
     const isError = role === 'assistant' && (
       content.toLowerCase().startsWith('error:') || 
       content.toLowerCase().startsWith('error ') ||
@@ -945,11 +972,26 @@ const mergeRecentRecords = (
     fileInputRef.current?.click();
   };
 
+  const chatReady = messagesLoaded && !keysLoading;
+
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.warn('[ChatPanel] readiness snapshot', {
+        messagesLoaded,
+        keysLoading,
+        hasX25519: Boolean(x25519),
+        hasEd25519: Boolean(ed25519),
+      });
+    }
+  }, [messagesLoaded, keysLoading, x25519, ed25519]);
+
   return (
     <aside
       ref={panelRef}
       className="relative shrink-0 bg-muted/30 border-r border-border/60 flex flex-col overflow-hidden"
       style={{ width: panelWidth }}
+      data-chat-loaded={chatReady ? 'true' : 'false'}
+      data-chat-ready={chatReady ? 'true' : 'false'}
     >
       <div
         role="separator"
@@ -968,6 +1010,7 @@ const mergeRecentRecords = (
         {messages.map((msg, idx) => (
           <div
             key={idx}
+            data-chat-message={msg.role}
             className={`flex flex-col gap-1 max-w-[85%] ${
               msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
             }`}
