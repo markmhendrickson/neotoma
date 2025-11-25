@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import readline from 'readline';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 const projectRoot = process.cwd();
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -20,6 +21,8 @@ envFiles.forEach((file) => {
 const bootTimeoutMs = Number(process.env.DEV_SERVE_BOOT_TIMEOUT_MS || 60000);
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const logHistoryLimit = 200;
+const startedAt = Date.now();
+let devServeStatePersisted = false;
 
 const tasks = [
   {
@@ -64,6 +67,75 @@ let shuttingDown = false;
 
 function hasValue(value) {
   return typeof value === 'string' && value.trim().length > 0;
+}
+
+function getBranchName() {
+  if (hasValue(process.env.BRANCH_NAME)) {
+    return process.env.BRANCH_NAME;
+  }
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf-8' }).trim();
+    return branch || 'main';
+  } catch {
+    return 'main';
+  }
+}
+
+const branchName = getBranchName();
+const devServeStateDir = path.join(projectRoot, '.dev-serve');
+const devServeStateFile = branchName ? path.join(devServeStateDir, `${branchName}.json`) : null;
+
+function readAssignedPorts() {
+  const readPort = (name) => {
+    const value = Number(process.env[name]);
+    return Number.isFinite(value) ? value : null;
+  };
+  return {
+    http: readPort('HTTP_PORT'),
+    vite: readPort('VITE_PORT'),
+    ws: readPort('WS_PORT'),
+  };
+}
+
+const assignedPorts = readAssignedPorts();
+
+function ensureDirExists(dir) {
+  if (!dir) {
+    return;
+  }
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+function persistDevServeState() {
+  if (!devServeStateFile || !assignedPorts) {
+    return;
+  }
+  ensureDirExists(devServeStateDir);
+  const payload = {
+    branch: branchName,
+    pid: process.pid,
+    startedAt,
+    ports: assignedPorts,
+  };
+  try {
+    fs.writeFileSync(devServeStateFile, JSON.stringify(payload, null, 2));
+    devServeStatePersisted = true;
+  } catch (error) {
+    console.warn(`[dev-serve] Failed to persist state file ${devServeStateFile}: ${error.message}`);
+  }
+}
+
+function clearDevServeState() {
+  if (devServeStatePersisted && devServeStateFile) {
+    try {
+      fs.rmSync(devServeStateFile, { force: true });
+    } catch {
+      // ignore
+    }
+    devServeStatePersisted = false;
+  }
 }
 
 function ensureBaseEnv() {
@@ -170,6 +242,7 @@ function shutdown(code = 0) {
   if (bootTimer) {
     clearTimeout(bootTimer);
   }
+  clearDevServeState();
   for (const state of taskState.values()) {
     terminateChild(state.child, 'SIGTERM');
   }
@@ -240,6 +313,7 @@ function scheduleBootWatchdog() {
 ensureBaseEnv();
 
 console.log('[dev-serve] Starting full dev stack (HTTP + UI) with diagnostics.');
+persistDevServeState();
 
 tasks.forEach((task) => spawnTask(task));
 scheduleBootWatchdog();
@@ -248,6 +322,7 @@ scheduleBootWatchdog();
   process.on(signal, () => shutdown(0));
 });
 
+process.on('exit', clearDevServeState);
 process.on('uncaughtException', (error) => {
   console.error('[dev-serve] Uncaught exception:', error);
   shutdown(1);

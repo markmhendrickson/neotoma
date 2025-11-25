@@ -6,5 +6,7 @@ dist/
 .claude/
 *.code-workspace
 .branch-ports/
+.venv-commit-scan/
+.dev-serve/
 
 
