@@ -127,6 +127,10 @@ components:
             - Do NOT send empty array. Omit field entirely if not generating client-side.
             - Server will auto-generate if omitted (requires OPENAI_API_KEY on server).
             Generation example: Use OpenAI embeddings.create with model text-embedding-3-small and input search.join with space separator
+        include_total_count:
+          type: boolean
+          description: >
+            When true, response includes a {records,total_count} object instead of a bare array so callers know the full number of matches.
     DeleteRecordRequest:
       type: object
       required: [id]
@@ -457,6 +461,9 @@ components:
           items:
             $ref: '#/components/schemas/Record'
           description: Records that were queried during the conversation (if any)
+        records_total_count:
+          type: integer
+          description: Exact number of records in the final retrieve_records call when available
         function_calls:
           type: array
           items:
@@ -659,13 +666,23 @@ paths:
                   limit: 10
       responses:
         '200':
-          description: Array of records
+          description: Records (optionally with total_count metadata)
           content:
             application/json:
               schema:
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Record'
+                  - type: object
+                    properties:
+                      records:
                 type: array
                 items:
                   $ref: '#/components/schemas/Record'
+                      total_count:
+                        type: integer
+                        description: Exact number of matching records
         '400':
           description: Invalid payload
           content:

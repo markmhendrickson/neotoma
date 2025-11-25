@@ -25,13 +25,9 @@ describe('processFileLocally', () => {
       csvRowRecordsEnabled: true,
     });
 
-    expect(result.primaryRecord.type).toBe('dataset');
+    expect(result.primaryRecord).toBeNull();
     expect(result.additionalRecords).toHaveLength(2);
-    expect(result.primaryRecord.properties.csv_rows).toMatchObject({
-      linked_records: 2,
-      truncated: false,
-    });
-    expect(result.additionalRecords[0].properties).toHaveProperty('csv_origin.parent_record_id', result.primaryRecord.id);
+    expect(result.additionalRecords[0].properties).toHaveProperty('csv_origin.file_name', 'sets-small.csv');
   });
 
   it('skips row creation when disabled', async () => {
@@ -43,7 +39,7 @@ describe('processFileLocally', () => {
       csvRowRecordsEnabled: false,
     });
 
-    expect(result.primaryRecord.type).not.toBe('dataset_row');
+    expect(result.primaryRecord?.type).not.toBe('dataset_row');
     expect(result.additionalRecords).toHaveLength(0);
   });
 });

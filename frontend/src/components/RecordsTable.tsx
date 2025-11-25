@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   ColumnDef,
   SortingState,
@@ -32,6 +33,7 @@ import { Separator } from '@/components/ui/separator';
 import { useSettings } from '@/hooks/useSettings';
 import { formatRelativeTime } from '@/utils/time';
 import { EmptyPlaceholder } from '@/components/EmptyPlaceholder';
+import { humanizePropertyKey } from '@/utils/property_keys';
 
 function renderDateCell(value?: string | null) {
   if (!value) return '—';
@@ -47,9 +49,44 @@ function renderDateCell(value?: string | null) {
   );
 }
 
+function renderPropertyValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) {
+    return '—';
+  }
+  if (typeof value === 'string') {
+    return (
+      <span className="text-sm truncate block" title={value}>
+        {value}
+      </span>
+    );
+  }
+  if (typeof value === 'number') {
+    return <span className="text-sm">{value.toLocaleString()}</span>;
+  }
+  if (typeof value === 'boolean') {
+    return <span className="text-sm">{value ? 'Yes' : 'No'}</span>;
+  }
+  if (Array.isArray(value)) {
+    return (
+      <span className="text-sm truncate block" title={JSON.stringify(value)}>
+        {value.length} item(s)
+      </span>
+    );
+  }
+  if (typeof value === 'object') {
+    return (
+      <span className="text-sm truncate block" title={JSON.stringify(value)}>
+        {Object.keys(value).length} key(s)
+      </span>
+    );
+  }
+  return <span className="text-sm">{String(value)}</span>;
+}
+
 interface RecordsTableProps {
   records: NeotomaRecord[];
   totalCount: number;
+  displayCount: number;
   types: string[];
   onRecordClick: (record: NeotomaRecord) => void;
   onDeleteRecord: (record: NeotomaRecord) => Promise<void> | void;
@@ -57,6 +94,9 @@ interface RecordsTableProps {
   onSearch: (query: string) => void;
   onTypeFilter: (type: string) => void;
   isLoading?: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
   onFileUploadRef?: React.MutableRefObject<((files: FileList | null) => Promise<void>) | null>;
 }
 
@@ -92,27 +132,6 @@ const DEFAULT_COLUMN_VISIBILITY: VisibilityState = Object.freeze({
 });
 
 const ROW_INTERACTIVE_ATTR = 'data-row-interactive';
-
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
-const getRecordTestMeta = (record: NeotomaRecord) => {
-  const summary =
-    typeof record.summary === 'string' && record.summary.trim().length > 0
-      ? record.summary.trim()
-      : undefined;
-  const summarySlug = summary ? slugify(summary) : undefined;
-  return {
-    summary,
-    summarySlug,
-    rowTestId: summarySlug ? `record-row-${summarySlug}` : `record-row-${record.id}`,
-    actionsTestId: summarySlug ? `record-actions-${summarySlug}` : `record-actions-${record.id}`,
-  };
-};
 
 const getStoredColumnVisibility = (): VisibilityState => {
   if (typeof window === 'undefined') {
@@ -223,6 +242,7 @@ const getStoredColumnWidths = (): Record<string, number> => {
 export function RecordsTable({
   records,
   totalCount,
+  displayCount,
   types,
   onRecordClick,
   onDeleteRecord,
@@ -230,6 +250,9 @@ export function RecordsTable({
   onSearch,
   onTypeFilter,
   isLoading = false,
+  loadingMore = false,
+  hasMore = false,
+  onLoadMore,
   onFileUploadRef,
 }: RecordsTableProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +260,7 @@ export function RecordsTable({
   const ALL_TYPES_VALUE = '__all__';
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [rowsClickable, setRowsClickable] = useState(true);
+  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
   
   const triggerFileDialog = useCallback(() => {
     fileInputRef.current?.click();
@@ -258,28 +282,148 @@ export function RecordsTable({
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'updated_at', desc: true },
   ]);
-  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
-  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
-
+  const [baseColumnVisibility, setBaseColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
+  const [persistColumnVisibility, setPersistColumnVisibility] = useState(false);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
+  const [loadMoreTriggerNode, setLoadMoreTriggerNode] = useState<HTMLDivElement | null>(null);
+  const handleTableScrollRef = useCallback((node: HTMLDivElement | null) => {
+    tableScrollRef.current = node;
+    setScrollContainer(node);
+  }, []);
+  const handleLoadMoreTriggerRef = useCallback((node: HTMLDivElement | null) => {
+    loadMoreTriggerRef.current = node;
+    setLoadMoreTriggerNode(node);
+  }, []);
+  const prevColumnVisibility = useRef<VisibilityState>({});
+  
+  // Infinite scroll: detect when user scrolls near bottom
   useEffect(() => {
-    if (typeof window === 'undefined') {
+    if (
+      !onLoadMore ||
+      !hasMore ||
+      loadingMore ||
+      !loadMoreTriggerNode ||
+      typeof IntersectionObserver === 'undefined'
+    ) {
       return;
     }
-    const testWindow = window as typeof window & { __NEOTOMA_SELECT_RECORD?: (id: string) => void };
-    testWindow.__NEOTOMA_SELECT_RECORD = (recordId: string) => {
-      setSelectedRowIds((current) => {
-        if (!records.some((record) => record.id === recordId)) {
-          return current;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          onLoadMore();
         }
-        return [recordId];
-      });
-    };
+      },
+      {
+        root: scrollContainer ?? null,
+        rootMargin: '200px',
+      }
+    );
+
+    observer.observe(loadMoreTriggerNode);
+
     return () => {
-      delete testWindow.__NEOTOMA_SELECT_RECORD;
+      observer.disconnect();
     };
+  }, [onLoadMore, hasMore, loadingMore, scrollContainer, loadMoreTriggerNode]);
+  const propertyKeys = useMemo(() => {
+    const keys = new Set<string>();
+    records.forEach((record) => {
+      if (record.properties && typeof record.properties === 'object' && !Array.isArray(record.properties)) {
+        Object.keys(record.properties).forEach((key) => {
+          if (key && typeof key === 'string') {
+            keys.add(key);
+          }
+        });
+      }
+    });
+    return Array.from(keys).sort((a, b) =>
+      humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
+    );
   }, [records]);
-  const columnLabels: Record<string, string> = useMemo(
-    () => ({
+
+  // Compute columnVisibility synchronously to include all property columns as hidden
+  // This prevents flickering when propertyKeys changes
+  const columnVisibility = useMemo(() => {
+    const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
+    const visibility: VisibilityState = { ...baseColumnVisibility };
+    
+    // Remove stale property columns
+    Object.keys(visibility).forEach((columnId) => {
+      if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
+        delete visibility[columnId];
+      }
+    });
+    
+    // Add new property columns as hidden by default
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      if (!(columnId in visibility)) {
+        visibility[columnId] = false;
+      }
+    });
+    
+    return visibility;
+  }, [baseColumnVisibility, propertyKeys]);
+
+  // Sync baseColumnVisibility when propertyKeys change (for persistence)
+  useEffect(() => {
+    const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
+    setBaseColumnVisibility((prev) => {
+      const cleaned: VisibilityState = { ...prev };
+      let changed = false;
+      
+      // Remove stale property columns
+      Object.keys(cleaned).forEach((columnId) => {
+        if (columnId.startsWith('prop:') && !validPropertyColumnIds.has(columnId)) {
+          delete cleaned[columnId];
+          changed = true;
+        }
+      });
+
+      // Add new property columns as hidden by default
+      propertyKeys.forEach((key) => {
+        const columnId = `prop:${key}`;
+        if (!(columnId in cleaned)) {
+          cleaned[columnId] = false;
+          changed = true;
+        }
+      });
+      
+      if (changed) {
+        setPersistColumnVisibility(false);
+        return cleaned;
+      }
+      return prev;
+    });
+  }, [propertyKeys]);
+
+  useEffect(() => {
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      const wasVisible = prevColumnVisibility.current[columnId];
+      const isVisible = columnVisibility[columnId];
+      if (!wasVisible && isVisible && tableScrollRef.current) {
+        const container = tableScrollRef.current;
+        const targetLeft = container.scrollWidth;
+        if (typeof container.scrollTo === 'function') {
+          container.scrollTo({ left: targetLeft, behavior: 'smooth' });
+        } else {
+          container.scrollLeft = targetLeft;
+        }
+      }
+    });
+    const wasPersisting = prevColumnVisibility.current !== columnVisibility;
+    prevColumnVisibility.current = { ...columnVisibility };
+    if (wasPersisting) {
+      setPersistColumnVisibility(true);
+    }
+  }, [columnVisibility, propertyKeys]);
+
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const columnLabels: Record<string, string> = useMemo(() => {
+    const base: Record<string, string> = {
       select: 'Select',
       type: 'Type',
       summary: 'Summary',
@@ -289,8 +433,35 @@ export function RecordsTable({
       _status: 'Status',
       id: 'ID',
       actions: 'Actions',
-    }),
-    []
+    };
+    propertyKeys.forEach((key) => {
+      base[`prop:${key}`] = humanizePropertyKey(key);
+    });
+    return base;
+  }, [propertyKeys]);
+
+  const propertyColumns = useMemo<ColumnDef<NeotomaRecord>[]>(
+    () =>
+      propertyKeys.map((key) => ({
+        id: `prop:${key}`,
+        accessorFn: (row) => {
+          const props = row.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return undefined;
+          }
+          return (props as Record<string, unknown>)[key];
+        },
+        header: humanizePropertyKey(key),
+        cell: ({ row }) => {
+          const props = row.original.properties;
+          if (!props || typeof props !== 'object' || Array.isArray(props)) {
+            return '—';
+          }
+          const value = (props as Record<string, unknown>)[key];
+          return renderPropertyValue(value);
+        },
+      })),
+    [propertyKeys]
   );
 
   const toggleRecordSelection = useCallback((recordId: string, checked: boolean) => {
@@ -378,7 +549,6 @@ export function RecordsTable({
             type="checkbox"
             aria-label={`Select record ${row.original.id}`}
             className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            data-testid="record-row-checkbox"
             checked={selectedRowIds.includes(row.original.id)}
             onChange={(event) => {
               event.stopPropagation();
@@ -957,6 +1127,7 @@ export function RecordsTable({
         },
         cell: ({ row }) => <span className="font-mono text-xs truncate block" title={row.original.id}>{row.original.id}</span>,
       },
+      ...propertyColumns,
       {
         id: 'actions',
         header: 'Actions',
@@ -974,7 +1145,17 @@ export function RecordsTable({
         maxSize: 60,
       },
     ],
-    [handleSelectAll, isAllSelected, isPartiallySelected, onDeleteRecord, onRecordClick, records.length, selectedRowIds, toggleRecordSelection]
+    [
+      handleSelectAll,
+      isAllSelected,
+      isPartiallySelected,
+      onDeleteRecord,
+      onRecordClick,
+      propertyColumns,
+      records.length,
+      selectedRowIds,
+      toggleRecordSelection,
+    ]
   );
 
   const columnIds = useMemo(
@@ -1006,13 +1187,16 @@ export function RecordsTable({
   } | null>(null);
 
   useEffect(() => {
+    if (!persistColumnVisibility) {
+      return;
+    }
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
+      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(baseColumnVisibility));
     } catch (error) {
       console.warn('[RecordsTable] Failed to persist column visibility', error);
     }
-  }, [columnVisibility]);
+  }, [baseColumnVisibility, persistColumnVisibility]);
 
   useEffect(() => {
     setColumnOrder((current) => mergeColumnOrder(current, columnIds));
@@ -1045,7 +1229,7 @@ export function RecordsTable({
       columnOrder,
     },
     onSortingChange: setSorting,
-    onColumnVisibilityChange: setColumnVisibility,
+    onColumnVisibilityChange: setBaseColumnVisibility,
     onColumnOrderChange: setColumnOrder,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -1165,16 +1349,17 @@ export function RecordsTable({
   const showWelcomeEmptyState = !isInitialLoading && records.length === 0 && !searchQuery.trim() && !selectedType;
   const showEmptyPlaceholder = !isInitialLoading && table.getRowModel().rows.length === 0;
   const visibleColumns = table.getVisibleLeafColumns();
-  const skeletonColumns = visibleColumns.length > 0 ? visibleColumns : table.getAllLeafColumns();
+  // Always use visible columns for skeleton to respect column visibility settings
+  const skeletonColumns = visibleColumns;
   const formatRecordCount = useCallback(
     (count: number) => `${count} record${count === 1 ? '' : 's'}`,
     []
   );
   const recordCountLabel = isInitialLoading
     ? 'Loading records…'
-    : records.length === totalCount
-    ? formatRecordCount(totalCount)
-    : `${records.length} of ${formatRecordCount(totalCount)}`;
+    : displayCount === totalCount
+    ? formatRecordCount(displayCount)
+    : `${displayCount} of ${formatRecordCount(totalCount)}`;
   const quotaLabel = isInitialLoading ? 'Calculating usage…' : quotaMessage;
 
   const handleDragStart = useCallback(
@@ -1346,7 +1531,6 @@ export function RecordsTable({
             size="icon"
             variant="outline"
             className="h-9 w-9"
-            data-testid="records-table-upload-button"
             onClick={triggerFileDialog}
             disabled={isInitialLoading}
           >
@@ -1359,11 +1543,10 @@ export function RecordsTable({
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="w-[300px]"
-            data-testid="records-table-search-input"
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" data-testid="records-type-filter">
+              <Button variant="outline">
                 {selectedType ? `Type: ${selectedType}` : 'All Types'}
               </Button>
             </DropdownMenuTrigger>
@@ -1391,7 +1574,10 @@ export function RecordsTable({
                 <DropdownMenuCheckboxItem
                   key={column.id}
                   checked={column.getIsVisible()}
-                  onCheckedChange={(checked) => column.toggleVisibility(checked === true)}
+                  onCheckedChange={(checked) => {
+                    column.toggleVisibility(checked === true);
+                    setPersistColumnVisibility(true);
+                  }}
                   onSelect={(event) => event.preventDefault()}
                 >
                   {columnLabels[column.id] || column.id}
@@ -1404,7 +1590,7 @@ export function RecordsTable({
           {selectedCount > 0 && (
             <div className="flex items-center gap-3">
               <span className="text-foreground font-medium">{selectedCount} selected</span>
-              <Button size="sm" variant="destructive" data-testid="records-delete-selected-button" onClick={handleDeleteSelected}>
+              <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
                 Delete selected
               </Button>
             </div>
@@ -1418,7 +1604,6 @@ export function RecordsTable({
                   type="button"
                   aria-label="Local storage details"
                   className="inline-flex items-center justify-center rounded-full p-1 hover:bg-muted transition-colors"
-                  data-testid="local-storage-details-button"
                 >
                   {settings.cloudStorageEnabled ? (
                     <CheckCircle className="h-4 w-4" />
@@ -1474,8 +1659,11 @@ export function RecordsTable({
           </span>
         </div>
       </div>
-      <div className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden">
-        <div className="h-full overflow-auto">
+      <div
+        className="flex-1 min-h-0 max-h-full rounded-md border overflow-hidden"
+        key={`${searchQuery}-${selectedType}`}
+      >
+        <div className="h-full overflow-auto" ref={handleTableScrollRef}>
           {showEmptyPlaceholder ? (
             <div className="flex h-full items-center justify-center px-6 py-10">
               {showWelcomeEmptyState ? (
@@ -1548,11 +1736,12 @@ export function RecordsTable({
               )}
             </div>
           ) : (
-            <Table className="table-fixed w-full">
+            <Fragment>
+              <Table className="table-fixed w-full">
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
                   <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.filter((header) => header.column.getIsVisible()).map((header) => {
                       const width = columnWidths[header.column.id];
                       const style = width ? { width: `${width}px` } : undefined;
                       const resizeLabel = columnLabels[header.column.id] || header.column.id;
@@ -1686,38 +1875,41 @@ export function RecordsTable({
                     </TableRow>
                   ))
                 ) : (
-                  table.getRowModel().rows.map((row) => {
-                    const testMeta = getRecordTestMeta(row.original);
-                    return (
-                      <TableRow
-                        key={row.id}
-                        data-state={row.getIsSelected() ? 'selected' : undefined}
-                        data-record-id={row.original.id}
-                        data-record-summary={testMeta.summary}
-                        data-record-summary-slug={testMeta.summarySlug}
-                        data-testid={testMeta.rowTestId}
-                        onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
-                        className={cn(
-                          rowsClickable ? 'cursor-pointer' : 'cursor-default',
-                          row.original._status === 'Uploading' && 'bg-amber-50',
-                          row.original._status === 'Failed' && 'bg-red-50'
-                        )}
-                      >
-                        {row.getVisibleCells().map((cell) => {
-                          const width = columnWidths[cell.column.id];
-                          const style = width ? { width: `${width}px` } : undefined;
-                          return (
-                            <TableCell key={cell.id} style={style} className="overflow-hidden">
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() ? 'selected' : undefined}
+                      onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
+                      className={cn(
+                        rowsClickable ? 'cursor-pointer' : 'cursor-default',
+                        row.original._status === 'Uploading' && 'bg-amber-50',
+                        row.original._status === 'Failed' && 'bg-red-50'
+                      )}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const width = columnWidths[cell.column.id];
+                        const style = width ? { width: `${width}px` } : undefined;
+                        return (
+                          <TableCell key={cell.id} style={style} className="overflow-hidden">
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
+            {hasMore && (
+              <div ref={handleLoadMoreTriggerRef} className="h-4 w-full flex-shrink-0" />
+            )}
+            {loadingMore && (
+              <div className="flex items-center justify-center py-4 flex-shrink-0">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-sm text-muted-foreground">Loading more records...</span>
+              </div>
+            )}
+            </Fragment>
           )}
         </div>
       </div>
@@ -1739,7 +1931,6 @@ interface RowActionsProps {
 }
 
 function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) {
-  const testMeta = getRecordTestMeta(record);
   const handleDelete = () => {
     const maybePromise = onDeleteRecord(record);
     if (isPromise(maybePromise)) {
@@ -1754,7 +1945,6 @@ function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) 
           variant="ghost"
           size="icon"
           className="h-8 w-8 p-0"
-          data-testid={testMeta.actionsTestId}
           {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
