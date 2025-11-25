@@ -22,7 +22,10 @@
     "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts",
     "import:connector": "tsx scripts/run-importers.ts",
     "test:e2e": "cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test",
-    "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts"
+    "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts",
+    "setup:env-hook": "bash scripts/setup-env-copy-hook.sh",
+    "copy:env": "node scripts/copy-env-to-worktree.js",
+    "setup:worktree": "bash scripts/cursor-worktree-init.sh"
   },
   "keywords": [
     "mcp",

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, MutableRefObject } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowUp, Plus } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
 import type { DatastoreAPI } from '@/hooks/useDatastore';
@@ -232,7 +232,8 @@ const getStoredMessages = async (x25519: X25519KeyPair | null, ed25519: Ed25519K
         (msg): msg is ChatMessage =>
           (msg.role === 'assistant' || msg.role === 'user') &&
           typeof msg.content === 'string' &&
-          msg.timestamp instanceof Date && !Number.isNaN(msg.timestamp.valueOf())
+          msg.timestamp instanceof Date && !Number.isNaN(msg.timestamp.valueOf()) &&
+          !msg.isError // Filter out error messages
       );
     return ensureIntroMessage(normalized);
   } catch (error) {
@@ -353,6 +354,7 @@ export function ChatPanel({
   const panelRef = useRef<HTMLDivElement>(null);
   const handleFileUploadRef = useRef<typeof handleFileUpload | null>(null);
   const errorCountsRef = useRef<Map<string, number>>(new Map());
+  const errorToastIdsRef = useRef<Map<string, string | number>>(new Map());
   const uploadToastIdsRef = useRef<Map<File, string | number>>(new Map());
   const isResizingRef = useRef(false);
   const recentRecordsRef = useRef<SessionRecentRecord[]>(
@@ -566,17 +568,6 @@ const mergeRecentRecords = (
     };
   }, []);
 
-  useEffect(() => {
-    if (errorCountsRef.current.size > 0) return;
-    const existingErrors = new Map<string, number>();
-    messages.forEach((msg) => {
-      if (msg.isError) {
-        const key = msg.content.toLowerCase();
-        existingErrors.set(key, msg.errorCount ?? 1);
-      }
-    });
-    errorCountsRef.current = existingErrors;
-  }, [messages]);
 
   const handleResizeStart = (event: React.MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -913,33 +904,23 @@ const mergeRecentRecords = (
       const newCount = currentCount + 1;
       errorCountsRef.current.set(errorKey, newCount);
       
-      // Check if this error already exists in messages
-      setMessages((prev) => {
-        const errorIndex = prev.findIndex(
-          (msg) => msg.isError && msg.content.toLowerCase() === errorKey
-        );
-        
-        if (errorIndex >= 0) {
-          // Update existing error message with new count
-          const updated = [...prev];
-          updated[errorIndex] = {
-            ...updated[errorIndex],
-            errorCount: newCount,
-            timestamp: new Date(), // Update timestamp to show it's recent
-          };
-          return updated;
-        } else {
-          // Add new error message
-          return [...prev, { 
-            role, 
-            content, 
-            timestamp: new Date(), 
-            recordsQueried,
-            isError: true,
-            errorCount: 1,
-          }];
-        }
-      });
+      // Get or create toast ID for this error
+      let toastId = errorToastIdsRef.current.get(errorKey);
+      const errorMessage = newCount > 1 ? `${content} (occurred ${newCount} times)` : content;
+      
+      if (toastId) {
+        // Update existing toast with new count
+        notify.error(errorMessage, {
+          id: toastId,
+          duration: Infinity, // Keep displaying as long as occurrences are happening
+        });
+      } else {
+        // Create new toast
+        const newToastId = notify.error(errorMessage, {
+          duration: Infinity, // Keep displaying as long as occurrences are happening
+        });
+        errorToastIdsRef.current.set(errorKey, newToastId);
+      }
       
       console.error('[Chat Error]', content, newCount > 1 ? `(occurred ${newCount} times)` : '');
     } else {
@@ -1140,7 +1121,7 @@ const mergeRecentRecords = (
         />
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-3">
-        {messages.map((msg, idx) => (
+        {messages.filter(msg => !msg.isError).map((msg, idx) => (
           <div
             key={idx}
             className={`flex flex-col gap-1 max-w-[85%] ${
@@ -1213,32 +1194,17 @@ const mergeRecentRecords = (
               onInput={autoResizeTextarea}
             />
           </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="h-9 w-9 rounded-full border border-border/70 bg-white text-muted-foreground shadow-none hover:bg-white"
-                onClick={triggerFileDialog}
-                disabled={isLoading}
-              >
-                <Plus className="h-4 w-4" />
-                <span className="sr-only">Attach files</span>
-              </Button>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                type="button"
-                size="icon"
-                onClick={handleSend}
-                disabled={isLoading || !input.trim()}
-                className="h-9 w-9 rounded-full bg-[#8f8f8f] text-white shadow-none hover:bg-[#828282] disabled:bg-muted disabled:text-muted-foreground"
-              >
-                <ArrowUp className="h-4 w-4" />
-                <span className="sr-only">Send message</span>
-              </Button>
-            </div>
+          <div className="flex items-center justify-end">
+            <Button
+              type="button"
+              size="icon"
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="h-9 w-9 rounded-full bg-[#8f8f8f] text-white shadow-none hover:bg-[#828282] disabled:bg-muted disabled:text-muted-foreground"
+            >
+              <ArrowUp className="h-4 w-4" />
+              <span className="sr-only">Send message</span>
+            </Button>
           </div>
           <input
             type="file"

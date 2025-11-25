@@ -1,0 +1,12 @@
+{
+  "$schema": "https://www.cursor.com/schemas/worktrees.json",
+  "setup-worktree-unix": [
+    "node scripts/copy-env-to-worktree.js"
+  ],
+  "setup-worktree-windows": [
+    "node scripts/copy-env-to-worktree.js"
+  ],
+  "setup-worktree": [
+    "node scripts/copy-env-to-worktree.js"
+  ]
+}

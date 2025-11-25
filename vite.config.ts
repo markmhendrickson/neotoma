@@ -11,6 +11,9 @@ const enableDevCrossOriginIsolation =
 export default defineConfig({
   plugins: [react()],
   root: 'frontend',
+  define: {
+    'import.meta.env.VITE_WS_PORT': JSON.stringify(process.env.WS_PORT || '8081'),
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './frontend/src'),
