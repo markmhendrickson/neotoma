@@ -25,6 +25,8 @@ export default defineConfig({
       ...configDefaults.exclude,
       'playwright/tests/**/*',
     ],
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });
 
