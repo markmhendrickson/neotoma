@@ -1,11 +1,16 @@
 import { execFile } from 'node:child_process';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createHash, randomUUID } from 'node:crypto';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { buildSampleRecords } from '../../frontend/src/sample-data/sample-records.js';
+import type { LocalRecord } from '../../frontend/src/store/types';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
+const encoder = new TextEncoder();
 
 type BranchPorts = {
   httpPort: number;
@@ -99,9 +104,12 @@ export function buildBackendEnv(port: number): NodeJS.ProcessEnv {
 export function buildFrontendEnv(
   vitePort: number,
   apiPort: number,
+  options: { apiBaseOverride?: string } = {},
 ): NodeJS.ProcessEnv {
   const apiBase =
-    process.env.VITE_API_BASE_URL || `http://127.0.0.1:${apiPort}`;
+    options.apiBaseOverride ||
+    process.env.VITE_API_BASE_URL ||
+    `http://127.0.0.1:${apiPort}`;
 
   return {
     ...process.env,
@@ -150,6 +158,234 @@ export async function waitForHttp(
   const reason =
     lastError instanceof Error ? lastError.message : String(lastError);
   throw new Error(`Timed out waiting for ${url}: ${reason}`);
+}
+
+type MockApiServerControls = {
+  seedRecords: (records?: LocalRecord[]) => void;
+  clearRecords: () => void;
+  listRecords: () => LocalRecord[];
+};
+
+export type MockApiServer = MockApiServerControls & {
+  origin: string;
+  close: () => Promise<void>;
+};
+
+function respondJson(res: ServerResponse, status: number, payload: unknown) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(payload));
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+async function parseJsonBody(req: IncomingMessage): Promise<any> {
+  try {
+    const body = await readRequestBody(req);
+    if (!body.length) {
+      return {};
+    }
+    return JSON.parse(body.toString('utf8'));
+  } catch {
+    return {};
+  }
+}
+
+function buildMockRecord(overrides: Partial<LocalRecord> = {}): LocalRecord {
+  const timestamp = new Date().toISOString();
+  return {
+    id: overrides.id ?? randomUUID(),
+    type: overrides.type ?? 'note',
+    summary: overrides.summary ?? 'Mock record generated during tests',
+    properties: overrides.properties ?? { source: 'mock-api' },
+    file_urls: overrides.file_urls ?? [],
+    embedding: overrides.embedding ?? null,
+    created_at: overrides.created_at ?? timestamp,
+    updated_at: overrides.updated_at ?? timestamp,
+  };
+}
+
+function filterRecords(
+  records: LocalRecord[],
+  payload: { type?: string; search?: string[]; limit?: number } = {},
+): LocalRecord[] {
+  let results = [...records];
+  if (payload.type) {
+    results = results.filter((record) => record.type === payload.type);
+  }
+  if (Array.isArray(payload.search) && payload.search.length > 0) {
+    const terms = payload.search.map((term) => String(term).toLowerCase());
+    results = results.filter((record) => {
+      const haystack = JSON.stringify(record).toLowerCase();
+      return terms.every((term) => haystack.includes(term));
+    });
+  }
+  if (typeof payload.limit === 'number' && Number.isFinite(payload.limit)) {
+    results = results.slice(0, Math.max(0, payload.limit));
+  }
+  return results;
+}
+
+export async function startMockApiServer(
+  port: number,
+  options: { initialRecords?: LocalRecord[] } = {},
+): Promise<MockApiServer> {
+  const startServer = async (desiredPort: number): Promise<MockApiServer> => {
+    const origin = `http://127.0.0.1:${desiredPort}`;
+    const recordStore = new Map<string, LocalRecord>();
+
+    const seedRecords = (records: LocalRecord[] = buildSampleRecords()) => {
+      recordStore.clear();
+      for (const record of records) {
+        recordStore.set(record.id, record);
+      }
+    };
+
+    const clearRecords = () => {
+      recordStore.clear();
+    };
+
+    const listRecords = () => Array.from(recordStore.values());
+
+    seedRecords(options.initialRecords);
+
+    const server = createServer(async (req, res) => {
+      if (!req.url) {
+        respondJson(res, 400, { error: 'Missing URL' });
+        return;
+      }
+      const requestUrl = new URL(req.url, origin);
+      if (req.method === 'GET' && requestUrl.pathname === '/health') {
+        respondJson(res, 200, { status: 'ok' });
+        return;
+      }
+
+    if (req.method === 'GET' && requestUrl.pathname === '/api/types') {
+      const types = Array.from(new Set(listRecords().map((record) => record.type))).sort();
+      respondJson(res, 200, { types });
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/retrieve_records') {
+      const payload = await parseJsonBody(req);
+      respondJson(res, 200, filterRecords(listRecords(), payload));
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/chat') {
+      const payload = await parseJsonBody(req);
+      if (process.env.MOCK_API_VERBOSE === '1') {
+        console.log('[MockApi] /api/chat', { messages: payload?.messages?.length ?? 0 });
+      }
+      const latestRecord = listRecords()[0];
+      const assistantMessage = latestRecord
+        ? `Mock response referencing record ${latestRecord.summary ?? latestRecord.id}`
+        : 'Mock response with no records available';
+      const invoiceRecords = filterRecords(listRecords(), { type: 'invoice' }).filter(
+        (record) => typeof record.properties?.amount_due === 'number',
+      );
+      const visualization =
+        invoiceRecords.length > 0
+          ? {
+              graphType: 'bar',
+              justification: 'Mock invoice totals by vendor',
+              datasetLabel: 'Sample invoices',
+              recordIds: invoiceRecords.slice(0, 3).map((record) => record.id),
+              dimensionField: { key: 'vendor', label: 'Vendor', kind: 'category' },
+              measureFields: [{ key: 'amount_due', label: 'Amount Due' }],
+            }
+          : undefined;
+      respondJson(res, 200, {
+        message: { content: assistantMessage },
+        records_queried: filterRecords(listRecords(), { limit: 3 }),
+        visualization,
+        echo: payload?.messages ?? [],
+      });
+      if (process.env.MOCK_API_VERBOSE === '1') {
+        console.log('[MockApi] /api/chat response', { assistantMessage });
+      }
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/upload_file') {
+      const body = await readRequestBody(req);
+      const created = buildMockRecord({
+        type: 'file_asset',
+        summary: `Uploaded file (${body.length} bytes)`,
+        properties: {
+          size_bytes: body.length,
+          source: 'mock-upload',
+        },
+        file_urls: [`files/${randomUUID()}.bin`],
+      });
+      recordStore.set(created.id, created);
+      respondJson(res, 200, created);
+      return;
+    }
+
+    if (req.method === 'POST' && requestUrl.pathname === '/api/analyze_file') {
+      const body = await readRequestBody(req);
+      respondJson(res, 200, {
+        type: 'analysis_result',
+        properties: {
+          bytes: body.length,
+          analyzed_at: new Date().toISOString(),
+        },
+        summary: 'File analyzed via mock API',
+      });
+      return;
+    }
+
+      if (req.method === 'GET' && requestUrl.pathname === '/api/get_file_url') {
+        const filePath = requestUrl.searchParams.get('file_path') ?? '';
+        respondJson(res, 200, {
+          url: `${origin}/${filePath.replace(/^\/+/, '')}`,
+        });
+        return;
+      }
+
+      respondJson(res, 404, { error: 'Not Found' });
+    });
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(desiredPort, '127.0.0.1', resolve);
+      });
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      server.close();
+      if (code === 'EADDRINUSE') {
+        return startServer(desiredPort + 1);
+      }
+      throw error;
+    }
+
+    return {
+      origin,
+      seedRecords,
+      clearRecords,
+      listRecords,
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          server.close((err) => {
+            if (err) {
+              reject(err);
+              return;
+            }
+            resolve();
+          });
+        }),
+    };
+  };
+
+  return startServer(port);
 }
 
 export { repoRoot };

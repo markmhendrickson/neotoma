@@ -1,18 +1,21 @@
 import { test as base } from '@playwright/test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import {
-  buildBackendEnv,
   buildFrontendEnv,
   getBranchPorts,
   waitForHttp,
   repoRoot,
+  startMockApiServer,
 } from '../utils/servers.js';
+import type { MockApiServer } from '../utils/servers.js';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
 type RunningServers = {
-  backend: ChildProcessWithoutNullStreams;
   frontend: ChildProcessWithoutNullStreams;
+  mockApi: MockApiServer;
   apiUrl: string;
   uiUrl: string;
   bearerToken: string;
@@ -36,36 +39,73 @@ function drainStream(child: ChildProcessWithoutNullStreams, label: string) {
 
 async function startServers(): Promise<RunningServers> {
   const ports = await getBranchPorts();
-  const backendEnv = buildBackendEnv(ports.httpPort);
-  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort);
+  const branchPortDir = mkdtempSync(`${tmpdir()}/neotoma-playwright-`);
+  const branchPortsFile = `${branchPortDir}/ports.json`;
+  writeFileSync(
+    branchPortsFile,
+    JSON.stringify(
+      {
+        pid: process.pid,
+        createdAt: Date.now(),
+        ports,
+      },
+      null,
+      2,
+    ),
+  );
 
-  const backend = spawn(npmCommand, ['run', 'dev:http'], {
-    cwd: repoRoot,
-    env: backendEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  drainStream(backend, 'backend');
+  const mockApi = await startMockApiServer(ports.httpPort);
+  const effectiveHttpPort = Number(new URL(mockApi.origin).port);
+  const apiBaseUrl = `${mockApi.origin}/api`;
 
-  await waitForHttp(`http://127.0.0.1:${ports.httpPort}/health`);
+  const sharedEnv = {
+    BRANCH_PORTS_FILE: branchPortsFile,
+    HTTP_PORT: String(effectiveHttpPort),
+    VITE_PORT: String(ports.vitePort),
+    WS_PORT: String(ports.wsPort),
+    VITE_API_BASE_URL: apiBaseUrl,
+    VITE_PROXY_REWRITE_API: 'false',
+    MOCK_API_VERBOSE: process.env.MOCK_API_VERBOSE ?? '0',
+    VITE_DISABLE_CHAT_ENCRYPTION: 'true',
+  };
 
-  const frontend = spawn(npmCommand, ['run', 'dev:ui'], {
-    cwd: repoRoot,
-    env: frontendEnv,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const frontendEnv = {
+    ...buildFrontendEnv(ports.vitePort, ports.httpPort),
+    ...sharedEnv,
+  };
+
+  const frontend = spawn(
+    npmCommand,
+    ['run', 'dev:ui', '--', '--host', '127.0.0.1', '--strictPort'],
+    {
+      cwd: repoRoot,
+      env: frontendEnv,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
   drainStream(frontend, 'frontend');
 
   await waitForHttp(`http://127.0.0.1:${ports.vitePort}`);
 
-  const apiUrl = `http://127.0.0.1:${ports.httpPort}/api`;
+  const apiUrl = apiBaseUrl;
   const uiUrl = `http://127.0.0.1:${ports.vitePort}`;
 
+  const cleanupPortsFile = () => {
+    try {
+      rmSync(branchPortDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures
+    }
+  };
+
+  frontend.once('exit', cleanupPortsFile);
+
   return {
-    backend,
+    mockApi,
     frontend,
     apiUrl,
     uiUrl,
-    bearerToken: backendEnv.ACTIONS_BEARER_TOKEN ?? '',
+    bearerToken: 'mock-e2e-bearer',
   };
 }
 
@@ -104,7 +144,7 @@ export const test = base.extend<
         await use(servers);
       } finally {
         terminate(servers.frontend);
-        terminate(servers.backend);
+        await servers.mockApi.close();
       }
     },
     { scope: 'worker', auto: true },

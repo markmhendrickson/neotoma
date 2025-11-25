@@ -1,0 +1,1 @@
+Playwright sample upload fixture.

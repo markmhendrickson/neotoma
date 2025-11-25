@@ -1,0 +1,87 @@
+{
+  "recordsLifecycle": {
+    "description": "Records table end-to-end CRUD, filtering, uploads, quota surfaces.",
+    "components": [
+      "RecordsTable",
+      "RecordDetailsPanel",
+      "useDatastore",
+      "useStorageQuota"
+    ],
+    "states": [
+      "empty datastore",
+      "seeded records (multiple types)",
+      "drag-and-drop upload",
+      "manual upload button",
+      "multi-select delete",
+      "quota threshold > 90%"
+    ],
+    "specFile": "records-lifecycle.spec.ts"
+  },
+  "recordDetails": {
+    "description": "Record details side panel interactions and file affordances.",
+    "components": [
+      "RecordDetailsPanel",
+      "RecordsTable"
+    ],
+    "states": [
+      "panel opened via table row click",
+      "status badge transitions",
+      "file links (local + remote)",
+      "panel dismissal persistence"
+    ],
+    "specFile": "record-details.spec.ts"
+  },
+  "chatPanel": {
+    "description": "Chat message persistence, uploads, and inline record references.",
+    "components": [
+      "ChatPanel",
+      "useKeys",
+      "useSettings",
+      "useDatastore"
+    ],
+    "states": [
+      "intro message seed",
+      "encrypted history (keys ready)",
+      "file upload success",
+      "file upload failure + retry",
+      "recent records sidebar"
+    ],
+    "specFile": "chat-panel.spec.ts"
+  },
+  "settingsAndKeys": {
+    "description": "Floating settings button, key management dialog, Supabase toggles.",
+    "components": [
+      "FloatingSettingsButton",
+      "KeyManagementDialog",
+      "useSettings",
+      "useKeys"
+    ],
+    "states": [
+      "generate keys",
+      "export keys",
+      "import keys",
+      "cloud toggle on/off",
+      "bearer token validation"
+    ],
+    "specFile": "settings-keys.spec.ts"
+  },
+  "storageAndSchema": {
+    "description": "Seed helpers, schema migrations, worker health, quota banners.",
+    "components": [
+      "store",
+      "worker",
+      "useStorageQuota",
+      "seedLocalRecords utilities"
+    ],
+    "states": [
+      "first-run schema init",
+      "seeded records via helper",
+      "quota usage < 50%",
+      "quota usage > 90%",
+      "background sync in-progress"
+    ],
+    "specFile": "storage-schema.spec.ts"
+  }
+}
+
+

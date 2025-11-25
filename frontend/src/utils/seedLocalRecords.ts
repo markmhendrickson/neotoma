@@ -63,4 +63,6 @@ export function resetSeedMarker() {
   }
 }
 
+export { SAMPLE_RECORD_STORAGE_KEY };
+
 

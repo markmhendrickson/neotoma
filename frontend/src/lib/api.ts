@@ -1,4 +1,5 @@
 import type { NeotomaRecord } from '@/types/record';
+import type { VisualizationRequest } from '@/types/visualization';
 
 /**
  * Normalize API base URL to use Vite proxy in development
@@ -166,7 +167,11 @@ export async function sendChatMessage(
     messages: Array<{ role: string; content: string }>;
     recentRecords?: RecentRecordReference[];
   }
-): Promise<{ message: { content: string }; records_queried?: NeotomaRecord[] }> {
+): Promise<{
+  message: { content: string };
+  records_queried?: NeotomaRecord[];
+  visualization?: VisualizationRequest;
+}> {
   const response = await fetch(normalizeApiUrl(apiBase, '/chat'), {
     method: 'POST',
     headers: {

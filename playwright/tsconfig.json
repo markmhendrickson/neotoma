@@ -3,6 +3,10 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../frontend/src/*"]
+    },
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "strict": true,

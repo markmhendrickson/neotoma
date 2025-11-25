@@ -128,6 +128,21 @@ const DEFAULT_COLUMN_VISIBILITY: VisibilityState = Object.freeze({
 
 const ROW_INTERACTIVE_ATTR = 'data-row-interactive';
 
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const getRecordSummaryInfo = (record: NeotomaRecord) => {
+  const raw = typeof record.summary === 'string' ? record.summary.trim() : '';
+  if (!raw) {
+    return { summary: undefined, summarySlug: undefined };
+  }
+  return { summary: raw, summarySlug: slugify(raw) };
+};
+
 const getStoredColumnVisibility = (): VisibilityState => {
   if (typeof window === 'undefined') {
     return { ...DEFAULT_COLUMN_VISIBILITY };
@@ -273,8 +288,6 @@ export function RecordsTable({
     { id: 'updated_at', desc: true },
   ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
-  const tableScrollRef = useRef<HTMLDivElement | null>(null);
-  const prevColumnVisibility = useRef(columnVisibility);
   const propertyKeys = useMemo(() => {
     const keys = new Set<string>();
     records.forEach((record) => {
@@ -290,6 +303,18 @@ export function RecordsTable({
       humanizePropertyKey(a).localeCompare(humanizePropertyKey(b), undefined, { sensitivity: 'base' })
     );
   }, [records]);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const resolvedColumnVisibility = useMemo<VisibilityState>(() => {
+    const next: VisibilityState = { ...DEFAULT_COLUMN_VISIBILITY, ...columnVisibility };
+    propertyKeys.forEach((key) => {
+      const columnId = `prop:${key}`;
+      if (!(columnId in next)) {
+        next[columnId] = false;
+      }
+    });
+    return next;
+  }, [columnVisibility, propertyKeys]);
+  const prevColumnVisibility = useRef(resolvedColumnVisibility);
 
   useEffect(() => {
     const validPropertyColumnIds = new Set(propertyKeys.map((key) => `prop:${key}`));
@@ -325,7 +350,7 @@ export function RecordsTable({
     propertyKeys.forEach((key) => {
       const columnId = `prop:${key}`;
       const wasVisible = prevColumnVisibility.current[columnId];
-      const isVisible = columnVisibility[columnId];
+      const isVisible = resolvedColumnVisibility[columnId];
       if (!wasVisible && isVisible && tableScrollRef.current) {
         const container = tableScrollRef.current;
         const targetLeft = container.scrollWidth;
@@ -336,8 +361,8 @@ export function RecordsTable({
         }
       }
     });
-    prevColumnVisibility.current = columnVisibility;
-  }, [columnVisibility, propertyKeys]);
+    prevColumnVisibility.current = resolvedColumnVisibility;
+  }, [propertyKeys, resolvedColumnVisibility]);
 
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
   const columnLabels: Record<string, string> = useMemo(() => {
@@ -1107,11 +1132,11 @@ export function RecordsTable({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(columnVisibility));
+      window.localStorage.setItem(COLUMN_VISIBILITY_STORAGE_KEY, JSON.stringify(resolvedColumnVisibility));
     } catch (error) {
       console.warn('[RecordsTable] Failed to persist column visibility', error);
     }
-  }, [columnVisibility]);
+  }, [resolvedColumnVisibility]);
 
   useEffect(() => {
     setColumnOrder((current) => mergeColumnOrder(current, columnIds));
@@ -1140,7 +1165,7 @@ export function RecordsTable({
     columns,
     state: {
       sorting,
-      columnVisibility,
+      columnVisibility: resolvedColumnVisibility,
       columnOrder,
     },
     onSortingChange: setSorting,
@@ -1460,7 +1485,7 @@ export function RecordsTable({
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" data-testid="records-type-filter">
                 {selectedType ? `Type: ${selectedType}` : 'All Types'}
               </Button>
             </DropdownMenuTrigger>
@@ -1501,7 +1526,12 @@ export function RecordsTable({
           {selectedCount > 0 && (
             <div className="flex items-center gap-3">
               <span className="text-foreground font-medium">{selectedCount} selected</span>
-              <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleDeleteSelected}
+                data-testid="records-delete-selected"
+              >
                 Delete selected
               </Button>
             </div>
@@ -1782,28 +1812,36 @@ export function RecordsTable({
                     </TableRow>
                   ))
                 ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() ? 'selected' : undefined}
-                      onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
-                      className={cn(
-                        rowsClickable ? 'cursor-pointer' : 'cursor-default',
-                        row.original._status === 'Uploading' && 'bg-amber-50',
-                        row.original._status === 'Failed' && 'bg-red-50'
-                      )}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const width = columnWidths[cell.column.id];
-                        const style = width ? { width: `${width}px` } : undefined;
-                        return (
-                          <TableCell key={cell.id} style={style} className="overflow-hidden">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
+                  table.getRowModel().rows.map((row) => {
+                    const { summary, summarySlug } = getRecordSummaryInfo(row.original);
+                    return (
+                      <TableRow
+                        key={row.id}
+                        data-state={row.getIsSelected() ? 'selected' : undefined}
+                        data-record-id={row.original.id}
+                        data-record-type={row.original.type}
+                        data-record-summary={summary}
+                        data-record-summary-slug={summarySlug}
+                        data-testid={summarySlug ? `record-row-${summarySlug}` : undefined}
+                        onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
+                        className={cn(
+                          rowsClickable ? 'cursor-pointer' : 'cursor-default',
+                          row.original._status === 'Uploading' && 'bg-amber-50',
+                          row.original._status === 'Failed' && 'bg-red-50'
+                        )}
+                      >
+                        {row.getVisibleCells().map((cell) => {
+                          const width = columnWidths[cell.column.id];
+                          const style = width ? { width: `${width}px` } : undefined;
+                          return (
+                            <TableCell key={cell.id} style={style} className="overflow-hidden">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1828,6 +1866,7 @@ interface RowActionsProps {
 }
 
 function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) {
+  const { summary, summarySlug } = getRecordSummaryInfo(record);
   const handleDelete = () => {
     const maybePromise = onDeleteRecord(record);
     if (isPromise(maybePromise)) {
@@ -1843,6 +1882,10 @@ function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) 
           size="icon"
           className="h-8 w-8 p-0"
           {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
+          data-record-id={record.id}
+          data-record-summary={summary}
+          data-record-summary-slug={summarySlug}
+          data-testid={summarySlug ? `record-actions-${summarySlug}` : undefined}
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
           onPointerDown={(event) => event.stopPropagation()}
