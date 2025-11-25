@@ -20,7 +20,9 @@
     "branches:prune": "node scripts/prune-merged-branches.js",
     "start:ws": "node dist/mcp_ws_bridge.js",
     "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts",
-    "import:connector": "tsx scripts/run-importers.ts"
+    "import:connector": "tsx scripts/run-importers.ts",
+    "test:e2e": "cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test",
+    "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts"
   },
   "keywords": [
     "mcp",

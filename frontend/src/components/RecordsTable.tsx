@@ -93,6 +93,27 @@ const DEFAULT_COLUMN_VISIBILITY: VisibilityState = Object.freeze({
 
 const ROW_INTERACTIVE_ATTR = 'data-row-interactive';
 
+const slugify = (value: string): string =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+const getRecordTestMeta = (record: NeotomaRecord) => {
+  const summary =
+    typeof record.summary === 'string' && record.summary.trim().length > 0
+      ? record.summary.trim()
+      : undefined;
+  const summarySlug = summary ? slugify(summary) : undefined;
+  return {
+    summary,
+    summarySlug,
+    rowTestId: summarySlug ? `record-row-${summarySlug}` : `record-row-${record.id}`,
+    actionsTestId: summarySlug ? `record-actions-${summarySlug}` : `record-actions-${record.id}`,
+  };
+};
+
 const getStoredColumnVisibility = (): VisibilityState => {
   if (typeof window === 'undefined') {
     return { ...DEFAULT_COLUMN_VISIBILITY };
@@ -239,6 +260,24 @@ export function RecordsTable({
   ]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => getStoredColumnVisibility());
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const testWindow = window as typeof window & { __NEOTOMA_SELECT_RECORD?: (id: string) => void };
+    testWindow.__NEOTOMA_SELECT_RECORD = (recordId: string) => {
+      setSelectedRowIds((current) => {
+        if (!records.some((record) => record.id === recordId)) {
+          return current;
+        }
+        return [recordId];
+      });
+    };
+    return () => {
+      delete testWindow.__NEOTOMA_SELECT_RECORD;
+    };
+  }, [records]);
   const columnLabels: Record<string, string> = useMemo(
     () => ({
       select: 'Select',
@@ -339,6 +378,7 @@ export function RecordsTable({
             type="checkbox"
             aria-label={`Select record ${row.original.id}`}
             className="h-4 w-4 rounded border border-input text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="record-row-checkbox"
             checked={selectedRowIds.includes(row.original.id)}
             onChange={(event) => {
               event.stopPropagation();
@@ -1306,6 +1346,7 @@ export function RecordsTable({
             size="icon"
             variant="outline"
             className="h-9 w-9"
+            data-testid="records-table-upload-button"
             onClick={triggerFileDialog}
             disabled={isInitialLoading}
           >
@@ -1318,10 +1359,11 @@ export function RecordsTable({
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="w-[300px]"
+            data-testid="records-table-search-input"
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" data-testid="records-type-filter">
                 {selectedType ? `Type: ${selectedType}` : 'All Types'}
               </Button>
             </DropdownMenuTrigger>
@@ -1362,7 +1404,7 @@ export function RecordsTable({
           {selectedCount > 0 && (
             <div className="flex items-center gap-3">
               <span className="text-foreground font-medium">{selectedCount} selected</span>
-              <Button size="sm" variant="destructive" onClick={handleDeleteSelected}>
+              <Button size="sm" variant="destructive" data-testid="records-delete-selected-button" onClick={handleDeleteSelected}>
                 Delete selected
               </Button>
             </div>
@@ -1376,6 +1418,7 @@ export function RecordsTable({
                   type="button"
                   aria-label="Local storage details"
                   className="inline-flex items-center justify-center rounded-full p-1 hover:bg-muted transition-colors"
+                  data-testid="local-storage-details-button"
                 >
                   {settings.cloudStorageEnabled ? (
                     <CheckCircle className="h-4 w-4" />
@@ -1643,28 +1686,35 @@ export function RecordsTable({
                     </TableRow>
                   ))
                 ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() ? 'selected' : undefined}
-                      onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
-                      className={cn(
-                        rowsClickable ? 'cursor-pointer' : 'cursor-default',
-                        row.original._status === 'Uploading' && 'bg-amber-50',
-                        row.original._status === 'Failed' && 'bg-red-50'
-                      )}
-                    >
-                      {row.getVisibleCells().map((cell) => {
-                        const width = columnWidths[cell.column.id];
-                        const style = width ? { width: `${width}px` } : undefined;
-                        return (
-                          <TableCell key={cell.id} style={style} className="overflow-hidden">
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))
+                  table.getRowModel().rows.map((row) => {
+                    const testMeta = getRecordTestMeta(row.original);
+                    return (
+                      <TableRow
+                        key={row.id}
+                        data-state={row.getIsSelected() ? 'selected' : undefined}
+                        data-record-id={row.original.id}
+                        data-record-summary={testMeta.summary}
+                        data-record-summary-slug={testMeta.summarySlug}
+                        data-testid={testMeta.rowTestId}
+                        onClick={rowsClickable ? (event) => handleRowClick(event, row.original) : undefined}
+                        className={cn(
+                          rowsClickable ? 'cursor-pointer' : 'cursor-default',
+                          row.original._status === 'Uploading' && 'bg-amber-50',
+                          row.original._status === 'Failed' && 'bg-red-50'
+                        )}
+                      >
+                        {row.getVisibleCells().map((cell) => {
+                          const width = columnWidths[cell.column.id];
+                          const style = width ? { width: `${width}px` } : undefined;
+                          return (
+                            <TableCell key={cell.id} style={style} className="overflow-hidden">
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -1689,6 +1739,7 @@ interface RowActionsProps {
 }
 
 function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) {
+  const testMeta = getRecordTestMeta(record);
   const handleDelete = () => {
     const maybePromise = onDeleteRecord(record);
     if (isPromise(maybePromise)) {
@@ -1703,6 +1754,7 @@ function RowActions({ record, onViewDetails, onDeleteRecord }: RowActionsProps) 
           variant="ghost"
           size="icon"
           className="h-8 w-8 p-0"
+          data-testid={testMeta.actionsTestId}
           {...{ [ROW_INTERACTIVE_ATTR]: 'true' }}
           onClick={(event) => event.stopPropagation()}
           onMouseDown={(event) => event.stopPropagation()}
