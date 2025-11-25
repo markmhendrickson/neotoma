@@ -272,6 +272,7 @@ const RetrieveSchema = z.object({
     similarity_threshold: z.number().min(0).max(1).optional().default(0.3),
   query_embedding: z.array(z.number()).optional(),
   ids: z.array(z.string().uuid()).min(1).max(100).optional(),
+  include_total_count: z.boolean().optional(),
 });
 
 const StoreRecordsSchema = z.object({
@@ -911,8 +912,19 @@ app.post('/retrieve_records', async (req, res) => {
     logWarn('ValidationError:retrieve_records', req, { issues: parsed.error.issues });
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { type, properties, limit, search, search_mode, similarity_threshold, query_embedding: providedQueryEmbedding, ids } = parsed.data;
+  const {
+    type,
+    properties,
+    limit,
+    search,
+    search_mode,
+    similarity_threshold,
+    query_embedding: providedQueryEmbedding,
+    ids,
+    include_total_count,
+  } = parsed.data;
   const normalizedType = type ? normalizeRecordType(type).type : undefined;
+  const includeTotalCount = include_total_count === true;
 
   const resultMap = new Map<string, any>();
   const appendResults = (records: any[]) => {
@@ -924,6 +936,7 @@ app.post('/retrieve_records', async (req, res) => {
   };
   const finalLimit = limit ?? 100;
   const hasIdFilter = Array.isArray(ids) && ids.length > 0;
+  let totalCount: number | null = null;
 
   if (hasIdFilter) {
     try {
@@ -1135,8 +1148,44 @@ app.post('/retrieve_records', async (req, res) => {
     return rest;
   });
   
-  logDebug('Success:retrieve_records', req, { count: resultsWithoutEmbeddings.length, search_mode, has_search: !!search });
-  return res.json(resultsWithoutEmbeddings);
+  if (includeTotalCount) {
+    if (!search && !hasIdFilter && !properties) {
+      try {
+        let countQuery = supabase.from('records');
+        if (normalizedType) {
+          countQuery = countQuery.eq('type', normalizedType);
+        }
+        const { count, error: countError } = await countQuery.select('id', {
+          count: 'exact',
+          head: true,
+        });
+        if (countError) {
+          logError('SupabaseError:retrieve_records:count', req, countError);
+        } else if (typeof count === 'number') {
+          totalCount = count;
+        }
+      } catch (countError) {
+        logError('SupabaseError:retrieve_records:count', req, countError);
+      }
+    } else if (hasIdFilter && ids) {
+      totalCount = ids.length;
+    }
+  }
+
+  const payload = includeTotalCount
+    ? {
+        records: resultsWithoutEmbeddings,
+        total_count: totalCount ?? resultsWithoutEmbeddings.length,
+      }
+    : resultsWithoutEmbeddings;
+
+  logDebug('Success:retrieve_records', req, {
+    count: resultsWithoutEmbeddings.length,
+    total_count: includeTotalCount ? totalCount ?? resultsWithoutEmbeddings.length : undefined,
+    search_mode,
+    has_search: !!search,
+  });
+  return res.json(payload);
 });
 
 app.post('/delete_record', async (req, res) => {
@@ -1537,8 +1586,19 @@ async function executeRetrieveRecords(params: {
   similarity_threshold?: number;
   query_embedding?: number[];
   ids?: string[];
-}): Promise<any[]> {
-  const { type, properties, limit, search, search_mode = 'both', similarity_threshold = 0.3, query_embedding: providedQueryEmbedding, ids } = params;
+  include_total_count?: boolean;
+}): Promise<{ records: any[]; totalCount?: number }> {
+  const {
+    type,
+    properties,
+    limit,
+    search,
+    search_mode = 'both',
+    similarity_threshold = 0.3,
+    query_embedding: providedQueryEmbedding,
+    ids,
+    include_total_count,
+  } = params;
 
   const resultMap = new Map<string, any>();
   const appendResults = (records: any[]) => {
@@ -1550,14 +1610,22 @@ async function executeRetrieveRecords(params: {
   };
 
   const finalLimit = limit ?? 100;
+  const includeTotalCount = include_total_count === true;
+  const normalizedType = type ? normalizeRecordType(type).type : undefined;
+  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
+  const hasSearch = Array.isArray(search) && search.length > 0;
+  let totalCount: number | null = null;
 
-  if (ids && ids.length > 0) {
-    const idMatches = await fetchRecordsByIds(ids, type);
+  if (hasIdFilter) {
+    const idMatches = await fetchRecordsByIds(ids, normalizedType);
     appendResults(idMatches);
+    if (includeTotalCount) {
+      totalCount = ids.length;
+    }
   }
 
   // Semantic search (vector similarity)
-  if (search && (search_mode === 'semantic' || search_mode === 'both')) {
+  if (hasSearch && (search_mode === 'semantic' || search_mode === 'both')) {
     let query_embedding: number[] | undefined = providedQueryEmbedding;
     if (!query_embedding && config.openaiApiKey) {
       const searchText = search.join(' ');
@@ -1568,8 +1636,8 @@ async function executeRetrieveRecords(params: {
     if (query_embedding && query_embedding.length === 1536) {
       let embeddingQuery = supabase.from('records').select('*').not('embedding', 'is', null);
       
-      if (type) {
-        embeddingQuery = embeddingQuery.eq('type', type);
+      if (normalizedType) {
+        embeddingQuery = embeddingQuery.eq('type', normalizedType);
       }
 
       const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
@@ -1613,11 +1681,11 @@ async function executeRetrieveRecords(params: {
   }
 
   // Keyword search
-  if (search && (search_mode === 'keyword' || search_mode === 'both')) {
+  if (hasSearch && (search_mode === 'keyword' || search_mode === 'both')) {
     let keywordQuery = supabase.from('records').select('*');
     
-    if (type) {
-      keywordQuery = keywordQuery.eq('type', type);
+    if (normalizedType) {
+      keywordQuery = keywordQuery.eq('type', normalizedType);
     }
 
     const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(finalLimit * 2);
@@ -1635,9 +1703,9 @@ async function executeRetrieveRecords(params: {
   }
 
   // No search mode
-  if (!search && !(ids && ids.length > 0)) {
+  if (!hasSearch && !hasIdFilter) {
     let query = supabase.from('records').select('*');
-    if (type) query = query.eq('type', type);
+    if (normalizedType) query = query.eq('type', normalizedType);
     query = query.order('created_at', { ascending: false }).limit(finalLimit);
 
     const { data, error } = await query;
@@ -1659,11 +1727,204 @@ async function executeRetrieveRecords(params: {
   results = results.slice(0, finalLimit);
 
   // Remove embeddings from response
-  return results.map((rec: any) => {
+  const sanitized = results.map((rec: any) => {
     const { embedding, ...rest } = rec;
     void embedding;
     return rest;
   });
+
+  if (includeTotalCount && totalCount === null && !hasSearch && !properties) {
+    try {
+      let countQuery = supabase.from('records');
+      if (normalizedType) {
+        countQuery = countQuery.eq('type', normalizedType);
+      }
+      const { count } = await countQuery.select('id', { count: 'exact', head: true });
+      if (typeof count === 'number') {
+        totalCount = count;
+      }
+    } catch {
+      totalCount = null;
+    }
+  }
+
+  return {
+    records: sanitized,
+    totalCount: includeTotalCount ? totalCount ?? sanitized.length : undefined,
+  };
+}
+
+// Local-only version of executeRetrieveRecords that works with in-memory records
+async function executeRetrieveRecordsLocal(
+  localRecords: any[],
+  params: {
+    type?: string;
+    properties?: Record<string, unknown>;
+    limit?: number;
+    search?: string[];
+    search_mode?: 'semantic' | 'keyword' | 'both';
+    similarity_threshold?: number;
+    query_embedding?: number[];
+    ids?: string[];
+    include_total_count?: boolean;
+  }
+): Promise<{ records: any[]; totalCount?: number }> {
+  const {
+    type,
+    properties,
+    limit,
+    search,
+    search_mode = 'both',
+    similarity_threshold = 0.3,
+    query_embedding: providedQueryEmbedding,
+    ids,
+    include_total_count,
+  } = params;
+
+  const resultMap = new Map<string, any>();
+  const appendResults = (records: any[]) => {
+    for (const record of records) {
+      const id = record?.id;
+      if (!id || resultMap.has(id)) continue;
+      resultMap.set(id, record);
+    }
+  };
+
+  const finalLimit = limit ?? 100;
+  const includeTotalCount = include_total_count === true;
+  const normalizedType = type ? normalizeRecordType(type).type : undefined;
+  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
+  const hasSearch = Array.isArray(search) && search.length > 0;
+  let totalCount: number | null = null;
+
+  // Start with all local records
+  let candidates = [...localRecords];
+
+  // Filter by type if specified
+  if (normalizedType) {
+    candidates = candidates.filter((rec: any) => rec.type === normalizedType);
+  }
+
+  // Filter by IDs if specified
+  if (hasIdFilter) {
+    const idMatches = candidates.filter((rec: any) => ids.includes(rec.id));
+    appendResults(idMatches);
+    if (includeTotalCount) {
+      totalCount = idMatches.length;
+    }
+  }
+
+  // Semantic search (vector similarity)
+  if (hasSearch && (search_mode === 'semantic' || search_mode === 'both')) {
+    let query_embedding: number[] | undefined = providedQueryEmbedding;
+    if (!query_embedding && config.openaiApiKey) {
+      const searchText = search.join(' ');
+      const generated = await generateEmbedding(searchText);
+      query_embedding = generated || undefined;
+    }
+
+    if (query_embedding && Array.isArray(query_embedding) && query_embedding.length === 1536) {
+      const recordsWithEmbeddings = candidates.filter((rec: any) => {
+        if (!rec.embedding) return false;
+        let recEmbedding = rec.embedding;
+        if (typeof recEmbedding === 'string') {
+          try {
+            recEmbedding = JSON.parse(recEmbedding);
+          } catch {
+            return false;
+          }
+        }
+        return Array.isArray(recEmbedding) && recEmbedding.length === 1536;
+      });
+
+      const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
+      
+      const scoredCandidates = recordsWithEmbeddings
+        .map((rec: any) => {
+          let recEmbedding = rec.embedding;
+          if (typeof recEmbedding === 'string') {
+            try {
+              recEmbedding = JSON.parse(recEmbedding);
+            } catch {
+              return null;
+            }
+          }
+          
+          if (!Array.isArray(recEmbedding) || recEmbedding.length !== 1536) {
+            return null;
+          }
+          
+          const dotProduct = query_embedding.reduce((sum, val, i) => sum + val * recEmbedding[i], 0);
+          const recNorm = Math.sqrt(recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0));
+          const similarity = dotProduct / (queryNorm * recNorm);
+          
+          return { ...rec, similarity };
+        })
+        .filter((rec: any) => rec !== null)
+        .sort((a: any, b: any) => b.similarity - a.similarity);
+      
+      const semanticMatches = scoredCandidates
+        .filter((rec: any) => rec.similarity >= similarity_threshold)
+        .slice(0, finalLimit);
+      appendResults(semanticMatches);
+    }
+  }
+
+  // Keyword search
+  if (hasSearch && (search_mode === 'keyword' || search_mode === 'both')) {
+    const searchText = search.join(' ').toLowerCase();
+    const keywordMatches = candidates.filter((rec: any) => {
+      const typeMatch = rec.type?.toLowerCase().includes(searchText);
+      const summaryMatch = rec.summary?.toLowerCase().includes(searchText);
+      const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
+      const propsMatch = propsText.includes(searchText);
+      return typeMatch || summaryMatch || propsMatch;
+    }).slice(0, finalLimit);
+    appendResults(keywordMatches);
+  }
+
+  // No search mode - just return records
+  if (!hasSearch && !hasIdFilter) {
+    const sorted = candidates
+      .sort((a: any, b: any) => {
+        const timeA = new Date(a.created_at || 0).getTime();
+        const timeB = new Date(b.created_at || 0).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, finalLimit);
+    appendResults(sorted);
+  }
+
+  // Filter by exact property matches
+  let results = Array.from(resultMap.values());
+  if (properties) {
+    results = results.filter((rec: any) => {
+      return Object.entries(properties).every(([key, value]) => {
+        const recValue = (rec.properties as Record<string, unknown>)?.[key];
+        return recValue === value;
+      });
+    });
+  }
+  results = results.slice(0, finalLimit);
+
+  // Remove embeddings from response
+  const sanitized = results.map((rec: any) => {
+    const { embedding, ...rest } = rec;
+    void embedding;
+    return rest;
+  });
+
+  // Calculate total count if requested
+  if (includeTotalCount && totalCount === null && !hasSearch && !properties) {
+    totalCount = normalizedType 
+      ? candidates.filter((rec: any) => rec.type === normalizedType).length
+      : candidates.length;
+  }
+
+  return {
+    records: sanitized,
+    totalCount: includeTotalCount ? totalCount ?? sanitized.length : undefined,
+  };
 }
 
 function extractUUIDs(text: string): string[] {
@@ -1685,6 +1946,7 @@ app.post('/chat', async (req, res) => {
       persisted: z.boolean().optional(),
       payload: z.record(z.unknown()).optional(),
     })).optional(),
+    local_records: z.array(z.record(z.unknown())).optional(),
   });
 
   const parsed = schema.safeParse(req.body);
@@ -1697,7 +1959,10 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'OPENAI_API_KEY not configured on server' });
   }
 
-  const { messages, model = 'gpt-4o-mini', temperature = 0.7, recent_records: recentRecordsInput = [] } = parsed.data;
+  const { messages, model = 'gpt-4o-mini', temperature = 0.7, recent_records: recentRecordsInput = [], local_records: localRecordsInput = [] } = parsed.data;
+  
+  // Determine if we're in local-only mode (local_records provided and non-empty)
+  const useLocalOnly = Array.isArray(localRecordsInput) && localRecordsInput.length > 0;
 
   // Extract UUIDs from the last user message
   const lastUserMessage = messages[messages.length - 1];
@@ -1722,6 +1987,7 @@ Guidelines:
 - Do NOT infer record types from recent records shown in context - those are just examples
 - Provide clear, concise answers based on the retrieved records
 - If no records are found, let the user know
+- Function call results include a \"total_count\" when available; use it to report counts even if the returned \"records\" array is truncated to the current limit
 - Be conversational and helpful`,
   };
 
@@ -1801,10 +2067,24 @@ Guidelines:
 
     let persistedRecentRecords: any[] = [];
     if (persistedRecent.length > 0) {
+      if (useLocalOnly) {
+        // In local-only mode, fetch from local_records
+        persistedRecentRecords = localRecordsInput.filter((rec: any) => 
+          rec.id && persistedRecent.includes(rec.id)
+        );
+        // Preserve order
+        const orderMap = new Map(persistedRecent.map((id, index) => [id, index]));
+        persistedRecentRecords.sort((a, b) => {
+          const aIndex = orderMap.get(a.id) ?? 0;
+          const bIndex = orderMap.get(b.id) ?? 0;
+          return aIndex - bIndex;
+        });
+      } else {
       try {
         persistedRecentRecords = await fetchRecordsByIds(persistedRecent);
       } catch (error) {
         logError('SupabaseError:chat:recent_records', req, error);
+        }
       }
     }
 
@@ -1856,6 +2136,7 @@ Guidelines:
     chatMessages.push(...messages);
     const functionCalls: Array<{ name: string; arguments: string; result?: any }> = [];
     const recordsQueried: any[] = [];
+    let lastRetrieveTotalCount: number | null = null;
     const maxIterations = 5;
     let iteration = 0;
 
@@ -1916,7 +2197,8 @@ Guidelines:
         if (functionName === 'retrieve_records') {
           try {
             const args = JSON.parse(functionArgs);
-            const records = await executeRetrieveRecords({
+            const { records, totalCount } = useLocalOnly
+              ? await executeRetrieveRecordsLocal(localRecordsInput as any[], {
               type: args.type,
               properties: args.properties,
               limit: Math.min(args.limit || 10, 50), // Cap at 50 for chat
@@ -1924,21 +2206,40 @@ Guidelines:
               search_mode: args.search_mode || 'both',
               similarity_threshold: args.similarity_threshold || 0.3,
               ids: Array.isArray(args.ids) ? args.ids.slice(0, 50) : undefined,
+                  include_total_count: true,
+                })
+              : await executeRetrieveRecords({
+                  type: args.type,
+                  properties: args.properties,
+                  limit: Math.min(args.limit || 10, 50), // Cap at 50 for chat
+                  search: args.search,
+                  search_mode: args.search_mode || 'both',
+                  similarity_threshold: args.similarity_threshold || 0.3,
+                  ids: Array.isArray(args.ids) ? args.ids.slice(0, 50) : undefined,
+                  include_total_count: true,
             });
 
             recordsQueried.push(...records);
+            if (typeof totalCount === 'number') {
+              lastRetrieveTotalCount = totalCount;
+            }
+
+            const functionResult = {
+              records,
+              total_count: typeof totalCount === 'number' ? totalCount : undefined,
+            };
 
             functionCalls.push({
               name: functionName,
               arguments: functionArgs,
-              result: records,
+              result: functionResult,
             });
 
             // Add function result to conversation
             chatMessages.push({
               role: 'function',
               name: functionName,
-              content: JSON.stringify(records),
+              content: JSON.stringify(functionResult),
             });
 
             iteration++;
@@ -1965,6 +2266,7 @@ Guidelines:
       return res.json({
         message: assistantMessage,
         records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+        records_total_count: typeof lastRetrieveTotalCount === 'number' ? lastRetrieveTotalCount : undefined,
         function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
           name: fc.name,
           arguments: JSON.parse(fc.arguments),
@@ -1980,6 +2282,7 @@ Guidelines:
         content: typeof lastMessage.content === 'string' ? lastMessage.content : 'Unable to complete request',
       },
       records_queried: recordsQueried.length > 0 ? recordsQueried : undefined,
+      records_total_count: typeof lastRetrieveTotalCount === 'number' ? lastRetrieveTotalCount : undefined,
       function_calls: functionCalls.length > 0 ? functionCalls.map(fc => ({
         name: fc.name,
         arguments: JSON.parse(fc.arguments),

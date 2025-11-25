@@ -3,10 +3,21 @@
  * Initializes SQLite and WebWorker connection
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { DatastoreWorkerClient } from '../worker/client.js';
 import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
 import type { LocalRecord, QueryOptions, VectorSearchOptions } from '../store/types.js';
+
+const workerUrl = new URL('../worker/db.worker.ts', import.meta.url);
+let sharedWorkerClient: DatastoreWorkerClient | null = null;
+let sharedWorkerInitPromise: Promise<void> | null = null;
+let sharedWorkerKeyFingerprint: string | null = null;
+
+function fingerprintKeys(x25519Key: X25519KeyPair, ed25519Key: Ed25519KeyPair): string {
+  const serialize = (key: X25519KeyPair | Ed25519KeyPair) =>
+    Array.from(key.publicKey).join(',') + '|' + Array.from(key.privateKey).join(',');
+  return `${serialize(x25519Key)}::${serialize(ed25519Key)}`;
+}
 
 export interface DatastoreAPI {
   initialized: boolean;
@@ -34,22 +45,44 @@ export function useDatastore(
       return;
     }
 
-    let workerClient: DatastoreWorkerClient | null = null;
-
     async function init() {
       if (!x25519Key || !ed25519Key) {
         return;
       }
+
+      const fingerprint = fingerprintKeys(x25519Key, ed25519Key);
+
+      if (sharedWorkerKeyFingerprint && sharedWorkerKeyFingerprint !== fingerprint) {
+        // Keys changed – reset existing worker so it can be re-initialized
+        sharedWorkerClient?.terminate();
+        sharedWorkerClient = null;
+        sharedWorkerInitPromise = null;
+        sharedWorkerKeyFingerprint = null;
+        setInitialized(false);
+      }
+
       try {
         console.log('[Datastore] Starting initialization...');
-        // Create worker client
-        const workerUrl = new URL('../worker/db.worker.ts', import.meta.url);
-        workerClient = new DatastoreWorkerClient(workerUrl);
+        if (!sharedWorkerClient) {
+          sharedWorkerClient = new DatastoreWorkerClient(workerUrl);
+        }
+        if (!sharedWorkerInitPromise) {
+          sharedWorkerInitPromise = sharedWorkerClient
+            .init(x25519Key, ed25519Key)
+            .catch((error) => {
+              // Reset cached worker on failure so we can retry
+              sharedWorkerClient?.terminate();
+              sharedWorkerClient = null;
+              sharedWorkerInitPromise = null;
+              sharedWorkerKeyFingerprint = null;
+              throw error;
+            });
+        }
 
-        // Initialize database
-        await workerClient.init(x25519Key, ed25519Key);
+        await sharedWorkerInitPromise;
 
-        setClient(workerClient);
+        sharedWorkerKeyFingerprint = fingerprint;
+        setClient(sharedWorkerClient);
         setInitialized(true);
         setError(null);
         console.log('[Datastore] Initialization complete');
@@ -66,12 +99,6 @@ export function useDatastore(
     }
 
     init();
-
-    return () => {
-      if (workerClient) {
-        workerClient.terminate();
-      }
-    };
   }, [x25519Key, ed25519Key]);
 
   const getRecord = useCallback(
@@ -144,16 +171,21 @@ export function useDatastore(
     [client, initialized]
   );
 
-  return {
-    initialized,
-    error,
-    getRecord,
-    putRecord,
-    queryRecords,
-    countRecords,
-    deleteRecord,
-    clearAll,
-    searchVectors,
-  };
+  const datastoreValue = useMemo(
+    () => ({
+      initialized,
+      error,
+      getRecord,
+      putRecord,
+      queryRecords,
+      countRecords,
+      deleteRecord,
+      clearAll,
+      searchVectors,
+    }),
+    [initialized, error, getRecord, putRecord, queryRecords, countRecords, deleteRecord, clearAll, searchVectors]
+  );
+
+  return datastoreValue;
 }
 

@@ -165,8 +165,13 @@ export async function sendChatMessage(
   payload: {
     messages: Array<{ role: string; content: string }>;
     recentRecords?: RecentRecordReference[];
+    localRecords?: NeotomaRecord[];
   }
-): Promise<{ message: { content: string }; records_queried?: NeotomaRecord[] }> {
+): Promise<{
+  message: { content: string };
+  records_queried?: NeotomaRecord[];
+  records_total_count?: number;
+}> {
   const response = await fetch(normalizeApiUrl(apiBase, '/chat'), {
     method: 'POST',
     headers: {
@@ -176,6 +181,7 @@ export async function sendChatMessage(
     body: JSON.stringify({
       messages: payload.messages,
       recent_records: payload.recentRecords?.length ? payload.recentRecords : undefined,
+      local_records: payload.localRecords?.length ? payload.localRecords : undefined,
     }),
   });
 

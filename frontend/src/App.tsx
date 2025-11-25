@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type DragEvent } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } from 'react';
 import { Toaster } from '@/components/ui/toaster';
 import { Toaster as SonnerToaster } from 'sonner';
 import { ChatPanel } from '@/components/ChatPanel';
@@ -13,42 +13,7 @@ import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
 import { DatastoreContext } from '@/contexts/DatastoreContext';
 import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
 import { configureLocalFileEncryption, deleteLocalFile, isLocalFilePath } from '@/utils/local_files';
-
-const tokenizeQuery = (query: string): string[] =>
-  query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-
-const collectSearchableStrings = (value: unknown, acc: string[]) => {
-  if (value === null || value === undefined) return;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    acc.push(String(value).toLowerCase());
-    return;
-  }
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectSearchableStrings(item, acc));
-    return;
-  }
-  if (typeof value === 'object') {
-    Object.entries(value as Record<string, unknown>).forEach(([key, val]) => {
-      acc.push(key.toLowerCase());
-      collectSearchableStrings(val, acc);
-    });
-  }
-};
-
-const buildRecordSearchStrings = (record: NeotomaRecord): string[] => {
-  const parts: string[] = [];
-  [record.type, record.summary ?? '', record.id, ...(record.file_urls ?? [])].forEach((value) => {
-    if (typeof value === 'string' && value.trim()) {
-      parts.push(value.toLowerCase());
-    }
-  });
-  collectSearchableStrings(record.properties ?? {}, parts);
-  return parts;
-};
+import { recordMatchesQuery } from '@/utils/record_search';
 
 function App() {
   const { toast } = useToast();
@@ -63,49 +28,116 @@ function App() {
   }, [x25519, ed25519]);
 
   const datastore = useDatastore(x25519, ed25519);
+  const {
+    initialized: datastoreInitialized,
+    queryRecords: datastoreQueryRecords,
+    countRecords: datastoreCountRecords,
+    getRecord: datastoreGetRecord,
+  } = datastore;
   const [allRecords, setAllRecords] = useState<NeotomaRecord[]>([]);
   const [filteredRecords, setFilteredRecords] = useState<NeotomaRecord[]>([]);
+  const [filteredDisplayCount, setFilteredDisplayCount] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
   const [types, setTypes] = useState<string[]>([]);
   const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(null);
   const [selectedType, setSelectedType] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [recordsLoading, setRecordsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const RECORDS_PER_PAGE = 50;
+  const allRecordsRef = useRef<NeotomaRecord[]>([]);
+  const totalRecordsRef = useRef(0);
+  const fullLoadInProgressRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
   const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
-  const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS === 'true';
+  const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS !== 'false';
 
-  const loadRecords = useCallback(async () => {
-    if (!datastore.initialized || keysLoading) {
+  const loadRecords = useCallback(async (reset: boolean = true) => {
+    if (!datastoreInitialized || keysLoading) {
       return;
     }
 
-    setRecordsLoading(true);
+    if (reset) {
+      setRecordsLoading(true);
+      setAllRecords([]);
+      allRecordsRef.current = [];
+      setHasMore(true);
+    }
+
     try {
+      const currentOffset = reset ? 0 : allRecordsRef.current.length;
       const [localRecords, totalCount] = await Promise.all([
-        datastore.queryRecords(),
-        datastore.countRecords(),
+        datastoreQueryRecords({ limit: RECORDS_PER_PAGE, offset: currentOffset }),
+        reset ? datastoreCountRecords() : Promise.resolve(totalRecordsRef.current),
       ]);
       const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
-      setAllRecords(neotomaRecords);
-      setTotalRecords(totalCount);
-
-      // Extract unique types
-      const uniqueTypes = Array.from(new Set(neotomaRecords.map(r => r.type))).sort();
+      
+      const newRecords = reset ? neotomaRecords : [...allRecordsRef.current, ...neotomaRecords];
+      allRecordsRef.current = newRecords;
+      setAllRecords(newRecords);
+      setHasMore(newRecords.length < totalCount);
+      
+      // Extract unique types from all loaded records
+      const uniqueTypes = Array.from(new Set(newRecords.map(r => r.type))).sort();
       setTypes(uniqueTypes);
+      
+      if (reset) {
+        totalRecordsRef.current = totalCount;
+        setTotalRecords(totalCount);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load records';
       console.error('[Records Loading Error]', errorMessage, error);
-      setAllRecords([]);
-      // Show error in chat
-      if (chatPanelErrorRef.current) {
-        chatPanelErrorRef.current(errorMessage);
+      if (reset) {
+        setAllRecords([]);
+        allRecordsRef.current = [];
+        // Show error in chat
+        if (chatPanelErrorRef.current) {
+          chatPanelErrorRef.current(errorMessage);
+        }
       }
     } finally {
       setRecordsLoading(false);
+      setLoadingMore(false);
     }
-  }, [datastore, keysLoading]);
+  }, [datastoreInitialized, keysLoading, datastoreQueryRecords, datastoreCountRecords]);
+
+  // Add a function to append a single record without reloading
+  const appendRecord = useCallback(async (recordId: string) => {
+    if (!datastoreInitialized) return;
+    
+    try {
+      const localRecord = await datastoreGetRecord(recordId);
+      if (localRecord) {
+        const neotomaRecord = normalizeRecord(localToNeotoma(localRecord));
+        setAllRecords((prev) => {
+          // Check if record already exists
+          if (prev.some(r => r.id === recordId)) {
+            return prev;
+          }
+          const updated = [neotomaRecord, ...prev];
+          allRecordsRef.current = updated;
+          
+          // Update types
+          const uniqueTypes = Array.from(new Set(updated.map(r => r.type))).sort();
+          setTypes(uniqueTypes);
+          
+          return updated;
+        });
+        setTotalRecords((prev) => {
+          const next = prev + 1;
+          totalRecordsRef.current = next;
+          return next;
+        });
+      }
+    } catch (error) {
+      console.error('[Append Record Error]', error);
+      // Fallback to full reload if append fails
+      await loadRecords(true);
+    }
+  }, [datastoreInitialized, datastoreGetRecord, loadRecords]);
 
 
   const loadTypes = useCallback(async () => {
@@ -117,13 +149,13 @@ function App() {
   }, [allRecords]);
 
   useEffect(() => {
-    if (datastore.initialized && !keysLoading) {
-      loadRecords();
+    if (datastoreInitialized && !keysLoading) {
+      loadRecords(true);
     }
-  }, [datastore.initialized, keysLoading, loadRecords]);
+  }, [datastoreInitialized, keysLoading, loadRecords]);
 
   useEffect(() => {
-    if (!autoSeedEnabled || !datastore.initialized || keysLoading) {
+    if (!autoSeedEnabled || !datastoreInitialized || keysLoading) {
       return;
     }
 
@@ -133,7 +165,7 @@ function App() {
       try {
         const seeded = await seedLocalRecords(datastore);
         if (seeded && !cancelled) {
-          await loadRecords();
+          await loadRecords(true);
           toast({
             title: 'Sample records added',
             description: 'Clear the sample marker or reset storage to remove them.',
@@ -149,10 +181,10 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [autoSeedEnabled, datastore, keysLoading, loadRecords, toast]);
+  }, [autoSeedEnabled, datastore, datastoreInitialized, keysLoading, loadRecords, toast]);
 
   useEffect(() => {
-    if (!import.meta.env.DEV || !datastore.initialized) {
+    if (!import.meta.env.DEV || !datastoreInitialized) {
       return;
     }
 
@@ -163,7 +195,7 @@ function App() {
 
     devWindow.seedNeotomaSamples = async (options?: { force?: boolean }) => {
       await seedLocalRecords(datastore, { force: options?.force ?? true });
-      await loadRecords();
+      await loadRecords(true);
     };
     devWindow.resetNeotomaSampleMarker = () => resetSeedMarker();
 
@@ -171,31 +203,21 @@ function App() {
       delete devWindow.seedNeotomaSamples;
       delete devWindow.resetNeotomaSampleMarker;
     };
-  }, [datastore, loadRecords]);
+  }, [datastore, loadRecords, datastoreInitialized]);
 
   useEffect(() => {
     loadTypes();
   }, [loadTypes]);
 
-  const recordMatchesQuery = useCallback((record: NeotomaRecord, query: string) => {
-    const tokens = tokenizeQuery(query);
-    if (tokens.length === 0) return true;
-
-    const searchableStrings = buildRecordSearchStrings(record);
-    if (searchableStrings.length === 0) {
-      return false;
-    }
-
-    return tokens.every((token) =>
-      searchableStrings.some((field) => field.includes(token))
-    );
+  const matchesQuery = useCallback((record: NeotomaRecord, query: string) => {
+    return recordMatchesQuery(record, query);
   }, []);
 
   useEffect(() => {
     let recordsToFilter = [...allRecords];
 
     if (searchQuery.trim()) {
-      recordsToFilter = recordsToFilter.filter((record) => recordMatchesQuery(record, searchQuery));
+      recordsToFilter = recordsToFilter.filter((record) => matchesQuery(record, searchQuery));
     }
 
     if (selectedType) {
@@ -213,7 +235,47 @@ function App() {
     });
 
     setFilteredRecords(recordsToFilter);
-  }, [allRecords, selectedType, searchQuery, recordMatchesQuery]);
+  }, [allRecords, selectedType, searchQuery, matchesQuery]);
+
+  const filteredCount = filteredRecords.length;
+  useEffect(() => {
+    const trimmedSearch = searchQuery.trim();
+    const requiresFilter = trimmedSearch.length > 0 || Boolean(selectedType);
+    if (!datastoreInitialized || keysLoading) {
+      return;
+    }
+    if (!requiresFilter) {
+      setFilteredDisplayCount(totalRecordsRef.current);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const queryOptions = selectedType ? { type: selectedType } : undefined;
+        const localRecords = await datastoreQueryRecords(queryOptions);
+        if (cancelled) return;
+        const normalizedRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
+        const nextCount = trimmedSearch.length
+          ? normalizedRecords.filter((record) => matchesQuery(record, trimmedSearch)).length
+          : normalizedRecords.length;
+        setFilteredDisplayCount(nextCount);
+      } catch (error) {
+        console.error('[App] Failed to compute filtered count', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [searchQuery, selectedType, datastoreInitialized, keysLoading, datastoreQueryRecords, matchesQuery]);
+
+  const displayCount = useMemo(() => {
+    if (!searchQuery.trim() && !selectedType) {
+      return totalRecords;
+    }
+    return filteredDisplayCount || filteredCount;
+  }, [searchQuery, selectedType, totalRecords, filteredDisplayCount, filteredCount]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -222,6 +284,92 @@ function App() {
   const handleTypeFilter = (type: string) => {
     setSelectedType(type);
   };
+
+  useEffect(() => {
+    const shouldLoadAllForSearch = searchQuery.trim().length > 0 && hasMore;
+    if (!shouldLoadAllForSearch || loadingMore || recordsLoading) {
+      return;
+    }
+    loadRecords(false);
+  }, [searchQuery, hasMore, loadingMore, recordsLoading, loadRecords]);
+
+  // Reset pagination state when search/filter is cleared
+  const prevSearchQuery = useRef(searchQuery);
+  const prevSelectedType = useRef(selectedType);
+  useEffect(() => {
+    const trimmedSearch = searchQuery.trim();
+    const prevTrimmedSearch = prevSearchQuery.current.trim();
+    const requireFullDataset = trimmedSearch.length > 0 || Boolean(selectedType);
+    const prevRequireFullDataset = prevTrimmedSearch.length > 0 || Boolean(prevSelectedType.current);
+    
+    // Detect transition from filter/search to no filter/search
+    const wasFilterActive = prevRequireFullDataset && !requireFullDataset;
+    
+    if (wasFilterActive && allRecords.length > 0 && totalRecordsRef.current > 0) {
+      // Check if we previously loaded all records
+      const hadLoadedAll = allRecords.length === totalRecordsRef.current;
+      
+      if (hadLoadedAll && totalRecordsRef.current > RECORDS_PER_PAGE) {
+        // Reset to paginated loading
+        loadRecords(true);
+      }
+    }
+    
+    prevSearchQuery.current = searchQuery;
+    prevSelectedType.current = selectedType;
+  }, [searchQuery, selectedType, allRecords.length, loadRecords]);
+
+  useEffect(() => {
+    const trimmedSearch = searchQuery.trim();
+    const requireFullDataset = trimmedSearch.length > 0 || Boolean(selectedType);
+    if (
+      !requireFullDataset ||
+      !hasMore ||
+      fullLoadInProgressRef.current ||
+      !datastoreInitialized ||
+      keysLoading
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    fullLoadInProgressRef.current = true;
+    setLoadingMore(true);
+
+    (async () => {
+      try {
+        const localRecords = await datastoreQueryRecords();
+        if (cancelled) {
+          return;
+        }
+        const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
+        allRecordsRef.current = neotomaRecords;
+        setAllRecords(neotomaRecords);
+        setHasMore(false);
+        totalRecordsRef.current = neotomaRecords.length;
+        setTotalRecords(neotomaRecords.length);
+      } catch (error) {
+        console.error('[App] Failed to fully load records for search/filter', error);
+      } finally {
+        if (!cancelled) {
+          setLoadingMore(false);
+          fullLoadInProgressRef.current = false;
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      fullLoadInProgressRef.current = false;
+    };
+  }, [
+    searchQuery,
+    selectedType,
+    hasMore,
+    datastoreInitialized,
+    keysLoading,
+    datastoreQueryRecords,
+  ]);
 
   const handleDeleteRecords = useCallback(
     async (recordsToDelete: NeotomaRecord[]) => {
@@ -253,7 +401,7 @@ function App() {
         if (selectedRecord && recordsToDelete.some((record) => record.id === selectedRecord.id)) {
           setSelectedRecord(null);
         }
-        await loadRecords();
+        await loadRecords(true);
         const description =
           recordsToDelete.length === 1
             ? `Removed ${recordsToDelete[0].summary ?? recordsToDelete[0].id}.`
@@ -317,16 +465,20 @@ function App() {
         onDrop={handleDrop}
       >
         <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-          <ChatPanel 
+          <ChatPanel
             datastore={datastore}
-            onFileUploaded={loadRecords} 
+            onFileUploaded={appendRecord}
             onFileUploadRef={chatPanelFileUploadRef}
             onErrorRef={chatPanelErrorRef}
+            activeSearchQuery={searchQuery}
+            activeTypeFilter={selectedType}
+            allRecords={allRecords}
           />
           <main className="flex-1 min-h-0 max-h-full overflow-hidden">
             <RecordsTable
               records={filteredRecords}
-            totalCount={totalRecords}
+              totalCount={totalRecords}
+              displayCount={displayCount}
               types={types}
               onRecordClick={setSelectedRecord}
               onDeleteRecord={handleDeleteRecord}
@@ -334,6 +486,9 @@ function App() {
               onSearch={handleSearch}
               onTypeFilter={handleTypeFilter}
               isLoading={recordsLoading}
+              loadingMore={loadingMore}
+              hasMore={hasMore}
+              onLoadMore={() => loadRecords(false)}
               onFileUploadRef={chatPanelFileUploadRef}
             />
           </main>
