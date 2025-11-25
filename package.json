@@ -22,7 +22,9 @@
     "dev:ws": "node scripts/with-branch-ports.js tsx watch src/mcp_ws_bridge.ts",
     "import:connector": "tsx scripts/run-importers.ts",
     "test:e2e": "cross-env PLAYWRIGHT_USE_MOCK_API=1 PLAYWRIGHT_TEST_SEED=ci npx playwright test",
-    "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts"
+    "validate:coverage": "tsx scripts/validate-coverage-map.ts",
+    "check:pw-coverage": "tsx scripts/check-playwright-coverage.ts",
+    "prepare": "husky"
   },
   "keywords": [
     "mcp",
@@ -71,6 +73,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
@@ -88,8 +91,11 @@
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "concurrently": "^8.2.2",
+    "cross-env": "^10.1.0",
     "eslint": "^8.56.0",
+    "husky": "^9.1.7",
     "jsdom": "^27.2.0",
+    "lint-staged": "^16.2.7",
     "pdfkit": "^0.17.2",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
