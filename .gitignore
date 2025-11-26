@@ -10,3 +10,5 @@ dist/
 .dev-serve/
 
 
+playwright/report/
+playwright/test-results/
