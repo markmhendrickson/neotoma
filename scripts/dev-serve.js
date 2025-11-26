@@ -26,6 +26,13 @@ let devServeStatePersisted = false;
 
 const tasks = [
   {
+    name: 'proxy',
+    description: 'Reverse proxy server',
+    script: null,
+    command: ['node', 'scripts/dev-proxy.js'],
+    readyPattern: /Reverse proxy listening on port/i,
+  },
+  {
     name: 'actions',
     description: 'HTTP Actions server',
     script: 'dev:http',
@@ -188,12 +195,29 @@ function printDiagnostics(state) {
   }
 }
 
+function sanitizeBranchForHost(branchName) {
+  // Convert branch name to hostname-safe format (e.g., "feature/test" -> "feature-test")
+  return branchName.replace(/\//g, '-').replace(/[^a-z0-9-]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
 function checkAllReady() {
   if ([...taskState.values()].every((state) => state.ready)) {
     if (bootTimer) {
       clearTimeout(bootTimer);
     }
+    const proxyHttpPort = parseInt(process.env.PROXY_HTTP_PORT || process.env.PROXY_PORT || '80', 10);
+    const proxyHttpsPort = parseInt(process.env.PROXY_HTTPS_PORT || '443', 10);
+    const sanitizedBranch = sanitizeBranchForHost(branchName);
+    const httpPortSuffix = proxyHttpPort === 80 ? '' : `:${proxyHttpPort}`;
+    const httpsPortSuffix = proxyHttpsPort === 443 ? '' : `:${proxyHttpsPort}`;
+    const httpUrl = `http://${sanitizedBranch}.dev${httpPortSuffix}`;
+    const httpsUrl = `https://${sanitizedBranch}.dev${httpsPortSuffix}`;
+    
     console.log('[dev-serve] All dev services are ready. Press Ctrl+C to stop.');
+    console.log(`[dev-serve] UI available at: ${httpsUrl} (HTTPS) or ${httpUrl} (HTTP)`);
+    if (assignedPorts.http) {
+      console.log(`[dev-serve] API available at: ${httpsUrl}/api (HTTPS) or ${httpUrl}/api (HTTP)`);
+    }
   }
 }
 
@@ -255,10 +279,20 @@ function shutdown(code = 0) {
 }
 
 function spawnTask(task) {
-  const child = spawn(npmCommand, ['run', task.script], {
-    stdio: ['inherit', 'pipe', 'pipe'],
-    env: { ...process.env },
-  });
+  let child;
+  if (task.command) {
+    // For direct commands (like proxy)
+    child = spawn(task.command[0], task.command.slice(1), {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+  } else {
+    // For npm scripts
+    child = spawn(npmCommand, ['run', task.script], {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+  }
 
   const state = {
     task,

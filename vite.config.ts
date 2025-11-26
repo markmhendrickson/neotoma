@@ -39,6 +39,7 @@ export default defineConfig({
   },
   server: {
     port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
+    host: '0.0.0.0', // Accept connections from proxy
     hmr: {
       protocol: 'ws',
       host: 'localhost',
