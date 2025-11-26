@@ -8,6 +8,7 @@ dist/
 .branch-ports/
 .venv-commit-scan/
 .dev-serve/
+.dev-certs/
 
 
 playwright/report/
