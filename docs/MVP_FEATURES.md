@@ -1,4 +1,4 @@
-# Neotoma MVP Feature List
+# Neotoma MVP Feature List (Truth Layer Only)
 
 This is the complete, authoritative MVP feature list for Neotoma, expressed as clean raw Markdown for direct use in engineering specs, Cursor tasks, or repo documentation.
 

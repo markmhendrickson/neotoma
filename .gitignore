@@ -13,3 +13,5 @@ dist/
 
 playwright/report/
 playwright/test-results/
+docs/private/
+data
