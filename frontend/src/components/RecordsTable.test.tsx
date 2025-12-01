@@ -17,6 +17,24 @@ const baseRecord: NeotomaRecord = {
   _status: 'Ready',
 };
 
+const csvRowRecord: NeotomaRecord = {
+  id: 'row_1',
+  type: 'transaction',
+  summary: 'alpha — amount: 10',
+  properties: {
+    amount: 10,
+    csv_origin: {
+      file_name: 'sample.csv',
+      row_index: 0,
+    },
+  },
+  file_urls: [],
+  created_at: new Date('2024-01-03T00:00:00Z').toISOString(),
+  updated_at: new Date('2024-01-03T00:00:00Z').toISOString(),
+  embedding: null,
+  _status: 'Ready',
+};
+
 function renderTable(overrides: Partial<React.ComponentProps<typeof RecordsTable>> = {}) {
   const onRecordClick = vi.fn();
   const onDeleteRecord = vi.fn();
@@ -165,6 +183,35 @@ describe('RecordsTable', () => {
       expect(storedOrder[1]).toBe('summary');
       expect(getVisibleColumnOrder()[1]).toBe('summary');
     });
+  });
+
+  it('hides CSV row records by default and surfaces notice', () => {
+    renderTable({
+      records: [csvRowRecord],
+      totalCount: 1,
+      displayCount: 1,
+      types: ['transaction'],
+    });
+
+    expect(screen.queryByText(csvRowRecord.summary!)).not.toBeInTheDocument();
+    expect(screen.getByText(/Hiding 1 CSV row record/)).toBeInTheDocument();
+  });
+
+  it('allows enabling CSV row records through the Columns menu', async () => {
+    const user = userEvent.setup();
+    renderTable({
+      records: [csvRowRecord],
+      totalCount: 1,
+      displayCount: 1,
+      types: ['transaction'],
+    });
+
+    const { menu } = await openColumnsMenu(user);
+    const toggle = within(menu).getByRole('menuitemcheckbox', { name: /Show CSV row records/i });
+    await user.click(toggle);
+    await user.keyboard('{Escape}');
+
+    expect(screen.getByText(csvRowRecord.summary!)).toBeInTheDocument();
   });
 
   it('persists column order preferences to localStorage', async () => {

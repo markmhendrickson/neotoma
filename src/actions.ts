@@ -14,6 +14,7 @@ import path from 'path';
 import { normalizeRow } from './normalize.js';
 import { createRecordFromUploadedFile } from './services/file_analysis.js';
 import { generateRecordSummary } from './services/summary.js';
+import { generateRecordComparisonInsight } from './services/record_comparison.js';
 import { createLinkToken, exchangePublicToken, buildPlaidItemContext, isPlaidConfigured, normalizePlaidError } from './integrations/plaid/client.js';
 import {
   listPlaidItems as listPlaidItemsFromStore,
@@ -219,7 +220,11 @@ app.use(async (req, res, next) => {
   
   // Bearer token is now base64url-encoded Ed25519 public key
   // Auto-register if not exists (first-time user)
-  ensurePublicKeyRegistered(bearerToken);
+  const registered = ensurePublicKeyRegistered(bearerToken);
+  if (!registered) {
+    logWarn('AuthInvalidTokenFormat', req, { bearerTokenLength: bearerToken.length });
+    return res.status(403).json({ error: 'Invalid bearer token format (must be base64url-encoded Ed25519 public key)' });
+  }
 
   if (!isBearerTokenValid(bearerToken)) {
     logWarn('AuthInvalidToken', req);
@@ -1528,6 +1533,91 @@ app.post('/analyze_file', upload.single('file'), async (req, res) => {
   } catch (error) {
     logError('Error:analyze_file', req, error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to analyze file' });
+  }
+});
+
+app.post('/record_comparison', async (req, res) => {
+  const metricsSchema = z
+    .object({
+      amount: z.number().optional(),
+      currency: z.string().max(16).optional(),
+      repetitions: z.number().optional(),
+      load: z.number().optional(),
+      duration_minutes: z.number().optional(),
+      date: z.string().optional(),
+      recipient: z.string().optional(),
+      merchant: z.string().optional(),
+      category: z.string().optional(),
+      location: z.string().optional(),
+      label: z.string().optional(),
+    })
+    .strict()
+    .partial();
+
+  const recordSchema = z.object({
+    id: z.string(),
+    type: z.string(),
+    summary: z.string().nullable().optional(),
+    properties: z.record(z.unknown()).optional(),
+    metrics: metricsSchema.optional(),
+  });
+
+  const schema = z.object({
+    new_record: recordSchema,
+    similar_records: z.array(recordSchema).min(1).max(10),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:record_comparison', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  if (!config.openaiApiKey) {
+    logWarn('RecordComparison:openai_unconfigured', req);
+    return res.status(503).json({ error: 'OpenAI API key is not configured on the server' });
+  }
+
+  try {
+    const analysis = await generateRecordComparisonInsight(parsed.data);
+    return res.json({ analysis });
+  } catch (error) {
+    logError('RecordComparison:failure', req, error);
+    return res.status(500).json({ error: 'Failed to generate record comparison' });
+  }
+});
+
+app.post('/generate_embedding', async (req, res) => {
+  const schema = z.object({
+    type: z.string(),
+    properties: z.record(z.unknown()),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn('ValidationError:generate_embedding', req, { issues: parsed.error.issues });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  if (!config.openaiApiKey) {
+    logWarn('GenerateEmbedding:openai_unconfigured', req);
+    return res.status(503).json({ error: 'OpenAI API key is not configured on the server' });
+  }
+
+  try {
+    const { type, properties } = parsed.data;
+    const normalizedType = normalizeRecordType(type).type;
+    const recordText = getRecordText(normalizedType, properties);
+    const embedding = await generateEmbedding(recordText);
+    
+    if (!embedding) {
+      return res.status(500).json({ error: 'Failed to generate embedding' });
+    }
+
+    logDebug('Success:generate_embedding', req, { type: normalizedType });
+    return res.json({ embedding });
+  } catch (error) {
+    logError('GenerateEmbedding:failure', req, error);
+    return res.status(500).json({ error: 'Failed to generate embedding' });
   }
 });
 

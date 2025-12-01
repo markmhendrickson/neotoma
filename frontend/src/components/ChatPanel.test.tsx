@@ -11,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   uploadFile: vi.fn(),
   processFileLocally: vi.fn(),
   analyzeFile: vi.fn(),
+  requestQualitativeComparison: vi.fn(),
+  generateEmbedding: vi.fn(),
 }));
 
 const settingsMock = {
@@ -28,21 +30,32 @@ vi.mock('@/hooks/useSettings', () => ({
   }),
 }));
 
+const keysMock = {
+  bearerToken: '',
+};
+
 vi.mock('@/hooks/useKeys', () => ({
-  useKeys: () => ({
-    bearerToken: '',
-  }),
+  useKeys: () => keysMock,
 }));
 
 vi.mock('@/lib/api', () => ({
   uploadFile: (...args: unknown[]) => mocks.uploadFile(...args),
   sendChatMessage: (...args: unknown[]) => mocks.sendChatMessage(...args),
   analyzeFile: (...args: unknown[]) => mocks.analyzeFile(...args),
+  generateEmbedding: (...args: unknown[]) => mocks.generateEmbedding(...args),
 }));
 
 vi.mock('@/utils/file_processing', () => ({
   processFileLocally: (...args: unknown[]) => mocks.processFileLocally(...args),
 }));
+
+vi.mock('@/utils/record_comparison', async () => {
+  const actual = await vi.importActual<typeof import('@/utils/record_comparison')>('@/utils/record_comparison');
+  return {
+    ...actual,
+    requestQualitativeComparison: (...args: unknown[]) => mocks.requestQualitativeComparison(...args),
+  };
+});
 
 const toNeotomaRecord = (record: LocalRecord): NeotomaRecord => ({
   id: record.id,
@@ -72,9 +85,12 @@ describe('ChatPanel', () => {
     sessionStorage.clear();
     settingsMock.cloudStorageEnabled = true;
     settingsMock.bearerToken = 'settings-token';
+    keysMock.bearerToken = 'settings-token';
     mocks.sendChatMessage.mockReset();
     mocks.uploadFile.mockReset();
     mocks.processFileLocally.mockReset();
+    mocks.requestQualitativeComparison.mockReset();
+    mocks.generateEmbedding.mockReset();
     (datastoreStub.getRecord as unknown as MockInstance).mockReset();
     (datastoreStub.putRecord as unknown as MockInstance).mockReset();
     (datastoreStub.queryRecords as unknown as MockInstance).mockReset();
@@ -215,11 +231,8 @@ describe('ChatPanel', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(
-        screen.getByText(
-          /File "logo\.jpeg" was saved locally: Logo variants from kickoff call/
-        )
-      ).toBeInTheDocument();
+      expect(container.textContent).toContain('Finished uploading 1 file');
+      expect(container.textContent).toContain(summaryText);
     });
   });
 
@@ -256,9 +269,313 @@ describe('ChatPanel', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     await waitFor(() => {
+      expect(container.textContent).toContain('Finished uploading 1 file');
+      expect(container.textContent).toContain('File "data.csv" saved locally');
+    });
+  });
+
+  it('renders qualitative comparison text when helper responds', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    const summaryText = 'Bench press heavy single';
+    const localRecord: LocalRecord = {
+      id: 'local-compare',
+      type: 'exercise',
+      summary: summaryText,
+      properties: { movement: 'bench press', reps: 3 },
+      file_urls: [],
+      embedding: [0.1, 0.2, 0.3],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([
+      {
+        ...localRecord,
+        id: 'prior-record',
+        summary: 'Earlier bench press set',
+      },
+    ]);
+    mocks.requestQualitativeComparison.mockResolvedValue(
+      'This set is heavier than your average bench sessions.'
+    );
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['binary'], 'bench.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.requestQualitativeComparison).toHaveBeenCalled();
+    });
+
+    expect(
+      screen.getByText(
+        /This set is heavier than your average bench sessions\./i
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('generates embedding for locally processed file when bearer token is available', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = 'test-token';
+    keysMock.bearerToken = 'test-token';
+    const localRecord: LocalRecord = {
+      id: 'local-embedding',
+      type: 'document',
+      summary: 'Test document',
+      properties: { title: 'Test' },
+      file_urls: [],
+      embedding: null, // No embedding initially
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const mockEmbedding = Array.from({ length: 1536 }, () => 0.1);
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    mocks.generateEmbedding.mockResolvedValue(mockEmbedding);
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([]);
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.generateEmbedding).toHaveBeenCalledWith(
+        settingsMock.apiBase,
+        settingsMock.bearerToken,
+        'document',
+        { title: 'Test' }
+      );
+    });
+
+    await waitFor(() => {
+      expect(datastoreStub.putRecord).toHaveBeenCalled();
+      const putCall = (datastoreStub.putRecord as unknown as MockInstance).mock.calls[0][0];
+      expect(putCall.embedding).toEqual(mockEmbedding);
+    });
+  });
+
+  it('skips embedding generation when bearer token is missing', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = ''; // No bearer token
+    keysMock.bearerToken = '';
+    const localRecord: LocalRecord = {
+      id: 'local-no-token',
+      type: 'document',
+      summary: 'Test document',
+      properties: { title: 'Test' },
+      file_urls: [],
+      embedding: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.processFileLocally).toHaveBeenCalled();
+    });
+
+    expect(mocks.generateEmbedding).not.toHaveBeenCalled();
+  });
+
+  it('handles embedding generation failure gracefully', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = 'test-token';
+    keysMock.bearerToken = 'test-token';
+    const localRecord: LocalRecord = {
+      id: 'local-fail',
+      type: 'document',
+      summary: 'Test document',
+      properties: { title: 'Test' },
+      file_urls: [],
+      embedding: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    mocks.generateEmbedding.mockResolvedValue(null); // API returns null
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([]);
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['test content'], 'test.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.generateEmbedding).toHaveBeenCalled();
+    });
+
+    // Should still save the record without embedding
+    await waitFor(() => {
+      expect(datastoreStub.putRecord).toHaveBeenCalled();
+      const putCall = (datastoreStub.putRecord as unknown as MockInstance).mock.calls[0][0];
+      expect(putCall.embedding).toBeNull();
+    });
+  });
+
+  it('performs full end-to-end flow: local file → embedding → similarity → comparison', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = 'test-token';
+    keysMock.bearerToken = 'test-token';
+    const localRecord: LocalRecord = {
+      id: 'local-e2e',
+      type: 'transaction',
+      summary: 'New transaction',
+      properties: { amount: 150, recipient: 'ACME Corp' },
+      file_urls: [],
+      embedding: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const mockEmbedding = Array.from({ length: 1536 }, () => 0.2);
+    const similarRecord: LocalRecord = {
+      ...localRecord,
+      id: 'similar-1',
+      summary: 'Previous transaction',
+      properties: { amount: 100, recipient: 'ACME Corp' },
+    };
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    mocks.generateEmbedding.mockResolvedValue(mockEmbedding);
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([similarRecord]);
+    mocks.requestQualitativeComparison.mockResolvedValue('This transaction is 50% higher than previous transactions to this recipient.');
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['transaction data'], 'txn.csv', { type: 'text/csv' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // Wait for embedding generation
+    await waitFor(() => {
+      expect(mocks.generateEmbedding).toHaveBeenCalled();
+    });
+
+    // Wait for similarity search
+    await waitFor(() => {
+      expect(datastoreStub.searchVectors).toHaveBeenCalled();
+    });
+
+    // Wait for qualitative comparison
+    await waitFor(() => {
+      expect(mocks.requestQualitativeComparison).toHaveBeenCalled();
+    });
+
+    // Verify the comparison text appears
+    await waitFor(() => {
       expect(
-        screen.getByText(/File "data\.csv" was saved locally: Created 2 row records\./)
+        screen.getByText(/This transaction is 50% higher than previous transactions to this recipient\./i)
       ).toBeInTheDocument();
+    });
+  });
+
+  it('uses fallback similarity analysis when qualitative comparison fails', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = 'test-token';
+    keysMock.bearerToken = 'test-token';
+    const localRecord: LocalRecord = {
+      id: 'local-fallback',
+      type: 'exercise',
+      summary: 'Bench press',
+      properties: { reps: 10, load: 225 },
+      file_urls: [],
+      embedding: [0.1, 0.2, 0.3],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const similarRecord: LocalRecord = {
+      ...localRecord,
+      id: 'similar-1',
+      summary: 'Previous bench press',
+    };
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([similarRecord]);
+    mocks.requestQualitativeComparison.mockResolvedValue(null); // API returns null
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['workout data'], 'workout.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(mocks.requestQualitativeComparison).toHaveBeenCalled();
+    });
+
+    // Should show fallback analysis
+    await waitFor(() => {
+      expect(screen.getByText(/Similar to/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows single-record insight when no similar records are found', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    settingsMock.bearerToken = 'test-token';
+    keysMock.bearerToken = 'test-token';
+    const localRecord: LocalRecord = {
+      id: 'local-insight',
+      type: 'transaction',
+      summary: 'Payment to ACME Corp',
+      properties: { amount: 250, currency: 'USD', recipient: 'ACME Corp' },
+      file_urls: [],
+      embedding: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    const mockEmbedding = Array.from({ length: 1536 }, () => 0.3);
+
+    mocks.processFileLocally.mockResolvedValue({
+      primaryRecord: localRecord,
+      additionalRecords: [],
+    });
+    mocks.generateEmbedding.mockResolvedValue(mockEmbedding);
+    (datastoreStub.searchVectors as unknown as MockInstance).mockResolvedValue([]);
+
+    const { container } = render(<ChatPanel datastore={datastoreStub} />);
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['payment data'], 'payment.txt', { type: 'text/plain' });
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(datastoreStub.searchVectors).toHaveBeenCalled();
+    });
+
+    expect(mocks.requestQualitativeComparison).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(container.textContent).toContain('No similar records yet');
     });
   });
 
@@ -460,5 +777,26 @@ describe('ChatPanel', () => {
     await screen.findByText(/There are currently/i);
     expect(datastoreStub.queryRecords).toHaveBeenCalled();
     expect(mocks.sendChatMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not treat generic short questions as count queries without filters', async () => {
+    settingsMock.cloudStorageEnabled = false;
+    mocks.sendChatMessage.mockResolvedValue({
+      message: { content: 'Ack' },
+    });
+
+    const user = userEvent.setup();
+    render(<ChatPanel datastore={datastoreStub} />);
+
+    const input = screen.getByPlaceholderText('Ask about records...');
+    await user.type(input, 'what are the differences');
+
+    const sendButton = screen.getByRole('button', { name: /send message/i });
+    await user.click(sendButton);
+
+    await waitFor(() => {
+      expect(mocks.sendChatMessage).toHaveBeenCalledTimes(1);
+    });
+    expect(screen.queryByText(/There are currently/i)).toBeNull();
   });
 });

@@ -145,24 +145,26 @@ export async function processFileLocally(options: ProcessFileOptions): Promise<P
       headers,
       sampleRows: rows.slice(0, 5),
     });
+
     baseRecord = {
       ...baseRecord,
       type: parentType,
       summary: parentSummary,
+      properties: {
+        ...baseRecord.properties,
+        row_count: rows.length,
+      },
     };
+    primaryRecord = baseRecord;
 
     if (rows.length > 0) {
-      primaryRecord = null;
-
       const baseCsvOrigin: Record<string, unknown> = {
         file_url: fileUrl,
         file_name: fileName,
         file_size: fileSize,
         mime_type: mimeType,
+        parent_record_id: baseRecord.id,
       };
-      if (primaryRecord) {
-        baseCsvOrigin.parent_record_id = primaryRecord.id;
-      }
 
       rows.forEach((row, index) => {
         const rowId = randomUUID();

@@ -25,9 +25,15 @@ describe('processFileLocally', () => {
       csvRowRecordsEnabled: true,
     });
 
-    expect(result.primaryRecord).toBeNull();
+    expect(result.primaryRecord).not.toBeNull();
+    expect(result.primaryRecord?.type).toBe('dataset');
+    expect(result.primaryRecord?.properties).toHaveProperty('row_count', 2);
     expect(result.additionalRecords).toHaveLength(2);
     expect(result.additionalRecords[0].properties).toHaveProperty('csv_origin.file_name', 'sets-small.csv');
+    expect(result.additionalRecords[0].properties).toHaveProperty(
+      'csv_origin.parent_record_id',
+      result.primaryRecord?.id
+    );
   });
 
   it('skips row creation when disabled', async () => {

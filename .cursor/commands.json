@@ -20,10 +20,17 @@
       }
     },
     {
+<<<<<<< Current (Your changes)
       "name": "Setup: Copy Env File",
       "description": "Copy .env file from main repository to this worktree",
       "shell": {
         "command": "npm run copy:env"
+=======
+      "name": "dev-serve",
+      "description": "Start the full-stack dev serve orchestration (HTTP + UI servers) with diagnostics and port URLs",
+      "user": {
+        "documentation": ".cursor/commands/dev-serve.md"
+>>>>>>> Incoming (Background Agent changes)
       }
     }
   ]

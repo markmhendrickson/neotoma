@@ -5,13 +5,14 @@ import { ArrowUp } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
 import type { DatastoreAPI } from '@/hooks/useDatastore';
-import { uploadFile, sendChatMessage, analyzeFile } from '@/lib/api';
+import { uploadFile, sendChatMessage, analyzeFile, generateEmbedding } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
 import { formatRelativeTime } from '@/utils/time';
 import { normalizeRecord, type NeotomaRecord } from '@/types/record';
 import type { LocalRecord } from '@/store/types';
 import { localToNeotoma } from '@/utils/record_conversion';
 import { recordMatchesQuery, tokenizeQuery } from '@/utils/record_search';
+import { requestQualitativeComparison, buildMetrics } from '@/utils/record_comparison';
 import { toast as notify } from 'sonner';
 import { encryptForStorage, decryptFromStorage, setEncryptionKeys } from '@/store/encryption';
 import type { X25519KeyPair, Ed25519KeyPair } from '../../../src/crypto/types.js';
@@ -156,11 +157,201 @@ const getSummaryFromRecord = (record: LocalRecord): string | null => {
   return null;
 };
 
+const generateSimilarityAnalysis = (
+  newRecord: LocalRecord,
+  similarRecords: LocalRecord[]
+): string | null => {
+  if (similarRecords.length === 0) {
+    return null;
+  }
+
+  const sameTypeCount = similarRecords.filter((r) => r.type === newRecord.type).length;
+  const typeCount = similarRecords.length;
+  
+  const analysisParts: string[] = [];
+  
+  if (sameTypeCount > 0) {
+    if (sameTypeCount === typeCount) {
+      analysisParts.push(`${sameTypeCount} similar ${newRecord.type} record${sameTypeCount > 1 ? 's' : ''}`);
+    } else {
+      analysisParts.push(`${sameTypeCount} of ${typeCount} similar records are ${newRecord.type}`);
+    }
+  } else if (typeCount > 0) {
+    const typeGroups = new Map<string, number>();
+    similarRecords.forEach((r) => {
+      typeGroups.set(r.type, (typeGroups.get(r.type) || 0) + 1);
+    });
+    const topType = Array.from(typeGroups.entries()).sort((a, b) => b[1] - a[1])[0];
+    if (topType && topType[1] > 1) {
+      analysisParts.push(`${typeCount} similar records (mostly ${topType[0]})`);
+    } else {
+      analysisParts.push(`${typeCount} similar record${typeCount > 1 ? 's' : ''}`);
+    }
+  }
+
+  if (analysisParts.length > 0) {
+    return `Similar to ${analysisParts.join(', ')} already in database.`;
+  }
+
+  return null;
+};
+
+const formatAmountWithCurrency = (amount: number, currency?: string) => {
+  const formatted = amount % 1 === 0 ? amount.toFixed(0) : amount.toFixed(2);
+  return currency ? `${currency} ${formatted}` : formatted;
+};
+
+const generateRecordInsight = (record: LocalRecord | null): string | null => {
+  if (!record) {
+    return null;
+  }
+
+  const metrics = buildMetrics(record);
+  const detailParts: string[] = [];
+
+  if (metrics) {
+    if (typeof metrics.amount === 'number') {
+      detailParts.push(`amount ${formatAmountWithCurrency(metrics.amount, metrics.currency as string | undefined)}`);
+    }
+    if (typeof metrics.repetitions === 'number') {
+      detailParts.push(`reps ${metrics.repetitions}`);
+    }
+    if (typeof metrics.load === 'number') {
+      detailParts.push(`load ${metrics.load}`);
+    }
+    if (typeof metrics.duration_minutes === 'number') {
+      detailParts.push(`duration ${metrics.duration_minutes} min`);
+    }
+    if (typeof metrics.recipient === 'string' && metrics.recipient.trim()) {
+      detailParts.push(`recipient ${metrics.recipient}`);
+    } else if (typeof metrics.merchant === 'string' && metrics.merchant.trim()) {
+      detailParts.push(`merchant ${metrics.merchant}`);
+    }
+    if (typeof metrics.category === 'string' && metrics.category.trim()) {
+      detailParts.push(`category ${metrics.category}`);
+    }
+    if (typeof metrics.date === 'string' && metrics.date.trim()) {
+      detailParts.push(`dated ${metrics.date}`);
+    }
+  }
+
+  const summary = getSummaryFromRecord(record);
+  const descriptor = summary || `${record.type || 'Record'} captured`;
+  const detailText = detailParts.length > 0 ? ` (${detailParts.join(', ')})` : '';
+
+  return `No similar records yet. ${descriptor}${detailText}`.trim();
+};
+
+interface UploadSuccessResult {
+  status: 'success';
+  fileName: string;
+  localRecord: LocalRecord | null;
+  recordSummary?: string | null;
+  recordType?: string | null;
+  additionalRecords: number;
+  destinationLabel: string;
+  analysisText?: string | null;
+}
+
+interface UploadErrorResult {
+  status: 'error';
+  fileName: string;
+}
+
+type UploadResult = UploadSuccessResult | UploadErrorResult;
+
+const buildBatchInsightMessage = (
+  successfulUploads: UploadSuccessResult[],
+  totalFiles: number
+) => {
+  if (successfulUploads.length === 0) {
+    return '';
+  }
+
+  const introSentence =
+    totalFiles > 1
+      ? `Finished uploading ${successfulUploads.length} of ${totalFiles} files.`
+      : 'Finished uploading 1 file.';
+
+  const uploadsByInsight = [
+    ...successfulUploads.filter((upload) => Boolean(upload.analysisText)),
+    ...successfulUploads.filter((upload) => !upload.analysisText),
+  ];
+
+  const detailEntries: Array<{ text: string; count: number }> = [];
+  const upsertEntry = (text: string) => {
+    const trimmed = text.trim();
+    const existing = detailEntries.find((entry) => entry.text === trimmed);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      detailEntries.push({ text: trimmed, count: 1 });
+    }
+  };
+
+  uploadsByInsight.forEach((upload) => {
+    const descriptor =
+      upload.recordSummary?.trim() ||
+      (upload.recordType ? `${upload.recordType} record` : `File "${upload.fileName}"`);
+    if (upload.analysisText) {
+      upsertEntry(`${descriptor}: ${upload.analysisText}`);
+    } else {
+      const rowsHint =
+        upload.additionalRecords > 0
+          ? ` (${upload.additionalRecords} row record${upload.additionalRecords === 1 ? '' : 's'})`
+          : '';
+      upsertEntry(`${descriptor} saved ${upload.destinationLabel}${rowsHint}`);
+    }
+  });
+
+  const DETAIL_SENTENCE_BUDGET = 4; // keep total sentences ≤ 5 (intro + 4 details)
+  const needsSummarySentence = detailEntries.length > DETAIL_SENTENCE_BUDGET;
+  const directDetailCount = needsSummarySentence
+    ? Math.max(DETAIL_SENTENCE_BUDGET - 1, 0)
+    : Math.min(detailEntries.length, DETAIL_SENTENCE_BUDGET);
+
+  const ensureSentence = (text: string) =>
+    /[.!?]"?$/.test(text.trim()) ? text.trim() : `${text.trim()}.`;
+
+  const formatEntrySentence = (entry: { text: string; count: number }) => {
+    const base = ensureSentence(entry.text);
+    if (entry.count <= 1) {
+      return base;
+    }
+    const trimmed = base.replace(/[.!?]"?$/, '');
+    return `${trimmed} (x${entry.count}).`;
+  };
+
+  const detailSentences = detailEntries
+    .slice(0, directDetailCount)
+    .map((entry) => formatEntrySentence(entry));
+
+  if (needsSummarySentence) {
+    const remainingCount = detailEntries
+      .slice(directDetailCount)
+      .reduce((sum, entry) => sum + entry.count, 0);
+    detailSentences.push(
+      ensureSentence(
+        `Plus ${remainingCount} additional file${remainingCount === 1 ? '' : 's'} processed in this batch`
+      )
+    );
+  }
+
+  if (detailSentences.length === 0 && detailEntries.length > 0) {
+    detailSentences.push(formatEntrySentence(detailEntries[0]));
+  }
+
+  return `${ensureSentence(introSentence)} Compared to existing records: ${detailSentences.join(
+    ' '
+  )}`.trim();
+};
+
 const appendUploadDetails = (
   fileName: string,
   record: LocalRecord | null,
   additionalCount: number,
-  destinationLabel: string
+  destinationLabel: string,
+  similarityAnalysis?: string | null
 ) => {
   if (!record) {
     if (additionalCount > 0) {
@@ -170,7 +361,8 @@ const appendUploadDetails = (
   }
   const summarySnippet = getSummaryFromRecord(record) ?? 'Summary unavailable.';
   const rowsMessage = additionalCount > 0 ? ` Created ${additionalCount} row records.` : '';
-  return `File "${fileName}" was saved ${destinationLabel}: ${summarySnippet}${rowsMessage}`;
+  const analysisMessage = similarityAnalysis ? ` ${similarityAnalysis}` : '';
+  return `File "${fileName}" was saved ${destinationLabel}: ${summarySnippet}${rowsMessage}${analysisMessage}`;
 };
 
 const getDestinationLabel = (cloudStorageEnabled: boolean) =>
@@ -679,7 +871,7 @@ const mergeRecentRecords = (
 
     const fileArray = Array.from(files);
 
-    const processFile = async (file: File) => {
+    const processFile = async (file: File): Promise<UploadResult> => {
       const hasBearerToken = Boolean(bearerToken);
       const shouldUseCloudStorage = hasBearerToken && settings.cloudStorageEnabled;
       const canCallOpenApi = hasBearerToken;
@@ -804,6 +996,39 @@ const mergeRecentRecords = (
           await runLocalProcessing();
         }
 
+        // Generate embeddings for locally processed records if bearer token is available
+        if (localRecord && canCallOpenApi && (!localRecord.embedding || !Array.isArray(localRecord.embedding) || localRecord.embedding.length === 0)) {
+          try {
+            console.log('[File Upload] Generating embedding for locally processed record', {
+              type: localRecord.type,
+              hasProperties: !!localRecord.properties,
+            });
+            updateUploadToast('Generating embedding for similarity search…');
+            const embedding = await generateEmbedding(
+              settings.apiBase,
+              bearerToken!,
+              localRecord.type,
+              localRecord.properties
+            );
+            if (embedding && embedding.length > 0) {
+              console.log('[File Upload] Embedding generated successfully', { length: embedding.length });
+              localRecord = { ...localRecord, embedding };
+            } else {
+              console.warn('[File Upload] Embedding generation returned null or empty');
+            }
+          } catch (error) {
+            console.error('[File Upload] Failed to generate embedding:', error);
+            // Continue without embedding - non-blocking
+          }
+        } else {
+          if (localRecord) {
+            console.log('[File Upload] Embedding generation skipped', {
+              hasEmbedding: !!(localRecord.embedding && Array.isArray(localRecord.embedding) && localRecord.embedding.length > 0),
+              canCallOpenApi,
+            });
+          }
+        }
+
         const recordsToSave = localRecord
           ? [localRecord, ...additionalLocalRecords]
           : additionalLocalRecords;
@@ -837,12 +1062,85 @@ const mergeRecentRecords = (
         recordsToSave.forEach((record) => registerRecentRecord(record, recordPersisted));
 
         updateUploadToast('Finalizing upload…');
+        
+        let comparisonInsight: string | null = null;
+        let fallbackSimilarity: string | null = null;
+        
+        console.log('[File Upload] Starting similarity analysis', {
+          hasLocalRecord: !!localRecord,
+          hasEmbedding: !!(localRecord?.embedding && Array.isArray(localRecord.embedding) && localRecord.embedding.length > 0),
+          embeddingLength: localRecord?.embedding?.length || 0,
+          hasBearerToken: !!bearerToken,
+          recordType: localRecord?.type,
+        });
+        
+        if (localRecord && localRecord.embedding && Array.isArray(localRecord.embedding) && localRecord.embedding.length > 0) {
+          try {
+            console.log('[File Upload] Searching for similar records with type filter...');
+            // First try searching with type filter for more relevant matches
+            let similarRecords = await datastore.searchVectors({
+              query_embedding: localRecord.embedding,
+              similarity_threshold: 0.7,
+              limit: 5,
+              type: localRecord.type,
+            });
+            console.log('[File Upload] Similar records found (with type filter):', similarRecords.length);
+            
+            // If no results with type filter, try without it
+            if (similarRecords.length === 0) {
+              console.log('[File Upload] No results with type filter, trying without type filter...');
+              similarRecords = await datastore.searchVectors({
+                query_embedding: localRecord.embedding,
+                similarity_threshold: 0.7,
+                limit: 5,
+              });
+              console.log('[File Upload] Similar records found (without type filter):', similarRecords.length);
+            }
+            
+            // Filter out the record we just created
+            const otherSimilarRecords = similarRecords.filter((r) => r.id !== localRecord.id);
+            console.log('[File Upload] Similar records (excluding new record):', otherSimilarRecords.length);
+            
+            if (otherSimilarRecords.length > 0) {
+              if (bearerToken) {
+                console.log('[File Upload] Requesting qualitative comparison from API...');
+                comparisonInsight = await requestQualitativeComparison({
+                  apiBase: settings.apiBase,
+                  bearerToken,
+                  newRecord: localRecord,
+                  similarRecords: otherSimilarRecords,
+                });
+                console.log('[File Upload] Qualitative comparison result:', comparisonInsight ? 'received' : 'null');
+              } else {
+                console.log('[File Upload] No bearer token, skipping qualitative comparison');
+              }
+              
+              if (!comparisonInsight) {
+                console.log('[File Upload] Generating fallback similarity analysis...');
+                fallbackSimilarity = generateSimilarityAnalysis(localRecord, otherSimilarRecords);
+                console.log('[File Upload] Fallback analysis:', fallbackSimilarity);
+              }
+            } else {
+              console.log('[File Upload] No similar records found, skipping comparison');
+            }
+          } catch (error) {
+            console.error('[File Upload] Failed to search for similar records:', error);
+          }
+        } else {
+          console.log('[File Upload] Skipping similarity analysis - missing embedding or localRecord');
+        }
+
+        if (!comparisonInsight && !fallbackSimilarity) {
+          fallbackSimilarity = generateRecordInsight(localRecord);
+        }
+        
         const destinationLabel = getDestinationLabel(shouldUseCloudStorage);
         const message = appendUploadDetails(
           file.name,
           localRecord,
           additionalLocalRecords.length,
-          destinationLabel
+          destinationLabel,
+          comparisonInsight ?? fallbackSimilarity
         );
 
         notify.success(`Saved ${file.name}`, {
@@ -852,7 +1150,16 @@ const mergeRecentRecords = (
         });
         uploadToastIdsRef.current.delete(file);
 
-        addMessage('assistant', message);
+        return {
+          status: 'success',
+          fileName: file.name,
+          localRecord,
+          recordSummary: localRecord ? getSummaryFromRecord(localRecord) : null,
+          recordType: localRecord?.type ?? null,
+          additionalRecords: additionalLocalRecords.length,
+          destinationLabel,
+          analysisText: comparisonInsight ?? fallbackSimilarity ?? null,
+        };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error('[File Upload] Error processing file:', file.name, error);
@@ -870,11 +1177,23 @@ const mergeRecentRecords = (
         uploadToastIdsRef.current.delete(file);
 
         addMessage('assistant', `Error: ${displayMessage}`);
+        return { status: 'error', fileName: file.name };
       }
     };
 
     // Process files in parallel, but each file saves records sequentially
-    await Promise.all(fileArray.map((file) => processFile(file)));
+    const uploadResults = await Promise.all(fileArray.map((file) => processFile(file)));
+
+    const successfulUploads = uploadResults.filter(
+      (result): result is UploadSuccessResult => result?.status === 'success'
+    );
+
+    if (successfulUploads.length > 0) {
+      const batchMessage = buildBatchInsightMessage(successfulUploads, fileArray.length);
+      if (batchMessage) {
+        addMessage('assistant', batchMessage);
+      }
+    }
   };
 
   // Keep handleFileUpload ref up to date
@@ -966,6 +1285,9 @@ const mergeRecentRecords = (
     const mentionsHowAbout = /how about\b/i.test(normalizedMessage);
     const mentionsWhatAbout = /what about\b/i.test(normalizedMessage);
     const mentionsShowMe = /show me\b/i.test(normalizedMessage);
+    const mentionsRecords = /\brecords?\b/i.test(normalizedMessage);
+    const hasActiveFilter =
+      trimmedSearch.length > 0 || Boolean(activeTypeFilter?.trim());
     const searchQueryForCount =
       keywordQuery.trim().length > 0
         ? keywordQuery.trim()
@@ -996,7 +1318,8 @@ const mergeRecentRecords = (
     const isShortKeywordQuery = 
       keywordQuery.length > 0 && 
       userMessage.trim().split(/\s+/).length <= 5 &&
-      !isPropertyQuery;
+      !isPropertyQuery &&
+      (mentionsRecords || hasActiveFilter);
     
     const isCountQuery = hasExplicitCountPattern || hasImplicitCountPattern || isShortKeywordQuery;
     if (isCountQuery && datastore.initialized) {
