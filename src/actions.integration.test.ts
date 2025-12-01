@@ -8,6 +8,18 @@ let testApp: Application;
 
 const createBearerToken = () => Buffer.from(randomBytes(32)).toString('base64url');
 
+// Mock OpenAI for embedding and comparison tests
+const mockOpenAI = {
+  embeddings: {
+    create: vi.fn(),
+  },
+  chat: {
+    completions: {
+      create: vi.fn(),
+    },
+  },
+};
+
 describe('HTTP actions endpoints', () => {
   let server: ReturnType<Application['listen']> | null = null;
   let baseUrl = '';
@@ -206,6 +218,236 @@ describe('HTTP actions endpoints', () => {
       fetchSpy.mockRestore();
       await supabase.from('records').delete().eq('id', created!.id);
     }
+  });
+
+  describe('generate_embedding endpoint', () => {
+    it('requires authentication', async () => {
+      const response = await fetch(`${baseUrl}/generate_embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'test_record',
+          properties: { label: 'test' },
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('validates request payload', async () => {
+      const response = await fetch(`${baseUrl}/generate_embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          // Missing required fields
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      const error = await response.json();
+      expect(error.error).toBeDefined();
+    });
+
+    it('returns 503 when OpenAI API key is not configured', async () => {
+      // Skip if OpenAI is actually configured (module is cached)
+      const { config } = await import('./config.js');
+      if (config.openaiApiKey) {
+        console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
+        return;
+      }
+
+      const response = await fetch(`${baseUrl}/generate_embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          type: 'test_record',
+          properties: { label: 'test' },
+        }),
+      });
+
+      expect(response.status).toBe(503);
+      const error = await response.json();
+      expect(error.error).toContain('OpenAI API key');
+    });
+
+    it('generates embedding when OpenAI is configured', async () => {
+      const { config } = await import('./config.js');
+      if (!config.openaiApiKey) {
+        console.warn('Skipping test: OPENAI_API_KEY not configured');
+        return;
+      }
+
+      const mockEmbedding = Array.from({ length: 1536 }, () => Math.random());
+      
+      // Mock the OpenAI embeddings.create method
+      const embeddingsModule = await import('./embeddings.js');
+      const originalGenerate = embeddingsModule.generateEmbedding;
+      
+      vi.spyOn(embeddingsModule, 'generateEmbedding').mockResolvedValue(mockEmbedding);
+
+      try {
+        const response = await fetch(`${baseUrl}/generate_embedding`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${bearerToken}`,
+          },
+          body: JSON.stringify({
+            type: 'test_record',
+            properties: { label: 'test', amount: 100 },
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.embedding).toBeDefined();
+        expect(Array.isArray(data.embedding)).toBe(true);
+        expect(data.embedding.length).toBe(1536);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
+  });
+
+  describe('record_comparison endpoint', () => {
+    it('requires authentication', async () => {
+      const response = await fetch(`${baseUrl}/record_comparison`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          new_record: {
+            id: 'new-1',
+            type: 'transaction',
+            summary: 'New transaction',
+            properties: { amount: 100 },
+          },
+          similar_records: [
+            {
+              id: 'similar-1',
+              type: 'transaction',
+              summary: 'Similar transaction',
+              properties: { amount: 90 },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('validates request payload', async () => {
+      const response = await fetch(`${baseUrl}/record_comparison`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          // Missing required fields
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      const error = await response.json();
+      expect(error.error).toBeDefined();
+    });
+
+    it('returns 503 when OpenAI API key is not configured', async () => {
+      // Skip if OpenAI is actually configured (module is cached)
+      const { config } = await import('./config.js');
+      if (config.openaiApiKey) {
+        console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
+        return;
+      }
+
+      const response = await fetch(`${baseUrl}/record_comparison`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${bearerToken}`,
+        },
+        body: JSON.stringify({
+          new_record: {
+            id: 'new-1',
+            type: 'transaction',
+            summary: 'New transaction',
+            properties: { amount: 100 },
+          },
+          similar_records: [
+            {
+              id: 'similar-1',
+              type: 'transaction',
+              summary: 'Similar transaction',
+              properties: { amount: 90 },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(503);
+      const error = await response.json();
+      expect(error.error).toContain('OpenAI API key');
+    });
+
+    it('generates comparison analysis when OpenAI is configured', async () => {
+      const { config } = await import('./config.js');
+      if (!config.openaiApiKey) {
+        console.warn('Skipping test: OPENAI_API_KEY not configured');
+        return;
+      }
+
+      const mockAnalysis = 'This transaction is higher than similar transactions.';
+
+      // Mock the record comparison service
+      const comparisonModule = await import('./services/record_comparison.js');
+      const originalGenerate = comparisonModule.generateRecordComparisonInsight;
+      
+      vi.spyOn(comparisonModule, 'generateRecordComparisonInsight').mockResolvedValue(mockAnalysis);
+
+      try {
+        const response = await fetch(`${baseUrl}/record_comparison`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${bearerToken}`,
+          },
+          body: JSON.stringify({
+            new_record: {
+              id: 'new-1',
+              type: 'transaction',
+              summary: 'New transaction',
+              properties: { amount: 100 },
+              metrics: { amount: 100, currency: 'USD' },
+            },
+            similar_records: [
+              {
+                id: 'similar-1',
+                type: 'transaction',
+                summary: 'Similar transaction',
+                properties: { amount: 90 },
+                metrics: { amount: 90, currency: 'USD' },
+              },
+            ],
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        const data = await response.json();
+        expect(data.analysis).toBe(mockAnalysis);
+      } finally {
+        vi.restoreAllMocks();
+      }
+    });
   });
 });
 

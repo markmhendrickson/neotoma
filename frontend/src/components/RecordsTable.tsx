@@ -83,6 +83,14 @@ function renderPropertyValue(value: unknown): React.ReactNode {
   return <span className="text-sm">{String(value)}</span>;
 }
 
+function isCsvRowRecord(record: NeotomaRecord): boolean {
+  const props = record.properties;
+  if (!props || typeof props !== 'object' || Array.isArray(props)) {
+    return false;
+  }
+  return 'csv_origin' in (props as Record<string, unknown>);
+}
+
 interface RecordsTableProps {
   records: NeotomaRecord[];
   totalCount: number;
@@ -123,6 +131,7 @@ const SKELETON_ROW_COUNT = 6;
 const COLUMN_VISIBILITY_STORAGE_KEY = 'recordsTableColumnVisibility';
 const COLUMN_ORDER_STORAGE_KEY = 'recordsTableColumnOrder';
 const COLUMN_WIDTH_STORAGE_KEY = 'recordsTableColumnWidths';
+const SHOW_CSV_ROWS_STORAGE_KEY = 'recordsTableShowCsvRows';
 const MIN_COLUMN_WIDTH = 20;
 const DEFAULT_COLUMN_VISIBILITY: VisibilityState = Object.freeze({
   _status: false,
@@ -343,6 +352,23 @@ export function RecordsTable({
     );
   }, [records]);
 
+  const [showCsvRowRecords, setShowCsvRowRecords] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(SHOW_CSV_ROWS_STORAGE_KEY) === 'true';
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SHOW_CSV_ROWS_STORAGE_KEY, showCsvRowRecords ? 'true' : 'false');
+  }, [showCsvRowRecords]);
+
+  const csvRowRecords = useMemo(() => records.filter((record) => isCsvRowRecord(record)), [records]);
+  const visibleRecords = useMemo(
+    () => (showCsvRowRecords ? records : records.filter((record) => !isCsvRowRecord(record))),
+    [records, showCsvRowRecords]
+  );
+  const hiddenCsvRowCount = records.length - visibleRecords.length;
+
   // Compute columnVisibility synchronously to include all property columns as hidden
   // This prevents flickering when propertyKeys changes
   const columnVisibility = useMemo(() => {
@@ -482,16 +508,16 @@ export function RecordsTable({
         setSelectedRowIds([]);
         return;
       }
-      setSelectedRowIds(records.map((record) => record.id));
+      setSelectedRowIds(visibleRecords.map((record) => record.id));
     },
-    [records]
+    [visibleRecords]
   );
 
   useEffect(() => {
-    setSelectedRowIds((current) => current.filter((id) => records.some((record) => record.id === id)));
-  }, [records]);
+    setSelectedRowIds((current) => current.filter((id) => visibleRecords.some((record) => record.id === id)));
+  }, [visibleRecords]);
 
-  const isAllSelected = records.length > 0 && selectedRowIds.length === records.length;
+  const isAllSelected = visibleRecords.length > 0 && selectedRowIds.length === visibleRecords.length;
   const isPartiallySelected = selectedRowIds.length > 0 && !isAllSelected;
 
   const columns = useMemo<ColumnDef<NeotomaRecord>[]>(
@@ -1152,9 +1178,9 @@ export function RecordsTable({
       onDeleteRecord,
       onRecordClick,
       propertyColumns,
-      records.length,
       selectedRowIds,
       toggleRecordSelection,
+      visibleRecords.length,
     ]
   );
 
@@ -1221,7 +1247,7 @@ export function RecordsTable({
   }, [columnWidths]);
 
   const table = useReactTable({
-    data: records,
+    data: visibleRecords,
     columns,
     state: {
       sorting,
@@ -1338,15 +1364,16 @@ export function RecordsTable({
     return `${formatBytes(usage)} of ${formatBytes(quota)} (${percentText})`;
   }, [formatBytes, quotaSupported, quotaLoading, usage, quota, usagePercent]);
 
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(() => !isLoading || records.length > 0);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(() => !isLoading || visibleRecords.length > 0);
   useEffect(() => {
-    if (!isLoading || records.length > 0) {
+    if (!isLoading || visibleRecords.length > 0) {
       setHasLoadedOnce(true);
     }
-  }, [isLoading, records.length]);
+  }, [isLoading, visibleRecords.length]);
 
-  const isInitialLoading = !hasLoadedOnce && isLoading && records.length === 0;
-  const showWelcomeEmptyState = !isInitialLoading && records.length === 0 && !searchQuery.trim() && !selectedType;
+  const isInitialLoading = !hasLoadedOnce && isLoading && visibleRecords.length === 0;
+  const showWelcomeEmptyState =
+    !isInitialLoading && visibleRecords.length === 0 && !searchQuery.trim() && !selectedType;
   const showEmptyPlaceholder = !isInitialLoading && table.getRowModel().rows.length === 0;
   const visibleColumns = table.getVisibleLeafColumns();
   // Always use visible columns for skeleton to respect column visibility settings
@@ -1355,11 +1382,17 @@ export function RecordsTable({
     (count: number) => `${count} record${count === 1 ? '' : 's'}`,
     []
   );
+  const effectiveDisplayCount = showCsvRowRecords
+    ? displayCount
+    : Math.max(displayCount - hiddenCsvRowCount, 0);
+  const effectiveTotalCount = showCsvRowRecords
+    ? totalCount
+    : Math.max(totalCount - hiddenCsvRowCount, 0);
   const recordCountLabel = isInitialLoading
     ? 'Loading records…'
-    : displayCount === totalCount
-    ? formatRecordCount(displayCount)
-    : `${displayCount} of ${formatRecordCount(totalCount)}`;
+    : effectiveDisplayCount === effectiveTotalCount
+    ? formatRecordCount(effectiveDisplayCount)
+    : `${effectiveDisplayCount} of ${formatRecordCount(effectiveTotalCount)}`;
   const quotaLabel = isInitialLoading ? 'Calculating usage…' : quotaMessage;
 
   const handleDragStart = useCallback(
@@ -1505,8 +1538,8 @@ export function RecordsTable({
   }, []);
 
   const selectedRecords = useMemo(
-    () => records.filter((record) => selectedRowIds.includes(record.id)),
-    [records, selectedRowIds]
+    () => visibleRecords.filter((record) => selectedRowIds.includes(record.id)),
+    [visibleRecords, selectedRowIds]
   );
   const selectedCount = selectedRecords.length;
 
@@ -1583,6 +1616,13 @@ export function RecordsTable({
                   {columnLabels[column.id] || column.id}
                 </DropdownMenuCheckboxItem>
               ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={showCsvRowRecords}
+                onCheckedChange={(checked) => setShowCsvRowRecords(checked === true)}
+              >
+                Show CSV row records
+              </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -1657,6 +1697,20 @@ export function RecordsTable({
               </SheetContent>
             </Sheet>
           </span>
+          {hiddenCsvRowCount > 0 && !showCsvRowRecords && (
+            <div className="text-xs flex items-center gap-2 text-muted-foreground">
+              <span>
+                Hiding {hiddenCsvRowCount} CSV row record{hiddenCsvRowCount === 1 ? '' : 's'}
+              </span>
+              <button
+                type="button"
+                className="text-primary underline-offset-4 hover:underline"
+                onClick={() => setShowCsvRowRecords(true)}
+              >
+                Show
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div

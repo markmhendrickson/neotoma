@@ -5,7 +5,7 @@ import type { NeotomaRecord } from '@/types/record';
  * If apiBase is the current origin (dev mode), use /api prefix for proxy
  * Otherwise, use the provided apiBase as-is
  */
-function normalizeApiUrl(apiBase: string, endpoint: string): string {
+export function normalizeApiUrl(apiBase: string, endpoint: string): string {
   // If apiBase is the current origin (development), use /api proxy
   if (apiBase === window.location.origin || apiBase === '') {
     return `/api${endpoint}`;
@@ -239,6 +239,48 @@ export async function analyzeFile(
   }
 }
 
+export async function generateEmbedding(
+  apiBase: string,
+  bearerToken: string,
+  type: string,
+  properties: Record<string, unknown>
+): Promise<number[] | null> {
+  try {
+    const response = await fetch(normalizeApiUrl(apiBase, '/generate_embedding'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${bearerToken}`,
+      },
+      body: JSON.stringify({ type, properties }),
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('Unauthorized - check your Bearer Token');
+      }
+      if (response.status === 503) {
+        // OpenAI not configured - not an error, just return null
+        return null;
+      }
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.embedding || null;
+  } catch (error) {
+    // Handle network errors gracefully
+    if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      console.warn('[GenerateEmbedding] Backend server is not available');
+      return null;
+    }
+    // For other errors, log and return null (non-blocking)
+    console.warn('[GenerateEmbedding] Failed to generate embedding:', error instanceof Error ? error.message : error);
+    return null;
+  }
+}
+
 const ABSOLUTE_URL_PATTERN = /^[a-zA-Z][a-zA-Z\d+\-.]*:/;
 
 function buildStoragePath(filePath: string): string {
@@ -276,5 +318,61 @@ export async function getFileUrl(apiBase: string, bearerToken: string, filePath:
     return data.url;
   }
   return '';
+}
+
+export interface RecordComparisonMetricsPayload {
+  amount?: number;
+  currency?: string;
+  repetitions?: number;
+  load?: number;
+  duration_minutes?: number;
+  date?: string;
+  recipient?: string;
+  merchant?: string;
+  category?: string;
+  location?: string;
+  label?: string;
+}
+
+export interface RecordComparisonRecordPayload {
+  id: string;
+  type: string;
+  summary?: string | null;
+  properties?: Record<string, unknown>;
+  metrics?: RecordComparisonMetricsPayload;
+}
+
+export interface RecordComparisonRequestPayload {
+  new_record: RecordComparisonRecordPayload;
+  similar_records: RecordComparisonRecordPayload[];
+}
+
+export interface RecordComparisonResponsePayload {
+  analysis: string | null;
+}
+
+export async function generateRecordComparison(
+  apiBase: string,
+  bearerToken: string,
+  payload: RecordComparisonRequestPayload
+): Promise<RecordComparisonResponsePayload> {
+  const response = await fetch(normalizeApiUrl(apiBase, '/record_comparison'), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${bearerToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Unauthorized - check your Bearer Token');
+    }
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  return response.json();
 }
 

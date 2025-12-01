@@ -4,9 +4,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Enable COOP/COEP headers by default for OPFS support (can be disabled via env var)
-const enableDevCrossOriginIsolation =
-  process.env.VITE_ENABLE_CROSS_ORIGIN_ISOLATION !== 'false';
 
 export default defineConfig({
   plugins: [react()],
@@ -39,12 +36,16 @@ export default defineConfig({
   },
   server: {
     port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
+<<<<<<< Current (Your changes)
     host: '0.0.0.0', // Accept connections from proxy
     hmr: {
       protocol: 'ws',
       host: 'localhost',
       port: parseInt(process.env.VITE_PORT || process.env.PORT || '5173', 10),
     },
+=======
+    strictPort: true, // Fail if port is taken instead of auto-incrementing (ensures HMR port matches)
+>>>>>>> Incoming (Background Agent changes)
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.HTTP_PORT || '8080'}`,
@@ -52,12 +53,7 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
-    headers: enableDevCrossOriginIsolation
-      ? {
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-          'Cross-Origin-Opener-Policy': 'same-origin',
-        }
-      : undefined,
+    headers: undefined,
     fs: {
       allow: ['..'],
     },

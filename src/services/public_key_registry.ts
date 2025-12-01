@@ -53,10 +53,18 @@ export function isBearerTokenValid(bearerToken: string): boolean {
 
 /**
  * Auto-register public key if not exists (for first-time users)
+ * Returns true if registration succeeded, false if token format is invalid
  */
-export function ensurePublicKeyRegistered(bearerToken: string): void {
-  if (!publicKeyRegistry.has(bearerToken)) {
+export function ensurePublicKeyRegistered(bearerToken: string): boolean {
+  if (publicKeyRegistry.has(bearerToken)) {
+    return true;
+  }
+  try {
     registerPublicKey(bearerToken);
+    return true;
+  } catch (error) {
+    // Invalid bearer token format - return false instead of throwing
+    return false;
   }
 }
 
