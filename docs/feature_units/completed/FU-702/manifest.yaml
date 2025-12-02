@@ -1,0 +1,418 @@
+feature_id: "fu_702"
+version: "1.0.0"
+status: "draft"
+priority: "p1"
+risk_level: "medium"
+
+metadata:
+  title: "Billing and Subscription Management"
+  description: "Implement billing system for revenue collection (€3k–€15k/yr ACVs)"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+    - "product@neotoma.com"
+  created_at: "2025-01-XX"
+  target_release: "v1.0.0"
+
+subsystems:
+  - name: "billing"
+    changes: "New billing subsystem with Stripe integration"
+  - name: "auth"
+    changes: "Subscription status checks in auth middleware"
+  - name: "database"
+    changes: "New tables: subscriptions, invoices, usage_metrics, billing_plans"
+
+schema_changes:
+  - table: "subscriptions"
+    operation: "create_table"
+    columns:
+      - name: "id"
+        type: "UUID"
+        primary_key: true
+      - name: "user_id"
+        type: "UUID"
+        nullable: false
+        foreign_key: "auth.users(id)"
+      - name: "team_id"
+        type: "UUID"
+        nullable: true
+        foreign_key: "teams(id)"
+      - name: "plan_id"
+        type: "TEXT"
+        nullable: false
+      - name: "stripe_subscription_id"
+        type: "TEXT"
+        nullable: false
+        unique: true
+      - name: "status"
+        type: "TEXT"
+        nullable: false
+
+  - table: "invoices"
+    operation: "create_table"
+    columns:
+      - name: "id"
+        type: "UUID"
+        primary_key: true
+      - name: "subscription_id"
+        type: "UUID"
+        nullable: false
+        foreign_key: "subscriptions(id)"
+      - name: "stripe_invoice_id"
+        type: "TEXT"
+        nullable: false
+        unique: true
+      - name: "amount_cents"
+        type: "INTEGER"
+        nullable: false
+      - name: "status"
+        type: "TEXT"
+        nullable: false
+
+  - table: "usage_metrics"
+    operation: "create_table"
+    columns:
+      - name: "id"
+        type: "UUID"
+        primary_key: true
+      - name: "user_id"
+        type: "UUID"
+        nullable: true
+        foreign_key: "auth.users(id)"
+      - name: "team_id"
+        type: "UUID"
+        nullable: true
+        foreign_key: "teams(id)"
+      - name: "metric_type"
+        type: "TEXT"
+        nullable: false
+      - name: "metric_value"
+        type: "INTEGER"
+        nullable: false
+
+  - table: "billing_plans"
+    operation: "create_table"
+    columns:
+      - name: "id"
+        type: "TEXT"
+        primary_key: true
+      - name: "name"
+        type: "TEXT"
+        nullable: false
+      - name: "price_cents_monthly"
+        type: "INTEGER"
+        nullable: false
+      - name: "price_cents_annual"
+        type: "INTEGER"
+        nullable: true
+
+api_changes:
+  endpoints:
+    - path: "/api/billing/subscription"
+      method: "GET"
+      change_type: "new"
+      description: "Get current subscription"
+
+    - path: "/api/billing/subscribe"
+      method: "POST"
+      change_type: "new"
+      description: "Create subscription"
+
+    - path: "/api/billing/update-subscription"
+      method: "POST"
+      change_type: "new"
+      description: "Update subscription"
+
+    - path: "/api/billing/cancel-subscription"
+      method: "POST"
+      change_type: "new"
+      description: "Cancel subscription"
+
+    - path: "/api/billing/invoices"
+      method: "GET"
+      change_type: "new"
+      description: "List invoices"
+
+    - path: "/api/billing/usage"
+      method: "GET"
+      change_type: "new"
+      description: "Get usage metrics"
+
+    - path: "/api/billing/webhook"
+      method: "POST"
+      change_type: "new"
+      description: "Stripe webhook handler"
+
+ui:
+  components:
+    - name: "BillingSettings"
+      change_type: "new"
+      path: "frontend/src/components/BillingSettings.tsx"
+      description: "Main billing page"
+
+    - name: "SubscriptionCard"
+      change_type: "new"
+      path: "frontend/src/components/SubscriptionCard.tsx"
+      description: "Display current subscription"
+
+    - name: "PlanSelector"
+      change_type: "new"
+      path: "frontend/src/components/PlanSelector.tsx"
+      description: "Plan selection UI"
+
+    - name: "InvoiceTable"
+      change_type: "new"
+      path: "frontend/src/components/InvoiceTable.tsx"
+      description: "Invoice history table"
+
+    - name: "UsageDashboard"
+      change_type: "new"
+      path: "frontend/src/components/UsageDashboard.tsx"
+      description: "Usage metrics visualization"
+
+    - name: "SettingsUI"
+      change_type: "modified"
+      changes: "Add billing tab/section"
+
+  accessibility:
+    keyboard_navigation: true
+    aria_labels:
+      - element: "plan-selector"
+        label: "Select subscription plan"
+      - element: "payment-form"
+        label: "Payment information"
+    focus_management: "Focus moves to success message after subscription change"
+
+  i18n:
+    translatable_strings:
+      - key: "billing.subscription.active"
+        en: "Active Subscription"
+        es: "Suscripción Activa"
+      - key: "billing.plan.monthly"
+        en: "Monthly"
+        es: "Mensual"
+      - key: "billing.plan.annual"
+        en: "Annual"
+        es: "Anual"
+    locale_formatting:
+      - type: "currency"
+        fields: ["amount_cents"]
+      - type: "date"
+        fields: ["current_period_end", "paid_at"]
+
+observability:
+  metrics:
+    - name: "subscription_created_total"
+      type: "counter"
+      labels:
+        - "plan_id"
+        - "billing_cycle"
+      description: "Total subscriptions created"
+
+    - name: "subscription_updated_total"
+      type: "counter"
+      labels:
+        - "plan_id"
+        - "status"
+      description: "Total subscriptions updated"
+
+    - name: "payment_processed_total"
+      type: "counter"
+      labels:
+        - "status"
+      description: "Total payments processed"
+
+    - name: "payment_processed_amount_cents"
+      type: "histogram"
+      buckets: [10000, 50000, 100000, 500000, 1000000]
+      description: "Payment amounts in cents"
+
+    - name: "stripe_webhook_processed_total"
+      type: "counter"
+      labels:
+        - "event_type"
+        - "status"
+      description: "Stripe webhooks processed"
+
+  logs:
+    - level: "info"
+      event: "subscription_created"
+      fields:
+        - "subscription_id"
+        - "plan_id"
+        - "user_id"
+
+    - level: "info"
+      event: "payment_processed"
+      fields:
+        - "invoice_id"
+        - "amount_cents"
+        - "status"
+
+    - level: "error"
+      event: "payment_failed"
+      fields:
+        - "subscription_id"
+        - "error_code"
+        - "trace_id"
+
+    - level: "error"
+      event: "stripe_webhook_error"
+      fields:
+        - "event_type"
+        - "error_code"
+        - "trace_id"
+
+  events:
+    - event_type: "subscription.created"
+      payload:
+        - "subscription_id"
+        - "plan_id"
+      emitted_when: "Subscription successfully created"
+
+    - event_type: "subscription.updated"
+      payload:
+        - "subscription_id"
+        - "old_status"
+        - "new_status"
+      emitted_when: "Subscription status changed"
+
+    - event_type: "invoice.paid"
+      payload:
+        - "invoice_id"
+        - "amount_cents"
+      emitted_when: "Invoice payment succeeded"
+
+testing:
+  unit_tests:
+    - file: "src/services/billing.test.ts"
+      tests:
+        - "calculateSubscriptionPrice"
+        - "formatCurrency"
+        - "validatePlanTransition"
+        - "parseStripeWebhook"
+
+  integration_tests:
+    - file: "src/services/billing.integration.test.ts"
+      tests:
+        - "create subscription and verify Stripe customer"
+        - "update subscription and verify Stripe subscription"
+        - "cancel subscription and verify Stripe subscription"
+        - "handle payment webhook and update subscription"
+        - "generate invoice and verify database"
+
+  e2e_tests:
+    - file: "playwright/tests/billing.spec.ts"
+      tests:
+        - "user subscribes to individual plan"
+        - "user upgrades to team plan"
+        - "user cancels subscription"
+        - "user views invoice history"
+        - "payment fails and user sees past_due status"
+
+  fixtures:
+    - name: "stripe_webhook_subscription_created.json"
+      location: "playwright/fixtures/stripe_webhook_subscription_created.json"
+      description: "Stripe webhook payload for subscription.created event"
+
+    - name: "stripe_webhook_payment_succeeded.json"
+      location: "playwright/fixtures/stripe_webhook_payment_succeeded.json"
+      description: "Stripe webhook payload for payment succeeded"
+
+  coverage:
+    lines: 85
+    branches: 85
+    critical_paths: 100
+
+dependencies:
+  requires:
+    - feature_id: "fu_700"
+      reason: "Authentication required for billing"
+    - feature_id: "fu_701"
+      reason: "RLS required for team billing isolation"
+
+  blocks:
+    - feature_id: "revenue_collection"
+      reason: "Enables revenue collection (M2 milestone: €5k MRR)"
+
+feature_flags:
+  enabled: true
+  flags:
+    - name: "enable_billing"
+      default_value: false
+      description: "Enable billing and subscription management"
+
+rollout:
+  strategy: "phased"
+  phases:
+    - name: "internal"
+      percentage: 100
+      duration_days: 7
+      description: "Internal team testing"
+    - name: "beta"
+      percentage: 10
+      duration_days: 7
+      description: "Beta user testing"
+    - name: "general"
+      percentage: 100
+      duration_days: 0
+      description: "General availability"
+
+  rollback:
+    steps:
+      - "Disable enable_billing feature flag"
+      - "Stripe subscriptions remain active (no data loss)"
+      - "Users can access via Stripe dashboard"
+    triggers:
+      - condition: "payment_success_rate < 90%"
+        action: "Automatic rollback"
+
+  monitoring:
+    key_metrics:
+      - metric: "subscription_created_total"
+        threshold: ">10 subscriptions/week (M2: €5k MRR)"
+      - metric: "payment_processed_total"
+        threshold: "success_rate > 95%"
+      - metric: "payment_processed_amount_cents"
+        threshold: "Track revenue (€5k MRR by M2)"
+
+documentation:
+  files_created:
+    - path: "docs/feature_units/completed/FU-702/billing_spec.md"
+      purpose: "Billing feature unit specification"
+    - path: "docs/subsystems/billing.md"
+      purpose: "Billing subsystem documentation"
+
+risks:
+  - category: "payment_processing"
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Stripe handles payment processing, webhook retry logic, payment failure handling"
+
+  - category: "data_loss"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Transactional subscription updates, Stripe as source of truth"
+
+  - category: "security"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "No card storage, Stripe tokens only, webhook signature verification"
+
+notes: |
+  Billing is required for revenue collection to meet M2 milestone (€5k MRR by Jan 10, 2026).
+
+  Pricing strategy:
+  - Individual plans: €250–€1,250/month (€3k–€15k/yr)
+  - Team plans: €500–€2,500/month (€6k–€30k/yr) for 2–20 users
+  - Annual billing: 20% discount
+
+  Enables Tier 1 ICPs (individuals and small teams) to pay after experiencing value.
+
+links:
+  - title: "Stripe API Documentation"
+    url: "https://stripe.com/docs/api"
+  - title: "Revenue Timeline"
+    url: "../strategy_governance/revenue_timeline.md"
+  - title: "ICP Profiles"
+    url: "../specs/ICP_PROFILES.md"

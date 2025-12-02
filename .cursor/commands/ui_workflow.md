@@ -1,0 +1,45 @@
+# UI Workflow (DSL → Design → Implementation)
+
+You are modifying UI for the Neotoma repository.
+
+feature_id = {{input:feature_id}}
+
+## Load and follow
+
+- docs/context/index.md
+- docs/ui/dsl_spec.md
+- docs/ui/design_constraints/{{input:feature_id}}.yaml (if present)
+- spec/features/{{input:feature_id}}.md
+- features/{{input:feature_id}}.yaml
+- docs/subsystems/i18n.md
+- docs/subsystems/accessibility.md
+- docs/feature_units/standards/execution_instructions.md
+
+## Required workflow
+
+1. Load the DSL at docs/ui/dsl/{{input:feature_id}}.yaml.
+   - If missing, generate a DSL scaffold using the appropriate UI pattern.
+
+2. Validate that the DSL:
+   - matches the design constraints
+   - respects patterns (list/detail/dashboard/etc)
+   - includes required i18n + A11y attributes
+
+3. Generate a static layout preview description (textual wireframe).
+   - Optional: produce SVG markup for visualization.
+
+4. After approval (or if explicitly instructed):
+   - Implement the UI using design-system components.
+   - Update tests (snapshot + interaction)
+   - Update i18n strings
+   - Update manifest's ui block
+
+5. Run tests:
+   - TEST_CHANGED
+   - any UI-related subsystem tests
+
+## Inputs
+
+- `feature_id` (string): The feature_id associated with the UI under development.
+
+
