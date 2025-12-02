@@ -1,29 +1,72 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } from 'react';
-import { Toaster } from '@/components/ui/toaster';
-import { Toaster as SonnerToaster } from 'sonner';
-import { ChatPanel } from '@/components/ChatPanel';
-import { RecordsTable } from '@/components/RecordsTable';
-import { RecordDetailsPanel } from '@/components/RecordDetailsPanel';
-import { useKeys } from '@/hooks/useKeys';
-import { useDatastore } from '@/hooks/useDatastore';
-import { normalizeRecord, STATUS_ORDER, type NeotomaRecord } from '@/types/record';
-import { useToast } from '@/components/ui/use-toast';
-import { localToNeotoma } from '@/utils/record_conversion';
-import { FloatingSettingsButton } from '@/components/FloatingSettingsButton';
-import { DatastoreContext } from '@/contexts/DatastoreContext';
-import { seedLocalRecords, resetSeedMarker } from '@/utils/seedLocalRecords';
-import { configureLocalFileEncryption, deleteLocalFile, isLocalFilePath } from '@/utils/local_files';
-import { recordMatchesQuery } from '@/utils/record_search';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+  type DragEvent,
+} from "react";
+import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
+import { ChatPanel } from "@/components/ChatPanel";
+import { RecordsTable } from "@/components/RecordsTable";
+import { RecordDetailsPanel } from "@/components/RecordDetailsPanel";
+import { StyleGuide } from "@/components/StyleGuide";
+import { useKeys } from "@/hooks/useKeys";
+import { useDatastore } from "@/hooks/useDatastore";
+import {
+  normalizeRecord,
+  STATUS_ORDER,
+  type NeotomaRecord,
+} from "@/types/record";
+import { useToast } from "@/components/ui/use-toast";
+import { localToNeotoma } from "@/utils/record_conversion";
+import { FloatingSettingsButton } from "@/components/FloatingSettingsButton";
+import { DatastoreContext } from "@/contexts/DatastoreContext";
+import { seedLocalRecords, resetSeedMarker } from "@/utils/seedLocalRecords";
+import {
+  configureLocalFileEncryption,
+  deleteLocalFile,
+  isLocalFilePath,
+} from "@/utils/local_files";
+import { recordMatchesQuery } from "@/utils/record_search";
 
 function App() {
   const { toast } = useToast();
   const { x25519, ed25519, loading: keysLoading } = useKeys();
+
+  // Track current pathname for routing
+  const [pathname, setPathname] = useState(window.location.pathname);
+  const isDesignSystem = pathname === "/design-system";
+
+  // Handle pathname changes (browser navigation, programmatic changes)
+  useEffect(() => {
+    const handlePopState = () => {
+      setPathname(window.location.pathname);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // Keyboard shortcut to navigate to design system preview (Ctrl/Cmd + Shift + S)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
+        e.preventDefault();
+        const newPath = isDesignSystem ? "/" : "/design-system";
+        window.history.pushState({}, "", newPath);
+        setPathname(newPath);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isDesignSystem]);
   useEffect(() => {
     if (!x25519 || !ed25519) {
       return;
     }
     configureLocalFileEncryption(x25519, ed25519).catch((error) => {
-      console.error('[Local Files] Failed to configure encryption', error);
+      console.error("[Local Files] Failed to configure encryption", error);
     });
   }, [x25519, ed25519]);
 
@@ -39,9 +82,11 @@ function App() {
   const [filteredDisplayCount, setFilteredDisplayCount] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
   const [types, setTypes] = useState<string[]>([]);
-  const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(null);
-  const [selectedType, setSelectedType] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRecord, setSelectedRecord] = useState<NeotomaRecord | null>(
+    null
+  );
+  const [selectedType, setSelectedType] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [recordsLoading, setRecordsLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -50,15 +95,17 @@ function App() {
   const totalRecordsRef = useRef(0);
   const fullLoadInProgressRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
-  const chatPanelFileUploadRef = useRef<((files: FileList | null) => Promise<void>) | null>(null);
+  const chatPanelFileUploadRef = useRef<
+    ((files: FileList | null) => Promise<void>) | null
+  >(null);
   const chatPanelErrorRef = useRef<((error: string) => void) | null>(null);
-  const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS !== 'false';
+  const autoSeedEnabled = import.meta.env.VITE_AUTO_SEED_RECORDS !== "false";
 
   // Expose error trigger function for testing
   useEffect(() => {
     (window as any).triggerError = (message: string, count: number = 1) => {
       if (!chatPanelErrorRef.current) {
-        console.warn('[triggerError] Error handler not available yet');
+        console.warn("[triggerError] Error handler not available yet");
         return;
       }
       for (let i = 0; i < count; i++) {
@@ -69,103 +116,131 @@ function App() {
           }
         }, i * 10); // 10ms delay between triggers
       }
-      console.log(`[triggerError] Triggered error "${message}" ${count} time(s)`);
+      console.log(
+        `[triggerError] Triggered error "${message}" ${count} time(s)`
+      );
     };
     return () => {
       delete (window as any).triggerError;
     };
   }, []);
 
-  const loadRecords = useCallback(async (reset: boolean = true) => {
-    if (!datastoreInitialized || keysLoading) {
-      return;
-    }
-
-    if (reset) {
-      setRecordsLoading(true);
-      setAllRecords([]);
-      allRecordsRef.current = [];
-      setHasMore(true);
-    }
-
-    try {
-      const currentOffset = reset ? 0 : allRecordsRef.current.length;
-      const [localRecords, totalCount] = await Promise.all([
-        datastoreQueryRecords({ limit: RECORDS_PER_PAGE, offset: currentOffset }),
-        reset ? datastoreCountRecords() : Promise.resolve(totalRecordsRef.current),
-      ]);
-      const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
-      
-      const newRecords = reset ? neotomaRecords : [...allRecordsRef.current, ...neotomaRecords];
-      allRecordsRef.current = newRecords;
-      setAllRecords(newRecords);
-      setHasMore(newRecords.length < totalCount);
-      
-      // Extract unique types from all loaded records
-      const uniqueTypes = Array.from(new Set(newRecords.map(r => r.type))).sort();
-      setTypes(uniqueTypes);
-      
-      if (reset) {
-        totalRecordsRef.current = totalCount;
-        setTotalRecords(totalCount);
+  const loadRecords = useCallback(
+    async (reset: boolean = true) => {
+      if (!datastoreInitialized || keysLoading) {
+        return;
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load records';
-      console.error('[Records Loading Error]', errorMessage, error);
+
       if (reset) {
+        setRecordsLoading(true);
         setAllRecords([]);
         allRecordsRef.current = [];
-        // Show error in chat
-        if (chatPanelErrorRef.current) {
-          chatPanelErrorRef.current(errorMessage);
-        }
+        setHasMore(true);
       }
-    } finally {
-      setRecordsLoading(false);
-      setLoadingMore(false);
-    }
-  }, [datastoreInitialized, keysLoading, datastoreQueryRecords, datastoreCountRecords]);
+
+      try {
+        const currentOffset = reset ? 0 : allRecordsRef.current.length;
+        const [localRecords, totalCount] = await Promise.all([
+          datastoreQueryRecords({
+            limit: RECORDS_PER_PAGE,
+            offset: currentOffset,
+          }),
+          reset
+            ? datastoreCountRecords()
+            : Promise.resolve(totalRecordsRef.current),
+        ]);
+        const neotomaRecords = localRecords
+          .map(localToNeotoma)
+          .map(normalizeRecord);
+
+        const newRecords = reset
+          ? neotomaRecords
+          : [...allRecordsRef.current, ...neotomaRecords];
+        allRecordsRef.current = newRecords;
+        setAllRecords(newRecords);
+        setHasMore(newRecords.length < totalCount);
+
+        // Extract unique types from all loaded records
+        const uniqueTypes = Array.from(
+          new Set(newRecords.map((r) => r.type))
+        ).sort();
+        setTypes(uniqueTypes);
+
+        if (reset) {
+          totalRecordsRef.current = totalCount;
+          setTotalRecords(totalCount);
+        }
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to load records";
+        console.error("[Records Loading Error]", errorMessage, error);
+        if (reset) {
+          setAllRecords([]);
+          allRecordsRef.current = [];
+          // Show error in chat
+          if (chatPanelErrorRef.current) {
+            chatPanelErrorRef.current(errorMessage);
+          }
+        }
+      } finally {
+        setRecordsLoading(false);
+        setLoadingMore(false);
+      }
+    },
+    [
+      datastoreInitialized,
+      keysLoading,
+      datastoreQueryRecords,
+      datastoreCountRecords,
+    ]
+  );
 
   // Add a function to append a single record without reloading
-  const appendRecord = useCallback(async (recordId: string) => {
-    if (!datastoreInitialized) return;
-    
-    try {
-      const localRecord = await datastoreGetRecord(recordId);
-      if (localRecord) {
-        const neotomaRecord = normalizeRecord(localToNeotoma(localRecord));
-        setAllRecords((prev) => {
-          // Check if record already exists
-          if (prev.some(r => r.id === recordId)) {
-            return prev;
-          }
-          const updated = [neotomaRecord, ...prev];
-          allRecordsRef.current = updated;
-          
-          // Update types
-          const uniqueTypes = Array.from(new Set(updated.map(r => r.type))).sort();
-          setTypes(uniqueTypes);
-          
-          return updated;
-        });
-        setTotalRecords((prev) => {
-          const next = prev + 1;
-          totalRecordsRef.current = next;
-          return next;
-        });
-      }
-    } catch (error) {
-      console.error('[Append Record Error]', error);
-      // Fallback to full reload if append fails
-      await loadRecords(true);
-    }
-  }, [datastoreInitialized, datastoreGetRecord, loadRecords]);
+  const appendRecord = useCallback(
+    async (recordId: string) => {
+      if (!datastoreInitialized) return;
 
+      try {
+        const localRecord = await datastoreGetRecord(recordId);
+        if (localRecord) {
+          const neotomaRecord = normalizeRecord(localToNeotoma(localRecord));
+          setAllRecords((prev) => {
+            // Check if record already exists
+            if (prev.some((r) => r.id === recordId)) {
+              return prev;
+            }
+            const updated = [neotomaRecord, ...prev];
+            allRecordsRef.current = updated;
+
+            // Update types
+            const uniqueTypes = Array.from(
+              new Set(updated.map((r) => r.type))
+            ).sort();
+            setTypes(uniqueTypes);
+
+            return updated;
+          });
+          setTotalRecords((prev) => {
+            const next = prev + 1;
+            totalRecordsRef.current = next;
+            return next;
+          });
+        }
+      } catch (error) {
+        console.error("[Append Record Error]", error);
+        // Fallback to full reload if append fails
+        await loadRecords(true);
+      }
+    },
+    [datastoreInitialized, datastoreGetRecord, loadRecords]
+  );
 
   const loadTypes = useCallback(async () => {
     // Types are now loaded from local records
     if (allRecords.length > 0) {
-      const uniqueTypes = Array.from(new Set(allRecords.map(r => r.type))).sort();
+      const uniqueTypes = Array.from(
+        new Set(allRecords.map((r) => r.type))
+      ).sort();
       setTypes(uniqueTypes);
     }
   }, [allRecords]);
@@ -189,12 +264,13 @@ function App() {
         if (seeded && !cancelled) {
           await loadRecords(true);
           toast({
-            title: 'Sample records added',
-            description: 'Clear the sample marker or reset storage to remove them.',
+            title: "Sample records added",
+            description:
+              "Clear the sample marker or reset storage to remove them.",
           });
         }
       } catch (error) {
-        console.error('[Sample Records] Failed to seed data:', error);
+        console.error("[Sample Records] Failed to seed data:", error);
       }
     }
 
@@ -203,7 +279,14 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [autoSeedEnabled, datastore, datastoreInitialized, keysLoading, loadRecords, toast]);
+  }, [
+    autoSeedEnabled,
+    datastore,
+    datastoreInitialized,
+    keysLoading,
+    loadRecords,
+    toast,
+  ]);
 
   useEffect(() => {
     if (!import.meta.env.DEV || !datastoreInitialized) {
@@ -239,7 +322,9 @@ function App() {
     let recordsToFilter = [...allRecords];
 
     if (searchQuery.trim()) {
-      recordsToFilter = recordsToFilter.filter((record) => matchesQuery(record, searchQuery));
+      recordsToFilter = recordsToFilter.filter((record) =>
+        matchesQuery(record, searchQuery)
+      );
     }
 
     if (selectedType) {
@@ -248,8 +333,8 @@ function App() {
 
     recordsToFilter.sort((a, b) => {
       const statusDiff =
-        (STATUS_ORDER[a._status || 'Ready'] ?? STATUS_ORDER.Ready) -
-        (STATUS_ORDER[b._status || 'Ready'] ?? STATUS_ORDER.Ready);
+        (STATUS_ORDER[a._status || "Ready"] ?? STATUS_ORDER.Ready) -
+        (STATUS_ORDER[b._status || "Ready"] ?? STATUS_ORDER.Ready);
       if (statusDiff !== 0) return statusDiff;
       const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
       const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
@@ -277,27 +362,44 @@ function App() {
         const queryOptions = selectedType ? { type: selectedType } : undefined;
         const localRecords = await datastoreQueryRecords(queryOptions);
         if (cancelled) return;
-        const normalizedRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
+        const normalizedRecords = localRecords
+          .map(localToNeotoma)
+          .map(normalizeRecord);
         const nextCount = trimmedSearch.length
-          ? normalizedRecords.filter((record) => matchesQuery(record, trimmedSearch)).length
+          ? normalizedRecords.filter((record) =>
+              matchesQuery(record, trimmedSearch)
+            ).length
           : normalizedRecords.length;
         setFilteredDisplayCount(nextCount);
       } catch (error) {
-        console.error('[App] Failed to compute filtered count', error);
+        console.error("[App] Failed to compute filtered count", error);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [searchQuery, selectedType, datastoreInitialized, keysLoading, datastoreQueryRecords, matchesQuery]);
+  }, [
+    searchQuery,
+    selectedType,
+    datastoreInitialized,
+    keysLoading,
+    datastoreQueryRecords,
+    matchesQuery,
+  ]);
 
   const displayCount = useMemo(() => {
     if (!searchQuery.trim() && !selectedType) {
       return totalRecords;
     }
     return filteredDisplayCount || filteredCount;
-  }, [searchQuery, selectedType, totalRecords, filteredDisplayCount, filteredCount]);
+  }, [
+    searchQuery,
+    selectedType,
+    totalRecords,
+    filteredDisplayCount,
+    filteredCount,
+  ]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -321,29 +423,36 @@ function App() {
   useEffect(() => {
     const trimmedSearch = searchQuery.trim();
     const prevTrimmedSearch = prevSearchQuery.current.trim();
-    const requireFullDataset = trimmedSearch.length > 0 || Boolean(selectedType);
-    const prevRequireFullDataset = prevTrimmedSearch.length > 0 || Boolean(prevSelectedType.current);
-    
+    const requireFullDataset =
+      trimmedSearch.length > 0 || Boolean(selectedType);
+    const prevRequireFullDataset =
+      prevTrimmedSearch.length > 0 || Boolean(prevSelectedType.current);
+
     // Detect transition from filter/search to no filter/search
     const wasFilterActive = prevRequireFullDataset && !requireFullDataset;
-    
-    if (wasFilterActive && allRecords.length > 0 && totalRecordsRef.current > 0) {
+
+    if (
+      wasFilterActive &&
+      allRecords.length > 0 &&
+      totalRecordsRef.current > 0
+    ) {
       // Check if we previously loaded all records
       const hadLoadedAll = allRecords.length === totalRecordsRef.current;
-      
+
       if (hadLoadedAll && totalRecordsRef.current > RECORDS_PER_PAGE) {
         // Reset to paginated loading
         loadRecords(true);
       }
     }
-    
+
     prevSearchQuery.current = searchQuery;
     prevSelectedType.current = selectedType;
   }, [searchQuery, selectedType, allRecords.length, loadRecords]);
 
   useEffect(() => {
     const trimmedSearch = searchQuery.trim();
-    const requireFullDataset = trimmedSearch.length > 0 || Boolean(selectedType);
+    const requireFullDataset =
+      trimmedSearch.length > 0 || Boolean(selectedType);
     if (
       !requireFullDataset ||
       !hasMore ||
@@ -364,14 +473,19 @@ function App() {
         if (cancelled) {
           return;
         }
-        const neotomaRecords = localRecords.map(localToNeotoma).map(normalizeRecord);
+        const neotomaRecords = localRecords
+          .map(localToNeotoma)
+          .map(normalizeRecord);
         allRecordsRef.current = neotomaRecords;
         setAllRecords(neotomaRecords);
         setHasMore(false);
         totalRecordsRef.current = neotomaRecords.length;
         setTotalRecords(neotomaRecords.length);
       } catch (error) {
-        console.error('[App] Failed to fully load records for search/filter', error);
+        console.error(
+          "[App] Failed to fully load records for search/filter",
+          error
+        );
       } finally {
         if (!cancelled) {
           setLoadingMore(false);
@@ -397,11 +511,12 @@ function App() {
     async (recordsToDelete: NeotomaRecord[]) => {
       if (!datastore.initialized) {
         toast({
-          title: 'Datastore not ready',
-          description: 'Wait for local datastore initialization before deleting records.',
-          variant: 'destructive',
+          title: "Datastore not ready",
+          description:
+            "Wait for local datastore initialization before deleting records.",
+          variant: "destructive",
         });
-        throw new Error('Datastore not initialized');
+        throw new Error("Datastore not initialized");
       }
 
       if (recordsToDelete.length === 0) {
@@ -414,13 +529,21 @@ function App() {
             .filter(isLocalFilePath)
             .map((filePath) =>
               deleteLocalFile(filePath).catch((error) =>
-                console.warn('[Records] Failed to remove local file', { filePath, error })
+                console.warn("[Records] Failed to remove local file", {
+                  filePath,
+                  error,
+                })
               )
             )
         );
-        await Promise.all(recordsToDelete.map((record) => datastore.deleteRecord(record.id)));
+        await Promise.all(
+          recordsToDelete.map((record) => datastore.deleteRecord(record.id))
+        );
         await Promise.all(localFileRemovals);
-        if (selectedRecord && recordsToDelete.some((record) => record.id === selectedRecord.id)) {
+        if (
+          selectedRecord &&
+          recordsToDelete.some((record) => record.id === selectedRecord.id)
+        ) {
           setSelectedRecord(null);
         }
         await loadRecords(true);
@@ -429,15 +552,17 @@ function App() {
             ? `Removed ${recordsToDelete[0].summary ?? recordsToDelete[0].id}.`
             : `Removed ${recordsToDelete.length} records.`;
         toast({
-          title: recordsToDelete.length === 1 ? 'Record deleted' : 'Records deleted',
+          title:
+            recordsToDelete.length === 1 ? "Record deleted" : "Records deleted",
           description,
         });
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
         toast({
-          title: 'Failed to delete records',
+          title: "Failed to delete records",
           description: message,
-          variant: 'destructive',
+          variant: "destructive",
         });
         throw error;
       }
@@ -454,7 +579,7 @@ function App() {
     e.preventDefault();
     e.stopPropagation();
     // Only show overlay when files are being dragged, not UI elements
-    const hasFiles = e.dataTransfer.types.includes('Files');
+    const hasFiles = e.dataTransfer.types.includes("Files");
     if (hasFiles) {
       setIsDragging(true);
     }
@@ -478,9 +603,23 @@ function App() {
     }
   }, []);
 
+  // Show design system preview if on /design-system path
+  if (isDesignSystem) {
+    return (
+      <DatastoreContext.Provider value={datastore}>
+        <StyleGuide
+          onClose={() => {
+            window.history.pushState({}, "", "/");
+            setPathname("/");
+          }}
+        />
+      </DatastoreContext.Provider>
+    );
+  }
+
   return (
     <DatastoreContext.Provider value={datastore}>
-      <div 
+      <div
         className="h-screen max-h-screen bg-background flex flex-col overflow-hidden relative"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -515,7 +654,10 @@ function App() {
             />
           </main>
         </div>
-        <RecordDetailsPanel record={selectedRecord} onClose={() => setSelectedRecord(null)} />
+        <RecordDetailsPanel
+          record={selectedRecord}
+          onClose={() => setSelectedRecord(null)}
+        />
         <Toaster />
         <SonnerToaster
           duration={4000}
@@ -523,24 +665,28 @@ function App() {
           visibleToasts={10}
           toastOptions={{
             classNames: {
-              toast: 'bg-background border border-border shadow-lg',
-              title: 'text-foreground font-medium',
-              description: 'text-muted-foreground',
+              toast: "bg-background border border-border shadow-lg",
+              title: "text-foreground font-medium",
+              description: "text-muted-foreground",
             },
           }}
         />
         <FloatingSettingsButton />
-      {/* Full-page drag overlay */}
-      {isDragging && (
-        <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
-          <div className="bg-background/95 backdrop-blur-sm rounded-lg px-8 py-6 border-2 border-primary shadow-lg">
-            <div className="text-center">
-              <div className="text-2xl font-semibold text-primary mb-2">Drop files to upload</div>
-              <div className="text-sm text-muted-foreground">Release to add files to your records</div>
+        {/* Full-page drag overlay */}
+        {isDragging && (
+          <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
+            <div className="bg-background/95 backdrop-blur-sm rounded-lg px-8 py-6 border-2 border-primary shadow-lg">
+              <div className="text-center">
+                <div className="text-2xl font-semibold text-primary mb-2">
+                  Drop files to upload
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Release to add files to your records
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </DatastoreContext.Provider>
   );

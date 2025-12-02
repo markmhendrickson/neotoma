@@ -1,0 +1,31 @@
+name: "Create New Feature Unit"
+description: "Scaffold a new Feature Unit: spec, manifest, DSL, test dirs."
+prompt: |
+  Create a new Feature Unit with feature_id = {{input:feature_id}}.
+
+  Tasks:
+
+  1. Create:
+     - spec/features/{{input:feature_id}}.md (from template)
+     - features/{{input:feature_id}}.yaml (from manifest template)
+     - docs/ui/dsl/{{input:feature_id}}.yaml (empty DSL scaffold)
+     - tests/unit/features/{{input:feature_id}}/
+     - tests/integration/features/{{input:feature_id}}/
+     - tests/e2e/features/{{input:feature_id}}/
+     - tests/regression/features/{{input:feature_id}}/
+  
+  2. Populate:
+     - Required fields
+     - TODO placeholders
+     - i18n + A11y entries
+     - metrics skeleton
+     - rollout + kill-switch
+  
+  3. Do NOT implement code yet—only produce scaffolds.
+
+  4. Output:
+     - File tree created
+     - Next steps for developer
+inputs:
+  - name: feature_id
+    type: string

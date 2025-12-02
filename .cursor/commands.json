@@ -20,17 +20,59 @@
       }
     },
     {
-<<<<<<< Current (Your changes)
       "name": "Setup: Copy Env File",
       "description": "Copy .env file from main repository to this worktree",
       "shell": {
         "command": "npm run copy:env"
-=======
+      }
+    },
+    {
       "name": "dev-serve",
       "description": "Start the full-stack dev serve orchestration (HTTP + UI servers) with diagnostics and port URLs",
       "user": {
         "documentation": ".cursor/commands/dev-serve.md"
->>>>>>> Incoming (Background Agent changes)
+      }
+    },
+    {
+      "name": "Create New Feature Unit",
+      "description": "Scaffold a new Feature Unit: spec, manifest, DSL, test dirs.",
+      "user": {
+        "documentation": ".cursor/commands/create_feature_unit.md"
+      }
+    },
+    {
+      "name": "Fix Feature Bug",
+      "description": "Classify and fix a bug using Neotoma's error protocol.",
+      "user": {
+        "documentation": ".cursor/commands/fix_feature_bug.md"
+      }
+    },
+    {
+      "name": "Ingestion Flow Development",
+      "description": "Design or modify ingestion pipelines: document ingestion, normalization, chunking, embeddings, indexing.",
+      "user": {
+        "documentation": ".cursor/commands/ingestion_flow.md"
+      }
+    },
+    {
+      "name": "Modify Subsystem",
+      "description": "Safely modify schema, ingestion, search, vector_ops, auth, i18n, privacy, or accessibility subsystems.",
+      "user": {
+        "documentation": ".cursor/commands/modify_subsystem.md"
+      }
+    },
+    {
+      "name": "Run Feature Workflow",
+      "description": "Safely implement or modify a Feature Unit using Neotoma's spec-first development flow.",
+      "user": {
+        "documentation": ".cursor/commands/run_feature_workflow.md"
+      }
+    },
+    {
+      "name": "UI Workflow (DSL → Design → Implementation)",
+      "description": "Generate or modify UI for a Feature Unit using the DSL and design constraints.",
+      "user": {
+        "documentation": ".cursor/commands/ui_workflow.md"
       }
     }
   ]

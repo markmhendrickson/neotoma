@@ -1,0 +1,356 @@
+# Feature Unit Manifest Template
+# This YAML file accompanies every Feature Unit spec and provides machine-readable metadata
+
+feature_id: "fu_YYYY_MM_NNN"              # Unique identifier
+version: "1.0.0"                          # Semantic version
+status: "draft"                           # draft | in_progress | review | completed
+priority: "p1"                            # p0 (critical) | p1 (high) | p2 (medium) | p3 (low)
+risk_level: "medium"                      # low | medium | high
+
+# Metadata
+metadata:
+  title: "Feature Name"
+  description: "Brief description"
+  owner: "team@example.com"
+  reviewers:
+    - "reviewer1@example.com"
+    - "reviewer2@example.com"
+  created_at: "2024-01-15"
+  target_release: "v1.0.0"
+
+# Affected subsystems
+subsystems:
+  - name: "ingestion"
+    changes: "Add entity resolution logic"
+  - name: "schema"
+    changes: "New JSONB keys in properties"
+
+# Schema changes
+schema_changes:
+  - table: "records"
+    operation: "add_column"              # add_column | add_index | modify_column
+    column_name: "new_column"
+    column_type: "TEXT"
+    nullable: true
+    default_value: "default"
+  
+  - table: "records"
+    operation: "add_index"
+    index_name: "idx_records_new_column"
+    index_type: "btree"                  # btree | gin | ivfflat
+    columns: ["new_column"]
+
+# JSONB schema version bumps
+jsonb_schema_bumps:
+  - schema_type: "FinancialRecord"
+    old_version: "1.0"
+    new_version: "1.1"
+    changes:
+      - "Add field: payment_method"
+
+# API / MCP changes
+mcp_actions:
+  - action: "upload_file"
+    change_type: "new"                   # new | modified | deprecated
+    parameters:
+      - name: "file"
+        type: "File"
+        required: true
+    returns:
+      type: "Record"
+    errors:
+      - "FILE_TOO_LARGE"
+      - "UNSUPPORTED_FILE_TYPE"
+
+# UI changes
+ui:
+  components:
+    - name: "UploadButton"
+      change_type: "modified"            # new | modified | deprecated
+      changes: "Add loading state"
+    
+    - name: "RecordDetail"
+      change_type: "new"
+      path: "src/components/RecordDetail.tsx"
+  
+  # Accessibility requirements
+  accessibility:
+    keyboard_navigation: true
+    aria_labels:
+      - element: "upload-button"
+        label: "Upload file"
+    focus_management: "Focus moves to progress indicator"
+  
+  # Internationalization requirements
+  i18n:
+    translatable_strings:
+      - key: "upload.button"
+        en: "Upload File"
+        es: "Subir Archivo"
+    locale_formatting:
+      - type: "date"
+        fields: ["created_at"]
+      - type: "currency"
+        fields: ["amount"]
+
+# State machines (if introducing new state machine)
+state_machines:
+  - name: "ingestion_status"
+    states:
+      - name: "pending"
+        terminal: false
+      - name: "processing"
+        terminal: false
+      - name: "completed"
+        terminal: true
+      - name: "failed"
+        terminal: true
+    transitions:
+      - from: "pending"
+        to: "processing"
+        event: "start_ingestion"
+      - from: "processing"
+        to: "completed"
+        event: "success"
+      - from: "processing"
+        to: "failed"
+        event: "error"
+
+# Observability
+observability:
+  # Metrics
+  metrics:
+    - name: "record_upload_total"
+      type: "counter"                    # counter | gauge | histogram
+      labels:
+        - "status"                       # success | failed
+      description: "Total record uploads"
+    
+    - name: "record_upload_duration_ms"
+      type: "histogram"
+      buckets: [100, 500, 1000, 5000]
+      description: "Upload duration in milliseconds"
+  
+  # Logs
+  logs:
+    - level: "info"
+      event: "record_uploaded"
+      fields:
+        - "record_id"
+        - "type"
+        - "file_size_bytes"
+    
+    - level: "error"
+      event: "upload_failed"
+      fields:
+        - "error_code"
+        - "trace_id"
+  
+  # Events
+  events:
+    - event_type: "record.created"
+      payload:
+        - "record_id"
+        - "type"
+      emitted_when: "Record successfully inserted"
+  
+  # Tracing
+  traces:
+    - span_name: "ingest_file"
+      attributes:
+        - "file_size"
+        - "schema_type"
+
+# Testing requirements
+testing:
+  unit_tests:
+    - file: "src/services/ingestion.test.ts"
+      tests:
+        - "extractFieldsForFinancialRecord"
+        - "generateEntityId"
+  
+  integration_tests:
+    - file: "src/services/ingestion.integration.test.ts"
+      tests:
+        - "upload and extract invoice"
+  
+  e2e_tests:
+    - file: "playwright/tests/upload.spec.ts"
+      tests:
+        - "user uploads invoice and sees record details"
+  
+  # Test fixtures
+  fixtures:
+    - name: "sample_invoice.pdf"
+      location: "playwright/fixtures/sample_invoice.pdf"
+      description: "Invoice with known extracted fields"
+  
+  # Coverage targets
+  coverage:
+    lines: 85
+    branches: 85
+    critical_paths: 100               # Critical paths must have 100% coverage
+
+# Dependencies
+dependencies:
+  requires:
+    - feature_id: "fu_2024_01_000"
+      reason: "Depends on base schema"
+  
+  blocks:
+    - feature_id: "fu_2024_01_002"
+      reason: "Must complete before entity linking"
+
+# Feature flags
+feature_flags:
+  enabled: false
+  flags:
+    - name: "enable_new_upload"
+      default_value: false
+      description: "Enable new upload flow"
+
+# Rollout plan
+rollout:
+  strategy: "phased"                     # instant | phased | canary
+  phases:
+    - name: "internal"
+      percentage: 10
+      duration_days: 2
+    - name: "beta"
+      percentage: 50
+      duration_days: 7
+    - name: "general"
+      percentage: 100
+  
+  # Rollback plan
+  rollback:
+    steps:
+      - "Revert API endpoint"
+      - "Monitor error rates"
+    triggers:
+      - condition: "error_rate > 5%"
+        action: "Automatic rollback"
+  
+  # Monitoring
+  monitoring:
+    key_metrics:
+      - metric: "record_upload_total"
+        threshold: "success_rate > 95%"
+      - metric: "record_upload_duration_ms"
+        threshold: "p95 < 5000"
+
+# Documentation updates
+documentation:
+  files_updated:
+    - path: "docs/subsystems/ingestion/ingestion.md"
+      changes: "Add entity resolution section"
+  
+  files_created:
+    - path: "docs/examples/upload_flow.md"
+      purpose: "Document upload user flow"
+
+# Risk assessment (see docs/private/governance/risk_classification.md)
+risks:
+  - category: "data_loss"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Transactional inserts, retry logic"
+  
+  - category: "performance"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Load testing, monitoring"
+
+# Notes and links
+notes: |
+  Additional context, design decisions, or links to external resources.
+
+links:
+  - title: "Design Doc"
+    url: "https://example.com/design"
+  - title: "Figma Mockups"
+    url: "https://figma.com/file/..."
+
+---
+
+# Example Complete Manifest
+
+feature_id: "fu_2024_01_001"
+version: "1.0.0"
+status: "in_progress"
+priority: "p1"
+risk_level: "medium"
+
+metadata:
+  title: "Record Upload with Entity Extraction"
+  description: "Upload PDFs, extract fields, resolve entities"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+  created_at: "2024-01-15"
+  target_release: "v1.0.0"
+
+subsystems:
+  - name: "ingestion"
+    changes: "Full pipeline implementation"
+  - name: "schema"
+    changes: "FinancialRecord properties schema"
+
+schema_changes: []
+
+mcp_actions:
+  - action: "upload_file"
+    change_type: "new"
+    parameters:
+      - name: "file"
+        type: "File"
+        required: true
+    returns:
+      type: "Record"
+    errors:
+      - "FILE_TOO_LARGE"
+      - "UNSUPPORTED_FILE_TYPE"
+
+ui:
+  components:
+    - name: "UploadButton"
+      change_type: "new"
+      path: "frontend/src/components/UploadButton.tsx"
+  
+  accessibility:
+    keyboard_navigation: true
+    aria_labels:
+      - element: "upload-button"
+        label: "Upload file"
+  
+  i18n:
+    translatable_strings:
+      - key: "upload.button"
+        en: "Upload"
+
+observability:
+  metrics:
+    - name: "record_upload_total"
+      type: "counter"
+      labels: ["status"]
+    - name: "record_upload_duration_ms"
+      type: "histogram"
+
+testing:
+  unit_tests:
+    - file: "src/services/ingestion.test.ts"
+      tests: ["extractFields", "generateEntityId"]
+  e2e_tests:
+    - file: "playwright/tests/upload.spec.ts"
+      tests: ["upload invoice flow"]
+  coverage:
+    lines: 85
+    branches: 85
+
+rollout:
+  strategy: "instant"
+  monitoring:
+    key_metrics:
+      - metric: "record_upload_total"
+        threshold: "success_rate > 95%"
+
