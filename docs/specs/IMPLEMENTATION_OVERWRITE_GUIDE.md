@@ -651,7 +651,7 @@ test("file analysis is deterministic", async () => {
 
 ### FU-600: Advanced Search UI Update
 
-**Execute via:** `UI Workflow` with `feature_id=FU-600`
+**Execute via:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
 
 **Overwrite Checklist:**
 

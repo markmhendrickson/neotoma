@@ -6,8 +6,9 @@ feature_id = {{input:feature_id}}
 
 1. Read these authoritative documents first:
    - docs/context/index.md
-   - spec/features/{{input:feature_id}}.md
-   - features/{{input:feature_id}}.yaml
+   - docs/feature_units/standards/creating_feature_units.md (workflow context)
+   - docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md (or docs/feature_units/completed/{{input:feature_id}}/{{input:feature_id}}_spec.md if completed)
+   - docs/feature_units/in_progress/{{input:feature_id}}/manifest.yaml (or docs/feature_units/completed/{{input:feature_id}}/manifest.yaml if completed)
    - docs/feature_units/standards/feature_unit_spec.md
    - docs/feature_units/standards/execution_instructions.md
    - docs/feature_units/standards/error_protocol.md
@@ -43,7 +44,21 @@ feature_id = {{input:feature_id}}
 
 6. Apply error protocol (Class 1/2/3) only if bugs were encountered and fixed via step 5.
 
-7. Produce a final change summary:
+7. **Spec-to-Implementation Diff Checkpoint (CRITICAL):**
+
+   Before producing the final summary, the agent MUST:
+   
+   - Compare the implemented code against the spec
+   - List any ways implementation **intentionally diverged** from spec (even if small)
+   - For each divergence:
+     - Either update the spec to reflect the change (if divergence is intentional and correct)
+     - Or mark the divergence as a bug to be fixed (if divergence is unintentional)
+   - Present this diff to the user:
+     - "Implementation vs Spec Diff: [list of divergences]"
+     - "For each divergence, should I update the spec or fix the implementation? (spec/implementation/list)"
+   - **MUST NOT** proceed to final summary until spec and implementation are aligned (either by updating spec or fixing implementation)
+
+8. Produce a final change summary:
    - feature_id
    - files changed
    - risk

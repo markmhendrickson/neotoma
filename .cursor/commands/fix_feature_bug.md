@@ -5,8 +5,8 @@ Fix a bug in the Neotoma repo.
 1. Identify feature_id from error, path, or context.
 2. Load:
    - docs/context/index.md
-   - spec/features/<feature_id>.md
-   - features/<feature_id>.yaml
+   - docs/feature_units/in_progress/{{feature_id}}/{{feature_id}}_spec.md (or docs/feature_units/completed/{{feature_id}}/{{feature_id}}_spec.md if completed)
+   - docs/feature_units/in_progress/{{feature_id}}/manifest.yaml (or docs/feature_units/completed/{{feature_id}}/manifest.yaml if completed)
    - docs/feature_units/standards/error_protocol.md
    - docs/subsystems/i18n.md
    - docs/subsystems/accessibility.md
@@ -25,5 +25,6 @@ Fix a bug in the Neotoma repo.
    - reason
    - corrected files
    - tests added/updated
+
 
 

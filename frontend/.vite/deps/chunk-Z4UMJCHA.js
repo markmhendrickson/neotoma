@@ -3,7 +3,7 @@ import {
   createContextScope,
   useCallbackRef,
   useLayoutEffect2
-} from "./chunk-NCZN7ODK.js";
+} from "./chunk-HNRLCIXP.js";
 import {
   useComposedRefs
 } from "./chunk-JBZRCD6T.js";
@@ -20,8 +20,17 @@ import {
   __toESM
 } from "./chunk-DC5AMYBS.js";
 
+// node_modules/@radix-ui/react-direction/dist/index.mjs
+var React = __toESM(require_react(), 1);
+var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
+var DirectionContext = React.createContext(void 0);
+function useDirection(localDir) {
+  const globalDir = React.useContext(DirectionContext);
+  return localDir || globalDir || "ltr";
+}
+
 // node_modules/@radix-ui/react-popper/dist/index.mjs
-var React4 = __toESM(require_react(), 1);
+var React5 = __toESM(require_react(), 1);
 
 // node_modules/@floating-ui/utils/dist/floating-ui.utils.mjs
 var sides = ["top", "right", "bottom", "left"];
@@ -1632,7 +1641,7 @@ var computePosition2 = (reference, floating, options) => {
 };
 
 // node_modules/@floating-ui/react-dom/dist/floating-ui.react-dom.mjs
-var React = __toESM(require_react(), 1);
+var React2 = __toESM(require_react(), 1);
 var import_react = __toESM(require_react(), 1);
 var ReactDOM = __toESM(require_react_dom(), 1);
 var isClient = typeof document !== "undefined";
@@ -1698,7 +1707,7 @@ function roundByDPR(element, value) {
   return Math.round(value * dpr) / dpr;
 }
 function useLatestRef(value) {
-  const ref = React.useRef(value);
+  const ref = React2.useRef(value);
   index(() => {
     ref.current = value;
   });
@@ -1721,7 +1730,7 @@ function useFloating(options) {
     whileElementsMounted,
     open
   } = options;
-  const [data, setData] = React.useState({
+  const [data, setData] = React2.useState({
     x: 0,
     y: 0,
     strategy,
@@ -1729,19 +1738,19 @@ function useFloating(options) {
     middlewareData: {},
     isPositioned: false
   });
-  const [latestMiddleware, setLatestMiddleware] = React.useState(middleware);
+  const [latestMiddleware, setLatestMiddleware] = React2.useState(middleware);
   if (!deepEqual(latestMiddleware, middleware)) {
     setLatestMiddleware(middleware);
   }
-  const [_reference, _setReference] = React.useState(null);
-  const [_floating, _setFloating] = React.useState(null);
-  const setReference = React.useCallback((node) => {
+  const [_reference, _setReference] = React2.useState(null);
+  const [_floating, _setFloating] = React2.useState(null);
+  const setReference = React2.useCallback((node) => {
     if (node !== referenceRef.current) {
       referenceRef.current = node;
       _setReference(node);
     }
   }, []);
-  const setFloating = React.useCallback((node) => {
+  const setFloating = React2.useCallback((node) => {
     if (node !== floatingRef.current) {
       floatingRef.current = node;
       _setFloating(node);
@@ -1749,14 +1758,14 @@ function useFloating(options) {
   }, []);
   const referenceEl = externalReference || _reference;
   const floatingEl = externalFloating || _floating;
-  const referenceRef = React.useRef(null);
-  const floatingRef = React.useRef(null);
-  const dataRef = React.useRef(data);
+  const referenceRef = React2.useRef(null);
+  const floatingRef = React2.useRef(null);
+  const dataRef = React2.useRef(data);
   const hasWhileElementsMounted = whileElementsMounted != null;
   const whileElementsMountedRef = useLatestRef(whileElementsMounted);
   const platformRef = useLatestRef(platform2);
   const openRef = useLatestRef(open);
-  const update = React.useCallback(() => {
+  const update = React2.useCallback(() => {
     if (!referenceRef.current || !floatingRef.current) {
       return;
     }
@@ -1794,7 +1803,7 @@ function useFloating(options) {
       }));
     }
   }, [open]);
-  const isMountedRef = React.useRef(false);
+  const isMountedRef = React2.useRef(false);
   index(() => {
     isMountedRef.current = true;
     return () => {
@@ -1811,17 +1820,17 @@ function useFloating(options) {
       update();
     }
   }, [referenceEl, floatingEl, update, whileElementsMountedRef, hasWhileElementsMounted]);
-  const refs = React.useMemo(() => ({
+  const refs = React2.useMemo(() => ({
     reference: referenceRef,
     floating: floatingRef,
     setReference,
     setFloating
   }), [setReference, setFloating]);
-  const elements = React.useMemo(() => ({
+  const elements = React2.useMemo(() => ({
     reference: referenceEl,
     floating: floatingEl
   }), [referenceEl, floatingEl]);
-  const floatingStyles = React.useMemo(() => {
+  const floatingStyles = React2.useMemo(() => {
     const initialStyles = {
       position: strategy,
       left: 0,
@@ -1847,7 +1856,7 @@ function useFloating(options) {
       top: y
     };
   }, [strategy, transform, elements.floating, data.x, data.y]);
-  return React.useMemo(() => ({
+  return React2.useMemo(() => ({
     ...data,
     update,
     refs,
@@ -1916,12 +1925,12 @@ var arrow3 = (options, deps) => ({
 });
 
 // node_modules/@radix-ui/react-arrow/dist/index.mjs
-var React2 = __toESM(require_react(), 1);
-var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
+var React3 = __toESM(require_react(), 1);
+var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
 var NAME = "Arrow";
-var Arrow = React2.forwardRef((props, forwardedRef) => {
+var Arrow = React3.forwardRef((props, forwardedRef) => {
   const { children, width = 10, height = 5, ...arrowProps } = props;
-  return (0, import_jsx_runtime.jsx)(
+  return (0, import_jsx_runtime2.jsx)(
     Primitive.svg,
     {
       ...arrowProps,
@@ -1930,7 +1939,7 @@ var Arrow = React2.forwardRef((props, forwardedRef) => {
       height,
       viewBox: "0 0 30 10",
       preserveAspectRatio: "none",
-      children: props.asChild ? children : (0, import_jsx_runtime.jsx)("polygon", { points: "0,0 30,0 15,10" })
+      children: props.asChild ? children : (0, import_jsx_runtime2.jsx)("polygon", { points: "0,0 30,0 15,10" })
     }
   );
 });
@@ -1938,9 +1947,9 @@ Arrow.displayName = NAME;
 var Root = Arrow;
 
 // node_modules/@radix-ui/react-use-size/dist/index.mjs
-var React3 = __toESM(require_react(), 1);
+var React4 = __toESM(require_react(), 1);
 function useSize(element) {
-  const [size4, setSize] = React3.useState(void 0);
+  const [size4, setSize] = React4.useState(void 0);
   useLayoutEffect2(() => {
     if (element) {
       setSize({ width: element.offsetWidth, height: element.offsetHeight });
@@ -1975,38 +1984,38 @@ function useSize(element) {
 }
 
 // node_modules/@radix-ui/react-popper/dist/index.mjs
-var import_jsx_runtime2 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
 var POPPER_NAME = "Popper";
 var [createPopperContext, createPopperScope] = createContextScope(POPPER_NAME);
 var [PopperProvider, usePopperContext] = createPopperContext(POPPER_NAME);
 var Popper = (props) => {
   const { __scopePopper, children } = props;
-  const [anchor, setAnchor] = React4.useState(null);
-  return (0, import_jsx_runtime2.jsx)(PopperProvider, { scope: __scopePopper, anchor, onAnchorChange: setAnchor, children });
+  const [anchor, setAnchor] = React5.useState(null);
+  return (0, import_jsx_runtime3.jsx)(PopperProvider, { scope: __scopePopper, anchor, onAnchorChange: setAnchor, children });
 };
 Popper.displayName = POPPER_NAME;
 var ANCHOR_NAME = "PopperAnchor";
-var PopperAnchor = React4.forwardRef(
+var PopperAnchor = React5.forwardRef(
   (props, forwardedRef) => {
     const { __scopePopper, virtualRef, ...anchorProps } = props;
     const context = usePopperContext(ANCHOR_NAME, __scopePopper);
-    const ref = React4.useRef(null);
+    const ref = React5.useRef(null);
     const composedRefs = useComposedRefs(forwardedRef, ref);
-    const anchorRef = React4.useRef(null);
-    React4.useEffect(() => {
+    const anchorRef = React5.useRef(null);
+    React5.useEffect(() => {
       const previousAnchor = anchorRef.current;
       anchorRef.current = (virtualRef == null ? void 0 : virtualRef.current) || ref.current;
       if (previousAnchor !== anchorRef.current) {
         context.onAnchorChange(anchorRef.current);
       }
     });
-    return virtualRef ? null : (0, import_jsx_runtime2.jsx)(Primitive.div, { ...anchorProps, ref: composedRefs });
+    return virtualRef ? null : (0, import_jsx_runtime3.jsx)(Primitive.div, { ...anchorProps, ref: composedRefs });
   }
 );
 PopperAnchor.displayName = ANCHOR_NAME;
 var CONTENT_NAME = "PopperContent";
 var [PopperContentProvider, useContentContext] = createPopperContext(CONTENT_NAME);
-var PopperContent = React4.forwardRef(
+var PopperContent = React5.forwardRef(
   (props, forwardedRef) => {
     var _a, _b, _c, _d, _e, _f;
     const {
@@ -2026,9 +2035,9 @@ var PopperContent = React4.forwardRef(
       ...contentProps
     } = props;
     const context = usePopperContext(CONTENT_NAME, __scopePopper);
-    const [content, setContent] = React4.useState(null);
+    const [content, setContent] = React5.useState(null);
     const composedRefs = useComposedRefs(forwardedRef, (node) => setContent(node));
-    const [arrow4, setArrow] = React4.useState(null);
+    const [arrow4, setArrow] = React5.useState(null);
     const arrowSize = useSize(arrow4);
     const arrowWidth = (arrowSize == null ? void 0 : arrowSize.width) ?? 0;
     const arrowHeight = (arrowSize == null ? void 0 : arrowSize.height) ?? 0;
@@ -2090,11 +2099,11 @@ var PopperContent = React4.forwardRef(
     const arrowX = (_a = middlewareData.arrow) == null ? void 0 : _a.x;
     const arrowY = (_b = middlewareData.arrow) == null ? void 0 : _b.y;
     const cannotCenterArrow = ((_c = middlewareData.arrow) == null ? void 0 : _c.centerOffset) !== 0;
-    const [contentZIndex, setContentZIndex] = React4.useState();
+    const [contentZIndex, setContentZIndex] = React5.useState();
     useLayoutEffect2(() => {
       if (content) setContentZIndex(window.getComputedStyle(content).zIndex);
     }, [content]);
-    return (0, import_jsx_runtime2.jsx)(
+    return (0, import_jsx_runtime3.jsx)(
       "div",
       {
         ref: refs.setFloating,
@@ -2118,7 +2127,7 @@ var PopperContent = React4.forwardRef(
           }
         },
         dir: props.dir,
-        children: (0, import_jsx_runtime2.jsx)(
+        children: (0, import_jsx_runtime3.jsx)(
           PopperContentProvider,
           {
             scope: __scopePopper,
@@ -2127,7 +2136,7 @@ var PopperContent = React4.forwardRef(
             arrowX,
             arrowY,
             shouldHideArrow: cannotCenterArrow,
-            children: (0, import_jsx_runtime2.jsx)(
+            children: (0, import_jsx_runtime3.jsx)(
               Primitive.div,
               {
                 "data-side": placedSide,
@@ -2156,7 +2165,7 @@ var OPPOSITE_SIDE = {
   bottom: "top",
   left: "right"
 };
-var PopperArrow = React4.forwardRef(function PopperArrow2(props, forwardedRef) {
+var PopperArrow = React5.forwardRef(function PopperArrow2(props, forwardedRef) {
   const { __scopePopper, ...arrowProps } = props;
   const contentContext = useContentContext(ARROW_NAME, __scopePopper);
   const baseSide = OPPOSITE_SIDE[contentContext.placedSide];
@@ -2164,7 +2173,7 @@ var PopperArrow = React4.forwardRef(function PopperArrow2(props, forwardedRef) {
     // we have to use an extra wrapper because `ResizeObserver` (used by `useSize`)
     // doesn't report size as we'd expect on SVG elements.
     // it reports their bounding box which is effectively the largest path inside the SVG.
-    (0, import_jsx_runtime2.jsx)(
+    (0, import_jsx_runtime3.jsx)(
       "span",
       {
         ref: contentContext.onArrowChange,
@@ -2187,7 +2196,7 @@ var PopperArrow = React4.forwardRef(function PopperArrow2(props, forwardedRef) {
           }[contentContext.placedSide],
           visibility: contentContext.shouldHideArrow ? "hidden" : void 0
         },
-        children: (0, import_jsx_runtime2.jsx)(
+        children: (0, import_jsx_runtime3.jsx)(
           Root,
           {
             ...arrowProps,
@@ -2249,10 +2258,11 @@ var Content = PopperContent;
 var Arrow2 = PopperArrow;
 
 export {
+  useDirection,
   createPopperScope,
   Root2,
   Anchor,
   Content,
   Arrow2 as Arrow
 };
-//# sourceMappingURL=chunk-I5Z5BZWJ.js.map
+//# sourceMappingURL=chunk-Z4UMJCHA.js.map

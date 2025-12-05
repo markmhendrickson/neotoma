@@ -515,7 +515,12 @@ If a rule can be misinterpreted, formalize it. No ambiguity.
 9. **Insert Graph** → Transactional insert (record + entities + events + edges)
 10. **Emit Events** → Observability events for monitoring
 
-**OCR MUST be deterministic and consistent (same image → same text).**
+**OCR Requirements (Critical):**
+
+- OCR MUST be deterministic: same image → same text (no randomness, no model drift in MVP)
+- OCR models/versions MUST be pinned; updates require explicit testing
+- OCR failures or low-confidence regions MUST be surfaced explicitly in metadata without fabricating content
+- See `docs/subsystems/ingestion/ingestion.md` section 4.2 for implementation details
 
 ---
 

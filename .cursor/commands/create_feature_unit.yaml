@@ -1,31 +1,85 @@
 name: "Create New Feature Unit"
-description: "Scaffold a new Feature Unit: spec, manifest, DSL, test dirs."
+description: "Scaffold a new Feature Unit with interactive spec creation and dependency validation."
 prompt: |
-  Create a new Feature Unit with feature_id = {{input:feature_id}}.
-
-  Tasks:
-
-  1. Create:
-     - spec/features/{{input:feature_id}}.md (from template)
-     - features/{{input:feature_id}}.yaml (from manifest template)
-     - docs/ui/dsl/{{input:feature_id}}.yaml (empty DSL scaffold)
-     - tests/unit/features/{{input:feature_id}}/
-     - tests/integration/features/{{input:feature_id}}/
-     - tests/e2e/features/{{input:feature_id}}/
-     - tests/regression/features/{{input:feature_id}}/
+  You are creating a new Feature Unit with feature_id = {{input:feature_id}}.
   
-  2. Populate:
-     - Required fields
-     - TODO placeholders
-     - i18n + A11y entries
-     - metrics skeleton
-     - rollout + kill-switch
+  **CRITICAL: Follow the complete workflow in:** `docs/feature_units/standards/creating_feature_units.md`
   
-  3. Do NOT implement code yet—only produce scaffolds.
+  This command implements **Checkpoint 0** of the Feature Unit creation workflow.
 
-  4. Output:
+  Steps:
+
+  1. **Load required documents:**
+     - `docs/feature_units/standards/creating_feature_units.md` (workflow)
+     - `docs/feature_units/standards/feature_unit_spec.md` (spec template)
+     - `docs/feature_units/standards/manifest_template.yaml` (manifest template)
+     - `docs/specs/MVP_FEATURE_UNITS.md` (for dependency checking)
+
+  2. **Check for existing spec:**
+     - Check `docs/feature_units/completed/{{input:feature_id}}/{{input:feature_id}}_spec.md`
+     - Check `docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md`
+     - Check `docs/specs/MVP_FEATURE_UNITS.md` for MVP FU
+
+  3. **If spec exists:**
+     - Validate completeness using template checklist
+     - If complete → proceed to file structure creation
+     - If incomplete → prompt user to complete missing sections
+
+  4. **If spec does NOT exist:**
+     - **STOP** and ask user interactively for:
+       * Feature name and brief description
+       * Priority (P0/P1/P2/P3)
+       * Risk level (Low/Medium/High)
+       * User value
+       * Functional requirements (list)
+       * Non-functional requirements
+       * Affected subsystems
+       * Dependencies (list of feature_ids this requires)
+       * Schema changes (if any)
+       * API/MCP changes (if any)
+       * UI changes (if any)
+       * Testing strategy
+       * Observability plan
+
+  5. **After collecting input:**
+     - Generate complete spec following template
+     - Generate manifest following template
+     - Save to `docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md` and `manifest.yaml`
+
+  6. **Validate dependencies (CRITICAL):**
+     - Extract `dependencies.requires` from manifest
+     - For each dependency feature_id:
+       * Check `docs/specs/MVP_FEATURE_UNITS.md` for status
+       * Check `docs/feature_units/completed/` directories for completed status
+       * **REJECT if status is "⏳ Not Started" or missing**
+       * **WARN if status is "🔨 Partial"** (require user confirmation)
+       * Only proceed if all dependencies are ✅ Complete
+
+  7. **Create file structure:**
+     - `docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md`
+     - `docs/feature_units/in_progress/{{input:feature_id}}/manifest.yaml`
+     - `tests/unit/features/{{input:feature_id}}/` (directory)
+     - `tests/integration/features/{{input:feature_id}}/` (directory)
+     - `tests/e2e/features/{{input:feature_id}}/` (directory)
+     - `tests/regression/features/{{input:feature_id}}/` (directory)
+
+  8. **Do NOT implement code yet** — only produce scaffolds.
+
+  9. **Output:**
      - File tree created
-     - Next steps for developer
+     - Next steps: "If UI changes, proceed to Create Prototype → Prototype Review. Otherwise proceed to implementation using Run Feature Workflow"
+
+  **Dependency Validation Rules:**
+  - ✅ Allow: status `completed` or `✅ Complete`
+  - ⚠️ Warn but allow: status `🔨 Partial` (require user confirmation)
+  - ❌ REJECT: status `⏳ Not Started` or missing
+  
+  If rejected, output:
+  ```
+  ERROR: Cannot create {{input:feature_id}}. Required dependency FU-YYY is not yet implemented.
+  Please implement FU-YYY first, or remove the dependency if not actually required.
+  ```
 inputs:
   - name: feature_id
+    description: "The feature identifier (e.g., FU-2025-01-001)"
     type: string

@@ -9,8 +9,8 @@ prompt: |
   - docs/context/index.md
   - docs/ui/dsl_spec.md
   - docs/ui/design_constraints/{{input:feature_id}}.yaml (if present)
-  - spec/features/{{input:feature_id}}.md
-  - features/{{input:feature_id}}.yaml
+  - docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md (or docs/feature_units/completed/{{input:feature_id}}/{{input:feature_id}}_spec.md if completed)
+  - docs/feature_units/in_progress/{{input:feature_id}}/manifest.yaml (or docs/feature_units/completed/{{input:feature_id}}/manifest.yaml if completed)
   - docs/subsystems/i18n.md
   - docs/subsystems/accessibility.md
   - docs/feature_units/standards/execution_instructions.md

@@ -1,42 +1,35 @@
 "use client";
 import {
   VISUALLY_HIDDEN_STYLES
-} from "./chunk-BYUXGPIS.js";
-import {
-  clamp
-} from "./chunk-LSAGK3P7.js";
+} from "./chunk-KJ4VQ6GH.js";
 import {
   Anchor,
   Arrow,
   Content,
   Root2,
-  createPopperScope
-} from "./chunk-I5Z5BZWJ.js";
+  createPopperScope,
+  useDirection
+} from "./chunk-Z4UMJCHA.js";
+import {
+  createCollection
+} from "./chunk-SQROKAUX.js";
 import {
   Combination_default,
   FocusScope,
   hideOthers,
   useFocusGuards,
   useId
-} from "./chunk-CPL4JMMP.js";
-import {
-  createCollection
-} from "./chunk-7CTGJNWL.js";
+} from "./chunk-JGH5VZ4J.js";
 import {
   DismissableLayer,
   Portal,
-  useControllableState
-} from "./chunk-YIDGA4JZ.js";
-import {
-  useDirection
-} from "./chunk-U25F2AIW.js";
-import {
   Primitive,
   composeEventHandlers,
   createContextScope,
   useCallbackRef,
+  useControllableState,
   useLayoutEffect2
-} from "./chunk-NCZN7ODK.js";
+} from "./chunk-HNRLCIXP.js";
 import {
   composeRefs,
   useComposedRefs
@@ -57,6 +50,11 @@ import {
 // node_modules/@radix-ui/react-select/dist/index.mjs
 var React3 = __toESM(require_react(), 1);
 var ReactDOM = __toESM(require_react_dom(), 1);
+
+// node_modules/@radix-ui/number/dist/index.mjs
+function clamp(value, [min, max]) {
+  return Math.min(max, Math.max(min, value));
+}
 
 // node_modules/@radix-ui/react-select/node_modules/@radix-ui/react-slot/dist/index.mjs
 var React = __toESM(require_react(), 1);

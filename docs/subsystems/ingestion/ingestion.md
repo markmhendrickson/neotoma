@@ -82,12 +82,23 @@ flowchart TD
 - PDF (`.pdf`)
 - Images (`.jpg`, `.jpeg`, `.png`)
 - Text (`.txt`)
+- CSV/Spreadsheet (`.csv`, `.xlsx`) — row-level record creation
 
 **Future:**
 
-- Office docs (`.docx`, `.xlsx`)
+- Office docs (`.docx`)
 - Email (`.eml`, `.msg`)
 - HTML/Web content
+
+**Special Case: Chat Transcripts**
+
+Chat transcripts (e.g., logs exported from LLM apps like ChatGPT) require **non-deterministic interpretation** that violates the Truth Layer's determinism constraints. Per `docs/specs/GENERAL_REQUIREMENTS.md`:
+
+- MVP provides a **separate CLI tool** (outside the ingestion pipeline) that can:
+  - Non-deterministically convert raw chat exports into well-structured CSV/spreadsheet (with explicit columns and user-correctable fields)
+  - Feed the resulting CSV into the standard deterministic CSV ingestion path
+- Neotoma's Truth Layer ingestion pipeline never performs non-deterministic interpretation of chat content
+- See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-CSV CLI feature unit details
 
 ### 2.2 Validation Rules
 
@@ -203,6 +214,18 @@ async function performOCR(imageBuffer: Buffer): Promise<string> {
 ```
 
 **Determinism:** Tesseract is deterministic for same image + same version.
+
+**Critical MVP Constraints (per `docs/specs/GENERAL_REQUIREMENTS.md`):**
+
+- **No randomness:** Given the same input image/PDF, OCR output text MUST be identical across runs
+- **No model drift:** OCR models/versions are pinned; updates require explicit testing and version bump
+- **Explicit failure handling:** OCR failures or low-confidence regions MUST be surfaced explicitly in metadata without fabricating or inferring missing content
+
+**Implementation Requirements:**
+
+- Pin Tesseract.js version in `package.json`
+- Include OCR confidence scores in extraction metadata
+- For low-confidence regions (confidence < 70%), mark as `ocr_low_confidence: true` in metadata rather than dropping text
 
 ---
 

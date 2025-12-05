@@ -77,6 +77,7 @@ These documents are the **root of truth** for all Neotoma work:
 | Document                                                                  | Purpose                                                            | Audience                          |
 | ------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
 | [`MVP_OVERVIEW.md`](../specs/MVP_OVERVIEW.md)                             | Executive summary of Neotoma MVP                                   | Stakeholders, new team members    |
+| [`GENERAL_REQUIREMENTS.md`](../specs/GENERAL_REQUIREMENTS.md)             | High-level MVP ingestion + UI requirements                         | Product, implementation planning  |
 | [`ICP_PRIORITY_TIERS.md`](../specs/ICP_PRIORITY_TIERS.md)                 | Target user tiers, GTM strategy, revenue prioritization            | Product, GTM, planning            |
 | [`ICP_PROFILES.md`](../specs/ICP_PROFILES.md)                             | Detailed profiles for all ICPs (pain points, use cases, workflows) | Product, design, marketing, sales |
 | [`FUNCTIONAL_REQUIREMENTS.md`](../specs/FUNCTIONAL_REQUIREMENTS.md)       | Consolidated functional requirements                               | Product, planning                 |
@@ -142,12 +143,14 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/feature_units/standards/`
 
-| Document                                                                            | Purpose                                                           | Load When                                                  |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`feature_unit_spec.md`](../feature_units/standards/feature_unit_spec.md)           | Feature Unit definition, spec template, examples                  | Planning a new feature or reviewing Feature Unit structure |
-| [`manifest_template.yaml`](../feature_units/standards/manifest_template.yaml)       | YAML schema for manifests, i18n, A11y, metrics fields             | Creating a Feature Unit manifest                           |
-| [`execution_instructions.md`](../feature_units/standards/execution_instructions.md) | Feature Unit lifecycle, planning hierarchy, implementation flow   | Implementing a Feature Unit, understanding execution order |
-| [`error_protocol.md`](../feature_units/standards/error_protocol.md)                 | Error classification (Class 1/2/3), remediation, regression tests | Handling Feature Unit errors, debugging, or post-mortems   |
+| Document                                                                            | Purpose                                                                                   | Load When                                                  |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| [`release_workflow.md`](../feature_units/standards/release_workflow.md)             | **Release orchestration workflow** (multi-FU coordination, batching, integration testing) | **Planning/executing releases** (MVP = first release)      |
+| [`creating_feature_units.md`](../feature_units/standards/creating_feature_units.md) | **Complete workflow for creating new Feature Units** (4 checkpoints)                      | **Starting a new Feature Unit** — primary reference        |
+| [`feature_unit_spec.md`](../feature_units/standards/feature_unit_spec.md)           | Feature Unit definition, spec template, examples                                          | Planning a new feature or reviewing Feature Unit structure |
+| [`manifest_template.yaml`](../feature_units/standards/manifest_template.yaml)       | YAML schema for manifests, i18n, A11y, metrics fields                                     | Creating a Feature Unit manifest                           |
+| [`execution_instructions.md`](../feature_units/standards/execution_instructions.md) | Feature Unit lifecycle, planning hierarchy, implementation flow                           | Implementing an existing Feature Unit after spec approval  |
+| [`error_protocol.md`](../feature_units/standards/error_protocol.md)                 | Error classification (Class 1/2/3), remediation, regression tests                         | Handling Feature Unit errors, debugging, or post-mortems   |
 
 ### 2.5 UI Design System
 

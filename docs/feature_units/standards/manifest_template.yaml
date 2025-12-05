@@ -7,6 +7,20 @@ status: "draft"                           # draft | in_progress | review | compl
 priority: "p1"                            # p0 (critical) | p1 (high) | p2 (medium) | p3 (low)
 risk_level: "medium"                      # low | medium | high
 
+# Cross-cutting concern tags (used for scheduling and parallelization)
+tags:
+  - "schema"                              # schema | security | ui | ingestion | search | graph | auth | etc.
+  - "ingestion"
+
+# Kill switch / defer criteria
+kill_switch:
+  conditions:
+    - condition: "Dependency FU-XXX takes >2x estimated time"
+      action: "Defer to next release"
+    - condition: "Critical bug discovered in related subsystem"
+      action: "Pause until bug fixed"
+  # If any condition is met during execution, agent MUST stop and ask user: defer, pause, or continue?
+
 # Metadata
 metadata:
   title: "Feature Name"
@@ -116,9 +130,9 @@ state_machines:
         to: "failed"
         event: "error"
 
-# Observability
+# Observability (REQUIRED: At least one metric or log pattern that would catch this FU misbehaving)
 observability:
-  # Metrics
+  # Metrics (at least one required)
   metrics:
     - name: "record_upload_total"
       type: "counter"                    # counter | gauge | histogram
