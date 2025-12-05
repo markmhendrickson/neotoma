@@ -303,6 +303,38 @@ This document does NOT cover:
 
 ---
 
+#### FU-106: Chat Transcript to CSV CLI Tool
+
+- **Priority:** P1
+- **Risk:** Low
+- **Complexity:** Medium
+- **Dependencies:** None (standalone CLI, outside Truth Layer)
+- **Deliverables:**
+  - CLI tool for converting chat transcripts (e.g., ChatGPT exports) to structured CSV
+  - Support for common export formats (JSON, HTML, text)
+  - User-correctable field mapping (interactive mode)
+  - Deterministic CSV output from normalized transcript
+  - Documentation and usage examples
+- **Constraints (per GENERAL_REQUIREMENTS.md):**
+  - **MUST be separate from Truth Layer** (non-deterministic interpretation prohibited in ingestion pipeline)
+  - **MAY use LLMs or heuristics** (not constrained by Truth Layer determinism requirements)
+  - **MUST output well-structured CSV** that can be ingested deterministically
+  - **SHOULD support user correction/review** before final CSV export
+- **Tests:**
+  - Unit: Transcript parsing for each supported format
+  - Integration: Full CLI workflow (transcript → CSV → validate)
+  - E2E: CLI → Neotoma ingestion pipeline (CSV ingestion)
+- **Acceptance:** Can convert representative chat exports to CSV with >80% field accuracy
+- **Status:** ⏳ Not Started
+- **Implementation Notes:**
+  - CLI runs independently from Neotoma server (Node.js script in `scripts/` or separate package)
+  - Can use OpenAI/Anthropic APIs for interpretation (outside Truth Layer)
+  - Output CSV follows standard ingestion format (columns: date, type, description, metadata)
+  - See `docs/specs/GENERAL_REQUIREMENTS.md` for motivation and requirements
+  - Users run: `npm run chat-to-csv -- input.json output.csv`
+
+---
+
 ### Phase 2: MCP Layer (Application Layer)
 
 **Goal:** AI-safe access to truth via MCP actions.

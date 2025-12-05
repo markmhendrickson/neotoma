@@ -19,7 +19,8 @@ feature_id = {{input:feature_id}}
 
 ## Workflow
 
-1. Load or create spec/features/{{input:feature_id}}.md.
+1. Load or create spec at docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md.
+   - Use `Create New Feature Unit` command first if spec doesn't exist
    - Add ingestion goals, invariants, edge cases, limits.
 
 2. Check or create a state machine entry in the manifest.
@@ -63,5 +64,6 @@ feature_id = {{input:feature_id}}
 ## Inputs
 
 - `feature_id` (string): The feature identifier
+
 
 

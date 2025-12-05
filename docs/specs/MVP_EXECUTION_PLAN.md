@@ -4,6 +4,14 @@ _(Strategic Decision + Tactical Execution for Cursor Development)_
 
 ---
 
+**Note:** This document describes the execution plan for **MVP (Release v1.0.0)**. For the canonical **Release workflow pattern** that applies to MVP and all future releases, see [`docs/feature_units/standards/release_workflow.md`](../feature_units/standards/release_workflow.md).
+
+**Use this document for:** MVP-specific strategic decisions, tactical execution details, and historical context.
+
+**Use release_workflow.md for:** Understanding the general Release orchestration pattern (multi-FU coordination, dependency resolution, batching, integration testing) that MVP follows.
+
+---
+
 ## Purpose
 
 This document provides the **strategic decision** (build on top of existing implementation) and **tactical execution plan** for building Neotoma MVP in Cursor, specifying when to use **manual development** (human developer) vs **cloud agents** (Cursor AI), sequencing work appropriately, and referencing Cursor commands for each task.
@@ -182,30 +190,38 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 
 ## Cursor Commands Reference
 
+**Complete Feature Unit Creation Workflow:** See `docs/feature_units/standards/creating_feature_units.md` for detailed workflow with 4 interactive checkpoints.
+
 ### Available Commands
 
-| Command                        | Use Case                                               | When to Use                            |
-| ------------------------------ | ------------------------------------------------------ | -------------------------------------- |
-| **Create New Feature Unit**    | Scaffold FU spec, manifest, DSL, test dirs             | Starting any new Feature Unit          |
-| **Run Feature Workflow**       | Implement or modify a Feature Unit                     | Implementing any FU (primary command)  |
-| **Fix Feature Bug**            | Classify and fix bugs using error protocol             | When tests fail or bugs discovered     |
-| **Modify Subsystem**           | Safely modify subsystems (schema, ingestion, etc.)     | When changing subsystem architecture   |
-| **Ingestion Flow Development** | Design/modify ingestion pipelines                      | FU-100, FU-205, ingestion-related work |
-| **UI Workflow**                | Generate/modify UI using DSL → Design → Implementation | All UI Feature Units (FU-300+)         |
+| Command                        | Use Case                                             | When to Use                                                                               |
+| ------------------------------ | ---------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Create New Feature Unit**    | Scaffold FU spec, manifest, test dirs (Checkpoint 0) | Starting any new Feature Unit                                                             |
+| **Create Prototype**           | Build interactive prototype (after Checkpoint 0)     | After spec + UX complete, before implementation (UI FUs only)                             |
+| **Run Feature Workflow**       | Implement Feature Unit after prototype approval      | Implementing any FU (primary command)                                                     |
+| **Final Review**               | Present implementation for approval (Checkpoint 3)   | After implementation, before merge                                                        |
+| **Fix Feature Bug**            | Classify and fix bugs using error protocol           | When tests fail or bugs discovered                                                        |
+| **Modify Subsystem**           | Safely modify subsystems (schema, ingestion, etc.)   | When changing subsystem architecture                                                      |
+| **Ingestion Flow Development** | Design/modify ingestion pipelines                    | FU-100, FU-205, ingestion-related work                                                    |
+| **UI Workflow**                | (Legacy: Use new checkpoint-based workflow instead)  | Replaced by Create New Feature Unit (spec + UX) → Create Prototype → Run Feature Workflow |
 
 ### Command Usage Patterns
 
-**For new Feature Unit:**
+**For new Feature Unit (autonomous with checkpoints):**
 
-1. Use **Create New Feature Unit** to scaffold
-2. Use **Run Feature Workflow** to implement
-3. Use **Fix Feature Bug** if issues arise
+1. Use **Create New Feature Unit** → interactive spec + UX creation (Checkpoint 0, includes UX questions if UI changes present)
+2. If UI changes: Use **Create Prototype** → build prototype (autonomous)
+3. If UI changes: Review and approve prototype (Checkpoint 1)
+4. Use **Run Feature Workflow** → implement after spec/prototype approval
+5. Use **Final Review** → present for approval before merge (Checkpoint 2)
 
 **For UI Feature Units:**
 
-1. Use **Create New Feature Unit** to scaffold
-2. Use **UI Workflow** for DSL → Design → Implementation
-3. Use **Run Feature Workflow** for backend integration
+1. Use **Create New Feature Unit** → collect spec + UX requirements together (Checkpoint 0)
+2. Use **Create Prototype** → build interactive prototype with mocked APIs (autonomous)
+3. Review and approve prototype (Checkpoint 1)
+4. Use **Run Feature Workflow** → implement after prototype approval
+5. Use **Final Review** → present for final approval (Checkpoint 2)
 
 **For subsystem changes:**
 
@@ -214,8 +230,15 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 
 **For ingestion work:**
 
-1. Use **Ingestion Flow Development** for ingestion-specific FUs
-2. Use **Run Feature Workflow** for related services
+1. Use **Create New Feature Unit** → dependency validation → **Run Feature Workflow**
+2. Use **Ingestion Flow Development** for ingestion-specific planning (if needed)
+
+**Important Notes:**
+
+- **All Feature Unit creation includes dependency validation** — creation is rejected if required dependencies are not yet implemented (status must be ✅ Complete)
+- **UI Feature Units** must follow: Create New Feature Unit (spec + UX) → Create Prototype → Review → Run Feature Workflow → Final Review
+- **Non-UI Feature Units** follow: Create New Feature Unit → Run Feature Workflow → Final Review
+- The legacy **UI Workflow** command is replaced by the new checkpoint-based workflow
 
 ---
 
@@ -241,7 +264,7 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 
 - **Priority:** **P0 BLOCKER** — MVP cannot launch until LLM extraction removed
 - **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
-- **Cursor Command:** `Modify Subsystem` with `subsystem=ingestion` → `Run Feature Workflow` with `feature_id=FU-100`
+- **Cursor Command:** `Create New Feature Unit` → `Modify Subsystem` with `subsystem=ingestion` → `Run Feature Workflow` with `feature_id=FU-100` → `Final Review`
 - **Manual Time:** 2-3h (rule-based detection pattern review, extraction regex approval)
 - **Agent Time:** 8-10h (remove LLM code, implement rule-based detection, implement regex extractors, update fallback)
 - **Risk:** High (core extraction logic, breaking change, MVP launch blocker)
@@ -249,11 +272,13 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 
 **Steps:**
 
-1. **Human:** Review rule-based schema detection patterns (per `docs/subsystems/ingestion/ingestion.md` section 5 and `docs/subsystems/record_types.md` section 7)
-2. **Human:** Approve regex patterns for field extraction per schema type (per `docs/subsystems/record_types.md` section 4)
-3. **Agent:** Use `Modify Subsystem` to plan ingestion changes
-4. **Human:** Approve removal of OpenAI LLM calls
-5. **Agent:** Use `Run Feature Workflow` to implement:
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-100` → dependency validation passes (FU-000 ✅)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Human:** Review rule-based schema detection patterns (per `docs/subsystems/ingestion/ingestion.md` section 5 and `docs/subsystems/record_types.md` section 7)
+4. **Human:** Approve regex patterns for field extraction per schema type (per `docs/subsystems/record_types.md` section 4)
+5. **Agent:** Use `Modify Subsystem` to plan ingestion changes
+6. **Human:** Approve removal of OpenAI LLM calls
+7. **Agent:** Use `Run Feature Workflow` to implement:
 
    - Remove **ALL** `openai.chat.completions.create()` calls from `src/services/file_analysis.ts`
    - Implement multi-pattern schema detection (2+ patterns required, per `record_types.md`)
@@ -313,9 +338,10 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 
    **5g. Agent:** Verify code uses application-level types only (grep for schema family names in code logic)
 
-6. **Human:** Review extraction logic (high-risk, core functionality)
-7. **Agent:** Write tests (determinism tests per acceptance criteria below)
-8. **Human:** Final approval
+8. **Agent:** Write tests (determinism tests per acceptance criteria below)
+9. **Human:** Review extraction logic (high-risk, core functionality)
+10. **Agent:** Use `Final Review` to present implementation for approval (Checkpoint 3)
+11. **Human:** Final approval and merge
 
 **Acceptance Criteria (MUST PASS FOR MVP LAUNCH):**
 
@@ -441,23 +467,72 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Expected Results:** All verification commands should pass with zero violations (except comments/docs).
 
-#### FU-101: Entity Resolution
+**Schema Catalog Expansion (per `docs/specs/GENERAL_REQUIREMENTS.md`):**
 
-- **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
-- **Cursor Command:** `Run Feature Workflow` with `feature_id=FU-101`
-- **Manual Time:** 1.5-2.5h (spec design, migration review, algorithm approval)
-- **Agent Time:** 6-8h (implementation, tests)
-- **Risk:** High (new table, deterministic IDs, migration)
-- **Dependencies:** FU-100 ✅
+During FU-100 implementation, the initial schema catalog should be fleshed out **within Tier 1 (and selectively Tier 2)** by:
+
+- Deriving additional Tier 1 schema types from representative real-world sample files (e.g., files in user import directories)
+- Adding only high-leverage Tier 2 schemas clearly needed for MVP ICPs
+- Always preserving determinism, explainability, and schema-first constraints
+
+This expansion happens as part of FU-100 implementation (add new types to `record_types.ts`, add detection patterns, add extraction rules, add tests). New schemas beyond initial expansion are added via separate Feature Units post-MVP.
+
+---
+
+#### FU-106: Chat Transcript to CSV CLI Tool
+
+- **Execution:** Mostly Agent (Human spec review → Agent implementation → Human review)
+- **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
+- **Manual Time:** 1-1.5h (spec design, review output format)
+- **Agent Time:** 4-6h (CLI implementation, format parsers, tests)
+- **Risk:** Low (standalone tool, outside Truth Layer)
+- **Dependencies:** None (can be developed in parallel)
 
 **Steps:**
 
-1. **Human:** Review/approve entity ID generation algorithm (hash-based deterministic)
-2. **Agent:** Use `Create New Feature Unit` → `Run Feature Workflow`
-3. **Agent:** Implement entity table, normalization, ID generation
-4. **Human:** Review migration script (high-risk)
-5. **Agent:** Write tests (unit, integration, property-based)
-6. **Human:** Final review and approval
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-106` → no dependencies
+2. **Agent:** Collect spec interactively (Checkpoint 0): CLI for chat transcript → CSV conversion
+3. **Human:** Review spec and output CSV format requirements
+4. **Agent:** Use `Run Feature Workflow` to implement:
+   - CLI script in `scripts/chat-to-csv.ts` (Node.js)
+   - Parsers for common export formats (ChatGPT JSON, HTML, text)
+   - LLM-based interpretation (OpenAI/Anthropic API calls allowed, outside Truth Layer)
+   - Interactive field mapping/correction mode
+   - CSV output in standard ingestion format
+   - Documentation and usage examples
+5. **Agent:** Write tests:
+   - Unit: Format parsers for each supported export type
+   - Integration: Full CLI workflow (transcript → CSV → validate structure)
+   - E2E: CLI output → Neotoma CSV ingestion (verify deterministic ingestion)
+6. **Human:** Review CLI implementation at Checkpoint 2 (Final Review)
+7. **Agent:** Update after human feedback
+8. **Human:** Approve for merge
+
+**Output:** Standalone CLI tool that users run: `npm run chat-to-csv -- input.json output.csv`
+
+**Rationale:** Chat transcripts require non-deterministic interpretation that violates Truth Layer constraints. Separating this into a pre-processing CLI preserves Truth Layer determinism while enabling chat transcript ingestion.
+
+---
+
+#### FU-101: Entity Resolution
+
+- **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
+- **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
+- **Manual Time:** 1.5-2.5h (spec design, migration review, algorithm approval)
+- **Agent Time:** 6-8h (implementation, tests)
+- **Risk:** High (new table, deterministic IDs, migration)
+- **Dependencies:** FU-100 ✅ (must be completed first)
+
+**Steps:**
+
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-101` → dependency validation (FU-100 must be ✅ Complete)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Human:** Review/approve entity ID generation algorithm (hash-based deterministic)
+4. **Agent:** Use `Run Feature Workflow` to implement entity table, normalization, ID generation
+5. **Human:** Review migration script (high-risk)
+6. **Agent:** Write tests (unit, integration, property-based)
+7. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+8. **Human:** Final approval and merge
 
 **Schema Compliance Requirements:**
 
@@ -469,20 +544,22 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 #### FU-102: Event Generation
 
 - **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
-- **Cursor Command:** `Run Feature Workflow` with `feature_id=FU-102`
+- **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
 - **Manual Time:** 1.5-2.5h (spec design, migration review)
 - **Agent Time:** 5-7h (implementation, tests)
 - **Risk:** Medium-High (new table, date extraction logic)
-- **Dependencies:** FU-100 ✅
+- **Dependencies:** FU-100 ✅ (must be completed first)
 
 **Steps:**
 
-1. **Human:** Review/approve event type mapping (date_issued → InvoiceIssued)
-2. **Agent:** Use `Create New Feature Unit` → `Run Feature Workflow`
-3. **Agent:** Implement events table, date extraction, event ID generation
-4. **Human:** Review migration script
-5. **Agent:** Write tests
-6. **Human:** Final review
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-102` → dependency validation (FU-100 must be ✅ Complete)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Human:** Review/approve event type mapping (date_issued → InvoiceIssued)
+4. **Agent:** Use `Run Feature Workflow` to implement events table, date extraction, event ID generation
+5. **Human:** Review migration script
+6. **Agent:** Write tests
+7. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+8. **Human:** Final approval and merge
 
 **Schema Compliance Requirements:**
 
@@ -494,19 +571,21 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 #### FU-103: Graph Builder Hardening
 
 - **Execution:** Hybrid (Agent implementation → Human review)
-- **Cursor Command:** `Run Feature Workflow` with `feature_id=FU-103`
+- **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
 - **Manual Time:** 1.5-2h (integrity logic review)
 - **Agent Time:** 3-4h (transaction wrapping, integrity checks)
 - **Risk:** High (data integrity)
-- **Dependencies:** FU-101, FU-102
+- **Dependencies:** FU-101, FU-102 (both must be ✅ Complete)
 
 **Steps:**
 
-1. **Agent:** Use `Run Feature Workflow` to harden graph builder
-2. **Agent:** Add transactional inserts, orphan detection, cycle detection
-3. **Human:** Review integrity enforcement logic
-4. **Agent:** Write property-based tests (no orphans, no cycles)
-5. **Human:** Final review
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-103` → dependency validation (FU-101, FU-102 must be ✅ Complete)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Agent:** Use `Run Feature Workflow` to harden graph builder (transactional inserts, orphan detection, cycle detection)
+4. **Human:** Review integrity enforcement logic
+5. **Agent:** Write property-based tests (no orphans, no cycles)
+6. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+7. **Human:** Final approval and merge
 
 #### FU-105: Deterministic Search
 
@@ -577,44 +656,47 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 #### FU-303: Timeline View
 
 - **Execution:** Cloud Agent (UI pattern established)
-- **Cursor Command:** `UI Workflow` with `feature_id=FU-303`
-- **Manual Time:** 0.5-1h (UX review)
-- **Agent Time:** 5-6h (component, virtualization, tests)
+- **Cursor Command:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
+- **Manual Time:** 0.5-1h (UX input, prototype review)
+- **Agent Time:** 5-6h (prototype, component, virtualization, tests)
 - **Risk:** Medium (UI complexity)
-- **Dependencies:** FU-102 (events must exist)
+- **Dependencies:** FU-102 ✅ (events must exist and be completed)
 
 **Steps:**
 
-1. **Agent:** Use `Create New Feature Unit` → `UI Workflow`
-2. **Agent:** Generate DSL → Design → Implementation
-3. **Agent:** Implement TimelineView component with virtualization
-4. **Human:** Review UX (chronological sorting, date grouping)
-5. **Agent:** Write component + E2E tests
-6. **Human:** Final approval
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-303` → dependency validation (FU-102 must be ✅ Complete)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Agent:** Use `Create Prototype` to build interactive prototype with mocked APIs (autonomous, after Checkpoint 0)
+4. **Human:** Review and approve prototype (Checkpoint 1) — chronological sorting, date grouping, interaction patterns
+5. **Agent:** Use `Run Feature Workflow` to implement TimelineView component with virtualization
+6. **Agent:** Write component + E2E tests
+7. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+8. **Human:** Final approval and merge
 
 #### FU-304: File Upload UI
 
 - **Execution:** Cloud Agent (refactoring + enhancement)
-- **Cursor Command:** `UI Workflow` with `feature_id=FU-304`
-- **Manual Time:** 0.5-1h (bulk upload UX review)
-- **Agent Time:** 4-5h (refactor + bulk upload features)
+- **Cursor Command:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
+- **Manual Time:** 0.5-1h (UX input, prototype review)
+- **Agent Time:** 4-5h (prototype, refactor + bulk upload features)
 - **Risk:** Medium (bulk upload complexity)
-- **Dependencies:** FU-205 ✅
+- **Dependencies:** FU-205 ✅ (must be completed first)
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to refactor upload from ChatPanel
-2. **Agent:** Create dedicated upload page with drag-drop
-3. **Agent:** Add bulk upload (multiple files, folder import)
-4. **Agent:** Add upload queue management, progress tracking, resume on failure
-5. **Human:** Review bulk upload UX
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-304` → dependency validation (FU-205 must be ✅ Complete)
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Agent:** Use `Create Prototype` to build interactive prototype with mocked APIs (autonomous, after Checkpoint 0)
+4. **Human:** Review and approve prototype (Checkpoint 1) — bulk upload flow, queue management, progress tracking
+5. **Agent:** Use `Run Feature Workflow` to refactor upload from ChatPanel, create dedicated upload page, add bulk upload features
 6. **Agent:** Write tests (component, E2E with 50+ files)
-7. **Human:** Final approval
+7. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+8. **Human:** Final approval and merge
 
 #### FU-305: Dashboard View
 
 - **Execution:** Cloud Agent (straightforward aggregation UI)
-- **Cursor Command:** `UI Workflow` with `feature_id=FU-305`
+- **Cursor Command:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
 - **Manual Time:** 0.25-0.5h (quick review)
 - **Agent Time:** 3-4h (dashboard component, stats widgets)
 - **Risk:** Low
@@ -623,7 +705,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create dashboard
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement stats widgets, recent records, quick actions
 3. **Human:** Quick review
 4. **Agent:** Write tests
@@ -641,7 +723,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create settings page
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement locale selector, theme toggle, integrations list
 3. **Human:** Quick review
 4. **Agent:** Write tests
@@ -666,7 +748,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create welcome screen
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement welcome message, value prop, CTA
 3. **Human:** Review copy (activation-focused)
 4. **Agent:** Write tests
@@ -683,7 +765,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create processing indicator
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement step-by-step progress, live regions
 3. **Human:** Review UX (no black box)
 4. **Agent:** Write tests
@@ -700,7 +782,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create extraction results
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement field display, entity highlighting, CTAs
 3. **Human:** Review UX (activation metrics focus)
 4. **Agent:** Write tests
@@ -751,7 +833,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to create provider connectors
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement catalog, connect buttons, OAuth flow (Gmail only)
 3. **Human:** Review OAuth flow (Gmail)
 4. **Agent:** Write tests
@@ -779,7 +861,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to enhance search
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Add filter panel, search mode toggle, auto-complete
 3. **Human:** Review UX
 4. **Agent:** Write tests
@@ -798,20 +880,24 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 #### FU-700: Authentication UI
 
 - **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
-- **Cursor Command:** `Run Feature Workflow` with `feature_id=FU-700`
-- **Manual Time:** 1.5-2h (auth security review)
-- **Agent Time:** 4-5h (Supabase Auth integration, forms)
+- **Cursor Command:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
+- **Manual Time:** 1.5-2h (UX input, prototype review, auth security review)
+- **Agent Time:** 4-5h (prototype, Supabase Auth integration, forms)
 - **Risk:** High (security)
 - **Dependencies:** None
 
 **Steps:**
 
-1. **Human:** Review auth spec (Supabase Auth integration)
-2. **Agent:** Use `Create New Feature Unit` → `Run Feature Workflow`
-3. **Agent:** Implement signup/signin forms, password reset, OAuth
-4. **Human:** Review security (session management, token validation)
-5. **Agent:** Write tests (integration, E2E)
-6. **Human:** Final approval
+1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-700` → dependency validation passes
+2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
+3. **Human:** Review auth spec (Supabase Auth integration)
+4. **Agent:** Use `Create Prototype` to build interactive prototype with mocked APIs (autonomous, after Checkpoint 0)
+5. **Human:** Review and approve prototype (Checkpoint 1) — auth flows, security patterns
+6. **Agent:** Use `Run Feature Workflow` to implement signup/signin forms, password reset, OAuth
+7. **Human:** Review security (session management, token validation)
+8. **Agent:** Write tests (integration, E2E)
+9. **Agent:** Use `Final Review` to present implementation (Checkpoint 2)
+10. **Human:** Final approval and merge
 
 #### FU-701: RLS Implementation
 
@@ -949,7 +1035,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to enhance error handling
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Add error boundary, retry mechanisms
 3. **Human:** Quick review
 4. **Agent:** Write tests
@@ -967,7 +1053,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to add loading states
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement skeleton loaders, consistent spinners
 3. **Human:** Quick review
 4. **Agent:** Write tests
@@ -985,7 +1071,7 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Steps:**
 
-1. **Agent:** Use `UI Workflow` to add empty states
+1. **Agent:** Use `Create New Feature Unit` → `Create Prototype` → `Run Feature Workflow` (following new workflow)
 2. **Agent:** Implement empty states for all views
 3. **Human:** Quick review
 4. **Agent:** Write tests
@@ -1241,12 +1327,13 @@ grep -r "extraction_metadata" src/services/ | grep -E "unknown_fields|warnings"
 
 **Cursor Commands:**
 
-- `.cursor/commands/create_feature_unit.md` — Scaffold new FU
-- `.cursor/commands/run_feature_workflow.md` — Implement FU
-- `.cursor/commands/ui_workflow.md` — UI development
+- `.cursor/commands/create_feature_unit.md` — Scaffold new FU with spec + UX (Checkpoint 0, includes UX if UI changes)
+- `.cursor/commands/create_prototype.md` — Build interactive prototype (after Checkpoint 0, UI FUs only)
+- `.cursor/commands/run_feature_workflow.md` — Implement FU after spec/prototype approval
+- `.cursor/commands/final_review.md` — Present implementation for approval (Checkpoint 2)
 - `.cursor/commands/fix_feature_bug.md` — Bug fixing
 - `.cursor/commands/modify_subsystem.md` — Subsystem changes
-- `.cursor/commands/ingestion_flow.md` — Ingestion work
+- `.cursor/commands/ingestion_flow.md` — Ingestion work planning
 
 **Standards:**
 
@@ -1288,9 +1375,11 @@ Load when:
 
 ### Forbidden Patterns
 
-- Starting implementation without spec (use `Create New Feature Unit` first)
-- Skipping human review for high-risk FUs
-- Parallelizing dependent FUs
+- Starting implementation without spec (use `Create New Feature Unit` first — includes dependency validation)
+- Creating Feature Units with unimplemented dependencies (validation will reject)
+- Skipping UX input and prototype for UI Feature Units (UX collected in Checkpoint 0, then Create Prototype → Review)
+- Skipping human review for high-risk FUs (specs, migrations, security)
+- Parallelizing dependent FUs (wait for dependencies to be ✅ Complete)
 - Using manual development for boilerplate work (use agents)
 - Launching with post-MVP features enabled (semantic search, Plaid)
 - **Preserving non-compliant code** (LLM extraction, custom types, semantic search)

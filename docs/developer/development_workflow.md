@@ -76,7 +76,48 @@ hotfix/critical-issue-description
 
 ## Development Workflow
 
-### Step 1: Create Feature Branch
+### Step 1: Create Feature Branch (Worktree Recommended)
+
+**Recommended: Use Git Worktrees**
+
+Each Feature Unit should be developed in its own worktree for isolation and parallel development:
+
+```bash
+# From main repo root
+cd /path/to/neotoma
+
+# Ensure dev is up to date
+git fetch origin
+git checkout dev
+git pull origin dev
+
+# Create worktree for this Feature Unit (creates branch from current branch, which should be dev)
+git worktree add ../neotoma-FU-XXX -b feature/FU-XXX-short-description
+
+# Navigate to worktree
+cd ../neotoma-FU-XXX
+
+# Verify branch is based on dev
+git branch --show-current  # Should show feature/FU-XXX-short-description
+git log --oneline -1       # Should show latest dev commit
+
+# Setup worktree environment (copies .env files)
+npm run copy:env || node scripts/copy-env-to-worktree.js
+
+# Install dependencies in worktree
+npm install
+
+# Push branch to remote
+git push -u origin feature/FU-XXX-short-description
+```
+
+**Benefits of Worktrees:**
+- **Isolation:** Each Feature Unit has its own `node_modules`, `.env`, and build artifacts
+- **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
+- **Clean Context Switching:** Each worktree is independent
+- **Environment Management:** Automatic `.env` copying via `scripts/copy-env-to-worktree.js`
+
+**Alternative: Traditional Branching (if not using worktrees)**
 
 ```bash
 # Ensure you're on dev and up to date
@@ -89,6 +130,8 @@ git checkout -b feature/FU-XXX-short-description
 # Push to remote (sets upstream)
 git push -u origin feature/FU-XXX-short-description
 ```
+
+**Note:** See `.cursor/rules/worktree_env.md` for worktree environment setup details.
 
 ### Step 2: Implement Feature Unit
 
@@ -272,6 +315,20 @@ FU-XXX: Feature Description
 - Feature Unit ID preserved in commit message
 
 **After Merge:**
+
+**If using worktree:**
+```bash
+# From main repo root
+git worktree remove ../neotoma-FU-XXX
+# Or if worktree still has uncommitted changes:
+git worktree remove --force ../neotoma-FU-XXX
+
+# The branch will be automatically deleted from remote after merge
+# If you need to delete local branch tracking:
+git branch -d feature/FU-XXX-short-description
+```
+
+**If using traditional branching:**
 ```bash
 # Delete local branch
 git checkout dev
@@ -353,10 +410,12 @@ Load when:
 
 1. **Always branch from `dev`** — Never from `main` (except hotfixes)
 2. **One Feature Unit per branch** — Keep changes atomic
-3. **Reference Feature Unit ID** — In commit messages and PR titles
-4. **Follow commit message format** — Include "References:" line
-5. **Verify tests pass** — Before creating PR
-6. **Update documentation** — If patterns or architecture change
+3. **Use worktrees for isolation** — Each Feature Unit should have its own worktree when possible
+4. **Setup worktree environment** — Run `npm run copy:env` or `node scripts/copy-env-to-worktree.js` after creating worktree
+5. **Reference Feature Unit ID** — In commit messages and PR titles
+6. **Follow commit message format** — Include "References:" line
+7. **Verify tests pass** — Before creating PR
+8. **Update documentation** — If patterns or architecture change
 
 ### Forbidden Patterns
 
@@ -366,4 +425,5 @@ Load when:
 - Skipping code review
 - Merging without tests passing
 - Committing secrets or API keys
+
 

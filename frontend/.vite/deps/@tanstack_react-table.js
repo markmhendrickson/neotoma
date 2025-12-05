@@ -102,7 +102,7 @@ function getMemoOptions(tableOptions, debugLevel, key, onChange) {
       var _tableOptions$debugAl;
       return (_tableOptions$debugAl = tableOptions == null ? void 0 : tableOptions.debugAll) != null ? _tableOptions$debugAl : tableOptions[debugLevel];
     },
-    key,
+    key: false,
     onChange
   };
 }

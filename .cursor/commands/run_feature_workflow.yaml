@@ -7,8 +7,9 @@ prompt: |
 
   1. Read these authoritative documents first:
      - docs/context/index.md
-     - spec/features/{{input:feature_id}}.md
-     - features/{{input:feature_id}}.yaml
+     - docs/feature_units/standards/creating_feature_units.md (workflow context)
+     - docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md (or docs/feature_units/completed/{{input:feature_id}}/{{input:feature_id}}_spec.md if completed)
+     - docs/feature_units/in_progress/{{input:feature_id}}/manifest.yaml (or docs/feature_units/completed/{{input:feature_id}}/manifest.yaml if completed)
      - docs/feature_units/standards/feature_unit_spec.md
      - docs/feature_units/standards/execution_instructions.md
      - docs/feature_units/standards/error_protocol.md

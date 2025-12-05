@@ -60,6 +60,21 @@ Neotoma uses a **two-tier system** to balance implementation granularity with do
 
 ## 2. Complete Type Catalog (MVP)
 
+**MVP Catalog Strategy (per `docs/specs/GENERAL_REQUIREMENTS.md`):**
+
+For MVP, Neotoma uses a curated **Tier 1 / Tier 2 schema catalog** defined statically in `src/config/record_types.ts` and extraction rules, with deterministic generic fallback (`document`) for unrecognized types.
+
+**Catalog Expansion Approach:**
+
+- The initial MVP catalog should be **fleshed out within Tier 1 (and selectively Tier 2)** by:
+  - Deriving additional Tier 1 schema types from representative real-world sample files (including user import sets)
+  - Adding only those Tier 2 schemas that are clearly high-leverage for MVP ICPs
+  - Always preserving determinism, explainability, and schema-first constraints from the Neotoma manifest
+- New schema types are added via Feature Units with full extraction rules, tests, and compliance verification
+- Post-MVP: User-defined schemas may be supported; for MVP, all schemas are statically defined
+
+---
+
 ### 2.1 Financial Schema Family
 
 Application types for financial documents (invoices, receipts, transactions, statements, accounts).
