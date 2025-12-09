@@ -95,10 +95,10 @@ flowchart TD
 Chat transcripts (e.g., logs exported from LLM apps like ChatGPT) require **non-deterministic interpretation** that violates the Truth Layer's determinism constraints. Per `docs/specs/GENERAL_REQUIREMENTS.md`:
 
 - MVP provides a **separate CLI tool** (outside the ingestion pipeline) that can:
-  - Non-deterministically convert raw chat exports into well-structured CSV/spreadsheet (with explicit columns and user-correctable fields)
-  - Feed the resulting CSV into the standard deterministic CSV ingestion path
+  - Non-deterministically convert raw chat exports into well-structured JSON files (one record per JSON object with explicit schema types and properties)
+  - Feed the resulting JSON files into the standard deterministic ingestion path
 - Neotoma's Truth Layer ingestion pipeline never performs non-deterministic interpretation of chat content
-- See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-CSV CLI feature unit details
+- See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-JSON CLI feature unit details
 
 ### 2.2 Validation Rules
 

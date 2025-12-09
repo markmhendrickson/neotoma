@@ -1,0 +1,109 @@
+marketing:
+  strategy: "hybrid" # pre_launch + post_launch
+  owner: "Mark Hendrickson"
+  status: "not_started"
+
+  # Reference: docs/feature_units/standards/release_workflow.md
+  #
+  # NOTE: Detailed marketing plans are in markdown documents. This YAML file contains
+  # metadata and summaries for workflow automation. See:
+  # - marketing_plan.md (overview and coordination)
+  # - pre_launch_marketing_plan.md (complete pre-launch details)
+  # - post_launch_marketing_plan.md (complete post-launch details)
+  # - marketing_segments_plan.md (complete segment definitions)
+  # - marketing_metrics_plan.md (complete metrics and tracking)
+
+  user_acquisition:
+    pre_launch:
+      enabled: true
+      timeline: "Week -4 to Week 0"
+      tactics: ["waitlist_building", "early_access_beta", "content_teaser"]
+      target_segments:
+        ["AI-Native Individual Operators", "High-Context Knowledge Workers"]
+      success_criteria:
+        - "≥100 waitlist signups"
+        - "≥25 beta participants"
+        - "≥70% beta activation rate"
+        - "≥5 testimonials collected"
+      detailed_plan: "pre_launch_marketing_plan.md"
+
+    post_launch:
+      enabled: true
+      timeline: "Day 0 to Week 4"
+      tactics:
+        [
+          "launch_announcement",
+          "waitlist_conversion",
+          "organic_growth",
+          "partnership_outreach",
+        ]
+      success_criteria:
+        - "≥50 signups Day 1"
+        - "≥200 signups Week 1"
+        - "≥40% waitlist conversion rate"
+        - "≥100 organic signups Week 1-4"
+        - "≥60% overall activation rate"
+      detailed_plan: "post_launch_marketing_plan.md"
+
+  reengagement:
+    pre_launch:
+      enabled: false
+      reason: "MVP is first external release, no existing user base to reengage"
+
+    post_launch:
+      enabled: true
+      timeline: "Day 0 to Week 4"
+      tactics: ["onboarding_nudges", "usage_tips_campaign"]
+      target_segments:
+        [
+          "signed_up_no_upload",
+          "uploaded_no_timeline",
+          "uploaded_no_mcp",
+          "activated_users",
+        ]
+      success_criteria:
+        - "≥15% nudge response rate"
+        - "≥40% nudge to activation rate"
+        - "≥20% tip to feature adoption rate"
+      detailed_plan: "post_launch_marketing_plan.md"
+
+  user_segments:
+    acquisition_targets:
+      - segment: "AI-Native Individual Operators"
+        priority: "P0"
+        channels: ["twitter", "indie_hacker", "product_hunt", "hacker_news"]
+      - segment: "High-Context Knowledge Workers"
+        priority: "P1"
+        channels: ["linkedin", "content_marketing", "productivity_communities"]
+    detailed_plan: "marketing_segments_plan.md"
+
+  metrics:
+    acquisition_metrics:
+      pre_launch:
+        - "waitlist_signups (target: 100)"
+        - "beta_participants (target: 25)"
+        - "beta_activation_rate (target: 70%)"
+        - "content_views (target: 2000)"
+        - "content_to_waitlist_rate (target: 5%)"
+      post_launch:
+        - "day_1_signups (target: 50)"
+        - "week_1_signups (target: 200)"
+        - "waitlist_conversion_rate (target: 40%)"
+        - "organic_signups (target: 100)"
+        - "overall_activation_rate (target: 60%)"
+    reengagement_metrics:
+      post_launch:
+        - "nudge_response_rate (target: 15%)"
+        - "nudge_to_activation_rate (target: 40%)"
+        - "tip_to_feature_adoption_rate (target: 20%)"
+        - "activated_user_retention_rate (target: 50%)"
+    detailed_plan: "marketing_metrics_plan.md"
+
+  budget:
+    pre_launch:
+      total: 0 # organic only
+      time_investment: "~40 hours"
+    post_launch:
+      total: 0 # organic only for MVP
+      time_investment: "~60 hours"
+    note: "Paid acquisition deferred to post-MVP (v1.1+) after organic validation"

@@ -1,6 +1,23 @@
 ## Release v1.0.0 — MVP
 
-_(Deterministic Truth Layer MVP Release Plan)_
+_(Deterministic Truth Layer MVP Release Plan — Overview and Coordination Document)_
+
+---
+
+### Purpose
+
+This document provides the overview and coordination framework for v1.0.0. Detailed specifications are decomposed into separate topic-specific documents:
+
+- `acceptance_criteria.md` — Release-level acceptance criteria (product, technical, business)
+- `pre_mortem.md` — Failure mode analysis and mitigation strategies
+- `deployment_strategy.md` — Staging-first deployment and rollback procedures
+- `monitoring_plan.md` — Post-release monitoring, metrics, and alerting
+- `integration_tests.md` — Cross-FU integration test specifications
+- `discovery_plan.yaml` — Pre-release discovery activities and hypotheses
+- `marketing_plan.yaml` — Pre-launch and post-launch marketing strategy
+- `execution_schedule.md` — FU execution plan with batches and dependencies
+- `manifest.yaml` — FU list, dependencies, schedule, release type
+- `status.md` — Live status tracking and decision log
 
 ---
 
@@ -8,9 +25,13 @@ _(Deterministic Truth Layer MVP Release Plan)_
 
 - **Release ID**: `v1.0.0`
 - **Name**: MVP
+- **Release Type**: External (public launch with marketing)
 - **Goal**: Ship the first production-capable Neotoma Truth Layer with deterministic ingestion, extraction, entity resolution, event generation, memory graph, MCP access, and minimal UI to support Tier 1 ICP workflows.
 - **Priority**: P0 (critical)
 - **Target Ship Date**: 2025-03-01 (tentative)
+- **Discovery Required**: Yes (pre-release discovery + continuous discovery)
+- **Marketing Required**: Yes (hybrid: pre-launch + post-launch)
+- **Owner**: Mark Hendrickson
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
@@ -48,6 +69,7 @@ These may be extended with additional P1/P2 FUs if explicitly added later.
 - Plaid integration and other financial provider syncs
 - X (Twitter) and Instagram integrations
 - Real-time collaboration
+- `FU-106`: Chat Transcript to JSON CLI Tool (moved to Internal Release v0.2.0, pre-MVP)
 
 These are documented as post-MVP features and **MUST NOT** block v1.0.0.
 
@@ -55,107 +77,156 @@ These are documented as post-MVP features and **MUST NOT** block v1.0.0.
 
 ### 3. Release-Level Acceptance Criteria
 
-#### 3.1 Product
+**See `acceptance_criteria.md` for complete acceptance criteria.**
 
-- Core workflow: **upload → ingestion → extraction → entity resolution → event generation → memory graph → timeline → AI query via MCP** is functional for Tier 1 ICPs.
-- UI surfaces:
-  - Records list and detail views functional and usable.
-  - Timeline view present and correctly ordered.
-  - Basic upload UI separated from chat and usable.
-- Empty states and error states present and understandable for all main views.
+**Summary:**
 
-#### 3.2 Technical
-
-- Deterministic ingestion and extraction for all supported file types (PDF, JPG, PNG, text, CSV/spreadsheet) per `GENERAL_REQUIREMENTS.md`.
-- Deterministic OCR per manifest and ingestion docs (same image → same text; version pinned; explicit low-confidence handling).
-- No LLM extraction in Truth Layer (verified by FU-100.5 checks).
-- Graph integrity: **0 orphans**, **0 cycles** in memory graph.
-- Deterministic search ranking (same query + same DB state → same order).
-- All P0 Feature Units listed above are `completed` with passing tests.
-- 100% test coverage on critical path (ingestion, extraction, entity resolution, events, graph builder, search).
-
-#### 3.3 Business
-
-- DAU ≥ 10 at launch (pilot users).
-- ≥ 100 records ingested in first week (across test + pilot tenants).
-- Metrics instrumentation in place for:
-  - Upload success rate
-  - P95 upload latency
-  - Orphan/cycle counts
-  - Search latency
+- **Product**: Core workflow functional, UI surfaces usable, empty/error states present
+- **Technical**: Deterministic ingestion/OCR, no LLM extraction, graph integrity (0 orphans/cycles), deterministic search, 100% test coverage on critical path
+- **Business**: DAU ≥ 10 at launch, ≥ 100 records ingested in first week, metrics instrumentation in place
 
 ---
 
-### 4. Cross-FU Integration Scenarios (High-Level)
+### 4. Cross-FU Integration Scenarios
 
-These scenarios must pass end-to-end before v1.0.0 is approved:
+**See `integration_tests.md` for complete integration test specifications.**
 
-1. **Financial Document Ingestion Flow**
+**Summary of Integration Scenarios:**
 
-   - Upload multi-page bank/credit statement PDF from `~/Desktop/imports/`.
-   - System extracts transactions via rule-based extraction (FU-100).
-   - Entities (vendors, accounts) are resolved deterministically (FU-101).
-   - Events (transactions) generated and inserted into graph (FU-102, FU-103).
-   - Transactions and statements appear in search and UI with deterministic ranking (FU-105, FU-300).
+1. Financial Document Ingestion Flow
+2. CSV/Spreadsheet Ingestion Flow
+3. Multi-Event Document Flow
+4. Auth + RLS Flow
+5. MCP AI Access Flow
 
-2. **CSV/Spreadsheet Ingestion Flow**
-
-   - Upload CSV or XLSX (e.g., `capital-one-2025.csv`, `ibercaja-2025.xlsx`).
-   - One file-level Record + one row-level Record per non-header row created per schema (FU-100).
-   - Entities/events generated and linked correctly (FU-101, FU-102, FU-103).
-   - Row-level records discoverable via search and visible in UI (FU-105, FU-300).
-
-3. **Multi-Event Document Flow**
-
-   - Upload multi-transaction PDF, or workout log.
-   - Multiple Events/Records created per logical event, with proper linkage to file-level Record.
-   - Timeline view shows correct ordering (FU-102, FU-103, FU-300).
-
-4. **Auth + RLS Flow**
-
-   - User A and User B sign up and log in via Supabase Auth UI (FU-700).
-   - Each user uploads a document; neither can see the other’s records (FU-701).
-
-5. **MCP AI Access Flow**
-   - From a supported MCP client (e.g., ChatGPT/Claude), call store/retrieve actions.
-   - Verify ingestion, retrieval, and search results match UI and DB.
-
-The detailed test specifications for these flows live in `docs/releases/in_progress/v1.0.0/integration_tests.md`.
+All scenarios must pass end-to-end before v1.0.0 is approved for deployment.
 
 ---
 
-### 5. Deployment and Rollback Strategy
+### 5. Pre-Mortem: Failure Mode Analysis
 
-- **Deployment Strategy**: `staging_first`
-  - Deploy to staging, run full integration and smoke tests.
-  - If all pass, deploy to production.
-- **Rollback Plan**:
-  - Tag current production state before deploy.
-  - On failure, revert application to previous tag and, if required, restore DB from last known-good snapshot.
+**See `pre_mortem.md` for complete failure mode analysis.**
 
----
+**Summary of Identified Failure Modes:**
 
-### 6. Post-Release Monitoring
+1. **RLS Implementation Issues** (Probability: Low, Impact: Medium)
+2. **Graph Integrity Regressions** (Probability: Medium, Impact: High)
+3. **MVP Date Slips by 2+ Weeks** (Probability: High, Impact: Medium)
+4. **OCR Determinism Fails** (Probability: Low, Impact: Critical)
+5. **Discovery Reveals Low Willingness-to-Pay** (Probability: Medium, Impact: High)
 
-- Monitor:
-  - Upload success rate (target ≥ 95%).
-  - P95 upload latency (target < 5s).
-  - Search latency (target < 500ms P95).
-  - Graph integrity metrics (orphan/cycle counts).
-  - DAU (target ≥ 10).
-- Alerts configured for:
-  - Upload success rate < 90%.
-  - P95 upload latency > 8s.
-  - Any orphan or cycle detected in graph.
+Each failure mode includes early warning signals, mitigation strategies, and rollback plans. Pre-mortem reviewed at Checkpoint 0.5, Checkpoint 1, and Checkpoint 2.
 
 ---
 
-### 7. Status
+### 6. Deployment and Rollback Strategy
 
-- **Current Status**: `planning`
-- **Owner**: Mark Hendrickson
-- **Notes**:
-  - Release workflow standard defined in `docs/feature_units/standards/release_workflow.md`.
-  - Next step: generate `manifest.yaml` and `execution_schedule.md` from current FU inventory.
+**See `deployment_strategy.md` for complete deployment and rollback procedures.**
 
+**Summary:**
 
+- **Strategy**: Staging-first deployment (deploy to staging, validate, then deploy to production)
+- **Staging**: T-3 days, full integration test suite, performance benchmarks, manual testing
+- **Production**: Day 0, smoke tests, metrics validation, 1-hour monitoring window
+- **Rollback**: Triggered by critical errors, data integrity issues, performance degradation; < 15 minutes target restore time
+
+---
+
+### 7. Post-Release Monitoring and Observability
+
+**See `monitoring_plan.md` for complete monitoring infrastructure, metrics, and alerting configuration.**
+
+**Summary:**
+
+- **Infrastructure**: Application metrics, database metrics, error tracking, uptime monitoring
+- **Dashboards**: Main, Graph Integrity, Performance, User Metrics
+- **Key Metrics**: Product (upload success rate, latency, DAU, activation), Technical (graph integrity, error rate), Business (signups, conversion, retention)
+- **Alerting**: Critical alerts (immediate response), Warning alerts (monitor and address)
+- **Schedule**: Daily (first 2 weeks), Weekly, Monthly reviews
+
+---
+
+### 8. Discovery and Marketing
+
+#### 8.1 Discovery Plan
+
+Pre-release discovery is **required** for MVP (external release).
+
+- **Discovery Plan**: See `discovery_plan.md` (overview) and `discovery_plan.yaml` (metadata/summary)
+- **Participant Recruitment**: See `participant_recruitment_log.md`
+- **Timeline**: 3-4 weeks before development (Week -8 to Week -5)
+- **Activities**: Async screening survey, live interviews (value, usability, business viability), feasibility validation
+- **Success Criteria**: See `discovery_plan.md` and detailed discovery plan documents
+- **Continuous Discovery**: Weekly user interviews throughout development (2-3 participants per week)
+
+#### 8.2 Marketing Plan
+
+Marketing is **required** for MVP (external release).
+
+- **Marketing Plan**: See `marketing_plan.md` (overview) and `marketing_plan.yaml` (metadata/summary)
+- **Strategy**: Hybrid (pre-launch + post-launch)
+- **Pre-Launch Activities** (Week -4 to Week 0): Waitlist building, early access beta, content teasers
+- **Post-Launch Activities** (Day 0 to Week 4): Launch announcement, waitlist conversion, organic growth, partnership outreach
+- **Budget**: $0 (organic only for MVP)
+- **Detailed Plans**: See `pre_launch_marketing_plan.md`, `post_launch_marketing_plan.md`, `marketing_segments_plan.md`, `marketing_metrics_plan.md`
+
+---
+
+### 9. Status
+
+**See `status.md` for live status tracking and decision log.**
+
+**Current Status**: `planning`
+
+**Next Steps**:
+
+1. Complete discovery planning (review `discovery_plan.md` and detailed discovery plan documents)
+2. Complete marketing planning (review `marketing_plan.yaml`)
+3. Conduct pre-release discovery (Checkpoint 0.5)
+4. Execute FU batches (Step 1)
+
+---
+
+### 10. Document Index
+
+This release plan coordinates the following topic-specific documents:
+
+**Planning Documents:**
+
+- `manifest.yaml` — FU list, dependencies, schedule, release type
+- `execution_schedule.md` — FU execution plan with batches and dependencies
+- `acceptance_criteria.md` — Release-level acceptance criteria
+- `pre_mortem.md` — Failure mode analysis and mitigation strategies
+- `integration_tests.md` — Cross-FU integration test specifications
+
+**Discovery and Marketing:**
+
+- `discovery_plan.md` — Discovery overview and coordination
+- `discovery_plan.yaml` — Discovery metadata and summaries (for workflow automation)
+- `value_discovery_plan.md` — Value discovery details
+- `usability_discovery_plan.md` — Usability discovery details
+- `business_viability_discovery_plan.md` — Business viability discovery details
+- `feasibility_validation_plan.md` — Feasibility validation details
+- `continuous_discovery_plan.md` — Continuous discovery details
+- `participant_recruitment_log.md` — Participant outreach and tracking
+- `continuous_discovery_log.md` — Continuous discovery during development
+- `marketing_plan.md` — Marketing overview and coordination
+- `marketing_plan.yaml` — Marketing metadata and summaries (for workflow automation)
+- `pre_launch_marketing_plan.md` — Pre-launch marketing details
+- `post_launch_marketing_plan.md` — Post-launch marketing details
+- `marketing_segments_plan.md` — Marketing segment definitions
+- `marketing_metrics_plan.md` — Marketing metrics and tracking
+
+**Deployment and Operations:**
+
+- `deployment_strategy.md` — Staging-first deployment and rollback procedures
+- `monitoring_plan.md` — Post-release monitoring, metrics, and alerting
+
+**Status Tracking:**
+
+- `status.md` — Live status tracking and decision log
+
+**Related Standards:**
+
+- `docs/feature_units/standards/release_workflow.md` — Release workflow standard
+- `docs/feature_units/standards/discovery_process.md` — Discovery process standard

@@ -1,0 +1,288 @@
+release:
+  id: "v2.0.0"
+  name: "End-to-End Encryption (E2EE)"
+  type: "external" # internal | external
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "TBD" # Set after v1.0.0 completion
+  priority: "P1"
+  owner: "Mark Hendrickson"
+
+# NOTE: This manifest contains metadata and summaries for workflow automation.
+# Detailed planning documents are in markdown (see release_plan.md for overview).
+
+# WIP and parallelization limits
+execution_limits:
+  max_parallel_fus: 2 # Crypto work requires careful sequencing
+  max_high_risk_in_parallel: 1 # Only one high-risk FU at a time (crypto, migration)
+
+feature_units:
+  # Phase 1: Crypto Foundation
+  - id: "FU-850"
+    name: "Crypto Library"
+    priority: "P0"
+    complexity: "High"
+    risk: "High"
+    dependencies: []
+    description: "X25519/Ed25519 key generation, envelope encryption, signatures"
+
+  - id: "FU-851"
+    name: "Key Management UI"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-850"]
+    description: "Key generation, export/import, masked display in settings"
+
+  # Phase 2: Local-First Datastore
+  - id: "FU-852"
+    name: "Browser SQLite WASM Datastore"
+    priority: "P0"
+    complexity: "High"
+    risk: "High"
+    dependencies: ["FU-850"]
+    description: "OPFS VFS, encrypted-at-rest, schema + CRUD helpers"
+
+  - id: "FU-853"
+    name: "WebWorker RPC Layer"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-852"]
+    description: "Isolated datastore operations, structured message passing"
+
+  - id: "FU-854"
+    name: "Local Vector Search"
+    priority: "P0"
+    complexity: "High"
+    risk: "Medium"
+    dependencies: ["FU-852"]
+    description: "HNSWlib-WASM or SQLite-vss integration for embeddings"
+
+  # Phase 3: Encrypted MCP Bridge
+  - id: "FU-855"
+    name: "Encrypted WebSocket Bridge"
+    priority: "P0"
+    complexity: "High"
+    risk: "High"
+    dependencies: ["FU-850", "FU-853"]
+    description: "Browser encrypts, server relays ciphertext, reconnects/heartbeats"
+
+  - id: "FU-856"
+    name: "MCP Server Encryption Support"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-855"]
+    description: "Accept encrypted payloads, encrypt responses, signature verification"
+
+  - id: "FU-857"
+    name: "Public Key Authentication"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-850", "FU-856"]
+    description: "Bearer token = Ed25519 public key, public key registry"
+
+  # Phase 4: Migration & Compatibility
+  - id: "FU-858"
+    name: "Dual-Mode Operation"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-856", "FU-857"]
+    description: "Feature flag: plaintext + encrypted, backward compatibility"
+
+  - id: "FU-859"
+    name: "Migration Tooling"
+    priority: "P0"
+    complexity: "High"
+    risk: "High"
+    dependencies: ["FU-852", "FU-858"]
+    description: "One-time sync from Supabase to local SQLite, verification"
+
+  - id: "FU-860"
+    name: "Backward Compatibility Layer"
+    priority: "P1"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-858"]
+    description: "Support existing plaintext MCP clients, graceful degradation"
+
+  # Phase 5: Multi-Device Sync (Optional)
+  - id: "FU-861"
+    name: "Encrypted Delta Sync"
+    priority: "P2"
+    complexity: "High"
+    risk: "Medium"
+    dependencies: ["FU-853", "FU-856"]
+    description: "Conflict-free merge, append-only encrypted deltas"
+
+  - id: "FU-862"
+    name: "Local MCP Server Daemon"
+    priority: "P2"
+    complexity: "High"
+    risk: "Medium"
+    dependencies: ["FU-855", "FU-861"]
+    description: "Optional Electron app for offline routing, encrypted mailbox"
+
+execution_schedule:
+  detailed_plan: "execution_schedule.md"
+  batches:
+    # Batch 0: Crypto foundation (no dependencies)
+    - batch_id: 0
+      feature_units: ["FU-850"]
+      dependencies: []
+
+    # Batch 1: Key management UI (depends on crypto)
+    - batch_id: 1
+      feature_units: ["FU-851"]
+      dependencies: ["FU-850"]
+
+    # Batch 2: Local datastore (depends on crypto)
+    - batch_id: 2
+      feature_units: ["FU-852"]
+      dependencies: ["FU-850"]
+
+    # Batch 3: WebWorker RPC and vector search (depends on datastore)
+    - batch_id: 3
+      feature_units: ["FU-853", "FU-854"]
+      dependencies: ["FU-852"]
+
+    # Batch 4: Encrypted bridge (depends on crypto + RPC)
+    - batch_id: 4
+      feature_units: ["FU-855"]
+      dependencies: ["FU-850", "FU-853"]
+
+    # Batch 5: MCP server encryption (depends on bridge)
+    - batch_id: 5
+      feature_units: ["FU-856"]
+      dependencies: ["FU-855"]
+
+    # Batch 6: Public key auth (depends on crypto + server)
+    - batch_id: 6
+      feature_units: ["FU-857"]
+      dependencies: ["FU-850", "FU-856"]
+
+    # Batch 7: Dual-mode and compatibility (depends on server encryption)
+    - batch_id: 7
+      feature_units: ["FU-858", "FU-860"]
+      dependencies: ["FU-856", "FU-857"]
+
+    # Batch 8: Migration tooling (depends on datastore + dual-mode)
+    - batch_id: 8
+      feature_units: ["FU-859"]
+      dependencies: ["FU-852", "FU-858"]
+
+    # Batch 9: Multi-device sync (optional, depends on RPC + server)
+    - batch_id: 9
+      feature_units: ["FU-861", "FU-862"]
+      dependencies: ["FU-853", "FU-856"]
+      optional: true
+
+checkpoints:
+  checkpoint_1_after_batch: 2 # Review after crypto foundation + datastore
+  checkpoint_2_after_batch: 6 # Review after encrypted bridge complete
+  checkpoint_3_after_batch: 8 # Review before migration tooling
+
+acceptance_criteria:
+  product:
+    - criterion: "Users can generate/export/import encryption keys via UI"
+      test: "playwright/tests/e2e/key_management.spec.ts"
+      metric: null
+    - criterion: "All records encrypted before leaving browser"
+      test: "playwright/tests/e2e/encryption_verification.spec.ts"
+      metric: null
+    - criterion: "MCP servers see only ciphertext"
+      test: "tests/integration/mcp_encryption.spec.ts"
+      metric: null
+    - criterion: "ChatGPT integration works with exported private key"
+      test: "playwright/tests/e2e/chatgpt_integration.spec.ts"
+      metric: null
+    - criterion: "Migration tool successfully migrates existing records"
+      test: "tests/integration/migration_tool.spec.ts"
+      metric: null
+
+  technical:
+    - criterion: "100% of records encrypted before transmission"
+      test: "tests/unit/crypto/envelope.spec.ts"
+      metric: "encryption_coverage"
+      threshold: 100
+    - criterion: "Zero plaintext records in server database (post-migration)"
+      test: "tests/integration/migration_verification.spec.ts"
+      metric: "plaintext_records"
+      threshold: 0
+    - criterion: "Crypto library passes security audit"
+      test: "security_audit_report.md"
+      metric: null
+    - criterion: "Local datastore functional offline"
+      test: "playwright/tests/e2e/offline_operation.spec.ts"
+      metric: null
+    - criterion: "Vector search works on encrypted local datastore"
+      test: "tests/integration/local_vector_search.spec.ts"
+      metric: null
+    - criterion: "100% test coverage on crypto critical paths"
+      test: "coverage/crypto/"
+      metric: "coverage_percentage"
+      threshold: 100
+
+  business:
+    - criterion: "Migration completion rate ≥ 80%"
+      test: "analytics/migration_completion_rate"
+      metric: "migration_completion_rate"
+      threshold: 80
+    - criterion: "Zero data loss during migration"
+      test: "analytics/migration_data_loss"
+      metric: "data_loss_count"
+      threshold: 0
+    - criterion: "E2EE adoption rate ≥ 60%"
+      test: "analytics/e2ee_adoption_rate"
+      metric: "e2ee_adoption_rate"
+      threshold: 60
+
+risks:
+  - id: "crypto_implementation_bugs"
+    category: "security"
+    probability: "medium"
+    impact: "critical"
+    mitigation: "Security audit before launch, extensive crypto unit tests"
+  - id: "migration_data_loss"
+    category: "data_loss"
+    probability: "low"
+    impact: "critical"
+    mitigation: "Dry-run migration, verification checksums, backup before migration"
+  - id: "performance_degradation"
+    category: "performance"
+    probability: "medium"
+    impact: "high"
+    mitigation: "Performance benchmarks, WebWorker isolation, async encryption"
+  - id: "user_adoption_resistance"
+    category: "adoption"
+    probability: "medium"
+    impact: "medium"
+    mitigation: "Clear migration wizard, educational content, opt-in by default"
+  - id: "chatgpt_integration_complexity"
+    category: "integration"
+    probability: "high"
+    impact: "medium"
+    mitigation: "Clear documentation, video tutorials, ChatGPT extension support"
+
+notes: |
+  This release transforms Neotoma into a local-first, end-to-end encrypted Truth Layer.
+  
+  Key architectural changes:
+  - Browser becomes authoritative datastore (SQLite WASM + OPFS)
+  - Server stores only encrypted ciphertext
+  - MCP servers cannot decrypt user data
+  - Optional multi-device sync via encrypted deltas
+  
+  Migration strategy:
+  - Dual-mode operation (plaintext + encrypted)
+  - Gradual migration with tooling
+  - Backward compatibility maintained
+  
+  Success criteria:
+  - 100% encryption coverage
+  - Zero data loss during migration
+  - ≥80% migration completion rate
+  - ≥60% E2EE adoption rate
+

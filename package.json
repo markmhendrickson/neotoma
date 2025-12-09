@@ -28,7 +28,8 @@
     "prepare": "husky",
     "setup:env-hook": "bash scripts/setup-env-copy-hook.sh",
     "copy:env": "node scripts/copy-env-to-worktree.js",
-    "setup:worktree": "bash scripts/cursor-worktree-init.sh"
+    "setup:worktree": "bash scripts/cursor-worktree-init.sh",
+    "setup:data": "node scripts/setup-data-symlink.js"
   },
   "keywords": [
     "mcp",

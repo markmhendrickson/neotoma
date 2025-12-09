@@ -1,0 +1,136 @@
+feature_id: "fu_053"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "low"
+
+tags:
+  - "schema"
+  - "crypto"
+  - "blockchain"
+
+kill_switch:
+  conditions:
+    - condition: "Schema migration fails"
+      action: "Rollback migration, investigate"
+
+metadata:
+  title: "Cryptographic Schema Fields"
+  description: "Add signer_public_key and signature fields to state_events table, create agent identity abstraction"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+  created_at: "2025-01-XX"
+  target_release: "v0.1.0"
+
+subsystems:
+  - name: "schema"
+    changes: "Add crypto fields to state_events table"
+  - name: "crypto"
+    changes: "Agent identity abstraction (stub)"
+
+schema_changes:
+  - table: "state_events"
+    operation: "add_column"
+    column_name: "signer_public_key"
+    column_type: "TEXT"
+    nullable: true
+  
+  - table: "state_events"
+    operation: "add_column"
+    column_name: "signature"
+    column_type: "TEXT"
+    nullable: true
+
+observability:
+  metrics:
+    - name: "event_with_signature_total"
+      type: "counter"
+      description: "Total events with signatures"
+    
+    - name: "agent_identity_created_total"
+      type: "counter"
+      description: "Total agent identities created"
+  
+  logs:
+    - level: "info"
+      event: "agent_identity_created"
+      fields:
+        - "agent_id"
+        - "public_key"
+    
+    - level: "debug"
+      event: "event_includes_signature"
+      fields:
+        - "event_id"
+        - "signer_public_key"
+
+testing:
+  unit_tests:
+    - file: "src/crypto/agent_identity.test.ts"
+      tests:
+        - "AgentIdentity.createAgentIdentity (stub)"
+        - "AgentIdentity.getAgentPublicKey"
+  
+  integration_tests:
+    - file: "src/events/crypto_fields.integration.test.ts"
+      tests:
+        - "Event with signature fields stored correctly"
+        - "Event without signature fields stored correctly"
+  
+  fixtures:
+    - name: "sample_agent_identity.json"
+      location: "tests/fixtures/crypto/sample_agent_identity.json"
+      description: "Sample agent identity"
+  
+  coverage:
+    lines: 80
+    branches: 75
+    critical_paths: 100
+
+dependencies:
+  requires:
+    - feature_id: "fu_050"
+      reason: "Needs state_events table"
+  
+  blocks: []
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Rollback migration (remove columns)"
+      - "No data loss (columns nullable)"
+  
+  monitoring:
+    key_metrics:
+      - metric: "event_with_signature_total"
+        threshold: "Should be 0 initially"
+
+documentation:
+  files_created:
+    - path: "docs/architecture/agent_identity.md"
+      purpose: "Agent identity documentation (stub)"
+  
+  files_updated:
+    - path: "docs/subsystems/schema.md"
+      changes: "Document crypto fields in state_events table"
+
+risks:
+  - category: "migration_failure"
+    likelihood: "low"
+    impact: "low"
+    mitigation: "Nullable columns, rollback plan, testing"
+
+notes: |
+  Schema changes are expensive. Include fields now, implement verification logic post-MVP.
+  Fields nullable (no breaking changes). Agent identity abstraction is stub (no real crypto yet).
+  Foundation for future cryptographic event signing and agent identity verification.
+
+links:
+  - title: "Blockchain Readiness Assessment"
+    url: "docs/architecture/blockchain_readiness_assessment.md"
+

@@ -15,3 +15,4 @@ playwright/report/
 playwright/test-results/
 docs/private/
 data.vite/
+data/

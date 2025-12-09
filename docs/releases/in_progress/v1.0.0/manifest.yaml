@@ -1,9 +1,14 @@
 release:
   id: "v1.0.0"
   name: "MVP"
+  type: "external" # internal | external
   status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
   target_date: "2025-03-01"
   priority: "P0"
+  owner: "Mark Hendrickson"
+
+# NOTE: This manifest contains metadata and summaries for workflow automation.
+# Detailed planning documents are in markdown (see release_plan.md for overview).
 
 # WIP and parallelization limits
 execution_limits:
@@ -42,6 +47,8 @@ feature_units:
     dependencies: ["FU-700"]
 
 execution_schedule:
+  # Detailed execution schedule in execution_schedule.md
+  detailed_plan: "execution_schedule.md"
   batches:
     # Batch 0: FUs with no dependencies (can run in parallel)
     - batch_id: 0
@@ -99,26 +106,43 @@ acceptance_criteria:
       metric: "SELECT COUNT(*) FROM records WHERE created_at >= NOW() - INTERVAL '7 days' >= 100"
 
 pre_mortem:
-  failure_modes:
-    - mode: "RLS migration breaks existing tenants"
-      early_warning: "Test failures in multi-user isolation tests, migration dry-run errors"
-      mitigation: "FU-701 includes comprehensive migration testing, staged rollout"
-      rollback: "Revert migration, restore DB snapshot, disable RLS temporarily"
-    - mode: "Graph integrity regressions"
-      early_warning: "Integration tests fail, orphan node count > 0"
-      mitigation: "FU-103 includes property-based tests, batch-level integration tests"
-      rollback: "Disable graph builder, revert to single-record inserts"
-    - mode: "MVP date slips by 2 weeks"
-      early_warning: "FU completion rate < 80% after 50% of batches, critical FUs delayed"
-      mitigation: "Mid-release checkpoint (Checkpoint 1), descope P1 FUs if needed"
-      rollback: "Move non-critical FUs to v1.1.0, focus on P0 only"
+  # Detailed pre-mortem analysis in pre_mortem.md
+  detailed_plan: "pre_mortem.md"
+  failure_modes_summary:
+    - mode: "RLS implementation issues (per-user isolation)"
+      probability: "low"
+      impact: "medium"
+    - mode: "Graph integrity regressions (orphans/cycles)"
+      probability: "medium"
+      impact: "high"
+    - mode: "MVP date slips by 2+ weeks"
+      probability: "high"
+      impact: "medium"
+    - mode: "OCR determinism fails in production"
+      probability: "low"
+      impact: "critical"
+    - mode: "Discovery reveals low willingness-to-pay (<€25/month)"
+      probability: "medium"
+      impact: "high"
 
 deployment:
   strategy: "staging_first" # staging_first | canary | full_rollout
   rollback_plan: "Revert to previous release tag; restore database from last known-good snapshot if needed."
+  detailed_plan: "deployment_strategy.md"
+
+discovery:
+  enabled: true # true for early releases
+  plan_file: "discovery_plan.yaml"
+
+marketing:
+  enabled: true # true for external releases, false for internal
+  plan_file: "marketing_plan.yaml"
+  strategy: "hybrid" # pre_launch | post_launch | hybrid | none
 
 monitoring:
-  key_metrics:
+  # Detailed monitoring plan in monitoring_plan.md
+  detailed_plan: "monitoring_plan.md"
+  key_metrics_summary:
     - "upload_success_rate"
     - "upload_latency_p95"
     - "search_latency_p95"

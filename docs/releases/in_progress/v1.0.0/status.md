@@ -74,8 +74,46 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 
 ---
 
-### 7. Notes
+### 7. Release Planning Completeness
+
+**Required Planning Documents:**
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `release_plan.md` | ✅ Complete | Overview and coordination |
+| `manifest.yaml` | ✅ Complete | FU metadata, dependencies, schedule |
+| `execution_schedule.md` | ✅ Complete | Timeline estimates added |
+| `integration_tests.md` | ✅ Complete | Test specs defined |
+| `acceptance_criteria.md` | ✅ Complete | Release-level acceptance criteria |
+| `pre_mortem.md` | ✅ Complete | Failure mode analysis |
+| `deployment_strategy.md` | ✅ Complete | Deployment and rollback procedures |
+| `monitoring_plan.md` | ✅ Complete | Post-release monitoring and observability |
+| `discovery_plan.md` | ✅ Complete | Discovery overview and coordination |
+| `discovery_plan.yaml` | ✅ Complete | Discovery metadata and summaries |
+| `value_discovery_plan.md` | ✅ Complete | Value discovery details |
+| `usability_discovery_plan.md` | ✅ Complete | Usability discovery details |
+| `business_viability_discovery_plan.md` | ✅ Complete | Business viability discovery details |
+| `feasibility_validation_plan.md` | ✅ Complete | Feasibility validation details |
+| `continuous_discovery_plan.md` | ✅ Complete | Continuous discovery details |
+| `participant_recruitment_log.md` | ✅ Complete | Recruitment tracking template created |
+| `marketing_plan.md` | ✅ Complete | Marketing overview and coordination |
+| `marketing_plan.yaml` | ✅ Complete | Marketing metadata and summaries |
+| `pre_launch_marketing_plan.md` | ✅ Complete | Pre-launch marketing details |
+| `post_launch_marketing_plan.md` | ✅ Complete | Post-launch marketing details |
+| `marketing_segments_plan.md` | ✅ Complete | Marketing segment definitions |
+| `marketing_metrics_plan.md` | ✅ Complete | Marketing metrics and tracking |
+| `continuous_discovery_log.md` | ✅ Complete | Template created |
+
+**Planning Status:** ✅ All required documents complete
+
+**Next Checkpoint:** Checkpoint 0.5 — Pre-Release Discovery (Week -8 to -5)
+
+---
+
+### 8. Notes
 
 - Release workflow pattern defined in `docs/feature_units/standards/release_workflow.md`.
+- Discovery process defined in `docs/feature_units/standards/discovery_process.md`.
 - MVP specs remain in `docs/specs/` and are referenced, not duplicated.
 - This status file is the **single source of truth** for v1.0.0 release progress.
+- All planning documents now complete and ready for discovery phase.

@@ -11,6 +11,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["./**/*.ts"]
+  "include": ["./**/*.ts", "./types.d.ts"],
+  "exclude": ["../frontend/**/*", "../src/**/*", "**/*.csv", "**/*.json"]
 }
 

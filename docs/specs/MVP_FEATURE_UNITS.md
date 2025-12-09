@@ -12,6 +12,7 @@ This is the **master build plan** for MVP v1.0.0.
 
 **Related Documents:**
 
+- [`docs/specs/INTERNAL_MCP_RELEASE.md`](./INTERNAL_MCP_RELEASE.md) — Internal MCP-only release specification (precedes MVP, single-user, no UI)
 - [`docs/specs/MVP_EXECUTION_PLAN.md`](./MVP_EXECUTION_PLAN.md) — Tactical execution guide with Cursor command workflows. Use during active development for step-by-step guidance.
 - [`docs/specs/MVP_OVERVIEW.md`](./MVP_OVERVIEW.md) — High-level product context and MVP scope.
 
@@ -64,6 +65,27 @@ This document does NOT cover:
 8. ✅ Local storage / offline mode functional (local-first architecture)
 
 **Revenue Alignment:** MVP must support Tier 1 ICPs including small teams to enable mid-market ACVs (€3k–€15k/yr or €250–€1,250 MRR). See [`docs/private/strategy_governance/revenue_timeline.md`](../private/strategy_governance/revenue_timeline.md) for revenue objectives.
+
+---
+
+## Release Strategy
+
+**Internal MCP Release (Pre-MVP):**
+
+An internal, MCP-only release precedes the full MVP. This release includes:
+
+- Core backend services (file analysis, entity resolution, event generation, graph builder, search)
+- 6 core MCP actions (store_record, retrieve_records, update_record, delete_record, upload_file, get_file_url)
+- Single-user database (no RLS, no auth)
+- No UI components
+
+**Purpose:** Validate core capabilities via MCP integration with Cursor and ChatGPT before building UI and multi-user infrastructure.
+
+See [`docs/specs/INTERNAL_MCP_RELEASE.md`](./INTERNAL_MCP_RELEASE.md) for complete specification.
+
+**Full MVP (v1.0.0):**
+
+Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provider integrations on top of the validated MCP foundation.
 
 ---
 
@@ -303,35 +325,37 @@ This document does NOT cover:
 
 ---
 
-#### FU-106: Chat Transcript to CSV CLI Tool
+#### FU-106: Chat Transcript to JSON CLI Tool
 
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Medium
 - **Dependencies:** None (standalone CLI, outside Truth Layer)
+- **Release:** Internal Release v0.2.0 (pre-MVP)
 - **Deliverables:**
-  - CLI tool for converting chat transcripts (e.g., ChatGPT exports) to structured CSV
+  - CLI tool for converting chat transcripts (e.g., ChatGPT exports) to structured JSON files
   - Support for common export formats (JSON, HTML, text)
   - User-correctable field mapping (interactive mode)
-  - Deterministic CSV output from normalized transcript
+  - Deterministic JSON output with schema types from normalized transcript
   - Documentation and usage examples
 - **Constraints (per GENERAL_REQUIREMENTS.md):**
   - **MUST be separate from Truth Layer** (non-deterministic interpretation prohibited in ingestion pipeline)
   - **MAY use LLMs or heuristics** (not constrained by Truth Layer determinism requirements)
-  - **MUST output well-structured CSV** that can be ingested deterministically
-  - **SHOULD support user correction/review** before final CSV export
+  - **MUST output well-structured JSON** with schema types that can be ingested deterministically
+  - **SHOULD support user correction/review** before final JSON export
 - **Tests:**
   - Unit: Transcript parsing for each supported format
-  - Integration: Full CLI workflow (transcript → CSV → validate)
-  - E2E: CLI → Neotoma ingestion pipeline (CSV ingestion)
-- **Acceptance:** Can convert representative chat exports to CSV with >80% field accuracy
+  - Integration: Full CLI workflow (transcript → JSON → validate)
+  - E2E: CLI → Neotoma ingestion pipeline (JSON record ingestion)
+- **Acceptance:** Can convert representative chat exports to JSON with >80% field accuracy
 - **Status:** ⏳ Not Started
 - **Implementation Notes:**
   - CLI runs independently from Neotoma server (Node.js script in `scripts/` or separate package)
   - Can use OpenAI/Anthropic APIs for interpretation (outside Truth Layer)
-  - Output CSV follows standard ingestion format (columns: date, type, description, metadata)
+  - Output JSON follows standard record format (type, properties, file_urls, summary)
+  - Each JSON file contains one record object with schema type and extracted properties
   - See `docs/specs/GENERAL_REQUIREMENTS.md` for motivation and requirements
-  - Users run: `npm run chat-to-csv -- input.json output.csv`
+  - Users run: `npm run chat-to-json -- input.json output_dir/`
 
 ---
 
@@ -364,17 +388,20 @@ This document does NOT cover:
 
 - **Priority:** P0
 - **Risk:** Medium
-- **Complexity:** Low
-- **Dependencies:** FU-200 (MCP core)
+- **Complexity:** Medium (increased due to event-sourcing)
+- **Dependencies:** FU-200 (MCP core), FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - Input validation (type, properties required)
-  - Database insert
+  - Emit `RecordCreated` event via `EventRepository.appendEvent()`
+  - Apply reducer (`reduceRecordCreated`) to compute state
+  - Refresh materialized view after event emission
   - Response with created record
   - Error handling
 - **Tests:**
-  - Unit: Validation logic
-  - Integration: Store + retrieve
+  - Unit: Validation logic, event emission, reducer application
+  - Integration: Store + retrieve, verify event emitted, verify state matches reducer output
   - E2E: ChatGPT creates record
+  - Property: Event emission + reducer application → state consistent (100 runs)
 - **Status:** ✅ Complete
 
 ---
@@ -384,15 +411,16 @@ This document does NOT cover:
 - **Priority:** P0
 - **Risk:** Medium
 - **Complexity:** Medium
-- **Dependencies:** FU-105 (search), FU-200 (MCP core)
+- **Dependencies:** FU-105 (search), FU-200 (MCP core), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - Query parsing (type, properties, search, limit)
+  - Retrieve state via `StateRepository.getState()` (repository abstraction)
   - Search service integration
   - Deterministic result ordering
   - Pagination
 - **Tests:**
-  - Unit: Query parsing
-  - Integration: Retrieve with filters
+  - Unit: Query parsing, repository usage
+  - Integration: Retrieve with filters, verify repository abstraction
   - Property: Deterministic order
 - **Status:** ✅ Complete
 
@@ -400,35 +428,43 @@ This document does NOT cover:
 
 #### FU-203: MCP Action — update_record
 
-- **Priority:** P1
+- **Priority:** P0 (required for v0.1.0)
 - **Risk:** Low
-- **Complexity:** Low
-- **Dependencies:** FU-200 (MCP core)
+- **Complexity:** Medium (increased due to event-sourcing)
+- **Dependencies:** FU-200 (MCP core), FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - Update validation (id required)
+  - Emit `RecordUpdated` event via `EventRepository.appendEvent()`
+  - Apply reducer (`reduceRecordUpdated`) to compute updated state
+  - Refresh materialized view after event emission
   - Property merging
   - Response with updated record
 - **Tests:**
-  - Unit: Merge logic
-  - Integration: Update + retrieve
+  - Unit: Merge logic, event emission, reducer application
+  - Integration: Update + retrieve, verify event emitted, verify state matches reducer output
+  - Property: Event emission + reducer application → state consistent (100 runs)
 - **Status:** ✅ Complete
 
 ---
 
 #### FU-204: MCP Action — delete_record
 
-- **Priority:** P1
+- **Priority:** P0 (required for v0.1.0)
 - **Risk:** Medium (data loss)
-- **Complexity:** Low
-- **Dependencies:** FU-200 (MCP core)
+- **Complexity:** Medium (increased due to event-sourcing)
+- **Dependencies:** FU-200 (MCP core), FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - Delete validation
+  - Emit `RecordDeleted` event via `EventRepository.appendEvent()`
+  - Apply reducer (`reduceRecordDeleted`) to mark record as deleted
+  - Refresh materialized view after event emission
   - Cascade delete (edges, files)
   - Response with confirmation
 - **Tests:**
-  - Unit: Validation
-  - Integration: Delete + verify gone
+  - Unit: Validation, event emission, reducer application
+  - Integration: Delete + verify gone, verify event emitted, verify state matches reducer output
   - E2E: Delete via ChatGPT
+  - Property: Event emission + reducer application → state consistent (100 runs)
 - **Status:** ✅ Complete
 
 ---
@@ -438,16 +474,17 @@ This document does NOT cover:
 - **Priority:** P0
 - **Risk:** High (core ingestion)
 - **Complexity:** High
-- **Dependencies:** FU-100 (file analysis), FU-200 (MCP core)
+- **Dependencies:** FU-100 (file analysis), FU-200 (MCP core), FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - File path validation
   - Upload to storage (Supabase Storage or S3)
   - Trigger file analysis (optional)
-  - Create record with extracted fields
+  - Create record with extracted fields (uses `store_record` internally, inherits event-sourcing)
+  - Use `StateRepository` and `EventRepository` when creating records
   - Response with record + file URL
 - **Tests:**
   - Unit: File validation
-  - Integration: Upload + analyze + store
+  - Integration: Upload + analyze + store, verify event emitted for created record
   - E2E: ChatGPT uploads file → sees extraction
 - **Acceptance:** >95% upload success rate, <5s P95 latency
 - **Status:** ✅ Complete
@@ -1178,56 +1215,56 @@ This document does NOT cover:
 
 ## Feature Unit Summary Table
 
-| ID       | Name                           | Phase | Priority | Risk   | Complexity | Status          | Blocking       |
-| -------- | ------------------------------ | ----- | -------- | ------ | ---------- | --------------- | -------------- |
-| FU-000   | Database Schema                | 0     | P0       | High   | Medium     | ✅ Complete     | None           |
-| FU-001   | Crypto Infrastructure          | 0     | P0       | High   | High       | ✅ Complete     | None           |
-| FU-002   | Configuration                  | 0     | P0       | Medium | Low        | ✅ Complete     | None           |
-| FU-100   | File Analysis                  | 1     | P0       | High   | High       | 🔨 Needs Update | FU-000         |
-| FU-100.5 | Schema Compliance Verification | 1     | P0       | Medium | Medium     | 🔨 Pending      | FU-100         |
-| FU-101   | Entity Resolution              | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100         |
-| FU-102   | Event Generation               | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100         |
-| FU-103   | Graph Builder                  | 1     | P0       | High   | Medium     | 🔨 Partial      | FU-101, FU-102 |
-| FU-104   | Embedding Service              | 1     | P1       | Medium | Medium     | ✅ Complete     | FU-100         |
-| FU-105   | Search Service                 | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-104         |
-| FU-200   | MCP Server Core                | 2     | P0       | High   | High       | ✅ Complete     | FU-000         |
-| FU-201   | store_record                   | 2     | P0       | Medium | Low        | ✅ Complete     | FU-200         |
-| FU-202   | retrieve_records               | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-105, FU-200 |
-| FU-203   | update_record                  | 2     | P1       | Low    | Low        | ✅ Complete     | FU-200         |
-| FU-204   | delete_record                  | 2     | P1       | Medium | Low        | ✅ Complete     | FU-200         |
-| FU-205   | upload_file                    | 2     | P0       | High   | High       | ✅ Complete     | FU-100, FU-200 |
-| FU-206   | get_file_url                   | 2     | P1       | Low    | Low        | ✅ Complete     | FU-200         |
-| FU-207   | Plaid Integration              | 2     | Post-MVP | Medium | High       | ✅ Complete     | FU-200         |
-| FU-208   | Provider Integrations          | 2     | P1       | Medium | High       | ✅ Complete     | FU-200         |
-| FU-300   | UI Foundation                  | 3     | P0       | Medium | Medium     | 🔨 Partial      | None           |
-| FU-301   | Records List                   | 3     | P0       | Low    | Medium     | ✅ Complete     | FU-300, FU-202 |
-| FU-302   | Record Detail                  | 3     | P0       | Low    | Low        | ✅ Complete     | FU-300, FU-202 |
-| FU-303   | Timeline View                  | 3     | P0       | Medium | Medium     | ⏳ Not Started  | FU-102, FU-300 |
-| FU-304   | File Upload UI                 | 3     | P0       | Medium | Medium     | 🔨 Partial      | FU-205, FU-300 |
-| FU-305   | Dashboard                      | 3     | P1       | Low    | Low        | ⏳ Not Started  | FU-300, FU-202 |
-| FU-306   | Settings UI                    | 3     | P2       | Low    | Low        | 🔨 Partial      | FU-300         |
-| FU-307   | Chat/AI Panel                  | 3     | P0       | Medium | High       | ✅ Complete     | FU-202, FU-300 |
-| FU-400   | Onboarding Welcome             | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-300         |
-| FU-401   | Onboarding Progress            | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-205         |
-| FU-402   | Onboarding Results             | 4     | P0       | Low    | Medium     | ⏳ Not Started  | FU-302         |
-| FU-403   | Onboarding State               | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-400-402     |
-| FU-500   | Plaid Link UI                  | 5     | Post-MVP | Medium | Medium     | 🔨 Partial      | FU-207, FU-300 |
-| FU-501   | Provider Connectors UI         | 5     | P1       | Medium | High       | 🔨 Partial      | FU-208, FU-300 |
-| FU-600   | Advanced Search UI             | 6     | P1       | Low    | Medium     | 🔨 Partial      | FU-105, FU-301 |
-| FU-601   | Entity Explorer                | 6     | P2       | Low    | Medium     | ⏳ Not Started  | FU-101, FU-300 |
-| FU-700   | Authentication UI              | 7     | P0       | High   | Medium     | 🔨 Partial      | None           |
-| FU-701   | RLS Implementation             | 7     | P0       | High   | Medium     | ⏳ Not Started  | FU-700, FU-000 |
-| FU-703   | Local Storage / Offline Mode   | 7     | P0       | Medium | High       | ✅ Complete     | FU-001         |
-| FU-702   | Billing and Subscription       | 7     | P1       | Medium | High       | ⏳ Not Started  | FU-700, FU-701 |
-| FU-800   | Technical Metrics (Prometheus) | 8     | P1       | Low    | Medium     | ⏳ Not Started  | All FUs        |
-| FU-803   | Product Analytics (PostHog)    | 8     | P1       | Low    | Low        | ⏳ Not Started  | FU-700         |
-| FU-801   | Logging                        | 8     | P1       | Low    | Low        | 🔨 Partial      | None           |
-| FU-802   | Tracing                        | 8     | P2       | Low    | Medium     | ⏳ Not Started  | FU-801         |
-| FU-900   | Error Handling UI              | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300         |
-| FU-901   | Loading States                 | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300         |
-| FU-902   | Empty States                   | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300         |
-| FU-903   | A11y Audit                     | 9     | P1       | Low    | Medium     | ⏳ Not Started  | All UI FUs     |
-| FU-904   | i18n Setup                     | 9     | P2       | Low    | Medium     | ⏳ Not Started  | All UI FUs     |
+| ID       | Name                           | Phase | Priority | Risk   | Complexity | Status          | Blocking                       |
+| -------- | ------------------------------ | ----- | -------- | ------ | ---------- | --------------- | ------------------------------ |
+| FU-000   | Database Schema                | 0     | P0       | High   | Medium     | ✅ Complete     | None                           |
+| FU-001   | Crypto Infrastructure          | 0     | P0       | High   | High       | ✅ Complete     | None                           |
+| FU-002   | Configuration                  | 0     | P0       | Medium | Low        | ✅ Complete     | None                           |
+| FU-100   | File Analysis                  | 1     | P0       | High   | High       | 🔨 Needs Update | FU-000                         |
+| FU-100.5 | Schema Compliance Verification | 1     | P0       | Medium | Medium     | 🔨 Pending      | FU-100                         |
+| FU-101   | Entity Resolution              | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100                         |
+| FU-102   | Event Generation               | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100                         |
+| FU-103   | Graph Builder                  | 1     | P0       | High   | Medium     | 🔨 Partial      | FU-101, FU-102                 |
+| FU-104   | Embedding Service              | 1     | P1       | Medium | Medium     | ✅ Complete     | FU-100                         |
+| FU-105   | Search Service                 | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-104                         |
+| FU-200   | MCP Server Core                | 2     | P0       | High   | High       | ✅ Complete     | FU-000                         |
+| FU-201   | store_record                   | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
+| FU-202   | retrieve_records               | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-105, FU-200, FU-051         |
+| FU-203   | update_record                  | 2     | P0       | Low    | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
+| FU-204   | delete_record                  | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
+| FU-205   | upload_file                    | 2     | P0       | High   | High       | ✅ Complete     | FU-100, FU-200, FU-050, FU-051 |
+| FU-206   | get_file_url                   | 2     | P1       | Low    | Low        | ✅ Complete     | FU-200                         |
+| FU-207   | Plaid Integration              | 2     | Post-MVP | Medium | High       | ✅ Complete     | FU-200                         |
+| FU-208   | Provider Integrations          | 2     | P1       | Medium | High       | ✅ Complete     | FU-200                         |
+| FU-300   | UI Foundation                  | 3     | P0       | Medium | Medium     | 🔨 Partial      | None                           |
+| FU-301   | Records List                   | 3     | P0       | Low    | Medium     | ✅ Complete     | FU-300, FU-202                 |
+| FU-302   | Record Detail                  | 3     | P0       | Low    | Low        | ✅ Complete     | FU-300, FU-202                 |
+| FU-303   | Timeline View                  | 3     | P0       | Medium | Medium     | ⏳ Not Started  | FU-102, FU-300                 |
+| FU-304   | File Upload UI                 | 3     | P0       | Medium | Medium     | 🔨 Partial      | FU-205, FU-300                 |
+| FU-305   | Dashboard                      | 3     | P1       | Low    | Low        | ⏳ Not Started  | FU-300, FU-202                 |
+| FU-306   | Settings UI                    | 3     | P2       | Low    | Low        | 🔨 Partial      | FU-300                         |
+| FU-307   | Chat/AI Panel                  | 3     | P0       | Medium | High       | ✅ Complete     | FU-202, FU-300                 |
+| FU-400   | Onboarding Welcome             | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-300                         |
+| FU-401   | Onboarding Progress            | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-205                         |
+| FU-402   | Onboarding Results             | 4     | P0       | Low    | Medium     | ⏳ Not Started  | FU-302                         |
+| FU-403   | Onboarding State               | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-400-402                     |
+| FU-500   | Plaid Link UI                  | 5     | Post-MVP | Medium | Medium     | 🔨 Partial      | FU-207, FU-300                 |
+| FU-501   | Provider Connectors UI         | 5     | P1       | Medium | High       | 🔨 Partial      | FU-208, FU-300                 |
+| FU-600   | Advanced Search UI             | 6     | P1       | Low    | Medium     | 🔨 Partial      | FU-105, FU-301                 |
+| FU-601   | Entity Explorer                | 6     | P2       | Low    | Medium     | ⏳ Not Started  | FU-101, FU-300                 |
+| FU-700   | Authentication UI              | 7     | P0       | High   | Medium     | 🔨 Partial      | None                           |
+| FU-701   | RLS Implementation             | 7     | P0       | High   | Medium     | ⏳ Not Started  | FU-700, FU-000                 |
+| FU-703   | Local Storage / Offline Mode   | 7     | P0       | Medium | High       | ✅ Complete     | FU-001                         |
+| FU-702   | Billing and Subscription       | 7     | P1       | Medium | High       | ⏳ Not Started  | FU-700, FU-701                 |
+| FU-800   | Technical Metrics (Prometheus) | 8     | P1       | Low    | Medium     | ⏳ Not Started  | All FUs                        |
+| FU-803   | Product Analytics (PostHog)    | 8     | P1       | Low    | Low        | ⏳ Not Started  | FU-700                         |
+| FU-801   | Logging                        | 8     | P1       | Low    | Low        | 🔨 Partial      | None                           |
+| FU-802   | Tracing                        | 8     | P2       | Low    | Medium     | ⏳ Not Started  | FU-801                         |
+| FU-900   | Error Handling UI              | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
+| FU-901   | Loading States                 | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
+| FU-902   | Empty States                   | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
+| FU-903   | A11y Audit                     | 9     | P1       | Low    | Medium     | ⏳ Not Started  | All UI FUs                     |
+| FU-904   | i18n Setup                     | 9     | P2       | Low    | Medium     | ⏳ Not Started  | All UI FUs                     |
 
 \*All P0 features required for MVP (includes multi-user support for Tier 1 founders & small teams)
 
