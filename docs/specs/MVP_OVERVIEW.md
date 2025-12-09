@@ -40,7 +40,7 @@ Neotoma ingests PDFs and images, extracts structured fields, identifies entities
 **Is:**
 
 - The memory substrate beneath AI tools
-- The foundation for Agentic Portfolio (strategy) and Agentic Wallet (execution)
+- The foundation for Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)
 - A deterministic personal and team memory engine (supports individuals and small teams 2–20 people)
 
 ---
@@ -50,22 +50,28 @@ Neotoma ingests PDFs and images, extracts structured fields, identifies entities
 Neotoma is designed as a **Truth Layer** that can support multiple upper layers. One important example is a financial system:
 
 ```
-┌──────────────────────────────┐
-│ Agentic Wallet (Execution)   │ ← Blockchain, DeFi, automation
-└──────────▲───────────────────┘
-           │ Reads Only
-┌──────────▼───────────────────┐
-│ Agentic Portfolio (Strategy) │ ← Tax, projections, planning
-└──────────▲───────────────────┘
-           │ Reads Only
-┌──────────▼───────────────────┐
-│   Neotoma (Truth Layer)      │ ← Ingestion, extraction, memory
-└──────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│      Execution Layer                          │
+│  (Agentic Wallet + Domain Agents)            │
+│  Commands → Side Effects → Domain Events    │
+└────────────▲─────────────────────────────────┘
+             │ Reads Only, Receives Commands
+┌────────────▼─────────────────────────────────┐
+│      Strategy Layer                           │
+│  (Agentic Portfolio is example instance)    │
+│  State → Evaluates → Decisions + Commands   │
+└────────────▲─────────────────────────────────┘
+             │ Reads Only
+┌────────────▼─────────────────────────────────┐
+│    Neotoma (Truth Layer)                     │
+│  Event-sourced, Reducer-driven              │
+│  Domain Events → Reducers → State           │
+└─────────────────────────────────────────────┘
 ```
 
-Neotoma is the **bottom layer** — pure truth, no strategy, no execution.
+Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no strategy, no execution.
 
-**Note:** Agentic Portfolio and Agentic Wallet are two important examples of layers that can be built on Neotoma, but many other agent-driven layers are possible. Neotoma is a general-purpose Truth Layer substrate, not limited to financial use cases.
+**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose Truth Layer substrate, not limited to financial use cases.
 
 ---
 
@@ -217,7 +223,7 @@ See [`docs/specs/METRICS_REQUIREMENTS.md`](./METRICS_REQUIREMENTS.md) for full m
 - ❌ LLM-based extraction (rule-based only)
 - ❌ Semantic search (structured only)
 - ❌ Automatic ingestion (explicit user control)
-- ❌ Strategy or planning (that's Agentic Portfolio)
+- ❌ Strategy or planning (that's Strategy Layer, e.g., Agentic Portfolio)
 - ❌ Execution or transactions (that's Wallet)
 - ❌ Real-time collaboration (async multi-user only)
 - ❌ Enterprise features (advanced permissions, org-wide governance) — Tier 6, post-MVP

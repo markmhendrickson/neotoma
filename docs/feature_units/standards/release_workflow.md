@@ -553,6 +553,15 @@ Before creating a Release, verify:
 
 **Trigger:** Discovery complete and validated (if discovery was conducted), or execution schedule approved (if discovery skipped)
 
+**Execution Strategy:**
+
+The release workflow supports two execution strategies:
+
+1. **Sequential Execution** (default): Single agent executes FUs sequentially within batches
+2. **Multi-Agent Execution** (recommended for parallelizable batches): Orchestrator agent spawns worker agents via Cursor Background Agents API
+
+**To use multi-agent execution**, set `execution_strategy.type: "multi_agent"` in `manifest.yaml`. See `docs/feature_units/standards/multi_agent_orchestration.md` for complete specification.
+
 **Agent Actions:**
 
 1. **Continuous Discovery Setup (if discovery was conducted):**
@@ -561,48 +570,63 @@ Before creating a Release, verify:
    - Plan prototype testing after each major UI FU
    - Set up feedback collection mechanism
 
-2. **For each batch in execution schedule (in order):**
+2. **Determine Execution Strategy:**
 
-**Trigger:** Execution schedule approved
+   - Check `manifest.yaml` for `execution_strategy.type`
+   - If `"multi_agent"`: Follow `multi_agent_orchestration.md` workflow
+   - If `"sequential"` or not specified: Follow sequential workflow below
 
-**Agent Actions:**
+3. **For each batch in execution schedule (in order):**
 
-1. **For each batch in execution schedule (in order):**
+**Sequential Execution Workflow:**
 
-   a. **Start all FUs in batch (in parallel if multiple):**
+a. **Start all FUs in batch (in parallel if multiple):**
 
-   - For each FU in batch:
-     - Check if FU spec exists; if not, run `Create New Feature Unit` workflow (Checkpoint 0)
-     - If UI FU and prototype doesn't exist, run `Create Prototype` workflow
-     - If UI FU and prototype not approved, run Checkpoint 1 (Prototype Review)
-     - Run `Run Feature Workflow` to implement FU
-     - Run `Final Review` (Checkpoint 2) for FU approval
+- For each FU in batch:
+  - Check if FU spec exists; if not, run `Create New Feature Unit` workflow (Checkpoint 0)
+  - If UI FU and prototype doesn't exist, run `Create Prototype` workflow
+  - If UI FU and prototype not approved, run Checkpoint 1 (Prototype Review)
+  - Run `Run Feature Workflow` to implement FU
+  - Run `Final Review` (Checkpoint 2) for FU approval
+- If multiple FUs in batch, suggest running in parallel (separate agent sessions or worktrees)
 
-   b. **Wait for all FUs in batch to complete**
+b. **Wait for all FUs in batch to complete**
 
-   c. **Run cross-FU integration tests for this batch:**
+c. **Run cross-FU integration tests for this batch:**
 
-   - Execute integration test suite from `integration_tests.md`
-   - If tests fail:
-     - **STOP** and report failures to user
-     - User decides: fix and retry, skip FU, or abort Release
-   - If tests pass, proceed to next batch
+- Execute integration test suite from `integration_tests.md`
+- If tests fail:
+  - **STOP** and report failures to user
+  - User decides: fix and retry, skip FU, or abort Release
+- If tests pass, proceed to next batch
 
-   d. **Continuous Discovery (during batch execution):**
+d. **Continuous Discovery (during batch execution):**
 
-   - If batch includes UI FUs: Conduct prototype testing with 2-3 users
-   - Weekly user interviews: Gather feedback on completed features (2-3 users per week)
-   - Rapid iteration: Make quick adjustments based on user feedback
-   - Document findings in `continuous_discovery_log.md`
+- If batch includes UI FUs: Conduct prototype testing with 2-3 users
+- Weekly user interviews: Gather feedback on completed features (2-3 users per week)
+- Rapid iteration: Make quick adjustments based on user feedback
+- Document findings in `continuous_discovery_log.md`
 
-   e. **Update Release status:**
+e. **Update Release status:**
 
-   - Mark batch as `completed` in `status.md`
-   - Update overall Release progress percentage
-   - If any decisions were made during batch execution (scope changes, FU deferrals, etc.), append to Decision Log in `status.md` with timestamp
-   - Document continuous discovery findings
+- Mark batch as `completed` in `status.md`
+- Update overall Release progress percentage
+- If any decisions were made during batch execution (scope changes, FU deferrals, etc.), append to Decision Log in `status.md` with timestamp
+- Document continuous discovery findings
 
-2. **After all batches complete:**
+**Multi-Agent Execution Workflow:**
+
+See `docs/feature_units/standards/multi_agent_orchestration.md` for complete workflow. Key steps:
+
+a. **Check execution limits** (`max_parallel_fus`, `max_high_risk_in_parallel`)
+b. **Spawn worker agents** for all FUs in batch (via Cloud Agents API)
+c. **Monitor worker agents** (poll status file, handle failures)
+d. **Wait for all FUs in batch to complete** (all workers report completion)
+e. **Run cross-FU integration tests** (orchestrator executes)
+f. **Update Release status** (mark batch complete, update progress)
+g. **Cleanup worker agents** (terminate completed agents)
+
+4. **After all batches complete:**
    - Mark all FUs as `completed`
    - Synthesize continuous discovery findings
    - Update Release plan based on continuous discovery learnings
@@ -1528,6 +1552,7 @@ Load when:
 
 - `docs/feature_units/standards/creating_feature_units.md` — FU creation workflow
 - `docs/feature_units/standards/execution_instructions.md` — FU execution flow
+- `docs/feature_units/standards/multi_agent_orchestration.md` — Multi-agent execution (if `execution_strategy.type: "multi_agent"` in manifest)
 - `docs/feature_units/standards/discovery_process.md` — Discovery process (for Step 0.5)
 - `docs/specs/MVP_FEATURE_UNITS.md` — For MVP Release (first release)
 

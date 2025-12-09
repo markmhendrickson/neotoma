@@ -25,8 +25,11 @@ This document defines the release-level acceptance criteria that must be met bef
 
 - Records list and detail views functional and usable.
 - Timeline view present and correctly ordered.
-- Basic upload UI separated from chat and usable.
+- Basic upload UI functional and usable (no chat UI dependencies).
 - Empty states and error states present and understandable for all main views.
+- MCP integration documented and tested with external agents (ChatGPT, Cursor, Claude).
+
+**Note:** Neotoma adopts MCP-first conversational architecture. All conversational interactions are externalized to MCP-compatible agents. See `docs/architecture/conversational_ux_architecture.md` for architectural rationale.
 
 ---
 

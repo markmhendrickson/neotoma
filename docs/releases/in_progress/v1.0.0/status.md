@@ -8,7 +8,7 @@
 - **Name**: MVP
 - **Status**: `planning` <!-- planning | in_progress | ready_for_deployment | deployed | completed -->
 - **Owner**: Mark Hendrickson
-- **Target Date**: 2025-03-01
+- **Target Date**: 2026-02-24 (based on Dec 9, 2025 start date)
 
 ---
 

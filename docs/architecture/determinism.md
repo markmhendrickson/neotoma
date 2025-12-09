@@ -455,6 +455,113 @@ function calculateScore(record: Record, query: string): number {
 
 ---
 
+## 3.5 Reducer Determinism
+
+### 3.5.1 Reducer Requirements
+
+**Reducers MUST be deterministic:**
+
+- Same observations → same snapshot
+- Same merge policies → same result
+- Order-independent (observations sorted deterministically)
+
+**Pattern:**
+
+```typescript
+function computeSnapshot(
+  observations: Observation[],
+  mergePolicies: MergePolicies
+): EntitySnapshot {
+  // 1. Sort observations deterministically
+  const sorted = sortObservations(observations);
+  
+  // 2. Apply merge policies per field
+  const snapshot = {};
+  const provenance = {};
+  
+  for (const [field, policy] of Object.entries(mergePolicies)) {
+    const { value, sourceId } = mergeField(field, sorted, policy);
+    snapshot[field] = value;
+    provenance[field] = sourceId;
+  }
+  
+  return { snapshot, provenance };
+}
+```
+
+### 3.5.2 Observation Ordering
+
+Observations MUST be sorted deterministically before merging:
+
+1. **Primary sort:** `observed_at DESC` (most recent first)
+2. **Secondary sort:** `id ASC` (stable tie-breaker)
+
+**Sorting Function:**
+
+```typescript
+function sortObservations(observations: Observation[]): Observation[] {
+  return observations.sort((a, b) => {
+    const timeDiff = b.observed_at.getTime() - a.observed_at.getTime();
+    if (timeDiff !== 0) return timeDiff;
+    return a.id.localeCompare(b.id);
+  });
+}
+```
+
+### 3.5.3 ID Generation for Observations
+
+Observation IDs MUST be deterministic:
+
+```typescript
+function generateObservationId(
+  entityId: string,
+  recordId: string,
+  fieldHash: string
+): string {
+  const hash = createHash('sha256')
+    .update(`${entityId}:${recordId}:${fieldHash}`)
+    .digest('hex');
+  return `obs_${hash.substring(0, 24)}`;
+}
+```
+
+**Determinism:** Same entity + same record + same fields → same observation ID.
+
+### 3.5.4 Testing Reducer Determinism
+
+**Test Pattern:**
+
+```typescript
+test('reducer is deterministic', async () => {
+  const observations = [obs1, obs2, obs3];
+  const snapshot1 = await reducer.computeSnapshot(entityId);
+  
+  // Recompute with same observations
+  const snapshot2 = await reducer.computeSnapshot(entityId);
+  
+  expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
+  expect(snapshot1.provenance).toEqual(snapshot2.provenance);
+});
+
+test('reducer handles out-of-order observations', async () => {
+  const observations1 = [obs1, obs2, obs3];
+  const observations2 = [obs3, obs1, obs2]; // Different order
+  
+  const snapshot1 = await reducer.computeSnapshot(entityId, observations1);
+  const snapshot2 = await reducer.computeSnapshot(entityId, observations2);
+  
+  // Should produce same snapshot regardless of input order
+  expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
+});
+```
+
+**Related Documents:**
+
+- [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer implementation patterns
+- [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
+
+---
+
 ## 4. Determinism and Timestamps
 
 ### 4.1 Audit Timestamps (Acceptable Nondeterminism)

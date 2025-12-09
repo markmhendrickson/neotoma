@@ -55,43 +55,54 @@ Batching is derived from the dependency graph in `manifest.yaml`. All FUs in the
 
 ### Suggested Parallelization
 
-Assuming 2–3 active dev/agent lanes, suggested parallelization:
+**Assumptions:**
 
-- **Phase 1 (Batch 0)** — Estimated: 2-3 weeks
-  - Lane A: `FU-100` (File Analysis Service Update) — 1-2 weeks
-  - Lane B: `FU-300` (Design System Implementation) — 2-3 weeks
-  - Lane C: `FU-700` (Authentication UI) — 1 week
+- All timeline estimates assume Cursor agent execution (not human developers)
+- Cloud agents execute in parallel via Cursor Background Agents API (see `docs/feature_units/standards/multi_agent_orchestration.md`)
+- Execution limits: `max_parallel_fus: 3`, `max_high_risk_in_parallel: 1`
+
+**With Cloud Agent Parallelization (max 3 agents):**
+
+Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h) + implementation (2-8h) + testing (1-4h) + docs (0.5-1h) + 20% review overhead
+
+- **Phase 1 (Batch 0)** — Estimated: 1.5-2 weeks
+
+  - Cloud Agents: `FU-100` (2.5 days), `FU-300` (1.5 weeks design system), `FU-700` (1 week auth UI) in parallel
   - **Bottleneck**: FU-300 (longest in batch)
-  - **Timeline**: Week 0-3
+  - **Timeline**: Week 0-2
 
-- **Phase 2 (Batch 1)** — Estimated: 2-3 weeks
-  - Lane A: `FU-101` (Entity Resolution Service) — 2 weeks
-  - Lane B: `FU-102` (Event Generation Service) — 2-3 weeks
-  - **Bottleneck**: FU-102 (longest in batch)
-  - **Timeline**: Week 3-6
+- **Phase 2 (Batch 1)** — Estimated: 1 week
 
-- **Phase 3 (Batch 2)** — Estimated: 2-3 weeks
-  - Lane A/B: `FU-103` (Graph Builder Service) — 2-3 weeks
-  - **Timeline**: Week 6-9
+  - Cloud Agents: `FU-101` (1 day), `FU-102` (0.75 days) in parallel
+  - **Bottleneck**: FU-101 (longest in batch)
+  - **Timeline**: Week 2-3
 
-- **Phase 4 (Batch 3)** — Estimated: 2 weeks
-  - Lane A: `FU-105` (Search Service) — 1-2 weeks
-  - Lane B: `FU-701` (RLS Implementation) — 1-2 weeks
-  - **Timeline**: Week 9-11
+- **Phase 3 (Batch 2)** — Estimated: 0.5 days
 
-**Total Estimated Development Time**: 11-14 weeks (assumes 2-3 weeks per batch)
+  - Sequential: `FU-103` (0.5 days)
+  - **Timeline**: Week 3
 
-**Overall Timeline**:
-- **Week -8 to -5**: Pre-release discovery (3-4 weeks)
-- **Week -5 to -1**: Discovery synthesis, go/no-go decision, scope refinement (1 week)
-- **Week -4 to 0**: Pre-launch marketing activities (overlaps with Week -5 to -1)
-- **Week 0 to 11**: Development execution (11-14 weeks)
-- **Week 11 to 12**: Cross-release integration testing (1 week)
-- **Week 12**: Pre-release sign-off, staging deployment, pre-launch marketing finalization
-- **Week 13**: Production deployment (Day 0)
-- **Week 13 to 17**: Post-launch marketing and validation (4 weeks)
+- **Phase 4 (Batch 3)** — Estimated: 1 week
+  - Cloud Agents: `FU-105` (0.5 days), `FU-701` (1 week RLS implementation) in parallel
+  - **Bottleneck**: FU-701 (longest in batch)
+  - **Timeline**: Week 3-4
 
-**Target Ship Date**: Week 13 from development start = 2025-03-01 (adjustable based on discovery findings)
+**Total Estimated Development Time**: 3-4 weeks (with cloud agent parallelization, 25-35% reduction from sequential)
+
+**Sequential Timeline (for comparison):** ~4-5 weeks
+
+**Overall Timeline** (as of December 9, 2025):
+
+- **Week -8 to -5** (Dec 9, 2025 - Jan 6, 2026): Pre-release discovery (3-4 weeks)
+- **Week -5 to -1** (Jan 6-13, 2026): Discovery synthesis, go/no-go decision, scope refinement (1 week)
+- **Week -4 to 0** (Jan 6-13, 2026): Pre-launch marketing activities (overlaps with Week -5 to -1)
+- **Week 0 to 4** (Jan 13 - Feb 10, 2026): Development execution (3-4 weeks with cloud agents)
+- **Week 4 to 5** (Feb 10-17, 2026): Cross-release integration testing (1 week)
+- **Week 5** (Feb 17, 2026): Pre-release sign-off, staging deployment, pre-launch marketing finalization
+- **Week 6** (Feb 24, 2026): Production deployment (Day 0)
+- **Week 6 to 10** (Feb 24 - Mar 24, 2026): Post-launch marketing and validation (4 weeks)
+
+**Target Ship Date**: February 24, 2026 (Week 6 from development start, adjustable based on discovery findings)
 
 ---
 
@@ -121,7 +132,7 @@ Assuming 2–3 active dev/agent lanes, suggested parallelization:
     - Signup flow
     - Login flow
     - Password reset flow
-  
+
   **Continuous Discovery**: 2-3 user interviews on upload experience
 
 - **After Batch 1** (Week 6):
@@ -131,9 +142,9 @@ Assuming 2–3 active dev/agent lanes, suggested parallelization:
     - Verify entities created and deduplicated correctly
     - Verify events created with correct timestamps and linkage
     - Test determinism across full pipeline
-  
+
   **Mid-Release Checkpoint (Checkpoint 1)**: Review progress, validate integration
-  
+
   **Continuous Discovery**: Prototype testing with 3-5 users on entity/event views
 
 - **After Batch 2** (Week 9):
@@ -143,7 +154,7 @@ Assuming 2–3 active dev/agent lanes, suggested parallelization:
     - Verify 0 cycles after batch inserts
     - Test transactional insert behavior under failure scenarios
     - Test concurrent insert handling
-  
+
   **Continuous Discovery**: 2-3 user interviews on timeline/graph views
 
 - **After Batch 3** (Week 11):
@@ -152,11 +163,7 @@ Assuming 2–3 active dev/agent lanes, suggested parallelization:
     - Upload → extraction → graph → search → UI → MCP
     - Multi-user flows with RLS enforced
     - All IT-001 through IT-005 from `integration_tests.md`
-  
+
   **Continuous Discovery**: Beta testing with discovery participants (Week 11-12)
 
 See `integration_tests.md` for detailed test definitions.
-
-
-
-

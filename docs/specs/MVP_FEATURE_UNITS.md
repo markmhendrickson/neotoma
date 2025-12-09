@@ -143,6 +143,173 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 ---
 
+### Phase 0.5: Observation Architecture (Building on Event-Sourcing Foundation)
+
+**Goal:** Implement four-layer truth model (Document → Entity → Observation → Snapshot) with reducers, schema registry, and relationships.
+
+**Note:** This phase builds on the event-sourcing foundation (FU-050 through FU-054) which provides reducer infrastructure. Observation architecture enhances that foundation with observation-specific patterns.
+
+#### FU-055: Observation Storage Layer
+
+- **Priority:** P0
+- **Risk:** Medium
+- **Complexity:** Medium
+- **Dependencies:** FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions), FU-052 (Reducer Versioning)
+- **Deliverables:**
+  - Add `observations` table to database schema
+  - Add `entity_snapshots` table
+  - Add `raw_fragments` table
+  - Add indexes and RLS policies
+  - Repository interfaces: ObservationRepository, SnapshotRepository
+- **Tests:**
+  - Repository interface tests
+  - CRUD operations
+  - Transaction handling
+  - RLS policy validation
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/subsystems/schema.md`](../subsystems/schema.md) — Database schema
+  - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
+
+---
+
+#### FU-056: Enhanced Reducer Engine for Observations
+
+- **Priority:** P0
+- **Risk:** High
+- **Complexity:** High
+- **Dependencies:** FU-050 (Event-Sourcing Foundation), FU-052 (Reducer Versioning), FU-055 (Observation Storage)
+- **Deliverables:**
+  - Extend existing reducer infrastructure for observation merging
+  - Implement merge strategies: `last_write`, `highest_priority`, `most_specific`, `merge_array`
+  - Add provenance tracking in snapshots
+  - Integrate with existing reducer versioning (FU-052)
+- **Tests:**
+  - Merge strategy tests (all 4 strategies)
+  - Determinism tests (same observations → same snapshot)
+  - Out-of-order observation arrival
+  - Provenance tracking validation
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer patterns
+  - [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism requirements
+
+---
+
+#### FU-057: Schema Registry Service
+
+- **Priority:** P0
+- **Risk:** Medium
+- **Complexity:** Medium
+- **Dependencies:** FU-000 (Database Schema), FU-055 (Observation Storage)
+- **Deliverables:**
+  - `schema_registry` table
+  - SchemaRegistry service for config-driven schemas
+  - Schema validation
+  - Schema versioning and migration support
+- **Tests:**
+  - Schema registration
+  - Schema validation
+  - Active schema lookup
+  - Version migration
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry patterns
+
+---
+
+#### FU-058: Observation-Aware Ingestion Pipeline
+
+- **Priority:** P0
+- **Risk:** High
+- **Complexity:** High
+- **Dependencies:** FU-055 (Observation Storage), FU-056 (Enhanced Reducer), FU-100 (File Analysis), FU-101 (Entity Resolution)
+- **Deliverables:**
+  - Integrate observation creation into ingestion pipeline
+  - Separate known fields vs raw_fragments
+  - Trigger observation reducer after entity resolution
+  - Emit state_events for observation creation (integrates with FU-050)
+- **Tests:**
+  - Observation creation during ingestion
+  - Raw fragment storage
+  - Reducer invocation
+  - State event emission (FU-050 integration)
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/subsystems/ingestion/ingestion.md`](../subsystems/ingestion/ingestion.md) — Ingestion pipeline
+  - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
+
+---
+
+#### FU-059: Relationship Types
+
+- **Priority:** P0
+- **Risk:** Low
+- **Complexity:** Medium
+- **Dependencies:** FU-055 (Observation Storage), FU-103 (Graph Builder)
+- **Deliverables:**
+  - `relationships` table with typed edges
+  - Relationship service
+  - First-class relationship types: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF
+  - Graph traversal queries
+- **Tests:**
+  - Relationship creation
+  - Type validation
+  - Graph traversal
+  - Cycle detection
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/subsystems/relationships.md`](../subsystems/relationships.md) — Relationship patterns
+
+---
+
+#### FU-060: Automated Schema Promotion (Optional P1)
+
+- **Priority:** P1 (Optional)
+- **Risk:** Low
+- **Complexity:** Medium
+- **Dependencies:** FU-057 (Schema Registry), FU-058 (Observation-Aware Ingestion)
+- **Deliverables:**
+  - Pattern detection from raw_fragments
+  - Frequency analytics
+  - Schema suggestion generation
+  - Manifest-based migration (integrates with FU-052)
+- **Tests:**
+  - Pattern detection accuracy
+  - Frequency thresholds
+  - Manifest generation
+  - Migration execution
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.md) — Schema expansion patterns
+
+---
+
+#### FU-061: MCP Actions for Observation Architecture
+
+- **Priority:** P0
+- **Risk:** Medium
+- **Complexity:** Medium
+- **Dependencies:** FU-055 (Observation Storage), FU-056 (Enhanced Reducer), FU-059 (Relationship Types), FU-200 (MCP Server Core)
+- **Deliverables:**
+  - New MCP actions:
+    - `get_entity_snapshot` — Get entity with provenance
+    - `list_observations` — Query observations for entity
+    - `get_field_provenance` — Trace field to source documents
+    - `create_relationship` — Create typed relationship
+    - `list_relationships` — Query entity relationships
+  - Update existing MCP actions to use snapshots
+- **Tests:**
+  - MCP action execution
+  - Response validation
+  - Error handling
+  - Integration with existing actions
+- **Status:** ⏳ Not Started
+- **Related Documents:**
+  - [`docs/specs/MCP_SPEC.md`](./MCP_SPEC.md) — MCP specification
+
+---
+
 ### Phase 1: Core Services (Domain Layer)
 
 **Goal:** Deterministic extraction, entity resolution, graph construction.
@@ -719,22 +886,24 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 #### FU-307: Chat/AI Panel
 
-- **Priority:** P0
+- **Priority:** P0 → **EXCLUDED** (Architectural Decision)
 - **Risk:** Medium
 - **Complexity:** High
 - **Dependencies:** FU-202 (retrieve_records), FU-300 (UI foundation)
 - **Deliverables:**
-  - Chat interface (user message, AI response)
-  - MCP integration (retrieve_records via backend)
-  - Record references in responses
-  - File upload from chat
-  - Message history persistence
-- **Tests:**
-  - Component: ChatPanel, message rendering
-  - Integration: Send message → get response with record refs
-  - E2E: Ask "how many records?" → verify answer
-- **Acceptance:** AI responses reference record_ids, no hallucinations
-- **Status:** ✅ Complete (existing `ChatPanel.tsx`)
+  - ~~Chat interface (user message, AI response)~~ **EXCLUDED**
+  - ~~MCP integration (retrieve_records via backend)~~ **EXCLUDED** (MCP integration handled via external agents)
+  - ~~Record references in responses~~ **EXCLUDED**
+  - ~~File upload from chat~~ **EXCLUDED** (upload UI separated)
+  - ~~Message history persistence~~ **EXCLUDED**
+- **Architectural Decision:** Neotoma adopts MCP-first conversational architecture. All conversational interactions MUST be externalized to MCP-compatible agents (ChatGPT, Cursor, Claude). Internal chat UI violates architectural decision. See `docs/architecture/conversational_ux_architecture.md` for rationale.
+- **Migration Path:**
+  - ChatPanel component exists but MUST be deprecated
+  - Extract deterministic operations (search, filter) to standalone components
+  - Remove conversational state management
+  - Create MCP integration documentation for external agents
+  - See `docs/releases/in_progress/v1.0.0/architectural_impact_chat_ui.md` for migration details
+- **Status:** ❌ **EXCLUDED** (existing `ChatPanel.tsx` to be deprecated)
 
 ---
 
@@ -1215,56 +1384,56 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 ## Feature Unit Summary Table
 
-| ID       | Name                           | Phase | Priority | Risk   | Complexity | Status          | Blocking                       |
-| -------- | ------------------------------ | ----- | -------- | ------ | ---------- | --------------- | ------------------------------ |
-| FU-000   | Database Schema                | 0     | P0       | High   | Medium     | ✅ Complete     | None                           |
-| FU-001   | Crypto Infrastructure          | 0     | P0       | High   | High       | ✅ Complete     | None                           |
-| FU-002   | Configuration                  | 0     | P0       | Medium | Low        | ✅ Complete     | None                           |
-| FU-100   | File Analysis                  | 1     | P0       | High   | High       | 🔨 Needs Update | FU-000                         |
-| FU-100.5 | Schema Compliance Verification | 1     | P0       | Medium | Medium     | 🔨 Pending      | FU-100                         |
-| FU-101   | Entity Resolution              | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100                         |
-| FU-102   | Event Generation               | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-100                         |
-| FU-103   | Graph Builder                  | 1     | P0       | High   | Medium     | 🔨 Partial      | FU-101, FU-102                 |
-| FU-104   | Embedding Service              | 1     | P1       | Medium | Medium     | ✅ Complete     | FU-100                         |
-| FU-105   | Search Service                 | 1     | P0       | Medium | Medium     | 🔨 Partial      | FU-104                         |
-| FU-200   | MCP Server Core                | 2     | P0       | High   | High       | ✅ Complete     | FU-000                         |
-| FU-201   | store_record                   | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
-| FU-202   | retrieve_records               | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-105, FU-200, FU-051         |
-| FU-203   | update_record                  | 2     | P0       | Low    | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
-| FU-204   | delete_record                  | 2     | P0       | Medium | Medium     | ✅ Complete     | FU-200, FU-050, FU-051         |
-| FU-205   | upload_file                    | 2     | P0       | High   | High       | ✅ Complete     | FU-100, FU-200, FU-050, FU-051 |
-| FU-206   | get_file_url                   | 2     | P1       | Low    | Low        | ✅ Complete     | FU-200                         |
-| FU-207   | Plaid Integration              | 2     | Post-MVP | Medium | High       | ✅ Complete     | FU-200                         |
-| FU-208   | Provider Integrations          | 2     | P1       | Medium | High       | ✅ Complete     | FU-200                         |
-| FU-300   | UI Foundation                  | 3     | P0       | Medium | Medium     | 🔨 Partial      | None                           |
-| FU-301   | Records List                   | 3     | P0       | Low    | Medium     | ✅ Complete     | FU-300, FU-202                 |
-| FU-302   | Record Detail                  | 3     | P0       | Low    | Low        | ✅ Complete     | FU-300, FU-202                 |
-| FU-303   | Timeline View                  | 3     | P0       | Medium | Medium     | ⏳ Not Started  | FU-102, FU-300                 |
-| FU-304   | File Upload UI                 | 3     | P0       | Medium | Medium     | 🔨 Partial      | FU-205, FU-300                 |
-| FU-305   | Dashboard                      | 3     | P1       | Low    | Low        | ⏳ Not Started  | FU-300, FU-202                 |
-| FU-306   | Settings UI                    | 3     | P2       | Low    | Low        | 🔨 Partial      | FU-300                         |
-| FU-307   | Chat/AI Panel                  | 3     | P0       | Medium | High       | ✅ Complete     | FU-202, FU-300                 |
-| FU-400   | Onboarding Welcome             | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-300                         |
-| FU-401   | Onboarding Progress            | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-205                         |
-| FU-402   | Onboarding Results             | 4     | P0       | Low    | Medium     | ⏳ Not Started  | FU-302                         |
-| FU-403   | Onboarding State               | 4     | P0       | Low    | Low        | ⏳ Not Started  | FU-400-402                     |
-| FU-500   | Plaid Link UI                  | 5     | Post-MVP | Medium | Medium     | 🔨 Partial      | FU-207, FU-300                 |
-| FU-501   | Provider Connectors UI         | 5     | P1       | Medium | High       | 🔨 Partial      | FU-208, FU-300                 |
-| FU-600   | Advanced Search UI             | 6     | P1       | Low    | Medium     | 🔨 Partial      | FU-105, FU-301                 |
-| FU-601   | Entity Explorer                | 6     | P2       | Low    | Medium     | ⏳ Not Started  | FU-101, FU-300                 |
-| FU-700   | Authentication UI              | 7     | P0       | High   | Medium     | 🔨 Partial      | None                           |
-| FU-701   | RLS Implementation             | 7     | P0       | High   | Medium     | ⏳ Not Started  | FU-700, FU-000                 |
-| FU-703   | Local Storage / Offline Mode   | 7     | P0       | Medium | High       | ✅ Complete     | FU-001                         |
-| FU-702   | Billing and Subscription       | 7     | P1       | Medium | High       | ⏳ Not Started  | FU-700, FU-701                 |
-| FU-800   | Technical Metrics (Prometheus) | 8     | P1       | Low    | Medium     | ⏳ Not Started  | All FUs                        |
-| FU-803   | Product Analytics (PostHog)    | 8     | P1       | Low    | Low        | ⏳ Not Started  | FU-700                         |
-| FU-801   | Logging                        | 8     | P1       | Low    | Low        | 🔨 Partial      | None                           |
-| FU-802   | Tracing                        | 8     | P2       | Low    | Medium     | ⏳ Not Started  | FU-801                         |
-| FU-900   | Error Handling UI              | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
-| FU-901   | Loading States                 | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
-| FU-902   | Empty States                   | 9     | P1       | Low    | Low        | 🔨 Partial      | FU-300                         |
-| FU-903   | A11y Audit                     | 9     | P1       | Low    | Medium     | ⏳ Not Started  | All UI FUs                     |
-| FU-904   | i18n Setup                     | 9     | P2       | Low    | Medium     | ⏳ Not Started  | All UI FUs                     |
+| ID       | Name                           | Phase | Priority      | Risk   | Complexity | Status                               | Blocking                       |
+| -------- | ------------------------------ | ----- | ------------- | ------ | ---------- | ------------------------------------ | ------------------------------ |
+| FU-000   | Database Schema                | 0     | P0            | High   | Medium     | ✅ Complete                          | None                           |
+| FU-001   | Crypto Infrastructure          | 0     | P0            | High   | High       | ✅ Complete                          | None                           |
+| FU-002   | Configuration                  | 0     | P0            | Medium | Low        | ✅ Complete                          | None                           |
+| FU-100   | File Analysis                  | 1     | P0            | High   | High       | 🔨 Needs Update                      | FU-000                         |
+| FU-100.5 | Schema Compliance Verification | 1     | P0            | Medium | Medium     | 🔨 Pending                           | FU-100                         |
+| FU-101   | Entity Resolution              | 1     | P0            | Medium | Medium     | 🔨 Partial                           | FU-100                         |
+| FU-102   | Event Generation               | 1     | P0            | Medium | Medium     | 🔨 Partial                           | FU-100                         |
+| FU-103   | Graph Builder                  | 1     | P0            | High   | Medium     | 🔨 Partial                           | FU-101, FU-102                 |
+| FU-104   | Embedding Service              | 1     | P1            | Medium | Medium     | ✅ Complete                          | FU-100                         |
+| FU-105   | Search Service                 | 1     | P0            | Medium | Medium     | 🔨 Partial                           | FU-104                         |
+| FU-200   | MCP Server Core                | 2     | P0            | High   | High       | ✅ Complete                          | FU-000                         |
+| FU-201   | store_record                   | 2     | P0            | Medium | Medium     | ✅ Complete                          | FU-200, FU-050, FU-051         |
+| FU-202   | retrieve_records               | 2     | P0            | Medium | Medium     | ✅ Complete                          | FU-105, FU-200, FU-051         |
+| FU-203   | update_record                  | 2     | P0            | Low    | Medium     | ✅ Complete                          | FU-200, FU-050, FU-051         |
+| FU-204   | delete_record                  | 2     | P0            | Medium | Medium     | ✅ Complete                          | FU-200, FU-050, FU-051         |
+| FU-205   | upload_file                    | 2     | P0            | High   | High       | ✅ Complete                          | FU-100, FU-200, FU-050, FU-051 |
+| FU-206   | get_file_url                   | 2     | P1            | Low    | Low        | ✅ Complete                          | FU-200                         |
+| FU-207   | Plaid Integration              | 2     | Post-MVP      | Medium | High       | ✅ Complete                          | FU-200                         |
+| FU-208   | Provider Integrations          | 2     | P1            | Medium | High       | ✅ Complete                          | FU-200                         |
+| FU-300   | UI Foundation                  | 3     | P0            | Medium | Medium     | 🔨 Partial                           | None                           |
+| FU-301   | Records List                   | 3     | P0            | Low    | Medium     | ✅ Complete                          | FU-300, FU-202                 |
+| FU-302   | Record Detail                  | 3     | P0            | Low    | Low        | ✅ Complete                          | FU-300, FU-202                 |
+| FU-303   | Timeline View                  | 3     | P0            | Medium | Medium     | ⏳ Not Started                       | FU-102, FU-300                 |
+| FU-304   | File Upload UI                 | 3     | P0            | Medium | Medium     | 🔨 Partial                           | FU-205, FU-300                 |
+| FU-305   | Dashboard                      | 3     | P1            | Low    | Low        | ⏳ Not Started                       | FU-300, FU-202                 |
+| FU-306   | Settings UI                    | 3     | P2            | Low    | Low        | 🔨 Partial                           | FU-300                         |
+| FU-307   | Chat/AI Panel                  | 3     | P0 → EXCLUDED | Medium | High       | ❌ EXCLUDED (Architectural Decision) | FU-202, FU-300                 |
+| FU-400   | Onboarding Welcome             | 4     | P0            | Low    | Low        | ⏳ Not Started                       | FU-300                         |
+| FU-401   | Onboarding Progress            | 4     | P0            | Low    | Low        | ⏳ Not Started                       | FU-205                         |
+| FU-402   | Onboarding Results             | 4     | P0            | Low    | Medium     | ⏳ Not Started                       | FU-302                         |
+| FU-403   | Onboarding State               | 4     | P0            | Low    | Low        | ⏳ Not Started                       | FU-400-402                     |
+| FU-500   | Plaid Link UI                  | 5     | Post-MVP      | Medium | Medium     | 🔨 Partial                           | FU-207, FU-300                 |
+| FU-501   | Provider Connectors UI         | 5     | P1            | Medium | High       | 🔨 Partial                           | FU-208, FU-300                 |
+| FU-600   | Advanced Search UI             | 6     | P1            | Low    | Medium     | 🔨 Partial                           | FU-105, FU-301                 |
+| FU-601   | Entity Explorer                | 6     | P2            | Low    | Medium     | ⏳ Not Started                       | FU-101, FU-300                 |
+| FU-700   | Authentication UI              | 7     | P0            | High   | Medium     | 🔨 Partial                           | None                           |
+| FU-701   | RLS Implementation             | 7     | P0            | High   | Medium     | ⏳ Not Started                       | FU-700, FU-000                 |
+| FU-703   | Local Storage / Offline Mode   | 7     | P0            | Medium | High       | ✅ Complete                          | FU-001                         |
+| FU-702   | Billing and Subscription       | 7     | P1            | Medium | High       | ⏳ Not Started                       | FU-700, FU-701                 |
+| FU-800   | Technical Metrics (Prometheus) | 8     | P1            | Low    | Medium     | ⏳ Not Started                       | All FUs                        |
+| FU-803   | Product Analytics (PostHog)    | 8     | P1            | Low    | Low        | ⏳ Not Started                       | FU-700                         |
+| FU-801   | Logging                        | 8     | P1            | Low    | Low        | 🔨 Partial                           | None                           |
+| FU-802   | Tracing                        | 8     | P2            | Low    | Medium     | ⏳ Not Started                       | FU-801                         |
+| FU-900   | Error Handling UI              | 9     | P1            | Low    | Low        | 🔨 Partial                           | FU-300                         |
+| FU-901   | Loading States                 | 9     | P1            | Low    | Low        | 🔨 Partial                           | FU-300                         |
+| FU-902   | Empty States                   | 9     | P1            | Low    | Low        | 🔨 Partial                           | FU-300                         |
+| FU-903   | A11y Audit                     | 9     | P1            | Low    | Medium     | ⏳ Not Started                       | All UI FUs                     |
+| FU-904   | i18n Setup                     | 9     | P2            | Low    | Medium     | ⏳ Not Started                       | All UI FUs                     |
 
 \*All P0 features required for MVP (includes multi-user support for Tier 1 founders & small teams)
 

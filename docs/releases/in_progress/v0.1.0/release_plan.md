@@ -35,6 +35,19 @@ This release plan coordinates the internal MCP release scope into a concrete rel
 - `FU-053`: Cryptographic Schema Fields (signer_public_key, signature fields)
 - `FU-054`: Hash Chaining Schema Fields (previous_event_hash, event_hash fields)
 
+**Observation Architecture (Building on Event-Sourcing Foundation):**
+
+- `FU-055`: Observation Storage Layer (observations, snapshots, raw_fragments tables)
+- `FU-056`: Enhanced Reducer Engine for Observations (merge strategies, provenance)
+- `FU-057`: Schema Registry Service (config-driven schemas, versioning)
+- `FU-058`: Observation-Aware Ingestion Pipeline (observation creation, reducer invocation)
+- `FU-059`: Relationship Types (first-class typed relationships)
+- `FU-061`: MCP Actions for Observation Architecture (snapshot, provenance, relationships)
+
+**Optional (P1):**
+
+- `FU-060`: Automated Schema Promotion (optional, pattern detection from raw_fragments)
+
 **Core Backend Services:**
 
 - `FU-000`: Database Schema v1.0 (single-user, no RLS, includes state_events table)
@@ -54,6 +67,7 @@ This release plan coordinates the internal MCP release scope into a concrete rel
 - `FU-204`: MCP Action — `delete_record` (emits events, applies reducers)
 - `FU-205`: MCP Action — `upload_file`
 - `FU-206`: MCP Action — `get_file_url`
+- `FU-061`: MCP Actions — `get_entity_snapshot`, `list_observations`, `get_field_provenance`, `create_relationship`, `list_relationships`
 
 **Optional (P1):**
 
@@ -75,10 +89,13 @@ This release plan coordinates the internal MCP release scope into a concrete rel
 
 #### 3.1 Product
 
-- Core workflow: **upload_file → extraction → entity resolution → event generation → graph insertion → retrieve_records** is functional via MCP.
+- Core workflow: **upload_file → extraction → observation creation → reducer execution → snapshot computation → entity resolution → event generation → graph insertion → retrieve_records** is functional via MCP.
 - MCP actions return structured, deterministic responses.
 - Entity resolution validated: same entity name → same entity_id across multiple uploads.
 - Timeline events validated: date fields → chronological events.
+- **4-layer model operational**: Document → Entity → Observation → Snapshot data flow validated.
+- **Multi-source entity resolution**: Multiple observations about same entity merge correctly via reducers.
+- **Provenance tracking**: Every snapshot field traces to source observations and documents.
 
 #### 3.2 Technical
 
@@ -88,9 +105,13 @@ This release plan coordinates the internal MCP release scope into a concrete rel
 - **Event-sourcing foundation operational**: Events emitted for all state changes, reducers applied, historical replay functional.
 - **Repository abstractions in place**: Domain logic isolated from storage via repository interfaces.
 - **Type detection analytics**: Unknown schema types tracked in `extraction_metadata` and telemetry events (forward-compatible with E2EE).
+- **Observation layer operational**: Observations created during ingestion, snapshots computed by reducers.
+- **Reducer determinism validated**: Same observations + merge rules → same snapshot (100 runs).
+- **Schema registry functional**: Config-driven schemas loaded and applied.
+- **Relationship types operational**: First-class typed relationships (PART_OF, CORRECTS, etc.).
 - All P0 Feature Units listed above are `completed` with passing tests.
-- 100% test coverage on critical path (ingestion, extraction, entity resolution, events, graph builder, search, event-sourcing, repositories).
-- MCP server operational with all 6 core actions (using event-sourcing).
+- 100% test coverage on critical path (ingestion, extraction, observation creation, reducer execution, entity resolution, events, graph builder, search, event-sourcing, repositories).
+- MCP server operational with all core actions including observation architecture actions (using event-sourcing).
 
 #### 3.3 Business
 
@@ -142,8 +163,30 @@ These scenarios must pass end-to-end before v0.1.0 is approved:
    - Verify historical replay: get record state at specific timestamp.
 
 7. **Repository Abstraction Validation**
+
    - Verify domain services use repository interfaces (no direct DB access).
    - Verify file-based repository implementations functional.
+
+8. **Observation Architecture Validation**
+
+   - Upload document via MCP `upload_file` action.
+   - Verify observations created for each entity.
+   - Verify reducer computes snapshots with provenance.
+   - Verify multiple observations about same entity merge correctly.
+   - Query entity snapshot via `get_entity_snapshot` MCP action.
+   - Trace field provenance via `get_field_provenance` MCP action.
+
+9. **Multi-Source Entity Resolution Validation**
+
+   - Upload two documents about same entity from different sources.
+   - Verify observations created for each.
+   - Verify snapshot correctly merges observations.
+   - Verify provenance traces to both documents.
+
+10. **Relationship Types Validation**
+    - Create typed relationships (PART_OF, CORRECTS, etc.) via MCP.
+    - Verify graph traversal queries work.
+    - Verify relationship metadata preserved.
 
 The detailed test specifications for these flows live in `docs/releases/in_progress/v0.1.0/integration_tests.md`.
 
@@ -174,18 +217,22 @@ The detailed test specifications for these flows live in `docs/releases/in_progr
 
 **Internal Release is Complete When:**
 
-1. ✅ All 6 core MCP actions functional (using event-sourcing)
-2. ✅ File upload → extraction → graph insertion working end-to-end
+1. ✅ All core MCP actions functional (using event-sourcing)
+2. ✅ File upload → extraction → observation creation → reducer execution → graph insertion working end-to-end
 3. ✅ Entity resolution validated (canonical IDs)
 4. ✅ Event generation validated (timeline events)
 5. ✅ Graph integrity validated (0 orphans, 0 cycles)
 6. ✅ Search deterministic (same query → same order)
 7. ✅ **Event-sourcing foundation operational** (events emitted, reducers applied, historical replay functional)
 8. ✅ **Repository abstractions in place** (domain logic isolated from storage)
-9. ✅ Cursor integration tested (upload_file, retrieve_records)
-10. ✅ ChatGPT integration tested (store_record, retrieve_records)
-11. ✅ All critical path tests passing (100% coverage)
-12. ✅ Determinism validated (100 runs, same input → same output)
+9. ✅ **Observation layer operational** (observations created, snapshots computed, provenance tracked)
+10. ✅ **4-layer model functional** (Document → Entity → Observation → Snapshot)
+11. ✅ **Reducer determinism validated** (same observations → same snapshot)
+12. ✅ **Relationship types operational** (PART_OF, CORRECTS, etc.)
+13. ✅ Cursor integration tested (upload_file, retrieve_records, get_entity_snapshot)
+14. ✅ ChatGPT integration tested (store_record, retrieve_records, get_entity_snapshot)
+15. ✅ All critical path tests passing (100% coverage)
+16. ✅ Determinism validated (100 runs, same input → same output)
 
 ---
 
@@ -198,6 +245,8 @@ The detailed test specifications for these flows live in `docs/releases/in_progr
   - No UI or multi-user infrastructure required.
   - Focus on MCP-only validation of core Truth Layer capabilities.
   - Type detection analytics implemented for schema expansion insights (see `type_detection_analytics.md`).
+  - Observation architecture builds on event-sourcing foundation (FU-050 through FU-054).
+  - Four-layer truth model (Document → Entity → Observation → Snapshot) enables multi-source entity resolution and full provenance tracking.
 
 ---
 
@@ -207,5 +256,17 @@ The detailed test specifications for these flows live in `docs/releases/in_progr
 - `integration_tests.md` — Cross-FU integration test specifications
 - `execution_schedule.md` — Detailed batch execution plan
 - `manifest.yaml` — Feature Unit manifest and dependencies
+- `fu_spec_status.md` — Feature Unit specification status (which FUs have standalone specs)
+
+---
+
+### 10. Feature Unit Specifications
+
+**Specification Sources:**
+
+- **Standalone Specs:** FU-050 through FU-054 have standalone spec files in `docs/feature_units/completed/FU-XXX/`
+- **MVP_FEATURE_UNITS.md:** All other FUs have specifications in `docs/specs/MVP_FEATURE_UNITS.md`
+
+**See:** `fu_spec_status.md` for complete status of all FUs.
 
 ---

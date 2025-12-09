@@ -5,10 +5,15 @@ release:
   target_date: "when ready"
   priority: "P0"
 
-# WIP and parallelization limits
-execution_limits:
+# Execution strategy
+execution_strategy:
+  type: "multi_agent" # "multi_agent" or "sequential"
   max_parallel_fus: 3 # Maximum FUs executing simultaneously
   max_high_risk_in_parallel: 1 # Maximum high-risk FUs executing simultaneously
+  agent_spawning:
+    enabled: true
+    status_tracking: "file" # "file" or "api"
+    status_file: "docs/releases/in_progress/v0.1.0/agent_status.json"
 
 feature_units:
   # Infrastructure
@@ -35,6 +40,29 @@ feature_units:
   - id: "FU-054"
     priority: "P0"
     dependencies: ["FU-050"]
+
+  # Observation architecture (builds on event-sourcing foundation)
+  - id: "FU-055"
+    priority: "P0"
+    dependencies: ["FU-050", "FU-051", "FU-052"]
+  - id: "FU-056"
+    priority: "P0"
+    dependencies: ["FU-050", "FU-052", "FU-055"]
+  - id: "FU-057"
+    priority: "P0"
+    dependencies: ["FU-000", "FU-055"]
+  - id: "FU-058"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-056", "FU-100", "FU-101"]
+  - id: "FU-059"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-103"]
+  - id: "FU-060"
+    priority: "P1"
+    dependencies: ["FU-057", "FU-058"]
+  - id: "FU-061"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-056", "FU-059", "FU-200"]
 
   # Core services
   - id: "FU-100"
@@ -102,6 +130,16 @@ execution_schedule:
       feature_units: ["FU-052", "FU-053", "FU-054"]
       dependencies: ["FU-050"]
 
+    # Batch 0.7: Observation architecture storage (can run in parallel after blockchain foundation)
+    - batch_id: 0.7
+      feature_units: ["FU-055", "FU-057"]
+      dependencies: ["FU-050", "FU-051", "FU-052"]
+
+    # Batch 0.8: Observation services (depends on observation storage)
+    - batch_id: 0.8
+      feature_units: ["FU-056", "FU-059"]
+      dependencies: ["FU-055", "FU-057"]
+
     # Batch 1: MCP core + File analysis (can run in parallel)
     - batch_id: 1
       feature_units: ["FU-200", "FU-100"]
@@ -132,10 +170,20 @@ execution_schedule:
       feature_units: ["FU-202", "FU-205"]
       dependencies: ["FU-200", "FU-105", "FU-100"]
 
+    # Batch 6.5: Observation-aware ingestion (depends on observation services)
+    - batch_id: 6.5
+      feature_units: ["FU-058"]
+      dependencies: ["FU-055", "FU-056", "FU-100", "FU-101"]
+
+    # Batch 6.6: Observation MCP actions (depends on observation services and MCP core)
+    - batch_id: 6.6
+      feature_units: ["FU-061"]
+      dependencies: ["FU-055", "FU-056", "FU-059", "FU-200"]
+
     # Batch 7: Optional features (can run in parallel)
     - batch_id: 7
-      feature_units: ["FU-104", "FU-208"]
-      dependencies: ["FU-100", "FU-200"]
+      feature_units: ["FU-104", "FU-208", "FU-060"]
+      dependencies: ["FU-100", "FU-200", "FU-057", "FU-058"]
 
 checkpoints:
   checkpoint_0.5_after_batch: 0.6 # Review blockchain foundation before proceeding
@@ -182,6 +230,24 @@ acceptance_criteria:
       metric: null
     - criterion: "Type detection analytics functional (metadata stored, telemetry emitted)"
       test: "tests/integration/type_detection_analytics.test.ts"
+      metric: null
+    - criterion: "Observation layer operational (observations created, snapshots computed)"
+      test: "tests/integration/observation_flow.test.ts"
+      metric: null
+    - criterion: "4-layer model functional (Document → Entity → Observation → Snapshot)"
+      test: "tests/integration/four_layer_model.test.ts"
+      metric: null
+    - criterion: "Reducer determinism validated (same observations → same snapshot)"
+      test: "tests/integration/reducer_determinism.test.ts"
+      metric: null
+    - criterion: "Provenance tracking functional (every snapshot field traces to observations)"
+      test: "tests/integration/provenance_tracking.test.ts"
+      metric: null
+    - criterion: "Relationship types operational (PART_OF, CORRECTS, etc.)"
+      test: "tests/integration/relationships.test.ts"
+      metric: null
+    - criterion: "Schema registry functional (config-driven schemas loaded and applied)"
+      test: "tests/integration/schema_registry.test.ts"
       metric: null
   business:
     - criterion: "Cursor integration tested"

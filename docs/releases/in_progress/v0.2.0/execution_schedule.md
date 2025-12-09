@@ -12,7 +12,7 @@
 
 **FU-106: Chat Transcript to JSON CLI Tool**
 - **Dependencies**: None
-- **Estimated Time**: 4-6h (Agent) + 1-1.5h (Human review)
+- **Estimated Time**: 4-6h (assumes Cursor agent execution) + 1-1.5h (Human review - separate)
 - **Status**: ⏳ Not Started
 
 **Steps:**
@@ -31,9 +31,11 @@
 
 ## Timeline Estimate
 
+**Assumption:** All development timeline estimates assume Cursor agent execution (not human developers). Human review time is separate and noted below.
+
 - **Total Estimated Time**: 5-7.5 hours
-- **Human Time**: 1-1.5 hours (spec review, final review)
-- **Agent Time**: 4-6 hours (implementation, tests, docs)
+- **Agent Development Time**: 4-6 hours (implementation, tests, docs, assumes Cursor agent execution)
+- **Human Review Time**: 1-1.5 hours (spec review, final review - separate from development estimates)
 
 ---
 

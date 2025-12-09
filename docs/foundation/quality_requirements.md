@@ -1,0 +1,131 @@
+# Neotoma Quality Requirements
+
+_(Testing, Observability, Privacy, and Security)_
+
+---
+
+## Purpose
+
+This document defines quality requirements for testing, observability, privacy, and security.
+
+---
+
+## 20. Testing and Quality Requirements
+
+### 20.1 Test Types (All Required)
+
+**Unit Tests:**
+
+- Pure functions (extraction, ID generation)
+- Deterministic (run 100 times → 100 same results)
+- Fast (<10ms per test)
+
+**Integration Tests:**
+
+- Service interactions with test DB
+- Full ingestion pipeline
+- Graph insertion with transactions
+
+**E2E Tests (Playwright):**
+
+- Upload file → see record details
+- Search → click result → view detail
+- Timeline view → filter by date
+
+**Property-Based Tests:**
+
+- Invariant verification (e.g., entity ID always same length)
+- Determinism proofs
+
+### 20.2 Coverage Targets
+
+| Code Type         | Lines | Branches | Critical Paths |
+| ----------------- | ----- | -------- | -------------- |
+| Domain Logic      | >85%  | >85%     | 100%           |
+| Application Layer | >80%  | >80%     | 100%           |
+| UI Components     | >75%  | >75%     | N/A            |
+
+**Critical paths (100% required):**
+
+- Ingestion pipeline
+- Entity resolution
+- Graph insertion
+- Search ranking
+
+---
+
+## 21. Observability Requirements
+
+All operations MUST emit:
+
+**Metrics:**
+
+- Counters (e.g., `neotoma_record_upload_total{status="success"}`)
+- Histograms (e.g., `neotoma_record_upload_duration_ms`)
+
+**Logs:**
+
+- Structured JSON logs
+- NO PII (record IDs only, not extracted fields)
+- Include `trace_id` for distributed tracing
+
+**Events:**
+
+- State changes (e.g., `record.created`, `ingestion.failed`)
+- Payload: metadata only, no PII
+
+**Traces:**
+
+- Distributed tracing spans (e.g., `ingestion.ingest_file`)
+- Propagate `trace_id` through all layers
+
+---
+
+## 22. Privacy and Security Commitments
+
+### 22.1 Privacy (PII Handling)
+
+**MUST NOT:**
+
+- Log PII from `properties` (names, SSN, addresses, phone)
+- Log full `raw_text` (may contain PII)
+- Log auth tokens or credentials
+- Store PII unencrypted (use RLS, future: encryption)
+
+**MAY Log:**
+
+- Record IDs (UUIDs)
+- Schema types
+- Error codes
+- Performance metrics (file size, duration)
+
+### 22.2 Security
+
+**Authentication:**
+
+- Supabase Auth (email/password, OAuth)
+- JWT tokens validated on every request
+
+**Authorization:**
+
+- Row-Level Security (RLS) in PostgreSQL
+- MVP: All authenticated users see all records (single-user)
+- Future: Per-user isolation via `user_id` column + RLS policies
+
+**Data Protection:**
+
+- Database encryption at rest (Supabase default)
+- HTTPS for all API calls
+- WSS (WebSocket Secure) for MCP connections
+
+---
+
+## Related Documents
+
+- [`docs/context/index.md`](../context/index.md) — Documentation navigation guide
+- [`docs/testing/testing_standard.md`](../testing/testing_standard.md) — Testing standards
+- [`docs/observability/logging.md`](../observability/logging.md) — Logging standards
+- [`docs/observability/metrics_standard.md`](../observability/metrics_standard.md) — Metrics standards
+- [`docs/subsystems/privacy.md`](../subsystems/privacy.md) — Privacy subsystem
+- [`docs/subsystems/auth.md`](../subsystems/auth.md) — Auth subsystem
+
