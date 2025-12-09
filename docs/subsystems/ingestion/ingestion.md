@@ -56,9 +56,15 @@ flowchart TD
 
     RawText --> DetectSchema[Detect Schema Type]
     DetectSchema --> ExtractFields[Extract Fields]
-    ExtractFields --> ResolveEntities[Resolve Entities]
-    ResolveEntities --> GenerateEvents[Generate Events]
-
+    ExtractFields --> CategorizeFields[Categorize Known vs Unknown]
+    CategorizeFields --> StoreRawFragments[Store Raw Fragments]
+    
+    CategorizeFields --> ResolveEntities[Resolve Entities]
+    ResolveEntities --> CreateObservations[Create Observations]
+    CreateObservations --> TriggerReducer[Trigger Reducer]
+    TriggerReducer --> ComputeSnapshots[Compute Entity Snapshots]
+    
+    ComputeSnapshots --> GenerateEvents[Generate Events]
     GenerateEvents --> InsertGraph[Insert into Graph]
     InsertGraph --> EmitEvents[Emit Observability Events]
     EmitEvents --> Done[Return Record]
@@ -537,7 +543,18 @@ function extractFields(rawText: string, schemaType: string): any {
 
 ---
 
-## 7. Step 6: Entity Resolution
+## 7. Step 6: Entity Resolution and Observation Creation
+
+**Four-Layer Truth Model Context:** This section implements the middle layers of Neotoma's four-layer truth model (Document → Entity → Observation → Snapshot). After field extraction from documents, we:
+
+1. **Resolve Entities** — Identify canonical entities (people, companies, locations)
+2. **Create Observations** — Store granular, source-specific facts about entities
+3. **Trigger Reducers** — Compute entity snapshots from observations using merge policies from schema registry
+4. **Link to Graph** — Connect documents, entities, observations, and snapshots
+
+See [`docs/architecture/architectural_decisions.md`](../../architecture/architectural_decisions.md) for the complete four-layer model rationale and [`docs/subsystems/observation_architecture.md`](../observation_architecture.md) for detailed observation patterns.
+
+---
 
 ### 7.1 Entity Extraction
 
@@ -547,7 +564,8 @@ function extractFields(rawText: string, schemaType: string): any {
 function extractEntities(properties: any, schemaType: string): Entity[] {
   const entities: Entity[] = [];
 
-  if (schemaType === "FinancialRecord") {
+  // Use application types (invoice, receipt) not schema families (FinancialRecord)
+  if (schemaType === "invoice" || schemaType === "receipt") {
     if (properties.vendor_name) {
       entities.push({
         entity_type: "company",
@@ -556,7 +574,7 @@ function extractEntities(properties: any, schemaType: string): Entity[] {
     }
   }
 
-  if (schemaType === "IdentityDocument") {
+  if (schemaType === "identity_document") {
     if (properties.full_name) {
       entities.push({
         entity_type: "person",
@@ -603,6 +621,78 @@ function normalizeEntityValue(entityType: string, raw: string): string {
 
 ---
 
+## 7.5 Observation Creation
+
+**Overview:** After entity resolution, create observations — granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots in the four-layer truth model.
+
+**Process:**
+
+1. **Load Schema from Registry:** Fetch active schema version and field definitions from schema registry
+2. **Categorize Fields:** Separate known fields (match schema) from unknown fields
+3. **Store Raw Fragments:** Unknown fields stored in `raw_fragments` table with typed envelopes
+4. **Create Observations:** For each entity identified:
+   - Create observation with entity_id, entity_type, fields
+   - Set specificity_score based on field confidence
+   - Set source_priority based on document source
+   - Reference schema_version for deterministic replay
+   - Link to source_record_id
+5. **Trigger Reducer:** Call reducer engine to compute entity snapshot using merge policies from schema registry
+6. **Store Snapshot:** Reducer produces entity snapshot with provenance tracking
+
+**Schema Registry Integration:** Observations reference the schema version from schema registry, enabling deterministic replay if schemas evolve. Reducers use merge policies configured in schema registry to resolve conflicts between multiple observations.
+
+**Example:**
+
+```typescript
+async function createObservations(
+  recordId: string,
+  entities: Entity[],
+  extractedFields: any,
+  schemaType: string,
+  schemaVersion: string
+): Promise<void> {
+  // Categorize known vs unknown fields
+  const schema = await schemaRegistry.loadActiveSchema(schemaType);
+  const { knownFields, unknownFields } = categorizeFields(extractedFields, schema);
+  
+  // Store raw fragments for unknown fields
+  for (const [key, value] of Object.entries(unknownFields)) {
+    await rawFragmentRepo.create({
+      record_id: recordId,
+      fragment_key: key,
+      fragment_value: value,
+      fragment_envelope: { type: typeof value, confidence: 'medium' }
+    });
+  }
+  
+  // Create observations for each entity
+  for (const entity of entities) {
+    const observation = await observationRepo.create({
+      entity_id: entity.id,
+      entity_type: entity.type,
+      schema_version: schemaVersion,
+      source_record_id: recordId,
+      observed_at: new Date(),
+      specificity_score: calculateSpecificity(entity, knownFields),
+      source_priority: calculatePriority(recordId),
+      fields: extractEntityFields(knownFields, entity)
+    });
+    
+    // Trigger reducer to compute snapshot
+    await reducerEngine.computeSnapshot(entity.id);
+  }
+}
+```
+
+**Related Documents:**
+
+- [`docs/architecture/architectural_decisions.md`](../../architecture/architectural_decisions.md) — Four-layer truth model
+- [`docs/subsystems/observation_architecture.md`](../observation_architecture.md) — Complete observation architecture
+- [`docs/subsystems/reducer.md`](../reducer.md) — Reducer merge strategies
+- [`docs/subsystems/schema_registry.md`](../schema_registry.md) — Schema registry patterns and merge policies
+
+---
+
 ## 8. Step 7: Event Generation
 
 ### 8.1 Event Extraction
@@ -638,12 +728,13 @@ function generateEvents(
 }
 
 function mapFieldToEventType(fieldName: string, schemaType: string): string {
-  if (schemaType === "FinancialRecord") {
+  // Use application types (invoice, travel_document) not schema families
+  if (schemaType === "invoice") {
     if (fieldName === "date_issued") return "InvoiceIssued";
     if (fieldName === "date_due") return "InvoiceDue";
   }
 
-  if (schemaType === "TravelDocument") {
+  if (schemaType === "travel_document") {
     if (fieldName === "departure_datetime") return "FlightDeparture";
     if (fieldName === "arrival_datetime") return "FlightArrival";
   }

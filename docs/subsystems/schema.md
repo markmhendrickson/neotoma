@@ -319,6 +319,267 @@ CREATE INDEX idx_external_sync_runs_status ON external_sync_runs(status);
 
 ---
 
+### 2.7 `observations` Table
+
+**Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots.
+
+**Schema:**
+
+```sql
+CREATE TABLE observations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  source_record_id UUID NOT NULL REFERENCES records(id),
+  observed_at TIMESTAMPTZ NOT NULL,
+  specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
+  source_priority INTEGER DEFAULT 0,
+  fields JSONB NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL
+);
+```
+
+**Field Definitions:**
+
+| Field              | Type        | Purpose                                                      | Mutable | Indexed     |
+| ------------------ | ----------- | ------------------------------------------------------------ | ------- | ----------- |
+| `id`               | UUID        | Unique observation ID                                        | No      | Primary key |
+| `entity_id`        | TEXT        | Target entity ID (hash-based)                                | No      | Yes         |
+| `entity_type`      | TEXT        | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
+| `schema_version`   | TEXT        | Schema version used for extraction                            | No      | No          |
+| `source_record_id` | UUID        | Source document/record                                       | No      | Yes         |
+| `observed_at`      | TIMESTAMPTZ | Timestamp when observation was made                          | No      | Yes         |
+| `specificity_score`| NUMERIC     | How specific this observation is (0-1)                       | No      | No          |
+| `source_priority`  | INTEGER     | Priority of source (higher = more trusted)                   | No      | No          |
+| `fields`           | JSONB       | Granular facts extracted from document                       | No      | No          |
+| `created_at`       | TIMESTAMPTZ | Observation creation timestamp                               | No      | No          |
+| `user_id`          | UUID        | User who owns this observation                                | No      | Yes         |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_observations_entity ON observations(entity_id, observed_at DESC);
+CREATE INDEX idx_observations_record ON observations(source_record_id);
+CREATE INDEX idx_observations_user ON observations(user_id);
+```
+
+**Notes:**
+
+- Observations are immutable once created
+- Multiple observations can exist for the same entity from different sources
+- Reducers merge observations into entity snapshots deterministically
+- See [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) for details
+
+---
+
+### 2.8 `entity_snapshots` Table
+
+**Purpose:** Store deterministic reducer output representing current truth for entities. Snapshots are computed from observations.
+
+**Schema:**
+
+```sql
+CREATE TABLE entity_snapshots (
+  entity_id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  snapshot JSONB NOT NULL,
+  computed_at TIMESTAMPTZ NOT NULL,
+  observation_count INTEGER NOT NULL,
+  last_observation_at TIMESTAMPTZ NOT NULL,
+  provenance JSONB NOT NULL,
+  user_id UUID NOT NULL
+);
+```
+
+**Field Definitions:**
+
+| Field                  | Type        | Purpose                                                      | Mutable | Indexed     |
+| ---------------------- | ----------- | ------------------------------------------------------------ | ------- | ----------- |
+| `entity_id`            | TEXT        | Entity ID (hash-based, primary key)                         | No      | Primary key |
+| `entity_type`          | TEXT        | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
+| `schema_version`       | TEXT        | Schema version used for snapshot computation                 | No      | No          |
+| `snapshot`             | JSONB       | Current truth, computed by reducer                           | Yes     | Yes (GIN)   |
+| `computed_at`          | TIMESTAMPTZ | When snapshot was computed                                   | Yes     | No          |
+| `observation_count`    | INTEGER     | Number of observations merged                                | Yes     | No          |
+| `last_observation_at` | TIMESTAMPTZ | Timestamp of most recent observation                         | Yes     | No          |
+| `provenance`           | JSONB       | Maps field → observation_id, traces each field to source    | Yes     | No          |
+| `user_id`              | UUID        | User who owns this entity                                    | No      | Yes         |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_snapshots_type ON entity_snapshots(entity_type);
+CREATE INDEX idx_snapshots_user ON entity_snapshots(user_id);
+CREATE INDEX idx_snapshots_snapshot ON entity_snapshots USING GIN(snapshot);
+```
+
+**Notes:**
+
+- Snapshots are recomputed when new observations arrive
+- Provenance enables full traceability: snapshot field → observation → document
+- Reducers are deterministic: same observations + merge rules → same snapshot
+- See [`docs/subsystems/reducer.md`](./reducer.md) for reducer patterns
+
+---
+
+### 2.9 `schema_registry` Table
+
+**Purpose:** Manage config-driven schema definitions, versions, and merge policies. Enables runtime schema evolution without code deployments.
+
+**Schema:**
+
+```sql
+CREATE TABLE schema_registry (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_type TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  schema_definition JSONB NOT NULL,
+  reducer_config JSONB NOT NULL,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(entity_type, schema_version)
+);
+```
+
+**Field Definitions:**
+
+| Field              | Type    | Purpose                                                      | Mutable | Indexed     |
+| ------------------ | ------- | ------------------------------------------------------------ | ------- | ----------- |
+| `id`               | UUID    | Unique registry entry ID                                     | No      | Primary key |
+| `entity_type`      | TEXT    | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
+| `schema_version`   | TEXT    | Schema version (e.g., "1.0", "1.1")                          | No      | Yes         |
+| `schema_definition`| JSONB   | Field definitions, types, validators                         | No      | No          |
+| `reducer_config`   | JSONB   | Merge policies per field                                     | No      | No          |
+| `active`           | BOOLEAN | Whether this version is active                               | Yes     | Yes         |
+| `created_at`       | TIMESTAMPTZ | When schema version was created                            | No      | No          |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_schema_active ON schema_registry(entity_type, active) WHERE active = true;
+```
+
+**Notes:**
+
+- Schema definitions include field types, validators, and constraints
+- Reducer config defines merge strategies per field (last_write, highest_priority, most_specific, merge_array)
+- Only one active schema version per entity_type at a time
+- See [`docs/subsystems/schema_registry.md`](./schema_registry.md) for details
+
+---
+
+### 2.10 `raw_fragments` Table
+
+**Purpose:** Store unknown fields that don't match current schemas. Enables schema discovery and automated promotion.
+
+**Schema:**
+
+```sql
+CREATE TABLE raw_fragments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  record_id UUID NOT NULL REFERENCES records(id),
+  fragment_type TEXT NOT NULL,
+  fragment_key TEXT NOT NULL,
+  fragment_value JSONB NOT NULL,
+  fragment_envelope JSONB NOT NULL,
+  frequency_count INTEGER DEFAULT 1,
+  first_seen TIMESTAMPTZ DEFAULT NOW(),
+  last_seen TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Field Definitions:**
+
+| Field            | Type        | Purpose                                                      | Mutable | Indexed     |
+| ---------------- | ----------- | ------------------------------------------------------------ | ------- | ----------- |
+| `id`             | UUID        | Unique fragment ID                                            | No      | Primary key |
+| `record_id`      | UUID        | Source record                                                | No      | Yes         |
+| `fragment_type`  | TEXT        | Fragment type (unknown_field, unstructured_text, etc.)       | No      | No          |
+| `fragment_key`   | TEXT        | Field name/key                                               | No      | Yes         |
+| `fragment_value` | JSONB       | Field value                                                   | No      | No          |
+| `fragment_envelope` | JSONB    | Type metadata (type, confidence, etc.)                       | No      | No          |
+| `frequency_count`| INTEGER     | How many times this fragment appeared                        | Yes     | Yes         |
+| `first_seen`     | TIMESTAMPTZ | When fragment first appeared                                  | No      | No          |
+| `last_seen`      | TIMESTAMPTZ | When fragment last appeared                                   | Yes     | No          |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_fragments_record ON raw_fragments(record_id);
+CREATE INDEX idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
+```
+
+**Notes:**
+
+- Raw fragments accumulate until patterns emerge
+- Automated schema promotion analyzes fragments to propose schema updates
+- Frequency tracking enables pattern detection
+- See [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.md) for promotion pipeline
+
+---
+
+### 2.11 `relationships` Table
+
+**Purpose:** Store first-class typed relationships between entities. Enables flexible graph modeling without hard-coded hierarchies.
+
+**Schema:**
+
+```sql
+CREATE TABLE relationships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  relationship_type TEXT NOT NULL,
+  source_entity_id TEXT NOT NULL,
+  target_entity_id TEXT NOT NULL,
+  source_record_id UUID REFERENCES records(id),
+  metadata JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL
+);
+```
+
+**Field Definitions:**
+
+| Field              | Type        | Purpose                                                      | Mutable | Indexed     |
+| ------------------ | ----------- | ------------------------------------------------------------ | ------- | ----------- |
+| `id`               | UUID        | Unique relationship ID                                        | No      | Primary key |
+| `relationship_type`| TEXT       | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.)      | No      | Yes         |
+| `source_entity_id` | TEXT        | Source entity ID                                             | No      | Yes         |
+| `target_entity_id` | TEXT        | Target entity ID                                             | No      | Yes         |
+| `source_record_id` | UUID        | Document that created this relationship                      | No      | No          |
+| `metadata`         | JSONB       | Relationship-specific metadata                               | No      | No          |
+| `created_at`       | TIMESTAMPTZ | When relationship was created                                | No      | No          |
+| `user_id`          | UUID        | User who owns this relationship                              | No      | Yes         |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_relationships_source ON relationships(source_entity_id);
+CREATE INDEX idx_relationships_target ON relationships(target_entity_id);
+CREATE INDEX idx_relationships_type ON relationships(relationship_type);
+```
+
+**Relationship Types:**
+
+- `PART_OF` — hierarchical relationships (invoice line item part of invoice)
+- `CORRECTS` — correction relationships (corrected invoice corrects original)
+- `REFERS_TO` — reference relationships (invoice refers to contract)
+- `SETTLES` — settlement relationships (payment settles invoice)
+- `DUPLICATE_OF` — duplicate detection (duplicate record)
+- `DEPENDS_ON` — dependency relationships
+- `SUPERSEDES` — version relationships
+
+**Notes:**
+
+- Relationships are first-class records, not hard-coded foreign keys
+- Multiple relationship types can exist between same entities
+- Graph queries traverse relationships dynamically
+- See [`docs/subsystems/relationships.md`](./relationships.md) for details
+
+---
+
 ## 3. JSONB `properties` Schema
 
 ### 3.1 Overview

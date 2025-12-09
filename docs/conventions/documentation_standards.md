@@ -39,22 +39,30 @@ Core invariants:
 - Privacy-maximal: No background data collection
 - Graph integrity: No orphans, no cycles, no inferred edges
 - Truth-Layer bounded: No strategy, execution, or agent logic
+- Event-sourced: All state updates via Domain Events → Reducers
+- Pure Strategy: Strategy Layer has no side effects (State in → Decisions out)
+- Pure Execution: Execution Layer emits Domain Events (Commands in → Events out)
 
 Layered architecture (example: financial system):
-┌─────────────────────────────────┐
-│ Agentic Wallet (Execution Layer)│
-└────────────▲────────────────────┘
-             │
-┌────────────▼────────────────────┐
-│ Agentic Portfolio (Strategy Layer)│
-└────────────▲────────────────────┘
-             │
-┌────────────▼────────────────────┐
-│    Neotoma (Truth Layer)        │
-│  Ingestion → Schema → Memory    │
-└─────────────────────────────────┘
+┌───────────────────────────────────────────────┐
+│      Execution Layer                          │
+│  (Agentic Wallet + Domain Agents)            │
+│  Commands → Side Effects → Domain Events    │
+└────────────▲─────────────────────────────────┘
+             │ Reads Only, Receives Commands
+┌────────────▼─────────────────────────────────┐
+│      Strategy Layer                           │
+│  (Agentic Portfolio is example instance)    │
+│  State → Evaluates → Decisions + Commands   │
+└────────────▲─────────────────────────────────┘
+             │ Reads Only
+┌────────────▼─────────────────────────────────┐
+│    Neotoma (Truth Layer)                    │
+│  Event-sourced, Reducer-driven             │
+│  Domain Events → Reducers → State          │
+└─────────────────────────────────────────────┘
 
-Note: Agentic Portfolio and Agentic Wallet are examples; many other agent-driven layers are possible.
+Note: Agentic Portfolio is an example instance of Strategy Layer. Agentic Wallet is part of Execution Layer alongside domain agents. Many other agent-driven layers are possible.
 
 This document enforces Truth Layer purity.
 ```
@@ -504,9 +512,54 @@ If a breaking change is required:
 
 ---
 
-## 11. Testing Documentation
+## 11. Timeline Estimates
 
-### 11.1 Testable Assertions
+### 11.1 Agent-Based Estimation Assumption
+
+All timeline estimates in documentation MUST assume Cursor agents (or equivalent AI coding assistants) performing the work, NOT human developers.
+
+**Rationale:** Neotoma development workflow uses Cursor agents as the primary execution mechanism. Timeline estimates based on human developer velocity would be inaccurate and misleading.
+
+### 11.2 Timeline Estimate Format
+
+When documenting timeline estimates:
+
+- ✅ Use explicit duration units: "3 days", "2 weeks", "5 hours"
+- ✅ State the assumption: "Estimated: 3 days (assumes Cursor agent execution)"
+- ✅ Include parallelization notes: "With 3 agents in parallel: ~14-17 days"
+- ❌ Do not assume human developer velocity
+- ❌ Do not omit the agent execution assumption
+
+### 11.3 Where Timeline Estimates Appear
+
+Timeline estimates MUST follow this convention in:
+
+- `execution_schedule.md` files
+- Release plan documents (`release_plan.md`)
+- Feature Unit specifications
+- Any planning documents with duration estimates
+
+### 11.4 Example
+
+```markdown
+### Estimated Timeline
+
+**Assumptions:**
+
+- All estimates assume Cursor agent execution
+- FU-100: 5 days (high-risk, rule-based extraction)
+- FU-101: 3 days
+- FU-102: 3 days
+
+**Sequential Timeline:** ~11 days
+**With Parallelization (3 agents):** ~5-6 days
+```
+
+---
+
+## 12. Testing Documentation
+
+### 12.1 Testable Assertions
 
 Documentation SHOULD include testable assertions:
 
@@ -518,7 +571,7 @@ The ingestion pipeline MUST process files in deterministic order by `created_at`
 **Test:** Upload 3 files with timestamps T1 < T2 < T3. Verify processing order is always T1 → T2 → T3.
 ```
 
-### 11.2 Test Coverage Mapping
+### 12.2 Test Coverage Mapping
 
 Link documentation sections to test files:
 
@@ -533,16 +586,16 @@ This section is tested by:
 
 ---
 
-## 12. Privacy and Security Content
+## 13. Privacy and Security Content
 
-### 12.1 PII Handling in Examples
+### 13.1 PII Handling in Examples
 
 Examples MUST NOT contain real PII:
 
 - ✅ Use: `user@example.com`, `John Doe`, `123-45-6789`
 - ❌ Use: Real email addresses, names, or SSNs
 
-### 12.2 Security-Sensitive Information
+### 13.2 Security-Sensitive Information
 
 Documentation MUST NOT include:
 
@@ -553,9 +606,9 @@ Documentation MUST NOT include:
 
 ---
 
-## 13. Accessibility in Documentation
+## 14. Accessibility in Documentation
 
-### 13.1 Alt Text for Diagrams
+### 14.1 Alt Text for Diagrams
 
 Provide text descriptions for all diagrams:
 
@@ -569,16 +622,16 @@ _Figure 1: Ingestion pipeline showing file upload → validation → extraction 
 
 ````
 
-### 13.2 Heading Hierarchy
+### 14.2 Heading Hierarchy
 Use proper heading hierarchy (no skipped levels):
 - ✅ H1 → H2 → H3
 - ❌ H1 → H3 (skipped H2)
 
 ---
 
-## 14. Internationalization Considerations
+## 15. Internationalization Considerations
 
-### 14.1 Language-Neutral Examples
+### 15.1 Language-Neutral Examples
 Use language-neutral or multi-language examples where applicable:
 ```json
 {
@@ -588,7 +641,7 @@ Use language-neutral or multi-language examples where applicable:
 }
 ````
 
-### 14.2 Avoid Cultural Assumptions
+### 15.2 Avoid Cultural Assumptions
 
 Examples should work globally:
 
@@ -597,7 +650,7 @@ Examples should work globally:
 
 ---
 
-## 15. Agent Constraints for Documentation Changes
+## 16. Agent Constraints for Documentation Changes
 
 Agents modifying documentation MUST:
 
@@ -636,7 +689,8 @@ Load this document whenever:
 3. All examples are complete and deterministic (Section 6)
 4. MUST/MUST NOT language is used correctly (Section 4)
 5. Agent Instructions section is present in every doc
-6. No PII or secrets in examples (Section 11)
+6. No PII or secrets in examples (Section 13)
+7. Timeline estimates assume Cursor agent execution (Section 11)
 
 ### Forbidden Patterns
 

@@ -28,7 +28,7 @@ This document provides the overview and coordination framework for v1.0.0. Detai
 - **Release Type**: External (public launch with marketing)
 - **Goal**: Ship the first production-capable Neotoma Truth Layer with deterministic ingestion, extraction, entity resolution, event generation, memory graph, MCP access, and minimal UI to support Tier 1 ICP workflows.
 - **Priority**: P0 (critical)
-- **Target Ship Date**: 2025-03-01 (tentative)
+- **Target Ship Date**: 2026-02-24 (tentative, based on Dec 9, 2025 start date)
 - **Discovery Required**: Yes (pre-release discovery + continuous discovery)
 - **Marketing Required**: Yes (hybrid: pre-launch + post-launch)
 - **Owner**: Mark Hendrickson
@@ -70,6 +70,9 @@ These may be extended with additional P1/P2 FUs if explicitly added later.
 - X (Twitter) and Instagram integrations
 - Real-time collaboration
 - `FU-106`: Chat Transcript to JSON CLI Tool (moved to Internal Release v0.2.0, pre-MVP)
+- `FU-307`: Chat/AI Panel (excluded per architectural decision; see `docs/architecture/conversational_ux_architecture.md` and `architectural_impact_chat_ui.md`)
+
+**Note:** Neotoma adopts MCP-first conversational architecture. All conversational interactions are externalized to MCP-compatible agents (ChatGPT, Cursor, Claude). Internal chat UI violates architectural decision and is excluded.
 
 These are documented as post-MVP features and **MUST NOT** block v1.0.0.
 

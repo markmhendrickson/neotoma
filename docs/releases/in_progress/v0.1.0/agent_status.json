@@ -1,0 +1,242 @@
+{
+  "release_id": "v0.1.0",
+  "orchestrator": {
+    "agent_id": "orch_1765299006703",
+    "started_at": "2025-12-09T16:50:06.703Z",
+    "current_batch": 0,
+    "status": "running"
+  },
+  "batches": [
+    {
+      "batch_id": 0,
+      "status": "running",
+      "feature_units": [
+        {
+          "fu_id": "FU-000",
+          "worker_agent_id": "worker_1765299154339_gzfryhuvb",
+          "status": "running",
+          "progress": 0,
+          "started_at": "2025-12-09T16:52:34.339Z",
+          "last_update": "2025-12-09T16:52:34.339Z"
+        },
+        {
+          "fu_id": "FU-002",
+          "worker_agent_id": "worker_1765299154339_3bf25h79x",
+          "status": "running",
+          "progress": 0,
+          "started_at": "2025-12-09T16:52:34.339Z",
+          "last_update": "2025-12-09T16:52:34.339Z"
+        }
+      ],
+      "started_at": "2025-12-09T16:52:34.338Z"
+    },
+    {
+      "batch_id": 0,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-050",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-051",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 0,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-052",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-053",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-054",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 1,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-200",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-100",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 2,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-101",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-102",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 3,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-103",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 4,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-105",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 5,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-201",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-203",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-204",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-206",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 6,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-202",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-205",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    },
+    {
+      "batch_id": 7,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-104",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        },
+        {
+          "fu_id": "FU-208",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "completed_fus": []
+}

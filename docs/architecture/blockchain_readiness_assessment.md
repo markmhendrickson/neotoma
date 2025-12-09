@@ -72,7 +72,7 @@ These can be layered on incrementally:
   - `GET /api/records/:id?at=2024-01-15T10:00:00Z` — Get record state at timestamp
 - Keep current CRUD as adapter during transition
 
-**Estimate:** 5-7 days (includes replay functionality)
+**Estimate:** 5-7 days (includes replay functionality, assumes Cursor agent execution)
 
 **Rationale:** Rebuilding entire data layer post-MVP is expensive. Event schema should include all future fields (crypto, hashing) even if logic isn't implemented yet. **Historical replay is a core benefit of event-sourcing** and should be available in MVP.
 
@@ -89,7 +89,7 @@ These can be layered on incrementally:
 - Refactor domain services to use repositories (dependency injection)
 - Remove direct DB access from domain layer
 
-**Estimate:** 3-4 days
+**Estimate:** 3-4 days (assumes Cursor agent execution)
 
 **Rationale:** Domain logic touching storage directly prevents multi-backend support (file, DB, blockchain). This is foundational for future decentralization.
 
@@ -104,7 +104,7 @@ These can be layered on incrementally:
 - Migration path utilities (stub for future migrations)
 - Version-aware reducer application
 
-**Estimate:** 1-2 days
+**Estimate:** 1-2 days (assumes Cursor agent execution)
 
 **Rationale:** Required for event-sourcing upgradability. If reducers exist, versioning must exist.
 
@@ -118,7 +118,7 @@ These can be layered on incrementally:
 - Agent identity abstraction (`src/crypto/agent_identity.ts`)
 - Schema supports crypto, but verification logic deferred
 
-**Estimate:** 1 day
+**Estimate:** 1 day (assumes Cursor agent execution)
 
 **Rationale:** Schema changes are expensive. Include fields now, implement verification logic post-MVP.
 
@@ -132,7 +132,7 @@ These can be layered on incrementally:
 - Hash computation utilities (stub)
 - Schema supports chaining, but Merkle logic deferred
 
-**Estimate:** 1 day
+**Estimate:** 1 day (assumes Cursor agent execution)
 
 **Rationale:** Schema changes are expensive. Include fields now, implement Merkle root computation post-MVP.
 
@@ -149,6 +149,8 @@ These can be layered on incrementally:
 
 ## Impact on MVP Timeline
 
+**Assumption:** All timeline estimates assume Cursor agent execution (not human developers).
+
 **New Feature Units:**
 
 - FU-050: Event-Sourcing Foundation — 4-6 days
@@ -157,7 +159,7 @@ These can be layered on incrementally:
 - FU-053: Cryptographic Schema Fields — 1 day
 - FU-054: Hash Chaining Schema Fields — 1 day
 
-**Total Addition:** 11-15 days (includes historical replay functionality)
+**Total Addition:** 11-15 days (includes historical replay functionality, assumes Cursor agent execution)
 
 **Release Target:** v0.1.0 (Internal MCP Release) - establishes foundation before MVP
 
@@ -173,7 +175,7 @@ These can be layered on incrementally:
 - No refactoring needed - foundation already established
 - Can focus on UI, multi-user, and product features
 
-**Total v0.1.0 Extension:** 11-15 days (includes historical replay functionality)
+**Total v0.1.0 Extension:** 11-15 days (includes historical replay functionality, assumes Cursor agent execution)
 
 **Note:** These foundational patterns will be inherited by v1.0.0 (MVP), avoiding expensive refactoring.
 

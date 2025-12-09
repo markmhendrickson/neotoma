@@ -3,7 +3,7 @@ release:
   name: "MVP"
   type: "external" # internal | external
   status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
-  target_date: "2025-03-01"
+  target_date: "2026-02-24" # Based on Dec 9, 2025 start date
   priority: "P0"
   owner: "Mark Hendrickson"
 

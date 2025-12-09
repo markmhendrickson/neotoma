@@ -16,6 +16,11 @@ This document details the execution order of Feature Units for v2.0.0, organized
 
 **Estimated Duration:** 20 weeks (5 months)
 
+**Assumptions:**
+- All timeline estimates assume Cursor agent execution (not human developers)
+- Cloud agents execute in parallel via Cursor Background Agents API (see `docs/feature_units/standards/multi_agent_orchestration.md`)
+- Execution limits: `max_parallel_fus: 2` (crypto work requires careful sequencing), `max_high_risk_in_parallel: 1`
+
 **Critical Path:** FU-850 → FU-852 → FU-853 → FU-855 → FU-856 → FU-857 → FU-858 → FU-859
 
 ---
@@ -342,7 +347,9 @@ FU-850 → FU-852 → FU-853 → FU-855 → FU-856 → FU-857 → FU-858 → FU-
 | Phase 5: Multi-Device Sync (Optional) | 9 | 3 weeks | 19 weeks |
 | Testing & Security Audit | - | 1 week | 20 weeks |
 
-**Total Duration:** 20 weeks (5 months)
+**Total Duration:** 20 weeks (5 months, with cloud agent parallelization)
+
+**Note:** Crypto work requires careful sequencing (`max_parallel_fus: 2`), limiting parallelization benefits. Sequential timeline would be ~22-24 weeks. Cloud agent parallelization provides 8-17% reduction for this release.
 
 ---
 

@@ -26,6 +26,10 @@ Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release
 | IT-005 | Determinism Validation           | 1, 2, 3, 4, 6   | FU-100, FU-101, FU-102, FU-103, FU-105, FU-205 |
 | IT-006 | MCP Action Validation            | 5, 6            | FU-200, FU-201, FU-202, FU-203, FU-204, FU-206 |
 | IT-007 | Event-Sourcing Validation        | 0.5, 0.6, 5     | FU-050, FU-051, FU-052, FU-053, FU-054, FU-201, FU-203, FU-204 |
+| IT-008 | Observation Architecture Validation | 0.7, 0.8, 6.5, 6.6 | FU-055, FU-056, FU-057, FU-058, FU-059, FU-061 |
+| IT-009 | Multi-Source Entity Resolution    | 0.7, 0.8, 6.5, 6.6 | FU-055, FU-056, FU-058, FU-061 |
+| IT-010 | Reducer Determinism Validation   | 0.8, 6.5        | FU-056, FU-058 |
+| IT-011 | Relationship Types Validation     | 0.8, 6.6        | FU-059, FU-061 |
 
 ---
 
@@ -239,6 +243,143 @@ Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release
 
 ---
 
+#### IT-008: Observation Architecture Validation
+
+**Goal:** Verify that observation layer is operational (observations created, snapshots computed, provenance tracked).
+
+**Preconditions:**
+- System running with FU-055, FU-056, FU-057, FU-058, FU-059, FU-061 deployed.
+- MCP server accessible from test client.
+- Test file with entities (e.g., invoice with vendor).
+
+**Steps:**
+1. Upload document via `upload_file` MCP action.
+2. Verify observations created for each entity:
+   - Query `observations` table for entity_id.
+   - Verify observation contains correct fields, schema_version, source_record_id.
+3. Verify snapshot computed:
+   - Query `entity_snapshots` table for entity_id.
+   - Verify snapshot contains merged fields from observations.
+   - Verify provenance maps fields to observation_ids.
+4. Query entity snapshot via `get_entity_snapshot` MCP action.
+5. Verify response includes snapshot, provenance, observation_count.
+6. Query observations via `list_observations` MCP action.
+7. Verify response includes all observations for entity.
+
+**Expected Results:**
+- Observations created during ingestion.
+- Snapshots computed by reducers with provenance.
+- MCP actions return correct snapshot and observation data.
+- Provenance traces fields to observations and documents.
+
+**Machine-Checkable:**
+- Query: `SELECT COUNT(*) FROM observations WHERE entity_id = '{entity_id}'` returns expected count.
+- Query: `SELECT * FROM entity_snapshots WHERE entity_id = '{entity_id}'` returns snapshot with provenance.
+- MCP action `get_entity_snapshot` returns snapshot with provenance mapping.
+
+---
+
+#### IT-009: Multi-Source Entity Resolution
+
+**Goal:** Verify that multiple observations about same entity merge correctly via reducers.
+
+**Preconditions:**
+- System running with FU-055, FU-056, FU-058, FU-061 deployed.
+- Two test files about same entity from different sources.
+
+**Steps:**
+1. Upload document 1 about entity (e.g., invoice from vendor) via `upload_file`.
+2. Verify observation 1 created with fields and source_priority.
+3. Upload document 2 about same entity (e.g., contract with vendor) via `upload_file`.
+4. Verify observation 2 created with different fields and source_priority.
+5. Query entity snapshot via `get_entity_snapshot` MCP action.
+6. Verify snapshot correctly merges observations:
+   - Fields from both observations present.
+   - Merge policies applied correctly (highest_priority, last_write, etc.).
+   - Provenance tracks which observation contributed each field.
+7. Query field provenance via `get_field_provenance` MCP action.
+8. Verify provenance chain: field → observation → document → file.
+
+**Expected Results:**
+- Multiple observations about same entity coexist.
+- Reducer merges observations correctly based on merge policies.
+- Provenance traces each field to correct observation and document.
+- MCP actions return correct merged snapshot and provenance.
+
+**Machine-Checkable:**
+- Query: `SELECT COUNT(*) FROM observations WHERE entity_id = '{entity_id}'` returns 2.
+- Query: `SELECT observation_count FROM entity_snapshots WHERE entity_id = '{entity_id}'` returns 2.
+- Snapshot contains fields from both observations.
+- Provenance maps fields to correct observation_ids.
+
+---
+
+#### IT-010: Reducer Determinism Validation
+
+**Goal:** Verify that reducers are deterministic (same observations + merge rules → same snapshot).
+
+**Preconditions:**
+- System running with FU-056, FU-058 deployed.
+- Test observations for entity.
+
+**Steps:**
+1. Create observations for entity with known fields and priorities.
+2. Compute snapshot via reducer.
+3. Record snapshot fields and provenance.
+4. Recompute snapshot with same observations (trigger reducer again).
+5. Verify snapshot identical (same fields, same provenance).
+6. Test with out-of-order observations:
+   - Create observations in different order.
+   - Compute snapshot.
+   - Verify same result regardless of input order.
+
+**Expected Results:**
+- Same observations → same snapshot (100% deterministic).
+- Out-of-order observations → same snapshot (order-independent).
+- Provenance mapping deterministic.
+
+**Machine-Checkable:**
+- Property-based test: 100 runs with same observations, assert all snapshots identical.
+- Order-independence test: Different observation orders produce same snapshot.
+
+---
+
+#### IT-011: Relationship Types Validation
+
+**Goal:** Verify that first-class typed relationships work correctly.
+
+**Preconditions:**
+- System running with FU-059, FU-061 deployed.
+- Entities created (e.g., invoice, payment).
+
+**Steps:**
+1. Create relationship via `create_relationship` MCP action:
+   - Type: `SETTLES`
+   - Source: payment entity
+   - Target: invoice entity
+.2. Verify relationship created in `relationships` table.
+3. Query relationships via `list_relationships` MCP action:
+   - Query outbound relationships for payment entity.
+   - Query inbound relationships for invoice entity.
+4. Verify relationship metadata preserved.
+5. Test cycle detection:
+   - Attempt to create cycle (e.g., PART_OF relationship that would create cycle).
+   - Verify cycle detection prevents creation.
+
+**Expected Results:**
+- Relationships created successfully.
+- Graph traversal queries work.
+- Relationship metadata preserved.
+- Cycle detection prevents invalid relationships.
+
+**Machine-Checkable:**
+
+- Query: `SELECT COUNT(*) FROM relationships WHERE source_entity_id = '{entity_id}'` returns expected count.
+- MCP action `list_relationships` returns relationships with correct types and metadata.
+- Cycle detection query prevents invalid relationships.
+
+---
+
 ### 4. Execution per Batch
 
 **After Batch 0.6:** Event-sourcing foundation tests (IT-007 partial: events emitted, reducers applied)
@@ -249,7 +390,15 @@ Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release
 
 **After Batch 5:** Event-sourcing MCP action tests (IT-007 complete: store_record, update_record, delete_record emit events)
 
-**After Batch 6:** Full integration test suite (IT-001 through IT-007)
+**After Batch 0.7:** Observation storage tests (IT-008 partial: observations created)
+
+**After Batch 0.8:** Reducer tests (IT-010: reducer determinism)
+
+**After Batch 6.5:** Observation ingestion tests (IT-008, IT-009: full observation flow)
+
+**After Batch 6.6:** Observation MCP action tests (IT-008, IT-009, IT-011: MCP actions functional)
+
+**After Batch 6:** Full integration test suite (IT-001 through IT-011)
 
 **Before Release:** Complete integration test suite must pass
 

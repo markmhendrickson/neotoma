@@ -8,6 +8,8 @@ _(Model Context Protocol Actions and Contracts)_
 
 This document provides the complete specification for Neotoma's Model Context Protocol (MCP) server. MCP is the **primary AI-safe interface** for accessing and modifying Neotoma's Truth Layer from AI tools (ChatGPT, Claude, Cursor, custom agents).
 
+**Architectural Note:** Neotoma externalizes all conversational interactions to MCP-compatible agents. Neotoma does not provide internal chat UI or conversational interfaces. See `docs/architecture/conversational_ux_architecture.md` for the architectural rationale.
+
 MCP ensures:
 
 - Structured, validated access to truth
@@ -117,6 +119,20 @@ flowchart LR
 | `get_product_analytics` | Query product analytics (activation, retention, usage)              | Bounded Eventual (analytics platform sync)    | Yes (same query + time → same result) | ⏳ Post-MVP |
 
 **Note:** Metrics actions are post-MVP. They enable AI-generated reports on system performance and user behavior. Requires Prometheus and PostHog/Mixpanel integration (Phase 8 observability).
+
+---
+
+### 2.5 Observation and Snapshot Operations
+
+| Action                 | Purpose                                    | Consistency | Deterministic | MVP Status |
+| ---------------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
+| `get_entity_snapshot`  | Get entity snapshot with provenance        | Strong      | Yes           | ✅ MVP     |
+| `list_observations`    | Query observations for entity              | Strong      | Yes           | ✅ MVP     |
+| `get_field_provenance` | Trace field to source documents            | Strong      | Yes           | ✅ MVP     |
+| `create_relationship`  | Create typed relationship between entities | Strong      | Yes           | ✅ MVP     |
+| `list_relationships`   | Query entity relationships                 | Strong      | Yes           | ✅ MVP     |
+
+**Note:** These actions enable AI agents to work with entities, observations, and snapshots — the core of Neotoma's four-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
 
 ---
 
@@ -404,7 +420,309 @@ flowchart LR
 
 ---
 
-### 3.7 `plaid_create_link_token`
+### 3.7 `get_entity_snapshot`
+
+**Purpose:** Get entity snapshot with provenance. Returns current truth for entity computed by reducer from observations.
+
+**Four-Layer Model Context:** This action returns the **Snapshot** layer — the deterministic output of the reducer engine that merges multiple **Observations** (extracted from **Documents**) about an **Entity**. The snapshot represents the current truth, with every field traceable to its source observation and document.
+
+**Use Cases:**
+
+- Get current state of an entity (company, person, invoice)
+- Trace which documents contributed to current truth
+- Understand how multiple sources were merged
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string; // Required: Entity ID (hash-based)
+}
+```
+
+**Response Schema:**
+
+```typescript
+{
+  entity_id: string;
+  entity_type: string;
+  schema_version: string;
+  snapshot: Record<string, any>; // Current truth
+  provenance: Record<string, string>; // Maps field → observation_id
+  computed_at: string; // ISO 8601
+  observation_count: number;
+  last_observation_at: string; // ISO 8601
+}
+```
+
+**Errors:**
+
+| Code               | HTTP | Meaning                  | Retry? |
+| ------------------ | ---- | ------------------------ | ------ |
+| `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist  | No     |
+| `VALIDATION_ERROR` | 400  | Invalid entity_id format | No     |
+
+**Example:**
+
+```json
+// Request
+{
+  "entity_id": "ent_abc123def456"
+}
+
+// Response
+{
+  "entity_id": "ent_abc123def456",
+  "entity_type": "company",
+  "schema_version": "1.0",
+  "snapshot": {
+    "name": "Acme Corp",
+    "address": "123 Main St",
+    "tax_id": "12-3456789"
+  },
+  "provenance": {
+    "name": "obs_xyz789",
+    "address": "obs_xyz789",
+    "tax_id": "obs_xyz789"
+  },
+  "computed_at": "2024-01-15T10:35:00Z",
+  "observation_count": 2,
+  "last_observation_at": "2024-01-15T10:30:00Z"
+}
+```
+
+**Consistency:** Strong
+
+**Determinism:** Yes (same entity_id → same snapshot)
+
+**Related Documents:**
+
+- [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) — Four-layer truth model
+- [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
+- [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer patterns and merge strategies
+- [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry merge policies
+
+---
+
+### 3.8 `list_observations`
+
+**Purpose:** Query observations for entity. Returns all observations that contributed to entity snapshot.
+
+**Four-Layer Model Context:** This action returns the **Observation** layer — granular, source-specific facts extracted from **Documents** about an **Entity**. Each observation represents what one document said about the entity at a specific point in time. The reducer merges these observations into a snapshot using merge policies from schema registry.
+
+**Use Cases:**
+
+- See all facts extracted about an entity from different documents
+- Understand how entity truth evolved over time
+- Debug conflicts between multiple sources
+- Audit which documents contributed specific facts
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string; // Required: Entity ID
+  limit?: number; // Optional: Max results (default: 100)
+  offset?: number; // Optional: Pagination offset (default: 0)
+}
+```
+
+**Response Schema:**
+
+```typescript
+{
+  observations: Array<{
+    id: string;
+    entity_id: string;
+    entity_type: string;
+    schema_version: string;
+    source_record_id: string;
+    observed_at: string; // ISO 8601
+    specificity_score: number;
+    source_priority: number;
+    fields: Record<string, any>;
+    created_at: string; // ISO 8601
+  }>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+```
+
+**Errors:**
+
+| Code               | HTTP | Meaning                  | Retry? |
+| ------------------ | ---- | ------------------------ | ------ |
+| `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist  | No     |
+| `VALIDATION_ERROR` | 400  | Invalid entity_id format | No     |
+
+**Consistency:** Strong
+
+**Determinism:** Yes (same entity_id → same observations, sorted by observed_at DESC)
+
+---
+
+### 3.9 `get_field_provenance`
+
+**Purpose:** Trace field to source documents. Returns full provenance chain: snapshot field → observation → document → file.
+
+**Four-Layer Model Context:** This action traverses the complete four-layer truth model:
+
+1. **Snapshot** field (current truth) →
+2. **Observation** (which observation contributed this value) →
+3. **Document** (which record/document contained the observation) →
+4. **File** (original source file)
+
+This enables full explainability: for any fact in the system, you can trace it back to the exact source document and understand why it was selected (via specificity_score and source_priority).
+
+**Use Cases:**
+
+- Answer "where did this value come from?"
+- Audit trail for compliance
+- Debug incorrect entity data
+- Understand reducer merge decisions
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string; // Required: Entity ID
+  field: string; // Required: Field name
+}
+```
+
+**Response Schema:**
+
+```typescript
+{
+  field: string;
+  value: any; // Current field value from snapshot
+  source_observation: {
+    id: string;
+    source_record_id: string;
+    observed_at: string; // ISO 8601
+    specificity_score: number;
+    source_priority: number;
+  };
+  source_record: {
+    id: string;
+    type: string;
+    file_urls: string[];
+    created_at: string; // ISO 8601
+  };
+  observed_at: string; // ISO 8601
+}
+```
+
+**Errors:**
+
+| Code               | HTTP | Meaning                    | Retry? |
+| ------------------ | ---- | -------------------------- | ------ |
+| `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist    | No     |
+| `FIELD_NOT_FOUND`  | 404  | Field not in snapshot      | No     |
+| `VALIDATION_ERROR` | 400  | Invalid entity_id or field | No     |
+
+**Consistency:** Strong
+
+**Determinism:** Yes (same entity_id + field → same provenance)
+
+---
+
+### 3.10 `create_relationship`
+
+**Purpose:** Create typed relationship between entities.
+
+**Request Schema:**
+
+```typescript
+{
+  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES'; // Required
+  source_entity_id: string; // Required: Source entity ID
+  target_entity_id: string; // Required: Target entity ID
+  metadata?: Record<string, any>; // Optional: Relationship-specific metadata
+}
+```
+
+**Response Schema:**
+
+```typescript
+{
+  id: string; // UUID
+  relationship_type: string;
+  source_entity_id: string;
+  target_entity_id: string;
+  metadata?: Record<string, any>;
+  created_at: string; // ISO 8601
+}
+```
+
+**Errors:**
+
+| Code                        | HTTP | Meaning                               | Retry? |
+| --------------------------- | ---- | ------------------------------------- | ------ |
+| `ENTITY_NOT_FOUND`          | 404  | Source or target entity doesn't exist | No     |
+| `INVALID_RELATIONSHIP_TYPE` | 400  | Invalid relationship type             | No     |
+| `CYCLE_DETECTED`            | 400  | Relationship would create cycle       | No     |
+| `VALIDATION_ERROR`          | 400  | Invalid entity IDs                    | No     |
+
+**Consistency:** Strong
+
+**Determinism:** Yes (same inputs → same relationship ID)
+
+**Related Documents:**
+
+- [`docs/subsystems/relationships.md`](../subsystems/relationships.md) — Relationship patterns
+
+---
+
+### 3.11 `list_relationships`
+
+**Purpose:** Query entity relationships. Returns all relationships for entity (inbound, outbound, or both).
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string; // Required: Entity ID
+  direction?: 'inbound' | 'outbound' | 'both'; // Optional: Default 'both'
+  relationship_type?: string; // Optional: Filter by type
+  limit?: number; // Optional: Max results (default: 100)
+  offset?: number; // Optional: Pagination offset (default: 0)
+}
+```
+
+**Response Schema:**
+
+```typescript
+{
+  relationships: Array<{
+    id: string;
+    relationship_type: string;
+    source_entity_id: string;
+    target_entity_id: string;
+    metadata?: Record<string, any>;
+    created_at: string; // ISO 8601
+  }>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+```
+
+**Errors:**
+
+| Code               | HTTP | Meaning                        | Retry? |
+| ------------------ | ---- | ------------------------------ | ------ |
+| `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist        | No     |
+| `VALIDATION_ERROR` | 400  | Invalid entity_id or direction | No     |
+
+**Consistency:** Strong
+
+**Determinism:** Yes (same entity_id + filters → same relationships, sorted by created_at DESC)
+
+---
+
+### 3.12 `plaid_create_link_token`
 
 **Purpose:** Create Plaid Link token for OAuth flow.
 

@@ -1,0 +1,76 @@
+{
+  "release_id": "v0.1.0",
+  "orchestrator": {
+    "agent_id": "orch_1234567890",
+    "started_at": "2024-01-15T10:00:00Z",
+    "current_batch": 0,
+    "status": "running",
+    "completed_at": null
+  },
+  "batches": [
+    {
+      "batch_id": 0,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "feature_units": [
+        {
+          "fu_id": "FU-050",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0.0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-051",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0.0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null
+        }
+      ]
+    },
+    {
+      "batch_id": 1,
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "feature_units": [
+        {
+          "fu_id": "FU-100",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0.0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "completed_fus": []
+}
+

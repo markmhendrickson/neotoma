@@ -179,6 +179,15 @@ export const SCHEMA_FAMILIES = {
 
 ## 4. Field Extraction Rules Per Type
 
+**Schema Registry Integration:** Field definitions for each record type are managed in the schema registry (see [`docs/subsystems/schema_registry.md`](./schema_registry.md)). The schema registry stores:
+- Field definitions (type, required/optional, validators)
+- Schema versions for evolution tracking
+- Merge policies for reducer conflict resolution
+
+This section documents the field extraction rules used during ingestion. During observation creation, the active schema version is loaded from the schema registry to validate fields and configure merge policies.
+
+---
+
 ### 4.1 Financial Types
 
 #### Invoice
@@ -602,6 +611,71 @@ const IDENTITY_DOCUMENT_PATTERNS = {
   date_expiry: /(?:expir|expiry|expires)[\s:]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})/i,
 };
 ```
+
+---
+
+## 4.5 Observation Emission Patterns
+
+**Overview:** After field extraction, Neotoma creates **observations** — granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots.
+
+**Process:**
+
+1. Extract fields using type-specific rules (Section 4)
+2. Categorize fields: known (match schema) vs unknown (store in raw_fragments)
+3. For each entity identified in extracted fields:
+   - Create observation with entity_id, entity_type, fields
+   - Set specificity_score based on field confidence
+   - Set source_priority based on document source
+   - Reference schema_version for deterministic replay
+4. Store observations, then trigger reducer to compute entity snapshots
+
+**Observation Fields Per Type:**
+
+Observations contain the same fields as extracted fields (Section 4), but organized by entity:
+
+- **Invoice:** Creates observations for `vendor_name` (company entity) and `customer_name` (company entity)
+- **Receipt:** Creates observation for `merchant_name` (company entity)
+- **Transaction:** Creates observation for `counterparty` (company or person entity)
+- **Contact:** Creates observation for contact itself (person or company entity)
+
+**Specificity Score Calculation:**
+
+| Field Type | Specificity Score | Rationale |
+| ---------- | ----------------- | --------- |
+| Explicit entity name | 0.9 | High confidence |
+| Inferred from context | 0.6 | Medium confidence |
+| Partial match | 0.4 | Lower confidence |
+| Ambiguous | 0.2 | Low confidence |
+
+**Source Priority Rules:**
+
+| Source Type | Priority | Rationale |
+| ----------- | -------- | --------- |
+| Official documents (invoices, contracts) | 10 | Highest trust |
+| Bank statements | 8 | High trust |
+| Receipts | 7 | Medium-high trust |
+| Notes, messages | 5 | Medium trust |
+| User-entered | 3 | Lower trust |
+
+**Reducer Merge Policies (Schema Registry):**
+
+Merge policies are configured per field in the schema registry, not hard-coded. This enables schema evolution without code changes.
+
+**Example merge policies for common record types:**
+
+- **Invoice:** `vendor_name` uses `highest_priority`, `amount` uses `last_write`
+- **Receipt:** `merchant_name` uses `highest_priority`, `total` uses `last_write`
+- **Transaction:** `counterparty` uses `most_specific`, `amount` uses `last_write`
+
+**Schema Registry Lookup:** During observation creation, the active schema version is fetched from schema registry. This schema version is referenced in the observation for deterministic replay. When the reducer runs, it loads merge policies from schema registry to resolve conflicts between multiple observations.
+
+See [`docs/subsystems/reducer.md`](./reducer.md) for merge strategy details and [`docs/subsystems/schema_registry.md`](./schema_registry.md) for schema version management.
+
+**Related Documents:**
+
+- [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) — Complete observation architecture
+- [`docs/subsystems/reducer.md`](./reducer.md) — Reducer merge strategies
+- [`docs/subsystems/schema_registry.md`](./schema_registry.md) — Schema registry patterns
 
 ---
 

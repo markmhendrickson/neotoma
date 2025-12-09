@@ -41,13 +41,22 @@ This index does NOT cover:
 
 These documents are the **root of truth** for all Neotoma work:
 
-1. **[`docs/NEOTOMA_MANIFEST.md`](../NEOTOMA_MANIFEST.md)**
+1. **Foundation Documents** (`docs/foundation/`)
 
-   - Unified architectural and product context
-   - Layered architecture (Truth Layer supports multiple upper layers; financial system is one example)
-   - Core principles: determinism, immutability, provenance, schema-first
-   - Target users, workflows, and positioning
-   - **Load this FIRST in every agent session**
+   - **Core Identity:** [`docs/foundation/core_identity.md`](../foundation/core_identity.md) — What Neotoma is and is not
+   - **Philosophy:** [`docs/foundation/philosophy.md`](../foundation/philosophy.md) — Core principles and architectural invariants
+   - **Layered Architecture:** [`docs/foundation/layered_architecture.md`](../foundation/layered_architecture.md) — Truth Layer, Strategy Layer, Execution Layer
+   - **Problem Statement:** [`docs/foundation/problem_statement.md`](../foundation/problem_statement.md) — Why Neotoma exists
+   - **Product Positioning:** [`docs/foundation/product_positioning.md`](../foundation/product_positioning.md) — Market positioning
+   - **User Workflows:** [`docs/foundation/user_workflows.md`](../foundation/user_workflows.md) — Key workflows
+   - **Product Principles:** [`docs/foundation/product_principles.md`](../foundation/product_principles.md) — Product design principles
+   - **Data Models:** [`docs/foundation/data_models.md`](../foundation/data_models.md) — Global data commitments
+   - **Entity Resolution:** [`docs/foundation/entity_resolution.md`](../foundation/entity_resolution.md) — Entity doctrine
+   - **Timeline Events:** [`docs/foundation/timeline_events.md`](../foundation/timeline_events.md) — Event doctrine
+   - **AI Safety:** [`docs/foundation/ai_safety.md`](../foundation/ai_safety.md) — AI tool interaction rules
+   - **Quality Requirements:** [`docs/foundation/quality_requirements.md`](../foundation/quality_requirements.md) — Testing, observability, privacy, security
+   - **Agent Instructions:** [`docs/foundation/agent_instructions.md`](../foundation/agent_instructions.md) — Complete agent instructions and validation checklist
+   - **Load foundation documents FIRST in every agent session**
 
 2. **[`docs/private/governance/00_GENERATION.md`](../private/governance/00_GENERATION.md)**
    - Master checklist for documentation generation
@@ -97,11 +106,13 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/architecture/`
 
-| Document                                             | Purpose                                                | Load When                                                            |
-| ---------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| [`architecture.md`](../architecture/architecture.md) | Canonical platform architecture, layers, boundaries    | Any structural change, new subsystem, cross-layer interaction        |
-| [`consistency.md`](../architecture/consistency.md)   | Consistency models per subsystem, UI handling rules    | Working with async operations, indexing, or eventual consistency     |
-| [`determinism.md`](../architecture/determinism.md)   | Determinism doctrine, ordering rules, testing patterns | Any logic that must be reproducible, sorting, or randomness concerns |
+| Document                                                                                 | Purpose                                                | Load When                                                            |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
+| [`architecture.md`](../architecture/architecture.md)                                     | Canonical platform architecture, layers, boundaries    | Any structural change, new subsystem, cross-layer interaction        |
+| [`architectural_decisions.md`](../architecture/architectural_decisions.md)                 | Core architectural decisions and four-layer truth model | Making architectural decisions, understanding observation architecture |
+| [`consistency.md`](../architecture/consistency.md)                                       | Consistency models per subsystem, UI handling rules    | Working with async operations, indexing, or eventual consistency     |
+| [`determinism.md`](../architecture/determinism.md)                                       | Determinism doctrine, ordering rules, testing patterns | Any logic that must be reproducible, sorting, or randomness concerns |
+| [`conversational_ux_architecture.md`](../architecture/conversational_ux_architecture.md) | MCP-first conversational architecture decision         | Evaluating chat/conversational features, UI component design         |
 
 ### 2.3 Subsystems (Domain-Specific Logic)
 
@@ -111,8 +122,11 @@ These documents are the **root of truth** for all Neotoma work:
 
 | Document                                           | Purpose                                                           | Load When                                                                |
 | -------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [`schema.md`](../subsystems/schema.md)             | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
-| [`record_types.md`](../subsystems/record_types.md) | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
+| [`schema.md`](../subsystems/schema.md)                         | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
+| [`record_types.md`](../subsystems/record_types.md)             | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
+| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model | Understanding observation layer, snapshot computation, provenance |
+| [`reducer.md`](../subsystems/reducer.md)                       | Reducer engine patterns, merge strategies, determinism          | Implementing reducers, configuring merge policies, testing snapshots |
+| [`relationships.md`](../subsystems/relationships.md)           | Relationship types, graph patterns, query patterns               | Creating relationships, graph traversal, relationship metadata |
 
 #### Ingestion Pipeline
 
@@ -275,11 +289,16 @@ graph TD
 
     %% Architecture Layer
     Architecture[architecture/architecture.md]
+    ArchDecisions[architecture/architectural_decisions.md]
     Consistency[architecture/consistency.md]
     Determinism[architecture/determinism.md]
 
     %% Subsystems Layer
     Schema[subsystems/schema.md]
+    ObservationArch[subsystems/observation_architecture.md]
+    Reducer[subsystems/reducer.md]
+    SchemaRegistry[subsystems/schema_registry.md]
+    Relationships[subsystems/relationships.md]
     Ingestion[subsystems/ingestion/ingestion.md]
     StateMachines[subsystems/ingestion/state_machines.md]
     Search[subsystems/search/search.md]
@@ -315,29 +334,47 @@ graph TD
 
     %% Dependencies: Manifest to Architecture
     NeoManifest --> Architecture
+    NeoManifest --> ArchDecisions
     NeoManifest --> Consistency
     NeoManifest --> Determinism
     Conventions --> Architecture
+    Conventions --> ArchDecisions
     Conventions --> Consistency
     Conventions --> Determinism
+    Architecture --> ArchDecisions
 
     %% Dependencies: Architecture to Subsystems
     Architecture --> Schema
     Architecture --> Ingestion
     Architecture --> Search
     Architecture --> Auth
+    ArchDecisions --> ObservationArch
+    ArchDecisions --> Reducer
+    ArchDecisions --> Relationships
+    ArchDecisions --> Schema
     Determinism --> Schema
     Determinism --> Ingestion
     Determinism --> Search
+    Determinism --> Reducer
     Consistency --> Ingestion
     Consistency --> Search
+    Consistency --> ObservationArch
 
     %% Dependencies: Subsystems Internal
     Schema --> Ingestion
+    Schema --> ObservationArch
+    Schema --> SchemaRegistry
     Ingestion --> StateMachines
+    Ingestion --> ObservationArch
+    ObservationArch --> Reducer
+    ObservationArch --> SchemaRegistry
+    Reducer --> SchemaRegistry
+    SchemaRegistry --> Schema
+    ObservationArch --> Relationships
     Schema --> Search
     Schema --> VectorOps
     Ingestion --> VectorOps
+    Reducer --> Schema
 
     %% Dependencies: Cross-cutting
     Architecture --> I18n
@@ -395,51 +432,60 @@ graph TD
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Verify feature fits Truth Layer scope and product vision
-2. `docs/feature_units/standards/feature_unit_spec.md` — Understand Feature Unit structure
-3. `docs/feature_units/standards/manifest_template.yaml` — Create manifest
-4. Relevant subsystem docs (e.g., `ingestion.md`, `search.md`)
-5. `docs/testing/testing_standard.md` — Plan testing strategy
-6. `docs/private/governance/risk_classification.md` — Assess risk level
+1. `docs/foundation/core_identity.md` — Verify feature fits Truth Layer scope and product vision
+2. `docs/foundation/layered_architecture.md` — Understand layer boundaries
+3. `docs/foundation/product_principles.md` — Ensure principles are reflected
+4. `docs/feature_units/standards/feature_unit_spec.md` — Understand Feature Unit structure
+5. `docs/feature_units/standards/manifest_template.yaml` — Create manifest
+6. Relevant subsystem docs (e.g., `ingestion.md`, `search.md`)
+7. `docs/testing/testing_standard.md` — Plan testing strategy
+8. `docs/private/governance/risk_classification.md` — Assess risk level
 
 ### 4.2 Modifying Database Schema
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Verify immutability constraints
-2. `docs/subsystems/schema.md` — Understand current schema and evolution rules
-3. `docs/architecture/determinism.md` — Ensure deterministic migration
-4. `docs/migration/migrations_lifecycle.md` — Plan migration strategy
-5. `docs/private/governance/risk_classification.md` — Schema changes are typically high-risk
+1. `docs/foundation/core_identity.md` — Verify immutability constraints
+2. `docs/foundation/layered_architecture.md` — Understand event-sourced architecture
+3. `docs/subsystems/schema.md` — Understand current schema and evolution rules
+4. `docs/subsystems/schema_registry.md` — Schema versioning and registry patterns
+5. `docs/architecture/determinism.md` — Ensure deterministic migration
+6. `docs/migration/migrations_lifecycle.md` — Plan migration strategy
+7. `docs/private/governance/risk_classification.md` — Schema changes are typically high-risk
 
 ### 4.3 Building a UI Component
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — UI as inspection window, not agent; product principles
-2. `docs/ui/dsl_spec.md` — UI DSL structure
-3. Relevant `docs/ui/patterns/*.md` — Appropriate pattern (list/detail/dashboard/etc.)
-4. `docs/subsystems/accessibility.md` — A11y requirements
-5. `docs/subsystems/i18n.md` — Localization requirements
-6. `docs/testing/testing_standard.md` — UI testing requirements
+1. `docs/foundation/core_identity.md` — UI as inspection window, not agent
+2. `docs/foundation/product_principles.md` — Truth Before Experience, Minimal Over Magical
+3. `docs/ui/dsl_spec.md` — UI DSL structure
+4. Relevant `docs/ui/patterns/*.md` — Appropriate pattern (list/detail/dashboard/etc.)
+5. `docs/subsystems/accessibility.md` — A11y requirements
+6. `docs/subsystems/i18n.md` — Localization requirements
+7. `docs/testing/testing_standard.md` — UI testing requirements
 
 ### 4.4 Implementing Ingestion Logic
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Determinism, explicit control, provenance
-2. `docs/architecture/architecture.md` — Ingestion layer boundaries
-3. `docs/subsystems/ingestion/ingestion.md` — Full pipeline details
-4. `docs/subsystems/ingestion/state_machines.md` — State transitions
-5. `docs/subsystems/schema.md` — Schema assignment rules
-6. `docs/architecture/determinism.md` — Deterministic extraction
-7. `docs/subsystems/events.md` — Event emission during ingestion
+1. `docs/foundation/core_identity.md` — Determinism, explicit control, provenance
+2. `docs/foundation/layered_architecture.md` — Truth Layer boundaries
+3. `docs/foundation/product_principles.md` — Explicit Over Implicit, Determinism Over Heuristics
+4. `docs/architecture/architecture.md` — Ingestion layer boundaries
+5. `docs/subsystems/ingestion/ingestion.md` — Full pipeline details (includes observation creation)
+6. `docs/subsystems/ingestion/state_machines.md` — State transitions
+7. `docs/subsystems/schema.md` — Schema assignment rules
+8. `docs/subsystems/schema_registry.md` — Schema registry lookup
+9. `docs/subsystems/observation_architecture.md` — Observation creation during ingestion
+10. `docs/architecture/determinism.md` — Deterministic extraction
+11. `docs/subsystems/events.md` — Event emission during ingestion
 
 ### 4.5 Implementing Search or Retrieval
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — No semantic search in MVP
+1. `docs/foundation/core_identity.md` — No semantic search in MVP
 2. `docs/architecture/architecture.md` — Search layer placement
 3. `docs/subsystems/search/search.md` — Search models and ranking
 4. `docs/architecture/consistency.md` — Search index consistency model
@@ -450,13 +496,64 @@ graph TD
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Privacy and explicit control
+1. `docs/foundation/core_identity.md` — Privacy and explicit control
 2. `docs/subsystems/auth.md` — Auth flows and permissions
 3. `docs/subsystems/privacy.md` — PII handling
 4. `docs/subsystems/errors.md` — Auth error handling
 5. `docs/observability/logging.md` — Never log PII or tokens
 
-### 4.7 Writing Tests
+### 4.7 Implementing Reducer Logic
+
+**Required Reading Order:**
+
+1. `docs/architecture/architectural_decisions.md` — Core architectural decisions, four-layer model
+2. `docs/subsystems/reducer.md` — Reducer patterns, merge strategies
+3. `docs/architecture/determinism.md` — Reducer determinism requirements
+4. `docs/subsystems/schema_registry.md` — Schema registry, merge policy configuration
+5. `docs/subsystems/observation_architecture.md` — Observation architecture overview
+
+### 4.8 Working with Observations and Snapshots
+
+**Required Reading Order:**
+
+1. `docs/architecture/architectural_decisions.md` — Four-layer truth model
+2. `docs/subsystems/observation_architecture.md` — Observation lifecycle, snapshot computation
+3. `docs/subsystems/reducer.md` — Reducer execution, merge strategies
+4. `docs/subsystems/schema.md` — Observations and snapshots tables
+5. `docs/architecture/consistency.md` — Observation and snapshot consistency
+
+### 4.9 Implementing Schema Registry
+
+**Required Reading Order:**
+
+1. `docs/architecture/architectural_decisions.md` — Schema registry rationale
+2. `docs/subsystems/schema_registry.md` — Schema registry patterns
+3. `docs/subsystems/schema.md` — Schema registry table
+4. `docs/architecture/schema_expansion.md` — Automated schema promotion (if applicable)
+
+### 4.10 Working with Relationships
+
+**Required Reading Order:**
+
+1. `docs/architecture/architectural_decisions.md` — Open ontology via relationships
+2. `docs/subsystems/relationships.md` — Relationship types, graph patterns
+3. `docs/subsystems/schema.md` — Relationships table
+4. `docs/foundation/entity_resolution.md` — Entity resolution patterns
+
+### 4.11 Working with Four-Layer Truth Model
+
+**Required Reading Order:**
+
+1. `docs/foundation/core_identity.md` — Truth Layer boundaries and scope
+2. `docs/foundation/layered_architecture.md` — Event-sourced architecture
+3. `docs/architecture/architectural_decisions.md` — Four-layer truth model rationale
+4. `docs/subsystems/observation_architecture.md` — Complete observation architecture
+5. `docs/subsystems/reducer.md` — Reducer patterns and merge strategies
+6. `docs/subsystems/schema_registry.md` — Schema registry for merge policies
+7. `docs/subsystems/ingestion/ingestion.md` — How ingestion creates observations
+8. `docs/architecture/determinism.md` — Deterministic computation requirements
+
+### 4.12 Writing Tests
 
 **Required Reading Order:**
 
@@ -465,15 +562,16 @@ graph TD
 3. `docs/testing/fixtures_standard.md` — Fixture creation and usage
 4. Relevant subsystem docs for domain logic
 
-### 4.8 Creating Documentation
+### 4.13 Creating Documentation
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Foundational + product context
-2. `docs/private/governance/00_GENERATION.md` — Required sections for doc type
-3. `docs/conventions/documentation_standards.md` — Formatting and style rules
+1. `docs/foundation/core_identity.md` — Foundational + product context
+2. `docs/foundation/product_principles.md` — Product design principles
+3. `docs/private/governance/00_GENERATION.md` — Required sections for doc type
+4. `docs/conventions/documentation_standards.md` — Formatting and style rules
 
-### 4.9 Debugging or Error Handling
+### 4.14 Debugging or Error Handling
 
 **Required Reading Order:**
 
@@ -483,15 +581,17 @@ graph TD
 4. `docs/observability/tracing.md` — Distributed tracing if multi-service
 5. `docs/feature_units/standards/error_protocol.md` — Error classification
 
-### 4.10 Agent or Automated Development
+### 4.15 Agent or Automated Development
 
 **Required Reading Order:**
 
-1. `docs/NEOTOMA_MANIFEST.md` — Absolute constraints and product context
-2. `docs/private/governance/agent_global.md` — Global agent rules
-3. `docs/private/governance/risk_classification.md` — Risk assessment
-4. `docs/private/governance/agent_background_execution.md` — If running autonomously
-5. Relevant domain docs as needed
+1. `docs/foundation/core_identity.md` — Absolute constraints and product context
+2. `docs/foundation/layered_architecture.md` — Layer boundaries
+3. `docs/foundation/product_principles.md` — Product principles validation
+4. `docs/private/governance/agent_global.md` — Global agent rules
+5. `docs/private/governance/risk_classification.md` — Risk assessment
+6. `docs/private/governance/agent_background_execution.md` — If running autonomously
+7. Relevant domain docs as needed
 
 ---
 
@@ -501,8 +601,8 @@ graph TD
 
 Agents MUST load these docs before any other documentation:
 
-1. `docs/NEOTOMA_MANIFEST.md`
-2. `docs/context/index.md` (this file)
+1. `docs/context/index.md` (this file)
+2. Foundation documents from `docs/foundation/` (see Section 1.1)
 
 ### 5.2 Load Dependencies Before Dependents
 
@@ -587,15 +687,15 @@ No Feature Unit may be implemented without:
 
 ### 7.1 Never Skip Foundational Docs
 
-❌ **FORBIDDEN:** Starting implementation without loading `NEOTOMA_MANIFEST.md`
+❌ **FORBIDDEN:** Starting implementation without loading foundation documents
 
-✅ **REQUIRED:** Always load manifest first, even for "small" changes
+✅ **REQUIRED:** Always load foundation documents first, even for "small" changes
 
 ### 7.2 Never Violate Truth Layer Boundaries
 
 ❌ **FORBIDDEN:** Introducing strategy, execution, or agent logic into Neotoma code
 
-✅ **REQUIRED:** Verify all changes respect Truth Layer boundaries defined in `NEOTOMA_MANIFEST.md`
+✅ **REQUIRED:** Verify all changes respect Truth Layer boundaries defined in foundation documents
 
 ### 7.3 Never Introduce Nondeterminism
 
@@ -692,15 +792,11 @@ Load `docs/context/index.md` at the **start of every agent session**, regardless
 
 ### Required Co-Loaded Documents
 
-After loading this file, immediately load:
-
-1. `docs/NEOTOMA_MANIFEST.md`
-
-Then load task-specific docs as indicated in Section 4 (Reading Strategies).
+After loading this file, immediately load foundation documents from `docs/foundation/` (see Section 1.1), then load task-specific docs as indicated in Section 4 (Reading Strategies).
 
 ### Constraints Agents Must Enforce
 
-1. **Always load foundational docs first** — Never skip `NEOTOMA_MANIFEST.md`
+1. **Always load foundational docs first** — Never skip foundation documents from `docs/foundation/`
 2. **Follow dependency graph** — Load parent docs before child docs
 3. **Load cross-cutting concerns** — Privacy, i18n, A11y, events, errors when relevant
 4. **Update this index** — When adding new documentation files
@@ -719,8 +815,8 @@ Then load task-specific docs as indicated in Section 4 (Reading Strategies).
 
 ### Validation Checklist
 
-- [ ] Loaded `NEOTOMA_MANIFEST.md` first
-- [ ] Loaded this index (`context/index.md`) second
+- [ ] Loaded this index (`context/index.md`) first
+- [ ] Loaded foundation documents from `docs/foundation/` second
 - [ ] Identified change type and followed appropriate reading strategy (Section 4)
 - [ ] Loaded all dependency docs from graph (Section 3)
 - [ ] Loaded relevant cross-cutting concern docs (privacy, i18n, A11y, etc.)

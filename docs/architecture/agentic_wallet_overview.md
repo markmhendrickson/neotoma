@@ -2,11 +2,19 @@
 
 ## Purpose
 
-The **Agentic Wallet** is the execution and tactical reasoning layer of Neotoma's system.  
+The **Agentic Wallet** is part of the **Execution Layer** in Neotoma's layered architecture.  
 
-It interprets the strategy defined by the Agentic Portfolio and decides **how** to implement it operationally across chains, venues, and liquidity sources.
+It demonstrates how the Execution Layer operates as pure effect: taking Commands from the Strategy Layer, performing side effects via external adapters, and emitting Domain Events that flow through reducers to update world state.
 
-Unlike the portfolio, the Agentic Wallet:
+It interprets the strategy defined by the Strategy Layer (e.g., Agentic Portfolio) and decides **how** to implement it operationally across chains, venues, and liquidity sources.
+
+Unlike the Strategy Layer, the Agentic Wallet (Execution Layer):
+
+- Takes Commands from Strategy Layer  
+
+- Performs side effects using external adapters  
+
+- Emits Domain Events describing what happened  
 
 - Holds keys (local or MPC)  
 
@@ -16,23 +24,35 @@ Unlike the portfolio, the Agentic Wallet:
 
 - Handles complex multi-chain routing  
 
-- Provides receipts and confirmations back to Neotoma  
-
 The Wallet is an **agentic executor**, not the origin of strategy.
 
 ---
 
 ## Role in Neotoma Architecture
 
-- Neotoma = data truth + validation  
+- Neotoma = Truth Layer (event-sourced, reducer-driven)  
 
-- Agentic Portfolio = strategic intent ("what should happen")  
+- Strategy Layer = Pure Cognition ("what should happen", e.g., Agentic Portfolio)  
 
-- Agentic Wallet = tactical realization ("how it should happen")  
+- Execution Layer = Pure Effect ("how it should happen", Agentic Wallet is part of this layer)  
+
+### Execution Layer Responsibilities (Agentic Wallet as Part)
+
+As part of the Execution Layer, Agentic Wallet:
+
+- **Takes Commands from Strategy Layer**
+- **Performs side effects using external adapters** (TradingAdapter, PaymentsAdapter, etc.)
+- **Emits Domain Events** describing what actually happened (TRADE_EXECUTED, PAYMENT_INITIATED, etc.)
+- **NEVER mutates Neotoma truth directly** (only via Domain Events → Reducers)
+
+Execution is pure effect:
+
+- Commands in → Events out
+- All truth updates flow through reducers
 
 ### Core Responsibilities
 
-- Interpret portfolio-level intent  
+- Take Commands from Strategy Layer  
 
 - Convert high-level goals into specific transactional operations  
 
@@ -44,31 +64,37 @@ The Wallet is an **agentic executor**, not the origin of strategy.
 
 - Hold keys securely (local/MPC)  
 
-- Sign and submit transactions  
+- Sign and submit transactions via adapters  
 
-- Provide verifiable receipts for post-execution reconciliation  
+- Emit Domain Events for post-execution reconciliation (events flow through reducers to update state)  
 
 ---
 
 ## Execution Model
 
-Given a strategy directive (e.g. "rebalance BTC from 75% to 60%"):
+Given a Command from Strategy Layer (e.g. "rebalance BTC from 75% to 60%"):
 
-1. Analyze liquidity and slippage across venues  
+1. Take Command from Strategy Layer  
 
-2. Determine optimal sell-side routes  
+2. Analyze liquidity and slippage across venues  
 
-3. Evaluate bridging options to reach target chain(s)  
+3. Determine optimal sell-side routes  
 
-4. Sign transactions sequentially or atomically  
+4. Evaluate bridging options to reach target chain(s)  
 
-5. Submit transactions  
+5. Sign transactions sequentially or atomically via TradingAdapter  
 
-6. Report precise results to Neotoma Truth Layer  
+6. Submit transactions via TradingAdapter  
 
-7. Allow portfolio recomputation and verification  
+7. Emit Domain Events (e.g., TRADE_EXECUTED) describing what happened  
 
-The Wallet must **never** alter strategy rules; it must honor the Agentic Portfolio's constraints.
+8. Domain Events flow through Reducers → Updated world state in Neotoma  
+
+9. Strategy Layer reads updated state on next tick  
+
+The Wallet must **never** alter strategy rules; it must honor the Strategy Layer's constraints.
+
+The Wallet must **never** mutate Neotoma truth directly; all updates flow through Domain Events → Reducers.
 
 ---
 
@@ -86,9 +112,9 @@ Regardless of mode, the Wallet executes only within the strategy boundaries defi
 
 ---
 
-## Relationship with Agentic Portfolio
+## Relationship with Strategy Layer (Agentic Portfolio)
 
-The Wallet answers:
+The Wallet (Execution Layer) answers:
 
 - How do we operationalize the strategy?  
 
@@ -98,23 +124,45 @@ The Wallet answers:
 
 - How do we minimize slippage, fees, and risk?  
 
-The Portfolio defines *intent*.  
+The Strategy Layer (e.g., Agentic Portfolio) defines *intent* and outputs Commands.  
 
-The Wallet computes *actions*.
+The Execution Layer (including Agentic Wallet) computes *actions* and emits Domain Events.
+
+### Event Flow
+
+```
+Strategy Layer (Agentic Portfolio)
+  ↓ Outputs Commands
+  ↓
+Execution Layer (Agentic Wallet + Domain Agents)
+  ↓ Takes Commands
+  ↓ Performs side effects via adapters
+  ↓ Emits Domain Events (TRADE_EXECUTED, PAYMENT_INITIATED, etc.)
+  ↓
+Neotoma (Truth Layer)
+  ↓ Reducers process Domain Events
+  ↓ Updated world state
+  ↓
+Next Strategy Tick reads updated state
+```
 
 ---
 
 ## Agent Instructions
 
-- The Wallet must introspect the Agentic Portfolio for constraints and rules.  
+- The Wallet (Execution Layer) must take Commands from Strategy Layer.  
 
 - It must produce deterministic action bundles and plans.  
 
-- It must sign only actions compliant with strategy.  
+- It must sign only actions compliant with strategy constraints.  
 
-- It must export receipts and outcomes for truth-layer reconciliation.  
+- It must emit Domain Events describing what actually happened (not just intentions).  
 
-- It must never self-modify strategy or rules.  
+- It must never mutate Neotoma truth directly (all updates via Domain Events → Reducers).  
+
+- It must never self-modify strategy or rules (that's Strategy Layer's responsibility).
+
+- **Critical:** Execution Layer functions are pure effect: Commands in → Events out. All side effects go through adapters. All truth updates flow through Domain Events → Reducers.  
 
 ---
 
