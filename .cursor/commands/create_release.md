@@ -14,13 +14,14 @@ This command implements the Release workflow from `docs/feature_units/standards/
 
 ## When to Use
 
-Use this command to:
-
+**Explicit Command:** Use this command when you know exactly what you want:
 - Start a new release (MVP = v1.0.0, next minor = v1.1.0, etc.)
 - Plan multi-FU work with dependency resolution
 - Generate execution schedules with parallelization
 - Orchestrate FU creation/execution in dependency order
 - Run cross-FU integration tests
+
+**Automatic Detection:** This workflow can also be triggered automatically via `.cursor/rules/release_detection.md` when you mention release-related patterns in natural language (e.g., "new release", "release v1.1.0"). Both paths execute the same workflow.
 
 ---
 

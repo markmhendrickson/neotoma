@@ -24,8 +24,8 @@
   - Preserve deterministic linkage between each row-level Record and the file-level Record in the Memory Graph.
 
 - For chat transcripts (e.g., logs exported from LLM apps), MVP MUST provide a **separate CLI tool or flow** (outside the Truth Layer ingestion pipeline) that can:
-  - Non-deterministically convert a raw chat export into a well-structured CSV or spreadsheet (with explicit columns and user-correctable fields), and then
-  - Feed the resulting CSV/spreadsheet into the standard deterministic ingestion path described above, so that Neotoma itself never performs non-deterministic interpretation of chat content.
+  - Non-deterministically convert a raw chat export into well-structured JSON files (one record per JSON object with explicit schema types and properties), and then
+  - Feed the resulting JSON files into the standard deterministic ingestion path described above, so that Neotoma itself never performs non-deterministic interpretation of chat content.
 
 ### MVP Schema Catalog
 

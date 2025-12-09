@@ -1,0 +1,53 @@
+release:
+  id: v0.2.0
+  name: Chat Transcript Extraction Tool
+  type: internal
+  priority: P1
+  status: planning
+  target_ship_date: null # Before MVP (v1.0.0)
+  owner: Mark Hendrickson
+
+feature_units:
+  - id: FU-106
+    name: Chat Transcript to JSON CLI Tool
+    priority: P1
+    status: not_started
+    dependencies: []
+
+scope:
+  included:
+    - FU-106: Chat Transcript to JSON CLI Tool
+
+  excluded:
+    - Truth Layer integration (tool runs separately)
+    - UI components (CLI-only)
+    - Multi-user infrastructure (standalone tool)
+    - CSV output format (JSON only)
+
+acceptance_criteria:
+  product:
+    - CLI tool converts chat transcripts to JSON files with schema types
+    - Output JSON files can be ingested deterministically
+    - Interactive mode allows field correction
+    - Tool handles common export formats (ChatGPT JSON, HTML, text)
+
+  technical:
+    - CLI script functional (scripts/chat-to-json.ts)
+    - Parsers for supported formats
+    - LLM-based interpretation working
+    - JSON output follows standard record format
+    - Unit, integration, and E2E tests passing
+
+  business:
+    - Tool enables chat transcript ingestion workflow
+    - Preserves Truth Layer determinism constraints
+
+success_criteria:
+  - CLI tool functional
+  - All format parsers working
+  - LLM interpretation working
+  - JSON output format correct
+  - Interactive mode functional
+  - All tests passing
+  - Documentation complete
+  - Field accuracy ≥80%

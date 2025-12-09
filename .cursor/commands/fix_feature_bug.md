@@ -2,6 +2,8 @@
 
 Fix a bug in the Neotoma repo.
 
+**Automatic Detection:** This workflow can also be triggered automatically via `.cursor/rules/bug_fix_detection.md` when you mention bug/error-related patterns in natural language (e.g., "bug", "error", "fix", "broken"). Both paths execute the same workflow.
+
 1. Identify feature_id from error, path, or context.
 2. Load:
    - docs/context/index.md

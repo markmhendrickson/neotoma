@@ -136,9 +136,89 @@ Every file MUST end with an **Agent Instructions** section following this templa
 
 ---
 
-## 4. Language and Phrasing Conventions
+## 4. Document Decomposition and Format Standards
 
-### 4.1 MUST/MUST NOT Language
+### 4.1 Decomposition Principles
+
+When creating planning or specification documents (especially for Releases), follow these decomposition principles:
+
+1. **Decompose by Topic**: Large documents should be decomposed into topic-specific documents:
+
+   - **Overview/coordination documents** (`{topic}_plan.md`): Provide high-level summaries, coordination framework, and references to detailed documents
+   - **Detailed topic documents** (`{topic}_{subtopic}_plan.md`): Contain comprehensive details for specific topics (interview questions, test scenarios, tactics, etc.)
+   - Example: `discovery_plan.md` (overview) → `value_discovery_plan.md`, `usability_discovery_plan.md`, `business_viability_discovery_plan.md`
+
+2. **Use Markdown for Human-Readable Content**:
+
+   - All detailed documentation should be in Markdown format
+   - Markdown provides better readability, version control diff clarity, and collaboration
+   - Use Markdown for: specifications, plans, reports, logs, detailed documentation
+
+3. **Use YAML Only When Required**:
+
+   - YAML files should be used ONLY when:
+     - Required for workflow automation (e.g., `manifest.yaml` for FU dependency resolution)
+     - Structured metadata/summaries needed for programmatic access (e.g., hypotheses, success criteria, timelines)
+     - Machine-readable format is essential for tooling
+   - YAML files should contain: metadata, summaries, success criteria, hypotheses, participant counts, timelines
+   - YAML files should NOT contain: detailed interview questions, test scenarios, comprehensive tactics, lengthy descriptions
+
+4. **Eliminate Redundancy**:
+
+   - Each piece of information should exist in only one place
+   - YAML files reference detailed markdown plans via `detailed_plan` fields
+   - Markdown overview documents provide coordination and cross-references
+   - Detailed markdown documents contain comprehensive content without duplication
+
+5. **Cross-Reference Documents**:
+
+   - All documents should include a "Related Documents" section
+   - Overview documents should list all related detailed documents
+   - Detailed documents should reference back to overview documents
+   - Use consistent cross-reference format: `` `filename.md` ``
+
+6. **File Naming Conventions**:
+   - Overview: `{topic}_plan.md` (e.g., `discovery_plan.md`, `marketing_plan.md`)
+   - Detailed topics: `{topic}_{subtopic}_plan.md` (e.g., `value_discovery_plan.md`, `pre_launch_marketing_plan.md`)
+   - YAML summaries: `{topic}_plan.yaml` (e.g., `discovery_plan.yaml`, `marketing_plan.yaml`)
+   - Logs/tracking: `{topic}_log.md` (e.g., `continuous_discovery_log.md`)
+
+**Example Structure:**
+
+```
+release/
+  ├── discovery_plan.md              # Overview and coordination
+  ├── discovery_plan.yaml            # Metadata, summaries (hypotheses, success criteria)
+  ├── value_discovery_plan.md        # Detailed value discovery content
+  ├── usability_discovery_plan.md    # Detailed usability discovery content
+  └── ...
+```
+
+**Release Planning Document Structure:**
+
+```
+docs/releases/in_progress/vX.Y.Z/
+  ├── release_plan.md              # Overview and coordination
+  ├── manifest.yaml                # FU metadata, dependencies (YAML required for automation)
+  ├── acceptance_criteria.md       # Release-level acceptance criteria
+  ├── pre_mortem.md               # Failure mode analysis
+  ├── deployment_strategy.md      # Deployment and rollback procedures
+  ├── monitoring_plan.md          # Post-release monitoring and observability
+  ├── discovery_plan.md           # Discovery overview (if discovery enabled)
+  ├── discovery_plan.yaml         # Discovery metadata/summary (if discovery enabled)
+  ├── value_discovery_plan.md     # Value discovery details
+  ├── usability_discovery_plan.md # Usability discovery details
+  ├── marketing_plan.md           # Marketing overview (if external release)
+  ├── marketing_plan.yaml         # Marketing metadata/summary (if external release)
+  ├── pre_launch_marketing_plan.md # Pre-launch marketing details
+  └── ...
+```
+
+---
+
+## 5. Language and Phrasing Conventions
+
+### 5.1 MUST/MUST NOT Language
 
 Use RFC 2119 terminology consistently:
 
@@ -148,14 +228,14 @@ Use RFC 2119 terminology consistently:
 - **SHOULD NOT** / **NOT RECOMMENDED** — Strong discouragement
 - **MAY** / **OPTIONAL** — Truly optional
 
-### 4.2 Directive Tone
+### 5.2 Directive Tone
 
 Documentation uses clear, directive language:
 
 - ✅ "The system MUST validate input before storage."
 - ❌ "The system should probably validate input."
 
-### 4.3 Forbidden Language
+### 5.3 Forbidden Language
 
 NEVER use:
 
@@ -165,9 +245,9 @@ NEVER use:
 
 ---
 
-## 5. Mermaid Diagram Standards
+## 6. Mermaid Diagram Standards
 
-### 5.1 General Rules
+### 6.1 General Rules
 
 All Mermaid diagrams MUST:
 
@@ -176,7 +256,7 @@ All Mermaid diagrams MUST:
 - Use deterministic ordering of nodes and edges
 - Be versionable (no auto-generated IDs)
 
-### 5.2 Diagram Types and Usage
+### 6.2 Diagram Types and Usage
 
 **Flowchart (TD/LR)** — For sequential processes:
 
@@ -247,7 +327,7 @@ graph LR
     Generation --> Architecture
 ```
 
-### 5.3 Node and Edge Styling
+### 6.3 Node and Edge Styling
 
 Use consistent styles:
 
@@ -259,9 +339,9 @@ Use consistent styles:
 
 ---
 
-## 6. Example Formatting Standards
+## 7. Example Formatting Standards
 
-### 6.1 Complete Examples Only
+### 7.1 Complete Examples Only
 
 All code examples MUST be:
 
@@ -270,7 +350,7 @@ All code examples MUST be:
 - Valid (parseable JSON/YAML/TypeScript)
 - Annotated (comments explaining non-obvious aspects)
 
-### 6.2 Example Structure
+### 7.2 Example Structure
 
 **JSON Examples:**
 
@@ -327,9 +407,9 @@ export function generateEntityId(
 
 ---
 
-## 7. Cross-Referencing Standards
+## 8. Cross-Referencing Standards
 
-### 7.1 Internal Links
+### 8.1 Internal Links
 
 Use relative paths for internal documentation links:
 
@@ -344,7 +424,7 @@ See [`docs/architecture/architecture.md`](../architecture/architecture.md) for d
 - All internal links MUST use lowercase `.md` extension
 - **Rationale:** Case-sensitivity issues on some systems (Linux, CI/CD) can break links
 
-### 7.2 Foundation Links
+### 8.2 Foundation Links
 
 Always reference the foundational docs when restating core principles:
 
@@ -352,7 +432,7 @@ Always reference the foundational docs when restating core principles:
 As defined in `docs/NEOTOMA_MANIFEST.md`, Neotoma MUST remain deterministic.
 ```
 
-### 7.3 Section Anchors
+### 8.3 Section Anchors
 
 Use explicit anchors for subsections:
 
@@ -364,9 +444,9 @@ Reference this section: [Data Models](#data-models)
 
 ---
 
-## 8. Tables and Matrices
+## 9. Tables and Matrices
 
-### 8.1 Table Format
+### 9.1 Table Format
 
 Use consistent table formatting with clear headers:
 
@@ -376,7 +456,7 @@ Use consistent table formatting with clear headers:
 | Search Index | Bounded Eventual  | Stale results acceptable |
 | Graph Edges  | Strong            | Block until committed    |
 
-### 8.2 Decision Matrices
+### 9.2 Decision Matrices
 
 For complex decision logic, use matrices:
 
@@ -388,9 +468,9 @@ For complex decision logic, use matrices:
 
 ---
 
-## 9. Versioning and Evolution
+## 10. Versioning and Evolution
 
-### 9.1 Document Versioning
+### 10.1 Document Versioning
 
 Each documentation file SHOULD include a version indicator in frontmatter:
 
@@ -402,7 +482,7 @@ status: canonical
 ---
 ```
 
-### 9.2 Additive Changes Only
+### 10.2 Additive Changes Only
 
 Documentation changes MUST be additive:
 
@@ -413,7 +493,7 @@ Documentation changes MUST be additive:
 - ❌ Contradict existing invariants
 - ❌ Weaken MUST requirements
 
-### 9.3 Breaking Changes
+### 10.3 Breaking Changes
 
 If a breaking change is required:
 
@@ -424,9 +504,9 @@ If a breaking change is required:
 
 ---
 
-## 10. Testing Documentation
+## 11. Testing Documentation
 
-### 10.1 Testable Assertions
+### 11.1 Testable Assertions
 
 Documentation SHOULD include testable assertions:
 
@@ -438,7 +518,7 @@ The ingestion pipeline MUST process files in deterministic order by `created_at`
 **Test:** Upload 3 files with timestamps T1 < T2 < T3. Verify processing order is always T1 → T2 → T3.
 ```
 
-### 10.2 Test Coverage Mapping
+### 11.2 Test Coverage Mapping
 
 Link documentation sections to test files:
 
@@ -453,16 +533,16 @@ This section is tested by:
 
 ---
 
-## 11. Privacy and Security Content
+## 12. Privacy and Security Content
 
-### 11.1 PII Handling in Examples
+### 12.1 PII Handling in Examples
 
 Examples MUST NOT contain real PII:
 
 - ✅ Use: `user@example.com`, `John Doe`, `123-45-6789`
 - ❌ Use: Real email addresses, names, or SSNs
 
-### 11.2 Security-Sensitive Information
+### 12.2 Security-Sensitive Information
 
 Documentation MUST NOT include:
 
@@ -473,9 +553,9 @@ Documentation MUST NOT include:
 
 ---
 
-## 12. Accessibility in Documentation
+## 13. Accessibility in Documentation
 
-### 12.1 Alt Text for Diagrams
+### 13.1 Alt Text for Diagrams
 
 Provide text descriptions for all diagrams:
 
@@ -489,16 +569,16 @@ _Figure 1: Ingestion pipeline showing file upload → validation → extraction 
 
 ````
 
-### 12.2 Heading Hierarchy
+### 13.2 Heading Hierarchy
 Use proper heading hierarchy (no skipped levels):
 - ✅ H1 → H2 → H3
 - ❌ H1 → H3 (skipped H2)
 
 ---
 
-## 13. Internationalization Considerations
+## 14. Internationalization Considerations
 
-### 13.1 Language-Neutral Examples
+### 14.1 Language-Neutral Examples
 Use language-neutral or multi-language examples where applicable:
 ```json
 {
@@ -508,7 +588,7 @@ Use language-neutral or multi-language examples where applicable:
 }
 ````
 
-### 13.2 Avoid Cultural Assumptions
+### 14.2 Avoid Cultural Assumptions
 
 Examples should work globally:
 
@@ -517,7 +597,7 @@ Examples should work globally:
 
 ---
 
-## 14. Agent Constraints for Documentation Changes
+## 15. Agent Constraints for Documentation Changes
 
 Agents modifying documentation MUST:
 

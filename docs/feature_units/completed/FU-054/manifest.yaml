@@ -1,0 +1,130 @@
+feature_id: "fu_054"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "low"
+
+tags:
+  - "schema"
+  - "hashing"
+  - "blockchain"
+
+kill_switch:
+  conditions:
+    - condition: "Schema migration fails"
+      action: "Rollback migration, investigate"
+
+metadata:
+  title: "Hash Chaining Schema Fields"
+  description: "Add previous_event_hash and event_hash fields to state_events table, create hash computation utilities (stub)"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+  created_at: "2025-01-XX"
+  target_release: "v0.1.0"
+
+subsystems:
+  - name: "schema"
+    changes: "Add hash fields to state_events table"
+  - name: "hashing"
+    changes: "Hash computation utilities (stub)"
+
+schema_changes:
+  - table: "state_events"
+    operation: "add_column"
+    column_name: "previous_event_hash"
+    column_type: "TEXT"
+    nullable: true
+  
+  - table: "state_events"
+    operation: "add_column"
+    column_name: "event_hash"
+    column_type: "TEXT"
+    nullable: true
+
+observability:
+  metrics:
+    - name: "event_with_hash_total"
+      type: "counter"
+      description: "Total events with hashes"
+    
+    - name: "hash_computation_total"
+      type: "counter"
+      description: "Total hash computations (future)"
+  
+  logs:
+    - level: "debug"
+      event: "event_includes_hash"
+      fields:
+        - "event_id"
+        - "event_hash"
+
+testing:
+  unit_tests:
+    - file: "src/hashing/hash_chain.test.ts"
+      tests:
+        - "computeEventHash (stub)"
+        - "computePreviousEventHash (stub)"
+  
+  integration_tests:
+    - file: "src/events/hash_fields.integration.test.ts"
+      tests:
+        - "Event with hash fields stored correctly"
+        - "Event without hash fields stored correctly"
+  
+  fixtures:
+    - name: "sample_event_with_hash.json"
+      location: "tests/fixtures/hashing/sample_event_with_hash.json"
+      description: "Sample event with hash fields"
+  
+  coverage:
+    lines: 80
+    branches: 75
+    critical_paths: 100
+
+dependencies:
+  requires:
+    - feature_id: "fu_050"
+      reason: "Needs state_events table"
+  
+  blocks: []
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Rollback migration (remove columns)"
+      - "No data loss (columns nullable)"
+  
+  monitoring:
+    key_metrics:
+      - metric: "event_with_hash_total"
+        threshold: "Should be 0 initially"
+
+documentation:
+  files_created:
+    - path: "docs/architecture/hash_chaining.md"
+      purpose: "Hash chaining documentation (stub)"
+  
+  files_updated:
+    - path: "docs/subsystems/schema.md"
+      changes: "Document hash fields in state_events table"
+
+risks:
+  - category: "migration_failure"
+    likelihood: "low"
+    impact: "low"
+    mitigation: "Nullable columns, rollback plan, testing"
+
+notes: |
+  Schema changes are expensive. Include fields now, implement Merkle root computation post-MVP.
+  Fields nullable (no breaking changes). Hash computation utilities are stubs (no real computation yet).
+  Foundation for future hash chaining and Merkle root computation for blockchain anchoring.
+
+links:
+  - title: "Blockchain Readiness Assessment"
+    url: "docs/architecture/blockchain_readiness_assessment.md"
+

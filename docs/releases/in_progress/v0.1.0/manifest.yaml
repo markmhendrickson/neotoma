@@ -1,0 +1,221 @@
+release:
+  id: "v0.1.0"
+  name: "Internal MCP Release"
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "when ready"
+  priority: "P0"
+
+# WIP and parallelization limits
+execution_limits:
+  max_parallel_fus: 3 # Maximum FUs executing simultaneously
+  max_high_risk_in_parallel: 1 # Maximum high-risk FUs executing simultaneously
+
+feature_units:
+  # Infrastructure
+  - id: "FU-000"
+    priority: "P0"
+    dependencies: []
+  - id: "FU-002"
+    priority: "P0"
+    dependencies: []
+
+  # Blockchain-ready architecture foundation
+  - id: "FU-050"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-051"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-052"
+    priority: "P0"
+    dependencies: ["FU-050"]
+  - id: "FU-053"
+    priority: "P0"
+    dependencies: ["FU-050"]
+  - id: "FU-054"
+    priority: "P0"
+    dependencies: ["FU-050"]
+
+  # Core services
+  - id: "FU-100"
+    priority: "P0"
+    dependencies: ["FU-000"]
+    notes: "Includes type detection analytics (see type_detection_analytics.md)"
+  - id: "FU-101"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-102"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-103"
+    priority: "P0"
+    dependencies: ["FU-101", "FU-102"]
+  - id: "FU-105"
+    priority: "P0"
+    dependencies: ["FU-103"]
+
+  # MCP layer
+  - id: "FU-200"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-201"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-202"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-105"]
+  - id: "FU-203"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-204"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-205"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-100"]
+  - id: "FU-206"
+    priority: "P0"
+    dependencies: ["FU-200"]
+
+  # Optional
+  - id: "FU-104"
+    priority: "P1"
+    dependencies: ["FU-100"]
+  - id: "FU-208"
+    priority: "P1"
+    dependencies: ["FU-200"]
+
+execution_schedule:
+  batches:
+    # Batch 0: Infrastructure (can run in parallel)
+    - batch_id: 0
+      feature_units: ["FU-000", "FU-002"]
+      dependencies: []
+
+    # Batch 0.5: Blockchain-ready architecture foundation (can run in parallel)
+    - batch_id: 0.5
+      feature_units: ["FU-050", "FU-051"]
+      dependencies: ["FU-000"]
+
+    # Batch 0.6: Complete blockchain foundation (depends on FU-050)
+    - batch_id: 0.6
+      feature_units: ["FU-052", "FU-053", "FU-054"]
+      dependencies: ["FU-050"]
+
+    # Batch 1: MCP core + File analysis (can run in parallel)
+    - batch_id: 1
+      feature_units: ["FU-200", "FU-100"]
+      dependencies: ["FU-000"]
+
+    # Batch 2: Entity and event services (can run in parallel)
+    - batch_id: 2
+      feature_units: ["FU-101", "FU-102"]
+      dependencies: ["FU-100"]
+
+    # Batch 3: Graph builder
+    - batch_id: 3
+      feature_units: ["FU-103"]
+      dependencies: ["FU-101", "FU-102"]
+
+    # Batch 4: Search service
+    - batch_id: 4
+      feature_units: ["FU-105"]
+      dependencies: ["FU-103"]
+
+    # Batch 5: Core MCP actions (can run in parallel, now use event-sourcing)
+    - batch_id: 5
+      feature_units: ["FU-201", "FU-203", "FU-204", "FU-206"]
+      dependencies: ["FU-200", "FU-050", "FU-051"]
+
+    # Batch 6: MCP actions requiring services
+    - batch_id: 6
+      feature_units: ["FU-202", "FU-205"]
+      dependencies: ["FU-200", "FU-105", "FU-100"]
+
+    # Batch 7: Optional features (can run in parallel)
+    - batch_id: 7
+      feature_units: ["FU-104", "FU-208"]
+      dependencies: ["FU-100", "FU-200"]
+
+checkpoints:
+  checkpoint_0.5_after_batch: 0.6 # Review blockchain foundation before proceeding
+  checkpoint_1_after_batch: 4 # Mid-release review after graph builder and search
+
+acceptance_criteria:
+  product:
+    - criterion: "Core workflow functional via MCP (upload → extraction → query)"
+      test: "tests/integration/mcp_workflow.test.ts"
+      metric: null
+    - criterion: "Entity resolution validated (canonical IDs)"
+      test: "tests/integration/entity_resolution.test.ts"
+      metric: null
+    - criterion: "Timeline events validated"
+      test: "tests/integration/event_generation.test.ts"
+      metric: null
+  technical:
+    - criterion: "All P0 FUs deployed and passing tests"
+      test: null
+      metric: "SELECT COUNT(*) FROM feature_units WHERE priority='P0' AND status='completed'"
+    - criterion: "0 orphan nodes, 0 cycles in memory graph"
+      test: "tests/integration/graph_integrity.test.ts"
+      metric: "SELECT COUNT(*) FROM events WHERE record_id NOT IN (SELECT id FROM records) = 0"
+    - criterion: "Deterministic ingestion (same file → same output)"
+      test: "tests/integration/determinism.test.ts"
+      metric: null
+    - criterion: "Deterministic search ranking"
+      test: "tests/integration/search_determinism.test.ts"
+      metric: null
+    - criterion: "100% critical path test coverage"
+      test: "npm run test:coverage -- --critical-path"
+      metric: "coverage.critical_path >= 100"
+    - criterion: "MCP server operational with 6 core actions"
+      test: "tests/integration/mcp_actions.test.ts"
+      metric: null
+    - criterion: "Event-sourcing foundation operational (events emitted, reducers applied)"
+      test: "tests/integration/event_sourcing.test.ts"
+      metric: null
+    - criterion: "Historical replay functional (get record at timestamp)"
+      test: "tests/integration/historical_replay.test.ts"
+      metric: null
+    - criterion: "Repository abstractions in place (domain logic isolated from storage)"
+      test: "tests/integration/repository_abstractions.test.ts"
+      metric: null
+    - criterion: "Type detection analytics functional (metadata stored, telemetry emitted)"
+      test: "tests/integration/type_detection_analytics.test.ts"
+      metric: null
+  business:
+    - criterion: "Cursor integration tested"
+      test: null
+      metric: "Manual validation via Cursor MCP integration"
+    - criterion: "ChatGPT integration tested"
+      test: null
+      metric: "Manual validation via ChatGPT MCP integration"
+
+pre_mortem:
+  failure_modes:
+    - mode: "Graph integrity regressions"
+      early_warning: "Integration tests fail, orphan node count > 0"
+      mitigation: "FU-103 includes property-based tests, batch-level integration tests"
+      rollback: "Disable graph builder, revert to single-record inserts"
+    - mode: "Determinism failures"
+      early_warning: "Property-based tests fail, same input produces different output"
+      mitigation: "FU-100, FU-101, FU-102 include determinism tests, 100-run validation"
+      rollback: "Identify and fix nondeterministic code paths"
+    - mode: "MCP action failures"
+      early_warning: "MCP integration tests fail, Cursor/ChatGPT cannot connect"
+      mitigation: "FU-200 includes comprehensive MCP protocol tests"
+      rollback: "Revert MCP server changes, check protocol compliance"
+
+deployment:
+  strategy: "internal_only" # internal_only | staging_first | canary | full_rollout
+  rollback_plan: "Revert code changes directly (internal release, no production deployment)"
+
+monitoring:
+  key_metrics:
+    - "upload_success_rate"
+    - "upload_latency_p95"
+    - "search_latency_p95"
+    - "graph_orphan_count"
+    - "graph_cycle_count"
+    - "mcp_action_success_rate"
+    - "determinism_test_pass_rate"

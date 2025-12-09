@@ -1,0 +1,330 @@
+feature_id: "fu_050"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "high"
+
+tags:
+  - "schema"
+  - "events"
+  - "architecture"
+  - "blockchain"
+
+kill_switch:
+  conditions:
+    - condition: "Database migration fails in staging"
+      action: "Pause until migration fixed"
+    - condition: "Reducer application causes data corruption"
+      action: "Revert to direct DB writes, pause event emission"
+
+metadata:
+  title: "Event-Sourcing Foundation"
+  description: "Implement append-only event log, reducers, event validation, and historical replay functionality"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+  created_at: "2025-01-XX"
+  target_release: "v0.1.0"
+
+subsystems:
+  - name: "events"
+    changes: "New state_events table, event log, event validation pipeline"
+  - name: "reducers"
+    changes: "Pure reducer functions for state computation"
+  - name: "mcp_actions"
+    changes: "Refactor to emit events + apply reducers"
+
+schema_changes:
+  - table: "state_events"
+    operation: "create_table"
+    columns:
+      - name: "id"
+        type: "TEXT"
+        nullable: false
+        primary_key: true
+      - name: "event_type"
+        type: "TEXT"
+        nullable: false
+      - name: "payload"
+        type: "JSONB"
+        nullable: false
+      - name: "timestamp"
+        type: "TIMESTAMP WITH TIME ZONE"
+        nullable: false
+      - name: "record_id"
+        type: "TEXT"
+        nullable: true
+      - name: "previous_event_hash"
+        type: "TEXT"
+        nullable: true
+      - name: "event_hash"
+        type: "TEXT"
+        nullable: true
+      - name: "signer_public_key"
+        type: "TEXT"
+        nullable: true
+      - name: "signature"
+        type: "TEXT"
+        nullable: true
+      - name: "reducer_version"
+        type: "TEXT"
+        nullable: false
+        default_value: "'1.0'"
+      - name: "created_at"
+        type: "TIMESTAMP WITH TIME ZONE"
+        nullable: false
+        default_value: "NOW()"
+  
+  - table: "state_events"
+    operation: "add_index"
+    index_name: "idx_state_events_record_id"
+    index_type: "btree"
+    columns: ["record_id"]
+  
+  - table: "state_events"
+    operation: "add_index"
+    index_name: "idx_state_events_timestamp"
+    index_type: "btree"
+    columns: ["timestamp"]
+  
+  - table: "state_events"
+    operation: "add_index"
+    index_name: "idx_state_events_type"
+    index_type: "btree"
+    columns: ["event_type"]
+  
+  - table: "state_events"
+    operation: "add_index"
+    index_name: "idx_state_events_previous_hash"
+    index_type: "btree"
+    columns: ["previous_event_hash"]
+    where_clause: "WHERE previous_event_hash IS NOT NULL"
+
+mcp_actions:
+  - action: "store_record"
+    change_type: "modified"
+    changes: "Now emits RecordCreated event + applies reducer"
+  
+  - action: "update_record"
+    change_type: "modified"
+    changes: "Now emits RecordUpdated event + applies reducer"
+  
+  - action: "delete_record"
+    change_type: "modified"
+    changes: "Now emits RecordDeleted event + applies reducer"
+
+observability:
+  metrics:
+    - name: "state_event_emitted_total"
+      type: "counter"
+      labels:
+        - "event_type"
+        - "status"
+      description: "Total events emitted (success or failed)"
+    
+    - name: "state_event_replay_duration_ms"
+      type: "histogram"
+      buckets: [10, 50, 100, 500, 1000]
+      description: "Historical replay duration in milliseconds"
+    
+    - name: "state_event_validation_failures_total"
+      type: "counter"
+      labels:
+        - "error_code"
+      description: "Total event validation failures"
+    
+    - name: "reducer_application_duration_ms"
+      type: "histogram"
+      buckets: [1, 5, 10, 50, 100]
+      description: "Reducer execution duration in milliseconds"
+  
+  logs:
+    - level: "info"
+      event: "event_emitted"
+      fields:
+        - "event_id"
+        - "event_type"
+        - "record_id"
+        - "timestamp"
+    
+    - level: "info"
+      event: "historical_replay_completed"
+      fields:
+        - "record_id"
+        - "event_count"
+        - "duration_ms"
+    
+    - level: "error"
+      event: "event_validation_failed"
+      fields:
+        - "event_type"
+        - "error_code"
+        - "trace_id"
+    
+    - level: "error"
+      event: "reducer_application_failed"
+      fields:
+        - "event_id"
+        - "reducer_version"
+        - "error_code"
+        - "trace_id"
+  
+  events:
+    - event_type: "state_event.emitted"
+      payload:
+        - "event_id"
+        - "event_type"
+        - "record_id"
+      emitted_when: "Event successfully stored"
+    
+    - event_type: "state_event.validation_failed"
+      payload:
+        - "event_type"
+        - "error_code"
+      emitted_when: "Event validation fails"
+  
+  traces:
+    - span_name: "emit_event"
+      attributes:
+        - "event_type"
+        - "record_id"
+    
+    - span_name: "replay_events"
+      attributes:
+        - "record_id"
+        - "event_count"
+        - "up_to_timestamp"
+
+testing:
+  unit_tests:
+    - file: "src/events/event_schema.test.ts"
+      tests:
+        - "eventSchema.validate"
+        - "eventSchema.validate rejects invalid schema"
+    
+    - file: "src/reducers/record_reducer.test.ts"
+      tests:
+        - "reduceRecordCreated"
+        - "reduceRecordUpdated"
+        - "reduceRecordDeleted"
+        - "reducers are pure functions"
+    
+    - file: "src/events/replay.test.ts"
+      tests:
+        - "replayEvents"
+        - "getRecordAtTimestamp"
+        - "replay is deterministic"
+  
+  integration_tests:
+    - file: "src/events/event_sourcing.integration.test.ts"
+      tests:
+        - "store_record emits event and applies reducer"
+        - "update_record emits event and applies reducer"
+        - "delete_record emits event and applies reducer"
+        - "replay events produces correct state"
+        - "historical API returns correct events"
+  
+  property_tests:
+    - file: "src/reducers/record_reducer.property.test.ts"
+      tests:
+        - "same events produce same state (100 runs)"
+        - "replay events matches direct DB read (100 runs)"
+        - "event emission + reducer application is consistent (100 runs)"
+  
+  fixtures:
+    - name: "record_created_event.json"
+      location: "tests/fixtures/events/record_created_event.json"
+      description: "Sample RecordCreated event payload"
+    
+    - name: "record_updated_event.json"
+      location: "tests/fixtures/events/record_updated_event.json"
+      description: "Sample RecordUpdated event payload"
+    
+    - name: "record_deleted_event.json"
+      location: "tests/fixtures/events/record_deleted_event.json"
+      description: "Sample RecordDeleted event payload"
+  
+  coverage:
+    lines: 90
+    branches: 85
+    critical_paths: 100
+
+dependencies:
+  requires:
+    - feature_id: "fu_000"
+      reason: "Requires database schema (state_events table)"
+  
+  blocks:
+    - feature_id: "fu_201"
+      reason: "MCP actions must use event-sourcing"
+    - feature_id: "fu_203"
+      reason: "MCP actions must use event-sourcing"
+    - feature_id: "fu_204"
+      reason: "MCP actions must use event-sourcing"
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert MCP action changes (remove event emission)"
+      - "Keep state_events table (no data loss)"
+      - "Continue using direct records table writes"
+    triggers:
+      - condition: "event_emission_failure_rate > 5%"
+        action: "Revert to direct DB writes"
+      - condition: "reducer_application_failure_rate > 1%"
+        action: "Pause event emission, investigate"
+  
+  monitoring:
+    key_metrics:
+      - metric: "state_event_emitted_total"
+        threshold: "success_rate > 99%"
+      - metric: "state_event_replay_duration_ms"
+        threshold: "p95 < 500"
+      - metric: "state_event_validation_failures_total"
+        threshold: "failures < 1% of events"
+      - metric: "reducer_application_duration_ms"
+        threshold: "p95 < 50"
+
+documentation:
+  files_created:
+    - path: "docs/subsystems/event_sourcing.md"
+      purpose: "Event-sourcing architecture documentation"
+    - path: "docs/architecture/historical_replay.md"
+      purpose: "Historical replay usage guide"
+  
+  files_updated:
+    - path: "docs/subsystems/events.md"
+      changes: "Update to include state events (not just observability events)"
+    - path: "docs/architecture/architecture.md"
+      changes: "Add event-sourcing layer to architecture diagram"
+
+risks:
+  - category: "data_corruption"
+    likelihood: "low"
+    impact: "high"
+    mitigation: "Materialized view strategy, comprehensive tests, reducer validation"
+  
+  - category: "performance"
+    likelihood: "medium"
+    impact: "medium"
+    mitigation: "Indexes on event table, efficient replay queries, monitoring"
+  
+  - category: "complexity"
+    likelihood: "high"
+    impact: "medium"
+    mitigation: "Clear documentation, comprehensive tests, gradual rollout"
+
+notes: |
+  Establishes event-sourcing foundation for blockchain-ready architecture.
+  Includes all schema fields needed for future crypto/hash features.
+  Historical replay is core benefit and must be functional in v0.1.0.
+  Materialized view strategy ensures single source of truth (events) with performance-optimized current state reads.
+
+links:
+  - title: "Blockchain Readiness Assessment"
+    url: "docs/architecture/blockchain_readiness_assessment.md"
+

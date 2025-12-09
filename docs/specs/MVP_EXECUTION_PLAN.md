@@ -479,7 +479,9 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 
 ---
 
-#### FU-106: Chat Transcript to CSV CLI Tool
+#### FU-106: Chat Transcript to JSON CLI Tool
+
+**Note:** This Feature Unit is **excluded from MVP (v1.0.0)** and will be delivered in **Internal Release v0.2.0** (pre-MVP).
 
 - **Execution:** Mostly Agent (Human spec review → Agent implementation → Human review)
 - **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
@@ -491,24 +493,24 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 **Steps:**
 
 1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-106` → no dependencies
-2. **Agent:** Collect spec interactively (Checkpoint 0): CLI for chat transcript → CSV conversion
-3. **Human:** Review spec and output CSV format requirements
+2. **Agent:** Collect spec interactively (Checkpoint 0): CLI for chat transcript → JSON conversion
+3. **Human:** Review spec and output JSON format requirements
 4. **Agent:** Use `Run Feature Workflow` to implement:
-   - CLI script in `scripts/chat-to-csv.ts` (Node.js)
+   - CLI script in `scripts/chat-to-json.ts` (Node.js)
    - Parsers for common export formats (ChatGPT JSON, HTML, text)
    - LLM-based interpretation (OpenAI/Anthropic API calls allowed, outside Truth Layer)
    - Interactive field mapping/correction mode
-   - CSV output in standard ingestion format
+   - JSON output in standard record format (one file per record with type, properties, file_urls)
    - Documentation and usage examples
 5. **Agent:** Write tests:
    - Unit: Format parsers for each supported export type
-   - Integration: Full CLI workflow (transcript → CSV → validate structure)
-   - E2E: CLI output → Neotoma CSV ingestion (verify deterministic ingestion)
+   - Integration: Full CLI workflow (transcript → JSON → validate structure)
+   - E2E: CLI output → Neotoma JSON ingestion (verify deterministic ingestion)
 6. **Human:** Review CLI implementation at Checkpoint 2 (Final Review)
 7. **Agent:** Update after human feedback
 8. **Human:** Approve for merge
 
-**Output:** Standalone CLI tool that users run: `npm run chat-to-csv -- input.json output.csv`
+**Output:** Standalone CLI tool that users run: `npm run chat-to-json -- input.json output_dir/`
 
 **Rationale:** Chat transcripts require non-deterministic interpretation that violates Truth Layer constraints. Separating this into a pre-processing CLI preserves Truth Layer determinism while enabling chat transcript ingestion.
 

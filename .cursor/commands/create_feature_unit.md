@@ -4,6 +4,8 @@ Create a new Feature Unit with feature_id = {{input:feature_id}}.
 
 **Follow the complete workflow in:** `docs/feature_units/standards/creating_feature_units.md`
 
+**Automatic Detection:** This workflow can also be triggered automatically via `.cursor/rules/feature_unit_detection.md` when you mention feature-related patterns in natural language (e.g., "create feature", "new feature", "FU-XXX"). Both paths execute the same workflow.
+
 ## Workflow Overview
 
 This command implements **Checkpoint 0** of the Feature Unit creation workflow (includes UX input collection if UI changes present):
