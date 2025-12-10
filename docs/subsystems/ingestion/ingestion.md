@@ -6,16 +6,16 @@ _(Deterministic Ingestion from Source to Memory Graph)_
 
 ## Purpose
 
-This document defines the **canonical ingestion pipeline** that transforms user-provided files into structured truth. It specifies:
+This document defines the **canonical ingestion pipeline** that transforms user-provided inputs into structured truth. Neotoma supports two primary ingestion paths: **file uploads** (PDFs, images, text files) and **agent interactions** (contextual data provided via MCP `store_record` action). This document specifies:
 
-- End-to-end ingestion flow (upload → extraction → graph)
+- End-to-end ingestion flow (upload/agent interaction → extraction → graph)
 - Deterministic extraction rules
 - Schema detection and assignment
 - Entity resolution and event generation
 - Error handling and retry logic
 - Testing requirements
 
-Ingestion is the **primary entry point** for truth into Neotoma.
+Ingestion is the **primary entry point** for truth into Neotoma. The dual ingestion model—file uploads and agent interactions—enables incremental memory growth as users scale their agent usage, with contextual data from conversations persisting alongside extracted document data.
 
 ---
 
@@ -24,18 +24,28 @@ Ingestion is the **primary entry point** for truth into Neotoma.
 This document covers:
 
 - File upload and normalization
-- OCR and text extraction
+- Agent interaction ingestion via MCP `store_record` action
+- OCR and text extraction (file uploads only)
 - Schema detection
 - Field extraction (rule-based, deterministic)
 - Entity resolution
 - Event generation
 - Graph insertion
 
+**Ingestion Paths:**
+
+1. **File Upload:** Users explicitly upload PDFs, images, or text files through the UI or `upload_file` MCP action. Files undergo OCR, schema detection, and rule-based field extraction.
+
+2. **Agent Interactions:** Users provide contextual data during conversations with ChatGPT, Claude, Cursor, or other MCP-compatible agents. Agents store this data via the `store_record` MCP action, enabling incremental memory growth that maintains accuracy and comprehensiveness as agent usage scales. This path bypasses file processing and directly creates records with user-provided properties.
+
+Both paths feed into the same four-layer truth model (Document → Entity → Observation → Snapshot), ensuring unified memory regardless of ingestion source.
+
 This document does NOT cover:
 
 - UI implementation (see `docs/ui/`)
 - Database schema (see `docs/subsystems/schema.md`)
 - Search indexing (see `docs/subsystems/search/search.md`)
+- MCP action specifications (see `docs/specs/MCP_SPEC.md`)
 
 ---
 
@@ -58,12 +68,12 @@ flowchart TD
     DetectSchema --> ExtractFields[Extract Fields]
     ExtractFields --> CategorizeFields[Categorize Known vs Unknown]
     CategorizeFields --> StoreRawFragments[Store Raw Fragments]
-    
+
     CategorizeFields --> ResolveEntities[Resolve Entities]
     ResolveEntities --> CreateObservations[Create Observations]
     CreateObservations --> TriggerReducer[Trigger Reducer]
     TriggerReducer --> ComputeSnapshots[Compute Entity Snapshots]
-    
+
     ComputeSnapshots --> GenerateEvents[Generate Events]
     GenerateEvents --> InsertGraph[Insert into Graph]
     InsertGraph --> EmitEvents[Emit Observability Events]
@@ -653,18 +663,21 @@ async function createObservations(
 ): Promise<void> {
   // Categorize known vs unknown fields
   const schema = await schemaRegistry.loadActiveSchema(schemaType);
-  const { knownFields, unknownFields } = categorizeFields(extractedFields, schema);
-  
+  const { knownFields, unknownFields } = categorizeFields(
+    extractedFields,
+    schema
+  );
+
   // Store raw fragments for unknown fields
   for (const [key, value] of Object.entries(unknownFields)) {
     await rawFragmentRepo.create({
       record_id: recordId,
       fragment_key: key,
       fragment_value: value,
-      fragment_envelope: { type: typeof value, confidence: 'medium' }
+      fragment_envelope: { type: typeof value, confidence: "medium" },
     });
   }
-  
+
   // Create observations for each entity
   for (const entity of entities) {
     const observation = await observationRepo.create({
@@ -675,9 +688,9 @@ async function createObservations(
       observed_at: new Date(),
       specificity_score: calculateSpecificity(entity, knownFields),
       source_priority: calculatePriority(recordId),
-      fields: extractEntityFields(knownFields, entity)
+      fields: extractEntityFields(knownFields, entity),
     });
-    
+
     // Trigger reducer to compute snapshot
     await reducerEngine.computeSnapshot(entity.id);
   }

@@ -1,11 +1,12 @@
 release:
   id: v0.2.0
   name: Chat Transcript Extraction Tool
-  type: internal
+  type: "not_marketed" # marketed | not_marketed
   priority: P1
   status: planning
   target_ship_date: null # Before MVP (v1.0.0)
   owner: Mark Hendrickson
+  marketing_required: false
 
 feature_units:
   - id: FU-106

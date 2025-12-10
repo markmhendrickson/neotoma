@@ -253,3 +253,4 @@ src/
 - `docs/architecture/architecture.md`: Add repository layer to architecture diagram
 - `docs/subsystems/schema.md`: Document repository abstractions
 
+

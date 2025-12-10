@@ -381,3 +381,4 @@ This document defines integration tests that span multiple Feature Units for v2.
 - `migration_plan.md` — Migration strategy
 - `.cursor/plans/local-first-e2ee-architecture-99397386.plan.md` — Architecture details
 
+

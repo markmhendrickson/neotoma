@@ -1,0 +1,461 @@
+release:
+  id: "v2.1.0"
+  name: "GDPR & US State Privacy Compliance"
+  type: "not_marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "TBD" # Set after v2.0.0 completion
+  priority: "P0" # Legal compliance requirement
+  owner: "Mark Hendrickson"
+  marketing_required: false
+
+# NOTE: This manifest contains metadata and summaries for workflow automation.
+# Detailed planning documents are in markdown (see release_plan.md for overview).
+
+# WIP and parallelization limits
+execution_limits:
+  max_parallel_fus: 4 # GDPR features can be parallelized (consent, cookies, retention can run in parallel)
+  max_high_risk_in_parallel: 1 # Only one high-risk FU at a time (deletion, identity verification)
+
+feature_units:
+  # Phase 1: GDPR Data Export
+  - id: "FU-900"
+    name: "GDPR Data Export Service"
+    priority: "P0"
+    complexity: "High"
+    risk: "Medium"
+    dependencies: [] # Depends on v2.0.0 E2EE architecture
+    description: "Compile all user data (local encrypted + server data), decrypt locally, export JSON/CSV"
+
+  - id: "FU-901"
+    name: "GDPR Data Export API Endpoint"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: ["FU-900"]
+    description: "REST API endpoint /api/gdpr/export, handle request, trigger export, return download link"
+
+  - id: "FU-902"
+    name: "GDPR Data Export UI"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: ["FU-901"]
+    description: "Settings → Privacy → Export My Data button, request status, download link"
+
+  # Phase 2: GDPR Account Deletion
+  - id: "FU-903"
+    name: "GDPR Bulk Deletion Service"
+    priority: "P0"
+    complexity: "High"
+    risk: "High"
+    dependencies: [] # Depends on v2.0.0 E2EE architecture
+    description: "Delete all user data (local SQLite + OPFS, server ciphertext, subscriptions, metrics)"
+
+  - id: "FU-904"
+    name: "GDPR Account Deletion API Endpoint"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "High"
+    dependencies: ["FU-903"]
+    description: "REST API endpoint /api/gdpr/delete, handle request, trigger deletion, confirm completion"
+
+  - id: "FU-905"
+    name: "GDPR Account Deletion UI"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-904"]
+    description: "Settings → Privacy → Delete My Account button, confirmation dialog, status tracking"
+
+  # Phase 3: GDPR Request Management
+  - id: "FU-906"
+    name: "GDPR Request Tracking System"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: []
+    description: "Database schema for request tracking, status management, audit trail"
+
+  - id: "FU-907"
+    name: "GDPR Request Management UI"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-906"]
+    description: "Request history view, status display, download links for exports"
+
+  - id: "FU-908"
+    name: "GDPR Request Notification System"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: ["FU-906"]
+    description: "Email notifications for request status changes, deadline reminders"
+
+  # Phase 4: Identity Verification & Security
+  - id: "FU-909"
+    name: "GDPR Identity Verification"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "High"
+    dependencies: []
+    description: "Verify user identity before processing requests (email verification, password/2FA)"
+
+  - id: "FU-910"
+    name: "GDPR Request Rate Limiting"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: []
+    description: "Rate limiting (max 1 export per 30 days, 1 deletion per account lifetime)"
+
+  - id: "FU-911"
+    name: "GDPR Audit Logging"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-906"]
+    description: "Log all GDPR requests and fulfillments, compliance audit trail"
+
+  # Phase 5: E2EE-Specific Handling
+  - id: "FU-912"
+    name: "GDPR Export with Lost Keys"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-900"]
+    description: "Handle users who lost encryption keys, export server ciphertext with instructions"
+
+  - id: "FU-913"
+    name: "GDPR Deletion of Encrypted Server Data"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-903"]
+    description: "Delete encrypted ciphertext from server, handle encrypted delta sync cleanup"
+
+  - id: "FU-914"
+    name: "GDPR Multi-Device Sync Cleanup"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: ["FU-913"]
+    description: "Delete encrypted deltas from server, verify cleanup completion"
+
+  # Phase 6: Legal Document Publishing
+  - id: "FU-915"
+    name: "Legal Document Serving Service"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: []
+    description: "Serve Privacy Policy and Terms of Service from markdown source, version management"
+
+  - id: "FU-916"
+    name: "Legal Document API Endpoints"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-915"]
+    description: "REST API endpoints /legal/privacy and /legal/terms, render markdown to HTML"
+
+  - id: "FU-917"
+    name: "Legal Document UI Links"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-916"]
+    description: "Footer links, Settings → Legal section, signup/login Terms acceptance"
+
+  # Phase 7: Consent Management & Additional GDPR Rights
+  - id: "FU-918"
+    name: "Consent Management System"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: []
+    description: "Track consent records (timestamp, method, scope), consent withdrawal, consent history"
+
+  - id: "FU-919"
+    name: "Cookie Consent Banner"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: []
+    description: "GDPR cookie consent banner, cookie preferences management, consent tracking"
+
+  - id: "FU-920"
+    name: "Terms/Privacy Acceptance Tracking"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-917"]
+    description: "Track which users accepted which version of Terms/Privacy Policy"
+
+  - id: "FU-921"
+    name: "Right to Restrict Processing UI"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: []
+    description: "Settings → Privacy → Restrict Processing toggle, block new ingestion"
+
+  - id: "FU-922"
+    name: "Data Retention Enforcement"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: []
+    description: "Automated deletion after retention period, user notification before deletion"
+
+  # Phase 8: Breach Notification & Compliance Automation
+  - id: "FU-923"
+    name: "Breach Notification Automation"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: []
+    description: "72-hour notification workflow, DPA notification templates, user notification automation"
+
+  - id: "FU-924"
+    name: "Records of Processing Activities Generator"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: []
+    description: "Automated generation of Article 30 records from system data, quarterly updates"
+
+  # Phase 9: US State Privacy Law Compliance
+  - id: "FU-925"
+    name: "Global Privacy Control (GPC) Signal Support"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: []
+    description: "Honor GPC opt-out signals from browsers, set opt-out preferences automatically"
+
+  - id: "FU-926"
+    name: "Sensitive Data Opt-In Consent"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: []
+    description: "Opt-in consent for sensitive data processing (CPRA/VCDPA/CPA/CTDPA), consent withdrawal"
+
+  - id: "FU-927"
+    name: "Right to Correct UI"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: []
+    description: "UI workflow for right to correct inaccurate data (CPRA/VCDPA/CPA/CTDPA)"
+
+  - id: "FU-928"
+    name: "US State Breach Notification"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-923"]
+    description: "California-specific breach notification requirements, state-specific templates"
+
+execution_schedule:
+  detailed_plan: "execution_schedule.md"
+  batches:
+    # Batch 0: Request tracking foundation (no dependencies)
+    - batch_id: 0
+      feature_units: ["FU-906"]
+      dependencies: []
+
+    # Batch 1: Identity verification and security (foundation)
+    - batch_id: 1
+      feature_units: ["FU-909", "FU-910", "FU-911"]
+      dependencies: ["FU-906"]
+
+    # Batch 2: Data export service (depends on tracking)
+    - batch_id: 2
+      feature_units: ["FU-900"]
+      dependencies: ["FU-906"]
+
+    # Batch 3: Data export API and UI (depends on service)
+    - batch_id: 3
+      feature_units: ["FU-901", "FU-902"]
+      dependencies: ["FU-900"]
+
+    # Batch 4: Lost key handling (depends on export service)
+    - batch_id: 4
+      feature_units: ["FU-912"]
+      dependencies: ["FU-900"]
+
+    # Batch 5: Bulk deletion service (depends on tracking)
+    - batch_id: 5
+      feature_units: ["FU-903"]
+      dependencies: ["FU-906"]
+
+    # Batch 6: Encrypted server data deletion (depends on deletion service)
+    - batch_id: 6
+      feature_units: ["FU-913"]
+      dependencies: ["FU-903"]
+
+    # Batch 7: Multi-device sync cleanup (depends on server deletion)
+    - batch_id: 7
+      feature_units: ["FU-914"]
+      dependencies: ["FU-913"]
+
+    # Batch 8: Account deletion API and UI (depends on deletion service)
+    - batch_id: 8
+      feature_units: ["FU-904", "FU-905"]
+      dependencies: ["FU-903"]
+
+    # Batch 9: Request management UI and notifications (depends on tracking)
+    - batch_id: 9
+      feature_units: ["FU-907", "FU-908"]
+      dependencies: ["FU-906"]
+
+    # Batch 10: Legal document publishing (independent)
+    - batch_id: 10
+      feature_units: ["FU-915"]
+      dependencies: []
+
+    # Batch 11: Legal document API and UI (depends on serving service)
+    - batch_id: 11
+      feature_units: ["FU-916", "FU-917"]
+      dependencies: ["FU-915"]
+
+checkpoints:
+  checkpoint_1_after_batch: 3 # Review after export features complete
+  checkpoint_2_after_batch: 8 # Review after deletion features complete
+  checkpoint_3_after_batch: 11 # Review after legal documents complete
+  checkpoint_4_after_batch: 17 # Final review before deployment (includes all GDPR + US state features)
+
+acceptance_criteria:
+  product:
+    - criterion: "Users can request data export via UI"
+      test: "playwright/tests/e2e/gdpr_export.spec.ts"
+      metric: null
+    - criterion: "Users receive data export within 30 days"
+      test: "analytics/gdpr_export_processing_time"
+      metric: "export_processing_time_hours"
+      threshold: 720 # 30 days
+    - criterion: "Users can request account deletion via UI"
+      test: "playwright/tests/e2e/gdpr_deletion.spec.ts"
+      metric: null
+    - criterion: "Account deletion completes within 30 days"
+      test: "analytics/gdpr_deletion_processing_time"
+      metric: "deletion_processing_time_hours"
+      threshold: 720 # 30 days
+    - criterion: "Users can track request status"
+      test: "playwright/tests/e2e/gdpr_request_tracking.spec.ts"
+      metric: null
+    - criterion: "Data exports work with encrypted local data"
+      test: "tests/integration/gdpr_export_e2ee.spec.ts"
+      metric: null
+
+  technical:
+    - criterion: "GDPR export API endpoint functional"
+      test: "tests/integration/gdpr_export_api.spec.ts"
+      metric: null
+    - criterion: "GDPR deletion API endpoint functional"
+      test: "tests/integration/gdpr_deletion_api.spec.ts"
+      metric: null
+    - criterion: "Request tracking system logs all requests"
+      test: "tests/integration/gdpr_request_tracking.spec.ts"
+      metric: null
+    - criterion: "Identity verification prevents unauthorized requests"
+      test: "tests/integration/gdpr_identity_verification.spec.ts"
+      metric: null
+    - criterion: "Rate limiting prevents abuse"
+      test: "tests/integration/gdpr_rate_limiting.spec.ts"
+      metric: null
+    - criterion: "100% test coverage on GDPR critical paths"
+      test: "coverage/gdpr/"
+      metric: "coverage_percentage"
+      threshold: 100
+    - criterion: "Legal documents served from markdown source"
+      test: "tests/integration/legal_document_serving.spec.ts"
+      metric: null
+    - criterion: "Legal document versioning tracked"
+      test: "tests/integration/legal_document_versioning.spec.ts"
+      metric: null
+    - criterion: "Breach notification sent within 72 hours"
+      test: "tests/integration/breach_notification.spec.ts"
+      metric: "breach_notification_time_hours"
+      threshold: 72
+    - criterion: "Records of processing activities auto-generated"
+      test: "tests/integration/processing_records_generator.spec.ts"
+      metric: null
+    - criterion: "Global Privacy Control (GPC) signals honored"
+      test: "tests/integration/gpc_signal_support.spec.ts"
+      metric: null
+    - criterion: "Sensitive data opt-in consent tracked"
+      test: "tests/integration/sensitive_data_consent.spec.ts"
+      metric: null
+    - criterion: "Right to correct UI functional"
+      test: "playwright/tests/e2e/right_to_correct.spec.ts"
+      metric: null
+    - criterion: "US state breach notification compliant"
+      test: "tests/integration/us_state_breach_notification.spec.ts"
+      metric: null
+
+  business:
+    - criterion: "GDPR compliance: All data subject rights automated"
+      test: "analytics/gdpr_compliance_status"
+      metric: "automated_rights_percentage"
+      threshold: 100
+    - criterion: "Legal compliance: Meets GDPR 30-day response deadline"
+      test: "analytics/gdpr_response_time"
+      metric: "average_response_time_hours"
+      threshold: 720 # 30 days
+    - criterion: "Zero manual GDPR request processing required"
+      test: "analytics/gdpr_manual_processing_rate"
+      metric: "manual_processing_rate"
+      threshold: 0
+
+risks:
+  - id: "e2ee_export_decryption_failure"
+    category: "technical"
+    probability: "low"
+    impact: "high"
+    mitigation: "Comprehensive key validation, fallback to ciphertext export"
+  - id: "lost_key_scenario"
+    category: "user_experience"
+    probability: "medium"
+    impact: "medium"
+    mitigation: "Export server ciphertext with instructions, key recovery guidance"
+  - id: "deletion_incomplete"
+    category: "compliance"
+    probability: "low"
+    impact: "critical"
+    mitigation: "Comprehensive deletion verification, audit trail"
+  - id: "request_deadline_missed"
+    category: "compliance"
+    probability: "low"
+    impact: "high"
+    mitigation: "Automated processing, queue monitoring, alerts"
+  - id: "identity_verification_bypass"
+    category: "security"
+    probability: "low"
+    impact: "critical"
+    mitigation: "Strong identity verification, rate limiting, audit logging"
+
+notes: |
+  This release implements automated GDPR compliance features required legally and operationally for v2.0.0's E2EE architecture.
+
+  Key features:
+  - Automated data export (works with encrypted local data)
+  - Automated account deletion (handles encrypted data cleanup)
+  - Request tracking and management
+  - Identity verification and security
+  - E2EE-specific handling (lost keys, encrypted data)
+
+  E2EE considerations:
+  - Local data encrypted → Must decrypt locally before export
+  - Server data encrypted → Export ciphertext with decryption instructions
+  - Deletion must handle both local and server-side encrypted data
+  - Lost key scenario requires special handling
+
+  Success criteria:
+  - All GDPR rights automated
+  - Meets 30-day response deadline
+  - Zero manual processing required
+  - 100% test coverage on critical paths
+

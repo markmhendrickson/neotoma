@@ -548,3 +548,4 @@ Load `docs/architecture/architectural_decisions.md` when:
 - **Relationship-first:** Hierarchies emerge from edges
 - **Config-driven:** Schema evolution via registry, not code
 
+

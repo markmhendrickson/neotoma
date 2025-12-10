@@ -8,6 +8,12 @@ _(Local-First Architecture with End-to-End Encryption Release Plan)_
 
 This document provides the overview and coordination framework for v2.0.0, which introduces end-to-end encryption and a local-first architecture. Detailed specifications are decomposed into separate topic-specific documents:
 
+**Release Classification:**
+
+- **All releases deploy to production** at neotoma.io
+- **Release types**: "Marketed" (with marketing activities) vs "Not Marketed" (silent deployment)
+- **This release**: Marketed (major version with marketing activities)
+
 - `execution_schedule.md` — FU execution plan with batches and dependencies
 - `manifest.yaml` — FU list, dependencies, schedule, release type
 - `integration_tests.md` — Cross-FU integration test specifications
@@ -20,12 +26,13 @@ This document provides the overview and coordination framework for v2.0.0, which
 
 - **Release ID**: `v2.0.0`
 - **Name**: End-to-End Encryption (E2EE)
-- **Release Type**: External (major version, breaking changes)
+- **Release Type**: Marketed (major version, breaking changes)
 - **Goal**: Transform Neotoma into a local-first, end-to-end encrypted Truth Layer where app creators cannot access user data. Browser becomes authoritative datastore; server stores only encrypted ciphertext.
 - **Priority**: P1 (high-value enhancement, not blocking MVP)
 - **Target Ship Date**: TBD (post-MVP, after v1.0.0 validation)
 - **Discovery Required**: Yes (user demand validation, privacy requirements)
 - **Marketing Required**: Yes (privacy-first positioning, competitive differentiator)
+- **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
 
 #### 1.1 Canonical Specs (Authoritative Sources)

@@ -8,9 +8,12 @@ _(MCP-Focused, Single-User Release for Internal Validation)_
 
 - **Release ID**: `v0.1.0`
 - **Name**: Internal MCP Release
+- **Release Type**: Not Marketed (production deployment without marketing activities)
 - **Goal**: Validate deterministic ingestion, extraction, entity resolution, event generation, and graph construction through MCP-only access. Enable internal validation via Cursor and ChatGPT integration without UI or multi-user infrastructure.
 - **Priority**: P0 (critical for MVP foundation)
-- **Target Ship Date**: When ready (internal validation release)
+- **Target Ship Date**: When ready
+- **Marketing Required**: No (not marketed release)
+- **Deployment**: Production (neotoma.io)
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
@@ -194,10 +197,17 @@ The detailed test specifications for these flows live in `docs/releases/in_progr
 
 ### 5. Deployment and Rollout Strategy
 
-- **Deployment Strategy**: `internal_only`
-  - Deploy to internal development environment.
-  - No staging/production deployment required (internal validation only).
-- **Rollback Plan**: N/A (internal release, can revert code changes directly).
+- **Deployment Target**: Production (neotoma.io)
+  - All releases deploy to production at neotoma.io
+  - Deploy MCP server to neotoma.io
+  - MCP endpoints accessible via MCP protocol
+- **Marketing Strategy**: Not Marketed
+  - No pre-launch marketing activities
+  - No post-launch marketing activities
+  - No user acquisition campaigns
+  - No announcement or promotion
+  - Release deployed silently to production
+- **Rollback Plan**: Revert code changes and redeploy to neotoma.io
 
 ---
 
@@ -239,9 +249,12 @@ The detailed test specifications for these flows live in `docs/releases/in_progr
 ### 8. Status
 
 - **Current Status**: `planning`
+- **Release Type**: Not Marketed
+- **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
 - **Notes**:
-  - Internal validation release before full MVP.
+  - Not marketed release - deploys to production without marketing activities
+  - All releases deploy to production at neotoma.io
   - No UI or multi-user infrastructure required.
   - Focus on MCP-only validation of core Truth Layer capabilities.
   - Type detection analytics implemented for schema expansion insights (see `type_detection_analytics.md`).

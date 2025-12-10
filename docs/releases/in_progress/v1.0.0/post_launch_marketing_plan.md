@@ -9,6 +9,7 @@ _(Post-Launch User Acquisition and Reengagement: Launch Announcement, Conversion
 This document defines the post-launch marketing activities for v1.0.0, focused on launch announcement, waitlist conversion, organic growth, partnership outreach, and user reengagement.
 
 **Related Documents:**
+
 - `marketing_plan.md` — Marketing overview and coordination
 - `pre_launch_marketing_plan.md` — Pre-launch marketing activities
 - `marketing_segments_plan.md` — User segment definitions
@@ -30,6 +31,7 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 - **Timeline**: Day 0
 - **Channels**: Product Hunt, Hacker News, Twitter, Indie Hacker, Email, Blog
+- **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Product Hunt, Hacker News) prioritized for launch day maximum reach
 
 #### 2.2 Launch Sequence
 
@@ -50,13 +52,13 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 2.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Day 1 signups | 50 (conservative for day 1) | Signup analytics by channel |
-| Product Hunt upvotes | 100 | Product Hunt dashboard |
-| Hacker News points | 50 (modest goal) | HN thread score |
-| Press mentions | 2 (blogs, newsletters) | Manual tracking + Google Alerts |
-| Social shares | 100 | Twitter shares, retweets |
+| Metric               | Target                      | Tracking                        |
+| -------------------- | --------------------------- | ------------------------------- |
+| Day 1 signups        | 50 (conservative for day 1) | Signup analytics by channel     |
+| Product Hunt upvotes | 100                         | Product Hunt dashboard          |
+| Hacker News points   | 50 (modest goal)            | HN thread score                 |
+| Press mentions       | 2 (blogs, newsletters)      | Manual tracking + Google Alerts |
+| Social shares        | 100                         | Twitter shares, retweets        |
 
 ---
 
@@ -80,10 +82,10 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 3.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Waitlist conversion rate | 40% (waitlist → signup) | Email opens, clicks, signups by source |
-| Waitlist activation rate | 60% (signups → first upload) | Usage analytics |
+| Metric                   | Target                       | Tracking                               |
+| ------------------------ | ---------------------------- | -------------------------------------- |
+| Waitlist conversion rate | 40% (waitlist → signup)      | Email opens, clicks, signups by source |
+| Waitlist activation rate | 60% (signups → first upload) | Usage analytics                        |
 
 ---
 
@@ -93,6 +95,7 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 - **Timeline**: Week 1 to Week 4
 - **Channels**: Twitter, blog, community, word of mouth
+- **Platform Priority**: P0 platforms (Twitter) for sustained engagement; P1 platforms (LinkedIn, Reddit, Discord) added for Week 1-4 growth
 
 #### 4.2 Activities
 
@@ -109,11 +112,11 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 4.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Organic signups | 100 (Week 1-4 total) | Signup analytics (non-paid sources) |
-| Content to signup rate | 3% (blog/twitter → signup) | UTM tracking |
-| Organic search traffic | 500 (visits from Google) | Google Analytics |
+| Metric                 | Target                     | Tracking                            |
+| ---------------------- | -------------------------- | ----------------------------------- |
+| Organic signups        | 100 (Week 1-4 total)       | Signup analytics (non-paid sources) |
+| Content to signup rate | 3% (blog/twitter → signup) | UTM tracking                        |
+| Organic search traffic | 500 (visits from Google)   | Google Analytics                    |
 
 ---
 
@@ -136,11 +139,11 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 5.3 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Directory listings | 5 | Manual tracking |
-| Referral signups | 20 | Signup analytics (referral sources) |
-| Backlinks acquired | 10 | Ahrefs or manual tracking |
+| Metric             | Target | Tracking                            |
+| ------------------ | ------ | ----------------------------------- |
+| Directory listings | 5      | Manual tracking                     |
+| Referral signups   | 20     | Signup analytics (referral sources) |
+| Backlinks acquired | 10     | Ahrefs or manual tracking           |
 
 ---
 
@@ -155,10 +158,12 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 **Triggers and Messages:**
 
 1. **signed_up_no_upload_3_days**
+
    - Message: "Ready to upload your first document? Start with a bank statement or receipt."
    - Channels: Email, in-app banner
 
 2. **uploaded_no_timeline_7_days**
+
    - Message: "You've uploaded X documents. Check out your timeline view to see them chronologically."
    - Channels: Email, in-app prompt
 
@@ -170,10 +175,10 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 **Metrics:**
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Nudge response rate | 15% (users who act on nudge) | Email clicks, in-app interactions |
-| Nudge to activation rate | 40% (responded users who complete action) | Usage analytics |
+| Metric                   | Target                                    | Tracking                          |
+| ------------------------ | ----------------------------------------- | --------------------------------- |
+| Nudge response rate      | 15% (users who act on nudge)              | Email clicks, in-app interactions |
+| Nudge to activation rate | 40% (responded users who complete action) | Usage analytics                   |
 
 #### 6.2 Usage Tips Campaign
 
@@ -182,6 +187,7 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 **Target Segment**: activated_users
 
 **Email Series:**
+
 - **Week 2**: Power user tips (keyboard shortcuts, bulk upload, CSV handling)
 - **Week 3**: MCP setup walkthrough (step-by-step for Claude + ChatGPT)
 - **Week 4**: Advanced workflows (multi-event documents, timeline filters)
@@ -190,9 +196,9 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 **Metrics:**
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Email open rate | 35% | Email analytics |
+| Metric                  | Target                           | Tracking        |
+| ----------------------- | -------------------------------- | --------------- |
+| Email open rate         | 35%                              | Email analytics |
 | Tip to feature adoption | 20% (users who try featured tip) | Usage analytics |
 
 ---
@@ -224,5 +230,3 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 - `pre_launch_marketing_plan.md` — Pre-launch marketing activities
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
-- `marketing_plan.yaml` — Marketing metadata and summaries
-

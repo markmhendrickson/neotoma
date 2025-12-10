@@ -1,6 +1,6 @@
 ## Release v0.2.0 — Chat Transcript Extraction Tool
 
-_(Pre-MVP Internal Release for Chat Transcript Processing)_
+_(Pre-MVP Release for Chat Transcript Processing)_
 
 ---
 
@@ -8,9 +8,12 @@ _(Pre-MVP Internal Release for Chat Transcript Processing)_
 
 - **Release ID**: `v0.2.0`
 - **Name**: Chat Transcript Extraction Tool
+- **Release Type**: Not Marketed (production deployment without marketing activities)
 - **Goal**: Provide a standalone CLI tool for converting chat transcripts (e.g., ChatGPT exports) into structured JSON files with schema types that can be ingested deterministically by Neotoma's Truth Layer.
 - **Priority**: P1 (pre-MVP, enables chat transcript ingestion workflow)
 - **Target Ship Date**: Before MVP (v1.0.0)
+- **Marketing Required**: No (not marketed release)
+- **Deployment**: Production (neotoma.io)
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
@@ -440,11 +443,17 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 
 ### 7. Deployment and Rollout Strategy
 
-- **Deployment Strategy**: `internal_only`
-  - Tool available as npm script in development environment
-  - No server deployment required (standalone CLI tool)
-  - Documentation and usage examples provided
-- **Rollback Plan**: N/A (internal release, can revert code changes directly)
+- **Deployment Target**: Production (neotoma.io)
+  - All releases deploy to production at neotoma.io
+  - CLI tool distributed via npm package
+  - Documentation and tool available at neotoma.io
+- **Marketing Strategy**: Not Marketed
+  - No pre-launch marketing activities
+  - No post-launch marketing activities
+  - No user acquisition campaigns
+  - No announcement or promotion
+  - Release deployed silently to production
+- **Rollback Plan**: Revert code changes and redeploy to neotoma.io
 
 ---
 
@@ -461,7 +470,7 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 
 ### 9. Success Criteria
 
-**Internal Release is Complete When:**
+**Release is Complete When:**
 
 1. ✅ CLI tool functional (`npm run chat-to-json`)
 2. ✅ Parsers for all supported formats (JSON, HTML, text)
@@ -481,7 +490,8 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 - **Current Status**: `planning`
 - **Owner**: Mark Hendrickson
 - **Notes**:
-  - Pre-MVP internal release
+  - Pre-MVP release (not marketed)
+  - All releases deploy to production at neotoma.io
   - Enables chat transcript ingestion workflow
   - Preserves Truth Layer determinism by separating non-deterministic interpretation from ingestion pipeline
   - Tool runs independently from Neotoma server

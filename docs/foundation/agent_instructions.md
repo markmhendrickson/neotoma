@@ -50,7 +50,48 @@ When writing code:
 3. **All collections MUST be sorted** (deterministic iteration)
 4. **Graph writes MUST be transactional** (all-or-nothing)
 5. **Errors MUST use ErrorEnvelope** (structured, trace_id)
-6. **No PII in logs** (record IDs only)
+
+### 23.5 Release Build Completion Rules
+
+After completing a release build:
+
+1. **MUST generate release report** with Section 9 (Testing Guidance)
+2. **MUST include all manual test cases** from `integration_tests.md`
+3. **MUST format test cases as user-facing instructions** (not developer commands)
+4. **MUST present test cases to user** after build completion
+5. **MUST reference Section 9** when presenting completion summary
+
+See `.cursor/rules/post_build_testing.md` for complete requirements.
+
+### 23.6 README Maintenance Rules
+
+When documentation is created, modified, or deleted:
+
+1. **MUST update README.md** to reflect changes
+2. **MUST verify all links** in README are functional
+3. **MUST ensure README accuracy** matches current documentation
+4. **MUST maintain README completeness** as repository overview
+
+See `.cursor/rules/readme_maintenance.md` for complete requirements.
+
+### 23.7 Downstream Documentation Update Rules
+
+When upstream documentation is updated:
+
+1. **MUST identify downstream dependencies** that reference or depend on upstream changes
+2. **MUST update all downstream docs** that restate or depend on upstream information
+3. **MUST verify consistency** across the documentation tree
+4. **MUST NOT leave contradictions** between upstream and downstream docs
+
+**Common dependencies:**
+
+- Foundation docs → Architecture, specs, subsystems, feature units, releases, README
+- Architecture docs → Subsystems, feature units, releases, developer docs, README
+- Specs → Feature units, releases, developer docs, README
+- Standards → Feature units, releases, README
+- Subsystems → Feature units, releases, developer docs, integrations, README
+
+See `.cursor/rules/downstream_doc_updates.md` for complete requirements.
 
 ---
 
@@ -195,6 +236,8 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - [ ] Consistency model correct (strong vs bounded eventual per subsystem)
 - [ ] Tests cover all new paths (unit, integration, E2E as appropriate)
 - [ ] Documentation updated to reflect changes
+- [ ] Downstream documentation updated if upstream docs changed
+- [ ] README.md updated if documentation changes affect user-facing information
 - [ ] Feature fits within Neotoma scope (Truth Layer only)
 - [ ] No violations of MUST/MUST NOT lists
 

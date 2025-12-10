@@ -8,9 +8,12 @@ _(Staging-First Deployment Strategy with Rollback Procedures)_
 
 This document defines the deployment strategy for v1.0.0, including staging deployment, production deployment, and rollback procedures.
 
-**Strategy**: `staging_first` — All releases deploy to staging first, validate, then deploy to production.
+**Strategy**: `staging_first` — All releases deploy to staging first, validate, then deploy to production at neotoma.io.
+
+**Note**: All releases (marketed and not marketed) deploy to production at neotoma.io. Staging is used for validation before production deployment.
 
 **Related Documents:**
+
 - `release_plan.md` — Release overview and scope
 - `acceptance_criteria.md` — Release-level acceptance criteria
 - `pre_mortem.md` — Failure mode analysis
@@ -153,10 +156,12 @@ This document defines the deployment strategy for v1.0.0, including staging depl
 ### 3. Deployment Timeline
 
 **Staging Deployment:**
+
 - Target: T-3 days (3 days before production)
 - Duration: ~2 hours (including validation)
 
 **Production Deployment:**
+
 - Target: Day 0 (launch date)
 - Duration: ~1 hour (including validation)
 - Maintenance window: TBD (if needed)
@@ -170,4 +175,3 @@ This document defines the deployment strategy for v1.0.0, including staging depl
 - `pre_mortem.md` — Failure mode analysis
 - `monitoring_plan.md` — Post-release monitoring and observability
 - `status.md` — Current status and progress tracking
-

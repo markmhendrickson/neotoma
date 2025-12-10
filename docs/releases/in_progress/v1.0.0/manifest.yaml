@@ -1,11 +1,12 @@
 release:
   id: "v1.0.0"
   name: "MVP"
-  type: "external" # internal | external
+  type: "marketed" # marketed | not_marketed
   status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
   target_date: "2026-02-24" # Based on Dec 9, 2025 start date
   priority: "P0"
   owner: "Mark Hendrickson"
+  marketing_required: true
 
 # NOTE: This manifest contains metadata and summaries for workflow automation.
 # Detailed planning documents are in markdown (see release_plan.md for overview).
@@ -132,11 +133,11 @@ deployment:
 
 discovery:
   enabled: true # true for early releases
-  plan_file: "discovery_plan.yaml"
+  plan_file: "discovery_plan.md"
 
 marketing:
   enabled: true # true for external releases, false for internal
-  plan_file: "marketing_plan.yaml"
+  plan_file: "marketing_plan.md"
   strategy: "hybrid" # pre_launch | post_launch | hybrid | none
 
 monitoring:

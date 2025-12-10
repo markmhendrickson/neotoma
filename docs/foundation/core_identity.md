@@ -25,18 +25,18 @@ It is:
 
 Neotoma focuses exclusively on:
 
-1. **Ingestion** — User-provided file upload (explicit, never automatic)
-2. **Normalization** — Format conversion, text extraction, OCR
-3. **Extraction** — Deterministic field extraction via rule-based parsing
+1. **Ingestion** — Dual-path ingestion: user-provided file uploads (explicit, never automatic) and agent interactions where users provide contextual data via MCP `store_record` action, enabling incremental memory growth as agent usage scales
+2. **Normalization** — Format conversion, text extraction, OCR (file uploads only)
+3. **Extraction** — Deterministic field extraction via rule-based parsing (file uploads) or direct property assignment (agent interactions)
 4. **Schema Assignment** — Type detection (FinancialRecord, IdentityDocument, etc.)
-5. **Observation Creation** — Granular, source-specific facts extracted from documents
+5. **Observation Creation** — Granular, source-specific facts extracted from documents or provided via agent interactions
 6. **Reducer Execution** — Deterministic computation of entity snapshots from observations
 7. **Schema Registry Management** — Config-driven schema evolution and versioning
 8. **Entity Resolution** — Canonical ID generation for people, companies, locations
 9. **Event Creation** — Timeline events from extracted date fields
 10. **Memory Graph Construction** — Records → Entities → Events with typed edges, relationships
 11. **Deterministic Retrieval** — Structured search and queries
-12. **AI-Safe Access** — Truth exposure via MCP tools
+12. **AI-Safe Access** — Truth exposure via MCP tools, enabling agents to both read and write memory
 
 ---
 

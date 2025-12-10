@@ -9,6 +9,7 @@ _(Pre-Launch User Acquisition: Waitlist Building, Beta, Content Teasers)_
 This document defines the pre-launch marketing activities for v1.0.0, focused on building waitlist, early access beta, and content teasers before launch.
 
 **Related Documents:**
+
 - `marketing_plan.md` — Marketing overview and coordination
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
 - `marketing_segments_plan.md` — User segment definitions
@@ -31,6 +32,7 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 - **Timeline**: Week -4 to Week 0
 - **Channels**: Twitter, Indie Hacker, Hacker News, Content marketing
 - **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
+- **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Hacker News) prioritized for waitlist building; aligns with AI-Native Individual Operators segment
 
 #### 2.2 Activities
 
@@ -47,12 +49,12 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 
 #### 2.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Waitlist signups | 100 | Landing page email capture |
-| Cost per waitlist signup | $0 (organic only) | Time investment / signups |
-| Social engagement rate | 3% | Twitter analytics, blog analytics |
-| Demo video views | 500 | YouTube/Twitter video views |
+| Metric                   | Target            | Tracking                          |
+| ------------------------ | ----------------- | --------------------------------- |
+| Waitlist signups         | 100               | Landing page email capture        |
+| Cost per waitlist signup | $0 (organic only) | Time investment / signups         |
+| Social engagement rate   | 3%                | Twitter analytics, blog analytics |
+| Demo video views         | 500               | YouTube/Twitter video views       |
 
 ---
 
@@ -79,12 +81,12 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 
 #### 3.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Beta participants | 25 (13 discovery + 20 waitlist, assume 75% accept) | Beta signup confirmations |
-| Beta activation rate | 70% (beta users who upload ≥1 document) | Usage analytics |
-| Advocate conversion rate | 30% (beta users willing to share/testimonial) | Advocate opt-ins |
-| Testimonials collected | 5 | Written testimonials or case studies |
+| Metric                   | Target                                             | Tracking                             |
+| ------------------------ | -------------------------------------------------- | ------------------------------------ |
+| Beta participants        | 25 (13 discovery + 20 waitlist, assume 75% accept) | Beta signup confirmations            |
+| Beta activation rate     | 70% (beta users who upload ≥1 document)            | Usage analytics                      |
+| Advocate conversion rate | 30% (beta users willing to share/testimonial)      | Advocate opt-ins                     |
+| Testimonials collected   | 5                                                  | Written testimonials or case studies |
 
 ---
 
@@ -111,11 +113,11 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 
 #### 4.4 Metrics
 
-| Metric | Target | Tracking |
-|--------|--------|----------|
-| Content views | 2000 (across all content) | Blog analytics, Twitter analytics, YouTube |
-| Content to waitlist rate | 5% (content viewers who join waitlist) | UTM tracking from content → landing page |
-| Content shares | 50 (organic shares) | Social share counts |
+| Metric                   | Target                                 | Tracking                                   |
+| ------------------------ | -------------------------------------- | ------------------------------------------ |
+| Content views            | 2000 (across all content)              | Blog analytics, Twitter analytics, YouTube |
+| Content to waitlist rate | 5% (content viewers who join waitlist) | UTM tracking from content → landing page   |
+| Content shares           | 50 (organic shares)                    | Social share counts                        |
 
 ---
 
@@ -143,5 +145,3 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
-- `marketing_plan.yaml` — Marketing metadata and summaries
-

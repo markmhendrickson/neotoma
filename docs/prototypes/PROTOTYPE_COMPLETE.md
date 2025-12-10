@@ -14,14 +14,14 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
 
 ### New Components Created
 
-1. **MockChatPanel** (`frontend/src/prototype/components/MockChatPanel.tsx`)
+1. **MockChatPanel** (`frontend/src/components/MockChatPanel.tsx`)
 
    - Simulates AI/MCP queries with mock responses
    - 15+ pre-programmed query patterns
    - Record reference links
    - Demonstrates FU-307 (Chat/AI Panel)
 
-2. **Dashboard** (`frontend/src/prototype/components/Dashboard.tsx`)
+2. **Dashboard** (`frontend/src/components/Dashboard.tsx`)
 
    - Overview stats (records, entities, events)
    - Quick actions (Upload, Search, Timeline)
@@ -29,7 +29,7 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
    - Record type breakdown visualization
    - Demonstrates FU-305 (Dashboard View)
 
-3. **MockUploadUI** (`frontend/src/prototype/components/MockUploadUI.tsx`)
+3. **MockUploadUI** (`frontend/src/components/MockUploadUI.tsx`)
 
    - Bulk file upload simulation
    - Drag & drop interface
@@ -39,7 +39,7 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
    - Simulates extraction stages
    - Demonstrates FU-304 (Upload UI with bulk upload)
 
-4. **SettingsView** (`frontend/src/prototype/components/SettingsView.tsx`)
+4. **SettingsView** (`frontend/src/components/SettingsView.tsx`)
 
    - Account management
    - Theme selection (light/dark/system)
@@ -49,7 +49,7 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
    - API key management
    - Demonstrates FU-306 (Settings UI)
 
-5. **EntityExplorerView** (`frontend/src/prototype/components/EntityExplorerView.tsx`)
+5. **EntityExplorerView** (`frontend/src/components/EntityExplorerView.tsx`)
 
    - Entity list with type filtering
    - Search functionality
@@ -58,7 +58,7 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
    - Visual type indicators (icons, colors)
    - Demonstrates FU-601 (Entity Explorer)
 
-6. **Mock AI Responses** (`frontend/src/prototype/fixtures/mockAIResponses.ts`)
+6. **Mock AI Responses** (`frontend/src/fixtures/mockAIResponses.ts`)
 
    - 15+ query patterns (count, invoices, travel, timeline, etc.)
    - Contextual responses with record references
@@ -70,7 +70,7 @@ A fully-functional, client-side demonstration covering **all MVP workflows** wit
 
 ### Enhanced PrototypeApp
 
-**Complete rewrite** (`frontend/src/prototype/PrototypeApp.tsx`) with:
+**Complete rewrite** (`frontend/src/PrototypeApp.tsx`) with:
 
 - **7 navigable views:**
 
@@ -273,7 +273,7 @@ These are **intentionally** excluded to create a fast, shareable prototype witho
 ### New Components (9 files)
 
 ```
-frontend/src/prototype/components/
+frontend/src/components/
 ├── MockChatPanel.tsx          (220 lines)
 ├── Dashboard.tsx              (230 lines)
 ├── MockUploadUI.tsx           (320 lines)
@@ -282,7 +282,7 @@ frontend/src/prototype/components/
 └── ui/
     └── switch.tsx             (20 lines)
 
-frontend/src/prototype/fixtures/
+frontend/src/fixtures/
 └── mockAIResponses.ts         (180 lines)
 ```
 
@@ -290,7 +290,7 @@ frontend/src/prototype/fixtures/
 
 ```
 frontend/src/
-├── prototype/PrototypeApp.tsx (470 lines - complete rewrite)
+├── PrototypeApp.tsx           (470 lines - complete rewrite)
 └── components/ui/
     └── dialog.tsx             (Added DialogDescription)
 ```
@@ -401,3 +401,8 @@ See `docs/specs/MVP_EXECUTION_PLAN.md` for roadmap to replace fixtures with real
 
 **Created**: December 2, 2024  
 **Version**: 2.0.0 (Comprehensive MVP Demo)
+
+
+
+
+

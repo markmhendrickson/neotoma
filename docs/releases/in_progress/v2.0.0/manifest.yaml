@@ -1,11 +1,12 @@
 release:
   id: "v2.0.0"
   name: "End-to-End Encryption (E2EE)"
-  type: "external" # internal | external
+  type: "marketed" # marketed | not_marketed
   status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
   target_date: "TBD" # Set after v1.0.0 completion
   priority: "P1"
   owner: "Mark Hendrickson"
+  marketing_required: true
 
 # NOTE: This manifest contains metadata and summaries for workflow automation.
 # Detailed planning documents are in markdown (see release_plan.md for overview).
@@ -268,21 +269,20 @@ risks:
 
 notes: |
   This release transforms Neotoma into a local-first, end-to-end encrypted Truth Layer.
-  
+
   Key architectural changes:
   - Browser becomes authoritative datastore (SQLite WASM + OPFS)
   - Server stores only encrypted ciphertext
   - MCP servers cannot decrypt user data
   - Optional multi-device sync via encrypted deltas
-  
+
   Migration strategy:
   - Dual-mode operation (plaintext + encrypted)
   - Gradual migration with tooling
   - Backward compatibility maintained
-  
+
   Success criteria:
   - 100% encryption coverage
   - Zero data loss during migration
   - ≥80% migration completion rate
   - ≥60% E2EE adoption rate
-

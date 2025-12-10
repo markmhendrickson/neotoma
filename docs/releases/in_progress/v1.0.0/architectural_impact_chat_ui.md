@@ -333,3 +333,4 @@ Load `docs/releases/in_progress/v1.0.0/architectural_impact_chat_ui.md` when:
 - [ ] ChatPanel marked as deprecated
 - [ ] MCP integration documentation created
 - [ ] User documentation updated
+
