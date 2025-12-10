@@ -11,22 +11,26 @@
 ## Documentation Files
 
 ### Primary Documentation
+
 1. **[PROTOTYPE_QUICKSTART.md](./PROTOTYPE_QUICKSTART.md)**
+
    - One-page getting started guide
    - How to run and navigate
    - Quick feature overview
 
 2. **[PROTOTYPE_README.md](./PROTOTYPE_README.md)**
+
    - Complete documentation (200+ lines)
    - Features, data fixtures, use cases
    - Conversion to production guide
 
 3. **[PROTOTYPE_SUMMARY.md](./PROTOTYPE_SUMMARY.md)**
+
    - Executive summary
    - Architecture overview
    - Key files and technical stack
 
-4. **[docs/ui/prototype_guide.md](./docs/ui/prototype_guide.md)**
+4. **[../ui/prototype_guide.md](../ui/prototype_guide.md)**
    - Detailed user guide
    - Navigation map and view explanations
    - Demo scenarios and troubleshooting
@@ -38,7 +42,9 @@
 ### Application Components
 
 #### Main Application
+
 - `frontend/src/PrototypeApp.tsx`
+
   - Main prototype application container
   - View routing (records/timeline/entities)
   - Welcome modal with onboarding
@@ -50,6 +56,7 @@
   - Loads PrototypeApp with strict mode
 
 #### New UI Components
+
 - `frontend/src/components/TimelineView.tsx`
   - Timeline view component
   - Year/month grouping with collapsible sections
@@ -60,17 +67,20 @@
 ### Data Fixtures
 
 - `frontend/src/fixtures/records.ts`
+
   - 15 sample records across 10 types
   - Helper functions for filtering and retrieval
   - 450+ lines
 
 - `frontend/src/fixtures/entities.ts`
+
   - 17 entities (people, companies, locations, products)
   - Entity-record relationships
   - Helper functions for queries
   - 250+ lines
 
 - `frontend/src/fixtures/events.ts`
+
   - 26 timeline events from 2010-2024
   - Event types and relationships
   - Helper functions for sorting and filtering
@@ -83,10 +93,12 @@
 ### Configuration Files
 
 - `frontend/prototype.html`
+
   - HTML entry point for prototype
   - References prototype-main.tsx
 
 - `scripts/run-prototype.sh`
+
   - Shell script to start prototype
   - Displays feature summary
   - Executable
@@ -96,6 +108,7 @@
   - Runs Vite on port 5174 with prototype.html
 
 ### VS Code Configuration
+
 - `.vscode/settings.json`
   - Editor settings for consistent formatting
   - File associations and exclusions
@@ -107,6 +120,7 @@
 ### ✅ Complete Features
 
 **Records View**:
+
 - [x] 15 sample records across 10 document types
 - [x] Full-text search across all fields
 - [x] Type filtering with dropdown
@@ -115,6 +129,7 @@
 - [x] File reference display
 
 **Timeline View** (NEW):
+
 - [x] 26 chronological events
 - [x] Year/month grouping with collapsible sections
 - [x] Event type filtering
@@ -124,12 +139,14 @@
 - [x] Sort order toggle (newest/oldest first)
 
 **Entities View** (NEW):
+
 - [x] 17 extracted entities
 - [x] Statistics by entity type (4 types)
 - [x] Visual breakdown dashboard
 - [x] Entity resolution demonstration
 
 **Welcome Modal** (NEW):
+
 - [x] Interactive onboarding experience
 - [x] Feature overview with statistics
 - [x] "What to try" suggestions
@@ -138,6 +155,7 @@
 - [x] Re-open via "About" button
 
 **Navigation**:
+
 - [x] Tab-based view switching
 - [x] Count badges on each tab
 - [x] Responsive header with demo mode badge
@@ -148,6 +166,7 @@
 ## Data Inventory
 
 ### Records (15 total)
+
 ```
 FinancialRecord (3)
 ├── Invoice #INV-2024-001 from Acme Corp
@@ -186,7 +205,9 @@ VehicleDocument (1)
 ```
 
 ### Events (26 total)
+
 Spanning **2010-2024**:
+
 - 2010: 1 event (MBA graduation)
 - 2022: 1 event (passport issued)
 - 2023: 4 events (contracts, insurance)
@@ -195,6 +216,7 @@ Spanning **2010-2024**:
 Event types: InvoiceIssued, Purchase, PaymentDue, ContractSigned, ContractEffective, ContractExpiry, DocumentIssued, TravelBooked, FlightDeparture, FlightArrival, HotelCheckIn, HotelCheckOut, MedicalAppointment, PolicyEffective, PolicyRenewal, EducationCompleted, RegistrationRenewed, BankStatement, TaxDocumentIssued, UtilityBillDue
 
 ### Entities (17 total)
+
 ```
 Person (2)
 ├── John Michael Smith
@@ -227,15 +249,19 @@ Product (1)
 ## Demo Scenarios
 
 ### 1. Financial Records Review
+
 Records → Filter "FinancialRecord" → View invoice details → Timeline → See InvoiceIssued event
 
 ### 2. Travel Planning
+
 Search "flight" → See travel documents → Timeline → Filter "TravelBooked" → See full trip itinerary
 
 ### 3. Entity Exploration
+
 Entities view → View stats → Records → Browse company mentions → Understand entity linking
 
 ### 4. Timeline Navigation
+
 Timeline → Expand/collapse years → Filter by event type → Click event → Navigate to record
 
 ---
@@ -243,6 +269,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 ## Design System Compliance
 
 ✅ Follows `docs/ui/design_system.md`:
+
 - Color palette (light/dark themes)
 - Typography (Inter font family)
 - Spacing scale (4px base)
@@ -265,6 +292,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 ## File Statistics
 
 ### Lines of Code (Approximate)
+
 - `PrototypeApp.tsx`: ~250 lines
 - `TimelineView.tsx`: ~300 lines
 - `fixtures/records.ts`: ~450 lines
@@ -273,6 +301,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - **Total new code**: ~1,650 lines
 
 ### Documentation (Approximate)
+
 - `PROTOTYPE_README.md`: ~400 lines
 - `PROTOTYPE_SUMMARY.md`: ~350 lines
 - `PROTOTYPE_QUICKSTART.md`: ~100 lines
@@ -280,6 +309,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - **Total documentation**: ~1,350 lines
 
 ### Total Contribution
+
 **~3,000 lines** of code and documentation
 
 ---
@@ -287,12 +317,14 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 ## Next Steps
 
 ### For Immediate Use
+
 1. Run `npm run dev:prototype`
 2. Explore the interface
 3. Share with stakeholders
 4. Gather feedback
 
 ### For Production
+
 1. Review [MVP_EXECUTION_PLAN.md](./docs/specs/MVP_EXECUTION_PLAN.md)
 2. Replace fixtures with API calls
 3. Add authentication (Supabase Auth)
@@ -315,6 +347,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 ## Completion Checklist
 
 ### Prototype Implementation
+
 - [x] Static data fixtures (records, entities, events)
 - [x] Records view with search and filtering
 - [x] Timeline view with chronological events
@@ -325,6 +358,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - [x] Design system compliance
 
 ### Documentation
+
 - [x] Quick start guide
 - [x] Complete README
 - [x] Summary document
@@ -332,6 +366,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - [x] This index file
 
 ### Configuration
+
 - [x] NPM script for running prototype
 - [x] Shell script for convenience
 - [x] HTML entry point
@@ -339,6 +374,7 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - [x] VS Code settings
 
 ### Testing
+
 - [x] No linter errors
 - [x] TypeScript compilation successful
 - [x] All components render correctly
@@ -367,4 +403,3 @@ All prototype features implemented, documented, and tested.
 ---
 
 **End of Index**
-

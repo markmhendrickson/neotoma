@@ -6,7 +6,10 @@ export type ProviderCapability =
   | 'calendar'
   | 'media'
   | 'email'
-  | 'files';
+  | 'files'
+  | 'notes'
+  | 'records'
+  | 'tickets';
 
 export interface ProviderRecord {
   type: string;
@@ -45,7 +48,7 @@ export interface FetchUpdatesResult {
 
 export interface ProviderClient {
   readonly id: string;
-  readonly capabilities: ProviderCapability[];
+  readonly capabilities: readonly ProviderCapability[];
   readonly defaultRecordType: string;
   fetchUpdates(input: FetchUpdatesInput): Promise<FetchUpdatesResult>;
 }

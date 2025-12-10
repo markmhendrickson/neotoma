@@ -9,6 +9,7 @@ _(User Segment Definitions, Targeting, and Messaging)_
 This document defines the user segments for v1.0.0 marketing activities, including acquisition targets and reengagement targets with their priorities, definitions, channels, and messaging.
 
 **Related Documents:**
+
 - `marketing_plan.md` — Marketing overview and coordination
 - `pre_launch_marketing_plan.md` — Pre-launch marketing activities
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
@@ -25,6 +26,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Definition**: Solo operators who use AI tools daily for work/life (Claude, ChatGPT, etc.)
 
 **Channels**:
+
 - Twitter
 - Indie Hacker
 - Product Hunt
@@ -33,6 +35,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Messaging**: "Truth layer for AI-native workflows. Deterministic MCP access to your documents."
 
 **Characteristics**:
+
 - Use Claude/ChatGPT daily or weekly
 - Manage personal data (contracts, receipts, financial records)
 - Value deterministic, structured data access
@@ -47,6 +50,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Definition**: Professionals managing complex documents/data (consultants, researchers, analysts)
 
 **Channels**:
+
 - LinkedIn
 - Content marketing
 - Productivity communities
@@ -54,6 +58,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Messaging**: "Unified document search with deterministic extraction. Timeline view for all your records."
 
 **Characteristics**:
+
 - Manage multiple document types
 - Need reliable document retrieval
 - Value chronological organization
@@ -76,6 +81,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Goal**: Convert to activated users (upload ≥1 document)
 
 **Approach**:
+
 - Email and in-app banner
 - Focus on first upload guidance
 - Remove friction points
@@ -95,6 +101,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Goal**: Feature discovery (timeline view)
 
 **Approach**:
+
 - Email and in-app prompt
 - Highlight timeline value
 - Show chronological organization benefits
@@ -114,6 +121,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Goal**: MCP setup and activation
 
 **Approach**:
+
 - Email and in-app tutorial
 - Step-by-step MCP setup guide
 - Highlight AI-native workflow value
@@ -131,6 +139,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 **Goal**: Retention, advanced feature adoption, power user conversion
 
 **Approach**:
+
 - Weekly usage tips emails
 - Advanced workflow tutorials
 - Power user feature highlights
@@ -140,10 +149,12 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 ### 3. Segment Prioritization
 
 **Acquisition Priorities:**
+
 1. **P0**: AI-Native Individual Operators (primary focus)
 2. **P1**: High-Context Knowledge Workers (secondary focus)
 
 **Reengagement Priorities:**
+
 1. **P0**: signed_up_no_upload, uploaded_no_mcp, activated_users (highest priority)
 2. **P1**: uploaded_no_timeline (secondary priority)
 
@@ -152,10 +163,12 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 ### 4. Messaging Framework
 
 **Core Value Propositions:**
+
 - **For AI-Native Operators**: "Give Claude/ChatGPT access to your personal data via MCP"
 - **For Knowledge Workers**: "Unified document search with deterministic extraction"
 
 **Key Messages:**
+
 - Deterministic extraction (no AI guessing)
 - MCP integration (AI-native workflows)
 - Timeline view (chronological organization)
@@ -166,18 +179,21 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 ### 5. Channel-Specific Messaging
 
 **Twitter/Indie Hacker/HN**:
+
 - Technical depth
 - Building in public
 - Problem/solution framing
 - Demo videos
 
 **LinkedIn/Content Marketing**:
+
 - Professional use cases
 - Productivity benefits
 - Case studies
 - Tutorial content
 
 **Email/In-App**:
+
 - Personalized based on user segment
 - Feature-specific guidance
 - Progress-based triggers
@@ -191,5 +207,3 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - `pre_launch_marketing_plan.md` — Pre-launch marketing activities
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
 - `marketing_metrics_plan.md` — Metrics and tracking
-- `marketing_plan.yaml` — Marketing metadata and summaries
-

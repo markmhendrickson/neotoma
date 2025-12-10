@@ -407,3 +407,4 @@ Load `docs/subsystems/relationships.md` when:
 - ❌ Untyped relationships (must specify type)
 - ❌ Cycles in PART_OF or DEPENDS_ON relationships
 - ❌ Direct entity updates (use relationships)
+

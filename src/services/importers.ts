@@ -131,7 +131,7 @@ export async function runConnectorSync(options: RunConnectorSyncOptions): Promis
     }
 
     await updateConnector(connector.id, {
-      syncCursor: cursor,
+      syncCursor: cursor as Record<string, unknown> | null,
       lastSuccessfulSync: new Date().toISOString(),
       lastError: null,
     });

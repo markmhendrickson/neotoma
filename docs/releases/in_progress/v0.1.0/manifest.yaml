@@ -1,9 +1,11 @@
 release:
   id: "v0.1.0"
   name: "Internal MCP Release"
+  type: "not_marketed" # marketed | not_marketed
   status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
   target_date: "when ready"
   priority: "P0"
+  marketing_required: false
 
 # Execution strategy
 execution_strategy:
@@ -273,8 +275,10 @@ pre_mortem:
       rollback: "Revert MCP server changes, check protocol compliance"
 
 deployment:
-  strategy: "internal_only" # internal_only | staging_first | canary | full_rollout
-  rollback_plan: "Revert code changes directly (internal release, no production deployment)"
+  target: "production" # All releases deploy to production at neotoma.io
+  target_url: "neotoma.io"
+  marketing: false # Not marketed release - no marketing activities
+  rollback_plan: "Revert code changes and redeploy to neotoma.io"
 
 monitoring:
   key_metrics:

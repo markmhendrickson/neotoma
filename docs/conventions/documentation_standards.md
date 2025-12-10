@@ -662,7 +662,9 @@ Agents modifying documentation MUST:
 6. Include proper Agent Instructions section
 7. Cross-link to foundational documents where relevant
 8. Update the `docs/context/index.md` if adding new files
-9. Run documentation linter (if available) before committing
+9. **Identify and update downstream documentation** that depends on changes (see `.cursor/rules/downstream_doc_updates.md`)
+10. **Update README.md** if changes affect user-facing information (see `.cursor/rules/readme_maintenance.md`)
+11. Run documentation linter (if available) before committing
 
 ---
 
@@ -691,6 +693,8 @@ Load this document whenever:
 5. Agent Instructions section is present in every doc
 6. No PII or secrets in examples (Section 13)
 7. Timeline estimates assume Cursor agent execution (Section 11)
+8. Downstream documentation updated when upstream docs change (see `.cursor/rules/downstream_doc_updates.md`)
+9. README.md updated when documentation changes affect user-facing information (see `.cursor/rules/readme_maintenance.md`)
 
 ### Forbidden Patterns
 
@@ -711,3 +715,5 @@ Load this document whenever:
 - [ ] Cross-references use correct relative paths
 - [ ] No PII or secrets in examples
 - [ ] Consistent with NEOTOMA_MANIFEST.md
+- [ ] Downstream documentation updated if upstream doc changed
+- [ ] README.md updated if changes affect user-facing information

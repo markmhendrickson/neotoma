@@ -58,12 +58,14 @@ All other steps are autonomous, including:
 
 ## Release Types
 
-Releases are categorized as either **internal** or **external**:
+Releases are categorized as either **marketed** or **not_marketed**:
 
-- **Internal Release**: Internal testing, staging deployments, or development milestones. No marketing activities required.
-- **External Release**: Public-facing releases (MVP, major versions, feature launches). Requires marketing strategy with user acquisition and reengagement tactics.
+- **Not Marketed Release**: Silent deployment to production without marketing activities. No pre-launch or post-launch marketing campaigns, announcements, or user acquisition activities.
+- **Marketed Release**: Public-facing releases (MVP, major versions, feature launches) with marketing activities. Requires marketing strategy with user acquisition and reengagement tactics.
 
-Marketing activities (pre-launch and post-launch) are **skipped for internal releases**.
+**Important:** All releases deploy to production at neotoma.io. The distinction is whether marketing activities accompany the release, not where it deploys.
+
+Marketing activities (pre-launch and post-launch) are **skipped for not_marketed releases**.
 
 ---
 
@@ -72,12 +74,12 @@ Marketing activities (pre-launch and post-launch) are **skipped for internal rel
 Before creating a Release, verify:
 
 - [ ] Release ID follows format: `vX.Y.Z` (e.g., `v1.0.0` for MVP, `v1.1.0` for next minor release)
-- [ ] Release type is defined (internal or external)
+- [ ] Release type is defined (marketed or not_marketed)
 - [ ] Release scope is defined (what's in, what's out)
 - [ ] All included FUs are identified with IDs
 - [ ] Release-level acceptance criteria are clear
-- [ ] Deployment target is defined (staging, production)
-- [ ] Marketing strategy defined (if external release)
+- [ ] Deployment target: Production (neotoma.io) - all releases deploy to production
+- [ ] Marketing strategy defined (if marketed release)
 
 ---
 
@@ -86,7 +88,8 @@ Before creating a Release, verify:
 **When a user mentions any of the following patterns, the agent MUST automatically trigger the release creation workflow:**
 
 - "new release"
-- "internal release"
+- "not marketed release"
+- "marketed release"
 - "create release"
 - "release vX.Y.Z"
 - "split out [features] into a [type] release"
@@ -115,8 +118,8 @@ Before creating a Release, verify:
      - `discovery_plan.md` (if discovery enabled - overview)
      - `discovery_plan.yaml` (if discovery enabled - metadata/summary for automation)
      - `participant_recruitment_log.md` (if discovery enabled)
-     - `marketing_plan.md` (if external release - overview)
-     - `marketing_plan.yaml` (if external release - metadata/summary for automation)
+     - `marketing_plan.md` (if marketed release - overview)
+     - `marketing_plan.yaml` (if marketed release - metadata/summary for automation)
      - `status.md`
 
 3. **Do NOT** create standalone specification documents in `docs/specs/` for releases. Releases MUST follow the release workflow and be created in `docs/releases/`.
@@ -168,7 +171,7 @@ Before creating a Release, verify:
    **Required Questions:**
 
    - Release name and version (e.g., "MVP", "v1.0.0")
-   - Release type (internal or external)
+   - Release type (marketed or not_marketed)
    - Release goal (1-2 sentence summary)
    - Target ship date (date or "when ready")
    - Priority (P0 critical / P1 high / P2 normal)
@@ -176,11 +179,12 @@ Before creating a Release, verify:
    - Excluded scope (what's explicitly NOT in this release)
    - Release-level acceptance criteria (product + technical + business)
    - Cross-FU integration test requirements
-   - Deployment strategy (staging first, canary, full rollout)
+   - Deployment target: Production (neotoma.io) - all releases deploy to production
+   - Deployment strategy (staging first for validation, then production)
    - Rollback plan (how to revert if issues found)
    - Post-release monitoring plan (metrics, alerts)
    - Discovery plan (hypotheses to test, discovery activities — see Discovery Process)
-   - Marketing strategy (if external release: user acquisition and reengagement tactics)
+   - Marketing strategy (if marketed release: user acquisition and reengagement tactics)
 
    **Agent Actions After User Input:**
 
@@ -225,8 +229,8 @@ Before creating a Release, verify:
      ├── discovery_plan.md         # Discovery overview (if discovery enabled)
      ├── discovery_plan.yaml       # Discovery metadata/summary (if discovery enabled)
      ├── participant_recruitment_log.md # Participant outreach and tracking (if discovery enabled)
-     ├── marketing_plan.md         # Marketing overview (if external release)
-     ├── marketing_plan.yaml       # Marketing metadata/summary (if external release)
+     ├── marketing_plan.md         # Marketing overview (if marketed release)
+     ├── marketing_plan.yaml       # Marketing metadata/summary (if marketed release)
      └── status.md                 # Live status tracking + decision log
    ```
 
@@ -298,9 +302,9 @@ Before creating a Release, verify:
       - Topic-specific detailed plans in markdown (e.g., `value_discovery_plan.md`, `usability_discovery_plan.md`)
       - See document decomposition principles in Step 7
 
-13. **Marketing Planning (External Releases Only):**
+13. **Marketing Planning (Marketed Releases Only):**
 
-    - **If Release type is external:**
+    - **If Release type is marketed:**
       - **STOP and prompt user interactively** for marketing strategy:
         - Marketing strategy (pre-launch, post-launch, hybrid, none)
         - User acquisition tactics (pre-launch: waitlist, early access; post-launch: launch announcement, paid ads, content, partnerships)
@@ -313,8 +317,8 @@ Before creating a Release, verify:
         - Topic-specific detailed plans in markdown (e.g., `pre_launch_marketing_plan.md`, `post_launch_marketing_plan.md`)
         - See document decomposition principles in Step 7
       - Present marketing plan to user: "Review marketing plan? (yes/modify)"
-    - **If Release type is internal:**
-      - Skip marketing planning (no marketing activities for internal releases)
+    - **If Release type is not_marketed:**
+      - Skip marketing planning (no marketing activities for not_marketed releases)
       - Mark marketing as `disabled` in manifest
 
 14. **If approved:**
@@ -610,6 +614,10 @@ d. **Continuous Discovery (during batch execution):**
 e. **Update Release status:**
 
 - Mark batch as `completed` in `status.md`
+- **Check and update checkpoints** (see `.cursor/rules/checkpoint_management.md`):
+  - Check `manifest.yaml` for `checkpoint_{id}_after_batch` triggers
+  - If current batch ID matches a checkpoint trigger → mark checkpoint as `completed` in `status.md`
+  - Add completion notes: batch ID, completed FUs, validation summary
 - Update overall Release progress percentage
 - If any decisions were made during batch execution (scope changes, FU deferrals, etc.), append to Decision Log in `status.md` with timestamp
 - Document continuous discovery findings
@@ -628,6 +636,19 @@ g. **Cleanup worker agents** (terminate completed agents)
 
 4. **After all batches complete:**
    - Mark all FUs as `completed`
+   - **ALWAYS define test commands for all integration tests** (REQUIRED)
+     - For each test in `integration_tests.md`, add `test:` field pointing to test file path
+     - Test files should be created in `tests/integration/release/{RELEASE_ID}/` directory
+     - Test commands must be defined before release can be marked `ready_for_deployment`
+   - **ALWAYS run full integration test suite** (REQUIRED - orchestrator does this automatically)
+     - Orchestrator calls `runFullIntegrationTestSuite(releaseId)` after all batches complete
+     - Tests may show as `not_run` if test commands aren't defined yet (blocks `ready_for_deployment`)
+     - Failed tests block release from `ready_for_deployment` status
+   - **Ensure Checkpoint 2 (Pre-Release Sign-Off) is marked as `completed`** in `status.md`:
+     - If still `pending`, update to `completed`
+     - Add completion notes: total batches completed, release status, P0 FU completion
+   - **Generate release report with Section 9 (Testing Guidance)** containing all manual test cases from `integration_tests.md` (see `.cursor/rules/post_build_testing.md`)
+   - **Present test cases to user:** "Release build complete. See release_report.md Section 9 (Testing Guidance) for manual test cases to validate functionality."
    - Synthesize continuous discovery findings
    - Update Release plan based on continuous discovery learnings
    - Proceed to Step 2
@@ -662,29 +683,41 @@ g. **Cleanup worker agents** (terminate completed agents)
 
 **Agent Actions:**
 
-1. **Run full cross-FU integration test suite:**
+1. **Run full cross-FU integration test suite (AUTOMATIC - REQUIRED):**
 
-   - Execute all tests from `integration_tests.md`
+   - **The release orchestrator ALWAYS automatically runs all integration tests** from `integration_tests.md` after all batches complete
+   - This is a **REQUIRED** step in the release build process - cannot be skipped
+   - Execute all tests listed in `integration_tests.md` (IT-001 through IT-XXX)
+   - Update `status.md` integration test status table with results (passed/failed/not_run)
    - Run end-to-end user flows that span multiple FUs
    - Verify no regressions in existing functionality
+   - Tests showing `not_run` (no commands defined) are acceptable for initial releases but should be implemented
 
-2. **Run Release-level acceptance criteria checks:**
+2. **If orchestrator is not used (manual execution):**
+
+   - Manually run all tests from `integration_tests.md`
+   - Update `status.md` integration test status table with results
+   - Follow test execution instructions in `integration_tests.md`
+
+3. **Run Release-level acceptance criteria checks:**
 
    - Product acceptance: Core workflows functional, empty/error states handled
    - Technical acceptance: Performance benchmarks, test coverage, graph integrity
    - Business acceptance: Metrics instrumented, analytics ready
 
-3. **Generate integration test report:**
+4. **Generate integration test report:**
 
    - Save to `docs/releases/vX.Y.Z/integration_test_report.md`
    - Include pass/fail summary, performance metrics, issues found
 
-4. **If tests fail:**
+5. **If tests fail:**
 
    - **STOP** and report failures to user
    - User decides: fix issues and re-test, or abort Release
+   - Release status remains `in_progress` until tests pass
 
-5. **If all tests pass:**
+6. **If all tests pass:**
+   - Update release status to `ready_for_deployment` (if not already)
    - Proceed to Step 4
 
 ---
@@ -702,32 +735,74 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Acceptance criteria: [checklist with status]
    - Release plan link
    - Integration test report link
+   - **Manual test cases:** "See release_report.md Section 9 (Testing Guidance) for all manual test cases to validate functionality before deployment"
 
-2. **STOP and prompt user:**
+2. **Generate release report with Section 9 (Testing Guidance):**
 
-   - "Release vX.Y.Z ready for deployment."
-   - "All FUs complete: [list]"
-   - "Integration tests passed: [summary]"
-   - "Acceptance criteria met: [checklist]"
-   - "Approve for deployment? (yes/no)"
-   - "Any final changes needed? (list or 'none')"
+   - Extract all test cases from `integration_tests.md`
+   - Format as user-facing manual test instructions
+   - Include step-by-step actions and expected results
+   - Mark all manual test cases as **REQUIRED BEFORE DEPLOYMENT**
+   - See `.cursor/rules/post_build_testing.md` for requirements
 
-3. **If user requests changes:**
+3. **REQUIRE Manual Test Execution (BLOCKER):**
+
+   - **STOP and prompt user:**
+     - "Release vX.Y.Z ready for deployment."
+     - "All FUs complete: [list]"
+     - "Integration tests passed: [summary]"
+     - "Acceptance criteria met: [checklist]"
+     - **"MANUAL TEST EXECUTION REQUIRED: All manual test cases in release_report.md Section 9 (Testing Guidance) MUST be executed and validated before deployment."**
+     - "Have you executed all manual test cases? (yes/no)"
+     - "If yes, provide test results summary: [pass/fail for each test case]"
+     - "If no, execute all test cases now and document results before proceeding."
+
+4. **Validate Manual Test Results:**
+
+   - **If user says "no" or test results incomplete:**
+
+     - **BLOCK deployment** - do not proceed to Step 5
+     - Provide clear instructions: "Execute all manual test cases from release_report.md Section 9 (Testing Guidance) and document results before deployment approval."
+     - Wait for user to complete manual test execution
+     - Return to Step 3 validation
+
+   - **If user says "yes" and provides test results:**
+     - Verify all test cases have documented results (Pass/Fail)
+     - **If any test case failed:**
+       - **BLOCK deployment** - do not proceed to Step 5
+       - Prompt: "Test case [ID] failed. Fix issues and re-execute test cases before deployment approval."
+       - Wait for user to fix issues and re-execute tests
+       - Return to Step 3 validation
+     - **If all test cases passed:**
+       - Document test results in `status.md` or `manual_test_results.md`
+       - Proceed to Step 5 (deployment approval)
+
+5. **Final Deployment Approval:**
+
+   - **STOP and prompt user:**
+     - "All manual test cases executed and passed."
+     - "Test results documented: [summary]"
+     - "Approve for deployment? (yes/no)"
+     - "Any final changes needed? (list or 'none')"
+
+6. **If user requests changes:**
 
    - Make changes
-   - Re-run affected tests
+   - Re-run affected tests (both automated and manual)
    - Repeat Checkpoint 2 until approved
 
-4. **If approved:**
+7. **If approved:**
    - Mark Release status as `ready_for_deployment`
-   - **If external release:** Proceed to Step 4.5 (Pre-Release Marketing)
-   - **If internal release:** Proceed to Step 5 (Deployment)
+   - Document manual test execution completion in `status.md`
+
+- **If marketed release:** Proceed to Step 4.5 (Pre-Release Marketing)
+- **If not_marketed release:** Proceed to Step 5 (Deployment)
 
 ---
 
-### Step 4.5: Pre-Release Marketing Execution (External Releases Only)
+### Step 4.5: Pre-Release Marketing Execution (Marketed Releases Only)
 
-**Trigger:** Release approved for deployment, Release type is external, pre-launch marketing enabled
+**Trigger:** Release approved for deployment, Release type is marketed, pre-launch marketing enabled
 
 **Timeline:** 2-4 weeks before deployment (depending on strategy)
 
@@ -791,35 +866,44 @@ g. **Cleanup worker agents** (terminate completed agents)
 6. **If approved:**
    - Proceed to Step 5 (Deployment)
 
-**Note:** This step is skipped for internal releases.
+**Note:** This step is skipped for not_marketed releases.
 
 ---
 
 ### Step 5: Deployment
 
-**Trigger:** Release approved for deployment
+**Trigger:** Release approved for deployment (manual tests executed and passed)
 
 **Agent Actions:**
 
-1. **Execute deployment plan:**
+1. **Verify Manual Test Execution (PRE-DEPLOYMENT CHECK):**
 
-   - Follow deployment strategy from Release plan (staging first, canary, full rollout)
+   - **REQUIRED:** Check that all manual test cases from `release_report.md` Section 9 (Testing Guidance) have been executed and documented
+   - **REQUIRED:** Verify all manual test cases passed (no failures)
+   - **If manual tests not executed or any failed:**
+     - **BLOCK deployment** - return to Step 4 (Checkpoint 2)
+     - Error: "Cannot deploy: Manual test cases must be executed and all must pass before deployment."
+
+2. **Execute deployment plan:**
+
+   - **All releases deploy to production at neotoma.io**
+   - Follow deployment strategy from Release plan (staging first for validation, then production)
    - Run deployment scripts or guide user through manual steps
    - Verify deployment success (health checks, smoke tests)
 
-2. **Update Release status:**
+3. **Update Release status:**
 
    - Mark Release as `deployed`
    - Record deployment timestamp
 
-3. **Setup post-release monitoring:**
+4. **Setup post-release monitoring:**
 
    - Verify metrics and alerts are active
    - Start monitoring key metrics from Release acceptance criteria
 
-4. **If external release:**
+5. **If marketed release:**
    - Proceed to Step 6 (Post-Release Marketing & Validation)
-   - **If internal release:**
+   - **If not_marketed release:**
      - Move Release files from `in_progress/` to `completed/`:
        ```bash
        mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z
@@ -828,9 +912,9 @@ g. **Cleanup worker agents** (terminate completed agents)
 
 ---
 
-### Step 6: Post-Release Marketing, Acquisition & Reengagement (External Releases Only)
+### Step 6: Post-Release Marketing, Acquisition & Reengagement (Marketed Releases Only)
 
-**Trigger:** Release deployed to production, Release type is external
+**Trigger:** Release deployed to production, Release type is marketed
 
 **Timeline:** Week 1-4 post-deployment
 
@@ -971,7 +1055,7 @@ g. **Cleanup worker agents** (terminate completed agents)
      ```
    - Update Release status to `completed`
 
-**Note:** This step is skipped for internal releases.
+**Note:** This step is skipped for not_marketed releases.
 
 ---
 
@@ -994,9 +1078,9 @@ docs/releases/in_progress/vX.Y.Z/
   ├── participant_recruitment_log.md # Participant outreach and tracking
   ├── discovery_report.md       # Combined discovery findings
   ├── continuous_discovery_log.md # Continuous discovery during development
-  ├── marketing_plan.md         # Marketing overview (external releases only)
-  ├── marketing_plan.yaml       # Marketing metadata/summary (external releases only)
-  ├── pre_launch_marketing_report.md # Pre-launch metrics (external releases only)
+     ├── marketing_plan.md         # Marketing overview (marketed releases only)
+     ├── marketing_plan.yaml       # Marketing metadata/summary (marketed releases only)
+     ├── pre_launch_marketing_report.md # Pre-launch metrics (marketed releases only)
   └── status.md                 # Live status tracking
 ```
 
@@ -1048,11 +1132,11 @@ docs/releases/completed/vX.Y.Z/
   ├── discovery_plan.yaml
   ├── discovery_report.md
   ├── continuous_discovery_log.md
-  ├── marketing_plan.yaml        # Marketing strategy (external releases only)
-  ├── pre_launch_marketing_report.md # Pre-launch metrics (external releases only)
-  ├── post_launch_acquisition_report.md # Post-launch acquisition metrics (external releases only)
-  ├── post_launch_reengagement_report.md # Post-launch reengagement metrics (external releases only)
-  ├── marketing_efficacy_report.md # Pre vs post comparison (external releases only)
+     ├── marketing_plan.yaml        # Marketing strategy (marketed releases only)
+     ├── pre_launch_marketing_report.md # Pre-launch metrics (marketed releases only)
+     ├── post_launch_acquisition_report.md # Post-launch acquisition metrics (marketed releases only)
+     ├── post_launch_reengagement_report.md # Post-launch reengagement metrics (marketed releases only)
+     ├── marketing_efficacy_report.md # Pre vs post comparison (marketed releases only)
   └── status.md
 ```
 
@@ -1067,7 +1151,7 @@ read_file
 release:
   id: "v1.0.0"
   name: "MVP"
-  type: "external" # internal | external
+  type: "marketed" # marketed | not_marketed
   status: "in_progress" # in_progress | ready_for_deployment | deployed | completed
   target_date: "2025-03-01"
   priority: "P0"
@@ -1192,7 +1276,7 @@ monitoring:
     - "DAU (target: 10)"
 
 marketing:
-  enabled: true # true for external releases, false for internal
+  enabled: true # true for marketed releases, false for not_marketed
   strategy: "hybrid" # pre_launch | post_launch | hybrid | none
 
   user_acquisition:
@@ -1228,7 +1312,7 @@ read_file
 
 ---
 
-## Marketing Plan Format (External Releases Only)
+## Marketing Plan Format (Marketed Releases Only)
 
 ```yaml
 marketing:
@@ -1565,9 +1649,13 @@ Load when:
 5. **ALWAYS get user approval at Checkpoints 0, 0.5 (if discovery conducted), 1 (if configured), 2**
 6. **ALWAYS run cross-FU integration tests after each batch**
 7. **NEVER deploy without passing integration tests**
-8. **ALWAYS define Release type (internal/external) during planning**
-9. **SKIP marketing activities for internal releases** (Step 4.5 and Step 6 marketing sections)
-10. **REQUIRE marketing plan for external releases** before proceeding to deployment
+8. **REQUIRE manual test execution before deployment** - All manual test cases from `release_report.md` Section 9 (Testing Guidance) MUST be executed and all must pass before deployment approval
+9. **BLOCK deployment if manual tests not executed** - Do not proceed to Step 5 (Deployment) until all manual test cases are executed and documented
+10. **BLOCK deployment if any manual test fails** - Fix issues and re-execute tests before deployment approval
+11. **ALWAYS define Release type (marketed/not_marketed) during planning**
+12. **SKIP marketing activities for not_marketed releases** (Step 4.5 and Step 6 marketing sections)
+13. **REQUIRE marketing plan for marketed releases** before proceeding to deployment
+14. **ALL releases deploy to production at neotoma.io** - distinction is marketing, not deployment location
 
 ### Forbidden Patterns
 
@@ -1575,6 +1663,9 @@ Load when:
 - Skipping cross-FU integration tests
 - Proceeding past checkpoints without user approval
 - Deploying with failing acceptance criteria
+- **Deploying without executing manual test cases** - All manual test cases from `release_report.md` Section 9 (Testing Guidance) must be executed before deployment
+- **Deploying with failed manual test cases** - All manual test cases must pass before deployment approval
+- **Skipping manual test validation** - Manual test execution and results documentation is required at Checkpoint 2
 
 ---
 
@@ -1583,38 +1674,40 @@ Load when:
 ### Command Sequence
 
 1. **Create Release:** Use `Create New Release` command with `release_id` (e.g., `v1.0.0`)
-2. **Interactive Release planning:** Answer questions at Checkpoint 0 (includes release type, discovery planning, marketing planning for external releases)
+2. **Interactive Release planning:** Answer questions at Checkpoint 0 (includes release type, discovery planning, marketing planning for marketed releases)
 3. **Pre-release discovery (recommended):** Validate assumptions before building at Checkpoint 0.5
 4. **Review execution schedule:** Approve batch plan and parallelization
 5. **Autonomous FU execution:** Agent runs FUs in batch order with parallelization (includes continuous discovery)
 6. **Mid-release review (optional):** Checkpoint 1 after critical-path FUs
 7. **Pre-release sign-off:** Approve deployment at Checkpoint 2
-8. **Pre-release marketing (external only):** Execute pre-launch acquisition and reengagement at Step 4.5
-9. **Deployment:** Follow deployment plan, setup monitoring
-10. **Post-release marketing (external only):** Execute post-launch acquisition and reengagement at Step 6
+8. **Pre-release marketing (marketed only):** Execute pre-launch acquisition and reengagement at Step 4.5
+9. **Deployment:** Follow deployment plan, deploy to production (neotoma.io), setup monitoring
+10. **Post-release marketing (marketed only):** Execute post-launch acquisition and reengagement at Step 6
 
 ### Status Flow
 
-**External Release:**
+**Marketed Release:**
 
 ```
 Planning → Discovery → In Progress → Ready for Deployment → Pre-Launch Marketing → Deployed → Post-Launch Marketing → Completed
 ```
 
-**Internal Release:**
+**Not Marketed Release:**
 
 ```
 Planning → Discovery → In Progress → Ready for Deployment → Deployed → Completed
 ```
 
-- **Planning:** Release plan being defined (includes marketing plan for external releases)
+- **Planning:** Release plan being defined (includes marketing plan for marketed releases)
 - **Discovery:** Pre-release discovery validating assumptions (if conducted)
 - **In Progress:** FUs being executed in batches (with continuous discovery)
 - **Ready for Deployment:** All FUs complete, integration tests pass, user approved
-- **Pre-Launch Marketing (external only):** Execute pre-launch acquisition and reengagement
-- **Deployed:** Release deployed to production
-- **Post-Launch Marketing (external only):** Execute post-launch acquisition and reengagement
+- **Pre-Launch Marketing (marketed only):** Execute pre-launch acquisition and reengagement
+- **Deployed:** Release deployed to production at neotoma.io (all releases)
+- **Post-Launch Marketing (marketed only):** Execute post-launch acquisition and reengagement
 - **Completed:** Release shipped and monitored
+
+**Note:** All releases deploy to production at neotoma.io. The distinction between marketed and not_marketed is whether marketing activities accompany the release.
 
 ---
 
@@ -1642,15 +1735,15 @@ Subsequent releases (v1.1.0, v2.0.0) follow this same Release workflow pattern, 
 
 ---
 
-## Example: MVP Release Execution (External Release)
+## Example: MVP Release Execution (Marketed Release)
 
 ```
-Release: v1.0.0 (MVP) - External Release
+Release: v1.0.0 (MVP) - Marketed Release
 FUs: FU-100, FU-101, FU-102, FU-103, FU-300, FU-700, FU-701
 
 Checkpoint 0: Release Planning
 → User defines scope, FUs, acceptance criteria, discovery plan
-→ User defines Release type: external
+→ User defines Release type: marketed
 → User defines marketing strategy: hybrid (pre-launch + post-launch)
 → User defines user acquisition tactics (waitlist, early access, launch announcement)
 → User defines reengagement tactics (feature teasers, winback campaigns)
@@ -1689,9 +1782,11 @@ Step 3: Cross-Release Integration Testing
 
 Checkpoint 2: Pre-Release Sign-Off
 → User reviews completion status
-→ User approves deployment
+→ **REQUIRED: User executes all manual test cases from release_report.md Section 9 (Testing Guidance)**
+→ **REQUIRED: User documents test results (all must pass)**
+→ User approves deployment (only after manual tests executed and passed)
 
-Step 4.5: Pre-Release Marketing (External Release)
+Step 4.5: Pre-Release Marketing (Marketed Release)
 → Launch waitlist building campaigns (Week -4 to Week 0)
 → Open early access beta signups (Week -2)
 → Publish content teasers (Week -2 to Week 0)
@@ -1705,7 +1800,7 @@ Step 5: Deployment
 → Deploy to production
 → Setup monitoring
 
-Step 6: Post-Release Marketing & Validation (External Release)
+Step 6: Post-Release Marketing & Validation (Marketed Release)
 → Launch announcement (Product Hunt, social, email, blog) - Day 0
 → Convert waitlist to signups - Day 0
 → Send feature announcement to all existing users - Day 0
@@ -1718,16 +1813,16 @@ Step 6: Post-Release Marketing & Validation (External Release)
 → Mark Release as completed
 ```
 
-## Example: Internal Release Execution
+## Example: Not Marketed Release Execution
 
 ```
-Release: v1.0.1-alpha (Internal Testing) - Internal Release
+Release: v0.1.0 (Internal MCP Release) - Not Marketed Release
 FUs: FU-200, FU-201
 
 Checkpoint 0: Release Planning
 → User defines scope, FUs, acceptance criteria
-→ User defines Release type: internal
-→ Marketing planning skipped (internal release)
+→ User defines Release type: not_marketed
+→ Marketing planning skipped (not_marketed release)
 → Agent generates dependency graph
 → Agent generates execution schedule:
     Batch 0: FU-200, FU-201 (parallel)
@@ -1743,16 +1838,19 @@ Step 3: Cross-Release Integration Testing
 
 Checkpoint 2: Pre-Release Sign-Off
 → User reviews completion status
-→ User approves deployment
+→ **REQUIRED: User executes all manual test cases from release_report.md Section 9 (Testing Guidance)**
+→ **REQUIRED: User documents test results (all must pass)**
+→ User approves deployment (only after manual tests executed and passed)
 
 Step 5: Deployment
+→ Verify manual test execution completed and all passed (pre-deployment check)
 → Deploy to staging
 → Smoke tests pass
-→ Deploy to internal testing environment
+→ Deploy to production at neotoma.io
 → Setup monitoring
 → Mark Release as completed
 
-(Step 4.5 and Step 6 marketing steps skipped for internal release)
+(Step 4.5 and Step 6 marketing steps skipped for not_marketed release)
 ```
 
 ---

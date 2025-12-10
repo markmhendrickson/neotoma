@@ -8,12 +8,25 @@ _(Pre-Release Discovery Plan — Overview and Coordination Document)_
 
 This document provides the overview and coordination framework for v1.0.0 pre-release discovery. Detailed discovery activities are decomposed into separate topic-specific documents:
 
+**Discovery Activities:**
+
 - `value_discovery_plan.md` — Value discovery (problem and solution validation)
 - `usability_discovery_plan.md` — Usability discovery (prototype user testing)
 - `business_viability_discovery_plan.md` — Business viability discovery (pricing validation)
 - `feasibility_validation_plan.md` — Feasibility validation (technical POC)
 - `continuous_discovery_plan.md` — Continuous discovery during development
-- `participant_recruitment_log.md` — Participant outreach and tracking
+
+**Lead Sourcing and Filtering:**
+
+- `discovery_lead_sourcing_tools.md` — Automated tools for sourcing participants from multiple platforms
+- `discovery_filtering_criteria.md` — Enhanced ICP matching criteria and scoring system
+- `discovery_filtering_keywords.md` — Complete keyword reference for all platforms
+- `subscription_detection_strategy.md` — Multi-method approach for detecting paid AI tool subscriptions
+- `cross_platform_signal_detection.md` — Strategy for detecting signals across target platform and linked platforms
+
+**Recruitment and Tracking:**
+
+- `participant_recruitment_log.md` — Participant outreach and tracking (includes response rate strategies, early access strategy, outreach templates)
 
 **Reference Standards:**
 
@@ -119,8 +132,16 @@ This document provides the overview and coordination framework for v1.0.0 pre-re
 
 ### 4. Discovery Timeline
 
+**Week -10 to -9:**
+
+- Build discovery lead sourcing tools (LinkedIn Sales Navigator, Twitter/X, Indie Hackers, GitHub, Reddit/Discord)
+- Configure API credentials for agent-driven execution
+- See `discovery_lead_sourcing_tools.md` for tool specifications and agent execution patterns
+
 **Week -8:**
 
+- Agent executes discovery lead sourcing tools to generate qualified participant lists (or human executes if preferred)
+- Human reviews and approves final lead list before outreach
 - Participant recruitment begins (40-50 outreach messages)
 - Feasibility validation starts (technical POC)
 - Async screening survey launched
@@ -151,6 +172,15 @@ This document provides the overview and coordination framework for v1.0.0 pre-re
 
 **See `participant_recruitment_log.md` for tracking.**
 
+**Lead Sourcing Tools:**
+
+- **Discovery Lead Sourcing Tools**: See `discovery_lead_sourcing_tools.md` for automated tools for sourcing participants from LinkedIn Sales Navigator, Twitter/X, Indie Hackers, GitHub, Reddit/Discord
+- **Filtering Criteria**: See `discovery_filtering_criteria.md` for enhanced ICP matching criteria (paid subscriptions, specific job titles, tool usage, activity signals)
+- **Filtering Keywords**: See `discovery_filtering_keywords.md` for complete keyword reference
+- **Timeline**: Tools built Week -10 to -9, used Week -8 for recruitment
+- **Purpose**: Automate ICP filtering and participant identification across platforms with granular criteria
+- **Agent-Driven**: Tools can be executed autonomously by Cursor agents after API credential setup (see `discovery_lead_sourcing_tools.md` Section 5)
+
 **Recruitment Targets:**
 
 - **Value Discovery**: 13 participants (8 AI-Native Operators + 5 Knowledge Workers)
@@ -164,9 +194,29 @@ This document provides the overview and coordination framework for v1.0.0 pre-re
 
 **Outreach Strategy:**
 
-- 40-50 survey responses to get 20-25 willing to interview
+**Two Paths:**
+
+1. **Survey Path** (Community Posts, Broad Outreach):
+
+   - Post survey link in Indie Hackers, Reddit, Discord, Hacker News
+   - 40-50 survey responses → 20-25 willing to interview → Schedule 17-18 interviews
+   - Subscription detection: Self-reported in survey (most reliable)
+
+2. **Direct Outreach Path** (Personalized Messages):
+   - Personalized LinkedIn, Twitter/X DM, Email outreach
+   - 40-50 personalized messages → 20-25 responses → Schedule 17-18 interviews directly
+   - Subscription detection: Bio/post mentions + proxy indicators + brief question in calendar confirmation
+
+**Mixed Approach Recommended:**
+
+- Use survey for community posts (can't personalize)
+- Use direct outreach for personalized leads (LinkedIn, Twitter DM, existing network)
+- Both paths converge: Schedule 17-18 interviews total to get 13 completed
+
+**Common Metrics:**
+
 - Target 20-30% response rate, expect 20-30% no-shows
-- Schedule 17-18 interviews to get 13 completed
+- Use discovery lead sourcing tools to generate qualified lead lists before manual outreach
 
 ---
 
@@ -194,16 +244,31 @@ This discovery plan coordinates the following topic-specific documents:
 - `feasibility_validation_plan.md` — Feasibility validation tests and success criteria
 - `continuous_discovery_plan.md` — Continuous discovery activities during development
 
+**Lead Sourcing and Filtering:**
+
+- `discovery_lead_sourcing_tools.md` — Tools for sourcing discovery participants from multiple platforms (LinkedIn, Twitter/X, Indie Hackers, GitHub, Reddit/Discord)
+- `discovery_filtering_criteria.md` — Enhanced ICP matching criteria (paid subscriptions, specific job titles, tool usage, activity signals)
+- `discovery_filtering_keywords.md` — Complete keyword reference for all platforms
+- `subscription_detection_strategy.md` — Multi-method approach for detecting paid AI tool subscriptions (self-reported, bio mentions, proxy indicators)
+- `cross_platform_signal_detection.md` — Strategy for detecting signals across target platform and linked platforms
+
 **Tracking and Reports:**
 
-- `participant_recruitment_log.md` — Participant outreach and tracking
+- `participant_recruitment_log.md` — Participant outreach and tracking (includes response rate strategies, early access strategy, outreach templates)
 - `continuous_discovery_log.md` — Continuous discovery tracking template
-- Discovery reports (generated after each discovery phase)
+- Discovery reports (generated after each discovery phase):
+  - `value_discovery_report.md`
+  - `usability_discovery_report.md`
+  - `business_viability_report.md`
+  - `feasibility_validation.md`
+  - `discovery_report.md` (combined synthesis)
 
 **Related Documents:**
 
 - `release_plan.md` — Release overview and scope
+- `discovery_checklist.md` — Complete checklist of all discovery needs
 - `docs/feature_units/standards/discovery_process.md` — Discovery process standard
+- `docs/specs/ICP_PROFILES.md` — ICP profile definitions (source for filtering criteria)
 
 ---
 
@@ -212,10 +277,12 @@ This discovery plan coordinates the following topic-specific documents:
 - **Current Status**: Not started
 - **Owner**: Mark Hendrickson
 - **Next Steps**:
-  1. Launch async screening survey (Week -8)
-  2. Begin participant recruitment outreach
-  3. Start feasibility validation (technical POC)
-  4. Conduct value discovery interviews (Week -8 to -6)
-  5. Conduct usability discovery testing (Week -7 to -6)
-  6. Conduct business viability discovery interviews (Week -6 to -5)
-  7. Synthesize findings and make go/no-go decision (Week -5 to -4)
+  1. Build discovery lead sourcing tools (Week -10 to -9) — See `discovery_lead_sourcing_tools.md`
+  2. Launch async screening survey (Week -8)
+  3. Use lead sourcing tools to generate qualified participant lists (Week -8)
+  4. Begin participant recruitment outreach (Week -8)
+  5. Start feasibility validation (technical POC) (Week -8)
+  6. Conduct value discovery interviews (Week -8 to -6)
+  7. Conduct usability discovery testing (Week -7 to -6)
+  8. Conduct business viability discovery interviews (Week -6 to -5)
+  9. Synthesize findings and make go/no-go decision (Week -5 to -4)

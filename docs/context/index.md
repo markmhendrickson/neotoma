@@ -106,13 +106,13 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/architecture/`
 
-| Document                                                                                 | Purpose                                                | Load When                                                            |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| [`architecture.md`](../architecture/architecture.md)                                     | Canonical platform architecture, layers, boundaries    | Any structural change, new subsystem, cross-layer interaction        |
-| [`architectural_decisions.md`](../architecture/architectural_decisions.md)                 | Core architectural decisions and four-layer truth model | Making architectural decisions, understanding observation architecture |
-| [`consistency.md`](../architecture/consistency.md)                                       | Consistency models per subsystem, UI handling rules    | Working with async operations, indexing, or eventual consistency     |
-| [`determinism.md`](../architecture/determinism.md)                                       | Determinism doctrine, ordering rules, testing patterns | Any logic that must be reproducible, sorting, or randomness concerns |
-| [`conversational_ux_architecture.md`](../architecture/conversational_ux_architecture.md) | MCP-first conversational architecture decision         | Evaluating chat/conversational features, UI component design         |
+| Document                                                                                 | Purpose                                                 | Load When                                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [`architecture.md`](../architecture/architecture.md)                                     | Canonical platform architecture, layers, boundaries     | Any structural change, new subsystem, cross-layer interaction          |
+| [`architectural_decisions.md`](../architecture/architectural_decisions.md)               | Core architectural decisions and four-layer truth model | Making architectural decisions, understanding observation architecture |
+| [`consistency.md`](../architecture/consistency.md)                                       | Consistency models per subsystem, UI handling rules     | Working with async operations, indexing, or eventual consistency       |
+| [`determinism.md`](../architecture/determinism.md)                                       | Determinism doctrine, ordering rules, testing patterns  | Any logic that must be reproducible, sorting, or randomness concerns   |
+| [`conversational_ux_architecture.md`](../architecture/conversational_ux_architecture.md) | MCP-first conversational architecture decision          | Evaluating chat/conversational features, UI component design           |
 
 ### 2.3 Subsystems (Domain-Specific Logic)
 
@@ -120,13 +120,13 @@ These documents are the **root of truth** for all Neotoma work:
 
 #### Core Data and Schema
 
-| Document                                           | Purpose                                                           | Load When                                                                |
-| -------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| [`schema.md`](../subsystems/schema.md)                         | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
-| [`record_types.md`](../subsystems/record_types.md)             | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
-| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model | Understanding observation layer, snapshot computation, provenance |
-| [`reducer.md`](../subsystems/reducer.md)                       | Reducer engine patterns, merge strategies, determinism          | Implementing reducers, configuring merge policies, testing snapshots |
-| [`relationships.md`](../subsystems/relationships.md)           | Relationship types, graph patterns, query patterns               | Creating relationships, graph traversal, relationship metadata |
+| Document                                                                   | Purpose                                                           | Load When                                                                |
+| -------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`schema.md`](../subsystems/schema.md)                                     | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
+| [`record_types.md`](../subsystems/record_types.md)                         | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
+| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model   | Understanding observation layer, snapshot computation, provenance        |
+| [`reducer.md`](../subsystems/reducer.md)                                   | Reducer engine patterns, merge strategies, determinism            | Implementing reducers, configuring merge policies, testing snapshots     |
+| [`relationships.md`](../subsystems/relationships.md)                       | Relationship types, graph patterns, query patterns                | Creating relationships, graph traversal, relationship metadata           |
 
 #### Ingestion Pipeline
 
@@ -254,7 +254,18 @@ These documents are the **root of truth** for all Neotoma work:
 | [`troubleshooting.md`](../operations/troubleshooting.md) | Common issues and solutions  | Debugging setup or runtime issues                           |
 | [`deployment.md`](../infrastructure/deployment.md)       | Fly.io deployment procedures | Deploying to production, configuring production environment |
 
-### 2.13 API Documentation
+### 2.13 Legal and Compliance
+
+**Directory:** `docs/legal/`
+
+| Document                                              | Purpose                                               | Load When                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| [`compliance.md`](../legal/compliance.md)             | GDPR compliance, breach response, incident management | Handling data subject requests, responding to breaches, compliance audits |
+| [`privacy_policy.md`](../legal/privacy_policy.md)     | Privacy Policy template                               | Updating privacy policy, legal review                                     |
+| [`terms_of_service.md`](../legal/terms_of_service.md) | Terms of Service template                             | Updating terms of service, legal review                                   |
+| [`README.md`](../legal/README.md)                     | Legal documentation index                             | Navigating legal documentation                                            |
+
+### 2.14 API Documentation
 
 **Directory:** `docs/api/` and `docs/reference/`
 
@@ -263,7 +274,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`rest_api.md`](../api/rest_api.md)             | REST API endpoint reference | Implementing frontend API calls, integrating external clients |
 | [`error_codes.md`](../reference/error_codes.md) | Complete error code catalog | Implementing error handling, debugging API errors             |
 
-### 2.14 Vocabulary and Templates
+### 2.15 Vocabulary and Templates
 
 **Directory:** `docs/vocabulary/` and `docs/templates/`
 

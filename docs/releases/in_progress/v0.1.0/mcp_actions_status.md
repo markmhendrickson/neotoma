@@ -144,3 +144,4 @@ This document tracks which MCP actions from `docs/specs/MCP_SPEC.md` are include
 - `docs/releases/in_progress/v0.1.0/release_plan.md` — v0.1.0 scope
 - `docs/releases/in_progress/v1.0.0/release_plan.md` — v1.0.0 scope
 
+

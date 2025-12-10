@@ -13,8 +13,6 @@ This document provides the overview and coordination framework for v1.0.0. Detai
 - `deployment_strategy.md` — Staging-first deployment and rollback procedures
 - `monitoring_plan.md` — Post-release monitoring, metrics, and alerting
 - `integration_tests.md` — Cross-FU integration test specifications
-- `discovery_plan.yaml` — Pre-release discovery activities and hypotheses
-- `marketing_plan.yaml` — Pre-launch and post-launch marketing strategy
 - `execution_schedule.md` — FU execution plan with batches and dependencies
 - `manifest.yaml` — FU list, dependencies, schedule, release type
 - `status.md` — Live status tracking and decision log
@@ -25,12 +23,13 @@ This document provides the overview and coordination framework for v1.0.0. Detai
 
 - **Release ID**: `v1.0.0`
 - **Name**: MVP
-- **Release Type**: External (public launch with marketing)
+- **Release Type**: Marketed (public launch with marketing activities)
 - **Goal**: Ship the first production-capable Neotoma Truth Layer with deterministic ingestion, extraction, entity resolution, event generation, memory graph, MCP access, and minimal UI to support Tier 1 ICP workflows.
 - **Priority**: P0 (critical)
 - **Target Ship Date**: 2026-02-24 (tentative, based on Dec 9, 2025 start date)
 - **Discovery Required**: Yes (pre-release discovery + continuous discovery)
 - **Marketing Required**: Yes (hybrid: pre-launch + post-launch)
+- **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
 
 #### 1.1 Canonical Specs (Authoritative Sources)
@@ -69,7 +68,7 @@ These may be extended with additional P1/P2 FUs if explicitly added later.
 - Plaid integration and other financial provider syncs
 - X (Twitter) and Instagram integrations
 - Real-time collaboration
-- `FU-106`: Chat Transcript to JSON CLI Tool (moved to Internal Release v0.2.0, pre-MVP)
+- `FU-106`: Chat Transcript to JSON CLI Tool (moved to Not Marketed Release v0.2.0, pre-MVP)
 - `FU-307`: Chat/AI Panel (excluded per architectural decision; see `docs/architecture/conversational_ux_architecture.md` and `architectural_impact_chat_ui.md`)
 
 **Note:** Neotoma adopts MCP-first conversational architecture. All conversational interactions are externalized to MCP-compatible agents (ChatGPT, Cursor, Claude). Internal chat UI violates architectural decision and is excluded.
@@ -153,25 +152,45 @@ Each failure mode includes early warning signals, mitigation strategies, and rol
 
 #### 8.1 Discovery Plan
 
-Pre-release discovery is **required** for MVP (external release).
+Pre-release discovery is **required** for MVP (marketed release).
 
-- **Discovery Plan**: See `discovery_plan.md` (overview) and `discovery_plan.yaml` (metadata/summary)
-- **Participant Recruitment**: See `participant_recruitment_log.md`
+**Overview and Coordination:**
+
+- **Discovery Plan**: See `discovery_plan.md` (overview and coordination)
 - **Timeline**: 3-4 weeks before development (Week -8 to Week -5)
 - **Activities**: Async screening survey, live interviews (value, usability, business viability), feasibility validation
 - **Success Criteria**: See `discovery_plan.md` and detailed discovery plan documents
 - **Continuous Discovery**: Weekly user interviews throughout development (2-3 participants per week)
 
+**Lead Sourcing and Filtering:**
+
+- **Lead Sourcing Tools**: See `discovery_lead_sourcing_tools.md` — Automated tools for sourcing participants from LinkedIn Sales Navigator, Twitter/X, Indie Hackers, GitHub, Reddit/Discord
+- **Filtering Criteria**: See `discovery_filtering_criteria.md` — Enhanced ICP matching criteria (paid subscriptions, specific job titles, tool usage, activity signals)
+- **Filtering Keywords**: See `discovery_filtering_keywords.md` — Complete keyword reference for all platforms
+- **Subscription Detection**: See `subscription_detection_strategy.md` — Multi-method approach for detecting paid AI tool subscriptions
+- **Cross-Platform Signals**: See `cross_platform_signal_detection.md` — Strategy for detecting signals across target platform and linked platforms
+- **Timeline**: Tools built Week -10 to -9, used Week -8 for recruitment
+- **Agent-Driven**: Tools can be executed autonomously by Cursor agents after API credential setup
+
+**Participant Recruitment:**
+
+- **Recruitment Log**: See `participant_recruitment_log.md` — Participant outreach and tracking
+- **Outreach Strategy**: Two paths (Survey Path for community posts, Direct Outreach Path for personalized messages)
+- **Response Rate Optimization**: Personalization, incentives (gift cards), timing optimization, follow-up sequences
+- **Early Access Strategy**: Conditional offering (after interview for value discovery, can mention in usability/business viability discovery)
+
 #### 8.2 Marketing Plan
 
-Marketing is **required** for MVP (external release).
+Marketing is **required** for MVP (marketed release).
 
-- **Marketing Plan**: See `marketing_plan.md` (overview) and `marketing_plan.yaml` (metadata/summary)
+- **Marketing Plan**: See `marketing_plan.md` (overview and coordination)
 - **Strategy**: Hybrid (pre-launch + post-launch)
+- **Platform Prioritization**: P0 (Twitter, Indie Hackers, Product Hunt, Hacker News) for launch; P1 (LinkedIn, Reddit, Discord) for sustained growth
+- **Automation**: Planned for post-MVP (see `marketing_automation_plan.md`)
 - **Pre-Launch Activities** (Week -4 to Week 0): Waitlist building, early access beta, content teasers
 - **Post-Launch Activities** (Day 0 to Week 4): Launch announcement, waitlist conversion, organic growth, partnership outreach
 - **Budget**: $0 (organic only for MVP)
-- **Detailed Plans**: See `pre_launch_marketing_plan.md`, `post_launch_marketing_plan.md`, `marketing_segments_plan.md`, `marketing_metrics_plan.md`
+- **Detailed Plans**: See `pre_launch_marketing_plan.md`, `post_launch_marketing_plan.md`, `marketing_segments_plan.md`, `marketing_metrics_plan.md`, `marketing_automation_plan.md`
 
 ---
 
@@ -179,14 +198,44 @@ Marketing is **required** for MVP (external release).
 
 **See `status.md` for live status tracking and decision log.**
 
-**Current Status**: `planning`
+**Current Status**: `planning`  
+**Release Type**: Marketed  
+**Deployment**: Production (neotoma.io)
 
 **Next Steps**:
 
-1. Complete discovery planning (review `discovery_plan.md` and detailed discovery plan documents)
-2. Complete marketing planning (review `marketing_plan.yaml`)
-3. Conduct pre-release discovery (Checkpoint 0.5)
-4. Execute FU batches (Step 1)
+1. **Build Discovery Infrastructure** (Week -10 to -9):
+
+   - Build discovery lead sourcing tools (see `discovery_lead_sourcing_tools.md`)
+   - Configure API credentials for agent-driven execution
+   - Review filtering criteria and keywords (see `discovery_filtering_criteria.md`, `discovery_filtering_keywords.md`)
+
+2. **Week -8 Discovery Setup**:
+
+   - Execute lead sourcing tools to generate qualified participant lists
+   - Review and approve final lead list
+   - Launch async screening survey (Survey Path)
+   - Begin direct outreach (Direct Outreach Path)
+
+3. **Conduct Pre-Release Discovery** (Week -8 to -5):
+
+   - Value discovery interviews (13 participants)
+   - Usability discovery testing (8 participants)
+   - Business viability discovery interviews (8 participants)
+   - Feasibility validation (technical POC)
+
+4. **Discovery Synthesis** (Week -5 to -4):
+
+   - Analyze all discovery findings
+   - Make go/no-go decision
+   - Update release plan based on learnings
+
+5. **Complete Marketing Planning** (Week -5 to -4):
+
+   - Review `marketing_plan.md` and detailed marketing plans
+
+6. **Execute FU Batches** (Week 0+):
+   - Begin development after go decision
 
 ---
 
@@ -204,21 +253,37 @@ This release plan coordinates the following topic-specific documents:
 
 **Discovery and Marketing:**
 
+**Discovery Overview:**
+
 - `discovery_plan.md` — Discovery overview and coordination
-- `discovery_plan.yaml` — Discovery metadata and summaries (for workflow automation)
-- `value_discovery_plan.md` — Value discovery details
-- `usability_discovery_plan.md` — Usability discovery details
-- `business_viability_discovery_plan.md` — Business viability discovery details
-- `feasibility_validation_plan.md` — Feasibility validation details
-- `continuous_discovery_plan.md` — Continuous discovery details
-- `participant_recruitment_log.md` — Participant outreach and tracking
+- `discovery_checklist.md` — Complete checklist of all discovery needs
+
+**Lead Sourcing and Filtering:**
+
+- `discovery_lead_sourcing_tools.md` — Tools for sourcing discovery participants from multiple platforms (LinkedIn, Twitter/X, Indie Hackers, GitHub, Reddit/Discord)
+- `discovery_filtering_criteria.md` — Enhanced ICP matching criteria (paid subscriptions, job titles, tool usage, activity signals)
+- `discovery_filtering_keywords.md` — Complete keyword reference for all platforms
+- `subscription_detection_strategy.md` — Multi-method approach for detecting paid AI tool subscriptions
+- `cross_platform_signal_detection.md` — Strategy for detecting signals across target platform and linked platforms
+
+**Discovery Activities:**
+
+- `value_discovery_plan.md` — Value discovery details (problem and solution validation)
+- `usability_discovery_plan.md` — Usability discovery details (prototype user testing)
+- `business_viability_discovery_plan.md` — Business viability discovery details (pricing validation)
+- `feasibility_validation_plan.md` — Feasibility validation details (technical POC)
+- `continuous_discovery_plan.md` — Continuous discovery details (during development)
+
+**Recruitment and Tracking:**
+
+- `participant_recruitment_log.md` — Participant outreach and tracking (with response rate strategies, early access strategy)
 - `continuous_discovery_log.md` — Continuous discovery during development
 - `marketing_plan.md` — Marketing overview and coordination
-- `marketing_plan.yaml` — Marketing metadata and summaries (for workflow automation)
 - `pre_launch_marketing_plan.md` — Pre-launch marketing details
 - `post_launch_marketing_plan.md` — Post-launch marketing details
 - `marketing_segments_plan.md` — Marketing segment definitions
 - `marketing_metrics_plan.md` — Marketing metrics and tracking
+- `marketing_automation_plan.md` — Automated content generation, posting, and performance measurement
 
 **Deployment and Operations:**
 

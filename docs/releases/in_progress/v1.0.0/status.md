@@ -7,8 +7,11 @@
 - **Release ID**: `v1.0.0`
 - **Name**: MVP
 - **Status**: `planning` <!-- planning | in_progress | ready_for_deployment | deployed | completed -->
+- **Release Type**: Marketed
+- **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
 - **Target Date**: 2026-02-24 (based on Dec 9, 2025 start date)
+- **Marketing**: Yes (hybrid: pre-launch + post-launch)
 
 ---
 
@@ -78,35 +81,55 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 
 **Required Planning Documents:**
 
-| Document | Status | Notes |
-|----------|--------|-------|
-| `release_plan.md` | ✅ Complete | Overview and coordination |
-| `manifest.yaml` | ✅ Complete | FU metadata, dependencies, schedule |
-| `execution_schedule.md` | ✅ Complete | Timeline estimates added |
-| `integration_tests.md` | ✅ Complete | Test specs defined |
-| `acceptance_criteria.md` | ✅ Complete | Release-level acceptance criteria |
-| `pre_mortem.md` | ✅ Complete | Failure mode analysis |
-| `deployment_strategy.md` | ✅ Complete | Deployment and rollback procedures |
-| `monitoring_plan.md` | ✅ Complete | Post-release monitoring and observability |
-| `discovery_plan.md` | ✅ Complete | Discovery overview and coordination |
-| `discovery_plan.yaml` | ✅ Complete | Discovery metadata and summaries |
-| `value_discovery_plan.md` | ✅ Complete | Value discovery details |
-| `usability_discovery_plan.md` | ✅ Complete | Usability discovery details |
-| `business_viability_discovery_plan.md` | ✅ Complete | Business viability discovery details |
-| `feasibility_validation_plan.md` | ✅ Complete | Feasibility validation details |
-| `continuous_discovery_plan.md` | ✅ Complete | Continuous discovery details |
-| `participant_recruitment_log.md` | ✅ Complete | Recruitment tracking template created |
-| `marketing_plan.md` | ✅ Complete | Marketing overview and coordination |
-| `marketing_plan.yaml` | ✅ Complete | Marketing metadata and summaries |
-| `pre_launch_marketing_plan.md` | ✅ Complete | Pre-launch marketing details |
-| `post_launch_marketing_plan.md` | ✅ Complete | Post-launch marketing details |
-| `marketing_segments_plan.md` | ✅ Complete | Marketing segment definitions |
-| `marketing_metrics_plan.md` | ✅ Complete | Marketing metrics and tracking |
-| `continuous_discovery_log.md` | ✅ Complete | Template created |
+| Document                               | Status      | Notes                                                                                      |
+| -------------------------------------- | ----------- | ------------------------------------------------------------------------------------------ |
+| `release_plan.md`                      | ✅ Complete | Overview and coordination                                                                  |
+| `manifest.yaml`                        | ✅ Complete | FU metadata, dependencies, schedule                                                        |
+| `execution_schedule.md`                | ✅ Complete | Timeline estimates added                                                                   |
+| `integration_tests.md`                 | ✅ Complete | Test specs defined                                                                         |
+| `acceptance_criteria.md`               | ✅ Complete | Release-level acceptance criteria                                                          |
+| `pre_mortem.md`                        | ✅ Complete | Failure mode analysis                                                                      |
+| `deployment_strategy.md`               | ✅ Complete | Deployment and rollback procedures                                                         |
+| `monitoring_plan.md`                   | ✅ Complete | Post-release monitoring and observability                                                  |
+| `discovery_plan.md`                    | ✅ Complete | Discovery overview and coordination                                                        |
+| `discovery_lead_sourcing_tools.md`     | ✅ Complete | Tools for sourcing participants from multiple platforms                                    |
+| `discovery_filtering_criteria.md`      | ✅ Complete | Enhanced ICP matching criteria and scoring system                                          |
+| `discovery_filtering_keywords.md`      | ✅ Complete | Complete keyword reference for all platforms                                               |
+| `subscription_detection_strategy.md`   | ✅ Complete | Multi-method subscription detection strategy                                               |
+| `cross_platform_signal_detection.md`   | ✅ Complete | Cross-platform signal detection strategy                                                   |
+| `discovery_checklist.md`               | ✅ Complete | Complete checklist of all discovery needs                                                  |
+| `value_discovery_plan.md`              | ✅ Complete | Value discovery details (enhanced screening questions)                                     |
+| `usability_discovery_plan.md`          | ✅ Complete | Usability discovery details                                                                |
+| `business_viability_discovery_plan.md` | ✅ Complete | Business viability discovery details                                                       |
+| `feasibility_validation_plan.md`       | ✅ Complete | Feasibility validation details                                                             |
+| `continuous_discovery_plan.md`         | ✅ Complete | Continuous discovery details                                                               |
+| `participant_recruitment_log.md`       | ✅ Complete | Recruitment tracking (response rate strategies, early access strategy, outreach templates) |
+| `marketing_plan.md`                    | ✅ Complete | Marketing overview and coordination                                                        |
+| `pre_launch_marketing_plan.md`         | ✅ Complete | Pre-launch marketing details                                                               |
+| `post_launch_marketing_plan.md`        | ✅ Complete | Post-launch marketing details                                                              |
+| `marketing_segments_plan.md`           | ✅ Complete | Marketing segment definitions                                                              |
+| `marketing_metrics_plan.md`            | ✅ Complete | Marketing metrics and tracking                                                             |
+| `continuous_discovery_log.md`          | ✅ Complete | Template created                                                                           |
 
 **Planning Status:** ✅ All required documents complete
 
+**Discovery Infrastructure Status:**
+
+- ✅ Lead sourcing tools documented (`discovery_lead_sourcing_tools.md`)
+- ✅ Filtering criteria defined (`discovery_filtering_criteria.md`)
+- ✅ Filtering keywords cataloged (`discovery_filtering_keywords.md`)
+- ✅ Subscription detection strategy defined (`subscription_detection_strategy.md`)
+- ✅ Cross-platform signal detection strategy defined (`cross_platform_signal_detection.md`)
+- ✅ Response rate optimization strategies documented (`participant_recruitment_log.md`)
+- ✅ Early access incentive strategy defined (`participant_recruitment_log.md`)
+
 **Next Checkpoint:** Checkpoint 0.5 — Pre-Release Discovery (Week -8 to -5)
+
+**Pre-Discovery Tasks (Week -10 to -9):**
+
+- Build discovery lead sourcing tools (LinkedIn, Twitter/X, Indie Hackers, GitHub, Reddit/Discord)
+- Configure API credentials for agent-driven execution
+- Review filtering criteria and keywords
 
 ---
 

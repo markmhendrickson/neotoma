@@ -225,3 +225,4 @@ src/
 **Files Updated:**
 - `docs/subsystems/schema.md`: Document crypto fields in `state_events` table
 
+

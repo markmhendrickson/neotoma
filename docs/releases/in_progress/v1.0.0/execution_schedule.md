@@ -2,6 +2,8 @@
 
 _(Generated from FU dependencies; follows `release_workflow.md` pattern)_
 
+**Note:** This schedule assumes discovery is complete (Week -8 to -5) and go decision made. For discovery planning, see `discovery_plan.md` and related discovery documents.
+
 ---
 
 ### Batches Overview
@@ -93,9 +95,14 @@ Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h)
 
 **Overall Timeline** (as of December 9, 2025):
 
+- **Week -10 to -9** (Nov 25 - Dec 8, 2025): Build discovery lead sourcing tools, configure API credentials
 - **Week -8 to -5** (Dec 9, 2025 - Jan 6, 2026): Pre-release discovery (3-4 weeks)
-- **Week -5 to -1** (Jan 6-13, 2026): Discovery synthesis, go/no-go decision, scope refinement (1 week)
-- **Week -4 to 0** (Jan 6-13, 2026): Pre-launch marketing activities (overlaps with Week -5 to -1)
+  - Week -8: Execute lead sourcing tools, launch screening survey, begin recruitment
+  - Week -8 to -6: Value discovery interviews (13 participants)
+  - Week -7 to -6: Usability discovery testing (8 participants)
+  - Week -6 to -5: Business viability discovery interviews (8 participants)
+- **Week -5 to -4** (Jan 6-13, 2026): Discovery synthesis, go/no-go decision, scope refinement (1 week)
+- **Week -4 to 0** (Jan 6-13, 2026): Pre-launch marketing activities (overlaps with Week -5 to -4)
 - **Week 0 to 4** (Jan 13 - Feb 10, 2026): Development execution (3-4 weeks with cloud agents)
 - **Week 4 to 5** (Feb 10-17, 2026): Cross-release integration testing (1 week)
 - **Week 5** (Feb 17, 2026): Pre-release sign-off, staging deployment, pre-launch marketing finalization

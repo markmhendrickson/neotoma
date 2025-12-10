@@ -1,6 +1,8 @@
 # Release v0.2.0 — Status
 
 **Release**: Chat Transcript Extraction Tool  
+**Release Type**: Not Marketed  
+**Deployment**: Production (neotoma.io)  
 **Status**: `planning`  
 **Last Updated**: 2024-12-19
 
@@ -8,11 +10,12 @@
 
 ## Feature Unit Status
 
-| Feature Unit | Status | Notes |
-|-------------|--------|-------|
-| FU-106: Chat Transcript to JSON CLI Tool | ⏳ Not Started | Pre-MVP internal release |
+| Feature Unit                             | Status         | Notes                          |
+| ---------------------------------------- | -------------- | ------------------------------ |
+| FU-106: Chat Transcript to JSON CLI Tool | ⏳ Not Started | Pre-MVP release (not marketed) |
 
 **Status Legend:**
+
 - ✅ Complete
 - 🔨 Partial / In Progress
 - ⏳ Not Started
@@ -51,7 +54,7 @@ None currently.
 
 ## Notes
 
-- Pre-MVP internal release
+- Pre-MVP release (not marketed)
+- All releases deploy to production at neotoma.io
 - Enables chat transcript ingestion workflow
 - Preserves Truth Layer determinism constraints
-

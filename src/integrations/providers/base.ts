@@ -5,11 +5,12 @@ import type {
   FetchUpdatesResult,
   ProviderClient,
   ProviderRecord,
+  ProviderCapability,
 } from './types.js';
 
 export abstract class RestProviderClient implements ProviderClient {
   abstract readonly id: string;
-  abstract readonly capabilities: ProviderClient['capabilities'];
+  abstract readonly capabilities: readonly ProviderCapability[];
   abstract readonly defaultRecordType: string;
 
   protected requestTimeoutMs = 15000;
@@ -19,7 +20,7 @@ export abstract class RestProviderClient implements ProviderClient {
 
   protected requireAccessToken(secrets: ConnectorSecrets | null, hint?: string): string {
     const token = secrets?.accessToken || secrets?.token || secrets?.bearer;
-    if (!token) {
+    if (!token || typeof token !== 'string') {
       throw new Error(
         hint
           ? `${this.id} connector token missing (${hint})`

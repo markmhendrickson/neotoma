@@ -196,3 +196,4 @@ Includes:
 - `release_plan.md` — Release overview and scope
 - `pre_mortem.md` — Failure mode analysis (Failure Mode 4: OCR Determinism)
 
+

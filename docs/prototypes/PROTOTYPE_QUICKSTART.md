@@ -16,8 +16,6 @@ Or:
 
 Opens on `http://localhost:5174`
 
-Note: Script now lives at `scripts/prototypes/run-prototype.sh`.
-
 **Note**: Uses dedicated `vite.prototype.config.ts` configuration
 
 ## What You'll See
