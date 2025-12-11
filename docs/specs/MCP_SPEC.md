@@ -10,6 +10,13 @@ This document provides the complete specification for Neotoma's Model Context Pr
 
 **Architectural Note:** Neotoma externalizes all conversational interactions to MCP-compatible agents. Neotoma does not provide internal chat UI or conversational interfaces. See `docs/architecture/conversational_ux_architecture.md` for the architectural rationale.
 
+**Dual-Path Ingestion:** MCP enables dual-path ingestion for structured personal data memory:
+
+1. `upload_file` — File uploads (PDFs, images, receipts)
+2. `store_record` — Agent interactions (structured data from conversations)
+
+Both paths feed into the same structured memory with entity resolution and timelines.
+
 MCP ensures:
 
 - Structured, validated access to truth
@@ -17,6 +24,9 @@ MCP ensures:
 - Deterministic, reproducible responses
 - Full provenance and traceability
 - Error handling with clear codes
+- Cross-platform access (ChatGPT, Claude, Cursor)
+
+**Defensible Differentiation:** MCP integration provides cross-platform access (vs. platform-locked provider memory), supports privacy-first architecture (user-controlled access via MCP), and enables deterministic operations (reproducible responses). These are defensible differentiators competitors cannot pursue due to structural constraints. See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 
 ---
 

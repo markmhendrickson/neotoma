@@ -32,7 +32,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - Product Hunt
 - Hacker News
 
-**Messaging**: "Truth layer for AI-native workflows. Deterministic MCP access to your documents."
+**Messaging**: "Privacy-first deterministic memory for AI tools. User-controlled, cross-platform via MCP (ChatGPT, Claude, Cursor)."
 
 **Characteristics**:
 
@@ -55,7 +55,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - Content marketing
 - Productivity communities
 
-**Messaging**: "Unified document search with deterministic extraction. Timeline view for all your records."
+**Messaging**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access."
 
 **Characteristics**:
 
@@ -162,17 +162,31 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 
 ### 4. Messaging Framework
 
-**Core Value Propositions:**
+**Core Value Propositions (Lead with Defensible Differentiators):**
 
-- **For AI-Native Operators**: "Give Claude/ChatGPT access to your personal data via MCP"
-- **For Knowledge Workers**: "Unified document search with deterministic extraction"
+- **For AI-Native Operators**: "Privacy-first memory for ChatGPT, Claude, and Cursor. User-controlled, cross-platform via MCP."
+- **For Knowledge Workers**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access."
+- **For Privacy-Conscious Users**: "User-controlled memory that's never used for training. You own your data."
 
-**Key Messages:**
+**Key Messages (Defensible Differentiators First):**
 
-- Deterministic extraction (no AI guessing)
-- MCP integration (AI-native workflows)
-- Timeline view (chronological organization)
-- "Upload once, query forever"
+1. **Privacy-first architecture** — User-controlled, no provider access, never used for training (vs. provider-controlled memory)
+2. **Deterministic extraction** — Same input → same output, always; reproducible, explainable (vs. ML-based probabilistic)
+3. **Cross-platform access** — Works with ChatGPT, Claude, Cursor via MCP (vs. platform-locked memory)
+4. **Feature capabilities** — Entity resolution, timelines, dual-path ingestion (enabled by defensible differentiators)
+
+**Why This Matters:**
+
+- Competitors (model providers, startups) are developing similar features (structured memory, entity resolution, timelines)
+- Neotoma's defensible differentiators (privacy-first, deterministic, cross-platform) are what competitors cannot pursue due to structural constraints
+- Lead with defensible differentiators, not features alone
+
+**Strategic Messaging:**
+
+- "Privacy-first deterministic memory for AI tools"
+- "User-controlled, cross-platform via MCP"
+- "Upload once, query forever — across all your AI tools"
+- "Your data, your control, your memory"
 
 ---
 

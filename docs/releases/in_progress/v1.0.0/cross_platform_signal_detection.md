@@ -293,3 +293,5 @@ function aggregateSignals(lead) {
 - Target platform check: Fast (already have access)
 - Linked platform check: Slower (requires cross-platform API calls)
 - Recommendation: Make linked platform checks optional/async
+
+

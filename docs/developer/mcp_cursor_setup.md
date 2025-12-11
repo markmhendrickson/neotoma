@@ -284,3 +284,5 @@ npm test
 
 **Note:** The MCP server runs in stdio mode when used with Cursor. The server communicates via stdin/stdout using the Model Context Protocol JSON-RPC format. Cursor handles the protocol communication automatically.
 
+
+

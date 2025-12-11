@@ -24,13 +24,25 @@ This document provides the overview and coordination framework for v1.0.0. Detai
 - **Release ID**: `v1.0.0`
 - **Name**: MVP
 - **Release Type**: Marketed (public launch with marketing activities)
-- **Goal**: Ship the first production-capable Neotoma Truth Layer with deterministic ingestion, extraction, entity resolution, event generation, memory graph, MCP access, and minimal UI to support Tier 1 ICP workflows.
+- **Goal**: Ship the first production-capable Neotoma Truth Layer with structured personal data memory (dual-path ingestion), entity resolution, timelines, cross-platform MCP access, and minimal UI to support Tier 1 ICP workflows.
 - **Priority**: P0 (critical)
 - **Target Ship Date**: 2026-02-24 (tentative, based on Dec 9, 2025 start date)
 - **Discovery Required**: Yes (pre-release discovery + continuous discovery)
 - **Marketing Required**: Yes (hybrid: pre-launch + post-launch)
 - **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
+
+**Competitive Context:** Model/OS providers (OpenAI ChatGPT, Anthropic Claude, Google Gemini, Microsoft Copilot) have already implemented conversation-only native memory (2024-2025) and are actively developing structured memory capabilities (2025-2026). Startups (Supermemory.ai) offer MCP-integrated adaptive graph-based memory.
+
+**Neotoma's Defensible Differentiation:** MVP must validate three defensible architectural choices that competitors cannot pursue due to structural constraints:
+
+1. **Privacy-first architecture** (user-controlled vs. provider-controlled) — Competitors won't pursue due to business model conflicts
+2. **Deterministic extraction** (vs. ML-based probabilistic) — Competitors won't pursue due to architectural constraints
+3. **Cross-platform access** (vs. platform lock-in) — Competitors won't pursue due to platform lock-in revenue models
+
+**Feature Capabilities:** Entity resolution, timelines, dual-path ingestion are valuable but not defensible alone (competitors developing similar). MVP must combine defensible differentiators with feature capabilities.
+
+**Strategic Positioning:** See [`docs/private/competitive/defensible_differentiation_framework.md`](../../private/competitive/defensible_differentiation_framework.md) for detailed competitive analysis.
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
@@ -51,13 +63,15 @@ This release plan **does not duplicate** those documents. It coordinates them in
 As of this plan, the following FUs are in scope for v1.0.0 (MVP), derived from `MVP_FEATURE_UNITS.md` and `MVP_EXECUTION_PLAN.md`:
 
 - `FU-100`: File Analysis Service Update (remove LLM, add rule-based extraction)
-- `FU-101`: Entity Resolution Service
-- `FU-102`: Event Generation Service
+- `FU-101`: Entity Resolution Service (MVP-critical competitive differentiator)
+- `FU-102`: Event Generation Service (MVP-critical competitive differentiator: timelines)
 - `FU-103`: Graph Builder Service
 - `FU-105`: Search Service (deterministic ranking)
 - `FU-300`: Design System Implementation (core UI foundation)
 - `FU-700`: Authentication UI (Supabase Auth integration)
-- `FU-701`: RLS Implementation (row-level security)
+- `FU-701`: RLS Implementation (row-level security; MVP-critical for privacy/control positioning)
+
+**Note:** FU-101 (Entity Resolution) and FU-102 (Timelines) are MVP-critical competitive differentiators. Provider memory (ChatGPT, Claude, Gemini) doesn't offer entity resolution or timelines across personal data. These features validate Neotoma's defensible positioning.
 
 These may be extended with additional P1/P2 FUs if explicitly added later.
 

@@ -78,8 +78,9 @@ Before creating a Release, verify:
 - [ ] Release scope is defined (what's in, what's out)
 - [ ] All included FUs are identified with IDs
 - [ ] Release-level acceptance criteria are clear
+- [ ] **Defensible differentiation validated** — Release must validate at least one defensible differentiator (privacy-first, deterministic, cross-platform) with explicit acceptance criteria
 - [ ] Deployment target: Production (neotoma.io) - all releases deploy to production
-- [ ] Marketing strategy defined (if marketed release)
+- [ ] Marketing strategy defined (if marketed release) — Marketing must lead with defensible differentiators
 
 ---
 
@@ -243,7 +244,22 @@ Before creating a Release, verify:
    - **Use YAML** only when required for workflow automation or when structured data format is essential
    - **Decompose by topic** to eliminate redundancy and improve maintainability
 
-8. **Pre-Mortem Analysis (Failure Mode Identification):**
+8. **Defensible Differentiation Validation:**
+
+   **CRITICAL:** Before finalizing the plan, the agent MUST:
+
+   - **Explicitly validate defensible differentiation** — Release must validate at least one defensible differentiator:
+     - **Privacy-first architecture** (user-controlled vs. provider-controlled)
+     - **Deterministic extraction** (vs. ML-based probabilistic)
+     - **Cross-platform access** (vs. platform lock-in)
+   - **Include acceptance criteria** — Release acceptance criteria must explicitly validate defensible differentiators
+   - **Avoid feature-only releases** — Don't ship features without validating defensible differentiators
+   - **Reference framework** — Link to [`docs/private/competitive/defensible_differentiation_framework.md`](../../private/competitive/defensible_differentiation_framework.md) in release plan
+   - **Marketing alignment** — If marketed release, ensure marketing strategy leads with defensible differentiators
+   - Present defensible differentiation validation to user: "This release validates [differentiator(s)]. Review? (yes/modify)"
+   - If release doesn't validate defensible differentiation, **WARN** user: "This release doesn't validate defensible differentiators. Consider adding features that validate privacy-first, deterministic, or cross-platform differentiation."
+
+9. **Pre-Mortem Analysis (Failure Mode Identification):**
 
    Before finalizing the plan, the agent MUST:
 
@@ -257,17 +273,17 @@ Before creating a Release, verify:
      - "What other failure modes should we plan for?"
    - Incorporate user feedback and update the Release plan with a "Pre-Mortem" section.
 
-9. **WIP and Parallelization Limits:**
+10. **WIP and Parallelization Limits:**
 
-   - Encode limits in `manifest.yaml`:
-     - `max_parallel_fus: <number>` (default: 3, adjust based on team size)
-     - `max_high_risk_in_parallel: <number>` (default: 1, only one high-risk FU at a time)
-   - Agent MUST enforce these limits during execution:
-     - If a batch would exceed `max_parallel_fus`, split into sub-batches
-     - If multiple high-risk FUs are ready, queue them sequentially
-   - Present limits to user for approval: "Proposed limits: max_parallel_fus=3, max_high_risk_in_parallel=1. Approve? (yes/modify)"
+- Encode limits in `manifest.yaml`:
+  - `max_parallel_fus: <number>` (default: 3, adjust based on team size)
+  - `max_high_risk_in_parallel: <number>` (default: 1, only one high-risk FU at a time)
+- Agent MUST enforce these limits during execution:
+  - If a batch would exceed `max_parallel_fus`, split into sub-batches
+  - If multiple high-risk FUs are ready, queue them sequentially
+- Present limits to user for approval: "Proposed limits: max_parallel_fus=3, max_high_risk_in_parallel=1. Approve? (yes/modify)"
 
-10. **Machine-Checkable Exit Criteria:**
+11. **Machine-Checkable Exit Criteria:**
 
     - For each Release acceptance criterion, the agent MUST:
       - Define a **concrete test suite or script** that validates it
@@ -275,14 +291,14 @@ Before creating a Release, verify:
       - Add these to `integration_tests.md` with explicit pass/fail conditions
     - Present to user: "Each acceptance criterion now has a machine-checkable test. Review? (yes/modify)"
 
-11. **Present execution schedule to user for approval:**
+12. **Present execution schedule to user for approval:**
 
     - Display batches and parallel execution opportunities
     - Show estimated timeline based on FU complexity estimates
     - Show WIP limits and pre-mortem failure modes
     - **STOP and prompt user:** "Approve execution schedule? (yes/no/modify)"
 
-12. **Discovery Planning:**
+13. **Discovery Planning:**
 
     - Define discovery plan based on Release scope and risk:
       - Identify assumptions and hypotheses (value, usability, business viability, feasibility)
@@ -302,7 +318,7 @@ Before creating a Release, verify:
       - Topic-specific detailed plans in markdown (e.g., `value_discovery_plan.md`, `usability_discovery_plan.md`)
       - See document decomposition principles in Step 7
 
-13. **Marketing Planning (Marketed Releases Only):**
+14. **Marketing Planning (Marketed Releases Only):**
 
     - **If Release type is marketed:**
       - **STOP and prompt user interactively** for marketing strategy:
@@ -321,7 +337,7 @@ Before creating a Release, verify:
       - Skip marketing planning (no marketing activities for not_marketed releases)
       - Mark marketing as `disabled` in manifest
 
-14. **If approved:**
+15. **If approved:**
     - Initialize `status.md` with a "Decision Log" section (empty initially)
     - Mark Release status as `discovery` (if discovery planned) or `in_progress` (if skipped)
     - Proceed to Step 0.5 (if discovery planned) or Step 1 (if skipped)
@@ -699,26 +715,164 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Update `status.md` integration test status table with results
    - Follow test execution instructions in `integration_tests.md`
 
-3. **Run Release-level acceptance criteria checks:**
+3. **Validate Test Coverage Thresholds (REQUIRED):**
+
+   - **CRITICAL:** Run test coverage analysis for critical path services
+   - Check coverage thresholds defined in `vitest.config.ts`:
+     - General coverage: ≥80% (default)
+     - Critical path services: 100% (ingestion, extraction, entity resolution, event generation, graph builder, search, event-sourcing, reducers)
+   - Generate coverage report: `npm run test:coverage`
+   - **If coverage thresholds not met:**
+     - **STOP** and report coverage gaps to user
+     - List services below threshold with specific coverage percentages
+     - User must add tests to meet thresholds before proceeding
+     - Release status remains `in_progress` until coverage thresholds met
+   - Document coverage results in `docs/releases/vX.Y.Z/test_coverage_report.md`
+
+4. **Run Release-level acceptance criteria checks:**
 
    - Product acceptance: Core workflows functional, empty/error states handled
    - Technical acceptance: Performance benchmarks, test coverage, graph integrity
    - Business acceptance: Metrics instrumented, analytics ready
 
-4. **Generate integration test report:**
+5. **Generate integration test report:**
 
    - Save to `docs/releases/vX.Y.Z/integration_test_report.md`
    - Include pass/fail summary, performance metrics, issues found
+   - Include test coverage summary and threshold validation results
 
-5. **If tests fail:**
+6. **If tests fail:**
 
    - **STOP** and report failures to user
    - User decides: fix issues and re-test, or abort Release
    - Release status remains `in_progress` until tests pass
 
-6. **If all tests pass:**
+7. **If all tests pass and coverage thresholds met:**
    - Update release status to `ready_for_deployment` (if not already)
-   - Proceed to Step 4
+   - Proceed to Step 3.5 (Architectural Completeness Validation)
+
+---
+
+### Step 3.5: Architectural Completeness Validation (REQUIRED)
+
+**Trigger:** All integration tests pass, coverage thresholds met
+
+**Purpose:** Validate that implementation matches documented architecture - prevent gaps like missing database tables, unpersisted services, or incomplete endpoint integrations.
+
+**Agent Actions:**
+
+1. **Database Schema Completeness Validation (REQUIRED):**
+
+   - **For each FU in the release**, identify required database tables:
+     - Review FU specifications for database requirements
+     - Check `supabase/migrations/` for migration files creating required tables
+     - Verify `supabase/schema.sql` includes all required tables
+   - **Validation checks:**
+     - List all tables referenced in service code (e.g., `entities`, `timeline_events`, `record_entity_edges`)
+     - Verify migration files exist for each table
+     - Verify `schema.sql` includes table definitions
+     - Run database queries to confirm tables exist (if database accessible)
+   - **If gaps found:**
+     - **STOP** and report missing tables/migrations to user
+     - List specific tables missing and which FUs require them
+     - User must create migrations and update `schema.sql` before proceeding
+     - Release status remains `in_progress` until schema complete
+
+2. **Service Persistence Validation (REQUIRED):**
+
+   - **For each service that generates data**, verify persistence:
+     - Review service code (e.g., `entity_resolution.ts`, `event_generation.ts`)
+     - Verify services that generate IDs/entities/events actually persist to database
+     - Check for database insert/upsert calls in service functions
+     - Verify services don't only generate data in memory
+   - **Validation checks:**
+     - Entity resolution: `resolveEntity()` should insert/upsert to `entities` table
+     - Event generation: `generateEvents()` or similar should persist to `timeline_events` table
+     - Graph builder: Should create edges in graph edge tables
+     - Observation ingestion: Should persist observations to `observations` table
+   - **If gaps found:**
+     - **STOP** and report services not persisting data to user
+     - List specific services and functions that need persistence
+     - User must add persistence logic before proceeding
+     - Release status remains `in_progress` until persistence complete
+
+3. **Endpoint Integration Validation (REQUIRED):**
+
+   - **For each HTTP/MCP endpoint**, verify full pipeline integration:
+     - Review endpoint handlers (e.g., `actions.ts` for HTTP, `server.ts` for MCP)
+     - Verify endpoints call all required services in the pipeline
+     - Check that endpoints don't skip critical steps (e.g., entity resolution, event generation)
+   - **Validation checks:**
+     - `store_record` HTTP endpoint: Should call entity resolution, event generation, observation creation
+     - `upload_file` MCP action: Should trigger full extraction → entity → event → observation pipeline
+     - MCP observation actions: Should be implemented if specified in release plan
+   - **If gaps found:**
+     - **STOP** and report incomplete endpoint integrations to user
+     - List specific endpoints and missing service calls
+     - User must integrate services into endpoints before proceeding
+     - Release status remains `in_progress` until integration complete
+
+4. **MCP Action Completeness Validation (REQUIRED):**
+
+   - **For each MCP action specified in release plan**, verify implementation:
+     - Review `release_plan.md` for listed MCP actions (e.g., FU-061 actions)
+     - Check `src/server.ts` for action handler implementations
+     - Verify actions are registered in `ListToolsRequestSchema` response
+     - Verify actions have handlers in `CallToolRequestSchema` switch statement
+   - **If gaps found:**
+     - **STOP** and report missing MCP actions to user
+     - List specific actions missing and which FUs require them
+     - User must implement missing actions before proceeding
+     - Release status remains `in_progress` until actions complete
+
+5. **Graph Integrity Validation (REQUIRED):**
+
+   - **Verify graph builder handles all node types:**
+     - Check `graph_builder.ts` for orphan detection (records, entities, events)
+     - Check `graph_builder.ts` for cycle detection (record relationships, entity relationships)
+     - Verify `validateGraphIntegrity()` checks all node types
+   - **If gaps found:**
+     - **STOP** and report incomplete graph validation to user
+     - List specific node types or relationship types not validated
+     - User must enhance graph builder before proceeding
+     - Release status remains `in_progress` until validation complete
+
+6. **Documentation Consistency Validation (REQUIRED):**
+
+   - **Verify status documents are consistent:**
+     - Compare `status.md` integration test status with `release_report.md` test results
+     - Verify test pass/fail counts match across documents
+     - Check that FU completion status matches across documents
+   - **If inconsistencies found:**
+     - **STOP** and report inconsistencies to user
+     - List specific mismatches (e.g., "status.md shows 10/11 tests passing, release_report.md shows 11/11")
+     - User must reconcile documents before proceeding
+     - Release status remains `in_progress` until documents consistent
+
+7. **Generate Architectural Completeness Report:**
+
+   - Save to `docs/releases/vX.Y.Z/architectural_completeness_report.md`
+   - Include validation results for each category:
+     - Database schema: ✅ Complete / ❌ Missing tables: [list]
+     - Service persistence: ✅ Complete / ❌ Services not persisting: [list]
+     - Endpoint integration: ✅ Complete / ❌ Missing integrations: [list]
+     - MCP actions: ✅ Complete / ❌ Missing actions: [list]
+     - Graph integrity: ✅ Complete / ❌ Missing validations: [list]
+     - Documentation consistency: ✅ Consistent / ❌ Inconsistencies: [list]
+
+8. **If all validations pass:**
+
+   - Mark architectural completeness validation as `completed` in `status.md`
+   - Proceed to Step 4 (Checkpoint 2)
+
+9. **If any validation fails:**
+
+   - **STOP** and present architectural completeness report to user
+   - User must address all gaps before proceeding
+   - Release status remains `in_progress` until all validations pass
+   - After fixes, re-run Step 3.5 validation
+
+**Critical:** This validation step prevents deployment of releases with architectural gaps (like v0.1.0 had). All checks must pass before proceeding to Checkpoint 2.
 
 ---
 
@@ -1649,13 +1803,16 @@ Load when:
 5. **ALWAYS get user approval at Checkpoints 0, 0.5 (if discovery conducted), 1 (if configured), 2**
 6. **ALWAYS run cross-FU integration tests after each batch**
 7. **NEVER deploy without passing integration tests**
-8. **REQUIRE manual test execution before deployment** - All manual test cases from `release_report.md` Section 9 (Testing Guidance) MUST be executed and all must pass before deployment approval
-9. **BLOCK deployment if manual tests not executed** - Do not proceed to Step 5 (Deployment) until all manual test cases are executed and documented
-10. **BLOCK deployment if any manual test fails** - Fix issues and re-execute tests before deployment approval
-11. **ALWAYS define Release type (marketed/not_marketed) during planning**
-12. **SKIP marketing activities for not_marketed releases** (Step 4.5 and Step 6 marketing sections)
-13. **REQUIRE marketing plan for marketed releases** before proceeding to deployment
-14. **ALL releases deploy to production at neotoma.io** - distinction is marketing, not deployment location
+8. **REQUIRE test coverage thresholds met** - Critical path services must have 100% coverage, general coverage ≥80% before proceeding to architectural validation
+9. **REQUIRE architectural completeness validation** - Step 3.5 validation MUST pass before Checkpoint 2 (database schema, service persistence, endpoint integration, MCP actions, graph integrity, documentation consistency)
+10. **BLOCK Checkpoint 2 if architectural gaps found** - Do not proceed to Checkpoint 2 until all architectural completeness validations pass
+11. **REQUIRE manual test execution before deployment** - All manual test cases from `release_report.md` Section 9 (Testing Guidance) MUST be executed and all must pass before deployment approval
+12. **BLOCK deployment if manual tests not executed** - Do not proceed to Step 5 (Deployment) until all manual test cases are executed and documented
+13. **BLOCK deployment if any manual test fails** - Fix issues and re-execute tests before deployment approval
+14. **ALWAYS define Release type (marketed/not_marketed) during planning**
+15. **SKIP marketing activities for not_marketed releases** (Step 4.5 and Step 6 marketing sections)
+16. **REQUIRE marketing plan for marketed releases** before proceeding to deployment
+17. **ALL releases deploy to production at neotoma.io** - distinction is marketing, not deployment location
 
 ### Forbidden Patterns
 
@@ -1663,6 +1820,9 @@ Load when:
 - Skipping cross-FU integration tests
 - Proceeding past checkpoints without user approval
 - Deploying with failing acceptance criteria
+- **Skipping test coverage validation** - Coverage thresholds must be validated in Step 3 before architectural validation
+- **Skipping architectural completeness validation** - Step 3.5 validation must pass before Checkpoint 2
+- **Proceeding to Checkpoint 2 with architectural gaps** - Database schema, service persistence, endpoint integration, MCP actions, graph integrity, and documentation consistency must all be validated
 - **Deploying without executing manual test cases** - All manual test cases from `release_report.md` Section 9 (Testing Guidance) must be executed before deployment
 - **Deploying with failed manual test cases** - All manual test cases must pass before deployment approval
 - **Skipping manual test validation** - Manual test execution and results documentation is required at Checkpoint 2
@@ -1679,10 +1839,12 @@ Load when:
 4. **Review execution schedule:** Approve batch plan and parallelization
 5. **Autonomous FU execution:** Agent runs FUs in batch order with parallelization (includes continuous discovery)
 6. **Mid-release review (optional):** Checkpoint 1 after critical-path FUs
-7. **Pre-release sign-off:** Approve deployment at Checkpoint 2
-8. **Pre-release marketing (marketed only):** Execute pre-launch acquisition and reengagement at Step 4.5
-9. **Deployment:** Follow deployment plan, deploy to production (neotoma.io), setup monitoring
-10. **Post-release marketing (marketed only):** Execute post-launch acquisition and reengagement at Step 6
+7. **Integration testing:** Run full test suite, validate coverage thresholds (Step 3)
+8. **Architectural completeness validation:** Validate database schema, service persistence, endpoint integration, MCP actions, graph integrity, documentation consistency (Step 3.5)
+9. **Pre-release sign-off:** Approve deployment at Checkpoint 2
+10. **Pre-release marketing (marketed only):** Execute pre-launch acquisition and reengagement at Step 4.5
+11. **Deployment:** Follow deployment plan, deploy to production (neotoma.io), setup monitoring
+12. **Post-release marketing (marketed only):** Execute post-launch acquisition and reengagement at Step 6
 
 ### Status Flow
 
@@ -1779,6 +1941,17 @@ Step 1: Execute Batches (with continuous discovery)
 Step 3: Cross-Release Integration Testing
 → Full integration test suite runs
 → All tests pass
+→ Test coverage validation: Critical path services ≥100%, general ≥80%
+→ Coverage thresholds met
+
+Step 3.5: Architectural Completeness Validation
+→ Database schema validation: All required tables exist
+→ Service persistence validation: All services persist data
+→ Endpoint integration validation: All endpoints call full pipeline
+→ MCP action completeness validation: All specified actions implemented
+→ Graph integrity validation: All node types validated
+→ Documentation consistency validation: status.md and release_report.md consistent
+→ All validations pass
 
 Checkpoint 2: Pre-Release Sign-Off
 → User reviews completion status
@@ -1835,6 +2008,17 @@ Step 1: Execute Batches
 Step 3: Cross-Release Integration Testing
 → Full integration test suite runs
 → All tests pass
+→ Test coverage validation: Critical path services ≥100%, general ≥80%
+→ Coverage thresholds met
+
+Step 3.5: Architectural Completeness Validation
+→ Database schema validation: All required tables exist
+→ Service persistence validation: All services persist data
+→ Endpoint integration validation: All endpoints call full pipeline
+→ MCP action completeness validation: All specified actions implemented
+→ Graph integrity validation: All node types validated
+→ Documentation consistency validation: status.md and release_report.md consistent
+→ All validations pass
 
 Checkpoint 2: Pre-Release Sign-Off
 → User reviews completion status

@@ -16,7 +16,9 @@ This document defines the **canonical architecture** of the Neotoma Truth Layer 
 - Performance and security boundaries
 - Testing implications of architectural decisions
 
-This architecture enforces Neotoma's role as a **deterministic, immutable, schema-first Truth Layer** — never an app, agent, or strategy/execution system.
+This architecture enforces Neotoma's role as a **deterministic, immutable, schema-first Truth Layer** providing structured personal data memory (documents + agent-created data) — never an app, agent, or strategy/execution system.
+
+**Competitive Context:** Neotoma provides structured personal data memory with entity resolution and timelines (cross-platform via MCP), distinct from conversation-only provider memory (ChatGPT, Claude, Gemini).
 
 ---
 
@@ -38,18 +40,38 @@ This document does NOT cover:
 
 ---
 
+## Implementation Status
+
+**v0.1.0 (2025-12-11):** Full architecture implementation complete.
+
+All architectural components described in this document are now fully implemented:
+
+- ✅ Four-layer truth model (Document → Entity → Observation → Snapshot)
+- ✅ Five-layer internal architecture (External → Infrastructure → Domain → Application → Presentation)
+- ✅ Event-sourced state management
+- ✅ Repository abstractions with DB and file implementations
+- ✅ Complete graph model with entities, timeline events, and typed edges
+- ✅ All MCP actions operational (13/13 actions)
+- ✅ Graph integrity validation (orphan detection, cycle detection)
+- ✅ Deterministic entity resolution and event generation with database persistence
+
+See `docs/releases/in_progress/v0.1.0/test_coverage_gap_analysis.md` for remediation details.
+
+---
+
 ## 1. Neotoma in Context: Layered Architecture
 
 Neotoma is designed as a **Truth Layer** that can support multiple upper layers implementing agent-driven data processing and action execution. Understanding this layered architecture is **critical** to maintaining architectural purity.
 
 ### 1.1 Core Architectural Model
 
-Neotoma is the **truth layer**:
+Neotoma is the **truth layer** providing structured personal data memory:
 
 - Event-sourced
 - Reducer-driven
 - Deterministic world model
-- All agents read from it, none write to it directly
+- Dual-path ingestion (file uploads + agent interactions via MCP)
+- All agents read from it, write structured data via MCP
 
 Above Neotoma sit two layers:
 

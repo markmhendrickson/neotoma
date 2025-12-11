@@ -549,3 +549,5 @@ Load `docs/architecture/architectural_decisions.md` when:
 - **Config-driven:** Schema evolution via registry, not code
 
 
+
+

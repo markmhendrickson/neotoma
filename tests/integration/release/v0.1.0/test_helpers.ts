@@ -95,13 +95,13 @@ export async function cleanupTestRelationships(
   recordIds: string[]
 ): Promise<void> {
   if (recordIds.length === 0) return;
-  
+
   // Get entity IDs from observations for these records
   const { data: observations } = await supabase
     .from("observations")
     .select("entity_id")
     .in("source_record_id", recordIds);
-  
+
   const entityIds = new Set<string>();
   if (observations) {
     for (const obs of observations) {
@@ -110,7 +110,7 @@ export async function cleanupTestRelationships(
       }
     }
   }
-  
+
   // Delete relationships where source_entity_id or target_entity_id matches
   if (entityIds.size > 0) {
     const entityIdArray = Array.from(entityIds);
@@ -127,7 +127,7 @@ export async function cleanupTestRelationships(
         .in("target_entity_id", batch);
     }
   }
-  
+
   // Also delete relationships where source_id or target_id matches record IDs
   for (const recordId of recordIds) {
     await supabase
@@ -161,16 +161,16 @@ export async function cleanupAllTestData(recordIds: string[]): Promise<void> {
   // Step 2: Clean up in reverse dependency order
   // Relationships first (they reference entities and records)
   await cleanupTestRelationships(recordIds);
-  
+
   // Events next (they reference records)
   await cleanupTestEvents(recordIds);
-  
+
   // Entities and observations (observations reference records and entities)
   if (entityIds.size > 0) {
     const entityIdArray = Array.from(entityIds);
     await cleanupTestEntities(entityIdArray);
   }
-  
+
   // Records last (they're the root)
   await cleanupTestRecords(recordIds);
 }

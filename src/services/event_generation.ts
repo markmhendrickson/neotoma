@@ -182,3 +182,100 @@ export function generateEvents(
   );
 }
 
+/**
+ * Persist events to database
+ */
+export async function persistEvents(
+  events: TimelineEvent[]
+): Promise<TimelineEvent[]> {
+  if (events.length === 0) {
+    return [];
+  }
+
+  const now = new Date().toISOString();
+  const eventsToInsert = events.map((event) => ({
+    id: event.id,
+    event_type: event.event_type,
+    event_timestamp: event.event_timestamp,
+    source_record_id: event.source_record_id,
+    source_field: event.source_field,
+    created_at: now,
+  }));
+
+  const { data, error } = await supabase
+    .from("timeline_events")
+    .upsert(eventsToInsert, { onConflict: "id" })
+    .select();
+
+  if (error) {
+    console.error("Failed to persist events:", error);
+    return events; // Return original events even if persistence fails
+  }
+
+  return (data as TimelineEvent[]) || events;
+}
+
+/**
+ * Get events by record ID
+ */
+export async function getEventsByRecordId(
+  recordId: string
+): Promise<TimelineEvent[]> {
+  const { data, error } = await supabase
+    .from("timeline_events")
+    .select("*")
+    .eq("source_record_id", recordId)
+    .order("event_timestamp", { ascending: true });
+
+  if (error || !data) {
+    console.error("Failed to get events by record ID:", error);
+    return [];
+  }
+
+  return data as TimelineEvent[];
+}
+
+/**
+ * Get events by entity ID (via record-entity-event edges)
+ */
+export async function getEventsByEntityId(
+  entityId: string
+): Promise<TimelineEvent[]> {
+  // Query entity_event_edges to find event IDs
+  const { data: edges, error: edgesError } = await supabase
+    .from("entity_event_edges")
+    .select("event_id")
+    .eq("entity_id", entityId);
+
+  if (edgesError || !edges || edges.length === 0) {
+    return [];
+  }
+
+  const eventIds = edges.map((edge) => edge.event_id);
+
+  // Query timeline_events for these event IDs
+  const { data: events, error: eventsError } = await supabase
+    .from("timeline_events")
+    .select("*")
+    .in("id", eventIds)
+    .order("event_timestamp", { ascending: true });
+
+  if (eventsError || !events) {
+    return [];
+  }
+
+  return events as TimelineEvent[];
+}
+
+/**
+ * Generate and persist events (convenience function)
+ */
+export async function generateAndPersistEvents(
+  recordId: string,
+  properties: Record<string, unknown>,
+  schemaType: string
+): Promise<TimelineEvent[]> {
+  const events = generateEvents(recordId, properties, schemaType);
+  return await persistEvents(events);
+}
+

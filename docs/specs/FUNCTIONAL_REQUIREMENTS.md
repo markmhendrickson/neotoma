@@ -25,7 +25,12 @@ Consolidates functional requirements from all Neotoma subsystems into a single r
 
 ## 1. Ingestion Requirements
 
-**MUST:**
+**Dual-Path Ingestion:**
+
+1. **File Upload Path:** Accept PDF, JPG, PNG files (max 50MB), extract text, detect schema, extract fields
+2. **Agent Interaction Path:** Accept structured data via MCP `store_record`, direct property assignment
+
+**File Upload MUST:**
 
 - Accept PDF, JPG, PNG files (max 50MB)
 - Extract text via pdf-parse or Tesseract OCR
@@ -33,6 +38,13 @@ Consolidates functional requirements from all Neotoma subsystems into a single r
 - Extract fields deterministically
 - Generate content hash for deduplication
 - Process files in <10s (P95)
+
+**Agent Interaction MUST:**
+
+- Accept structured data via MCP `store_record`
+- Validate schema type and properties
+- Create records with user-provided properties
+- Support entity resolution and timeline generation across agent-created data
 
 **MUST NOT:**
 

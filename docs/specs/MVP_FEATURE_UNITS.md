@@ -381,10 +381,13 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 #### FU-101: Entity Resolution Service
 
-- **Priority:** P0
+- **Priority:** P0 (MVP-critical competitive differentiator)
 - **Risk:** Medium
 - **Complexity:** Medium
 - **Dependencies:** FU-100 (extraction)
+
+**Competitive Importance:** Entity resolution across all personal data (documents + agent-created data) is a core differentiator vs. conversation-only provider memory (ChatGPT, Claude, Gemini). Provider memory doesn't unify entities or resolve canonical IDs. This feature validates Neotoma's defensible positioning.
+
 - **Deliverables:**
   - Entity extraction from fields (vendor_name, full_name, etc.)
   - Normalization rules (lowercase, trim, suffix removal)
@@ -402,10 +405,13 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 #### FU-102: Event Generation Service
 
-- **Priority:** P0
+- **Priority:** P0 (MVP-critical competitive differentiator)
 - **Risk:** Medium
 - **Complexity:** Medium
 - **Dependencies:** FU-100 (extraction)
+
+**Competitive Importance:** Timeline generation across all personal data (documents + agent-created data) is a core differentiator vs. conversation-only provider memory (ChatGPT, Claude, Gemini). Provider memory doesn't build chronological timelines across personal data. This feature validates Neotoma's defensible positioning.
+
 - **Deliverables:**
   - Date field detection per schema type
   - Event type mapping (date_issued → InvoiceIssued)
@@ -1450,17 +1456,19 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 
 **Remaining P0 Work:**
 
-1. **FU-101:** Complete entity resolution with canonical IDs
-2. **FU-102:** Complete event generation service
+1. **FU-101:** Complete entity resolution with canonical IDs (MVP-critical competitive differentiator)
+2. **FU-102:** Complete event generation service (MVP-critical competitive differentiator: timelines)
 3. **FU-103:** Harden graph builder (zero orphans enforcement)
 4. **FU-105:** Add deterministic ranking to search
 5. **FU-303:** Build timeline view UI
 6. **FU-304:** Dedicated upload UI with bulk upload support
 7. **FU-400-403:** Complete onboarding flow (4 Feature Units)
 8. **FU-700:** Authentication UI (Supabase Auth)
-9. **FU-701:** Row-Level Security (RLS) for data isolation
+9. **FU-701:** Row-Level Security (RLS) for data isolation (MVP-critical for privacy/control positioning)
 
 **Note:** FU-703 (Local Storage / Offline Mode) is already complete.
+
+**Competitive Rationale:** FU-101 (Entity Resolution) and FU-102 (Timelines) are MVP-critical because they validate Neotoma's competitive differentiation. Provider memory (ChatGPT, Claude, Gemini) is conversation-only and doesn't offer entity resolution or timelines across personal data. These features demonstrate Neotoma's structured personal data memory vs. conversation-only provider memory.
 
 **Remaining P1 Work (Revenue Critical):** 10. **FU-702:** Billing and Subscription Management (enables M2: €5k MRR)
 

@@ -12,14 +12,22 @@ This document defines what Neotoma is and what it is not, establishing the funda
 
 ## What Neotoma Is
 
-Neotoma is a **Truth Layer** — a durable, structured, deterministic personal-data substrate designed for AI-native workflows.
+Neotoma is a **Truth Layer** — a privacy-first, deterministic, cross-platform personal-data substrate designed for AI-native workflows.
 
 It is:
 
-- The **lowest-level, canonical source of truth** for a user's personal and professional documents
+- The **lowest-level, canonical source of truth** for a user's personal and professional data (documents + agent-created data)
 - A **substrate** for AI-native personal computing
-- A **memory system** that transforms fragmented files and facts into structured, queryable truth
+- A **privacy-first structured memory system** that transforms fragmented personal data into structured, queryable truth via dual-path ingestion
 - The **foundation layer** beneath agent-driven layers (e.g., Strategy Layer with Agentic Portfolio as example instance, Execution Layer with Agentic Wallet as part)
+
+**Core Architectural Choices (Defensible Differentiators):**
+
+1. **Privacy-First:** User-controlled memory, no provider access, never used for training
+2. **Deterministic:** Same input → same output, always (reproducible, explainable, no hallucinations)
+3. **Cross-Platform:** Works with all AI tools via MCP (ChatGPT, Claude, Cursor), not platform-locked
+
+These architectural choices are defensible because competitors (model providers, OS providers, startups) cannot pursue them due to structural constraints (business model conflicts, architectural constraints, platform lock-in revenue models). See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 
 ### Core Responsibilities
 
@@ -32,11 +40,11 @@ Neotoma focuses exclusively on:
 5. **Observation Creation** — Granular, source-specific facts extracted from documents or provided via agent interactions
 6. **Reducer Execution** — Deterministic computation of entity snapshots from observations
 7. **Schema Registry Management** — Config-driven schema evolution and versioning
-8. **Entity Resolution** — Canonical ID generation for people, companies, locations
-9. **Event Creation** — Timeline events from extracted date fields
+8. **Entity Resolution** — Canonical ID generation for people, companies, locations across all personal data
+9. **Event Creation** — Timeline events from date fields across all personal data
 10. **Memory Graph Construction** — Records → Entities → Events with typed edges, relationships
 11. **Deterministic Retrieval** — Structured search and queries
-12. **AI-Safe Access** — Truth exposure via MCP tools, enabling agents to both read and write memory
+12. **AI-Safe Access** — Truth exposure via MCP tools, enabling agents to both read and write structured memory (cross-platform: ChatGPT, Claude, Cursor)
 
 ---
 

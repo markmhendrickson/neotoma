@@ -38,46 +38,64 @@ When any of the following occur, agents MUST update `README.md`:
 
 ## Agent Actions
 
-### Step 1: Detect Documentation Changes
+**CRITICAL:** README updates are **mandatory** and **automatic** — whenever documentation is updated in materially affecting ways, README MUST be **regenerated** (not patched) in the same workflow, not as a separate step.
 
-**When modifying documentation, agents MUST:**
+### Step 1: Detect Material Documentation Changes
 
-1. **Identify affected README sections:**
+**When modifying ANY documentation, agents MUST:**
 
-   - Architecture changes → Update "Architecture" section
-   - New features → Update "Key Features" section
-   - New docs → Update "Documentation Structure" section
-   - Integration changes → Update "Integrations" section
-   - Testing changes → Update "Testing" section
-   - Release status → Update "Current Status" section
+1. **Determine if change is material:**
 
-2. **Check README for outdated information:**
-   - Read current `README.md`
-   - Compare with modified documentation
-   - Identify discrepancies or missing information
+   A change is material if it affects:
 
-### Step 2: Update README
+   - Core identity (`docs/foundation/core_identity.md`)
+   - Product positioning (`docs/foundation/product_positioning.md`)
+   - MVP scope (`docs/specs/MVP_OVERVIEW.md`)
+   - Architecture (`docs/architecture/architecture.md`)
+   - Features or capabilities (feature specs)
+   - Release status (`docs/releases/in_progress/`)
+   - Documentation structure (new categories, reorganization)
+   - Development workflow (setup, scripts)
+   - Integrations (providers added/removed)
+   - Philosophy/principles (`docs/foundation/philosophy.md`)
+   - Problem statement (`docs/foundation/problem_statement.md`)
+   - Target users (`docs/specs/ICP_PROFILES.md`)
 
-**Agents MUST:**
+2. **If material change detected:**
 
-1. **Update relevant sections:**
+   - **Regenerate entire README** using `docs/conventions/readme_generation_framework.md`
+   - Do NOT patch individual sections
+   - Use primary sources to regenerate from scratch
+   - **Regenerate in same tool call batch as documentation changes**
 
-   - Add new information where appropriate
-   - Remove outdated information
-   - Update links and references
-   - Ensure consistency with documentation
+3. **If non-material change (typos, formatting, minor clarifications):**
+   - May patch specific sections if needed
+   - Still verify consistency with docs
+
+### Step 2: Regenerate README
+
+**For material changes, agents MUST:**
+
+1. **Follow regeneration process:**
+
+   - Read primary source documents (per framework)
+   - Extract key information (value prop, features, architecture, etc.)
+   - Generate README following required section structure
+   - Apply content guidelines (tone, style, confident positioning)
+   - Verify all sections against source docs
 
 2. **Maintain README structure:**
 
-   - Preserve existing organization
-   - Follow established formatting patterns
-   - Keep sections logically ordered
+   - Follow exact section order from framework
+   - Preserve formatting patterns
+   - Keep all 18 required sections
 
 3. **Verify completeness:**
    - All major documentation areas represented
    - All quick links functional
    - Current status accurate
    - Development instructions current
+   - All information matches source docs exactly
 
 ### Step 3: Validate Changes
 
@@ -103,36 +121,39 @@ When any of the following occur, agents MUST update `README.md`:
 
 ## README Sections and Update Triggers
 
-| README Section              | Update Trigger                                   |
-| --------------------------- | ------------------------------------------------ |
-| **What It Does**            | Core workflow changes, new capabilities          |
-| **Architecture**            | Architecture docs modified, layer changes        |
-| **Key Features**            | Feature specs updated, MVP scope changes         |
-| **Quick Links**             | New documentation added, structure changes       |
-| **Development**             | Setup instructions changed, new scripts added    |
-| **Documentation Structure** | New doc categories, reorganization               |
-| **Core Principles**         | Philosophy or principles updated                 |
-| **Integrations**            | Provider docs added/removed, integration changes |
-| **Testing**                 | Testing standards updated, coverage changes      |
-| **Current Status**          | Release status changes, version updates          |
+| README Section              | Update Trigger                                |
+| --------------------------- | --------------------------------------------- |
+| **What It Does**            | Core workflow changes, new capabilities       |
+| **Architecture**            | Architecture docs modified, layer changes     |
+| **Releases**                | Release status changes, new releases added    |
+| **Quick Links**             | New documentation added, structure changes    |
+| **Development**             | Setup instructions changed, new scripts added |
+| **Documentation Structure** | New doc categories, reorganization            |
+| **Core Principles**         | Philosophy or principles updated              |
+| **Testing**                 | Testing standards updated, coverage changes   |
 
 ---
 
 ## Constraints
 
-- **MUST** update README when documentation changes affect user-facing information
-- **MUST** maintain README accuracy and completeness
-- **MUST** verify all links before completing updates
-- **MUST NOT** remove sections without ensuring information is obsolete
+- **MUST** regenerate README (not patch) whenever documentation changes in materially affecting ways
+- **MUST** regenerate README automatically in same tool call batch as material documentation changes
+- **MUST** use `docs/conventions/readme_generation_framework.md` for regeneration process
+- **MUST** regenerate from primary sources, not from existing README
+- **MUST** maintain README accuracy and completeness against source docs
+- **MUST** verify all links before completing regeneration
+- **MUST NOT** patch individual sections for material changes (always regenerate)
 - **MUST NOT** add information to README that contradicts documentation
 - **MUST** preserve README's role as entry point and overview document
+- **MUST** follow required section structure exactly as defined in framework
+- **MUST** ensure confident, positive tone throughout (not defensive)
 
 ---
 
 ## Related Documents
 
 - `README.md` — Project README file
+- `docs/conventions/readme_generation_framework.md` — **REQUIRED:** Framework for regenerating README
 - `docs/conventions/documentation_standards.md` — Documentation standards
 - `docs/context/index.md` — Documentation navigation guide
 - `.cursor/rules/instruction_documentation.md` — Instruction documentation rule
-

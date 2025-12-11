@@ -55,7 +55,7 @@ Neotoma ("we," "our," or "us") is committed to protecting your privacy. This Pri
 
 We use your information to:
 
-- **Provide Service:** Process and structure your documents, store your memory, enable AI access via MCP
+- **Provide Service:** Process and structure your personal data (documents + agent-created data), store your memory, enable AI access via MCP
 - **Improve Service:** Analyze usage patterns (anonymized), fix bugs, enhance features
 - **Communicate:** Send service updates, security alerts, support responses
 - **Process Payments:** Handle subscription payments via Stripe
@@ -66,7 +66,7 @@ We use your information to:
 - Sell your data to third parties
 - Use your data for advertising
 - Scan your email automatically
-- Access your documents without your explicit upload
+- Access your data without your explicit upload or agent interaction
 
 ---
 
@@ -74,8 +74,8 @@ We use your information to:
 
 We process your personal data based on:
 
-- **Consent:** You explicitly upload documents and provide data via MCP actions
-- **Contract:** Processing necessary to provide Neotoma service
+- **Consent:** You explicitly upload documents and provide structured data via MCP actions (dual-path ingestion)
+- **Contract:** Processing necessary to provide Neotoma service (structured personal data memory)
 - **Legitimate Interest:** Service improvement, security, fraud prevention (minimal processing)
 
 ---
@@ -93,9 +93,10 @@ We share data with:
 
 ### 5.2 AI Agents (via MCP)
 
-- Your structured memory is exposed to AI agents (ChatGPT, Claude, Cursor) via Model Context Protocol (MCP)
-- AI agents can read your memory and write new contextual data (with your consent)
+- Your structured personal data memory is exposed to AI agents (ChatGPT, Claude, Cursor) via Model Context Protocol (MCP)
+- AI agents can read your memory and write new structured data (with your consent)
 - AI agents access only data you explicitly share via MCP
+- Dual-path ingestion: file uploads + agent interactions (`store_record`)
 
 ### 5.3 Legal Requirements
 
@@ -211,4 +212,3 @@ If you are located in the EU/EEA, you have the right to lodge a complaint with y
 ---
 
 **This Privacy Policy is effective as of [Date].**
-

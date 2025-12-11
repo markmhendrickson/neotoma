@@ -5,6 +5,8 @@
  */
 
 import { supabase } from "../db.js";
+import type { Entity } from "./entity_resolution.js";
+import type { TimelineEvent } from "./event_generation.js";
 
 export interface GraphInsertResult {
   recordId: string;
@@ -21,40 +23,93 @@ export async function detectOrphanNodes(): Promise<{
   orphanEntities: number;
   orphanEvents: number;
 }> {
-  // Check for records with no relationships
-  // This is a simplified check - in full implementation would check all edge types
   const orphanCounts = {
     orphanRecords: 0,
     orphanEntities: 0,
     orphanEvents: 0,
   };
 
-  // For v0.1.0, orphan detection focuses on record_relationships
-  // A record is an orphan if it has no relationships (record_relationships entries)
+  // Check for orphan records (records with no edges)
   const { data: allRecords } = await supabase.from("records").select("id");
 
-  if (allRecords) {
+  if (allRecords && allRecords.length > 0) {
     const recordIds = allRecords.map((r) => r.id);
 
-    if (recordIds.length > 0) {
-      const { data: relatedRecords } = await supabase
-        .from("record_relationships")
-        .select("source_id, target_id");
+    // Get all records that have at least one edge
+    const { data: recordEntityEdges } = await supabase
+      .from("record_entity_edges")
+      .select("record_id");
 
-      if (relatedRecords) {
-        const relatedIds = new Set<string>();
-        for (const rel of relatedRecords) {
-          relatedIds.add(rel.source_id);
-          relatedIds.add(rel.target_id);
-        }
+    const { data: recordEventEdges } = await supabase
+      .from("record_event_edges")
+      .select("record_id");
 
-        orphanCounts.orphanRecords = recordIds.filter(
-          (id) => !relatedIds.has(id)
-        ).length;
-      } else {
-        orphanCounts.orphanRecords = recordIds.length;
-      }
+    const { data: recordRelationships } = await supabase
+      .from("record_relationships")
+      .select("source_id, target_id");
+
+    const recordsWithEdges = new Set<string>();
+
+    if (recordEntityEdges) {
+      recordEntityEdges.forEach((edge) => recordsWithEdges.add(edge.record_id));
     }
+
+    if (recordEventEdges) {
+      recordEventEdges.forEach((edge) => recordsWithEdges.add(edge.record_id));
+    }
+
+    if (recordRelationships) {
+      recordRelationships.forEach((rel) => {
+        recordsWithEdges.add(rel.source_id);
+        recordsWithEdges.add(rel.target_id);
+      });
+    }
+
+    orphanCounts.orphanRecords = recordIds.filter(
+      (id) => !recordsWithEdges.has(id)
+    ).length;
+  }
+
+  // Check for orphan entities (entities with no record_entity_edges)
+  const { data: allEntities } = await supabase.from("entities").select("id");
+
+  if (allEntities && allEntities.length > 0) {
+    const entityIds = allEntities.map((e) => e.id);
+
+    const { data: entityEdges } = await supabase
+      .from("record_entity_edges")
+      .select("entity_id");
+
+    const entitiesWithEdges = new Set<string>();
+    if (entityEdges) {
+      entityEdges.forEach((edge) => entitiesWithEdges.add(edge.entity_id));
+    }
+
+    orphanCounts.orphanEntities = entityIds.filter(
+      (id) => !entitiesWithEdges.has(id)
+    ).length;
+  }
+
+  // Check for orphan events (events with no record_event_edges)
+  const { data: allEvents } = await supabase
+    .from("timeline_events")
+    .select("id");
+
+  if (allEvents && allEvents.length > 0) {
+    const eventIds = allEvents.map((e) => e.id);
+
+    const { data: eventEdges } = await supabase
+      .from("record_event_edges")
+      .select("event_id");
+
+    const eventsWithEdges = new Set<string>();
+    if (eventEdges) {
+      eventEdges.forEach((edge) => eventsWithEdges.add(edge.event_id));
+    }
+
+    orphanCounts.orphanEvents = eventIds.filter(
+      (id) => !eventsWithEdges.has(id)
+    ).length;
   }
 
   return orphanCounts;
@@ -68,27 +123,51 @@ export async function detectCycles(
 ): Promise<string[][]> {
   const cycles: string[][] = [];
 
-  // Get all relationships
-  let query = supabase
+  // Get all record-to-record relationships
+  let recordQuery = supabase
     .from("record_relationships")
     .select("source_id, target_id, relationship");
   if (relationshipType) {
-    query = query.eq("relationship", relationshipType);
+    recordQuery = recordQuery.eq("relationship", relationshipType);
   }
 
-  const { data: relationships } = await query;
+  const { data: recordRelationships } = await recordQuery;
 
-  if (!relationships || relationships.length === 0) {
-    return cycles;
+  // Get all entity-to-entity relationships
+  let entityQuery = supabase
+    .from("relationships")
+    .select("source_entity_id, target_entity_id, relationship_type");
+  if (relationshipType) {
+    entityQuery = entityQuery.eq("relationship_type", relationshipType);
   }
 
-  // Build adjacency map
+  const { data: entityRelationships } = await entityQuery;
+
+  // Build combined adjacency map for all relationships
   const graph = new Map<string, Set<string>>();
-  for (const rel of relationships) {
-    if (!graph.has(rel.source_id)) {
-      graph.set(rel.source_id, new Set());
+
+  // Add record relationships
+  if (recordRelationships) {
+    for (const rel of recordRelationships) {
+      if (!graph.has(rel.source_id)) {
+        graph.set(rel.source_id, new Set());
+      }
+      graph.get(rel.source_id)!.add(rel.target_id);
     }
-    graph.get(rel.source_id)!.add(rel.target_id);
+  }
+
+  // Add entity relationships
+  if (entityRelationships) {
+    for (const rel of entityRelationships) {
+      if (!graph.has(rel.source_entity_id)) {
+        graph.set(rel.source_entity_id, new Set());
+      }
+      graph.get(rel.source_entity_id)!.add(rel.target_entity_id);
+    }
+  }
+
+  if (graph.size === 0) {
+    return cycles;
   }
 
   // DFS to detect cycles
@@ -154,14 +233,27 @@ export async function validateGraphIntegrity(): Promise<{
   const cycles = await detectCycles();
   const cycleCount = cycles.length;
 
-  // For v0.1.0, orphan records are acceptable (records can exist without relationships)
-  // Only cycles are considered invalid
+  // Orphan records are acceptable (records can exist without entities/events if nothing was extracted)
+  // But orphan entities and events should not exist - they should always have edges
+  if (orphans.orphanEntities > 0) {
+    errors.push(
+      `Found ${orphans.orphanEntities} orphan entities (entities with no record_entity_edges)`
+    );
+  }
+
+  if (orphans.orphanEvents > 0) {
+    errors.push(
+      `Found ${orphans.orphanEvents} orphan events (events with no record_event_edges)`
+    );
+  }
+
+  // Cycles are invalid
   if (cycleCount > 0) {
     errors.push(`Found ${cycleCount} cycles in graph`);
   }
 
   return {
-    valid: errors.length === 0, // Only cycles make it invalid
+    valid: errors.length === 0,
     orphanCount: totalOrphans,
     cycleCount,
     errors,
@@ -177,8 +269,8 @@ export async function insertRecordWithGraph(
     properties: Record<string, unknown>;
     file_urls?: string[];
   },
-  entityIds: string[] = [],
-  eventIds: string[] = [],
+  entities: Entity[] = [],
+  events: TimelineEvent[] = [],
   relationships: Array<{
     target_id: string;
     relationship: string;
@@ -210,6 +302,63 @@ export async function insertRecordWithGraph(
   const insertedEntityIds: string[] = [];
   const insertedEventIds: string[] = [];
   const insertedRelationshipIds: string[] = [];
+
+  // Insert entities (they should already be persisted via resolveEntity, but we create edges)
+  for (const entity of entities) {
+    insertedEntityIds.push(entity.id);
+
+    // Create record-entity edge
+    const { error: edgeError } = await supabase
+      .from("record_entity_edges")
+      .insert({
+        record_id: recordId,
+        entity_id: entity.id,
+        edge_type: "EXTRACTED_FROM",
+      });
+
+    if (edgeError) {
+      console.error(
+        `Failed to insert record-entity edge: ${edgeError.message}`
+      );
+    }
+  }
+
+  // Insert events (they should already be persisted via persistEvents, but we create edges)
+  for (const event of events) {
+    insertedEventIds.push(event.id);
+
+    // Create record-event edge
+    const { error: recordEventError } = await supabase
+      .from("record_event_edges")
+      .insert({
+        record_id: recordId,
+        event_id: event.id,
+        edge_type: "GENERATED_FROM",
+      });
+
+    if (recordEventError) {
+      console.error(
+        `Failed to insert record-event edge: ${recordEventError.message}`
+      );
+    }
+
+    // Create entity-event edges for entities involved in this event
+    for (const entity of entities) {
+      const { error: entityEventError } = await supabase
+        .from("entity_event_edges")
+        .insert({
+          entity_id: entity.id,
+          event_id: event.id,
+          edge_type: "INVOLVES",
+        });
+
+      if (entityEventError) {
+        console.error(
+          `Failed to insert entity-event edge: ${entityEventError.message}`
+        );
+      }
+    }
+  }
 
   // Insert relationships
   for (const rel of relationships) {

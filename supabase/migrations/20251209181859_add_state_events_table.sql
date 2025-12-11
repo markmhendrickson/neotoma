@@ -27,3 +27,5 @@ CREATE INDEX IF NOT EXISTS idx_state_events_previous_hash ON state_events(previo
 COMMENT ON TABLE state_events IS 'Append-only event log for event-sourcing architecture. Events are immutable and serve as the single source of truth for state changes.';
 
 
+
+
