@@ -36,18 +36,18 @@ This document provides the overview and coordination framework for v1.0.0 market
 **See `pre_launch_marketing_plan.md` for complete details.**
 
 - **Timeline**: Week -4 to Week 0
-- **Tactics**: Waitlist building, early access beta, content teasers
+- **Tactics**: Waitlist building, early access beta, content teasers, competitor follower outreach
 - **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
-- **Success Criteria**: ≥100 waitlist signups, ≥25 beta participants, ≥70% beta activation rate
+- **Success Criteria**: ≥100 waitlist signups, ≥25 beta participants, ≥70% beta activation rate, ≥10 waitlist signups from competitor outreach
 
 #### 2.2 Post-Launch Marketing
 
 **See `post_launch_marketing_plan.md` for complete details.**
 
 - **Timeline**: Day 0 to Week 4
-- **Tactics**: Launch announcement, waitlist conversion, organic growth, partnership outreach
+- **Tactics**: Launch announcement, waitlist conversion, organic growth, partnership outreach, competitor follower outreach
 - **Reengagement**: Onboarding nudges, usage tips campaign
-- **Success Criteria**: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate
+- **Success Criteria**: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate, ≥20 organic signups from competitor outreach
 
 #### 2.3 User Segments
 
@@ -83,7 +83,98 @@ Platforms prioritized based on target segment alignment, engagement potential, a
 
 **Launch Focus:** Twitter/X, Indie Hackers, Product Hunt, Hacker News for Day 0 launch. Add LinkedIn and Reddit/Discord for sustained Week 1-4 growth.
 
-#### 2.6 Marketing Automation
+#### 2.6 Personal vs. Company Accounts Strategy
+
+**Strategy**: Dual-account approach — personal accounts for authenticity and building in public, company accounts for brand consistency and official announcements.
+
+**Personal Accounts (Primary for MVP):**
+
+**Why Personal Accounts Matter:**
+
+- **Authenticity**: Solo founder personal accounts have higher trust and engagement
+- **Existing Network**: Personal accounts already have followers/connections
+- **Building in Public**: Personal accounts better suited for transparent development updates
+- **Early Stage**: Company accounts have no followers yet; personal accounts have established presence
+- **Community Building**: Personal accounts enable authentic community engagement
+
+**Personal Account Usage:**
+
+1. **Twitter/X** — Use personal account (@markymark)
+
+   - Build-in-public updates
+   - Technical threads and demos
+   - Community engagement
+   - Competitor follower outreach
+   - Link to Neotoma in bio/pinned tweet
+
+2. **LinkedIn** — Use personal account (Mark Hendrickson)
+
+   - Professional use cases and case studies
+   - Thought leadership content
+   - Link to company page
+   - Share company page posts
+
+3. **Indie Hackers** — Use personal account
+
+   - Build-in-public updates
+   - Product development journey
+   - Community engagement
+
+4. **Hacker News** — Use personal account
+
+   - "Show HN" posts
+   - Technical discussions
+   - Community engagement
+
+5. **Product Hunt** — Use personal maker account
+   - Launch day product submission
+   - Maker reputation building
+
+**Company Accounts (Secondary for MVP):**
+
+**Why Company Accounts Matter:**
+
+- **Brand Consistency**: Official Neotoma presence
+- **SEO**: Company accounts improve search visibility
+- **Professional Credibility**: Official company presence for enterprise/partnership discussions
+- **Future Scaling**: Foundation for team expansion
+
+**Company Account Usage:**
+
+1. **Twitter/X** — Register `@neotomaio` or `@useneotoma` (when available)
+
+   - Official announcements
+   - Retweet/share personal account content
+   - Link to personal account
+   - Defer active use until post-MVP (focus on personal account for MVP)
+
+2. **LinkedIn** — Create `/company/neotoma` company page
+
+   - Official company presence
+   - Link from personal profile
+   - Share company updates
+   - Professional credibility
+
+3. **Other Platforms** — Register company handles but defer active use
+   - Instagram, Facebook, Reddit (reserve handles, defer active use)
+   - Focus on personal accounts for MVP
+
+**MVP Strategy (v1.0.0):**
+
+- **Primary**: Personal accounts (Twitter/X, LinkedIn, Indie Hackers, Hacker News, Product Hunt)
+- **Secondary**: Company accounts (register handles, create company page, link from personal accounts)
+- **Post-MVP**: Shift to company accounts as primary as brand recognition grows
+
+**Action Items:**
+
+- [ ] Ensure personal Twitter/X account bio mentions Neotoma
+- [ ] Pin Neotoma-related tweet to personal Twitter/X profile
+- [ ] Link Neotoma website in personal LinkedIn profile
+- [ ] Create LinkedIn company page and link from personal profile
+- [ ] Register company Twitter/X handle (`@neotomaio` or `@useneotoma`) but defer active use
+- [ ] Use personal accounts for all MVP marketing activities
+
+#### 2.7 Marketing Automation
 
 **Automation Strategy:**
 
@@ -102,7 +193,7 @@ Automated marketing system that creates content from release data, posts to soci
 
    - Extends `src/integrations/providers/x.ts` with write capabilities (Twitter API v2 posting)
    - Adds LinkedIn, Product Hunt, Hacker News APIs
-   - OAuth token management for posting accounts
+   - OAuth token management for posting accounts (personal accounts for MVP)
    - Platform-specific formatting and scheduling
 
 3. **Marketing Automation Workflow**

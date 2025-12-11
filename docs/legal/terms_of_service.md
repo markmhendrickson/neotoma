@@ -23,20 +23,24 @@ By accessing or using Neotoma ("Service"), you agree to be bound by these Terms 
 
 ### 2.1 What Neotoma Does
 
-Neotoma is a **deterministic, structured memory substrate** that transforms fragmented personal documents into AI-ready knowledge. Neotoma:
+Neotoma is a **deterministic, structured memory substrate** that transforms fragmented personal data into AI-ready knowledge via dual-path ingestion. Neotoma:
 
-- Structures documents (PDFs, images) you upload
-- Extracts structured fields (invoice numbers, amounts, dates, etc.)
-- Identifies entities (people, companies, locations)
-- Builds timelines from dates in documents
-- Exposes structured memory to AI agents via Model Context Protocol (MCP)
+- Accepts personal data via dual-path ingestion:
+  - File uploads (PDFs, images)
+  - Agent interactions (structured data via MCP `store_record`)
+- Extracts structured fields (invoice numbers, amounts, dates, etc.) from documents OR accepts structured data from agents
+- Identifies entities (people, companies, locations) across all personal data
+- Builds timelines from dates across all personal data
+- Exposes structured personal data memory to AI agents via Model Context Protocol (MCP)
+- Cross-platform: works with ChatGPT, Claude, Cursor
 
 ### 2.2 What Neotoma Does NOT Do
 
 - **No automatic scanning:** We do not scan your email or cloud storage automatically
 - **No email body reading:** We only process attachments you explicitly upload
 - **No guessing or inferring:** Extraction is deterministic (rule-based in MVP)
-- **No background data collection:** We only process data you explicitly provide
+- **No background data collection:** We only process data you explicitly provide via upload or MCP interaction
+- **Not conversation-only:** Unlike provider memory (ChatGPT, Claude, Gemini), Neotoma provides structured personal data memory with entity resolution and timelines
 
 ---
 
@@ -320,4 +324,3 @@ By using Neotoma, you acknowledge that you have read, understood, and agree to b
 ---
 
 **These Terms of Service are effective as of [Date].**
-

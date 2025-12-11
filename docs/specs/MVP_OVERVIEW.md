@@ -25,10 +25,13 @@ This document provides a high-level executive summary of Neotoma's MVP (Minimum 
 
 ## 1. What is Neotoma?
 
-Neotoma is a **Truth Layer** — a deterministic, structured memory substrate that transforms fragmented personal documents into AI-ready knowledge.
+Neotoma is a **Truth Layer** — a deterministic, structured memory substrate that transforms fragmented personal data into AI-ready knowledge via dual-path ingestion.
 
 **In One Sentence:**
-Neotoma ingests PDFs and images, extracts structured fields, identifies entities, builds timelines, and exposes everything to AI via MCP.
+Neotoma ingests personal data (PDFs, images, agent interactions), extracts structured fields, identifies entities, builds timelines, and exposes everything to AI via MCP.
+
+**vs. Provider Memory:**
+ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, provider-controlled). Neotoma provides structured personal data memory with entity resolution, timelines, and cross-platform access—enabling agents to reason across all your data, not just recent conversations.
 
 **Not:**
 
@@ -39,9 +42,9 @@ Neotoma ingests PDFs and images, extracts structured fields, identifies entities
 
 **Is:**
 
-- The memory substrate beneath AI tools
+- The structured personal data memory substrate beneath AI tools
 - The foundation for Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)
-- A deterministic personal and team memory engine (supports individuals and small teams 2–20 people)
+- A deterministic personal and team memory engine with dual-path ingestion (supports individuals and small teams 2–20 people)
 
 ---
 
@@ -88,9 +91,9 @@ Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no stra
 ### 3.2 Extraction
 
 - Schema detection (invoice, receipt, contract, document, note, message, travel_document, identity_document, etc.)
-- Deterministic field extraction (regex-based, no LLM)
-- Entity resolution (canonical IDs for companies, people, locations)
-- Event generation (timeline from date fields)
+- Deterministic field extraction (regex-based from documents, direct property assignment from agent interactions; no LLM)
+- Entity resolution (canonical IDs for companies, people, locations across all personal data)
+- Event generation (timeline from date fields across all personal data)
 - **Tier 1 ICP-aligned:** Schema types support AI-Native Operators (research, contracts, travel), Knowledge Workers (legal docs, research papers, client communications), and Founders (company docs, product docs, investor materials)
 
 ### 3.3 Memory Graph
@@ -147,16 +150,40 @@ Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no stra
 
 ## 5. Key Differentiators
 
-1. **Deterministic:** Same input → same output, always
-2. **Schema-first:** Type-driven extraction, not freeform
-3. **Explainable:** Every field traces to source
-4. **Entity-unified:** Canonical IDs across documents
-5. **Timeline-aware:** Automatic chronological ordering
-6. **AI-ready:** MCP-exposed structured memory
-7. **Immutable:** Truth never changes
-8. **Provenance:** Full audit trail
+**Defensible Architectural Choices (Long-Term Competitive Moats):**
+
+These differentiators are defensible because competitors find them structurally difficult to pursue:
+
+1. **Privacy-First Architecture (User-Controlled Memory)**
+
+   - User-controlled memory with no provider access, never used for training
+   - **Why Defensible:** Providers cannot pursue due to data collection/training business models. Startups cannot pursue due to provider-controlled revenue models.
+
+2. **Deterministic Extraction (vs. ML-Based Probabilistic)**
+
+   - Same input → same output, always (reproducible, explainable)
+   - **Why Defensible:** Providers cannot pursue due to ML-first organizational identity. Startups cannot pursue due to speed-to-market constraints.
+
+3. **Cross-Platform Access (MCP Integration)**
+   - Works with ChatGPT, Claude, Cursor via MCP (not platform-locked)
+   - **Why Defensible:** Providers cannot pursue due to platform lock-in business models. Startups cannot pursue due to separate consumer app positioning.
+
+**Feature Capabilities (Enabled by Defensible Differentiators):**
+
+These features are valuable but not defensible alone (competitors are developing similar capabilities):
+
+4. **Dual-path ingestion:** File uploads + agent interactions via MCP (not conversation-only)
+5. **Entity resolution:** Deterministic hash-based canonical IDs across all personal data
+6. **Timeline generation:** Deterministic automatic chronological ordering across all personal data
+7. **Structured personal data:** Schema-first extraction from documents AND agent-created data
+8. **Immutable:** Truth never changes
+9. **Provenance:** Full audit trail for all data
 
 **vs Notion/Evernote:** They store files. Neotoma understands files.
+
+**vs Provider Memory:** They offer conversation-only memory (platform-locked, provider-controlled, ML-based probabilistic). Neotoma provides structured personal data memory (cross-platform, privacy-first user-controlled, deterministic) with entity resolution and timelines.
+
+**Strategic Positioning:** Neotoma combines defensible architectural choices (privacy-first, deterministic, cross-platform) with feature capabilities (entity resolution, timelines, dual-path ingestion). Competitors can replicate features but cannot pursue the same architectural choices due to structural constraints. See [`docs/private/competitive/defensible_differentiation_framework.md`](../../private/competitive/defensible_differentiation_framework.md) for detailed analysis.
 
 ---
 

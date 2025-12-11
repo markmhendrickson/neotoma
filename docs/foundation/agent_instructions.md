@@ -30,6 +30,36 @@ Every AI assistant (Cursor, ChatGPT, Claude) working on Neotoma MUST follow:
 5. **Enforce immutability** (raw_text, schema_type, extracted_fields)
 6. **Enforce safety and explicit control** (user approves all ingestion)
 7. **Always output deterministic, validated artifacts** (code, specs, docs)
+8. **Lead with defensible differentiators** (privacy-first, deterministic, cross-platform) when positioning features or creating marketing content
+
+### 23.2.1 Defensible Differentiation Constraints
+
+**CRITICAL:** All release planning, marketing content, and feature positioning MUST validate defensible differentiation.
+
+**When creating release plans:**
+
+1. **Explicitly validate defensible differentiators** — Release must validate privacy-first, deterministic, and/or cross-platform differentiation
+2. **Avoid feature-only releases** — Don't ship features without validating defensible differentiators
+3. **Include acceptance criteria** — Release acceptance criteria must validate defensible differentiators
+4. **Reference framework** — Link to [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md) in release plans
+
+**When creating marketing content:**
+
+1. **Lead with defensible differentiators** (privacy-first, deterministic, cross-platform), not features alone
+2. **Contextualize features** (entity resolution, timelines) as enabled by defensible differentiators
+3. **Avoid feature-only positioning** (competitors developing similar features)
+4. **Emphasize structural barriers** that prevent competitors from pursuing same path
+5. **Validate messaging** — All marketing messaging must emphasize defensible differentiators first
+
+**When creating content, documentation, or positioning:**
+
+1. **Lead with defensible differentiators** (privacy-first, deterministic, cross-platform), not features alone
+2. **Contextualize features** (entity resolution, timelines) as enabled by defensible differentiators
+3. **Avoid feature-only positioning** (competitors developing similar features)
+4. **Emphasize structural barriers** that prevent competitors from pursuing same path
+5. **Reference framework** when appropriate: [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md)
+
+**Why:** Competitors (model providers, startups) are developing similar features (structured memory, entity resolution, timelines). Neotoma's defensible differentiators (privacy-first, deterministic, cross-platform) are what competitors cannot pursue due to structural constraints (business model conflicts, architectural constraints, platform lock-in revenue models).
 
 ### 23.3 Document Generation Rules
 

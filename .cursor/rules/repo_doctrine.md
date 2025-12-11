@@ -13,6 +13,11 @@ Always load these files FIRST for context:
 
 **Defer to these docs before code or chat history.**
 
+**Competitive Positioning:**
+
+- `docs/private/competitive/defensible_differentiation_framework.md` — Framework for avoiding feature races and building defensible differentiators
+- When creating positioning content, lead with defensible differentiators (privacy-first, deterministic, cross-platform), not features alone
+
 ---
 
 ## Workflow Detection Rules

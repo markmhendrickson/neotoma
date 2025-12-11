@@ -35,13 +35,14 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 2.2 Launch Sequence
 
-- **00:01 PST**: Product Hunt launch
-- **06:00 PST**: Hacker News Show HN post
-- **08:00 PST**: Twitter announcement thread
+- **00:01 PST**: Product Hunt launch — **Use personal maker account**
+- **06:00 PST**: Hacker News Show HN post — **Use personal account**
+- **08:00 PST**: Twitter announcement thread — **Use personal account**
 - **09:00 PST**: Email to waitlist (convert to signups)
-- **10:00 PST**: Indie Hacker launch post
+- **10:00 PST**: Indie Hacker launch post — **Use personal account**
 - **12:00 PST**: Blog post announcement
-- **Throughout day**: Engage with comments, respond to questions
+- **Throughout day**: Engage with comments, respond to questions — **Use personal accounts**
+- **Note**: All social media activities use personal accounts (see `marketing_plan.md` Section 2.6 for personal vs. company account strategy)
 
 #### 2.3 Goals
 
@@ -72,8 +73,8 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 #### 3.2 Email Sequence
 
 - **Day 0**: Launch announcement + signup link + early adopter pricing
-- **Day 3**: Feature deep-dive (MCP access, deterministic extraction)
-- **Day 7**: Testimonials from beta testers + last call for early adopter pricing
+- **Day 3**: Feature deep-dive (privacy-first architecture, deterministic extraction, cross-platform MCP access)
+- **Day 7**: Testimonials from beta testers + defensible differentiators recap + last call for early adopter pricing
 
 #### 3.3 Goals
 
@@ -99,10 +100,60 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 4.2 Activities
 
-- **Weekly**: Twitter threads on use cases, tips, workflows
+- **Weekly**: Twitter threads on use cases, tips, workflows — **Use personal account**
 - **Weekly**: Blog post (tutorial, case study, or technical deep-dive)
-- **Ongoing**: Engage with AI tool communities (Reddit, Discord, Indie Hackers)
-- **Ongoing**: Respond to user feedback publicly (build in public)
+- **Ongoing**: Engage with AI tool communities (Reddit, Discord, Indie Hackers) — **Use personal accounts**
+- **Ongoing**: Respond to user feedback publicly (build in public) — **Use personal accounts**
+- **Ongoing**: Competitor follower outreach (see Section 4.3) — **Use personal accounts**
+- **Note**: All social media activities use personal accounts (see `marketing_plan.md` Section 2.6 for personal vs. company account strategy)
+
+#### 4.3 Competitor Follower Outreach
+
+**Timeline**: Week 1 to Week 4 (continued from pre-launch)
+
+**Target Competitors**:
+
+- Supermemory.ai (High risk - direct MCP competitor)
+- MCP Memory Tools (MemCP, MemMachine, OpenMemory MCP, Mem0 MCP Server, Cognee, CoreMemory-MCP, In Memoria, Roampal, Memara - High risk - direct MCP competitors)
+- AI Memory Tools (Mem0, LangChain Memory, Zep, LangMem - Medium-High risk)
+- Model Provider Native Memory (OpenAI ChatGPT Memory, Anthropic Claude Memory, Google Gemini Personal Context - Very High risk)
+
+**Platforms**: Twitter/X, LinkedIn, Reddit, Discord
+
+**Activities**:
+
+1. **Monitor Competitor Discussions**
+
+   - Track competitor product updates, feature announcements
+   - Identify users expressing dissatisfaction or limitations
+   - Find users asking about alternatives or specific features
+
+2. **Value-First Engagement**
+
+   - Answer questions about AI memory challenges authentically
+   - Share Neotoma content when directly relevant (privacy, determinism, cross-platform, entity resolution)
+   - Provide comparisons when users explicitly ask about alternatives
+   - Avoid promotional spam; focus on helpful contributions
+
+3. **Conversion Tactics**
+   - When users mention pain points Neotoma solves, offer to help
+   - Share Neotoma launch announcement in relevant communities
+   - Invite competitor users to try Neotoma for specific use cases
+   - Offer migration guidance for users switching from competitors
+
+**Goals**:
+
+- Generate organic signups from competitor users
+- Build awareness as viable alternative
+- Capture users dissatisfied with competitor limitations
+
+**Metrics**:
+
+| Metric                          | Target | Tracking                                    |
+| ------------------------------- | ------ | ------------------------------------------- |
+| Competitor follower engagements | 100    | Manual tracking (comments, replies, shares) |
+| Organic signups from outreach   | 20     | UTM tracking (competitor-outreach source)   |
+| Community mentions              | 50     | Manual tracking (Discord, Reddit mentions)  |
 
 #### 4.3 Goals
 
@@ -112,11 +163,12 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 4.4 Metrics
 
-| Metric                 | Target                     | Tracking                            |
-| ---------------------- | -------------------------- | ----------------------------------- |
-| Organic signups        | 100 (Week 1-4 total)       | Signup analytics (non-paid sources) |
-| Content to signup rate | 3% (blog/twitter → signup) | UTM tracking                        |
-| Organic search traffic | 500 (visits from Google)   | Google Analytics                    |
+| Metric                      | Target                     | Tracking                                  |
+| --------------------------- | -------------------------- | ----------------------------------------- |
+| Organic signups             | 100 (Week 1-4 total)       | Signup analytics (non-paid sources)       |
+| Content to signup rate      | 3% (blog/twitter → signup) | UTM tracking                              |
+| Organic search traffic      | 500 (visits from Google)   | Google Analytics                          |
+| Competitor outreach signups | 20 (from Section 4.3)      | UTM tracking (competitor-outreach source) |
 
 ---
 
@@ -209,6 +261,7 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 - ≥200 signups Week 1
 - ≥40% waitlist conversion rate
 - ≥100 organic signups (non-waitlist) Week 1-4
+- ≥20 organic signups from competitor follower outreach (Week 1-4)
 - ≥60% overall activation rate (signup → first upload)
 - ≥15% nudge response rate
 - ≥20% tip to feature adoption rate

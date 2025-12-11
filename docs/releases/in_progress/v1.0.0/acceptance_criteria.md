@@ -9,6 +9,7 @@ _(Release-Level Acceptance Criteria for MVP)_
 This document defines the release-level acceptance criteria that must be met before v1.0.0 can be approved for deployment. These criteria span product, technical, and business dimensions.
 
 **Related Documents:**
+
 - `release_plan.md` — Release overview and scope
 - `integration_tests.md` — Detailed integration test specifications
 - `status.md` — Current status and progress tracking
@@ -19,9 +20,40 @@ This document defines the release-level acceptance criteria that must be met bef
 
 #### 1.1 Core Workflow
 
-- Core workflow: **upload → ingestion → extraction → entity resolution → event generation → memory graph → timeline → AI query via MCP** is functional for Tier 1 ICPs.
+- Core workflow: **dual-path ingestion (upload + agent interactions) → extraction → entity resolution → event generation → memory graph → timeline → AI query via MCP** is functional for Tier 1 ICPs.
 
-#### 1.2 UI Surfaces
+#### 1.2 Competitive Differentiation Validation
+
+**MVP must validate three defensible differentiators** (competitors cannot pursue due to structural constraints):
+
+1. **Privacy-First Architecture:**
+
+   - RLS enabled and functional (user data isolation)
+   - No provider access to user data (encryption, row-level security working)
+   - User data ownership validated (export, deletion control)
+   - **Why Defensible:** Providers/startups won't pursue due to business model conflicts
+
+2. **Deterministic Extraction:**
+
+   - Same file uploaded 3x → identical extraction (reproducible)
+   - No LLM extraction in Truth Layer (deterministic only)
+   - Full provenance for all extracted fields
+   - **Why Defensible:** Providers/startups won't pursue due to ML-first architecture/constraints
+
+3. **Cross-Platform Access:**
+   - MCP actions work with ChatGPT, Claude, Cursor (validated)
+   - Memory persists across platforms (cross-platform validation)
+   - **Why Defensible:** Providers won't pursue due to platform lock-in business models
+
+**Feature Capabilities (enabled by defensible differentiators):**
+
+- Dual-path ingestion functional (file uploads + MCP `store_record`)
+- Entity resolution functional (deterministic hash-based canonical IDs work across documents AND agent-created data)
+- Timeline generation functional (deterministic chronological ordering from documents AND agent-created data)
+
+**Note:** Features alone are not defensible (competitors developing similar). MVP must validate that defensible differentiators (privacy-first, deterministic, cross-platform) enable superior feature capabilities. See [`docs/private/competitive/defensible_differentiation_framework.md`](../../private/competitive/defensible_differentiation_framework.md).
+
+#### 1.3 UI Surfaces
 
 - Records list and detail views functional and usable.
 - Timeline view present and correctly ordered.
@@ -45,6 +77,9 @@ This document defines the release-level acceptance criteria that must be met bef
 | Deterministic search ranking                         | `tests/integration/search_determinism.test.ts`    | Same query + same DB state → identical result order                               |
 | All P0 FUs completed with passing tests              | Manual verification + status.md                   | All FU-100, FU-101, FU-102, FU-103, FU-105, FU-300, FU-700, FU-701 = `completed`  |
 | 100% test coverage on critical path                  | `npm run test:coverage -- --critical-path`        | `coverage.critical_path >= 100`                                                   |
+| Entity resolution across all data types              | `tests/integration/entity_resolution.test.ts`     | Entity resolution works for documents AND agent-created data                      |
+| Timeline generation across all data types            | `tests/integration/timeline_generation.test.ts`   | Timeline generation works for documents AND agent-created data                    |
+| Cross-platform MCP validation                        | Manual testing + integration tests                | MCP actions work with ChatGPT, Claude, Cursor                                     |
 
 ---
 
@@ -69,12 +104,14 @@ Metrics instrumentation in place for:
 ### 4. Validation Approach
 
 **Pre-Deployment Validation:**
+
 - All technical acceptance criteria validated via automated test suite
 - All integration scenarios pass (see `integration_tests.md`)
 - Product acceptance criteria validated via manual testing
 - Business acceptance criteria validated post-deployment (tracked in monitoring)
 
 **Post-Deployment Validation:**
+
 - Monitor business metrics for first week
 - Compare against targets
 - Document deviations in status updates
@@ -102,4 +139,3 @@ Before deployment to production, the following must be true:
 - `deployment_strategy.md` — Deployment and rollback procedures
 - `monitoring_plan.md` — Post-release monitoring and observability
 - `status.md` — Current status and progress tracking
-

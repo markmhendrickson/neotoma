@@ -276,3 +276,5 @@ We need to identify users who pay for AI tools (ChatGPT Plus/Pro, Claude Pro, Cu
 - Leads with subscription signals (any method) score 0.7+
 - Leads with self-reported subscriptions score 0.9+
 - Leads without signals score <0.5 (lower priority)
+
+

@@ -69,19 +69,33 @@ export async function resolveEntity(
     return existing as Entity;
   }
 
-  // Create new entity (if entities table exists - for v0.1.0 this may be deferred)
-  // For now, return the resolved entity structure
-  const entity: Entity = {
-    id: entityId,
-    entity_type: entityType,
-    canonical_name: canonicalName,
-    created_at: new Date().toISOString(),
-  };
+  // Create new entity
+  const now = new Date().toISOString();
+  const { data: newEntity, error } = await supabase
+    .from("entities")
+    .insert({
+      id: entityId,
+      entity_type: entityType,
+      canonical_name: canonicalName,
+      aliases: [],
+      created_at: now,
+      updated_at: now,
+    })
+    .select()
+    .single();
 
-  // TODO: Insert into entities table when it exists
-  // For v0.1.0, entity resolution just generates IDs deterministically
+  if (error) {
+    console.error(`Failed to insert entity ${entityId}:`, error);
+    // Return entity structure even if insert fails (for backwards compatibility)
+    return {
+      id: entityId,
+      entity_type: entityType,
+      canonical_name: canonicalName,
+      created_at: now,
+    };
+  }
 
-  return entity;
+  return newEntity as Entity;
 }
 
 /**
@@ -143,5 +157,59 @@ export function extractEntities(
   }
 
   return entities;
+}
+
+/**
+ * Get entity by ID
+ */
+export async function getEntityById(entityId: string): Promise<Entity | null> {
+  const { data, error } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("id", entityId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data as Entity;
+}
+
+/**
+ * List entities with optional filters
+ */
+export async function listEntities(filters?: {
+  entity_type?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<Entity[]> {
+  let query = supabase.from("entities").select("*");
+
+  if (filters?.entity_type) {
+    query = query.eq("entity_type", filters.entity_type);
+  }
+
+  if (filters?.limit) {
+    query = query.limit(filters.limit);
+  }
+
+  if (filters?.offset) {
+    query = query.range(
+      filters.offset,
+      filters.offset + (filters.limit || 10) - 1
+    );
+  }
+
+  // Order by created_at descending
+  query = query.order("created_at", { ascending: false });
+
+  const { data, error } = await query;
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data as Entity[];
 }
 

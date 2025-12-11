@@ -408,3 +408,5 @@ Load `docs/subsystems/relationships.md` when:
 - ❌ Cycles in PART_OF or DEPENDS_ON relationships
 - ❌ Direct entity updates (use relationships)
 
+
+

@@ -434,6 +434,130 @@ CREATE POLICY "Service role full access - relationships" ON relationships
 DROP POLICY IF EXISTS "public read - relationships" ON relationships;
 CREATE POLICY "public read - relationships" ON relationships FOR SELECT USING (true);
 
+-- Entities table (FU-101)
+CREATE TABLE IF NOT EXISTS entities (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  canonical_name TEXT NOT NULL,
+  aliases JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for entities
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+
+-- RLS policies for entities
+ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
+CREATE POLICY "Service role full access - entities" ON entities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - entities" ON entities;
+CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+
+-- Timeline events table (FU-102)
+CREATE TABLE IF NOT EXISTS timeline_events (
+  id TEXT PRIMARY KEY,
+  event_type TEXT NOT NULL,
+  event_timestamp TIMESTAMPTZ NOT NULL,
+  source_record_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+  source_field TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for timeline_events
+CREATE INDEX IF NOT EXISTS idx_timeline_events_record ON timeline_events(source_record_id);
+CREATE INDEX IF NOT EXISTS idx_timeline_events_timestamp ON timeline_events(event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_timeline_events_type ON timeline_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_timeline_events_type_timestamp ON timeline_events(event_type, event_timestamp DESC);
+
+-- RLS policies for timeline_events
+ALTER TABLE timeline_events ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - timeline_events" ON timeline_events;
+CREATE POLICY "Service role full access - timeline_events" ON timeline_events
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - timeline_events" ON timeline_events;
+CREATE POLICY "public read - timeline_events" ON timeline_events FOR SELECT USING (true);
+
+-- Graph edge tables (FU-103)
+-- Record-Entity edges table
+CREATE TABLE IF NOT EXISTS record_entity_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  record_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL,
+  edge_type TEXT NOT NULL DEFAULT 'EXTRACTED_FROM',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for record_entity_edges
+CREATE INDEX IF NOT EXISTS idx_record_entity_edges_record ON record_entity_edges(record_id);
+CREATE INDEX IF NOT EXISTS idx_record_entity_edges_entity ON record_entity_edges(entity_id);
+CREATE INDEX IF NOT EXISTS idx_record_entity_edges_type ON record_entity_edges(edge_type);
+
+-- RLS policies for record_entity_edges
+ALTER TABLE record_entity_edges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - record_entity_edges" ON record_entity_edges;
+CREATE POLICY "Service role full access - record_entity_edges" ON record_entity_edges
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - record_entity_edges" ON record_entity_edges;
+CREATE POLICY "public read - record_entity_edges" ON record_entity_edges FOR SELECT USING (true);
+
+-- Record-Event edges table
+CREATE TABLE IF NOT EXISTS record_event_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  record_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
+  event_id TEXT NOT NULL,
+  edge_type TEXT NOT NULL DEFAULT 'GENERATED_FROM',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for record_event_edges
+CREATE INDEX IF NOT EXISTS idx_record_event_edges_record ON record_event_edges(record_id);
+CREATE INDEX IF NOT EXISTS idx_record_event_edges_event ON record_event_edges(event_id);
+CREATE INDEX IF NOT EXISTS idx_record_event_edges_type ON record_event_edges(edge_type);
+
+-- RLS policies for record_event_edges
+ALTER TABLE record_event_edges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - record_event_edges" ON record_event_edges;
+CREATE POLICY "Service role full access - record_event_edges" ON record_event_edges
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - record_event_edges" ON record_event_edges;
+CREATE POLICY "public read - record_event_edges" ON record_event_edges FOR SELECT USING (true);
+
+-- Entity-Event edges table
+CREATE TABLE IF NOT EXISTS entity_event_edges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  entity_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  edge_type TEXT NOT NULL DEFAULT 'INVOLVES',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for entity_event_edges
+CREATE INDEX IF NOT EXISTS idx_entity_event_edges_entity ON entity_event_edges(entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_event_edges_event ON entity_event_edges(event_id);
+CREATE INDEX IF NOT EXISTS idx_entity_event_edges_type ON entity_event_edges(edge_type);
+
+-- RLS policies for entity_event_edges
+ALTER TABLE entity_event_edges ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - entity_event_edges" ON entity_event_edges;
+CREATE POLICY "Service role full access - entity_event_edges" ON entity_event_edges
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - entity_event_edges" ON entity_event_edges;
+CREATE POLICY "public read - entity_event_edges" ON entity_event_edges FOR SELECT USING (true);
+
 
 
 

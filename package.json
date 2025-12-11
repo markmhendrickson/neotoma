@@ -13,6 +13,8 @@
     "dev": "tsx watch src/index.ts",
     "test": "vitest run",
     "test:integration": "vitest run tests/integration",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:critical": "vitest run --coverage src/services/entity_resolution.ts src/services/event_generation.ts src/services/graph_builder.ts src/services/file_analysis.ts src/services/search.ts",
     "migrate": "node scripts/run_migrations.js",
     "migrate:dry-run": "node scripts/run_migrations.js --dry-run",
     "lint": "eslint src --ext .ts",

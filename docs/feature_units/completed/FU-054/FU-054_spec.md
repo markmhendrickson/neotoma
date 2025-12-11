@@ -226,3 +226,5 @@ src/
 - `docs/subsystems/schema.md`: Document hash fields in `state_events` table
 
 
+
+

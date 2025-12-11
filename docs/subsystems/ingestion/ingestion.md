@@ -15,7 +15,9 @@ This document defines the **canonical ingestion pipeline** that transforms user-
 - Error handling and retry logic
 - Testing requirements
 
-Ingestion is the **primary entry point** for truth into Neotoma. The dual ingestion model—file uploads and agent interactions—enables incremental memory growth as users scale their agent usage, with contextual data from conversations persisting alongside extracted document data.
+Ingestion is the **primary entry point** for truth into Neotoma. The dual-path ingestion model—file uploads and agent interactions—enables incremental structured personal data memory growth as users scale their agent usage, with structured data from agent conversations persisting alongside extracted document data.
+
+**Competitive Context:** Provider memory (ChatGPT, Claude, Gemini) is conversation-only. Neotoma's dual-path ingestion provides structured personal data memory (documents + agent-created data) with entity resolution and timelines working across all data.
 
 ---
 

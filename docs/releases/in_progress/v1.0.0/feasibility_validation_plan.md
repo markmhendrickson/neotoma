@@ -197,3 +197,5 @@ Includes:
 - `pre_mortem.md` — Failure mode analysis (Failure Mode 4: OCR Determinism)
 
 
+
+

@@ -233,3 +233,5 @@ position:founder|indie hacker|AI engineer
 - Multiple filter types can be combined with commas (`,`)
 - Case-insensitive matching recommended
 - Wildcard matching may be supported depending on platform API
+
+

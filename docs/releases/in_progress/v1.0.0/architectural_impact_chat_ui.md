@@ -334,3 +334,5 @@ Load `docs/releases/in_progress/v1.0.0/architectural_impact_chat_ui.md` when:
 - [ ] MCP integration documentation created
 - [ ] User documentation updated
 
+
+

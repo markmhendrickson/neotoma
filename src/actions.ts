@@ -901,6 +901,58 @@ app.post("/store_record", async (req, res) => {
     logError("EventEmissionError:store_record", req, eventError);
   }
 
+  // Extract and persist entities (FU-101)
+  try {
+    const { extractEntities, resolveEntity } = await import('./services/entity_resolution.js');
+    const entities = extractEntities(properties, normalizedType);
+    const resolvedEntities = [];
+    
+    for (const entity of entities) {
+      const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+      resolvedEntities.push(resolved);
+      
+      // Create record-entity edge
+      await supabase.from("record_entity_edges").insert({
+        record_id: data.id,
+        entity_id: resolved.id,
+        edge_type: "EXTRACTED_FROM",
+      });
+    }
+  } catch (entityError) {
+    // Log entity extraction error but don't fail the request
+    logError("EntityExtractionError:store_record", req, entityError);
+  }
+
+  // Generate and persist timeline events (FU-102)
+  try {
+    const { generateAndPersistEvents } = await import('./services/event_generation.js');
+    const events = await generateAndPersistEvents(data.id, properties, normalizedType);
+    
+    // Create record-event edges
+    for (const event of events) {
+      await supabase.from("record_event_edges").insert({
+        record_id: data.id,
+        event_id: event.id,
+        edge_type: "GENERATED_FROM",
+      });
+      
+      // Create entity-event edges (if entities were extracted)
+      // Note: This could be enhanced to link specific entities to events
+    }
+  } catch (eventError) {
+    // Log event generation error but don't fail the request
+    logError("EventGenerationError:store_record", req, eventError);
+  }
+
+  // Create observations (FU-058)
+  try {
+    const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
+    await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
+  } catch (observationError) {
+    // Log observation creation error but don't fail the request
+    logError("ObservationCreationError:store_record", req, observationError);
+  }
+
   logDebug("Success:store_record", req, { id: data?.id });
   return res.json(data);
 });

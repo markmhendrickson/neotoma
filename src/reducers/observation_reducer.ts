@@ -63,7 +63,9 @@ export class ObservationReducer {
     // Load schema and merge policies
     const schemaEntry = await schemaRegistry.loadActiveSchema(entityType);
     if (!schemaEntry) {
-      throw new Error(`No active schema found for entity type ${entityType}`);
+      // For v0.1.0, use default merge policies if no schema exists
+      console.warn(`No active schema found for entity type ${entityType}, using defaults`);
+      return this.computeSnapshotWithDefaults(entityId, observations);
     }
 
     const schemaDef = schemaEntry.schema_definition;
@@ -273,7 +275,63 @@ export class ObservationReducer {
       source_observation_id: observationIds.join(","), // Multiple sources
     };
   }
+
+  /**
+   * Compute snapshot with default merge policies (when no schema exists)
+   */
+  private async computeSnapshotWithDefaults(
+    entityId: string,
+    observations: Observation[]
+  ): Promise<EntitySnapshot> {
+    if (observations.length === 0) {
+      throw new Error(`No observations found for entity ${entityId}`);
+    }
+
+    const entityType = observations[0].entity_type;
+    const schemaVersion = observations[0].schema_version || "1.0";
+    const userId = observations[0].user_id;
+
+    // Sort observations deterministically
+    const sortedObservations = this.sortObservations(observations);
+
+    // Use last-write-wins for all fields
+    const snapshot: Record<string, unknown> = {};
+    const provenance: Record<string, string> = {};
+
+    const allFields = new Set<string>();
+    for (const obs of sortedObservations) {
+      Object.keys(obs.fields).forEach((field) => allFields.add(field));
+    }
+
+    for (const field of allFields) {
+      const result = this.lastWriteWins(field, sortedObservations.filter(
+        (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null
+      ));
+      
+      if (result.value !== undefined && result.value !== null) {
+        snapshot[field] = result.value;
+        provenance[field] = result.source_observation_id;
+      }
+    }
+
+    const lastObservationAt = sortedObservations[0].observed_at;
+    const computedAt = new Date().toISOString();
+
+    return {
+      entity_id: entityId,
+      entity_type: entityType,
+      schema_version: schemaVersion,
+      snapshot,
+      computed_at: computedAt,
+      observation_count: observations.length,
+      last_observation_at: lastObservationAt,
+      provenance,
+      user_id: userId,
+    };
+  }
 }
 
 export const observationReducer = new ObservationReducer();
+
+
 
