@@ -24,8 +24,10 @@ It is:
 **Core Architectural Choices (Defensible Differentiators):**
 
 1. **Privacy-First:** User-controlled memory, no provider access, never used for training
-2. **Deterministic:** Same input → same output, always (reproducible, explainable, no hallucinations)
+2. **Deterministic:** Same input → same output, always (reproducible, explainable, no hallucinations); hash-based entity IDs ensure deterministic, tamper-evident records
 3. **Cross-Platform:** Works with all AI tools via MCP (ChatGPT, Claude, Cursor), not platform-locked
+4. **Immutable Audit Trail:** Every change permanently recorded with full provenance; event-sourced architecture enables historical replay and time-travel queries
+5. **Cryptographic Integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 
 These architectural choices are defensible because competitors (model providers, OS providers, startups) cannot pursue them due to structural constraints (business model conflicts, architectural constraints, platform lock-in revenue models). See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 

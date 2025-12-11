@@ -25,6 +25,7 @@ Neotoma provides persistent, structured memory built on three architectural foun
 - Schema-first field extraction with reproducible, explainable results
 - Same input always produces same output—no hallucinations or probabilistic behavior
 - Full provenance: every field traces to its source
+- Hash-based entity IDs ensure deterministic, tamper-evident records
 
 **3. Cross-Platform Access**
 
@@ -32,6 +33,11 @@ Neotoma provides persistent, structured memory built on three architectural foun
 - One memory system across all your AI tools—no platform lock-in
 
 **These foundations enable:**
+
+- **Immutable audit trail** — Every change is permanently recorded with full provenance; time-travel queries let you see entity state at any point in time (how entities evolved as new observations arrived)
+- **Cryptographic integrity** — Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
+- **Event-sourced history** — Complete event log enables historical replay and audit trail of all modifications
+- **Deterministic guarantees** — Same input always produces same output—no probabilistic behavior or hallucinations
 
 - **Dual-path ingestion** — Documents (PDFs, images, receipts) AND agent-created structured data
 - **Entity resolution** — Deterministic hash-based canonical IDs unify entities across invoices, contracts, and agent interactions automatically
@@ -97,10 +103,12 @@ ChatGPT, Claude, and Gemini offer conversation-only memory. Neotoma provides str
 
 - **Structured extraction** — Deterministic field extraction from documents (invoices, receipts, contracts) with full provenance
 - **Cross-platform access** — One memory system works with ChatGPT, Claude, and Cursor via MCP
-- **Privacy-first architecture** — User-controlled memory with encryption; your data never used for training
+- **Privacy-first architecture** — User-controlled memory with encryption; Neotoma never uses your stored data for training
 - **Deterministic storage** — Reproducible, explainable memory vs. ML-based probabilistic approaches
-- **Entity resolution** — Canonical IDs unify entities across all your data automatically
+- **Entity resolution** — Hash-based canonical IDs unify entities across all your data automatically with cryptographic integrity
 - **Timeline generation** — Automatic chronological ordering from date fields across all personal data
+- **Immutable audit trail** — Every change permanently recorded with full provenance; time-travel queries enable viewing record state at any point in time
+- **Event-sourced history** — Complete event log enables historical replay and audit trail of all modifications
 - **No context window limits** — Persistent storage with consistent performance at scale
 - **Dual-path ingestion** — Documents AND agent-created structured data, not just chat history
 
@@ -118,7 +126,8 @@ Provider memory is conversation-only with contextual limitations. While provider
 6. **Reducer Execution** — Deterministic computation of entity snapshots from observations
 7. **Event Generation** — Timeline events from date fields across all personal data
 8. **Memory Graph** — Records → Entities → Events with typed edges and relationships
-9. **AI Access** — Structured memory exposed via MCP for ChatGPT, Claude, Cursor; agents can read existing memory and write new structured data, enabling incremental memory growth
+9. **Event Logging** — All state changes recorded in append-only event log with hash chaining and cryptographic fields for immutable audit trail
+10. **AI Access** — Structured memory exposed via MCP for ChatGPT, Claude, Cursor; agents can read existing memory and write new structured data, enabling incremental memory growth
 
 ### Architecture
 
@@ -240,6 +249,122 @@ npm run type-check
 npm run lint
 ```
 
+### Using with Cursor
+
+Neotoma provides MCP (Model Context Protocol) integration for Cursor, enabling AI agents to access and modify your structured memory.
+
+**Setup:**
+
+1. **Build the MCP server:**
+
+   ```bash
+   npm run build
+   ```
+
+2. **Configure environment variables:**
+
+   Set Supabase credentials in your shell environment:
+
+   ```bash
+   export SUPABASE_URL="https://your-project-id.supabase.co"
+   export SUPABASE_SERVICE_KEY="your-service-role-key-here"
+   ```
+
+   For persistent setup, add to `~/.zshrc` or `~/.bashrc`:
+
+   ```bash
+   echo 'export SUPABASE_URL="https://your-project-id.supabase.co"' >> ~/.zshrc
+   echo 'export SUPABASE_SERVICE_KEY="your-service-role-key-here"' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. **Connect Cursor:**
+
+   Cursor automatically detects the `mcp.json` file at `.cursor/mcp.json` in the project root. Restart Cursor after setting environment variables.
+
+4. **Verify connection:**
+
+   In Cursor chat, test the connection:
+
+   ```
+   List all available Neotoma MCP actions
+   ```
+
+**Available Actions:**
+
+- **Record Operations:** `store_record`, `update_record`, `retrieve_records`, `delete_record`
+- **File Operations:** `upload_file`, `get_file_url`
+- **Integration Operations:** `list_provider_catalog`, `sync_provider_imports`
+- **Entity & Snapshot Operations:** `get_entity_snapshot`, `list_observations`, `get_field_provenance`, `retrieve_entities`, `get_entity_by_identifier`
+- **Relationship Operations:** `create_relationship`, `list_relationships`, `get_related_entities`
+- **Timeline Operations:** `list_timeline_events`
+- **Graph Operations:** `get_graph_neighborhood` (complete graph context around any node)
+
+**Example Usage:**
+
+```
+Use the store_record action to create a test invoice with type "invoice" and properties: invoice_number: "INV-001", amount: 1000, vendor: "Acme Corp"
+```
+
+**For Cursor:** See [`docs/developer/mcp_cursor_setup.md`](docs/developer/mcp_cursor_setup.md) for MCP stdio setup.
+
+**For ChatGPT Custom GPT:** See [`docs/developer/mcp_chatgpt_setup.md`](docs/developer/mcp_chatgpt_setup.md) for HTTP Actions setup using OpenAPI schema.
+
+### Using Neotoma MCP in Another Workspace
+
+To use the Neotoma MCP server from a different workspace/repository:
+
+1. **Ensure Neotoma is built:**
+
+   ```bash
+   cd /path/to/neotoma
+   npm run build
+   ```
+
+2. **Create `.cursor/mcp.json` in your other workspace:**
+
+   ```json
+   {
+     "mcpServers": {
+       "neotoma": {
+         "command": "/path/to/node",
+         "args": ["/absolute/path/to/neotoma/dist/index.js"],
+         "cwd": "/absolute/path/to/neotoma",
+         "env": {
+           "NODE_ENV": "development"
+         }
+       }
+     }
+   }
+   ```
+
+   **Important:**
+
+   - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
+   - Set `cwd` to the Neotoma project root (required for `.env.development` loading)
+   - The server will load credentials from Neotoma's `.env.development` file automatically
+
+3. **Or use environment variables:**
+   If you want to override credentials from the other workspace:
+
+   ```json
+   {
+     "mcpServers": {
+       "neotoma": {
+         "command": "/path/to/node",
+         "args": ["/absolute/path/to/neotoma/dist/index.js"],
+         "cwd": "/absolute/path/to/neotoma",
+         "env": {
+           "DEV_SUPABASE_URL": "https://your-project-id.supabase.co",
+           "DEV_SUPABASE_SERVICE_KEY": "your-service-role-key-here"
+         }
+       }
+     }
+   }
+   ```
+
+4. **Restart Cursor** to detect the new MCP server configuration.
+
 ### Documentation Structure
 
 **Core Documentation:**
@@ -287,11 +412,12 @@ npm run lint
 5. **Timeline-aware** — Automatic chronological ordering from date fields across all personal data
 6. **Cross-platform** — MCP-exposed structured memory for ChatGPT, Claude, Cursor (not platform-locked)
 7. **Privacy-first** — User-controlled memory with encryption and row-level security
-8. **Immutable** — Truth never changes once stored
-9. **Provenance** — Full audit trail for all data (documents and agent interactions)
-10. **Dual-path ingestion** — File uploads + agent interactions via MCP
-11. **Four-layer model** — Record → Entity → Observation → Snapshot
-12. **Event-sourced** — Domain Events → Reducers → State updates
+8. **Immutable** — Truth never changes once stored; immutable audit trail with cryptographic integrity
+9. **Provenance** — Full audit trail for all data (documents and agent interactions); every change permanently recorded
+10. **Event-sourced** — Domain Events → Reducers → State updates; complete event log enables historical replay and time-travel queries
+11. **Cryptographic integrity** — Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
+12. **Dual-path ingestion** — File uploads + agent interactions via MCP
+13. **Four-layer model** — Record → Entity → Observation → Snapshot
 
 ### Testing
 

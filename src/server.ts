@@ -41,6 +41,12 @@ import {
   runAllConnectorSyncs,
 } from "./services/importers.js";
 import { recordMatchesKeywordSearch } from "./actions.js";
+import {
+  listEntities,
+  normalizeEntityValue,
+  generateEntityId,
+  type Entity,
+} from "./services/entity_resolution.js";
 
 export class NeotomaServer {
   private server: Server;
@@ -468,34 +474,179 @@ export class NeotomaServer {
             required: ["entity_id"],
           },
         },
+        {
+          name: "retrieve_entities",
+          description:
+            "Query entities with filters (type, pagination). Returns entities with their snapshots.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_type: {
+                type: "string",
+                description:
+                  "Filter by entity type (e.g., 'company', 'person')",
+              },
+              limit: {
+                type: "number",
+                description: "Maximum number of entities to return",
+                default: 100,
+              },
+              offset: {
+                type: "number",
+                description: "Offset for pagination",
+                default: 0,
+              },
+              include_snapshots: {
+                type: "boolean",
+                description: "Whether to include entity snapshots in response",
+                default: true,
+              },
+            },
+            required: [],
+          },
+        },
+        {
+          name: "list_timeline_events",
+          description:
+            "Query timeline events with filters (type, date range, source record). Returns chronological events.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              event_type: {
+                type: "string",
+                description:
+                  "Filter by event type (e.g., 'InvoiceIssued', 'FlightDeparture')",
+              },
+              after_date: {
+                type: "string",
+                description: "Filter events after this date (ISO 8601)",
+              },
+              before_date: {
+                type: "string",
+                description: "Filter events before this date (ISO 8601)",
+              },
+              source_record_id: {
+                type: "string",
+                description: "Filter by source record ID",
+              },
+              limit: {
+                type: "number",
+                description: "Maximum number of events to return",
+                default: 100,
+              },
+              offset: {
+                type: "number",
+                description: "Offset for pagination",
+                default: 0,
+              },
+            },
+            required: [],
+          },
+        },
+        {
+          name: "get_entity_by_identifier",
+          description:
+            "Find entity by identifier (name, email, etc.) across entity types or specific type.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              identifier: {
+                type: "string",
+                description:
+                  "Identifier to search for (name, email, tax_id, etc.) - will be normalized",
+              },
+              entity_type: {
+                type: "string",
+                description:
+                  "Optional: Limit search to specific entity type (e.g., 'company', 'person')",
+              },
+            },
+            required: ["identifier"],
+          },
+        },
+        {
+          name: "get_related_entities",
+          description:
+            "Get entities connected to a given entity via relationships. Supports n-hop traversal.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_id: {
+                type: "string",
+                description: "Starting entity ID",
+              },
+              relationship_types: {
+                type: "array",
+                items: { type: "string" },
+                description:
+                  "Filter by relationship types (e.g., ['PART_OF', 'REFERS_TO']). If empty, includes all types.",
+              },
+              direction: {
+                type: "string",
+                enum: ["inbound", "outbound", "both"],
+                description: "Direction of relationships to traverse",
+                default: "both",
+              },
+              max_hops: {
+                type: "number",
+                description:
+                  "Maximum number of relationship hops (1 = direct, 2 = 2-hop, etc.)",
+                default: 1,
+              },
+              include_entities: {
+                type: "boolean",
+                description:
+                  "Whether to include full entity snapshots in response",
+                default: true,
+              },
+            },
+            required: ["entity_id"],
+          },
+        },
+        {
+          name: "get_graph_neighborhood",
+          description:
+            "Get complete graph neighborhood around a node (entity or record): related entities, relationships, records, and events.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              node_id: {
+                type: "string",
+                description:
+                  "Node ID (entity_id or record_id) to get neighborhood for",
+              },
+              node_type: {
+                type: "string",
+                enum: ["entity", "record"],
+                description: "Type of node",
+                default: "entity",
+              },
+              include_relationships: {
+                type: "boolean",
+                description: "Include relationships in response",
+                default: true,
+              },
+              include_records: {
+                type: "boolean",
+                description: "Include related records in response",
+                default: true,
+              },
+              include_events: {
+                type: "boolean",
+                description: "Include timeline events in response",
+                default: true,
+              },
+              include_observations: {
+                type: "boolean",
+                description: "Include observations (for entities only)",
+                default: false,
+              },
+            },
+            required: ["node_id"],
+          },
+        },
       ],
     }));
-
-    // Handle encrypted requests (from WebSocket bridge)
-    this.server.setRequestHandler(
-      { method: "encrypted_request" } as any,
-      async (request: any) => {
-        // MCP server acts as blind router - just pass through encrypted payload
-        // The actual decryption/encryption happens in browser/ChatGPT client
-        const { encryptedPayload } = request.params || {};
-
-        if (!encryptedPayload) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            "Missing encryptedPayload"
-          );
-        }
-
-        // Return encrypted payload as-is (blind routing)
-        // In practice, this would be forwarded to the actual tool handler
-        // but for now we maintain the encrypted envelope structure
-        return {
-          encryptedPayload,
-          // Note: Actual tool execution would happen in browser via local datastore
-          // This is just a routing layer
-        };
-      }
-    );
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       try {
@@ -551,6 +702,16 @@ export class NeotomaServer {
             return await this.createRelationship(args);
           case "list_relationships":
             return await this.listRelationships(args);
+          case "retrieve_entities":
+            return await this.retrieveEntities(args);
+          case "list_timeline_events":
+            return await this.listTimelineEvents(args);
+          case "get_entity_by_identifier":
+            return await this.getEntityByIdentifier(args);
+          case "get_related_entities":
+            return await this.getRelatedEntities(args);
+          case "get_graph_neighborhood":
+            return await this.getGraphNeighborhood(args);
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -786,6 +947,7 @@ export class NeotomaServer {
     const normalizedType = type ? normalizeRecordType(type).type : undefined;
 
     let results: NeotomaRecord[] = [];
+    let totalCount = 0;
     const finalLimit = limit || 100;
 
     // Semantic search (vector similarity)
@@ -864,13 +1026,17 @@ export class NeotomaServer {
               return { ...rec, similarity };
             })
             .filter((rec: any) => rec && rec.similarity >= similarity_threshold)
-            .sort((a: any, b: any) => b.similarity - a.similarity)
-            .slice(0, finalLimit);
+            .sort((a: any, b: any) => b.similarity - a.similarity);
+
+          // Track total count before limiting
+          totalCount = semanticMatches.length;
+
+          const limitedMatches = semanticMatches.slice(0, finalLimit);
 
           if (search_mode === "semantic") {
-            results = semanticMatches;
+            results = limitedMatches;
           } else {
-            results = semanticMatches;
+            results = limitedMatches;
           }
         }
       }
@@ -893,14 +1059,14 @@ export class NeotomaServer {
 
       if (keywordCandidates) {
         const searchTerms = search.map((term) => term.toLowerCase());
-        const keywordMatches = keywordCandidates
-          .filter((rec: NeotomaRecord) =>
-            recordMatchesKeywordSearch(rec, searchTerms)
-          )
-          .slice(0, finalLimit);
+        const keywordMatches = keywordCandidates.filter((rec: NeotomaRecord) =>
+          recordMatchesKeywordSearch(rec, searchTerms)
+        );
 
+        // Track total count before limiting
         if (results.length === 0) {
-          results = keywordMatches;
+          totalCount = keywordMatches.length;
+          results = keywordMatches.slice(0, finalLimit);
         } else {
           // Merge keyword results with semantic results (both mode)
           const resultMap = new Map();
@@ -910,46 +1076,109 @@ export class NeotomaServer {
               resultMap.set(r.id, r);
             }
           });
-          results = Array.from(resultMap.values()).slice(0, finalLimit);
+          const mergedResults = Array.from(resultMap.values());
+          totalCount = mergedResults.length;
+          results = mergedResults.slice(0, finalLimit);
         }
       }
     }
 
     // No search: use existing logic
     if (!search) {
-      let query = supabase.from("records").select("*");
+      // If properties are specified, fetch all records to count accurately
+      // Otherwise, use count query for efficiency
+      if (properties) {
+        let allQuery = supabase.from("records").select("*");
 
-      if (normalizedType) {
-        query = query.eq("type", normalizedType);
-      }
+        if (normalizedType) {
+          allQuery = allQuery.eq("type", normalizedType);
+        }
 
-      if (limit) {
-        query = query.limit(limit);
+        // Fetch up to 10000 records for property filtering
+        const { data: allData, error: allError } = await allQuery
+          .limit(10000)
+          .order("created_at", { ascending: false });
+
+        if (allError) throw allError;
+
+        // Filter by properties and count
+        const propertyMatches = (allData || []).filter((rec: NeotomaRecord) => {
+          return Object.entries(properties).every(([key, value]) => {
+            const recValue = (rec.properties as Record<string, unknown>)[key];
+            return recValue === value;
+          });
+        });
+
+        totalCount = propertyMatches.length;
+        results = propertyMatches.slice(0, finalLimit);
       } else {
-        query = query.limit(100);
+        let countQuery = supabase
+          .from("records")
+          .select("*", { count: "exact", head: true });
+
+        if (normalizedType) {
+          countQuery = countQuery.eq("type", normalizedType);
+        }
+
+        const { count, error: countError } = await countQuery;
+
+        if (countError) {
+          throw countError;
+        }
+
+        totalCount = count || 0;
+
+        let query = supabase.from("records").select("*");
+
+        if (normalizedType) {
+          query = query.eq("type", normalizedType);
+        }
+
+        if (limit) {
+          query = query.limit(limit);
+        } else {
+          query = query.limit(100);
+        }
+
+        const { data, error } = await query.order("created_at", {
+          ascending: false,
+        });
+
+        if (error) throw error;
+
+        results = data || [];
       }
-
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
-
-      if (error) throw error;
-
-      results = data || [];
     }
 
-    // Filter by exact property matches
-    if (properties) {
+    // Filter by exact property matches (for search results)
+    if (properties && search) {
+      const beforeFilterCount = results.length;
       results = results.filter((rec: NeotomaRecord) => {
         return Object.entries(properties).every(([key, value]) => {
           const recValue = (rec.properties as Record<string, unknown>)[key];
           return recValue === value;
         });
       });
+      // Adjust total count based on property filtering for search results
+      if (beforeFilterCount > 0) {
+        const filterRatio = results.length / beforeFilterCount;
+        totalCount = Math.round(totalCount * filterRatio);
+      } else {
+        totalCount = results.length;
+      }
     }
 
     return {
-      content: [{ type: "text", text: JSON.stringify(results, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            { records: results, total: totalCount },
+            null,
+            2
+          ),
+        },
+      ],
     };
   }
 
@@ -1614,6 +1843,550 @@ export class NeotomaServer {
     });
   }
 
+  private async retrieveEntities(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_type: z.string().optional(),
+      limit: z.number().int().positive().default(100),
+      offset: z.number().int().nonnegative().default(0),
+      include_snapshots: z.boolean().default(true),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    // Get total count
+    let countQuery = supabase
+      .from("entities")
+      .select("*", { count: "exact", head: true });
+
+    if (parsed.entity_type) {
+      countQuery = countQuery.eq("entity_type", parsed.entity_type);
+    }
+
+    const { count, error: countError } = await countQuery;
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count entities: ${countError.message}`
+      );
+    }
+
+    // Get entities
+    const entities = await listEntities({
+      entity_type: parsed.entity_type,
+      limit: parsed.limit,
+      offset: parsed.offset,
+    });
+
+    // Optionally include snapshots
+    let entitiesWithSnapshots = entities;
+    if (parsed.include_snapshots && entities.length > 0) {
+      const entityIds = entities.map((e) => e.id);
+      const { data: snapshots, error: snapError } = await supabase
+        .from("entity_snapshots")
+        .select("*")
+        .in("entity_id", entityIds);
+
+      if (!snapError && snapshots) {
+        const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+        entitiesWithSnapshots = entities.map((entity) => ({
+          ...entity,
+          snapshot: snapshotMap.get(entity.id) || null,
+        }));
+      }
+    }
+
+    return this.buildTextResponse({
+      entities: entitiesWithSnapshots,
+      total: count || 0,
+    });
+  }
+
+  private async listTimelineEvents(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      event_type: z.string().optional(),
+      after_date: z.string().optional(),
+      before_date: z.string().optional(),
+      source_record_id: z.string().optional(),
+      limit: z.number().int().positive().default(100),
+      offset: z.number().int().nonnegative().default(0),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    let query = supabase.from("timeline_events").select("*");
+
+    if (parsed.event_type) {
+      query = query.eq("event_type", parsed.event_type);
+    }
+
+    if (parsed.after_date) {
+      query = query.gte("event_timestamp", parsed.after_date);
+    }
+
+    if (parsed.before_date) {
+      query = query.lte("event_timestamp", parsed.before_date);
+    }
+
+    if (parsed.source_record_id) {
+      query = query.eq("source_record_id", parsed.source_record_id);
+    }
+
+    // Get total count
+    let countQuery = supabase.from("timeline_events").select("*", {
+      count: "exact",
+      head: true,
+    });
+
+    if (parsed.event_type) {
+      countQuery = countQuery.eq("event_type", parsed.event_type);
+    }
+
+    if (parsed.after_date) {
+      countQuery = countQuery.gte("event_timestamp", parsed.after_date);
+    }
+
+    if (parsed.before_date) {
+      countQuery = countQuery.lte("event_timestamp", parsed.before_date);
+    }
+
+    if (parsed.source_record_id) {
+      countQuery = countQuery.eq("source_record_id", parsed.source_record_id);
+    }
+
+    const { count, error: countError } = await countQuery;
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count timeline events: ${countError.message}`
+      );
+    }
+
+    // Get events with pagination
+    const { data: events, error } = await query
+      .order("event_timestamp", { ascending: false })
+      .range(parsed.offset, parsed.offset + parsed.limit - 1);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to list timeline events: ${error.message}`
+      );
+    }
+
+    return this.buildTextResponse({
+      events: events || [],
+      total: count || 0,
+    });
+  }
+
+  private async getEntityByIdentifier(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      identifier: z.string(),
+      entity_type: z.string().optional(),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    // Normalize the identifier
+    const normalized = parsed.entity_type
+      ? normalizeEntityValue(parsed.entity_type, parsed.identifier)
+      : parsed.identifier.trim().toLowerCase();
+
+    // Search in entities table by canonical_name or aliases
+    let query = supabase
+      .from("entities")
+      .select("*")
+      .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
+
+    if (parsed.entity_type) {
+      query = query.eq("entity_type", parsed.entity_type);
+    }
+
+    const { data: entities, error } = await query.limit(100);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to search entities: ${error.message}`
+      );
+    }
+
+    // If no direct match, try generating entity ID to see if it exists
+    if ((!entities || entities.length === 0) && parsed.entity_type) {
+      const possibleId = generateEntityId(
+        parsed.entity_type,
+        parsed.identifier
+      );
+      const { data: entityById, error: idError } = await supabase
+        .from("entities")
+        .select("*")
+        .eq("id", possibleId)
+        .single();
+
+      if (!idError && entityById) {
+        return this.buildTextResponse({
+          entities: [entityById],
+          total: 1,
+        });
+      }
+    }
+
+    // Optionally include snapshots for found entities
+    let entitiesWithSnapshots = entities || [];
+    if (entitiesWithSnapshots.length > 0) {
+      const entityIds = entitiesWithSnapshots.map((e: Entity) => e.id);
+      const { data: snapshots, error: snapError } = await supabase
+        .from("entity_snapshots")
+        .select("*")
+        .in("entity_id", entityIds);
+
+      if (!snapError && snapshots) {
+        const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+        entitiesWithSnapshots = entitiesWithSnapshots.map((entity: Entity) => ({
+          ...entity,
+          snapshot: snapshotMap.get(entity.id) || null,
+        }));
+      }
+    }
+
+    return this.buildTextResponse({
+      entities: entitiesWithSnapshots,
+      total: entitiesWithSnapshots.length,
+    });
+  }
+
+  private async getRelatedEntities(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_id: z.string(),
+      relationship_types: z.array(z.string()).optional(),
+      direction: z.enum(["inbound", "outbound", "both"]).default("both"),
+      max_hops: z.number().int().positive().default(1),
+      include_entities: z.boolean().default(true),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const visited = new Set<string>([parsed.entity_id]);
+    const relatedEntityIds = new Set<string>();
+    const allRelationships: any[] = [];
+    let currentLevel = [parsed.entity_id];
+
+    // Traverse relationships up to max_hops
+    for (let hop = 0; hop < parsed.max_hops; hop++) {
+      const nextLevel: string[] = [];
+
+      for (const entityId of currentLevel) {
+        // Get outbound relationships
+        if (parsed.direction === "outbound" || parsed.direction === "both") {
+          let outboundQuery = supabase
+            .from("relationships")
+            .select("*")
+            .eq("source_entity_id", entityId);
+
+          if (
+            parsed.relationship_types &&
+            parsed.relationship_types.length > 0
+          ) {
+            outboundQuery = outboundQuery.in(
+              "relationship_type",
+              parsed.relationship_types
+            );
+          }
+
+          const { data: outbound, error: outError } = await outboundQuery;
+
+          if (!outError && outbound) {
+            allRelationships.push(...outbound);
+            for (const rel of outbound) {
+              if (!visited.has(rel.target_entity_id)) {
+                visited.add(rel.target_entity_id);
+                relatedEntityIds.add(rel.target_entity_id);
+                nextLevel.push(rel.target_entity_id);
+              }
+            }
+          }
+        }
+
+        // Get inbound relationships
+        if (parsed.direction === "inbound" || parsed.direction === "both") {
+          let inboundQuery = supabase
+            .from("relationships")
+            .select("*")
+            .eq("target_entity_id", entityId);
+
+          if (
+            parsed.relationship_types &&
+            parsed.relationship_types.length > 0
+          ) {
+            inboundQuery = inboundQuery.in(
+              "relationship_type",
+              parsed.relationship_types
+            );
+          }
+
+          const { data: inbound, error: inError } = await inboundQuery;
+
+          if (!inError && inbound) {
+            allRelationships.push(...inbound);
+            for (const rel of inbound) {
+              if (!visited.has(rel.source_entity_id)) {
+                visited.add(rel.source_entity_id);
+                relatedEntityIds.add(rel.source_entity_id);
+                nextLevel.push(rel.source_entity_id);
+              }
+            }
+          }
+        }
+      }
+
+      if (nextLevel.length === 0) break;
+      currentLevel = nextLevel;
+    }
+
+    // Get entity details if requested
+    let entities: any[] = [];
+    if (parsed.include_entities && relatedEntityIds.size > 0) {
+      const { data: entityData, error: entityError } = await supabase
+        .from("entities")
+        .select("*")
+        .in("id", Array.from(relatedEntityIds));
+
+      if (!entityError && entityData) {
+        entities = entityData;
+
+        // Include snapshots
+        const { data: snapshots, error: snapError } = await supabase
+          .from("entity_snapshots")
+          .select("*")
+          .in("entity_id", Array.from(relatedEntityIds));
+
+        if (!snapError && snapshots) {
+          const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+          entities = entities.map((entity) => ({
+            ...entity,
+            snapshot: snapshotMap.get(entity.id) || null,
+          }));
+        }
+      }
+    }
+
+    return this.buildTextResponse({
+      entities,
+      relationships: allRelationships,
+      total_entities: relatedEntityIds.size,
+      total_relationships: allRelationships.length,
+      hops_traversed: Math.min(
+        parsed.max_hops,
+        Array.from(visited).length > 1 ? 1 : 0
+      ),
+    });
+  }
+
+  private async getGraphNeighborhood(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      node_id: z.string(),
+      node_type: z.enum(["entity", "record"]).default("entity"),
+      include_relationships: z.boolean().default(true),
+      include_records: z.boolean().default(true),
+      include_events: z.boolean().default(true),
+      include_observations: z.boolean().default(false),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const result: any = {
+      node_id: parsed.node_id,
+      node_type: parsed.node_type,
+    };
+
+    if (parsed.node_type === "entity") {
+      // Get entity
+      const { data: entity, error: entityError } = await supabase
+        .from("entities")
+        .select("*")
+        .eq("id", parsed.node_id)
+        .single();
+
+      if (entityError || !entity) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Entity not found: ${parsed.node_id}`
+        );
+      }
+
+      result.entity = entity;
+
+      // Get entity snapshot
+      const { data: snapshot, error: snapError } = await supabase
+        .from("entity_snapshots")
+        .select("*")
+        .eq("entity_id", parsed.node_id)
+        .single();
+
+      if (!snapError && snapshot) {
+        result.entity_snapshot = snapshot;
+      }
+
+      // Get relationships
+      if (parsed.include_relationships) {
+        const { data: relationships, error: relError } = await supabase
+          .from("relationships")
+          .select("*")
+          .or(
+            `source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`
+          );
+
+        if (!relError && relationships) {
+          result.relationships = relationships;
+          const relatedEntityIds = new Set<string>();
+          relationships.forEach((rel) => {
+            if (rel.source_entity_id !== parsed.node_id) {
+              relatedEntityIds.add(rel.source_entity_id);
+            }
+            if (rel.target_entity_id !== parsed.node_id) {
+              relatedEntityIds.add(rel.target_entity_id);
+            }
+          });
+
+          // Get related entities
+          if (relatedEntityIds.size > 0) {
+            const { data: relatedEntities, error: relEntError } = await supabase
+              .from("entities")
+              .select("*")
+              .in("id", Array.from(relatedEntityIds));
+
+            if (!relEntError && relatedEntities) {
+              result.related_entities = relatedEntities;
+            }
+          }
+        }
+      }
+
+      // Get observations
+      if (parsed.include_observations) {
+        const { data: observations, error: obsError } = await supabase
+          .from("observations")
+          .select("*")
+          .eq("entity_id", parsed.node_id)
+          .order("observed_at", { ascending: false })
+          .limit(100);
+
+        if (!obsError && observations) {
+          result.observations = observations;
+
+          // Get source records for observations
+          if (parsed.include_records && observations.length > 0) {
+            const recordIds = observations
+              .map((obs: any) => obs.source_record_id)
+              .filter((id: string) => id);
+            if (recordIds.length > 0) {
+              const { data: records, error: recError } = await supabase
+                .from("records")
+                .select("*")
+                .in("id", recordIds);
+
+              if (!recError && records) {
+                result.related_records = records;
+
+                // Get events for these records
+                if (parsed.include_events) {
+                  const { data: events, error: evtError } = await supabase
+                    .from("timeline_events")
+                    .select("*")
+                    .in("source_record_id", recordIds);
+
+                  if (!evtError && events) {
+                    result.timeline_events = events;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // node_type === "record"
+      const { data: record, error: recordError } = await supabase
+        .from("records")
+        .select("*")
+        .eq("id", parsed.node_id)
+        .single();
+
+      if (recordError || !record) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          `Record not found: ${parsed.node_id}`
+        );
+      }
+
+      result.record = record;
+
+      // Get timeline events for this record
+      if (parsed.include_events) {
+        const { data: events, error: evtError } = await supabase
+          .from("timeline_events")
+          .select("*")
+          .eq("source_record_id", parsed.node_id);
+
+        if (!evtError && events) {
+          result.timeline_events = events;
+        }
+      }
+
+      // Get observations from this record
+      const { data: observations, error: obsError } = await supabase
+        .from("observations")
+        .select("*")
+        .eq("source_record_id", parsed.node_id);
+
+      if (!obsError && observations) {
+        result.observations = observations;
+
+        // Get entities mentioned in observations
+        if (observations.length > 0) {
+          const entityIds = observations
+            .map((obs: any) => obs.entity_id)
+            .filter((id: string) => id);
+          if (entityIds.length > 0) {
+            const { data: entities, error: entError } = await supabase
+              .from("entities")
+              .select("*")
+              .in("id", entityIds);
+
+            if (!entError && entities) {
+              result.related_entities = entities;
+
+              // Get relationships for these entities
+              if (parsed.include_relationships && entities.length > 0) {
+                const { data: relationships, error: relError } = await supabase
+                  .from("relationships")
+                  .select("*")
+                  .or(
+                    `source_entity_id.in.(${entityIds.join(
+                      ","
+                    )}),target_entity_id.in.(${entityIds.join(",")})`
+                  )
+                  .limit(1000);
+
+                if (!relError && relationships) {
+                  result.relationships = relationships;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return this.buildTextResponse(result);
+  }
+
   private setupErrorHandler(): void {
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
@@ -1628,6 +2401,6 @@ export class NeotomaServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("MCP Server running on stdio");
+    console.error("[Neotoma MCP] Server running on stdio");
   }
 }

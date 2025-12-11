@@ -301,6 +301,9 @@ All strategy/execution code MUST follow these patterns:
 - No direct mutations
 - Reducers MUST be deterministic and pure
 - Domain Events are the only source of truth changes
+- **Immutable audit trail:** Every change permanently recorded with full provenance
+- **Historical replay:** Complete event log enables time-travel queries (view record state at any point in time)
+- **Cryptographic integrity:** Hash chaining ensures deterministic, tamper-evident records
 
 ### 1.7.4 Ports & Adapters Architecture
 
@@ -324,11 +327,13 @@ Adapters for:
 - Constraints (limits, expiry, scopes) verified before accepting events
 - Replace static whitelists
 
-### 1.7.6 Hash-Chained Event Log (optional scaffolding)
+### 1.7.6 Hash-Chained Event Log (cryptographic integrity)
 
-- Events optionally include `previousHash` + `hash`
-- Ensures long-term audit integrity
-- Enables future on-chain anchoring
+- Events include `previous_event_hash` + `event_hash` for cryptographic integrity
+- Ensures deterministic, tamper-evident records with immutable audit trail
+- Enables historical replay and time-travel queries (view record state at any point in time)
+- Hash-based entity IDs provide canonical, deterministic identification across all personal data
+- Foundation for future blockchain anchoring (optional)
 
 ---
 

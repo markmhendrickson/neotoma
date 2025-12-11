@@ -723,15 +723,114 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 
 ---
 
-### 6. Content Teasers
+### 6. MCP Directory Listings
 
-#### 5.1 Timeline and Formats
+#### 6.1 Timeline and Targets
+
+- **Timeline**: Week -3 to Week 0
+- **Target Directories**:
+  - **Primary MCP Directories**:
+    - [Model Context Protocol Directory](https://model-context-protocol.com/) — Official MCP directory
+    - [Open MCP Directory](https://www.openmcpdirectory.com/) — Comprehensive daily-updated listing
+    - [MCP Store](https://www.mcpstore.site/) — Curated MCP servers and clients
+    - [MCP Ecosystem Directory](https://mcpez.com/) — 11,790+ MCP servers repository
+    - [MCP Index](https://mcpindex.net/) — Curated collection with real-time updates
+    - [MCP Curator](https://www.mcpcurator.com/) — 846+ MCP tools organized by category
+    - [MCP Directory](https://directorymcp.com/) — Centralized resource listing
+    - [MCP Server Directory](https://www.mcpdirectory.info/) — Browse/search/filter platform
+    - [MCP Server Directory](https://mcpserverdirectory.org/) — 2,500+ MCP resources
+    - [FindMCPs](https://findmcps.com/) — Comprehensive discovery platform
+  - **Secondary Directories**:
+    - GitHub awesome-mcp-servers (if applicable)
+    - MCP community showcases
+
+#### 6.2 Submission Strategy
+
+**Week -3**:
+
+- Research submission requirements for each directory
+- Prepare Neotoma MCP server listing materials:
+  - Server name: "Neotoma"
+  - Description: "Privacy-first deterministic truth layer for AI memory via MCP. Schema-first extraction, entity resolution, timelines, and cross-platform access (ChatGPT, Claude, Cursor)."
+  - Category: Memory / Personal Data / Privacy
+  - Features: File upload, record storage, entity resolution, timeline generation, MCP integration
+  - Website: https://neotoma.io (or landing page)
+  - GitHub: https://github.com/neotoma/neotoma
+  - Documentation: Link to MCP setup docs
+  - Tags: privacy-first, deterministic, entity-resolution, timelines, mcp-integration
+
+**Week -2**:
+
+- Submit to primary MCP directories (model-context-protocol.com, openmcpdirectory.com, mcpstore.site, mcpez.com)
+- Ensure MCP server is functional and documented
+- Test MCP integration with Claude Desktop, Cursor, ChatGPT
+
+**Week -1**:
+
+- Submit to secondary MCP directories (mcpindex.net, mcpcurator.com, directorymcp.com, mcpdirectory.info, mcpserverdirectory.org, findmcps.com)
+- Follow up on pending submissions
+- Verify listings are live
+
+**Week 0**:
+
+- Final verification of all directory listings
+- Update listings with launch announcement
+- Monitor directory traffic/referrals
+
+#### 6.3 Submission Requirements
+
+**Common Requirements**:
+
+- MCP server name and description
+- Category/classification
+- Features and capabilities
+- Website/GitHub links
+- Documentation link
+- Installation/setup instructions
+- Example use cases
+- Tags/keywords
+
+**Neotoma-Specific Materials**:
+
+- **Description**: "Privacy-first deterministic truth layer that transforms personal documents into structured memory for AI agents via MCP. Features schema-first extraction, entity resolution, timeline generation, and cross-platform access (ChatGPT, Claude, Cursor)."
+- **Key Features**:
+  - Privacy-first architecture (user-controlled, no provider access)
+  - Deterministic schema-first extraction
+  - Entity resolution across documents
+  - Timeline generation from date fields
+  - MCP integration (ChatGPT, Claude, Cursor)
+  - Dual-path ingestion (file uploads + agent interactions)
+- **Use Cases**: Personal document memory, invoice/receipt tracking, contract management, cross-platform AI memory
+- **Tags**: privacy-first, deterministic, entity-resolution, timelines, mcp-integration, personal-data, memory
+
+#### 6.4 Goals
+
+- Increase visibility in MCP ecosystem
+- Generate referral traffic from directory listings
+- Establish Neotoma as recognized MCP server
+- Build backlinks for SEO
+- Reach AI-Native Individual Operators discovering MCP tools
+
+#### 6.5 Metrics
+
+| Metric                      | Target | Tracking                             |
+| --------------------------- | ------ | ------------------------------------ |
+| Directory listings approved | 8      | Manual tracking (submission status)  |
+| Directory referral traffic  | 100    | Website analytics (referral sources) |
+| Directory to waitlist rate  | 5%     | UTM tracking (directory source)      |
+| Directory to signup rate    | 2%     | UTM tracking (directory source)      |
+
+---
+
+### 7. Content Teasers
+
+#### 7.1 Timeline and Formats
 
 - **Timeline**: Week -2 to Week 0
 - **Formats**: Blog posts (on personal website), demo video, Twitter threads, LinkedIn posts
 - **Distribution**: Personal accounts and website
 
-#### 5.2 Content Pieces
+#### 7.2 Content Pieces
 
 **Blog Posts** (on personal website):
 
@@ -760,7 +859,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Thought leadership content
 - Use case examples
 
-#### 5.3 Content Distribution Strategy
+#### 7.3 Content Distribution Strategy
 
 **Blog Posts**:
 
@@ -794,7 +893,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Professional framing
 - Engage with comments
 
-#### 5.4 Goals
+#### 7.4 Goals
 
 - Awareness building
 - Waitlist conversion
@@ -802,7 +901,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Personal brand building
 - Community engagement
 
-#### 5.5 Metrics
+#### 7.5 Metrics
 
 | Metric                    | Target                                 | Tracking                                 |
 | ------------------------- | -------------------------------------- | ---------------------------------------- |
@@ -815,7 +914,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 
 ---
 
-### 7. Success Criteria
+### 8. Success Criteria
 
 **Waitlist & Beta**:
 
@@ -830,6 +929,12 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - ≥500 demo video views
 - ≥5% content to waitlist conversion rate
 - ≥50 content shares (organic)
+
+**Directory Listings**:
+
+- ≥8 MCP directory listings approved
+- ≥100 directory referral visits
+- ≥5 waitlist signups from directory listings
 
 **Social Media Performance**:
 
@@ -857,9 +962,9 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 
 ---
 
-### 8. Agent-Based Automation
+### 9. Agent-Based Automation
 
-#### 7.1 Content Generation Automation
+#### 9.1 Content Generation Automation
 
 **Strategy**: Use AI agents (Claude/ChatGPT via MCP or direct API) to generate content drafts based on marketing schedule.
 
@@ -910,16 +1015,16 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Agent generates drafts, human reviews and publishes
 - Focus human time on review, refinement, and community engagement
 
-#### 7.2 Scheduling Automation (Post-MVP)
+#### 9.2 Scheduling Automation (Post-MVP)
 
 **Future**: Automated scheduling and publishing agents (see `marketing_automation_plan.md`)
 
 ---
 
-### 9. Budget
+### 10. Budget
 
 - **Total**: $0 (organic only)
-- **Time Investment**: ~30 hours with agent automation (down from ~60 hours)
+- **Time Investment**: ~35 hours with agent automation (down from ~60 hours)
   - Agent content generation: ~5 hours (prompting, reviewing, refining)
   - Twitter/X threads: ~5 hours (agent drafts + review + publishing)
   - Blog posts: ~8 hours (agent drafts + review + editing + publishing)
@@ -929,11 +1034,12 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
   - Website updates: ~3 hours (setup, optimization)
   - Community engagement: ~5 hours (daily engagement across platforms)
   - Personal network outreach: ~5 hours (messages, emails, follow-ups)
+  - MCP directory listings: ~5 hours (research, submission, follow-up)
 - **Agent Costs**: ~$10-20/month (Claude/ChatGPT API for content generation)
 
 ---
 
-### 10. Related Documents
+### 11. Related Documents
 
 - `marketing_plan.md` — Marketing overview and coordination
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
