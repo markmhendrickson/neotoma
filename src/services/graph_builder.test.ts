@@ -303,7 +303,7 @@ describe("Graph Builder Service", () => {
 
       testRecordIds.push(record!.id);
 
-      // Create an orphan event
+      // Create an orphan event (event with no record_event_edges)
       const { data: event } = await supabase
         .from("timeline_events")
         .insert({
@@ -317,6 +317,9 @@ describe("Graph Builder Service", () => {
         .single();
 
       testEventIds.push(event!.id);
+
+      // Don't create record_event_edges - this makes it an orphan event
+      // (events should always have edges connecting them to records)
 
       const result = await validateGraphIntegrity();
 
@@ -373,4 +376,3 @@ describe("Graph Builder Service", () => {
     });
   });
 });
-

@@ -57,6 +57,7 @@ These differentiators are defensible because competitors find them structurally 
    - Schema-first field extraction with deterministic, explainable results
    - Same input always produces same output (reproducible)
    - No hallucinations or probabilistic behavior
+   - Hash-based entity IDs ensure deterministic, tamper-evident records
    - **Why Defensible:** Providers cannot pursue this due to ML-first organizational identity. Startups cannot pursue this due to speed-to-market constraints.
 
 3. **Cross-Platform Access (MCP Integration)**
@@ -69,11 +70,13 @@ These differentiators are defensible because competitors find them structurally 
 These features are valuable but not defensible alone (competitors are developing similar capabilities):
 
 - **Dual-path ingestion:** File uploads + agent interactions via MCP (not conversation-only)
-- **Entity resolution:** Deterministic hash-based canonical IDs across all personal data
+- **Entity resolution:** Deterministic hash-based canonical IDs across all personal data with cryptographic integrity
 - **Timeline generation:** Deterministic automatic chronological ordering across all personal data
 - **Multi-modal ingestion:** PDFs, images, OCR, agent interactions
 - **Full provenance:** Every field traces to source (document or agent interaction)
-- **Immutability:** Truth never changes
+- **Immutability:** Truth never changes; immutable audit trail with cryptographic integrity
+- **Event-sourced history:** Complete event log enables historical replay and time-travel queries
+- **Cryptographic integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 - **Type-stable graph:** No orphans, no cycles, typed edges
 
 **Strategic Positioning:** Neotoma combines defensible differentiators (privacy-first, deterministic, cross-platform) with feature capabilities (entity resolution, timelines, dual-path ingestion). Competitors can replicate features but cannot pursue the same architectural choices due to structural constraints.

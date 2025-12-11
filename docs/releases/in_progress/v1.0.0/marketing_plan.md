@@ -36,18 +36,18 @@ This document provides the overview and coordination framework for v1.0.0 market
 **See `pre_launch_marketing_plan.md` for complete details.**
 
 - **Timeline**: Week -4 to Week 0
-- **Tactics**: Waitlist building, early access beta, content teasers, competitor follower outreach
+- **Tactics**: Waitlist building, early access beta, content teasers, competitor follower outreach, MCP directory listings
 - **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
-- **Success Criteria**: ≥100 waitlist signups, ≥25 beta participants, ≥70% beta activation rate, ≥10 waitlist signups from competitor outreach
+- **Success Criteria**: ≥100 waitlist signups, ≥25 beta participants, ≥70% beta activation rate, ≥10 waitlist signups from competitor outreach, ≥8 MCP directory listings approved
 
 #### 2.2 Post-Launch Marketing
 
 **See `post_launch_marketing_plan.md` for complete details.**
 
 - **Timeline**: Day 0 to Week 4
-- **Tactics**: Launch announcement, waitlist conversion, organic growth, partnership outreach, competitor follower outreach
+- **Tactics**: Launch announcement, waitlist conversion, organic growth, partnership outreach (MCP directories, AI tool directories), competitor follower outreach
 - **Reengagement**: Onboarding nudges, usage tips campaign
-- **Success Criteria**: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate, ≥20 organic signups from competitor outreach
+- **Success Criteria**: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate, ≥20 organic signups from competitor outreach, ≥10 MCP directory listings, ≥30 directory referral signups
 
 #### 2.3 User Segments
 

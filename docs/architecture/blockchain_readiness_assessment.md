@@ -258,42 +258,66 @@ With event-sourcing foundation in place, MVP will support:
 
 ### Core Functionality
 
-1. **Event Replay**
+**Primary: Entity Historical State (Most Important)**
 
-   ```typescript
-   // Replay all events for a record to reconstruct current state
-   const record = await replayEvents(recordId);
+Entities are the primary unit of truth and evolve over time as new observations arrive. Historical entity state inspection enables understanding how entities changed across multiple sources:
 
-   // Replay events up to a specific timestamp
-   const recordAtTime = await replayEvents(recordId, "2024-01-15T10:00:00Z");
-   ```
+```typescript
+// Get entity snapshot at specific point in time
+// Filters observations up to timestamp and recomputes snapshot
+const entityAtTime = await getEntitySnapshotAtTimestamp(
+  entityId,
+  "2024-01-15T10:00:00Z"
+);
 
-2. **Historical State Retrieval**
+// List observations up to timestamp to see what contributed to historical state
+const observations = await listObservations(entityId, {
+  upToTimestamp: "2024-01-15T10:00:00Z",
+});
+```
 
-   ```typescript
-   // Get record state at specific point in time
-   const record = await getRecordAtTimestamp(recordId, "2024-01-15T10:00:00Z");
-   ```
+**Why Entity Historical State Matters:**
 
-3. **Event History API**
+- Entities merge information from multiple documents over time
+- Understanding entity evolution (how a company's address changed, how a person's role evolved) is core to reasoning
+- Agents query entities, not individual records
+- Entity-centric architecture means historical entity state is the primary use case
 
-   ```typescript
-   // Get all events for a record (chronological)
-   GET /api/records/:id/history
-   // Returns: [{ event_type, timestamp, payload, ... }, ...]
+**Secondary: Record Historical State**
 
-   // Get record state at specific timestamp
-   GET /api/records/:id?at=2024-01-15T10:00:00Z
-   // Returns: Record state as it existed at that time
-   ```
+Records are mostly static once ingested (they're evidence nodes), but historical replay is available for audit:
+
+```typescript
+// Replay all events for a record to reconstruct current state
+const record = await replayEvents(recordId);
+
+// Replay events up to a specific timestamp
+const recordAtTime = await replayEvents(recordId, "2024-01-15T10:00:00Z");
+
+// Get record state at specific point in time
+const record = await getRecordAtTimestamp(recordId, "2024-01-15T10:00:00Z");
+```
+
+**Event History API**
+
+```typescript
+// Get all events for a record (chronological)
+GET /api/records/:id/history
+// Returns: [{ event_type, timestamp, payload, ... }, ...]
+
+// Get record state at specific timestamp
+GET /api/records/:id?at=2024-01-15T10:00:00Z
+// Returns: Record state as it existed at that time
+```
 
 ### Use Cases Enabled
 
-- **Audit Trail**: See complete history of changes to any record
-- **Time Travel**: View record state at any point in time
-- **Undo/Redo**: Replay events to different states (foundation for undo)
-- **Debugging**: Trace how record state evolved over time
+- **Entity Evolution**: See how entities changed over time as new observations arrived (primary use case)
+- **Audit Trail**: See complete history of changes to any record or entity
+- **Time Travel**: View entity state at any point in time to understand historical truth
+- **Debugging**: Trace how entity truth evolved over time across multiple sources
 - **Compliance**: Full audit log of all modifications
+- **Undo/Redo**: Replay events to different states (foundation for undo)
 
 ### Implementation Notes
 

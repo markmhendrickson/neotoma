@@ -247,14 +247,15 @@ async function getFieldProvenance(
 }
 ```
 
-### 4.3 Timeline View
+### 4.3 Timeline View (Primary Historical Inspection)
 
-Provenance enables timeline view:
+Provenance enables timeline view—the primary way to understand entity evolution:
 
-- Shows how entity properties changed over time
-- Tracks corrections and updates
+- Shows how entity properties changed over time as new observations arrived
+- Tracks corrections and updates across multiple documents
 - Shows source priority and specificity
 - Enables "why did this value change?" queries
+- **Historical entity state is more important than record historical state** — entities are the primary unit of truth that agents query and reason about
 
 ---
 
@@ -275,7 +276,7 @@ Observations integrate with event-sourcing:
 
 - **Observation Creation:** Emits `ObservationCreated` event
 - **Snapshot Computation:** Emits `SnapshotComputed` event
-- **Historical Replay:** Observations can be replayed to recompute snapshots
+- **Historical Replay (Primary):** Observations can be replayed to recompute entity snapshots at any point in time—this is the primary historical inspection capability since entities evolve over time as new observations arrive
 
 **Event Emission:**
 

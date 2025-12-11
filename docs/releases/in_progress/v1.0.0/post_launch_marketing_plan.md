@@ -176,26 +176,73 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 
 #### 5.1 Timeline and Targets
 
-- **Timeline**: Week 2 to Week 4
+- **Timeline**: Week 1 to Week 4
 - **Targets**:
-  - AI tool directories (There's An AI For That, Future Tools, AI Tools)
-  - MCP showcase / MCP tool listings
-  - Productivity communities (Notion, Obsidian, Roam)
-  - Indie hacker podcasts / newsletters
+  - **MCP Directories** (Primary):
+    - [Model Context Protocol Directory](https://model-context-protocol.com/) — Official MCP directory
+    - [Open MCP Directory](https://www.openmcpdirectory.com/) — Comprehensive daily-updated listing
+    - [MCP Store](https://www.mcpstore.site/) — Curated MCP servers and clients
+    - [MCP Ecosystem Directory](https://mcpez.com/) — 11,790+ MCP servers repository
+    - [MCP Index](https://mcpindex.net/) — Curated collection with real-time updates
+    - [MCP Curator](https://www.mcpcurator.com/) — 846+ MCP tools organized by category
+    - [MCP Directory](https://directorymcp.com/) — Centralized resource listing
+    - [MCP Server Directory](https://www.mcpdirectory.info/) — Browse/search/filter platform
+    - [MCP Server Directory](https://mcpserverdirectory.org/) — 2,500+ MCP resources
+    - [FindMCPs](https://findmcps.com/) — Comprehensive discovery platform
+  - **AI Tool Directories** (Secondary):
+    - There's An AI For That
+    - Future Tools
+    - AI Tools
+    - Product Hunt (already in launch sequence)
+  - **Productivity Communities**:
+    - Notion community
+    - Obsidian community
+    - Roam community
+  - **Indie Hacker Resources**:
+    - Indie hacker podcasts
+    - Indie hacker newsletters
 
-#### 5.2 Goals
+#### 5.2 Submission Strategy
 
-- Referral signups
-- Backlinks
-- Directory visibility
+**Week 1**:
 
-#### 5.3 Metrics
+- Verify all MCP directory listings from pre-launch are live
+- Update MCP directory listings with launch announcement and v1.0.0 features
+- Submit to any MCP directories missed in pre-launch
+- Submit to AI tool directories (There's An AI For That, Future Tools, AI Tools)
 
-| Metric             | Target | Tracking                            |
-| ------------------ | ------ | ----------------------------------- |
-| Directory listings | 5      | Manual tracking                     |
-| Referral signups   | 20     | Signup analytics (referral sources) |
-| Backlinks acquired | 10     | Ahrefs or manual tracking           |
+**Week 2**:
+
+- Submit to productivity communities (Notie, Obsidian, Roam)
+- Reach out to indie hacker podcasts/newsletters
+- Follow up on pending directory submissions
+- Monitor directory referral traffic
+
+**Week 3-4**:
+
+- Continue monitoring directory performance
+- Update directory listings with user testimonials/case studies
+- Optimize directory listings based on performance data
+- Build relationships with directory maintainers
+
+#### 5.3 Goals
+
+- Referral signups from directory listings
+- Backlinks for SEO
+- Directory visibility in MCP ecosystem
+- Establish Neotoma as recognized MCP server
+- Reach AI-Native Individual Operators discovering MCP tools
+
+#### 5.4 Metrics
+
+| Metric                     | Target | Tracking                              |
+| -------------------------- | ------ | ------------------------------------- |
+| MCP directory listings     | 10     | Manual tracking (all MCP directories) |
+| AI tool directory listings | 3      | Manual tracking                       |
+| Directory referral signups | 30     | Signup analytics (referral sources)   |
+| Directory referral traffic | 500    | Website analytics (referral sources)  |
+| Directory to signup rate   | 6%     | UTM tracking (directory source)       |
+| Backlinks acquired         | 15     | Ahrefs or manual tracking             |
 
 ---
 

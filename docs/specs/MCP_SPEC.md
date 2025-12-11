@@ -439,16 +439,35 @@ flowchart LR
 **Use Cases:**
 
 - Get current state of an entity (company, person, invoice)
+- **Historical state (primary):** Get entity state at any point in time by filtering observations up to a timestamp and recomputing snapshot—enables understanding how entities evolved as new observations arrived
 - Trace which documents contributed to current truth
-- Understand how multiple sources were merged
+- Understand how multiple sources were merged over time
+- See how entity properties changed across multiple documents (e.g., company address updates, person role changes)
 
 **Request Schema:**
 
 ```typescript
 {
   entity_id: string; // Required: Entity ID (hash-based)
+  at?: string; // Optional: ISO 8601 timestamp to get historical snapshot state
 }
 ```
+
+**Historical State (Primary Use Case):**
+
+Entity historical state inspection is more important than record historical state because:
+
+- **Entities are the primary unit of truth** — agents query and reason about entities, not individual records
+- **Entities evolve over time** — they merge information from multiple documents as new observations arrive
+- **Understanding entity evolution is core to reasoning** — seeing how a company's address changed or a person's role evolved across time
+
+To get historical entity state:
+
+1. Filter observations up to a timestamp using `list_observations` with `observed_at <= timestamp`
+2. Recompute the snapshot from those observations using the reducer
+3. This shows what the entity truth was at that point in time
+
+**Future Enhancement:** Add optional `at` parameter to `get_entity_snapshot` to directly return historical entity state, mirroring `getRecordAtTimestamp` but prioritizing entities as the primary historical inspection target.
 
 **Response Schema:**
 
