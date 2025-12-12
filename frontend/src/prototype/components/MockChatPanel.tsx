@@ -180,3 +180,6 @@ export function MockChatPanel({ onRecordClick }: MockChatPanelProps) {
 
 
 
+
+
+

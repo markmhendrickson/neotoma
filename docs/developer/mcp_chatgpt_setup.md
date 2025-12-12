@@ -245,3 +245,6 @@ curl http://localhost:8080/openapi.yaml
 - **HTTP Actions Server:** `src/actions.ts`
 - **Getting Started Guide:** `docs/developer/getting_started.md`
 - **Cursor MCP Setup:** `docs/developer/mcp_cursor_setup.md`
+
+
+

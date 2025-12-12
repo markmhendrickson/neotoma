@@ -1,5 +1,6 @@
 # Development Workflow Guide
-*(Git Workflow, Branch Strategy, and PR Process)*
+
+_(Git Workflow, Branch Strategy, and PR Process)_
 
 ---
 
@@ -12,6 +13,7 @@ This document defines the development workflow for Neotoma, including git branch
 ## Scope
 
 This document covers:
+
 - Git branch naming and strategy
 - Pull request creation and review process
 - Code review criteria
@@ -19,6 +21,7 @@ This document covers:
 - Feature Unit integration workflow
 
 This document does NOT cover:
+
 - Local environment setup (see `docs/developer/getting_started.md`)
 - Feature Unit specification (see `docs/feature_units/standards/feature_unit_spec.md`)
 - Deployment procedures (see `docs/infrastructure/deployment.md`)
@@ -35,16 +38,19 @@ This document does NOT cover:
 ### Feature Branches
 
 **Naming Convention:**
+
 ```
 feature/FU-XXX-short-description
 ```
 
 Examples:
+
 - `feature/FU-101-entity-resolution`
 - `feature/FU-400-timeline-view`
 - `feature/FU-702-billing-integration`
 
 **Rules:**
+
 - Branch from `dev` (not `main`)
 - One Feature Unit per branch (atomic changes)
 - Descriptive names matching Feature Unit ID
@@ -52,22 +58,26 @@ Examples:
 ### Bugfix Branches
 
 **Naming Convention:**
+
 ```
 bugfix/FU-XXX-issue-description
 ```
 
 Examples:
+
 - `bugfix/FU-101-deterministic-entity-ids`
 - `bugfix/FU-400-timeline-sorting`
 
 ### Hotfix Branches
 
 **Naming Convention:**
+
 ```
 hotfix/critical-issue-description
 ```
 
 **Rules:**
+
 - Branch from `main` (for production fixes)
 - Merge to both `main` and `dev`
 - Use sparingly (only for critical production issues)
@@ -112,6 +122,7 @@ git push -u origin feature/FU-XXX-short-description
 ```
 
 **Benefits of Worktrees:**
+
 - **Isolation:** Each Feature Unit has its own `node_modules`, `.env`, and build artifacts
 - **Parallel Development:** Work on multiple Feature Units simultaneously without conflicts
 - **Clean Context Switching:** Each worktree is independent
@@ -136,18 +147,21 @@ git push -u origin feature/FU-XXX-short-description
 ### Step 2: Implement Feature Unit
 
 1. **Load relevant documentation:**
-   - `docs/NEOTOMA_MANIFEST.md` — Foundational principles
-   - `docs/context/index.md` — Navigation guide
+
+   - `docs/NEOTOMA_MANIFEST.md`: Foundational principles
+   - `docs/context/index.md`: Navigation guide
    - Feature Unit spec (if exists in `docs/feature_units/completed/`)
    - Relevant subsystem docs
 
 2. **Write code following:**
+
    - Architecture layer boundaries (see `docs/architecture/architecture.md`)
    - Determinism rules (see `docs/architecture/determinism.md`)
    - Error handling (see `docs/subsystems/errors.md`)
    - Testing standards (see `docs/testing/testing_standard.md`)
 
 3. **Write tests:**
+
    - Unit tests for pure functions
    - Integration tests for services
    - E2E tests for UI flows (if applicable)
@@ -162,6 +176,7 @@ git push -u origin feature/FU-XXX-short-description
 ### Step 3: Commit Changes
 
 **Commit Message Format:**
+
 ```
 FU-XXX: Brief description
 
@@ -172,6 +187,7 @@ References: docs/specs/MVP_FEATURE_UNITS.md
 ```
 
 **Examples:**
+
 ```
 FU-101: Implement entity resolution
 
@@ -184,6 +200,7 @@ References: docs/specs/MVP_FEATURE_UNITS.md
 ```
 
 **Commit Rules:**
+
 - One logical change per commit
 - Reference Feature Unit ID in message
 - Include "References:" line pointing to relevant docs
@@ -200,38 +217,46 @@ gh pr create --base dev --title "FU-XXX: Feature Description" --body "PR body"
 ```
 
 **PR Title Format:**
+
 ```
 FU-XXX: Feature Description
 ```
 
 **PR Body Template:**
+
 ```markdown
 ## Feature Unit
+
 - **ID**: FU-XXX
 - **Priority**: P0/P1/P2
 - **Spec**: [Link to spec if exists]
 
 ## Changes
+
 - Change 1
 - Change 2
 
 ## Testing
+
 - [ ] Unit tests added/updated
 - [ ] Integration tests added/updated
 - [ ] E2E tests added/updated (if UI)
 - [ ] All tests passing locally
 
 ## Documentation
+
 - [ ] Code comments added
 - [ ] Subsystem docs updated (if patterns changed)
 - [ ] Feature Unit spec updated (if Class 1 error found)
 
 ## Risk Assessment
+
 - **Risk Level**: Low/Medium/High (see `docs/private/governance/risk_classification.md`)
 - **Breaking Changes**: Yes/No
 - **Migration Required**: Yes/No
 
 ## Checklist
+
 - [ ] Follows architectural layer boundaries
 - [ ] Maintains determinism (same input → same output)
 - [ ] Error handling uses ErrorEnvelope
@@ -246,18 +271,22 @@ FU-XXX: Feature Description
 ### Review Criteria
 
 **MUST Verify:**
+
 1. **Architectural Compliance:**
+
    - Respects layer boundaries (no upward dependencies)
    - Follows determinism rules
    - Maintains Truth Layer purity (no strategy/execution logic)
 
 2. **Code Quality:**
+
    - TypeScript types are correct
    - Error handling is structured (ErrorEnvelope)
    - No PII in logs or error messages
    - Tests cover critical paths
 
 3. **Documentation:**
+
    - Code is commented where complex
    - Subsystem docs updated if patterns changed
    - Feature Unit spec updated if Class 1 errors found
@@ -289,12 +318,14 @@ FU-XXX: Feature Description
 ### Before Merging
 
 1. **All CI checks pass:**
+
    - Lint passes
    - Type check passes
    - Tests pass
    - Coverage meets thresholds
 
 2. **Review approved:**
+
    - At least one approval
    - No "changes-requested" label
    - High-risk PRs require 2 approvals
@@ -310,6 +341,7 @@ FU-XXX: Feature Description
 ### Merge Strategy
 
 **For MVP Development:**
+
 - Use **"Squash and merge"** to keep `dev` history clean
 - PR title becomes commit message
 - Feature Unit ID preserved in commit message
@@ -317,6 +349,7 @@ FU-XXX: Feature Description
 **After Merge:**
 
 **If using worktree:**
+
 ```bash
 # From main repo root
 git worktree remove ../neotoma-FU-XXX
@@ -329,6 +362,7 @@ git branch -d feature/FU-XXX-short-description
 ```
 
 **If using traditional branching:**
+
 ```bash
 # Delete local branch
 git checkout dev
@@ -343,10 +377,12 @@ git branch -d feature/FU-XXX-short-description
 ### When Feature Unit is Complete
 
 1. **Update Feature Unit Status:**
+
    - Mark as complete in `docs/specs/MVP_FEATURE_UNITS.md`
    - Move spec to `docs/feature_units/completed/FU-XXX/` (if detailed spec exists)
 
 2. **Update Documentation:**
+
    - Update subsystem docs if patterns changed
    - Add error codes to `docs/reference/error_codes.md` (if new codes added)
    - Update architecture docs if structural changes
@@ -363,6 +399,7 @@ git branch -d feature/FU-XXX-short-description
 ### When Conflicts Occur
 
 1. **Rebase on latest dev:**
+
    ```bash
    git checkout feature/FU-XXX-short-description
    git fetch origin
@@ -370,11 +407,13 @@ git branch -d feature/FU-XXX-short-description
    ```
 
 2. **Resolve conflicts:**
+
    - Edit conflicted files
    - Keep changes that align with Feature Unit spec
    - Verify tests still pass after resolution
 
 3. **Continue rebase:**
+
    ```bash
    git add <resolved-files>
    git rebase --continue
@@ -394,6 +433,7 @@ git branch -d feature/FU-XXX-short-description
 ### When to Load This Document
 
 Load when:
+
 - Creating a new feature branch
 - Preparing a pull request
 - Reviewing code changes
@@ -402,20 +442,20 @@ Load when:
 
 ### Required Co-Loaded Documents
 
-- `docs/NEOTOMA_MANIFEST.md` — Foundational principles
-- `docs/feature_units/standards/feature_unit_spec.md` — Feature Unit structure
-- `docs/private/governance/risk_classification.md` — Risk assessment
+- `docs/NEOTOMA_MANIFEST.md`: Foundational principles
+- `docs/feature_units/standards/feature_unit_spec.md`: Feature Unit structure
+- `docs/private/governance/risk_classification.md`: Risk assessment
 
 ### Constraints Agents Must Enforce
 
-1. **Always branch from `dev`** — Never from `main` (except hotfixes)
-2. **One Feature Unit per branch** — Keep changes atomic
-3. **Use worktrees for isolation** — Each Feature Unit should have its own worktree when possible
-4. **Setup worktree environment** — Run `npm run copy:env` or `node scripts/copy-env-to-worktree.js` after creating worktree
-5. **Reference Feature Unit ID** — In commit messages and PR titles
-6. **Follow commit message format** — Include "References:" line
-7. **Verify tests pass** — Before creating PR
-8. **Update documentation** — If patterns or architecture change
+1. **Always branch from `dev`**: Never from `main` (except hotfixes)
+2. **One Feature Unit per branch**: Keep changes atomic
+3. **Use worktrees for isolation**: Each Feature Unit should have its own worktree when possible
+4. **Setup worktree environment**: Run `npm run copy:env` or `node scripts/copy-env-to-worktree.js` after creating worktree
+5. **Reference Feature Unit ID**: In commit messages and PR titles
+6. **Follow commit message format**: Include "References:" line
+7. **Verify tests pass**: Before creating PR
+8. **Update documentation**: If patterns or architecture change
 
 ### Forbidden Patterns
 
@@ -425,5 +465,3 @@ Load when:
 - Skipping code review
 - Merging without tests passing
 - Committing secrets or API keys
-
-

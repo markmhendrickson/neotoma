@@ -286,6 +286,63 @@ When running manual test cases from `docs/releases/in_progress/v0.1.0/release_re
 
 ---
 
+## Using Neotoma MCP in Another Workspace
+
+To use the Neotoma MCP server from a different workspace/repository:
+
+1. **Ensure Neotoma is built:**
+
+   ```bash
+   cd /path/to/neotoma
+   npm run build
+   ```
+
+2. **Create `.cursor/mcp.json` in your other workspace:**
+
+   ```json
+   {
+     "mcpServers": {
+       "neotoma": {
+         "command": "/path/to/node",
+         "args": ["/absolute/path/to/neotoma/dist/index.js"],
+         "cwd": "/absolute/path/to/neotoma",
+         "env": {
+           "NODE_ENV": "development"
+         }
+       }
+     }
+   }
+   ```
+
+   **Important:**
+
+   - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
+   - Set `cwd` to the Neotoma project root (required for `.env.development` loading)
+   - The server will load credentials from Neotoma's `.env.development` file automatically
+
+3. **Or use environment variables:**
+   If you want to override credentials from the other workspace:
+
+   ```json
+   {
+     "mcpServers": {
+       "neotoma": {
+         "command": "/path/to/node",
+         "args": ["/absolute/path/to/neotoma/dist/index.js"],
+         "cwd": "/absolute/path/to/neotoma",
+         "env": {
+           "DEV_SUPABASE_URL": "https://your-project-id.supabase.co",
+           "DEV_SUPABASE_SERVICE_KEY": "your-service-role-key-here"
+         }
+       }
+     }
+   }
+   ```
+
+4. **Restart Cursor** to detect the new MCP server configuration.
+
+---
+
 ## Additional Resources
 
 - **MCP Specification:** `docs/specs/MCP_SPEC.md`
@@ -318,3 +375,4 @@ npm test
 ---
 
 **Note:** The MCP server runs in stdio mode when used with Cursor. The server communicates via stdin/stdout using the Model Context Protocol JSON-RPC format. Cursor handles the protocol communication automatically.
+

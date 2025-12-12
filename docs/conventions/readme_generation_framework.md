@@ -368,3 +368,6 @@ All memory is exposed to AI tools via Model Context Protocol (MCP), ensuring age
 - `docs/specs/MVP_OVERVIEW.md` — MVP capabilities source
 - `docs/architecture/architecture.md` — Architecture source
 
+
+
+
