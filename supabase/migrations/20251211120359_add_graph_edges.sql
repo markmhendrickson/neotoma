@@ -79,3 +79,6 @@ COMMENT ON TABLE record_entity_edges IS 'Links records to entities extracted fro
 COMMENT ON TABLE record_event_edges IS 'Links records to timeline events generated from them';
 COMMENT ON TABLE entity_event_edges IS 'Links entities to timeline events they are involved in';
 
+
+
+

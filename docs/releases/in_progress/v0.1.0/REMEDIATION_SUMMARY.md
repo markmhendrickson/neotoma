@@ -200,3 +200,6 @@ The v0.1.0 release now has **full fidelity to the documented plan and product sp
 
 Next step: Manual validation via MCP integration (Cursor/ChatGPT) per release plan Section 9.
 
+
+
+

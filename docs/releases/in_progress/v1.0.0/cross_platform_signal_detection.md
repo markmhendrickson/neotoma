@@ -295,3 +295,6 @@ function aggregateSignals(lead) {
 - Recommendation: Make linked platform checks optional/async
 
 
+
+
+

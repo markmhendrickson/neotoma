@@ -1488,6 +1488,24 @@ app.post("/retrieve_records", async (req, res) => {
   if (search && search.length > 0) {
     const searchText = search.join(" ");
     results = rankSearchResults(results, searchText);
+  } else if (hasIdFilter && !properties && ids) {
+    // When only IDs are provided (no search, no properties), preserve order from ids array
+    const orderMap = new Map(ids.map((id, index) => [id, index]));
+    const idResults: any[] = [];
+    const otherResults: any[] = [];
+    for (const rec of results) {
+      if (orderMap.has(rec.id)) {
+        idResults.push(rec);
+      } else {
+        otherResults.push(rec);
+      }
+    }
+    idResults.sort((a, b) => {
+      const aIndex = orderMap.get(a.id) ?? Infinity;
+      const bIndex = orderMap.get(b.id) ?? Infinity;
+      return aIndex - bIndex;
+    });
+    results = [...idResults, ...otherResults];
   } else {
     // No search query - sort deterministically
     results = sortRecordsDeterministically(results);

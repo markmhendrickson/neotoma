@@ -33,3 +33,6 @@ CREATE POLICY "public read - timeline_events" ON timeline_events FOR SELECT USIN
 -- Add comment to table
 COMMENT ON TABLE timeline_events IS 'Stores timeline events generated from date fields in records. Event IDs are deterministic hash-based (evt_{sha256(record_id:field:date)}).';
 
+
+
+

@@ -32,3 +32,6 @@ CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
 -- Add comment to table
 COMMENT ON TABLE entities IS 'Stores resolved entities with canonical names. Entity IDs are deterministic hash-based (ent_{sha256(type:normalized_name)}).';
 
+
+
+

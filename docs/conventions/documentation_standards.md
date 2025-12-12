@@ -251,6 +251,54 @@ NEVER use:
 - Marketing language: "powerful", "seamless", "revolutionary"
 - Uncertain phrasing: "it might work if...", "this could be..."
 
+### 5.4 Writing Style: Avoid AI-Generated Patterns
+
+NEVER use AI-specific writing patterns that make documentation sound machine-generated:
+
+**Prohibited:**
+
+- Em dashes (—) — Use commas, periods, or colons instead
+- En dashes (–) — Use hyphens (-) or "to" for ranges
+- Excessive parenthetical asides (common in AI writing)
+- Overly complex sentence structures
+- Redundant qualifiers ("very", "quite", "rather", "somewhat")
+- Conversational transitions ("Now, let's...", "So, you might...", "Interestingly...")
+- Soft questions ("Would you like to...?", "Have you considered...?")
+- Motivational language ("Get started!", "Try it now!", "You're all set!")
+
+**Preferred:**
+
+- ✅ Use commas: "The system processes files, validates them, and stores records."
+- ✅ Use periods: "The system processes files. It then validates them."
+- ✅ Use colons: "The system performs three steps: processing, validation, and storage."
+- ✅ Direct statements: "The system processes files."
+- ✅ Simple, declarative sentences
+- ✅ One idea per sentence
+- ✅ Active voice: "The system validates input" (not "Input is validated by the system")
+
+**Examples:**
+
+❌ "Neotoma transforms fragmented personal data—connecting people, companies, and events—into a unified memory graph that enables agents to reason across all your data."
+
+✅ "Neotoma transforms fragmented personal data into a unified memory graph. The graph connects people, companies, and events. This enables agents to reason across all your data."
+
+❌ "Would you like to store a record? Simply use the `store_record` action!"
+
+✅ "Use the `store_record` action to store a record."
+
+❌ "Neotoma provides persistent structured memory—ensuring agents can access truth layer data—with full provenance tracking."
+
+✅ "Neotoma provides persistent structured memory with full provenance tracking. Agents can access truth layer data via MCP."
+
+### 5.5 Punctuation Rules
+
+- Use standard hyphens (-) for compound words and ranges: "file-based", "v0.1.0-v0.2.0"
+- Use commas for lists and appositives: "files, records, and entities"
+- Use periods to end sentences
+- Use colons to introduce lists or explanations
+- Use semicolons sparingly, only to connect closely related independent clauses
+- Avoid dashes (em or en) entirely
+
 ---
 
 ## 6. Mermaid Diagram Standards
@@ -664,7 +712,8 @@ Agents modifying documentation MUST:
 8. Update the `docs/context/index.md` if adding new files
 9. **Identify and update downstream documentation** that depends on changes (see `.cursor/rules/downstream_doc_updates.md`)
 10. **Update README.md** if changes affect user-facing information (see `.cursor/rules/readme_maintenance.md`)
-11. Run documentation linter (if available) before committing
+11. **Follow writing style rules** (Section 5.4): No em dashes, no AI-generated patterns, use commas/periods/colons instead
+12. Run documentation linter (if available) before committing
 
 ---
 
@@ -704,6 +753,9 @@ Load this document whenever:
 - Missing Agent Instructions sections
 - Contradictions with foundational documents
 - Nondeterministic examples or diagrams
+- Em dashes (—) or en dashes (–)
+- AI-generated writing patterns (em dashes, excessive parentheticals, conversational transitions)
+- Soft questions or motivational language
 
 ### Validation Checklist
 
@@ -717,3 +769,6 @@ Load this document whenever:
 - [ ] Consistent with NEOTOMA_MANIFEST.md
 - [ ] Downstream documentation updated if upstream doc changed
 - [ ] README.md updated if changes affect user-facing information
+- [ ] No em dashes (—) or en dashes (–) used (use commas, periods, or colons instead)
+- [ ] No AI-generated writing patterns (conversational transitions, soft questions, motivational language)
+- [ ] Simple, declarative sentences with active voice
