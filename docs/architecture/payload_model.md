@@ -61,7 +61,7 @@ interface PayloadEnvelope {
   provenance: {
     source_refs: string[]; // Immediate source payload IDs
     extracted_at: string; // ISO 8601 timestamp
-    extractor_version: string; // "neotoma-mcp:v0.1.1"
+    extractor_version: string; // "neotoma-mcp:v0.2.1"
     agent_id?: string; // Optional agent identifier
   };
   client_request_id?: string; // Optional: retry correlation
@@ -133,7 +133,7 @@ interface EntityExtractionRule {
   provenance: {
     source_refs: [],
     extracted_at: "2025-01-15T10:00:00Z",
-    extractor_version: "neotoma-mcp:v0.1.1"
+    extractor_version: "neotoma-mcp:v0.2.1"
   }
 }
 ```
@@ -223,14 +223,14 @@ File uploads create payloads via `upload_file` MCP action:
 
 ## Migration from Records
 
-**v0.1.1 Breaking Change:**
+**v0.2.1 Breaking Change:**
 
 - **Removed:** `store_record` MCP action
 - **Added:** `submit_payload` MCP action
 - **Eliminated:** `records` table (replaced by `payload_submissions` table)
 - **Updated:** Observations reference `source_payload_id` instead of `source_record_id`
 
-**Migration strategy:** Clean break for v0.1.1 (pre-v1.0.0, migrations not required)
+**Migration strategy:** Clean break for v0.2.1 (pre-v1.0.0, migrations not required)
 
 ---
 

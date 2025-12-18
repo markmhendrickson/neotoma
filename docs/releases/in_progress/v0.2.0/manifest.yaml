@@ -219,7 +219,7 @@ success_criteria:
 
 determinism_doctrine:
   principle: "Deterministic given fixed source, interpretation config, and resolver version"
-
+  
   deterministic_core:
     - Content hashing (SHA-256)
     - Deduplication (user_id, content_hash uniqueness)

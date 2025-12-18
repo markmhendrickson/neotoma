@@ -104,7 +104,7 @@ export class NeotomaServer {
                   extractor_version: {
                     type: "string",
                     description:
-                      "Extractor version (e.g., 'neotoma-mcp:v0.1.1')",
+                      "Extractor version (e.g., 'neotoma-mcp:v0.2.1')",
                   },
                   agent_id: {
                     type: "string",
@@ -785,13 +785,13 @@ export class NeotomaServer {
     };
   }
 
-  // DEPRECATED: store_record replaced by submit_payload in v0.1.1
+  // DEPRECATED: store_record replaced by submit_payload in v0.2.1
   // Kept for reference only - not exposed in MCP tool list
   private async storeRecord(
     args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     throw new Error(
-      "store_record has been replaced by submit_payload in v0.1.1. Please use submit_payload instead.",
+      "store_record has been replaced by submit_payload in v0.2.1. Please use submit_payload instead.",
     );
   }
 

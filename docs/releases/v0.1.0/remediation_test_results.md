@@ -252,7 +252,7 @@ The release has made substantial progress:
 
 1. **Complete HTTP integration (recommended):** Add entity/event extraction to HTTP endpoints (2-4 hours)
 2. **Deploy MCP-only:** Document that HTTP endpoints don't have entity/event extraction, only MCP actions do
-3. **Defer integration:** Deploy with current state, fix in v0.1.1
+3. **Defer integration:** Deploy with current state, fix in v0.2.1
 
 ---
 

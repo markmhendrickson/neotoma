@@ -92,7 +92,7 @@ flowchart LR
 | ---------------- | ----------------------- | ----------- | ---------------------- |
 | `submit_payload` | Submit payload envelope | Strong      | Yes (given same input) |
 
-**Note:** `submit_payload` is the primary ingestion action in v0.1.1+. It replaces `store_record` and provides capability-based processing with deterministic deduplication.
+**Note:** `submit_payload` is the primary ingestion action in v0.2.1+. It replaces `store_record` and provides capability-based processing with deterministic deduplication.
 
 ### 2.1.1 Legacy Record Operations (Deprecated)
 
@@ -102,7 +102,7 @@ flowchart LR
 | `retrieve_records` | Query records with filters        | Strong (metadata), Bounded Eventual (search index) | Yes (ranking) |
 | `delete_record`    | Remove record                     | Strong                                             | Yes           |
 
-**Note:** These operations are deprecated in v0.1.1+ and maintained for backward compatibility. New code should use `submit_payload` and entity-based operations (`get_entity_snapshot`, `list_observations`).
+**Note:** These operations are deprecated in v0.2.1+ and maintained for backward compatibility. New code should use `submit_payload` and entity-based operations (`get_entity_snapshot`, `list_observations`).
 
 ---
 
@@ -170,7 +170,7 @@ flowchart LR
   provenance: {
     source_refs: string[];         // Required: Immediate source payload IDs (not full chain)
     extracted_at: string;          // Required: ISO 8601 timestamp
-    extractor_version: string;     // Required: Extractor version (e.g., "neotoma-mcp:v0.1.1")
+    extractor_version: string;     // Required: Extractor version (e.g., "neotoma-mcp:v0.2.1")
     agent_id?: string;             // Optional: Agent identifier
   };
   client_request_id?: string;      // Optional: Retry correlation ID
@@ -218,7 +218,7 @@ flowchart LR
   "provenance": {
     "source_refs": [],
     "extracted_at": "2025-01-15T10:30:00Z",
-    "extractor_version": "neotoma-mcp:v0.1.1",
+    "extractor_version": "neotoma-mcp:v0.2.1",
     "agent_id": "claude-3-opus"
   }
 }
@@ -253,7 +253,7 @@ flowchart LR
 
 ### 3.2 `update_record` (Deprecated)
 
-**Status:** Deprecated in v0.1.1+. Use `submit_payload` with updated data instead.
+**Status:** Deprecated in v0.2.1+. Use `submit_payload` with updated data instead.
 
 **Purpose:** Update existing record's properties or metadata.
 
@@ -299,7 +299,7 @@ flowchart LR
 
 ### 3.3 `retrieve_records` (Deprecated)
 
-**Status:** Deprecated in v0.1.1+. Use entity-based operations (`get_entity_snapshot`, `list_observations`) instead.
+**Status:** Deprecated in v0.2.1+. Use entity-based operations (`get_entity_snapshot`, `list_observations`) instead.
 
 **Purpose:** Query records with filters, search, and semantic matching.
 
@@ -354,7 +354,7 @@ flowchart LR
 
 ### 3.4 `delete_record` (Deprecated)
 
-**Status:** Deprecated in v0.1.1+. Payloads are immutable; use entity-based operations for data management.
+**Status:** Deprecated in v0.2.1+. Payloads are immutable; use entity-based operations for data management.
 
 **Purpose:** Delete a record and its associated files.
 

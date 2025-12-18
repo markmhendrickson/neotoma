@@ -49,7 +49,7 @@ This document details the execution order of Feature Units for v2.0.0, organized
 
 **Feature Units:**
 
-- **FU-850**: Crypto Library
+- `FU-850`: Crypto Library
 
 **Dependencies:** None
 
@@ -79,7 +79,7 @@ This document details the execution order of Feature Units for v2.0.0, organized
 
 **Feature Units:**
 
-- **FU-851**: Key Management UI
+- `FU-851`: Key Management UI
 
 **Dependencies:** FU-850
 
@@ -108,7 +108,7 @@ This document details the execution order of Feature Units for v2.0.0, organized
 
 **Feature Units:**
 
-- **FU-852**: Browser SQLite WASM Datastore
+- `FU-852`: Browser SQLite WASM Datastore
 
 **Dependencies:** FU-850
 
@@ -139,8 +139,8 @@ This document details the execution order of Feature Units for v2.0.0, organized
 
 **Feature Units:**
 
-- **FU-853**: WebWorker RPC Layer
-- **FU-854**: Local Vector Search
+- `FU-853`: WebWorker RPC Layer
+- `FU-854`: Local Vector Search
 
 **Dependencies:** FU-852
 

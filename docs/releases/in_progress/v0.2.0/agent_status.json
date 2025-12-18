@@ -1,0 +1,419 @@
+{
+  "release_id": "v0.2.0",
+  "orchestrator": {
+    "agent_id": "orch_1766062695948",
+    "started_at": "2025-12-18T12:58:15.948Z",
+    "current_batch": 0,
+    "status": "running"
+  },
+  "batches": [
+    {
+      "batch_id": 0,
+      "status": "running",
+      "feature_units": [
+        {
+          "fu_id": "FU-110",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-112",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-113",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        }
+      ],
+      "started_at": "2025-12-18T12:58:15.950Z"
+    },
+    {
+      "batch_id": 1,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-111",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-114",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-115",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-116",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": 2,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-120",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-121",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": 3,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-122",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-123",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-124",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-125",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        },
+        {
+          "fu_id": "FU-126",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "batch_id": 4,
+      "status": "pending",
+      "feature_units": [
+        {
+          "fu_id": "FU-134",
+          "worker_agent_id": null,
+          "status": "pending",
+          "progress": 0,
+          "started_at": null,
+          "last_update": null,
+          "completed_at": null,
+          "error": null,
+          "tests": {
+            "unit": {
+              "passed": null,
+              "coverage": null,
+              "command": null
+            },
+            "integration": {
+              "passed": null,
+              "command": null
+            },
+            "e2e": {
+              "passed": null,
+              "command": null
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "completed_fus": []
+}
