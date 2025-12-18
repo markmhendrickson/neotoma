@@ -7,11 +7,17 @@
 import { createHash } from "node:crypto";
 import { supabase } from "../db.js";
 
+export const DEFAULT_USER_ID =
+  "00000000-0000-0000-0000-000000000000" as const;
+
 export interface Entity {
   id: string;
   entity_type: string;
   canonical_name: string;
   created_at: string;
+  user_id: string;
+  merged_to_entity_id: string | null;
+  merged_at: string | null;
 }
 
 /**
@@ -20,10 +26,11 @@ export interface Entity {
 export function generateEntityId(
   entityType: string,
   canonicalName: string,
+  userId: string = DEFAULT_USER_ID,
 ): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
   const hash = createHash("sha256")
-    .update(`${entityType}:${normalized}`)
+    .update(`${userId}:${entityType}:${normalized}`)
     .digest("hex");
 
   return `ent_${hash.substring(0, 24)}`;
@@ -54,15 +61,17 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
 export async function resolveEntity(
   entityType: string,
   rawValue: string,
+  userId: string = DEFAULT_USER_ID,
 ): Promise<Entity> {
   const canonicalName = normalizeEntityValue(entityType, rawValue);
-  const entityId = generateEntityId(entityType, canonicalName);
+  const entityId = generateEntityId(entityType, canonicalName, userId);
 
   // Check if entity exists
   const { data: existing } = await supabase
     .from("entities")
     .select("*")
     .eq("id", entityId)
+    .eq("user_id", userId)
     .single();
 
   if (existing) {
@@ -80,6 +89,7 @@ export async function resolveEntity(
       aliases: [],
       created_at: now,
       updated_at: now,
+      user_id: userId,
     })
     .select()
     .single();
@@ -162,11 +172,15 @@ export function extractEntities(
 /**
  * Get entity by ID
  */
-export async function getEntityById(entityId: string): Promise<Entity | null> {
+export async function getEntityById(
+  entityId: string,
+  userId: string = DEFAULT_USER_ID,
+): Promise<Entity | null> {
   const { data, error } = await supabase
     .from("entities")
     .select("*")
     .eq("id", entityId)
+    .eq("user_id", userId)
     .single();
 
   if (error || !data) {
@@ -183,8 +197,20 @@ export async function listEntities(filters?: {
   entity_type?: string;
   limit?: number;
   offset?: number;
+  includeMerged?: boolean;
+  user_id?: string;
 }): Promise<Entity[]> {
-  let query = supabase.from("entities").select("*");
+  const userId = filters?.user_id ?? DEFAULT_USER_ID;
+  const includeMerged = filters?.includeMerged ?? false;
+
+  let query = supabase
+    .from("entities")
+    .select("*")
+    .eq("user_id", userId);
+
+  if (!includeMerged) {
+    query = query.is("merged_to_entity_id", null);
+  }
 
   if (filters?.entity_type) {
     query = query.eq("entity_type", filters.entity_type);

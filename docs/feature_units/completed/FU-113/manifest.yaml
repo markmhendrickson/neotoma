@@ -1,0 +1,161 @@
+feature_id: "fu_113"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "high"
+
+tags:
+  - "schema"
+  - "security"
+  - "entity_resolution"
+
+kill_switch:
+  conditions:
+    - condition: "Supabase migration fails or RLS blocks ingestion"
+      action: "Stop deployment, revert entities extension migration"
+    - condition: "Entity resolution latency > 50ms P95 post-release"
+      action: "Disable new indexes/filters, investigate regression"
+
+metadata:
+  title: "Entity Extensions"
+  description: "Add user_id + merge tracking + RLS enforcement for entities ahead of merge tooling"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+    - "data.architect@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+subsystems:
+  - name: "schema"
+    changes: "Extend entities + entity_snapshots tables, add merge indexes, tighten RLS"
+  - name: "ingestion"
+    changes: "User-scoped entity resolution + merge-aware observation creation"
+  - name: "mcp_server"
+    changes: "Filter entity/timeline queries by user_id and exclude merged entities"
+
+schema_changes:
+  - table: "entities"
+    operation: "alter_table"
+    columns:
+      - name: "user_id"
+        type: "UUID"
+        nullable: false
+        default_value: "'00000000-0000-0000-0000-000000000000'"
+      - name: "merged_to_entity_id"
+        type: "TEXT"
+        nullable: true
+        foreign_key: "entities(id)"
+      - name: "merged_at"
+        type: "TIMESTAMPTZ"
+        nullable: true
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user"
+    index_type: "btree"
+    columns: ["user_id"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user_type"
+    index_type: "btree"
+    columns: ["user_id", "entity_type"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user_type_name"
+    index_type: "btree"
+    columns: ["user_id", "entity_type", "canonical_name"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_merged"
+    index_type: "btree"
+    columns: ["user_id", "merged_to_entity_id"]
+    where_clause: "WHERE merged_to_entity_id IS NOT NULL"
+  - table: "entity_snapshots"
+    operation: "alter_table"
+    columns:
+      - name: "user_id"
+        type: "UUID"
+        nullable: false
+  - table: "entities"
+    operation: "rls_policy"
+    policy_name: "Users read own entities"
+    action: "select"
+    using: "user_id = auth.uid()"
+    roles: ["authenticated"]
+  - table: "entity_snapshots"
+    operation: "rls_policy"
+    policy_name: "Users read own entity_snapshots"
+    action: "select"
+    using: "user_id = auth.uid()"
+    roles: ["authenticated"]
+
+observability:
+  metrics:
+    - name: "entity.resolution.lookup_duration_ms"
+      type: "histogram"
+      labels: ["result"]
+      description: "Latency for user-scoped entity lookups"
+    - name: "entity.merged_redirect_total"
+      type: "counter"
+      labels: ["entity_type"]
+      description: "Number of observations redirected due to merged entities"
+  logs:
+    - level: "warn"
+      event: "entity.merge_metadata_missing"
+      fields: ["entity_id", "user_id"]
+  traces:
+    - span_name: "entity_resolution.resolve"
+      attributes: ["user_id", "entity_type", "result"]
+
+testing:
+  unit_tests:
+    - file: "src/services/entity_resolution.test.ts"
+      tests:
+        - "resolveEntity stamps user_id"
+        - "resolveEntity excludes merged entities"
+    - file: "src/services/graph_builder.test.ts"
+      tests:
+        - "detectOrphanNodes respects user_id"
+  integration_tests:
+    - file: "tests/integration/release/v0.1.0/it_002_entity_resolution.test.ts"
+      tests:
+        - "entities persisted with user_id"
+    - file: "tests/integration/release/v0.1.0/it_004_graph_integrity.test.ts"
+      tests:
+        - "relationships inherit user scope"
+  e2e_tests:
+    - file: "tests/e2e/entities.e2e.test.ts"
+      description: "Store record → list entities, ensure merged entities hidden"
+
+dependencies:
+  requires:
+    - feature_id: "fu_000"
+      reason: "Extends base schema + RLS policies"
+  blocks:
+    - feature_id: "fu_116"
+      reason: "Entity merge audit log needs user_id + metadata"
+    - feature_id: "fu_126"
+      reason: "merge_entities() requires merge metadata + user isolation"
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Revert Supabase migration adding entity columns"
+      - "Restore previous RLS policies"
+    triggers:
+      - condition: "Entity resolution failure rate > 5%"
+        action: "Rollback migration + redeploy previous build"
+
+risks:
+  - category: "schema_migration"
+    likelihood: "medium"
+    impact: "high"
+    mitigation: "Apply migration in staging, verify supabase diff, backfill script validated"
+  - category: "data_isolation"
+    likelihood: "low"
+    impact: "critical"
+    mitigation: "RLS policies enforced; MCP uses service_role only via server"

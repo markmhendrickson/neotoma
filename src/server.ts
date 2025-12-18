@@ -46,6 +46,7 @@ import {
   listEntities,
   normalizeEntityValue,
   generateEntityId,
+  DEFAULT_USER_ID,
   type Entity,
 } from "./services/entity_resolution.js";
 
@@ -67,6 +68,11 @@ export class NeotomaServer {
 
     this.setupToolHandlers();
     this.setupErrorHandler();
+  }
+
+  private getUserId(): string {
+    // TODO: replace with authenticated context once multi-user support is wired through MCP
+    return DEFAULT_USER_ID;
   }
 
   private setupToolHandlers(): void {
@@ -1641,11 +1647,13 @@ export class NeotomaServer {
       entity_id: z.string(),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     const { data: snapshot, error } = await supabase
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .single();
 
     if (error || !snapshot) {
@@ -1667,11 +1675,13 @@ export class NeotomaServer {
       offset: z.number().int().nonnegative().default(0),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     const { data: observations, error } = await supabase
       .from("observations")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .order("observed_at", { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
@@ -1696,12 +1706,14 @@ export class NeotomaServer {
       field_name: z.string(),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     // Get the snapshot to extract provenance
     const { data: snapshot, error: snapshotError } = await supabase
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .single();
 
     if (snapshotError || !snapshot) {
@@ -1726,6 +1738,7 @@ export class NeotomaServer {
       .from("observations")
       .select("*")
       .eq("id", observationId)
+      .eq("user_id", userId)
       .single();
 
     if (obsError || !observation) {
@@ -1786,7 +1799,7 @@ export class NeotomaServer {
         source_entity_id: parsed.source_entity_id,
         target_entity_id: parsed.target_entity_id,
         metadata: parsed.metadata || {},
-        user_id: "00000000-0000-0000-0000-000000000000", // Default for v0.1.0 single-user
+        user_id: this.getUserId(), // Default for v0.1.0 single-user
       })
       .select()
       .single();
@@ -1809,6 +1822,7 @@ export class NeotomaServer {
       direction: z.enum(["inbound", "outbound", "both"]).default("both"),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     const relationships: any[] = [];
 
@@ -1816,7 +1830,8 @@ export class NeotomaServer {
       const { data: outbound, error: outboundError } = await supabase
         .from("relationships")
         .select("*")
-        .eq("source_entity_id", parsed.entity_id);
+        .eq("source_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (!outboundError && outbound) {
         relationships.push(
@@ -1829,7 +1844,8 @@ export class NeotomaServer {
       const { data: inbound, error: inboundError } = await supabase
         .from("relationships")
         .select("*")
-        .eq("target_entity_id", parsed.entity_id);
+        .eq("target_entity_id", parsed.entity_id)
+        .eq("user_id", userId);
 
       if (!inboundError && inbound) {
         relationships.push(
@@ -1854,11 +1870,14 @@ export class NeotomaServer {
       include_snapshots: z.boolean().default(true),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     // Get total count
     let countQuery = supabase
       .from("entities")
-      .select("*", { count: "exact", head: true });
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .is("merged_to_entity_id", null);
 
     if (parsed.entity_type) {
       countQuery = countQuery.eq("entity_type", parsed.entity_type);
@@ -1877,6 +1896,7 @@ export class NeotomaServer {
       entity_type: parsed.entity_type,
       limit: parsed.limit,
       offset: parsed.offset,
+      user_id: userId,
     });
 
     // Optionally include snapshots
@@ -1886,7 +1906,8 @@ export class NeotomaServer {
       const { data: snapshots, error: snapError } = await supabase
         .from("entity_snapshots")
         .select("*")
-        .in("entity_id", entityIds);
+        .in("entity_id", entityIds)
+        .eq("user_id", userId);
 
       if (!snapError && snapshots) {
         const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
@@ -1991,6 +2012,7 @@ export class NeotomaServer {
       entity_type: z.string().optional(),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     // Normalize the identifier
     const normalized = parsed.entity_type
@@ -2001,6 +2023,8 @@ export class NeotomaServer {
     let query = supabase
       .from("entities")
       .select("*")
+      .eq("user_id", userId)
+      .is("merged_to_entity_id", null)
       .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
 
     if (parsed.entity_type) {
@@ -2021,11 +2045,14 @@ export class NeotomaServer {
       const possibleId = generateEntityId(
         parsed.entity_type,
         parsed.identifier,
+        userId,
       );
       const { data: entityById, error: idError } = await supabase
         .from("entities")
         .select("*")
         .eq("id", possibleId)
+        .eq("user_id", userId)
+        .is("merged_to_entity_id", null)
         .single();
 
       if (!idError && entityById) {
@@ -2043,7 +2070,8 @@ export class NeotomaServer {
       const { data: snapshots, error: snapError } = await supabase
         .from("entity_snapshots")
         .select("*")
-        .in("entity_id", entityIds);
+        .in("entity_id", entityIds)
+        .eq("user_id", userId);
 
       if (!snapError && snapshots) {
         const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
@@ -2071,6 +2099,7 @@ export class NeotomaServer {
       include_entities: z.boolean().default(true),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -2087,7 +2116,8 @@ export class NeotomaServer {
           let outboundQuery = supabase
             .from("relationships")
             .select("*")
-            .eq("source_entity_id", entityId);
+            .eq("source_entity_id", entityId)
+            .eq("user_id", userId);
 
           if (
             parsed.relationship_types &&
@@ -2118,7 +2148,8 @@ export class NeotomaServer {
           let inboundQuery = supabase
             .from("relationships")
             .select("*")
-            .eq("target_entity_id", entityId);
+            .eq("target_entity_id", entityId)
+            .eq("user_id", userId);
 
           if (
             parsed.relationship_types &&
@@ -2155,7 +2186,9 @@ export class NeotomaServer {
       const { data: entityData, error: entityError } = await supabase
         .from("entities")
         .select("*")
-        .in("id", Array.from(relatedEntityIds));
+        .in("id", Array.from(relatedEntityIds))
+        .eq("user_id", userId)
+        .is("merged_to_entity_id", null);
 
       if (!entityError && entityData) {
         entities = entityData;
@@ -2164,7 +2197,8 @@ export class NeotomaServer {
         const { data: snapshots, error: snapError } = await supabase
           .from("entity_snapshots")
           .select("*")
-          .in("entity_id", Array.from(relatedEntityIds));
+          .in("entity_id", Array.from(relatedEntityIds))
+          .eq("user_id", userId);
 
         if (!snapError && snapshots) {
           const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
@@ -2200,6 +2234,7 @@ export class NeotomaServer {
       include_observations: z.boolean().default(false),
     });
     const parsed = schema.parse(args ?? {});
+    const userId = this.getUserId();
 
     const result: any = {
       node_id: parsed.node_id,
@@ -2212,6 +2247,8 @@ export class NeotomaServer {
         .from("entities")
         .select("*")
         .eq("id", parsed.node_id)
+        .eq("user_id", userId)
+        .is("merged_to_entity_id", null)
         .single();
 
       if (entityError || !entity) {
@@ -2228,6 +2265,7 @@ export class NeotomaServer {
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", parsed.node_id)
+        .eq("user_id", userId)
         .single();
 
       if (!snapError && snapshot) {
@@ -2241,7 +2279,8 @@ export class NeotomaServer {
           .select("*")
           .or(
             `source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`,
-          );
+          )
+          .eq("user_id", userId);
 
         if (!relError && relationships) {
           result.relationships = relationships;
@@ -2260,7 +2299,9 @@ export class NeotomaServer {
             const { data: relatedEntities, error: relEntError } = await supabase
               .from("entities")
               .select("*")
-              .in("id", Array.from(relatedEntityIds));
+              .in("id", Array.from(relatedEntityIds))
+              .eq("user_id", userId)
+              .is("merged_to_entity_id", null);
 
             if (!relEntError && relatedEntities) {
               result.related_entities = relatedEntities;
@@ -2275,6 +2316,7 @@ export class NeotomaServer {
           .from("observations")
           .select("*")
           .eq("entity_id", parsed.node_id)
+          .eq("user_id", userId)
           .order("observed_at", { ascending: false })
           .limit(100);
 
@@ -2344,7 +2386,8 @@ export class NeotomaServer {
       const { data: observations, error: obsError } = await supabase
         .from("observations")
         .select("*")
-        .eq("source_record_id", parsed.node_id);
+        .eq("source_record_id", parsed.node_id)
+        .eq("user_id", userId);
 
       if (!obsError && observations) {
         result.observations = observations;
@@ -2358,7 +2401,9 @@ export class NeotomaServer {
             const { data: entities, error: entError } = await supabase
               .from("entities")
               .select("*")
-              .in("id", entityIds);
+              .in("id", entityIds)
+              .eq("user_id", userId)
+              .is("merged_to_entity_id", null);
 
             if (!entError && entities) {
               result.related_entities = entities;
@@ -2373,6 +2418,7 @@ export class NeotomaServer {
                       ",",
                     )}),target_entity_id.in.(${entityIds.join(",")})`,
                   )
+                  .eq("user_id", userId)
                   .limit(1000);
 
                 if (!relError && relationships) {
