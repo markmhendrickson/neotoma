@@ -32,49 +32,50 @@ This document does NOT cover:
 
 ### 1.1 Model Overview
 
-Neotoma implements a three-layer truth model:
+Neotoma implements a four-layer truth model:
 
 ```
-Payload → Observation → Entity → Snapshot
+Source → InterpretationRun (with config) → Observation → EntitySnapshot
 ```
 
 **Layers:**
 
-1. **Payload (Document)** — unified ingestion primitive (files + agent data)
-2. **Observation** — granular, source-specific facts extracted from payloads
-3. **Entity** — the logical thing in the world with a stable ID
-4. **Snapshot** — deterministic reducer output representing current truth
+1. **Source** — content-addressed raw storage (files, external URLs)
+2. **InterpretationRun** — versioned interpretation attempt with config logging (provider, model, temperature, prompt_hash)
+3. **Observation** — granular, source-specific facts extracted via interpretation
+4. **EntitySnapshot** — deterministic reducer output representing current truth
+
+**Key Principle:** Each observation links to both its `source_id` (what raw content) and `interpretation_run_id` (how it was extracted), enabling full provenance and auditability without claiming replay determinism.
 
 **Model Diagram:**
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
-    Payload[Payload<br/>Files + Agent Data]
-    Observation[Observation<br/>Granular Facts]
-    Entity[Entity<br/>Stable ID]
-    Snapshot[Snapshot<br/>Current Truth]
+    Source[Source]
+    InterpRun[InterpretationRun]
+    Observation[Observation]
+    Entity[Entity]
+    Snapshot[EntitySnapshot]
 
-    Payload -->|Extract| Observation
+    Source -->|Versioned Interpretation| InterpRun
+    InterpRun -->|Extract| Observation
     Observation -->|Merge via Reducer| Snapshot
     Entity -.->|Target| Observation
     Entity -.->|Represents| Snapshot
-
-    style Payload fill:#e1f5ff
-    style Observation fill:#fff4e6
-    style Entity fill:#e6ffe6
-    style Snapshot fill:#ffe6f0
+    InterpRun -.->|"Config: model, temp, prompt_hash"| InterpRun
 ```
 
 ### 1.2 Key Benefits
 
 - **Decouples ingestion order from truth:** Observations can arrive in any order
 - **Enables multi-source merging:** Multiple sources contribute observations about same entity
-- **Provides full provenance:** Every snapshot field traces to specific observations and payloads
+- **Provides full provenance:** Every snapshot field traces to source AND interpretation config
 - **Supports deterministic merging:** Reducers compute snapshots deterministically
-- **Unified ingestion:** Files and agent submissions both create payloads
+- **Enables reinterpretation:** Same source can be reinterpreted with new models; observations immutable
+- **Auditability without replay determinism:** Interpretation config logged; outputs may vary
 
-See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
+See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale and [`docs/subsystems/sources.md`](./sources.md) for source and interpretation run details.
 
 ---
 
@@ -245,20 +246,30 @@ Snapshots are stored in `entity_snapshots` table:
 
 ### 4.1 Provenance Chain
 
-Every snapshot field traces to source:
+Every snapshot field traces through the full chain:
 
 ```
-Snapshot Field → Observation → Document → File
+Snapshot Field → Observation → InterpretationRun (with config) → Source
 ```
 
 **Example:**
 
 ```
 snapshot.vendor_name = "Acme Corp"
-  → observation_123 (from invoice.pdf)
-    → record_456 (invoice document)
-      → file_789 (invoice.pdf)
+  → observation_123
+    → interpretation_run_456 (gpt-4o-mini, temp=0, prompt_v3)
+      → source_789 (invoice.pdf, SHA-256: abc123...)
 ```
+
+**Key Fields:**
+- `observation.source_id` — links to source
+- `observation.interpretation_run_id` — links to interpretation run
+- `interpretation_run.interpretation_config` — model, temperature, prompt_hash, code_version
+
+This enables questions like:
+- "What raw content produced this observation?" → `source_id`
+- "How was this observation extracted?" → `interpretation_run_id` → `interpretation_config`
+- "Can I replay this extraction?" → No (AI is non-deterministic), but config is logged for audit
 
 ### 4.2 Provenance Query
 
@@ -272,14 +283,21 @@ async function getFieldProvenance(
   const snapshot = await snapshotRepo.findById(entityId);
   const observationId = snapshot.provenance[field];
   const observation = await observationRepo.findById(observationId);
-  const record = await recordRepo.findById(observation.source_record_id);
+  
+  // Get interpretation run (if AI-derived)
+  const interpretationRun = observation.interpretation_run_id
+    ? await interpretationRunRepo.findById(observation.interpretation_run_id)
+    : null;
+  
+  // Get source
+  const source = await sourceRepo.findById(observation.source_id);
 
   return {
     field,
     value: snapshot.snapshot[field],
     observation,
-    record,
-    file: record.file_urls[0],
+    interpretationRun,  // Includes config: model, temperature, prompt_hash
+    source,             // Includes content_hash, storage_url
   };
 }
 ```
