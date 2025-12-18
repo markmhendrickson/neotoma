@@ -477,24 +477,38 @@ CREATE TABLE IF NOT EXISTS entities (
   entity_type TEXT NOT NULL,
   canonical_name TEXT NOT NULL,
   aliases JSONB DEFAULT '[]',
+  metadata JSONB NOT NULL DEFAULT '{}',
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL,
+  merged_to_entity_id TEXT REFERENCES entities(id),
+  merged_at TIMESTAMPTZ
 );
 
 -- Indexes for entities
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_user ON entities(user_id);
+CREATE INDEX IF NOT EXISTS idx_entities_user_type ON entities(user_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_user_type_name
+  ON entities(user_id, entity_type, canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_merged
+  ON entities(user_id, merged_to_entity_id)
+  WHERE merged_to_entity_id IS NOT NULL;
 
 -- RLS policies for entities
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users read own entities" ON entities;
+CREATE POLICY "Users read own entities" ON entities
+  FOR SELECT USING (user_id = auth.uid());
+
 DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
 CREATE POLICY "Service role full access - entities" ON entities
   FOR ALL TO service_role USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "public read - entities" ON entities;
-CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
 
 -- Timeline events table (FU-102)
 CREATE TABLE IF NOT EXISTS timeline_events (
