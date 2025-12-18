@@ -1,6 +1,6 @@
 import type { LocalRecord } from '@/store/types';
 import { parseCsvRows } from '@/utils/csv';
-import workoutCsvRaw from './sets-medium.csv?raw';
+import { setsMediumCsv } from './sets-medium';
 
 const SAMPLE_SEED_TAG = 'sample_seed';
 const WORKOUT_SAMPLE_FILE = 'sets-medium.csv';
@@ -146,11 +146,11 @@ export function buildSampleRecords(): LocalRecord[] {
 }
 
 function buildWorkoutSampleRecords(indexOffset: number): LocalRecord[] {
-  if (!workoutCsvRaw || !workoutCsvRaw.trim()) {
+  if (!setsMediumCsv || !setsMediumCsv.trim()) {
     return [];
   }
 
-  const { rows, headers, truncated } = parseCsvRows(workoutCsvRaw, 5000);
+  const { rows, headers, truncated } = parseCsvRows(setsMediumCsv, 5000);
   if (rows.length === 0) {
     return [];
   }
