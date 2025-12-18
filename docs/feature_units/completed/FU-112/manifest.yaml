@@ -1,0 +1,133 @@
+feature_id: "fu_112"
+version: "1.0.0"
+status: "in_progress"
+priority: "p0"
+risk_level: "medium"
+
+tags:
+  - "storage"
+  - "ingestion"
+  - "quota"
+  - "supabase"
+
+metadata:
+  title: "Storage Infrastructure"
+  description: "Introduce upload queue retries and per-user storage usage tracking for ingestion resiliency."
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+subsystems:
+  - name: "database"
+    changes: "New upload_queue + storage_usage tables with helper functions"
+  - name: "ingestion"
+    changes: "upload_file route enqueues failed uploads and increments usage on success"
+  - name: "observability"
+    changes: "New metrics/logs for queue depth, upload failures, and quota tracking"
+
+schema_changes:
+  - table: "upload_queue"
+    operation: "create_table"
+    columns:
+      - { name: "id", type: "UUID", primary_key: true, default_value: "gen_random_uuid()" }
+      - { name: "temp_file_path", type: "TEXT", nullable: false }
+      - { name: "bucket", type: "TEXT", nullable: false }
+      - { name: "object_path", type: "TEXT", nullable: false }
+      - { name: "content_hash", type: "TEXT", nullable: false }
+      - { name: "byte_size", type: "BIGINT", nullable: false }
+      - { name: "retry_count", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "max_retries", type: "INTEGER", nullable: false, default_value: "5" }
+      - { name: "next_retry_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "error_message", type: "TEXT", nullable: true }
+      - { name: "metadata", type: "JSONB", nullable: false, default_value: "'{}'::jsonb" }
+      - { name: "user_id", type: "UUID", nullable: false }
+      - { name: "payload_submission_id", type: "UUID", nullable: true, foreign_key: "payload_submissions(id)" }
+      - { name: "created_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+    indexes:
+      - { name: "idx_upload_queue_next_retry", columns: ["next_retry_at"], where_clause: "retry_count < max_retries" }
+      - { name: "idx_upload_queue_user", columns: ["user_id"] }
+    rls:
+      - policy: "Service role full access"
+        command: "ALL"
+        role: "service_role"
+
+  - table: "storage_usage"
+    operation: "create_table"
+    columns:
+      - { name: "user_id", type: "UUID", primary_key: true }
+      - { name: "total_bytes", type: "BIGINT", nullable: false, default_value: "0" }
+      - { name: "total_sources", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "last_calculated", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "interpretation_count_month", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "interpretation_limit_month", type: "INTEGER", nullable: false, default_value: "100" }
+      - { name: "billing_month", type: "TEXT", nullable: false, default_value: "to_char(NOW(), 'YYYY-MM')" }
+    rls:
+      - policy: "Service role full access"
+        command: "ALL"
+        role: "service_role"
+
+  - function: "increment_storage_usage"
+    operation: "create_function"
+    language: "plpgsql"
+    body: |
+      INSERT INTO storage_usage (user_id, total_bytes, total_sources, last_calculated)
+      VALUES (p_user_id, p_bytes, 1, NOW())
+      ON CONFLICT (user_id) DO UPDATE SET
+        total_bytes = storage_usage.total_bytes + p_bytes,
+        total_sources = storage_usage.total_sources + 1,
+        last_calculated = NOW();
+
+  - function: "increment_interpretation_count"
+    operation: "create_function"
+    language: "plpgsql"
+    body: |
+      INSERT INTO storage_usage (user_id, interpretation_count_month, billing_month)
+      VALUES (p_user_id, 1, current_billing_month)
+      ON CONFLICT (user_id) DO UPDATE SET
+        interpretation_count_month = CASE
+          WHEN storage_usage.billing_month = current_billing_month
+          THEN storage_usage.interpretation_count_month + 1
+          ELSE 1
+        END,
+        billing_month = current_billing_month;
+
+api_changes:
+  endpoints:
+    - path: "/upload_file"
+      method: "POST"
+      change_type: "modified"
+      description: "Enqueue failed uploads (202 response) and increment storage usage on success."
+
+observability:
+  metrics:
+    - { name: "storage.upload.success_total", type: "counter", labels: ["bucket"] }
+    - { name: "storage.upload.failure_total", type: "counter", labels: ["bucket", "reason"] }
+    - { name: "storage.queue.depth", type: "gauge" }
+    - { name: "storage.queue.processed_total", type: "counter", labels: ["status"] }
+    - { name: "storage_usage.bytes", type: "gauge" }
+  logs:
+    - { level: "info", event: "UploadQueueEnqueue", fields: ["queue_id", "bucket", "object_path", "byte_size"] }
+    - { level: "warn", event: "StorageUsageIncrementFailed", fields: ["user_id", "byte_size", "reason"] }
+  events:
+    - { type: "storage.upload.enqueued", emitted_when: "Upload added to queue" }
+    - { type: "storage.upload.retry_failed", emitted_when: "Retry count exceeded max" }
+
+testing:
+  unit_tests:
+    - { name: "upload_queue.test.ts", description: "Enqueue writes file and DB row, cleans up on error." }
+    - { name: "storage_usage.test.ts", description: "RPC invoked with correct params and propagates failures." }
+  integration_tests:
+    - { id: "IT-007", description: "Upload queue retry flow (docs/releases/in_progress/v0.2.0/integration_tests.md)." }
+    - { id: "IT-010", description: "Interpretation quota enforcement using storage_usage." }
+  e2e_tests:
+    - { name: "Playwright Upload Pending", description: "UI reflects pending retry state when queue engaged." }
+    - { name: "Bulk upload quota surfaces", description: "Usage counters visible after imports." }
+
+dependencies:
+  requires:
+    - "FU-110"
+  blocks:
+    - "FU-130"
+    - "FU-136"
