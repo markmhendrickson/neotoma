@@ -1,499 +1,163 @@
-## Release v0.3.0 — Chat Transcript Extraction Tool
+## Release v0.3.0 — Operational Hardening
 
-_(Pre-MVP Release for Chat Transcript Processing)_
+_(Post-Ingestion Validation: Add Safety Nets Once Core Loop is Proven)_
 
 ---
 
 ### 1. Release Overview
 
 - **Release ID**: `v0.3.0`
-- **Name**: Chat Transcript Extraction Tool
+- **Name**: Operational Hardening
 - **Release Type**: Not Marketed (production deployment without marketing activities)
-- **Goal**: Provide a standalone CLI tool for converting chat transcripts (e.g., ChatGPT exports) into structured JSON files with schema types that can be ingested deterministically by Neotoma's Truth Layer.
-- **Priority**: P1 (pre-MVP, enables chat transcript ingestion workflow)
-- **Target Ship Date**: Before MVP (v1.0.0), after v0.2.0 (Sources-First Ingestion)
+- **Goal**: Add operational resilience and quota enforcement after validating the core ingestion + correction loop in v0.2.0. This includes async upload retry, stale interpretation cleanup, and strict quota enforcement.
+- **Priority**: P1 (operational robustness)
+- **Target Ship Date**: After v0.2.0 (Minimal Ingestion + Correction Loop) is validated with real usage
 - **Marketing Required**: No (not marketed release)
 - **Deployment**: Production (neotoma.io)
 
-#### 1.1 Canonical Specs (Authoritative Sources)
+#### 1.0 Guiding Principle
 
-- **Manifest**: `docs/NEOTOMA_MANIFEST.md`
-- **General Requirements**: `docs/specs/GENERAL_REQUIREMENTS.md`
-- **MVP Feature Units**: `docs/specs/MVP_FEATURE_UNITS.md` (FU-106)
-- **MVP Execution Plan**: `docs/specs/MVP_EXECUTION_PLAN.md` (FU-106)
+> Don't optimize throughput and robustness before confirming adoption and core flows.
 
-This release plan coordinates the chat transcript extraction tool into a concrete release.
+This release is gated on v0.2.0 validation: real users/agents must have successfully used ingest, reinterpret, correct, and merge before investing in async resilience.
 
 ---
 
 ### 2. Scope
 
-#### 2.1 Included Feature Units
+#### 2.1 Included Feature Units (Deferred from v0.2.0)
 
-- `FU-106`: Chat Transcript to JSON CLI Tool
-  - CLI tool for converting chat transcripts to structured JSON files
-  - Support for common export formats (ChatGPT JSON, HTML, text)
-  - LLM-based interpretation (OpenAI/Anthropic APIs allowed, outside Truth Layer)
-  - Interactive field mapping/correction mode
-  - JSON output with schema types (one file per record)
-  - Documentation and usage examples
+**Storage Infrastructure**
 
-#### 2.2 Explicitly Excluded
+- `FU-112`: Storage Infrastructure
+  - `upload_queue` table for async retry
+  - `storage_usage` table for per-user tracking
+  - Quota enforcement with per-plan tiers
 
-- Integration with Truth Layer ingestion pipeline (tool runs separately)
-- UI components (CLI-only tool)
-- Multi-user infrastructure (standalone tool)
-- CSV output format (JSON only)
+**Background Workers**
 
----
+- `FU-130`: Upload Queue Processor (async retry for failed uploads)
+- `FU-131`: Stale Interpretation Cleanup (timeout handling for hung jobs)
 
-### 3. CLI Interface Specification
+**Interpretation Enhancements**
 
-#### 3.1 Command Syntax
+- `interpretation_runs` timeout/heartbeat columns (deferred from v0.2.0)
+- Strict quota enforcement with billing month reset
 
-**Basic Usage:**
+#### 2.2 Explicitly Deferred
 
-```bash
-npm run chat-to-json <input-file> <output-dir> [options]
-```
+| Item | Deferred To | Reason |
+|------|-------------|--------|
+| `FU-132`: Archival Job | v0.4.0 | Only valuable with volume/diversity of data |
+| `FU-133`: Duplicate Detection Worker | v0.4.0 | Heuristics need data to justify |
+| Schema discovery/promotion | v0.4.0 | Requires analytics pipeline |
 
-**Arguments:**
+#### 2.3 Explicitly Excluded
 
-- `<input-file>`: Path to chat transcript file (required)
-  - Supported formats: JSON (ChatGPT export), HTML, plain text
-  - Auto-detected based on file extension and content
-- `<output-dir>`: Directory for output JSON files (required)
-  - Created if it doesn't exist
-  - One JSON file per extracted record
-
-**Options:**
-
-- `--interactive` / `-i`: Enable interactive field mapping mode
-- `--format <format>`: Force input format (json|html|text)
-- `--model <model>`: LLM model to use (default: gpt-4o-mini)
-- `--provider <provider>`: LLM provider (openai|anthropic, default: openai)
-- `--verbose` / `-v`: Enable verbose logging
-- `--help` / `-h`: Show help message
-
-**Examples:**
-
-```bash
-# Basic conversion
-npm run chat-to-json chat-export.json ./output
-
-# Interactive mode
-npm run chat-to-json -- --interactive chat-export.json ./output
-
-# Force format and specify model
-npm run chat-to-json -- --format html --model gpt-4o chat.html ./output
-
-# Verbose output
-npm run chat-to-json -- --verbose chat-export.json ./output
-```
-
-#### 3.2 Output Format
-
-**JSON File Structure:**
-Each output file follows Neotoma's standard record format:
-
-```json
-{
-  "type": "message",
-  "properties": {
-    "schema_version": "1.0",
-    "sender": "user",
-    "recipient": "assistant",
-    "subject": "Question about API",
-    "body": "How do I use the API?",
-    "sent_at": "2024-01-15T10:30:00Z"
-  },
-  "file_urls": ["local://chat-export.json"],
-  "summary": "User asked about API usage"
-}
-```
-
-**File Naming:**
-
-- Format: `record_<index>_<schema-type>_<timestamp>.json`
-- Example: `record_001_message_20240115T103000Z.json`
-- Index: Sequential number starting from 001
-- Timestamp: ISO 8601 format (UTC)
-
-#### 3.3 Error Handling
-
-**Exit Codes:**
-
-- `0`: Success
-- `1`: General error (invalid arguments, file not found, etc.)
-- `2`: LLM API error (authentication, rate limit, etc.)
-- `3`: Parsing error (invalid input format)
-- `4`: Output error (cannot write to output directory)
-
-**Error Messages:**
-
-- Clear, actionable error messages
-- Include file paths and line numbers where applicable
-- Suggest solutions for common issues
-
-**Example Error Output:**
-
-```
-Error: Input file not found: chat-export.json
-  Hint: Check file path and permissions
-
-Error: LLM API authentication failed
-  Hint: Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable
-
-Error: Invalid JSON format in input file
-  Hint: Verify file is valid ChatGPT export JSON
-```
-
-#### 3.4 Interactive Mode
-
-**Flow:**
-
-1. Tool parses input and extracts records using LLM
-2. Displays extracted fields and proposed schema types
-3. User can:
-   - Review and edit field mappings
-   - Change schema type assignments
-   - Skip records
-   - Confirm and proceed
-4. Tool exports final JSON files with user corrections
-
-**UI Format:**
-
-```
-Extracted Record 1/5:
-Schema Type: message
-Fields:
-  sender: user
-  recipient: assistant
-  body: How do I use the API?
-  sent_at: 2024-01-15T10:30:00Z
-
-Actions:
-  [E]dit fields
-  [C]hange schema type
-  [S]kip
-  [A]ccept
-  [Q]uit
-
->
-```
+- Semantic search integration (v1.x)
+- Model-selection UI (v1.x)
+- Multi-user organization features (v1.x)
 
 ---
 
-### 4. Release-Level Acceptance Criteria
+### 3. Release-Level Acceptance Criteria
 
-#### 4.1 Product
+#### 3.1 Product
 
-- CLI tool successfully converts chat transcripts to JSON files with schema types
-- Output JSON files can be ingested deterministically by Neotoma's standard ingestion path
-- Interactive mode allows users to correct field mappings before export
-- Tool handles common export formats (ChatGPT JSON, HTML, text)
+- Storage uploads that fail are retried automatically
+- Long-running interpretations are cleaned up
+- Quota limits are enforced with clear error messages
+- Users understand their usage via storage_usage tracking
 
-#### 4.2 Technical
+#### 3.2 Technical
 
 **Implementation Requirements:**
 
-- CLI script functional (`scripts/chat-to-json.ts`)
-- Parsers for supported export formats (ChatGPT JSON, HTML, text)
-- LLM-based interpretation working (OpenAI/Anthropic API integration)
-- JSON output follows standard record format (type, properties, file_urls, summary)
-- Each JSON file contains one record object with schema type
-- Unit tests for format parsers
-- Integration tests for full CLI workflow
-- E2E tests: CLI output → Neotoma JSON ingestion
+- `upload_queue` table with retry logic
+- `storage_usage` table with per-user bytes + interpretation counts
+- `interpretation_runs` extended with `timeout_at`, `heartbeat_at` columns
+- Upload Queue Processor worker (every 5 min)
+- Stale Interpretation Cleanup worker (every 5 min)
+- Quota enforcement with rejection on limit exceeded
+- Billing month reset automation
 
 **Technical Specifications:**
 
-- **Format Parsers:**
+- **Upload Queue Retry**: Max 5 retries with exponential backoff
+- **Interpretation Timeout**: 10 minutes with heartbeat monitoring
+- **Interpretation Quota**: Strict enforcement (reject on exceed)
+- **Storage Quota**: Per-plan limits (free: 1GB, pro: 100GB)
 
-  - ChatGPT JSON: Parse standard ChatGPT export format
-  - HTML: Extract text from HTML structure, handle nested elements
-  - Plain Text: Parse line-separated or structured text formats
-  - Auto-detection: Detect format from file extension and content
+#### 3.3 Business
 
-- **LLM Integration:**
-
-  - Provider: OpenAI (default) or Anthropic
-  - Model: Configurable (default: gpt-4o-mini)
-  - Prompt: Structured prompt for record extraction and schema type assignment
-  - Error Handling: Retry logic, rate limit handling, timeout management
-
-- **JSON Output Validation:**
-  - Schema validation against Neotoma record format
-  - Required fields: type, properties, file_urls
-  - Optional fields: summary
-  - Properties must include schema_version
-
-#### 4.3 Business
-
-- Tool enables chat transcript ingestion workflow without violating Truth Layer determinism constraints
-- Users can pre-process chat exports before ingestion
-- Tool preserves separation between non-deterministic interpretation (CLI) and deterministic ingestion (Truth Layer)
+- Operational reliability enables production-grade usage
+- Clear quota feedback improves user experience
+- Resilience reduces support burden
 
 ---
 
-### 5. Technical Implementation Details
+### 4. Data Model
 
-#### 5.1 Architecture
+#### 4.1 New Tables
 
-**Component Structure:**
+| Table | Purpose |
+|-------|---------|
+| `upload_queue` | Async retry for failed storage uploads |
+| `storage_usage` | Per-user storage and interpretation quotas |
 
-```
-scripts/chat-to-json.ts (CLI entry point)
-├── src/cli/parsers/
-│   ├── json_parser.ts (ChatGPT JSON parser)
-│   ├── html_parser.ts (HTML parser)
-│   └── text_parser.ts (Plain text parser)
-├── src/cli/llm/
-│   ├── interpreter.ts (LLM-based interpretation)
-│   └── prompts.ts (Prompt templates)
-├── src/cli/interactive/
-│   └── field_mapper.ts (Interactive field mapping)
-└── src/cli/output/
-    └── json_writer.ts (JSON file writer)
-```
+#### 4.2 Extended Tables
 
-#### 5.2 LLM Integration
-
-**Provider Selection:**
-
-- Environment variable: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
-- CLI option: `--provider <provider>`
-- Default: OpenAI if `OPENAI_API_KEY` is set, otherwise Anthropic
-
-**Model Selection:**
-
-- Default: `gpt-4o-mini` (cost-effective, sufficient accuracy)
-- Configurable via `--model` option
-- Supported models:
-  - OpenAI: `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`
-  - Anthropic: `claude-3-haiku`, `claude-3-sonnet`, `claude-3-opus`
-
-**Prompt Structure:**
-
-```
-You are extracting structured records from a chat transcript.
-
-Input transcript:
-{transcript_content}
-
-Extract records following these rules:
-1. Identify distinct records (messages, notes, tasks, code snippets)
-2. Assign appropriate schema types from: {schema_types}
-3. Extract fields according to schema type requirements
-4. Include timestamps where available
-5. Generate concise summaries
-
-Output format: JSON array of records
-```
-
-**Error Handling:**
-
-- Retry logic: 3 retries with exponential backoff
-- Rate limit handling: Wait and retry
-- Timeout: 60 seconds per LLM call
-- Fallback: Return partial results if LLM fails
-
-#### 5.3 Format Parsers
-
-**ChatGPT JSON Parser:**
-
-- Parse standard ChatGPT export JSON structure
-- Extract messages, metadata, timestamps
-- Handle nested conversation structures
-- Preserve message order
-
-**HTML Parser:**
-
-- Use HTML parser library (e.g., `cheerio` or `jsdom`)
-- Extract text content from HTML elements
-- Handle common HTML export structures
-- Preserve message boundaries
-
-**Plain Text Parser:**
-
-- Parse line-separated formats
-- Detect message boundaries (timestamps, separators)
-- Handle markdown-like formatting
-- Preserve message order
-
-**Format Detection:**
-
-1. Check file extension (.json, .html, .txt)
-2. Check file content (JSON structure, HTML tags, plain text)
-3. Use detected format or CLI-specified format
-
-#### 5.4 JSON Output Schema
-
-**Record Format:**
-
-```typescript
-interface OutputRecord {
-  type: string; // Schema type (e.g., "message", "note", "task")
-  properties: {
-    schema_version: string; // Required: "1.0"
-    [key: string]: unknown; // Type-specific fields
-  };
-  file_urls: string[]; // Array of source file URLs
-  summary?: string; // Optional human-readable summary
-}
-```
-
-**Schema Type Assignment:**
-
-- Use LLM to analyze content and assign schema types
-- Supported types: `message`, `note`, `task`, `code`, etc.
-- Fallback to `message` if type cannot be determined
-- User can override in interactive mode
-
-**Field Mapping:**
-
-- Extract fields based on schema type requirements
-- Map transcript fields to record properties
-- Handle missing fields gracefully
-- User can correct mappings in interactive mode
-
-#### 5.5 Interactive Mode Implementation
-
-**Data Structures:**
-
-```typescript
-interface ExtractedRecord {
-  proposedType: string;
-  fields: Record<string, unknown>;
-  confidence: number;
-}
-
-interface FieldMapping {
-  sourceField: string;
-  targetField: string;
-  value: unknown;
-}
-```
-
-**User Interface:**
-
-- Terminal-based interactive prompts
-- Display extracted records one at a time
-- Allow editing fields, changing schema types
-- Save corrections to final JSON output
-
-**State Management:**
-
-- Track user corrections
-- Apply corrections to final output
-- Support undo/redo (optional)
-
-#### 5.6 Validation and Error Handling
-
-**Input Validation:**
-
-- File exists and is readable
-- File format is supported
-- Output directory is writable
-- LLM API key is configured
-
-**Output Validation:**
-
-- JSON files are valid JSON
-- Records follow standard format
-- Required fields are present
-- Schema types are valid
-
-**Error Recovery:**
-
-- Continue processing if one record fails
-- Log errors for failed records
-- Generate partial output if possible
+| Table | Extensions |
+|-------|------------|
+| `interpretation_runs` | `timeout_at`, `heartbeat_at` columns |
 
 ---
 
-### 6. Cross-FU Integration Scenarios (High-Level)
+### 5. Background Workers
 
-These scenarios must pass end-to-end before v0.3.0 is approved:
+| Worker | Trigger | Purpose |
+|--------|---------|---------|
+| Upload Queue Processor | Cron 5 min | Retry failed storage uploads |
+| Stale Interpretation Cleanup | Cron 5 min | Mark timed-out runs as failed |
 
-1. **Chat Transcript Conversion Flow**
-
-   - User exports chat transcript from ChatGPT (JSON format)
-   - Run CLI: `npm run chat-to-json -- chat-export.json output_dir/`
-   - Tool parses transcript, uses LLM to interpret content
-   - Tool outputs JSON files (one per extracted record) with schema types
-   - User reviews/corrects field mappings in interactive mode
-   - Final JSON files exported to output directory
-
-2. **JSON Ingestion Validation**
-
-   - Take JSON files from CLI output
-   - Ingest JSON files via Neotoma's standard ingestion path
-   - Verify records created with correct schema types
-   - Verify properties extracted correctly
-   - Verify deterministic ingestion (same JSON → same record)
-
-3. **Multiple Format Support**
-   - Test with ChatGPT JSON export
-   - Test with HTML export
-   - Test with plain text export
-   - Verify consistent JSON output format across all input formats
+All deployed as Supabase Edge Functions with cron triggers.
 
 ---
 
-### 7. Deployment and Rollout Strategy
-
-- **Deployment Target**: Production (neotoma.io)
-  - All releases deploy to production at neotoma.io
-  - CLI tool distributed via npm package
-  - Documentation and tool available at neotoma.io
-- **Marketing Strategy**: Not Marketed
-  - No pre-launch marketing activities
-  - No post-launch marketing activities
-  - No user acquisition campaigns
-  - No announcement or promotion
-  - Release deployed silently to production
-- **Rollback Plan**: Revert code changes and redeploy to neotoma.io
-
----
-
-### 8. Post-Release Validation
-
-- Validate CLI tool functionality:
-  - Tool successfully converts representative chat exports
-  - Output JSON files have correct schema types
-  - Output JSON files can be ingested deterministically
-  - Interactive mode allows field correction
-  - Documentation is clear and complete
-
----
-
-### 9. Success Criteria
+### 6. Success Criteria
 
 **Release is Complete When:**
 
-1. ✅ CLI tool functional (`npm run chat-to-json`)
-2. ✅ Parsers for all supported formats (JSON, HTML, text)
-3. ✅ LLM-based interpretation working
-4. ✅ JSON output follows standard record format
-5. ✅ Interactive field mapping mode functional
-6. ✅ Unit tests passing (format parsers)
-7. ✅ Integration tests passing (full CLI workflow)
-8. ✅ E2E tests passing (CLI output → Neotoma ingestion)
-9. ✅ Documentation complete (usage examples, format specifications)
-10. ✅ Field accuracy ≥80% on representative chat exports
+1. ✅ `upload_queue` table created with retry logic
+2. ✅ `storage_usage` table created with quota tracking
+3. ✅ `interpretation_runs` extended with timeout columns
+4. ✅ Upload Queue Processor worker functional
+5. ✅ Stale Interpretation Cleanup worker functional
+6. ✅ Quota enforcement tested (reject on exceed)
+7. ✅ Integration tests for async retry scenarios
+8. ✅ Monitoring metrics for queue depth, timeouts
 
 ---
 
-### 10. Status
+### 7. Release Spacing Context
+
+| Release | Focus | Status |
+|---------|-------|--------|
+| **v0.2.0** | Minimal ingestion + correction loop | Prerequisite |
+| **v0.3.0** | Operational hardening | This release |
+| **v0.4.0** | Intelligence + housekeeping | Next |
+| **v1.x** | Experience + growth | Future |
+
+---
+
+### 8. Status
 
 - **Current Status**: `planning`
 - **Owner**: Mark Hendrickson
+- **Gate**: v0.2.0 must be validated with real usage before starting v0.3.0
 - **Notes**:
-  - Pre-MVP release (not marketed)
-  - All releases deploy to production at neotoma.io
-  - Enables chat transcript ingestion workflow
-  - Preserves Truth Layer determinism by separating non-deterministic interpretation from ingestion pipeline
-  - Tool runs independently from Neotoma server
+  - Operational resilience layer
+  - All deferred items from v0.2.0
+  - Background workers require v0.2.0 schema foundation
 
 ---

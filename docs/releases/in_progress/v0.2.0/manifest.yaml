@@ -1,15 +1,16 @@
 release:
   id: v0.2.0
-  name: Sources-First Ingestion Architecture
+  name: Minimal Ingestion + Correction Loop
   type: "not_marketed" # marketed | not_marketed
   priority: P0
   status: planning
-  target_ship_date: null # Before v0.3.0 and v1.0.0
+  target_ship_date: null # Before v0.3.0 (Operational Hardening) and v1.0.0
   owner: Mark Hendrickson
   marketing_required: false
+  guiding_principle: "Ship the minimal ingestion + correction loop that proves real usage before adding safety nets"
 
 feature_units:
-  # Phase 1: Schema + Storage Foundation
+  # Phase 1: Core Schema + RLS
   - id: FU-110
     name: Sources Table Migration
     priority: P0
@@ -24,15 +25,7 @@ feature_units:
     status: not_started
     dependencies: [FU-110]
     phase: 1
-    description: Versioned interpretation tracking with full config logging (provider, model_id, temperature, prompt_hash, code_version, feature_flags)
-
-  - id: FU-112
-    name: Storage Infrastructure
-    priority: P0
-    status: not_started
-    dependencies: []
-    phase: 1
-    description: Upload queue, storage usage tracking, quotas
+    description: Versioned interpretation tracking with config logging (no timeout columns in v0.2.0)
 
   - id: FU-113
     name: Entity Extensions
@@ -66,14 +59,14 @@ feature_units:
     phase: 1
     description: Merge audit log with TEXT IDs
 
-  # Phase 2: MCP Tools + Services
+  # Phase 2: Minimal MCP Tools + Services
   - id: FU-120
     name: Raw Storage Service
     priority: P0
     status: not_started
-    dependencies: [FU-110, FU-112]
+    dependencies: [FU-110]
     phase: 2
-    description: SHA-256 hashing, Supabase Storage, queue fallback
+    description: SHA-256 hashing, Supabase Storage (synchronous only, no queue)
 
   - id: FU-121
     name: Interpretation Service
@@ -81,7 +74,7 @@ feature_units:
     status: not_started
     dependencies: [FU-111, FU-114, FU-115]
     phase: 2
-    description: Strict JSON schema validation using schema registry, entity resolution, unknown field routing to raw_fragments
+    description: Strict JSON schema validation, entity resolution, unknown field routing
 
   - id: FU-122
     name: MCP ingest() Tool
@@ -105,7 +98,7 @@ feature_units:
     status: not_started
     dependencies: [FU-121]
     phase: 2
-    description: Versioned re-interpretation with quota enforcement
+    description: Versioned re-interpretation with simple quota check
 
   - id: FU-125
     name: MCP correct() Tool
@@ -121,41 +114,9 @@ feature_units:
     status: not_started
     dependencies: [FU-113, FU-116]
     phase: 2
-    description: Entity deduplication with cascade updates
+    description: Manual entity deduplication with cascade updates
 
-  # Phase 3: Background Workers + Integration
-  - id: FU-130
-    name: Upload Queue Processor
-    priority: P0
-    status: not_started
-    dependencies: [FU-112, FU-120]
-    phase: 3
-    description: Async retry for failed uploads
-
-  - id: FU-131
-    name: Stale Interpretation Cleanup
-    priority: P0
-    status: not_started
-    dependencies: [FU-111]
-    phase: 3
-    description: Timeout handling for hung jobs
-
-  - id: FU-132
-    name: Archival Job
-    priority: P2
-    status: not_started
-    dependencies: [FU-111]
-    phase: 3
-    description: Old interpretation run archival (deferred until core flows stable)
-
-  - id: FU-133
-    name: Duplicate Detection Worker
-    priority: P2
-    status: not_started
-    dependencies: [FU-113]
-    phase: 3
-    description: Heuristic duplicate flagging (deferred until core flows stable)
-
+  # Phase 3: Query + Integration
   - id: FU-134
     name: Query Updates
     priority: P0
@@ -164,16 +125,56 @@ feature_units:
     phase: 3
     description: Provenance chain, merged entity exclusion
 
+deferred_to_v030:
+  - id: FU-112
+    name: Storage Infrastructure
+    description: Upload queue, storage usage tracking, quotas
+    reason: Don't optimize throughput before confirming adoption
+
+  - id: FU-130
+    name: Upload Queue Processor
+    description: Async retry for failed uploads
+    reason: Not needed until real failure patterns emerge
+
+  - id: FU-131
+    name: Stale Interpretation Cleanup
+    description: Timeout handling for hung jobs
+    reason: Not needed until real usage patterns
+
+deferred_to_v040:
+  - id: FU-132
+    name: Archival Job
+    description: Old interpretation run archival
+    reason: Only valuable with volume/diversity of data
+
+  - id: FU-133
+    name: Duplicate Detection Worker
+    description: Heuristic duplicate flagging
+    reason: Heuristics need data to justify
+
 scope:
   included:
-    - FU-110 through FU-116: Schema + Storage Foundation
-    - FU-120 through FU-126: MCP Tools + Services
-    - FU-130 through FU-134: Background Workers + Integration
+    - FU-110, FU-111, FU-113-116: Core Schema + RLS
+    - FU-120 through FU-126: Minimal MCP Tools + Services
+    - FU-134: Query Updates
+
+  deferred_v030:
+    - FU-112: Storage Infrastructure (upload queue, storage usage)
+    - FU-130: Upload Queue Processor
+    - FU-131: Stale Interpretation Cleanup
+    - Advanced quota tiers and billing automation
+
+  deferred_v040:
+    - FU-132: Archival Job
+    - FU-133: Duplicate Detection Worker
+    - Schema discovery/promotion from raw_fragments
+
+  deferred_v1x:
+    - Semantic search integration
+    - Model-selection UI
+    - Multi-user organization features
 
   excluded:
-    - LLM model selection UI
-    - Semantic search integration
-    - Multi-user collaboration
     - Automated entity merge suggestions
     - Schema evolution UI
 
@@ -182,30 +183,29 @@ acceptance_criteria:
     - Raw files can be ingested and content-addressed
     - Interpretation runs are versioned and auditable
     - Users can correct AI-extracted fields
-    - Duplicate entities can be merged deterministically
+    - Duplicate entities can be merged manually
     - All data is user-isolated
 
   technical:
     - All new tables created with RLS policies
     - Sources table with content hash uniqueness per user
-    - Interpretation runs with timeout handling
     - Entities extended with user_id and merge tracking
     - MCP tools functional (ingest, ingest_structured, reinterpret, correct, merge_entities)
-    - Background workers deployed as Edge Functions
     - Unit and integration tests passing
+    - NO background workers in v0.2.0
 
   business:
-    - Foundation enables all subsequent ingestion-dependent features
+    - Core ingestion + correction loop validated with real usage
     - User data isolation satisfies privacy requirements
     - Interpretation auditability enables trust and debugging
 
 success_criteria:
   - All migrations applied successfully
   - RLS policies enforced on all user tables
-  - All MCP tools functional
-  - Background workers operational
+  - All MCP tools functional (synchronous operations only)
   - Cross-user isolation verified
   - All tests passing
+  - Validation goal: "Users/agents can ingest, re-interpret, correct, and merge on real data"
 
 determinism_doctrine:
   principle: "Deterministic given fixed source, interpretation config, and resolver version"

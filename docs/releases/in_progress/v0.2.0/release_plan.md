@@ -1,19 +1,25 @@
-## Release v0.2.0 — Sources-First Ingestion Architecture
+## Release v0.2.0 — Minimal Ingestion + Correction Loop
 
-_(Pre-MVP Release for Foundational Ingestion Infrastructure)_
+_(Pre-MVP Release: Prove the Core Before Adding Safety Nets)_
 
 ---
 
 ### 1. Release Overview
 
 - **Release ID**: `v0.2.0`
-- **Name**: Sources-First Ingestion Architecture
+- **Name**: Minimal Ingestion + Correction Loop
 - **Release Type**: Not Marketed (production deployment without marketing activities)
-- **Goal**: Implement a sources-first ingestion architecture that decouples raw data storage from interpretation, enabling content-addressed deduplication, versioned interpretation runs, user isolation, and entity merge capabilities.
+- **Goal**: Ship the **minimal ingestion + correction loop** that proves real usage. Everything not required for: (1) ingest raw/structured, (2) run AI interpretation, (3) store observations with provenance, (4) correct mistakes, (5) query entities/snapshots — is pushed to later releases.
 - **Priority**: P0 (foundational infrastructure required before MVP)
-- **Target Ship Date**: Before Chat Transcript CLI (v0.3.0) and MVP (v1.0.0)
+- **Target Ship Date**: Before Operational Hardening (v0.3.0) and MVP (v1.0.0)
 - **Marketing Required**: No (not marketed release)
 - **Deployment**: Production (neotoma.io)
+
+#### 1.0 Guiding Principle
+
+> Ship the **minimal ingestion + correction loop** that proves real usage before adding "safety nets" and "nice-to-have infra."
+
+This release validates: **"Users/agents can ingest, re-interpret, correct, and merge on real data."**
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
@@ -30,39 +36,46 @@ This release plan coordinates the sources-first ingestion architecture into a co
 
 #### 2.1 Included Feature Units
 
-**Phase 1: Schema + Storage Foundation**
+**Phase 1: Core Schema + RLS**
 
 - `FU-110`: Sources Table Migration (content-addressed raw storage with RLS)
-- `FU-111`: Interpretation Runs Table (versioned interpretation tracking with timeout handling)
-- `FU-112`: Storage Infrastructure (upload queue, storage usage tracking, quotas)
+- `FU-111`: Interpretation Runs Table (versioned interpretation tracking)
 - `FU-113`: Entity Extensions (user_id, merged_to tracking, RLS)
 - `FU-114`: Observation Extensions (source_id, interpretation_run_id linkage)
 - `FU-115`: Raw Fragments Extensions (unknown field storage with provenance)
 - `FU-116`: Entity Merges Table (merge audit log)
 
-**Phase 2: MCP Tools + Services**
+**Phase 2: Minimal MCP Tools + Services**
 
-- `FU-120`: Raw Storage Service (SHA-256 hashing, Supabase Storage, queue fallback)
+- `FU-120`: Raw Storage Service (SHA-256 hashing, Supabase Storage, **synchronous only**)
 - `FU-121`: Interpretation Service (schema validation, entity resolution, unknown field routing)
 - `FU-122`: MCP ingest() Tool (raw ingestion with optional interpretation)
 - `FU-123`: MCP ingest_structured() Tool (pre-structured data with schema validation)
-- `FU-124`: MCP reinterpret() Tool (versioned re-interpretation with quota enforcement)
+- `FU-124`: MCP reinterpret() Tool (versioned re-interpretation with simple quota check)
 - `FU-125`: MCP correct() Tool (high-priority correction observations)
-- `FU-126`: MCP merge_entities() Tool (entity deduplication with cascade updates)
+- `FU-126`: MCP merge_entities() Tool (manual entity deduplication)
 
-**Phase 3: Background Workers + Integration**
+**Phase 3: Query + Integration**
 
-- `FU-130`: Upload Queue Processor (async retry for failed uploads) — **P0**
-- `FU-131`: Stale Interpretation Cleanup (timeout handling for hung jobs) — **P0**
-- `FU-132`: Archival Job (old interpretation run archival) — P2 (deferred)
-- `FU-133`: Duplicate Detection Worker (heuristic duplicate flagging) — P2 (deferred)
-- `FU-134`: Query Updates (provenance chain, merged entity exclusion) — **P0**
+- `FU-134`: Query Updates (provenance chain, merged entity exclusion)
 
-#### 2.2 Explicitly Excluded
+#### 2.2 Explicitly Deferred
 
-- LLM model selection UI (use config/env)
-- Semantic search integration (post-MVP)
-- Multi-user collaboration (entities remain user-isolated)
+| Item | Deferred To | Reason |
+|------|-------------|--------|
+| `FU-112`: Storage Infrastructure (upload_queue, storage_usage tables) | v0.3.0 | Don't optimize throughput before confirming adoption |
+| `FU-130`: Upload Queue Processor | v0.3.0 | Async retry not needed until real failure patterns emerge |
+| `FU-131`: Stale Interpretation Cleanup | v0.3.0 | Timeout worker not needed until real usage patterns |
+| Advanced quota tiers (per-plan, monthly reset automation) | v0.3.0 | Simple hard-coded limit sufficient for validation |
+| `FU-132`: Archival Job | v0.4.0 | Only valuable with volume/diversity of data |
+| `FU-133`: Duplicate Detection Worker | v0.4.0 | Heuristics need data to justify |
+| Schema discovery/promotion from raw_fragments | v0.4.0 | Requires analytics pipeline |
+| Semantic search integration | v1.x | Leverage feature for proven core |
+| Model-selection UI | v1.x | Use config/env until core is validated |
+| Multi-user organization features | v1.x | Should not block Tier 1 ICP validation |
+
+#### 2.3 Explicitly Excluded (Not Planned)
+
 - Automated entity merge suggestions (manual/agent-driven only)
 - Schema evolution UI (schemas seeded via migration)
 
@@ -84,14 +97,12 @@ This release plan coordinates the sources-first ingestion architecture into a co
 
 - All new tables created with RLS policies
 - `sources` table with `(user_id, content_hash)` uniqueness
-- `interpretation_runs` with timeout/heartbeat columns
+- `interpretation_runs` table (no timeout/heartbeat columns in v0.2.0)
 - `entities` extended with `user_id`, `merged_to_entity_id`
 - `observations` linked to `source_id`, `interpretation_run_id`
 - `raw_fragments` stores unknown fields with provenance
 - `entity_merges` audit log with TEXT IDs (matching `entities.id`)
-- `storage_usage` tracks bytes + interpretation counts
 - MCP tools: `ingest()`, `ingest_structured()`, `reinterpret()`, `correct()`, `merge_entities()`
-- Background workers deployed as Supabase Edge Functions
 - Unit tests for schema filtering, unknown routing, merge behavior
 - Integration tests for full ingest → query flow, reinterpretation immutability
 
@@ -99,10 +110,10 @@ This release plan coordinates the sources-first ingestion architecture into a co
 
 - **Storage Path**: `sources/{user_id}/{content_hash}`
 - **Deduplication**: SHA-256 content hash with per-user uniqueness
-- **Interpretation Quota**: 100/month (free), 1000/month (pro)
-- **Interpretation Timeout**: 10 minutes with heartbeat monitoring
+- **Interpretation Quota**: Hard-coded global limit (e.g., 100/month), soft enforcement with logging
 - **Source Priorities**: AI=0, structured=100, correction=1000
 - **Entity IDs**: TEXT (not UUID) per baseline schema
+- **Storage**: Synchronous upload only (no queue fallback in v0.2.0)
 
 **Validation Requirements:**
 
@@ -131,23 +142,22 @@ This release plan coordinates the sources-first ingestion architecture into a co
 5. **User isolation from day one** (all tables user-scoped with RLS)
 6. **Prevent schema pollution** from interpretation (unknown → raw_fragments)
 7. **Bound entity-duplication damage** with minimal merge mechanism
-8. **Prevent unbounded interpretation costs** with quotas and timeouts
 
 #### 4.2 Benefits
 
 - **Provenance**: Every observation traceable to raw source and interpretation run
 - **Immutability**: Reinterpretation never modifies existing observations
 - **Flexibility**: Generic fallback type handles unknown schemas gracefully
-- **Cost Control**: Monthly quotas prevent runaway AI costs
-- **Resilience**: Upload queue handles storage failures with retry
 - **Auditability**: Entity merges logged with observation count
+- **Simplicity**: No background workers, no async queues — validate core loop first
 
 #### 4.3 Trade-offs
 
 - **Entity resolution remains heuristic**: Duplicates expected; merge is manual
 - **Interpretation is non-deterministic**: Auditability is the guarantee, not replay
 - **Storage overhead**: Raw content stored separately from observations
-- **Complexity**: More tables and relationships than simple record storage
+- **No async resilience**: Storage failures fail synchronously (deferred to v0.3.0)
+- **Simple quota enforcement**: Soft limit with logging only (strict enforcement in v0.3.0)
 
 ---
 
@@ -210,9 +220,7 @@ Every `observation` and `raw_fragment` MUST have:
 | Table | Purpose |
 |-------|---------|
 | `sources` | Raw content storage (hash, URL, mime_type, provenance) |
-| `interpretation_runs` | Versioned interpretation attempts with timeout tracking |
-| `upload_queue` | Async retry for failed storage uploads |
-| `storage_usage` | Per-user storage and interpretation quotas |
+| `interpretation_runs` | Versioned interpretation attempts |
 | `entity_merges` | Audit log for entity merge operations |
 
 #### 6.2 Extended Tables
@@ -223,6 +231,13 @@ Every `observation` and `raw_fragment` MUST have:
 | `observations` | `source_id`, `interpretation_run_id` |
 | `raw_fragments` | `source_id`, `interpretation_run_id`, `user_id` |
 | `entity_snapshots` | RLS policies only |
+
+#### 6.3 Deferred Tables (v0.3.0)
+
+| Table | Purpose | Why Deferred |
+|-------|---------|--------------|
+| `upload_queue` | Async retry for failed storage uploads | No async resilience until real failure patterns |
+| `storage_usage` | Per-user storage and interpretation quotas | Simple hard-coded limit sufficient for v0.2.0 |
 
 ---
 
@@ -315,31 +330,27 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 - ✅ Observations redirect to merged target
 - ✅ Audit log created
 
-#### 8.5 Upload Queue Retry Flow
+#### 8.5 Query Flow
 
-1. Storage upload fails during `ingest()`
-2. Content queued to `upload_queue` with temp file
-3. Source created with `storage_status: 'pending'`
-4. Background worker retries upload
-5. On success: status updated to 'uploaded'
-6. On final failure: status updated to 'failed'
+1. Agent queries entities for a user
+2. System excludes merged entities by default
+3. Provenance chain returned (source → interpretation_run → observation)
+4. Agent can optionally include merged entities
 
 **Acceptance Criteria:**
-- ✅ Partial failure doesn't block ingest response
-- ✅ Retry succeeds after transient failure
-- ✅ Final failure logged with error
+- ✅ Merged entities excluded by default
+- ✅ Provenance chain complete in query response
+- ✅ User isolation enforced (no cross-user data)
 
 ---
 
 ### 9. Implementation Phases
 
-#### Phase 1: Schema + Storage (1-2 weeks)
+#### Phase 1: Core Schema + RLS (1 week)
 
 **Migrations:**
 - `sources` table with RLS
-- `interpretation_runs` table with timeout/heartbeat columns
-- `upload_queue` table
-- `storage_usage` table with interpretation quotas
+- `interpretation_runs` table (no timeout/heartbeat — deferred to v0.3.0)
 - `entity_merges` table (TEXT IDs, user-scoped unique index)
 - Extend `entities` with user_id, merged_to_entity_id, merged_at + RLS
 - Extend `observations` with source_id, interpretation_run_id
@@ -353,43 +364,29 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 **Storage Service:**
 - `raw_storage_service.ts`
 - SHA-256 hashing
-- Supabase Storage upload with retry
-- File-based queue for failures with disk space check
-- Transactional storage usage tracking (idempotent)
+- Supabase Storage upload (**synchronous only**, no queue fallback)
 
 **Setup:**
 - Create storage bucket `sources` with user-prefix structure
-- Create temp directory for queue files
 
-#### Phase 2: MCP Tools + Workers (2-3 weeks)
+#### Phase 2: Minimal MCP Tools (2 weeks)
 
 **Interpretation Service:**
 - Schema filtering (valid → observation, unknown → raw_fragments)
 - Multi-entity extraction
-- Advisory lock on source_id
-- Heartbeat updates during long-running interpretation
-- Extraction completeness tracking
 - User-scoped entity resolution
+- Extraction completeness tracking
 
 **MCP Tools:**
-- `ingest()` with quota check
+- `ingest()` with simple quota check (soft limit + logging)
 - `ingest_structured()` with schema validation
-- `reinterpret()` with quota + timeout handling
+- `reinterpret()` with simple quota check
 - `correct()` with schema validation + entity ownership check
 - `merge_entities()` with validation + cascade updates + same-user check
 
-**Background Workers (P0 for v0.2.0):**
-- Upload queue processor (every 5 min) — required
-- Stale interpretation cleanup (every 5 min) — required
+**No Background Workers in v0.2.0** — all operations synchronous.
 
-**Deferred Workers (P2 — post-core-stability):**
-- Archival job (weekly) — defer until core flows stable
-- Duplicate detection (weekly, user-scoped) — defer until core flows stable
-
-**Monitoring:**
-- Instrument all services with metrics logging
-
-#### Phase 3: Integration + Testing (2 weeks)
+#### Phase 3: Query + Integration Testing (1 week)
 
 **Query Updates:**
 - Update `query_records` to return `source_id` in provenance
@@ -399,58 +396,51 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 - Redirect observations to merged entity target
 
 **Testing:**
-- Unit tests: schema filtering, unknown routing, idempotent usage
+- Unit tests: schema filtering, unknown routing, merge behavior
 - Integration tests: full ingest → query flow, reinterpret immutability, merge behavior
 - Merge tests: cross-user prevention, merged entity redirect/exclusion
-- Performance tests: concurrent uploads, large files
-- Timeout tests: verify stale cleanup works
 
-**Total: 5-7 weeks**
+**Total: 4 weeks**
 
 ---
 
 ### 10. Background Workers
 
-| Worker | Trigger | Priority | Purpose |
-|--------|---------|----------|---------|
-| Upload Queue Processor | Cron 5 min | **P0** | Retry failed storage uploads |
-| Stale Interpretation Cleanup | Cron 5 min | **P0** | Mark timed-out runs as failed |
-| Archival Job | Cron weekly | P1 (defer) | Archive old interpretation runs (180 days) |
-| Duplicate Detection | Cron weekly | P1 (defer) | Flag potential entity duplicates |
+**v0.2.0 has NO background workers.** All operations are synchronous.
 
-**Prioritization**: P0 workers (Upload Queue, Stale Cleanup) are required for v0.2.0 completion. P1 workers (Archival, Duplicate Detection) are deferred until core flows (ingest, reinterpret, correct, merge) are stable and monitored.
+| Worker | Deferred To | Reason |
+|--------|-------------|--------|
+| Upload Queue Processor | v0.3.0 | Async retry not needed until real failure patterns emerge |
+| Stale Interpretation Cleanup | v0.3.0 | Timeout handling not needed until real usage patterns |
+| Archival Job | v0.4.0 | Only valuable with volume/diversity of data |
+| Duplicate Detection | v0.4.0 | Heuristics need data to justify |
 
-All deployed as Supabase Edge Functions with cron triggers.
+**Rationale**: Validate the core ingestion + correction loop before adding operational complexity.
 
 ---
 
 ### 11. Monitoring Metrics
 
-#### 11.1 Core Flow Metrics (P0 — Gating for v0.2.0)
+#### 11.1 Core Flow Metrics (Minimal for v0.2.0)
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `ingest.latency_ms` | histogram | End-to-end ingest time |
 | `ingest.success_total` | counter | Successful ingestions |
 | `ingest.failure_total` | counter | Failed ingestions |
-| `reinterpret.latency_ms` | histogram | Reinterpretation time |
 | `reinterpret.success_total` | counter | Successful reinterpretations |
 | `correct.success_total` | counter | Successful corrections |
 | `merge.success_total` | counter | Successful entity merges |
-| `interpretation.quota_exceeded_total` | counter | Quota exceeded rejections |
+| `interpretation.quota_soft_limit_total` | counter | Quota soft limit warnings |
 
-**Gating Criteria**: Core flows (ingest, reinterpret, correct, merge) must have <1% error rate and p99 latency <30s before layering additional complexity.
+**Goal**: Enough telemetry to validate the core loop works. Detailed latency histograms deferred to v0.3.0.
 
-#### 11.2 Infrastructure Metrics
+#### 11.2 Deferred Metrics (v0.3.0+)
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `storage.upload.latency_ms` | histogram | Upload time |
-| `storage.upload.success_total` | counter | Successful uploads |
-| `storage.upload.failure_total` | counter | Failed uploads |
-| `storage.queue.depth` | gauge | Pending queue items |
-| `interpretation.timeout_total` | counter | Timed out interpretations |
-| `entity.potential_duplicates` | gauge | Entities flagged as potential duplicates |
+| Metric | Description | Why Deferred |
+|--------|-------------|--------------|
+| `*.latency_ms` histograms | Detailed latency tracking | Optimize after validation |
+| `storage.queue.depth` | Upload queue depth | No queue in v0.2.0 |
+| `interpretation.timeout_total` | Timed out interpretations | No timeout worker in v0.2.0 |
 
 ---
 
@@ -501,14 +491,13 @@ All deployed as Supabase Edge Functions with cron triggers.
 5. ✅ `reinterpret()` creates new observations (immutability verified)
 6. ✅ `correct()` creates priority-1000 observations
 7. ✅ `merge_entities()` rewrites observations and updates snapshots
-8. ✅ Upload queue processor retries failed uploads
-9. ✅ Stale interpretation cleanup marks timeouts as failed
-10. ✅ Unit tests passing (schema filtering, merge behavior)
-11. ✅ Integration tests passing (full ingestion flow)
-12. ✅ Cross-user isolation verified (no data leakage)
-13. ✅ Core flow monitoring instrumented (ingest, reinterpret, correct, merge)
-14. ✅ Interpretation config logging verified (provider, model, temperature, prompt_hash)
-15. ✅ Provenance chain complete (source → interpretation_run → observation → snapshot)
+8. ✅ Unit tests passing (schema filtering, merge behavior)
+9. ✅ Integration tests passing (full ingestion flow)
+10. ✅ Cross-user isolation verified (no data leakage)
+11. ✅ Interpretation config logging verified (provider, model, temperature, prompt_hash)
+12. ✅ Provenance chain complete (source → interpretation_run → observation → snapshot)
+
+**Validation Goal**: "Users/agents can ingest, re-interpret, correct, and merge on real data."
 
 ---
 
@@ -519,26 +508,33 @@ All deployed as Supabase Edge Functions with cron triggers.
 3. **Interpretation is non-deterministic**: Auditability is the guarantee, not replay
 4. **Merge chains not supported**: Each entity can only be merged once (flat merges only)
 5. **Relationships/timeline_events**: Out of scope unless they become user-scoped
-6. **Entity resolution not versioned**: Resolver version tracking deferred to future release (see 16.1)
-
-#### 16.1 Future Enhancements (Post-v0.2.0)
-
-| Enhancement | Description | Why Deferred |
-|-------------|-------------|--------------|
-| **Resolver versioning** | Track which resolver version produced each `entity_id` or merge decision | Requires `resolution_run` abstraction; adds complexity before core flows are stable |
-| **Resolver evolution rules** | Define additive vs breaking changes; audit/rollback capability | Depends on versioning foundation |
-| **Automated merge suggestions** | Proactive duplicate detection with UI | Core merge must be stable first |
+6. **No async resilience**: Storage failures fail synchronously (v0.3.0)
+7. **Simple quota enforcement**: Soft limit with logging only (v0.3.0)
+8. **No timeout handling**: Long interpretations not automatically cleaned up (v0.3.0)
 
 ---
 
-### 17. Status
+### 17. Release Spacing Summary
+
+| Release | Focus | Key Deliverables |
+|---------|-------|------------------|
+| **v0.2.0** | Core ingestion + correction loop | `ingest`, `ingest_structured`, `reinterpret`, `correct`, `merge_entities` |
+| **v0.3.0** | Operational hardening | Upload queue + retry, quota enforcement, stale cleanup workers |
+| **v0.4.0** | Intelligence + housekeeping | Duplicate detection, archival, early schema promotion |
+| **v1.x** | Experience + growth | Semantic search, model selection UI, multi-user org features |
+
+This spacing ensures each release validates real usage before layering complexity.
+
+---
+
+### 18. Status
 
 - **Current Status**: `planning`
 - **Owner**: Mark Hendrickson
 - **Notes**:
   - Pre-MVP release (not marketed)
-  - Foundational infrastructure for all subsequent ingestion features
-  - Enables Chat Transcript CLI (v0.3.0) and MVP (v1.0.0)
+  - Minimal viable ingestion loop — validate before adding complexity
+  - Enables Operational Hardening (v0.3.0) and MVP (v1.0.0)
   - Greenfield implementation (no migration complexity)
   - AI agent execution assumed
 
