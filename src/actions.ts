@@ -77,6 +77,7 @@ import {
   sortRecordsDeterministically,
 } from "./services/search.js";
 import { createObservationsFromRecord } from "./services/observation_ingestion.js";
+import { DEFAULT_USER_ID } from "./services/entity_resolution.js";
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -901,14 +902,23 @@ app.post("/store_record", async (req, res) => {
     logError("EventEmissionError:store_record", req, eventError);
   }
 
+  const userId =
+    parsed.data.user_id || config.plaid.linkDefaults?.userId || DEFAULT_USER_ID;
+
   // Extract and persist entities (FU-101)
   try {
-    const { extractEntities, resolveEntity } = await import('./services/entity_resolution.js');
+    const { extractEntities, resolveEntity } = await import(
+      "./services/entity_resolution.js"
+    );
     const entities = extractEntities(properties, normalizedType);
     const resolvedEntities = [];
     
     for (const entity of entities) {
-      const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+      const resolved = await resolveEntity(
+        entity.entity_type,
+        entity.raw_value,
+        userId,
+      );
       resolvedEntities.push(resolved);
       
       // Create record-entity edge
@@ -946,8 +956,10 @@ app.post("/store_record", async (req, res) => {
 
   // Create observations (FU-058)
   try {
-    const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
-    await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
+    const { createObservationsFromRecord } = await import(
+      "./services/observation_ingestion.js"
+    );
+    await createObservationsFromRecord(data as any, userId);
   } catch (observationError) {
     // Log observation creation error but don't fail the request
     logError("ObservationCreationError:store_record", req, observationError);
