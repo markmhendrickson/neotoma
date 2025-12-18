@@ -11,6 +11,7 @@ import {
   detectCycles,
   validateGraphIntegrity,
 } from "./graph_builder.js";
+import { DEFAULT_USER_ID } from "./entity_resolution.js";
 
 describe("Graph Builder Service", () => {
   const testRecordIds: string[] = [];
@@ -59,6 +60,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "orphan test company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -126,6 +128,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "test company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -214,16 +217,19 @@ describe("Graph Builder Service", () => {
           id: "ent_cycle_test_1",
           entity_type: "company",
           canonical_name: "company 1",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_test_2",
           entity_type: "company",
           canonical_name: "company 2",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_test_3",
           entity_type: "company",
           canonical_name: "company 3",
+          user_id: DEFAULT_USER_ID,
         },
       ];
 
@@ -274,6 +280,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "orphan company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -336,11 +343,13 @@ describe("Graph Builder Service", () => {
           id: "ent_cycle_val_1",
           entity_type: "company",
           canonical_name: "company 1",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_val_2",
           entity_type: "company",
           canonical_name: "company 2",
+          user_id: DEFAULT_USER_ID,
         },
       ];
 

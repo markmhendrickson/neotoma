@@ -7,11 +7,18 @@
 import { createHash } from "node:crypto";
 import { supabase } from "../db.js";
 
+export const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
+
 export interface Entity {
   id: string;
   entity_type: string;
   canonical_name: string;
+  aliases?: unknown;
+  user_id: string;
+  merged_to_entity_id?: string | null;
+  merged_at?: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 /**
@@ -20,10 +27,15 @@ export interface Entity {
 export function generateEntityId(
   entityType: string,
   canonicalName: string,
+  userId: string = DEFAULT_USER_ID,
 ): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
+
+  const scopePrefix =
+    userId && userId !== DEFAULT_USER_ID ? `${userId}:` : "";
+
   const hash = createHash("sha256")
-    .update(`${entityType}:${normalized}`)
+    .update(`${scopePrefix}${entityType}:${normalized}`)
     .digest("hex");
 
   return `ent_${hash.substring(0, 24)}`;
@@ -54,19 +66,21 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
 export async function resolveEntity(
   entityType: string,
   rawValue: string,
+  userId: string = DEFAULT_USER_ID,
 ): Promise<Entity> {
   const canonicalName = normalizeEntityValue(entityType, rawValue);
-  const entityId = generateEntityId(entityType, canonicalName);
+  const entityId = generateEntityId(entityType, canonicalName, userId);
 
   // Check if entity exists
   const { data: existing } = await supabase
     .from("entities")
     .select("*")
     .eq("id", entityId)
-    .single();
+    .eq("user_id", userId)
+    .maybeSingle();
 
   if (existing) {
-    return existing as Entity;
+    return await followMerge(existing as Entity, userId);
   }
 
   // Create new entity
@@ -78,6 +92,7 @@ export async function resolveEntity(
       entity_type: entityType,
       canonical_name: canonicalName,
       aliases: [],
+      user_id: userId,
       created_at: now,
       updated_at: now,
     })
@@ -162,12 +177,16 @@ export function extractEntities(
 /**
  * Get entity by ID
  */
-export async function getEntityById(entityId: string): Promise<Entity | null> {
+export async function getEntityById(
+  entityId: string,
+  userId: string = DEFAULT_USER_ID,
+): Promise<Entity | null> {
   const { data, error } = await supabase
     .from("entities")
     .select("*")
     .eq("id", entityId)
-    .single();
+    .eq("user_id", userId)
+    .maybeSingle();
 
   if (error || !data) {
     return null;
@@ -180,11 +199,18 @@ export async function getEntityById(entityId: string): Promise<Entity | null> {
  * List entities with optional filters
  */
 export async function listEntities(filters?: {
+  user_id?: string;
   entity_type?: string;
   limit?: number;
   offset?: number;
+  include_merged?: boolean;
 }): Promise<Entity[]> {
-  let query = supabase.from("entities").select("*");
+  const userId = filters?.user_id || DEFAULT_USER_ID;
+  let query = supabase.from("entities").select("*").eq("user_id", userId);
+
+  if (!filters?.include_merged) {
+    query = query.is("merged_to_entity_id", null);
+  }
 
   if (filters?.entity_type) {
     query = query.eq("entity_type", filters.entity_type);
@@ -211,4 +237,34 @@ export async function listEntities(filters?: {
   }
 
   return data as Entity[];
+}
+
+async function followMerge(
+  entity: Entity,
+  userId: string,
+): Promise<Entity> {
+  let current = entity;
+  const visited = new Set<string>();
+
+  while (current.merged_to_entity_id) {
+    if (visited.has(current.id)) {
+      break;
+    }
+    visited.add(current.id);
+
+    const { data } = await supabase
+      .from("entities")
+      .select("*")
+      .eq("id", current.merged_to_entity_id)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!data) {
+      break;
+    }
+
+    current = data as Entity;
+  }
+
+  return current;
 }
