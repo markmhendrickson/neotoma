@@ -1,0 +1,93 @@
+release:
+  id: v0.4.0
+  name: Intelligence + Housekeeping
+  type: "not_marketed"
+  priority: P2
+  status: planning
+  target_ship_date: null # After v0.3.0 is stable
+  owner: Mark Hendrickson
+  marketing_required: false
+  gate: "v0.3.0 must be stable before starting"
+  guiding_principle: "These features are only valuable with volume/diversity of data"
+
+dependencies:
+  - v0.3.0 # Operational Hardening
+
+feature_units:
+  # Intelligence Workers (deferred from v0.3.0)
+  - id: FU-133
+    name: Duplicate Detection Worker
+    priority: P1
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Heuristic duplicate flagging (weekly cron)
+
+  # Housekeeping Workers (deferred from v0.3.0)
+  - id: FU-132
+    name: Archival Job
+    priority: P1
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Old interpretation run archival (180 days)
+
+  # Schema Analytics
+  - id: FU-137
+    name: Raw Fragments Analytics
+    priority: P2
+    status: not_started
+    dependencies: []
+    phase: 2
+    description: Analytics on raw_fragments for schema promotion candidates
+
+  # Utility Tools (may be sequenced separately)
+  - id: FU-106
+    name: Chat Transcript Extraction CLI
+    priority: P2
+    status: not_started
+    dependencies: []
+    phase: 2
+    description: Standalone CLI for converting chat transcripts to JSON
+
+scope:
+  included:
+    - FU-132: Archival Job
+    - FU-133: Duplicate Detection Worker
+    - FU-137: Raw Fragments Analytics
+    - FU-106: Chat Transcript Extraction CLI (tentative)
+
+  deferred_v1x:
+    - Automated merge suggestions
+    - Semantic search integration
+    - Model-selection UI
+    - Multi-user organization features
+
+acceptance_criteria:
+  product:
+    - Duplicate entities are flagged for review
+    - Old interpretation runs are archived
+    - Schema promotion candidates are identified
+
+  technical:
+    - Duplicate Detection Worker functional
+    - Archival Job functional
+    - Raw Fragments analytics available
+
+  business:
+    - Intelligence improves data quality
+    - Housekeeping reduces storage costs
+    - Schema discovery enables evolution
+
+success_criteria:
+  - Duplicate Detection Worker functional
+  - Archival Job functional
+  - Raw Fragments analytics available
+  - Integration tests passing
+
+release_spacing:
+  v020: "Minimal ingestion + correction loop (foundation)"
+  v030: "Operational hardening (prerequisite)"
+  v040: "Intelligence + housekeeping (this release)"
+  v1x: "Experience + growth (future)"
+

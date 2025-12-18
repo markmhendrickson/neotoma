@@ -1,56 +1,124 @@
 release:
   id: v0.3.0
-  name: Chat Transcript Extraction Tool
-  type: "not_marketed" # marketed | not_marketed
+  name: Operational Hardening
+  type: "not_marketed"
   priority: P1
   status: planning
-  target_ship_date: null # Before MVP (v1.0.0), after v0.2.0
+  target_ship_date: null # After v0.2.0 is validated
   owner: Mark Hendrickson
   marketing_required: false
-  depends_on:
-    - v0.2.0 # Sources-First Ingestion (chat tool outputs use ingest pipeline)
+  gate: "v0.2.0 must be validated with real usage before starting"
+  guiding_principle: "Don't optimize throughput and robustness before confirming adoption"
+
+dependencies:
+  - v0.2.0 # Minimal Ingestion + Correction Loop
 
 feature_units:
-  - id: FU-106
-    name: Chat Transcript to JSON CLI Tool
-    priority: P1
+  # Storage Infrastructure (deferred from v0.2.0)
+  - id: FU-112
+    name: Storage Infrastructure
+    priority: P0
     status: not_started
     dependencies: []
+    phase: 1
+    description: upload_queue table, storage_usage table, quota enforcement
+
+  # Background Workers (deferred from v0.2.0)
+  - id: FU-130
+    name: Upload Queue Processor
+    priority: P0
+    status: not_started
+    dependencies: [FU-112]
+    phase: 2
+    description: Async retry for failed uploads (every 5 min)
+
+  - id: FU-131
+    name: Stale Interpretation Cleanup
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 2
+    description: Timeout handling for hung jobs (every 5 min)
+
+  # Interpretation Enhancements
+  - id: FU-135
+    name: Interpretation Timeout Columns
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Add timeout_at, heartbeat_at to interpretation_runs
+
+  - id: FU-136
+    name: Strict Quota Enforcement
+    priority: P0
+    status: not_started
+    dependencies: [FU-112]
+    phase: 2
+    description: Reject on quota exceed, billing month reset
+
+deferred_to_v040:
+  - id: FU-132
+    name: Archival Job
+    description: Old interpretation run archival
+    reason: Only valuable with volume/diversity of data
+
+  - id: FU-133
+    name: Duplicate Detection Worker
+    description: Heuristic duplicate flagging
+    reason: Heuristics need data to justify
+
+  - name: Schema Discovery/Promotion
+    description: Automated promotion from raw_fragments
+    reason: Requires analytics pipeline
 
 scope:
   included:
-    - FU-106: Chat Transcript to JSON CLI Tool
+    - FU-112: Storage Infrastructure (upload_queue, storage_usage)
+    - FU-130: Upload Queue Processor
+    - FU-131: Stale Interpretation Cleanup
+    - FU-135: Interpretation Timeout Columns
+    - FU-136: Strict Quota Enforcement
+
+  deferred_v040:
+    - FU-132: Archival Job
+    - FU-133: Duplicate Detection Worker
+    - Schema discovery/promotion from raw_fragments
 
   excluded:
-    - Truth Layer integration (tool runs separately)
-    - UI components (CLI-only)
-    - Multi-user infrastructure (standalone tool)
-    - CSV output format (JSON only)
+    - Semantic search integration (v1.x)
+    - Model-selection UI (v1.x)
+    - Multi-user organization features (v1.x)
 
 acceptance_criteria:
   product:
-    - CLI tool converts chat transcripts to JSON files with schema types
-    - Output JSON files can be ingested deterministically
-    - Interactive mode allows field correction
-    - Tool handles common export formats (ChatGPT JSON, HTML, text)
+    - Storage uploads that fail are retried automatically
+    - Long-running interpretations are cleaned up
+    - Quota limits are enforced with clear errors
+    - Users understand their usage via storage_usage
 
   technical:
-    - CLI script functional (scripts/chat-to-json.ts)
-    - Parsers for supported formats
-    - LLM-based interpretation working
-    - JSON output follows standard record format
-    - Unit, integration, and E2E tests passing
+    - upload_queue table with retry logic
+    - storage_usage table with per-user tracking
+    - interpretation_runs timeout columns added
+    - Upload Queue Processor worker functional
+    - Stale Interpretation Cleanup worker functional
+    - Quota enforcement tested
 
   business:
-    - Tool enables chat transcript ingestion workflow
-    - Preserves Truth Layer determinism constraints
+    - Operational reliability enables production-grade usage
+    - Clear quota feedback improves UX
+    - Resilience reduces support burden
 
 success_criteria:
-  - CLI tool functional
-  - All format parsers working
-  - LLM interpretation working
-  - JSON output format correct
-  - Interactive mode functional
-  - All tests passing
-  - Documentation complete
-  - Field accuracy ≥80%
+  - All new tables created
+  - Background workers functional
+  - Quota enforcement verified
+  - Integration tests passing
+  - Monitoring metrics for queue depth, timeouts
+
+release_spacing:
+  v020: "Minimal ingestion + correction loop (prerequisite)"
+  v030: "Operational hardening (this release)"
+  v040: "Intelligence + housekeeping (next)"
+  v1x: "Experience + growth (future)"
