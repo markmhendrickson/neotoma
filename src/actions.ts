@@ -77,6 +77,11 @@ import {
   sortRecordsDeterministically,
 } from "./services/search.js";
 import { createObservationsFromRecord } from "./services/observation_ingestion.js";
+import {
+  enqueueFailedUpload,
+  computeContentHash,
+} from "./services/upload_queue.js";
+import { incrementStorageUsage } from "./services/storage_usage.js";
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -130,6 +135,7 @@ const SENSITIVE_FIELDS = new Set([
 
 const CANONICAL_RECORD_TYPES = listCanonicalRecordTypes();
 const CANONICAL_RECORD_TYPE_IDS = CANONICAL_RECORD_TYPES.map((def) => def.id);
+const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
 
 function redactHeaders(
   headers: Record<string, unknown>
@@ -947,7 +953,7 @@ app.post("/store_record", async (req, res) => {
   // Create observations (FU-058)
   try {
     const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
-    await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
+    await createObservationsFromRecord(data as any, DEFAULT_USER_ID);
   } catch (observationError) {
     // Log observation creation error but don't fail the request
     logError("ObservationCreationError:store_record", req, observationError);
@@ -1851,7 +1857,7 @@ app.post("/create_relationship", async (req, res) => {
     metadata,
   } = parsed.data;
 
-  const userId = "00000000-0000-0000-0000-000000000000"; // v0.1.0 single-user
+  const userId = DEFAULT_USER_ID; // v0.1.0 single-user
 
   const { relationshipsService } = await import("./services/relationships.js");
 
@@ -2088,6 +2094,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
   const originalName = req.file?.originalname || "upload.bin";
   const mimeType = req.file?.mimetype || "application/octet-stream";
   const fileSize = req.file?.size ?? fileBuffer.length;
+  const fileHash = computeContentHash(fileBuffer);
 
   const recordId = record_id ?? randomUUID();
 
@@ -2176,12 +2183,56 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
     .from(bucketName)
     .upload(fileName, fileBuffer, { upsert: false });
 
-  if (uploadError) {
-    logError("SupabaseStorageError:upload_file", req, uploadError, {
+  if (uploadError || !uploadData) {
+    logError("SupabaseStorageError:upload_file", req, uploadError ?? {}, {
       bucket: bucketName,
       fileName,
     });
-    return res.status(500).json({ error: uploadError.message });
+
+    const queueMetadata = {
+      record_id: record_id ?? null,
+      override_properties: overrideProperties ?? null,
+      csv_row_records_requested: shouldGenerateCsvRows,
+      csv_rows_generated: preparedCsvRows.length > 0,
+      mime_type: mimeType,
+      original_name: originalName,
+    };
+
+    try {
+      const queued = await enqueueFailedUpload({
+        bucket: bucketName,
+        objectPath: fileName,
+        buffer: fileBuffer,
+        byteSize: fileSize,
+        userId: DEFAULT_USER_ID,
+        errorMessage: uploadError?.message ?? "Storage upload failed",
+        metadata: queueMetadata,
+        contentHash: fileHash,
+        payloadSubmissionId: null,
+      });
+
+      logDebug("UploadQueueEnqueue", req, {
+        queue_id: queued.id,
+        bucket: bucketName,
+        object_path: fileName,
+      });
+
+      return res.status(202).json({
+        status: "pending_retry",
+        queue_id: queued.id,
+        storage_status: "pending_retry",
+      });
+    } catch (queueError) {
+      logError("UploadQueueEnqueueFailed:upload_file", req, queueError, {
+        bucket: bucketName,
+        fileName,
+      });
+      return res.status(503).json({
+        error:
+          uploadError?.message ??
+          "Storage upload failed and retry queue is unavailable",
+      });
+    }
   }
 
   const filePath = uploadData.path;
@@ -2199,6 +2250,15 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
     if (updateError) {
       logError("SupabaseError:upload_file:update_row", req, updateError);
       return res.status(500).json({ error: updateError.message });
+    }
+
+    try {
+      await incrementStorageUsage(DEFAULT_USER_ID, fileSize);
+    } catch (usageError) {
+      logWarn("StorageUsageIncrementFailed:update_record_files", req, {
+        error:
+          usageError instanceof Error ? usageError.message : String(usageError),
+      });
     }
 
     logDebug("Success:upload_file", req, { record_id, filePath });
@@ -2287,6 +2347,15 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
     } catch (eventError) {
       // Log event emission error but don't fail the request
       logError("EventEmissionError:upload_file", req, eventError);
+    }
+
+    try {
+      await incrementStorageUsage(DEFAULT_USER_ID, fileSize);
+    } catch (usageError) {
+      logWarn("StorageUsageIncrementFailed:create_record", req, {
+        error:
+          usageError instanceof Error ? usageError.message : String(usageError),
+      });
     }
 
     logDebug("Success:upload_file:create", req, {

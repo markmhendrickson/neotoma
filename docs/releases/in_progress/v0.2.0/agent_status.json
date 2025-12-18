@@ -38,26 +38,26 @@
         },
         {
           "fu_id": "FU-112",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
-          "completed_at": null,
+          "worker_agent_id": "worker_fu112_local",
+          "status": "completed",
+          "progress": 1.0,
+          "started_at": "2025-12-18T13:41:39Z",
+          "last_update": "2025-12-18T13:46:22Z",
+          "completed_at": "2025-12-18T13:46:22Z",
           "error": null,
           "tests": {
             "unit": {
-              "passed": null,
+              "passed": true,
               "coverage": null,
-              "command": null
+              "command": "npm run test -- src/services/upload_queue.test.ts src/services/storage_usage.test.ts"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:integration"
             },
             "e2e": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:e2e"
             }
           }
         },
@@ -414,6 +414,12 @@
       ]
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "fu_id": "FU-112",
+      "timestamp": "2025-12-18T13:46:22Z",
+      "message": "Integration/E2E tests require Supabase DEV_SUPABASE_URL/KEY; not configured in agent environment."
+    }
+  ],
   "completed_fus": []
 }

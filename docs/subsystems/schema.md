@@ -724,16 +724,19 @@ CREATE POLICY "Service role full access" ON interpretation_runs
 ```sql
 CREATE TABLE upload_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL REFERENCES sources(id),
   temp_file_path TEXT NOT NULL,
+  bucket TEXT NOT NULL,
+  object_path TEXT NOT NULL,
   content_hash TEXT NOT NULL,
-  byte_size INTEGER NOT NULL,
+  byte_size BIGINT NOT NULL,
   retry_count INTEGER DEFAULT 0,
   max_retries INTEGER DEFAULT 5,
   next_retry_at TIMESTAMPTZ DEFAULT NOW(),
   error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  user_id UUID NOT NULL
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  user_id UUID NOT NULL,
+  payload_submission_id UUID REFERENCES payload_submissions(id),
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 
@@ -745,11 +748,25 @@ CREATE INDEX idx_upload_queue_retry ON upload_queue(next_retry_at)
 CREATE INDEX idx_upload_queue_user ON upload_queue(user_id);
 ```
 
+**Security:**
+
+```sql
+ALTER TABLE upload_queue ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role full access - upload_queue"
+  ON upload_queue
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+```
+
 **Notes:**
 
-- Background worker processes queue every 5 minutes
-- Exponential backoff: 30s, 60s, 120s, 300s, 600s
-- After max retries, source marked as `storage_status = 'failed'`
+- Background worker processes queue every 5 minutes.
+- Exponential backoff: 30s, 60s, 120s, 300s, 600s.
+- After max retries, the pending payload/storage status is marked as `failed` and the temp file is removed.
+- `metadata` stores serialized ingestion context (file name, mime type, overrides). This bridges the gap until the dedicated `sources` table from FU-110 is live, and fuels FU-130 retries.
+- `payload_submission_id` is nullable and populated once payload creation succeeds under the payload model defined in `docs/architecture/payload_model.md`.
 
 ---
 
@@ -769,6 +786,18 @@ CREATE TABLE storage_usage (
   interpretation_limit_month INTEGER DEFAULT 100,
   billing_month TEXT DEFAULT to_char(NOW(), 'YYYY-MM')
 );
+```
+
+**Security:**
+
+```sql
+ALTER TABLE storage_usage ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Service role full access - storage_usage"
+  ON storage_usage
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
 ```
 
 **Functions:**
@@ -811,6 +840,7 @@ $$ LANGUAGE plpgsql;
 
 - Interpretation quota resets monthly
 - Default limit: 100/month (free tier)
+- Usage counters are only mutated through the helper functions to guarantee deterministic increments (schema-first rule).
 
 ---
 
