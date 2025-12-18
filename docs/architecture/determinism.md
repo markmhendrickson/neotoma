@@ -224,26 +224,29 @@ for (const file of files.sort()) {
 
 ### 2.6 LLM Outputs (Non-Deterministic by Nature)
 
-❌ **FORBIDDEN (in MVP):**
+❌ **NON-DETERMINISTIC (but allowed with audit trail):**
 ```typescript
 // Nondeterministic: LLM extraction varies
 const entities = await llm.extract(rawText);
 // Same text → different entities each run
 ```
 
-✅ **REQUIRED (MVP):**
+**Policy:** AI interpretation is **auditable but not replay-deterministic** (see Section 1.2-1.3).
+
+**Requirements for AI interpretation:**
+- Config logging: model, temperature, prompt_hash, code_version
+- Immutable interpretation runs: reinterpretation creates NEW observations
+- Never claim replay determinism
+- Entity resolution may create duplicates; `merge_entities()` repairs
+
+**Alternative (fully deterministic):**
 ```typescript
 // Deterministic: rule-based extraction
 const entities = extractEntitiesViaRegex(rawText, schemaRules);
 // Same text + rules → same entities
 ```
 
-**Future:** If LLM extraction is added, MUST use:
-- Temperature = 0
-- Fixed seed
-- Fixed prompt
-- Validation against deterministic rules
-- Still not 100% deterministic (document limitations)
+Use rule-based extraction when determinism is critical; use AI interpretation when flexibility is needed.
 
 ---
 
@@ -823,7 +826,7 @@ Use this checklist when reviewing code:
 - [ ] All filesystem reads are sorted
 - [ ] All IDs are hash-based (not random)
 - [ ] All sorting has deterministic tiebreakers
-- [ ] No LLM extraction in MVP (rule-based only)
+- [ ] LLM extraction (if used) has config logging and immutable interpretation runs
 - [ ] Tests are reproducible (run 100 times, all pass)
 - [ ] External API calls are isolated from core truth
 
@@ -895,13 +898,14 @@ for (const batch of chunk(files.sort(), 100)) {
 3. **MUST NOT iterate unsorted** (Maps, Sets, Objects)
 4. **MUST NOT rely on filesystem order** (always sort)
 5. **MUST NOT claim replay determinism for AI interpretation** (config is logged, outputs may vary)
-6. **MUST NOT use nondeterministic ranking** (no random sorting)
-7. **MUST NOT introduce race conditions** (concurrent writes to shared state)
-8. **MUST NOT skip tiebreakers** (all sorting must have secondary sort)
-9. **MUST NOT allow flaky tests** (fix or remove)
-10. **MUST NOT hide nondeterminism** (document if unavoidable)
-11. **MUST NOT modify existing observations** (immutability invariant)
-12. **MUST NOT merge entities across users** (user isolation)
+6. **MUST NOT use AI interpretation without config logging** (provider, model, temperature, prompt_hash)
+7. **MUST NOT use nondeterministic ranking** (no random sorting)
+8. **MUST NOT introduce race conditions** (concurrent writes to shared state)
+9. **MUST NOT skip tiebreakers** (all sorting must have secondary sort)
+10. **MUST NOT allow flaky tests** (fix or remove)
+11. **MUST NOT hide nondeterminism** (document if unavoidable)
+12. **MUST NOT modify existing observations** (immutability invariant)
+13. **MUST NOT merge entities across users** (user isolation)
 
 ---
 
@@ -940,7 +944,7 @@ Load `docs/architecture/determinism.md` when:
 - Random UUID generation for IDs
 - Date.now() in business logic
 - Unsorted iteration over collections
-- LLM-based extraction (MVP)
+- LLM extraction without config logging and immutable interpretation runs
 - Nondeterministic ranking or sorting
 - Flaky tests left unfixed
 - Race conditions in concurrent code

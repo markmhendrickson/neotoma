@@ -165,11 +165,11 @@ CREATE TABLE interpretation_runs (
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   archived_at TIMESTAMPTZ,
-  user_id UUID NOT NULL,
-  timeout_at TIMESTAMPTZ,
-  heartbeat_at TIMESTAMPTZ
+  user_id UUID NOT NULL
 );
 ```
+
+**Note:** `timeout_at` and `heartbeat_at` columns are deferred to v0.3.0 (see Section 7.3).
 
 ### 3.2 Interpretation Config
 
@@ -197,32 +197,6 @@ The `interpretation_config` JSONB field stores all parameters needed to understa
 | `running` | Interpretation in progress |
 | `completed` | Interpretation finished successfully |
 | `failed` | Interpretation failed (see `error_message`) |
-
-### 3.4 Timeout Handling
-
-Long-running interpretations are bounded by timeout:
-
-- `timeout_at`: When the run should be considered stale
-- `heartbeat_at`: Last heartbeat from the interpretation process
-
-Background worker marks runs as `failed` if `heartbeat_at` is too old:
-
-```typescript
-async function cleanupStaleInterpretations(): Promise<void> {
-  const TIMEOUT_MINUTES = 10;
-  const cutoff = new Date(Date.now() - TIMEOUT_MINUTES * 60 * 1000);
-
-  await supabase
-    .from('interpretation_runs')
-    .update({ 
-      status: 'failed', 
-      error_message: 'Timeout - no heartbeat',
-      completed_at: new Date().toISOString()
-    })
-    .eq('status', 'running')
-    .lt('heartbeat_at', cutoff.toISOString());
-}
-```
 
 ---
 
@@ -288,83 +262,79 @@ reinterpret({
 
 ---
 
-## 6. Quota Enforcement
+## 6. Quota Enforcement (v0.2.0: Simple Hard-Coded Limit)
 
-### 6.1 Storage Quota
+### 6.1 Interpretation Quota (Soft Limit)
 
-```typescript
-const STORAGE_LIMITS: Record<string, number> = {
-  free: 1 * 1024 * 1024 * 1024,      // 1GB
-  pro: 50 * 1024 * 1024 * 1024,      // 50GB
-  enterprise: Infinity
-};
-```
-
-### 6.2 Interpretation Quota
+In v0.2.0, quota enforcement is minimal:
 
 ```typescript
-const INTERPRETATION_LIMITS: Record<string, number> = {
-  free: 100,     // 100 interpretations/month
-  pro: 1000,     // 1000 interpretations/month
-  enterprise: Infinity
-};
+const INTERPRETATION_LIMIT = 100; // Hard-coded global limit per month
+
+async function checkQuota(userId: string): Promise<boolean> {
+  const count = await countInterpretationsThisMonth(userId);
+  
+  if (count >= INTERPRETATION_LIMIT) {
+    logger.warn(`User ${userId} exceeded interpretation quota: ${count}/${INTERPRETATION_LIMIT}`);
+    // Soft limit: log warning but allow (for now)
+  }
+  
+  return true; // Always allow in v0.2.0
+}
 ```
 
-### 6.3 Usage Tracking
+**Rationale:** Simple quota check validates the pattern before investing in strict enforcement.
 
-```sql
-CREATE TABLE storage_usage (
-  user_id UUID PRIMARY KEY,
-  total_bytes BIGINT DEFAULT 0,
-  total_sources INTEGER DEFAULT 0,
-  last_calculated TIMESTAMPTZ DEFAULT NOW(),
-  interpretation_count_month INTEGER DEFAULT 0,
-  interpretation_limit_month INTEGER DEFAULT 100,
-  billing_month TEXT DEFAULT to_char(NOW(), 'YYYY-MM')
-);
-```
+### 6.2 Storage Quota
 
-Interpretation quota resets monthly based on `billing_month`.
+No storage quota enforcement in v0.2.0. Uploads always succeed (if storage backend succeeds).
+
+### 6.3 Deferred: Strict Quota Enforcement
+
+**See Section 7.2** for v0.3.0 plans:
+- `storage_usage` table with per-user tracking
+- Strict enforcement (reject on exceed)
+- Per-plan limits (free, pro, enterprise)
+- Billing month reset automation
 
 ---
 
-## 7. Upload Queue
+## 7. Deferred Features (v0.3.0 Operational Hardening)
 
-### 7.1 Purpose
+The following features are intentionally deferred to v0.3.0 to keep v0.2.0 minimal:
 
-Handle transient storage failures without blocking ingestion:
+### 7.1 Upload Queue + Async Retry
 
-1. Attempt upload to object storage
-2. If failure, queue to `upload_queue` with `storage_status = 'pending'`
-3. Background worker retries with exponential backoff
-4. On success, update `storage_status = 'uploaded'`
-5. On final failure, update `storage_status = 'failed'`
+**Deferred to v0.3.0.** In v0.2.0, storage uploads are synchronous only. If upload fails, ingestion fails (no queue fallback).
 
-### 7.2 Schema
+**v0.3.0 will add:**
+- `upload_queue` table for async retry
+- Background worker with exponential backoff
+- `storage_status = 'pending'` support
 
-```sql
-CREATE TABLE upload_queue (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL REFERENCES sources(id),
-  temp_file_path TEXT NOT NULL,
-  content_hash TEXT NOT NULL,
-  byte_size INTEGER NOT NULL,
-  retry_count INTEGER DEFAULT 0,
-  max_retries INTEGER DEFAULT 5,
-  next_retry_at TIMESTAMPTZ DEFAULT NOW(),
-  error_message TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  user_id UUID NOT NULL
-);
-```
+### 7.2 Storage Usage Tracking
 
-### 7.3 Retry Intervals
+**Deferred to v0.3.0.** In v0.2.0, quota enforcement is simple: hard-coded soft limit with logging only.
 
-Exponential backoff: 30s, 60s, 120s, 300s, 600s
+**v0.3.0 will add:**
+- `storage_usage` table with per-user byte tracking
+- Strict quota enforcement (reject on exceed)
+- Billing month reset automation
+
+### 7.3 Interpretation Timeout Handling
+
+**Deferred to v0.3.0.** In v0.2.0, interpretation runs have no timeout columns or heartbeat monitoring.
+
+**v0.3.0 will add:**
+- `timeout_at`, `heartbeat_at` columns to `interpretation_runs`
+- Stale interpretation cleanup worker
+- Automatic failure marking for hung jobs
+
+**Rationale:** Validate the core ingestion + correction loop before adding operational complexity.
 
 ---
 
-## 8. MCP Tools
+## 8. MCP Tools (v0.2.0 Minimal Set)
 
 ### 8.1 `ingest()`
 
@@ -431,7 +401,105 @@ correct({
 
 ---
 
-## 9. Security Model
+## 9. Ingestion Validation Contract
+
+### 9.1 ETL → Truth Layer Boundary
+
+**Policy:** All AI-produced records MUST pass strict schema validation before observations are written. The `schema_registry` is the single source of truth.
+
+### 9.2 Validation Requirements
+
+**For AI Interpretation (via `interpretation_runs`):**
+
+1. **Schema Validation:** Extract fields MUST match active schema version exactly
+2. **Type Validation:** Field types MUST match schema definitions (string, number, date, etc.)
+3. **Required Fields:** All required fields per schema MUST be present
+4. **Unknown Field Routing:** Fields not in schema → `raw_fragments` (not silently dropped)
+5. **Provenance Enforcement:** Every observation MUST have valid `source_id` and `interpretation_run_id`
+
+**For Structured Ingestion (via `ingest_structured()`):**
+
+1. **Schema Validation:** Properties MUST match registered schema for `entity_type`
+2. **Type Validation:** Field types MUST match schema definitions
+3. **Rejection Policy:** Invalid records are rejected with error code (not quarantined)
+
+### 9.3 Failure Paths
+
+| Validation Failure | Action | Error Code |
+|-------------------|--------|------------|
+| Schema not found | Reject | `SCHEMA_NOT_FOUND` |
+| Invalid field type | Reject | `SCHEMA_VALIDATION_FAILED` |
+| Missing required field | Reject | `SCHEMA_VALIDATION_FAILED` |
+| Unknown entity_type | Route to generic fallback | N/A |
+
+### 9.4 Provenance Enforcement
+
+**Foreign Key Constraints:**
+
+```sql
+ALTER TABLE observations
+  ADD CONSTRAINT fk_source_id FOREIGN KEY (source_id) REFERENCES sources(id),
+  ADD CONSTRAINT fk_interpretation_run_id FOREIGN KEY (interpretation_run_id) REFERENCES interpretation_runs(id);
+
+ALTER TABLE raw_fragments
+  ADD CONSTRAINT fk_source_id FOREIGN KEY (source_id) REFERENCES sources(id),
+  ADD CONSTRAINT fk_interpretation_run_id FOREIGN KEY (interpretation_run_id) REFERENCES interpretation_runs(id);
+```
+
+**NOT NULL Constraints:**
+
+- `observations.source_id` — MUST link to source
+- `observations.interpretation_run_id` — MUST link to interpretation run (for AI-derived; NULL for corrections)
+- `raw_fragments.source_id` — MUST link to source
+- `raw_fragments.interpretation_run_id` — MUST link to interpretation run
+
+### 9.5 Validation Service
+
+```typescript
+async function validateAndIngest(
+  sourceId: string,
+  extractedFields: Record<string, any>,
+  schemaType: string,
+  interpretationRunId: string
+): Promise<{ observations: Observation[], fragments: RawFragment[] }> {
+  // 1. Load schema
+  const schema = await schemaRegistry.getSchema(schemaType);
+  if (!schema) {
+    throw new Error(`SCHEMA_NOT_FOUND: ${schemaType}`);
+  }
+  
+  // 2. Separate known vs unknown fields
+  const { validFields, unknownFields } = separateFields(extractedFields, schema);
+  
+  // 3. Validate known fields
+  const validationResult = validateFields(validFields, schema);
+  if (!validationResult.valid) {
+    throw new Error(`SCHEMA_VALIDATION_FAILED: ${validationResult.errors.join(', ')}`);
+  }
+  
+  // 4. Create observations for valid fields
+  const observations = await createObservations(validFields, sourceId, interpretationRunId);
+  
+  // 5. Route unknown fields to raw_fragments
+  const fragments = await createRawFragments(unknownFields, sourceId, interpretationRunId);
+  
+  return { observations, fragments };
+}
+```
+
+### 9.6 Testing Requirements
+
+**Integration Tests:**
+
+1. **Valid Record:** Verify observation created with correct provenance
+2. **Invalid Type:** Verify rejection with `SCHEMA_VALIDATION_FAILED`
+3. **Unknown Fields:** Verify routing to `raw_fragments`
+4. **Missing Provenance:** Verify FK constraint violation
+5. **Prompt Change Test:** Verify prompt/model changes do NOT silently alter record shapes without schema version bump
+
+---
+
+## 10. Security Model
 
 - **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access
 - **MCP Server**: All mutations via `service_role`; user identity stamped into rows
@@ -440,7 +508,7 @@ correct({
 
 ---
 
-## Related Documents
+## 11. Related Documents
 
 - [`docs/subsystems/schema.md`](./schema.md) — Database schema (includes sources, interpretation_runs tables)
 - [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) — Observation layer
@@ -450,7 +518,7 @@ correct({
 
 ---
 
-## Agent Instructions
+## 12. Agent Instructions
 
 ### When to Load This Document
 
