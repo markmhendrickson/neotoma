@@ -17,22 +17,21 @@
           "status": "completed",
           "progress": 1.0,
           "started_at": "2025-12-18T13:33:21Z",
-          "last_update": "2025-12-18T13:36:42Z",
-          "completed_at": "2025-12-18T13:36:42Z",
+          "last_update": "2025-12-18T14:02:48Z",
+          "completed_at": "2025-12-18T14:02:48Z",
           "error": null,
           "tests": {
             "unit": {
-              "passed": true,
-              "coverage": null,
-              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test -- src/utils/property_sanitizer.test.ts"
+              "passed": false,
+              "command": "npm run test"
             },
             "integration": {
               "passed": false,
-              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test -- tests/integration/payload/payload_submission.test.ts"
+              "command": "npm run test:integration"
             },
             "e2e": {
               "passed": false,
-              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test:e2e"
+              "command": "npm run test:e2e"
             }
           }
         },
