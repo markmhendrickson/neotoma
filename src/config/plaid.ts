@@ -1,8 +1,6 @@
 import { z } from "zod";
 
-const plaidEnvSchema = z
-  .enum(['sandbox', 'development', 'production'])
-  .catch('sandbox');
+const plaidEnvSchema = z.enum(["sandbox", "development", "production"]).catch("sandbox");
 
 export type PlaidEnvironment = z.infer<typeof plaidEnvSchema>;
 
@@ -25,23 +23,23 @@ export interface PlaidConfig {
 function parseCommaSeparated(value: string | undefined, fallback: string[]): string[] {
   if (!value) return fallback;
   return value
-    .split(',')
+    .split(",")
     .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
 export function getPlaidConfig(): PlaidConfig {
   const environment = plaidEnvSchema.parse(
-    (process.env.PLAID_ENV || process.env.PLAID_ENVIRONMENT || '').toLowerCase()
+    (process.env.PLAID_ENV || process.env.PLAID_ENVIRONMENT || "").toLowerCase()
   );
 
-  const clientId = process.env.PLAID_CLIENT_ID || '';
+  const clientId = process.env.PLAID_CLIENT_ID || "";
   const secret =
     process.env.PLAID_SECRET ||
-    (environment === 'sandbox' ? process.env.PLAID_SANDBOX_SECRET || '' : '');
+    (environment === "sandbox" ? process.env.PLAID_SANDBOX_SECRET || "" : "");
 
-  const products = parseCommaSeparated(process.env.PLAID_PRODUCTS, ['transactions']);
-  const countryCodes = parseCommaSeparated(process.env.PLAID_COUNTRY_CODES, ['US']);
+  const products = parseCommaSeparated(process.env.PLAID_PRODUCTS, ["transactions"]);
+  const countryCodes = parseCommaSeparated(process.env.PLAID_COUNTRY_CODES, ["US"]);
 
   return {
     clientId,
@@ -59,5 +57,3 @@ export function getPlaidConfig(): PlaidConfig {
     },
   };
 }
-
-
