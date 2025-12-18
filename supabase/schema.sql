@@ -379,6 +379,24 @@ CREATE TABLE IF NOT EXISTS raw_fragments (
   last_seen TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Sources table (content-addressed storage)
+CREATE TABLE IF NOT EXISTS sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_hash TEXT NOT NULL,
+  storage_url TEXT NOT NULL,
+  storage_status TEXT NOT NULL DEFAULT 'uploaded'
+    CHECK (storage_status IN ('uploaded', 'pending', 'failed')),
+  mime_type TEXT NOT NULL,
+  file_name TEXT,
+  byte_size INTEGER NOT NULL,
+  source_type TEXT NOT NULL,
+  source_agent_id TEXT,
+  source_metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL,
+  CONSTRAINT unique_content_per_user UNIQUE (content_hash, user_id)
+);
+
 -- Schema registry table (FU-057)
 CREATE TABLE IF NOT EXISTS schema_registry (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -405,6 +423,11 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_snapshot ON entity_snapshots USING GIN(
 CREATE INDEX IF NOT EXISTS idx_fragments_record ON raw_fragments(record_id);
 CREATE INDEX IF NOT EXISTS idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
 
+-- Indexes for sources
+CREATE INDEX IF NOT EXISTS idx_sources_hash ON sources(content_hash);
+CREATE INDEX IF NOT EXISTS idx_sources_user ON sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_sources_created ON sources(created_at DESC);
+
 -- Index for schema_registry
 CREATE INDEX IF NOT EXISTS idx_schema_active ON schema_registry(entity_type, active) WHERE active = true;
 
@@ -412,6 +435,7 @@ CREATE INDEX IF NOT EXISTS idx_schema_active ON schema_registry(entity_type, act
 ALTER TABLE observations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE entity_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE raw_fragments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE schema_registry ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access
@@ -427,6 +451,10 @@ DROP POLICY IF EXISTS "Service role full access - raw_fragments" ON raw_fragment
 CREATE POLICY "Service role full access - raw_fragments" ON raw_fragments
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Service role full access - sources" ON sources;
+CREATE POLICY "Service role full access - sources" ON sources
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Service role full access - schema_registry" ON schema_registry;
 CREATE POLICY "Service role full access - schema_registry" ON schema_registry
   FOR ALL TO service_role USING (true) WITH CHECK (true);
@@ -440,6 +468,10 @@ CREATE POLICY "public read - entity_snapshots" ON entity_snapshots FOR SELECT US
 
 DROP POLICY IF EXISTS "public read - raw_fragments" ON raw_fragments;
 CREATE POLICY "public read - raw_fragments" ON raw_fragments FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Users read own sources" ON sources;
+CREATE POLICY "Users read own sources" ON sources
+  FOR SELECT USING (user_id = auth.uid());
 
 DROP POLICY IF EXISTS "public read - schema_registry" ON schema_registry;
 CREATE POLICY "public read - schema_registry" ON schema_registry FOR SELECT USING (true);

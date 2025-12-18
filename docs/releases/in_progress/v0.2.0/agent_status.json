@@ -13,26 +13,25 @@
       "feature_units": [
         {
           "fu_id": "FU-110",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
-          "completed_at": null,
+          "worker_agent_id": "worker_fu110_agent",
+          "status": "completed",
+          "progress": 1.0,
+          "started_at": "2025-12-18T13:33:21Z",
+          "last_update": "2025-12-18T14:02:48Z",
+          "completed_at": "2025-12-18T14:02:48Z",
           "error": null,
           "tests": {
             "unit": {
-              "passed": null,
-              "coverage": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:integration"
             },
             "e2e": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:e2e"
             }
           }
         },
