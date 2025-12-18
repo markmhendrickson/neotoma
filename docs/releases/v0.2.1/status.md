@@ -1,6 +1,6 @@
-# Release v0.1.1 — Status
+# Release v0.2.1 — Status
 
-**Release ID**: v0.1.1  
+**Release ID**: v0.2.1  
 **Release Name**: Documentation & Support System  
 **Status**: `planning`  
 **Owner**: Mark Hendrickson  
@@ -10,7 +10,7 @@
 
 ## 1. Release Metadata
 
-- **Release ID**: `v0.1.1`
+- **Release ID**: `v0.2.1`
 - **Name**: Documentation & Support System
 - **Status**: `planning`
 - **Release Type**: Not Marketed
@@ -104,7 +104,7 @@ See `acceptance_criteria.md` for detailed criteria.
 
 | Date       | Decision                    | Rationale                                                                                    |
 | ---------- | --------------------------- | -------------------------------------------------------------------------------------------- |
-| 2025-12-10 | Created v0.1.1 release plan | Add comprehensive documentation and support system to enable users and reduce support burden |
+| 2025-12-10 | Created v0.2.1 release plan | Add comprehensive documentation and support system to enable users and reduce support burden |
 
 ---
 
@@ -132,11 +132,11 @@ See `acceptance_criteria.md` for detailed criteria.
 
 ## 10. Related Documents
 
-- **Release Plan:** `docs/releases/v0.1.1/release_plan.md`
-- **Manifest:** `docs/releases/v0.1.1/manifest.yaml`
-- **Execution Schedule:** `docs/releases/v0.1.1/execution_schedule.md`
-- **Integration Tests:** `docs/releases/v0.1.1/integration_tests.md`
-- **Acceptance Criteria:** `docs/releases/v0.1.1/acceptance_criteria.md`
+- **Release Plan:** `docs/releases/v0.2.1/release_plan.md`
+- **Manifest:** `docs/releases/v0.2.1/manifest.yaml`
+- **Execution Schedule:** `docs/releases/v0.2.1/execution_schedule.md`
+- **Integration Tests:** `docs/releases/v0.2.1/integration_tests.md`
+- **Acceptance Criteria:** `docs/releases/v0.2.1/acceptance_criteria.md`
 
 ---
 

@@ -1,4 +1,4 @@
-## Release v0.1.1 — Documentation & Support System
+## Release v0.2.1 — Documentation & Support System
 
 _(Comprehensive Static Documentation + MCP Support Agent)_
 
@@ -6,7 +6,7 @@ _(Comprehensive Static Documentation + MCP Support Agent)_
 
 ### 1. Release Overview
 
-- **Release ID**: `v0.1.1`
+- **Release ID**: `v0.2.1`
 - **Name**: Documentation & Support System
 - **Release Type**: Not Marketed (production deployment without marketing activities)
 - **Goal**: Deliver comprehensive, statically-generated documentation derived from AI analysis of the repository, served for web viewing, plus an MCP endpoint with an agent that responds to support inquiries using the static documentation as its knowledge base.
@@ -157,7 +157,7 @@ This release plan coordinates the documentation and support system scope into a 
 
 ### 4. Cross-FU Integration Scenarios
 
-These scenarios must pass end-to-end before v0.1.1 is approved:
+These scenarios must pass end-to-end before v0.2.1 is approved:
 
 1. **Documentation Generation → Web Viewing**
 
@@ -191,7 +191,7 @@ These scenarios must pass end-to-end before v0.1.1 is approved:
    - Verify response addresses all parts of question
    - Verify citations reference correct documentation sections
 
-The detailed test specifications for these flows live in `docs/releases/v0.1.1/integration_tests.md`.
+The detailed test specifications for these flows live in `docs/releases/v0.2.1/integration_tests.md`.
 
 ---
 

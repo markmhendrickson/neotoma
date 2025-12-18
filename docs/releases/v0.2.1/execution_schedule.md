@@ -1,6 +1,6 @@
-# Release v0.1.1 — Execution Schedule
+# Release v0.2.1 — Execution Schedule
 
-**Release ID**: v0.1.1  
+**Release ID**: v0.2.1  
 **Release Name**: Documentation & Support System  
 **Release Type**: Not Marketed  
 **Deployment**: Production (neotoma.io)  
@@ -18,7 +18,7 @@
 
 ## Batch Execution Plan
 
-### Batch 0: Documentation Generation
+#### Batch 0: Documentation Generation
 
 **Feature Units:**
 
@@ -42,7 +42,7 @@ AI-powered repository analysis and comprehensive documentation generation. Analy
 
 ---
 
-### Batch 1: Documentation Web Server
+#### Batch 1: Documentation Web Server
 
 **Feature Units:**
 
@@ -74,7 +74,7 @@ One-page landing website presenting key information from README.md with director
 
 ---
 
-### Batch 2: MCP Support Inquiry Endpoint
+#### Batch 2: MCP Support Inquiry Endpoint
 
 **Feature Units:**
 
@@ -99,7 +99,7 @@ New MCP action `query_support` for support inquiries. Implements request/respons
 
 ---
 
-### Batch 3: Support Agent System
+#### Batch 3: Support Agent System
 
 **Feature Units:**
 
@@ -198,12 +198,3 @@ RAG-based support agent using static documentation as knowledge base. Implements
 - **Optimized Parallel**: 16-24 hours (Batches 1 and 2 run in parallel)
 
 ---
-
-
-
-
-
-
-
-
-

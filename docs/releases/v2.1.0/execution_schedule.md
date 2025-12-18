@@ -50,7 +50,7 @@ This document details the execution order of Feature Units for v2.1.0, organized
 
 **Feature Units:**
 
-- **FU-906**: GDPR Request Tracking System
+- `FU-906`: GDPR Request Tracking System
 
 **Dependencies:** None (foundation)
 
@@ -89,9 +89,9 @@ This document details the execution order of Feature Units for v2.1.0, organized
 
 **Feature Units:**
 
-- **FU-909**: GDPR Identity Verification
-- **FU-910**: GDPR Request Rate Limiting
-- **FU-911**: GDPR Audit Logging
+- `FU-909`: GDPR Identity Verification
+- `FU-910`: GDPR Request Rate Limiting
+- `FU-911`: GDPR Audit Logging
 
 **Dependencies:** FU-906
 

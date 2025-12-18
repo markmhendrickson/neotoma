@@ -170,7 +170,7 @@ See [`docs/subsystems/schema.md`](docs/subsystems/schema.md) for complete schema
 
 - **v0.1.0**: Internal MCP Release (`ready_for_deployment`). MCP-focused validation release with deterministic ingestion, extraction, entity resolution, and graph construction. See [`docs/releases/v0.1.0/`](docs/releases/v0.1.0/)
 - **v0.2.0**: Minimal Ingestion + Correction Loop (`planning`). Sources-first ingestion architecture with MCP ingestion tools (ingest, reinterpret, correct, merge_entities). See [`docs/releases/v0.2.0/`](docs/releases/v0.2.0/)
-- **v0.1.1**: Documentation & Support System (`planning`). Documentation improvements and support infrastructure. See [`docs/releases/v0.1.1/`](docs/releases/v0.1.1/)
+- **v0.2.1**: Documentation & Support System (`planning`). Documentation improvements and support infrastructure. See [`docs/releases/v0.2.1/`](docs/releases/v0.2.1/)
 - **v0.3.0**: Operational Hardening (`planning`). Operational resilience and quota enforcement (async upload retry, stale interpretation cleanup, strict quota enforcement). See [`docs/releases/v0.3.0/`](docs/releases/v0.3.0/)
 - **v0.4.0**: Intelligence + Housekeeping (`planning`). Intelligent features (duplicate detection, schema discovery) and housekeeping (archival) after operational stability. See [`docs/releases/v0.4.0/`](docs/releases/v0.4.0/)
 - **v1.0.0**: MVP (`planning`). First production-capable release with structured personal data memory, dual-path ingestion, entity resolution, timelines, cross-platform MCP access, and minimal UI. Target: 2026-01-23. See [`docs/releases/v1.0.0/`](docs/releases/v1.0.0/)

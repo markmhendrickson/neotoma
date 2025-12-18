@@ -1,6 +1,6 @@
-# Release v0.1.1 — Feature Unit Overview
+# Release v0.2.1 — Feature Unit Overview
 
-**Release ID**: v0.1.1  
+**Release ID**: v0.2.1  
 **Release Name**: Documentation & Support System  
 **Release Type**: Not Marketed  
 **Deployment**: Production (neotoma.io)
@@ -9,7 +9,7 @@
 
 ## Purpose
 
-This document provides a high-level overview of the four new Feature Units in v0.1.1. Detailed specifications should be created for each FU following the standard Feature Unit specification format.
+This document provides a high-level overview of the four new Feature Units in v0.2.1. Detailed specifications should be created for each FU following the standard Feature Unit specification format.
 
 ---
 

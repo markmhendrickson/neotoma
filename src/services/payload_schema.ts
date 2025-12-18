@@ -16,7 +16,7 @@ export const ProvenanceSchema = z.object({
   extracted_at: z.string().datetime().describe("ISO 8601 timestamp"),
   extractor_version: z
     .string()
-    .describe('Extractor version (e.g., "neotoma-mcp:v0.1.1")'),
+    .describe('Extractor version (e.g., "neotoma-mcp:v0.2.1")'),
   agent_id: z.string().optional().describe("Optional agent identifier"),
 });
 

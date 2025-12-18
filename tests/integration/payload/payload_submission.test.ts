@@ -66,7 +66,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
           agent_id: "test-agent",
         },
       };
@@ -105,7 +105,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: "2025-01-16T10:00:00Z",
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 
@@ -133,7 +133,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 
@@ -164,7 +164,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 
@@ -197,7 +197,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 
@@ -234,7 +234,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 
@@ -271,7 +271,7 @@ describe("Payload Submission Integration Tests", () => {
         provenance: {
           source_refs: [],
           extracted_at: new Date().toISOString(),
-          extractor_version: "neotoma-mcp:v0.1.1",
+          extractor_version: "neotoma-mcp:v0.2.1",
         },
       };
 

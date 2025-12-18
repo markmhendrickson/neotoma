@@ -330,7 +330,7 @@ All Priority 1 gaps have been resolved.
 
 1. **Performance tests**: Add load tests for high-volume operations
 
-   - Status: Deferred to v0.1.1
+   - Status: Deferred to v0.2.1
    - Reason: Not required for internal MCP release
 
 2. **Stress tests**: Test system limits (very large files, very large property objects)
