@@ -13,11 +13,6 @@ import type { NeotomaRecord } from "../db.js";
 import type { PayloadSubmission } from "./payload_schema.js";
 import type { Capability } from "./capability_registry.js";
 
-// Sentinel payload ID used for legacy v0.1.0 observation flows that operate
-// directly on records without an explicit payload submission.
-const LEGACY_OBSERVATION_PAYLOAD_ID =
-  "00000000-0000-0000-0000-000000000000";
-
 export interface ObservationCreationResult {
   record: NeotomaRecord;
   observations: Array<{
@@ -37,9 +32,6 @@ export async function createObservationsFromRecord(
 ): Promise<ObservationCreationResult> {
   const entities = extractEntities(record.properties, record.type);
   const observations = [];
-
-  // Ensure a legacy payload exists to satisfy observations.source_payload_id FK
-  await ensureLegacyObservationPayload();
 
   // Load active schema for entity types
   const entityTypes = new Set(entities.map((e) => e.entity_type));
@@ -95,40 +87,21 @@ export async function createObservationsFromRecord(
 
     // Create observation
     const observedAt = new Date().toISOString();
-    const baseObservation = {
-      entity_id: resolved.id,
-      entity_type: resolved.entity_type,
-      schema_version: schemaVersion,
-      // For legacy v0.1.0 paths that ingest directly from records (without payloads),
-      // associate observations with a sentinel payload ID to satisfy schema constraints.
-      // This sentinel payload (all-zero UUID) is preserved by tests and migrations.
-      source_payload_id: "00000000-0000-0000-0000-000000000000",
-      observed_at: observedAt,
-      specificity_score: 0.8, // Default specificity
-      source_priority: 0, // Default priority
-      fields: knownFields,
-      user_id: userId,
-    };
-
-    const insertObservation = async (payload: Record<string, unknown>) =>
-      supabase.from("observations").insert(payload).select().single();
-
-    let { data: observationData, error: obsError } = await insertObservation(
-      baseObservation,
-    );
-
-    // Fallback for environments where source_payload_id column is missing
-    if (
-      obsError &&
-      (obsError as any).code === "PGRST204" &&
-      typeof (obsError as any).message === "string" &&
-      (obsError as any).message.includes("source_payload_id")
-    ) {
-      const fallback: Record<string, unknown> = { ...baseObservation };
-      delete (fallback as any).source_payload_id;
-      ({ data: observationData, error: obsError } =
-        await insertObservation(fallback));
-    }
+    const { data: observationData, error: obsError } = await supabase
+      .from("observations")
+      .insert({
+        entity_id: resolved.id,
+        entity_type: resolved.entity_type,
+        schema_version: schemaVersion,
+        source_record_id: record.id,
+        observed_at: observedAt,
+        specificity_score: 0.8, // Default specificity
+        source_priority: 0, // Default priority
+        fields: knownFields,
+        user_id: userId,
+      })
+      .select()
+      .single();
 
     if (obsError) {
       console.error(`Failed to create observation: ${obsError.message}`);
@@ -300,37 +273,21 @@ export async function createObservationsFromPayload(
 
     // Create observation with source_payload_id
     const observedAt = new Date().toISOString();
-    const baseObservation = {
-      entity_id: resolved.id,
-      entity_type: resolved.entity_type,
-      schema_version: schemaVersion,
-      source_payload_id: payload.id,
-      observed_at: observedAt,
-      specificity_score: 0.8,
-      source_priority: 0,
-      fields: knownFields,
-      user_id: userId,
-    };
-
-    const insertObservation = async (payload: Record<string, unknown>) =>
-      supabase.from("observations").insert(payload).select().single();
-
-    let { data: observationData, error: obsError } = await insertObservation(
-      baseObservation,
-    );
-
-    // Fallback for environments where source_payload_id column is missing
-    if (
-      obsError &&
-      (obsError as any).code === "PGRST204" &&
-      typeof (obsError as any).message === "string" &&
-      (obsError as any).message.includes("source_payload_id")
-    ) {
-      const fallback: Record<string, unknown> = { ...baseObservation };
-      delete (fallback as any).source_payload_id;
-      ({ data: observationData, error: obsError } =
-        await insertObservation(fallback));
-    }
+    const { data: observationData, error: obsError } = await supabase
+      .from("observations")
+      .insert({
+        entity_id: resolved.id,
+        entity_type: resolved.entity_type,
+        schema_version: schemaVersion,
+        source_payload_id: payload.id,
+        observed_at: observedAt,
+        specificity_score: 0.8,
+        source_priority: 0,
+        fields: knownFields,
+        user_id: userId,
+      })
+      .select()
+      .single();
 
     if (obsError) {
       console.error(`Failed to create observation: ${obsError.message}`);
@@ -399,44 +356,4 @@ export async function createObservationsFromPayload(
     observations,
     snapshotUpdated,
   };
-}
-
-/**
- * Ensure legacy payload row exists for record-based observations
- */
-async function ensureLegacyObservationPayload(): Promise<void> {
-  // Check if sentinel payload already exists
-  const { data, error } = await supabase
-    .from("payload_submissions")
-    .select("id")
-    .eq("id", LEGACY_OBSERVATION_PAYLOAD_ID)
-    .maybeSingle();
-
-  if (error) {
-    console.error(
-      "Failed to check legacy observation payload:",
-      (error as any).message || error,
-    );
-    return;
-  }
-
-  if (data) return;
-
-  const { error: insertError } = await supabase
-    .from("payload_submissions")
-    .insert({
-      id: LEGACY_OBSERVATION_PAYLOAD_ID,
-      payload_submission_id: "legacy_observation_sentinel",
-      payload_content_id: "legacy_observation_sentinel",
-      capability_id: "legacy:store_record:v0",
-      body: {},
-      provenance: { mode: "legacy" },
-    });
-
-  if (insertError) {
-    console.error(
-      "Failed to create legacy observation payload:",
-      (insertError as any).message || insertError,
-    );
-  }
 }

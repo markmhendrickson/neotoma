@@ -4,7 +4,7 @@ Neotoma is a deterministic truth layer that transforms fragmented personal data 
 
 ### What It Does
 
-Neotoma builds persistent structured memory for AI agents through **dual-path ingestion**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide contextual information during agent conversations that gets remembered for future sessions. As you interact with ChatGPT, Claude, or Cursor, agents can both read your accumulated memory and write new structured data, creating an incremental knowledge base that grows more accurate and comprehensive over time.
+Neotoma builds persistent structured memory for AI agents through **dual-path ingestion**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation—creating an incremental knowledge base that grows more accurate and comprehensive over time.
 
 The system transforms fragmented personal data into a unified memory graph. The graph connects people, companies, events, and relationships across all your data. Every fact traces back to its source. Dates automatically create timelines. Entities are unified across all records, so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
 
@@ -168,12 +168,14 @@ See [`docs/subsystems/schema.md`](docs/subsystems/schema.md) for complete schema
 
 **Current Releases:**
 
-- **v0.1.0**: Internal MCP Release (`ready_for_deployment`). MCP-focused validation release with deterministic ingestion, extraction, entity resolution, and graph construction. See [`docs/releases/in_progress/v0.1.0/`](docs/releases/in_progress/v0.1.0/)
-- **v0.1.1**: Documentation & Support System (`planning`). Documentation improvements and support infrastructure. See [`docs/releases/in_progress/v0.1.1/`](docs/releases/in_progress/v0.1.1/)
-- **v0.2.0**: Chat Transcript Extraction Tool (`planning`). CLI tool for extracting structured data from chat transcripts. See [`docs/releases/in_progress/v0.2.0/`](docs/releases/in_progress/v0.2.0/)
-- **v1.0.0**: MVP (`planning`). First production-capable release with structured personal data memory, dual-path ingestion, entity resolution, timelines, cross-platform MCP access, and minimal UI. Target: 2026-02-24. See [`docs/releases/in_progress/v1.0.0/`](docs/releases/in_progress/v1.0.0/)
-- **v2.0.0**: End-to-End Encryption (`planning`). E2EE implementation for privacy-first architecture. See [`docs/releases/in_progress/v2.0.0/`](docs/releases/in_progress/v2.0.0/)
-- **v2.1.0**: GDPR & US State Privacy Compliance (`planning`). Compliance features for GDPR and US state privacy laws. See [`docs/releases/in_progress/v2.1.0/`](docs/releases/in_progress/v2.1.0/)
+- **v0.1.0**: Internal MCP Release (`ready_for_deployment`). MCP-focused validation release with deterministic ingestion, extraction, entity resolution, and graph construction. See [`docs/releases/v0.1.0/`](docs/releases/v0.1.0/)
+- **v0.2.0**: Minimal Ingestion + Correction Loop (`planning`). Sources-first ingestion architecture with MCP ingestion tools (ingest, reinterpret, correct, merge_entities). See [`docs/releases/v0.2.0/`](docs/releases/v0.2.0/)
+- **v0.1.1**: Documentation & Support System (`planning`). Documentation improvements and support infrastructure. See [`docs/releases/v0.1.1/`](docs/releases/v0.1.1/)
+- **v0.3.0**: Operational Hardening (`planning`). Operational resilience and quota enforcement (async upload retry, stale interpretation cleanup, strict quota enforcement). See [`docs/releases/v0.3.0/`](docs/releases/v0.3.0/)
+- **v0.4.0**: Intelligence + Housekeeping (`planning`). Intelligent features (duplicate detection, schema discovery) and housekeeping (archival) after operational stability. See [`docs/releases/v0.4.0/`](docs/releases/v0.4.0/)
+- **v1.0.0**: MVP (`planning`). First production-capable release with structured personal data memory, dual-path ingestion, entity resolution, timelines, cross-platform MCP access, and minimal UI. Target: 2026-01-23. See [`docs/releases/v1.0.0/`](docs/releases/v1.0.0/)
+- **v2.0.0**: End-to-End Encryption (`planning`). E2EE implementation for privacy-first architecture. See [`docs/releases/v2.0.0/`](docs/releases/v2.0.0/)
+- **v2.1.0**: GDPR & US State Privacy Compliance (`planning`). Compliance features for GDPR and US state privacy laws. See [`docs/releases/v2.1.0/`](docs/releases/v2.1.0/)
 
 See [`docs/releases/`](docs/releases/) for complete release documentation.
 

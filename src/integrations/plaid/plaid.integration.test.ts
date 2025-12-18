@@ -10,9 +10,9 @@ import {
 
 const shouldRun = isPlaidConfigured() && config.plaid.environment === "sandbox";
 
-(shouldRun ? describe : describe.skip)('Plaid sandbox integration', () => {
-  it('exchanges a sandbox public token and fetches accounts/transactions', async () => {
-    const publicToken = await createSandboxPublicToken('ins_109508', ['transactions']);
+(shouldRun ? describe : describe.skip)("Plaid sandbox integration", () => {
+  it("exchanges a sandbox public token and fetches accounts/transactions", async () => {
+    const publicToken = await createSandboxPublicToken("ins_109508", ["transactions"]);
     expect(publicToken).toBeTruthy();
 
     const exchange = await exchangePublicToken(publicToken);
@@ -35,5 +35,3 @@ const shouldRun = isPlaidConfigured() && config.plaid.environment === "sandbox";
     expect(Array.isArray(syncResult.removed)).toBe(true);
   }, 30000);
 });
-
-

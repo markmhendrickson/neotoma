@@ -102,12 +102,10 @@ Before creating a Release, verify:
 **Agent Actions:**
 
 1. **Immediately check** if user wants to create a release plan:
-
    - If context suggests a release (mentions "release", version numbers, "split out", "prior", etc.)
    - Ask: "I see you're requesting a new release. Should I create a release plan in `docs/releases/in_progress/{release_id}/` following the release workflow? (yes/no)"
 
 2. **If yes**, immediately:
-
    - Load `docs/feature_units/standards/release_workflow.md` (this document)
    - Load `.cursor/commands/create_release.md`
    - Follow Step 0 (Checkpoint 0) of the release workflow
@@ -140,7 +138,6 @@ Before creating a Release, verify:
 1. **Alignment Check (Spec vs Mental Model):**
 
    Before doing any planning work, the agent MUST:
-
    - Load and summarize the **canonical specs** relevant to this Release (e.g., `NEOTOMA_MANIFEST.md`, `MVP_OVERVIEW.md`, `GENERAL_REQUIREMENTS.md`, `MVP_FEATURE_UNITS.md` for MVP).
    - Present a concise, structured summary to the user covering:
      - What this Release will and will NOT change (in plain language).
@@ -154,23 +151,19 @@ Before creating a Release, verify:
    **MUST NOT** proceed to plan creation until the user has confirmed that the summary matches their intent (or has explicitly accepted any divergence as temporary).
 
 2. **Check if Release plan exists:**
-
    - Look for `docs/releases/vX.Y.Z/release_plan.md`
    - Look for `docs/releases/vX.Y.Z/manifest.yaml`
 
 3. **If Release plan exists:**
-
    - Load existing plan and manifest
    - Validate completeness using checklist
    - If complete → proceed to Step 1
    - If incomplete → prompt user to complete missing sections
 
 4. **If Release plan does NOT exist:**
-
    - **STOP and prompt user interactively** for required information:
 
    **Required Questions:**
-
    - Release name and version (e.g., "MVP", "v1.0.0")
    - Release type (marketed or not_marketed)
    - Release goal (1-2 sentence summary)
@@ -188,14 +181,12 @@ Before creating a Release, verify:
    - Marketing strategy (if marketed release: user acquisition and reengagement tactics)
 
    **Agent Actions After User Input:**
-
    - Generate complete Release plan following template
    - Create manifest YAML with all FU dependencies
    - Validate all required sections present
    - Save to `docs/releases/vX.Y.Z/release_plan.md` and `manifest.yaml`
 
 5. **Dependency Analysis (CRITICAL):**
-
    - Extract all FU IDs from manifest
    - For each FU, load its manifest and extract `dependencies.requires`
    - Build dependency graph (FU → [dependencies])
@@ -206,7 +197,6 @@ Before creating a Release, verify:
    - Generate **topological sort** of FUs (respects dependencies)
 
 6. **Execution Schedule Generation:**
-
    - Group FUs into **batches**:
      - Batch 0: FUs with no dependencies
      - Batch 1: FUs that depend only on Batch 0
@@ -236,7 +226,6 @@ Before creating a Release, verify:
    ```
 
    **Document Decomposition Principles:**
-
    - **Overview documents** (`*_plan.md`): Provide high-level coordination and references to detailed documents
    - **Detailed documents** (`*_*_plan.md`): Topic-specific detailed plans (e.g., `value_discovery_plan.md`, `pre_launch_marketing_plan.md`)
    - **YAML files** (`*.yaml`): Machine-readable metadata and summaries for workflow automation (hypotheses, success criteria, timelines)
@@ -247,7 +236,6 @@ Before creating a Release, verify:
 8. **Defensible Differentiation Validation:**
 
    **CRITICAL:** Before finalizing the plan, the agent MUST:
-
    - **Explicitly validate defensible differentiation** — Release must validate at least one defensible differentiator:
      - **Privacy-first architecture** (user-controlled vs. provider-controlled)
      - **Deterministic extraction** (vs. ML-based probabilistic)
@@ -262,7 +250,6 @@ Before creating a Release, verify:
 9. **Pre-Mortem Analysis (Failure Mode Identification):**
 
    Before finalizing the plan, the agent MUST:
-
    - Identify the **top 3-5 most likely failure modes** for this Release (e.g., "RLS migration breaks existing tenants", "graph integrity regressions", "MVP date slips by 2 weeks", "critical FU takes 2x longer than estimated").
    - For each failure mode, specify:
      - **Early warning signals** (metrics, test failures, timeline slips)
@@ -284,7 +271,6 @@ Before creating a Release, verify:
 - Present limits to user for approval: "Proposed limits: max_parallel_fus=3, max_high_risk_in_parallel=1. Approve? (yes/modify)"
 
 11. **Machine-Checkable Exit Criteria:**
-
     - For each Release acceptance criterion, the agent MUST:
       - Define a **concrete test suite or script** that validates it
       - Specify a **single metric or query** that proves it (e.g., "0 orphans" → `SELECT COUNT(*) FROM events WHERE record_id NOT IN (SELECT id FROM records)` must return 0)
@@ -292,14 +278,12 @@ Before creating a Release, verify:
     - Present to user: "Each acceptance criterion now has a machine-checkable test. Review? (yes/modify)"
 
 12. **Present execution schedule to user for approval:**
-
     - Display batches and parallel execution opportunities
     - Show estimated timeline based on FU complexity estimates
     - Show WIP limits and pre-mortem failure modes
     - **STOP and prompt user:** "Approve execution schedule? (yes/no/modify)"
 
 13. **Discovery Planning:**
-
     - Define discovery plan based on Release scope and risk:
       - Identify assumptions and hypotheses (value, usability, business viability, feasibility)
       - Define discovery activities (ICP interviews, prototype testing, pricing validation)
@@ -319,7 +303,6 @@ Before creating a Release, verify:
       - See document decomposition principles in Step 7
 
 14. **Marketing Planning (Marketed Releases Only):**
-
     - **If Release type is marketed:**
       - **STOP and prompt user interactively** for marketing strategy:
         - Marketing strategy (pre-launch, post-launch, hybrid, none)
@@ -355,7 +338,6 @@ Before creating a Release, verify:
 **Agent Actions:**
 
 1. **Load Discovery Process:**
-
    - Load `docs/feature_units/standards/discovery_process.md`
    - Review discovery plan from `discovery_plan.md` (overview) and `discovery_plan.yaml` (metadata/summary)
    - Understand hypotheses and success criteria
@@ -371,7 +353,6 @@ Before creating a Release, verify:
    **Process:**
 
    a. **Identify Recruitment Channels:**
-
    - Review ICP profiles and priority tiers (`docs/specs/ICP_PRIORITY_TIERS.md`, `docs/specs/ICP_PROFILES.md`)
    - Map discovery plan participant requirements to acquisition channels:
      - **AI-Native Individual Operators**: Twitter/X, Indie Hackers, Hacker News, AI tool communities (r/ChatGPT, r/ClaudeAI, Discord), GitHub, existing network
@@ -379,7 +360,6 @@ Before creating a Release, verify:
      - **Existing Users**: If available, prioritize users who already use Neotoma or similar tools
 
    b. **Create Recruitment Outreach:**
-
    - **Twitter/X Outreach Template:**
 
      ```
@@ -452,7 +432,6 @@ Before creating a Release, verify:
      ```
 
    c. **Schedule and Track Recruitment:**
-
    - **Target Response Rate**: 20-30% (send 3-4x more invites than needed)
    - **Outreach Volume**:
      - Value Discovery: 40-50 outreach messages for 13 participants (8 + 5)
@@ -466,7 +445,6 @@ Before creating a Release, verify:
      - If no response after 7 days: Mark as "no response", move to backup candidate
 
    d. **Participant Screening (Optional):**
-
    - **Screening Questions** (if using form):
      - "How often do you use Claude or ChatGPT?" (daily/weekly/monthly)
      - "Have you tried giving AI tools access to your personal data? How?" (copy-paste, upload, other)
@@ -474,7 +452,6 @@ Before creating a Release, verify:
    - **Select participants** who match ICP profile and show commitment signals (regular AI usage, actual workarounds)
 
    e. **Confirm and Remind:**
-
    - Send calendar invite with:
      - Interview duration (30-45 min)
      - Video call link (Zoom, Google Meet, etc.)
@@ -483,13 +460,11 @@ Before creating a Release, verify:
    - Send reminder 1 hour before interview with link
 
    f. **Handle No-Shows and Cancellations:**
-
    - **No-show rate**: Expect 20-30% no-shows (schedule 20-30% more than needed)
    - **Backup list**: Maintain list of backup candidates from same recruitment pool
    - **Follow-up**: If someone no-shows, send friendly follow-up offering to reschedule (1 attempt only)
 
    g. **Document Recruitment Progress:**
-
    - Track in `docs/releases/vX.Y.Z/participant_recruitment_log.md`:
      - Outreach sent: X messages
      - Responses received: Y responses
@@ -499,7 +474,6 @@ Before creating a Release, verify:
      - Backup candidates needed: M backups
 
 3. **Value Discovery (Week 1-2):**
-
    - Conduct ICP interviews on value assumptions using Mom Test questions
    - Focus on past behavior and concrete examples
    - Look for commitment signals (time spent, money spent, workarounds built)
@@ -508,7 +482,6 @@ Before creating a Release, verify:
    - Compare against success criteria
 
 4. **Usability Discovery (Week 1-2, parallel with Value Discovery):**
-
    - Build clickable prototype of core workflows (if not already built)
    - User test with 5-8 ICP users
    - Validate discoverability, understandability, workflow completion
@@ -516,7 +489,6 @@ Before creating a Release, verify:
    - Compare against success criteria
 
 5. **Business Viability Discovery (Week 2):**
-
    - Test pricing assumptions using Mom Test methodology:
      - Ask about past purchasing behavior, not hypothetical willingness to pay
      - Look for commitment signals (budget allocation, switching costs)
@@ -526,20 +498,17 @@ Before creating a Release, verify:
    - Compare against success criteria
 
 6. **Feasibility Validation (Week 1-2, parallel):**
-
    - Technical proof of concept (if high-risk technical assumptions)
    - Validate architectural constraints
    - Synthesize findings into feasibility validation report
 
 7. **Discovery Synthesis (Week 2-3):**
-
    - Analyze all discovery findings
    - Compare against success criteria
    - Generate combined discovery report
    - Present findings to user
 
 8. **Go/No-Go Decision:**
-
    - **STOP and prompt user:**
      - "Pre-release discovery complete. Findings: [summary]"
      - "Value Discovery: [pass/fail]"
@@ -549,14 +518,12 @@ Before creating a Release, verify:
      - "Decision: [Go (proceed to build) / Pivot (adjust scope) / No-Go (cancel or defer)]"
 
 9. **If Go (Proceed to Build):**
-
    - Update Release plan based on discovery learnings (adjust scope, refine FUs)
    - Mark Release status as `in_progress`
    - **Record Development Start Date** in `status.md` (current date/time)
    - Proceed to Step 1 (Execute FU Batches)
 
 10. **If Pivot (Adjust Scope):**
-
     - Update Release plan based on discovery findings
     - Re-run discovery on adjusted scope (if needed)
     - Return to discovery synthesis (Step 6)
@@ -586,13 +553,11 @@ The release workflow supports two execution strategies:
 **Agent Actions:**
 
 1. **Continuous Discovery Setup (if discovery was conducted):**
-
    - Schedule weekly user interviews during development
    - Plan prototype testing after each major UI FU
    - Set up feedback collection mechanism
 
 2. **Determine Execution Strategy:**
-
    - Check `manifest.yaml` for `execution_strategy.type`
    - If `"multi_agent"`: Follow `multi_agent_orchestration.md` workflow
    - If `"sequential"` or not specified: Follow sequential workflow below
@@ -679,12 +644,10 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Check if mid-release checkpoint is configured:**
-
    - Look for `checkpoint_1_after_batch` in manifest
    - If not configured, skip this checkpoint
 
 2. **If configured:**
-
    - **STOP and prompt user:**
      - "Mid-release checkpoint reached. X/Y FUs complete."
      - "Integration tests: [pass/fail summary]"
@@ -701,7 +664,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Run full cross-FU integration test suite (AUTOMATIC - REQUIRED):**
-
    - **The release orchestrator ALWAYS automatically runs all integration tests** from `integration_tests.md` after all batches complete
    - This is a **REQUIRED** step in the release build process - cannot be skipped
    - Execute all tests listed in `integration_tests.md` (IT-001 through IT-XXX)
@@ -711,13 +673,11 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Tests showing `not_run` (no commands defined) are acceptable for initial releases but should be implemented
 
 2. **If orchestrator is not used (manual execution):**
-
    - Manually run all tests from `integration_tests.md`
    - Update `status.md` integration test status table with results
    - Follow test execution instructions in `integration_tests.md`
 
 3. **Validate Test Coverage Thresholds (REQUIRED):**
-
    - **CRITICAL:** Run test coverage analysis for critical path services
    - Check coverage thresholds defined in `vitest.config.ts`:
      - General coverage: ≥80% (default)
@@ -731,24 +691,28 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Document coverage results in `docs/releases/vX.Y.Z/test_coverage_report.md`
 
 4. **Run Release-level acceptance criteria checks:**
-
    - Product acceptance: Core workflows functional, empty/error states handled
    - Technical acceptance: Performance benchmarks, test coverage, graph integrity
    - Business acceptance: Metrics instrumented, analytics ready
 
-5. **Generate integration test report:**
+5. **(Marketed / High-Risk Releases) Run Spec-Compliance Review Stage:**
+   - **Scope:** Marketed releases (e.g., v1.0.0) and high-risk releases (crypto/privacy: v2.0.0, v2.1.0) MUST run spec-compliance checks after integration tests and coverage, before marking `ready_for_deployment`.
+   - **Artifacts:** `release_plan.md`, `manifest.yaml`, `acceptance_criteria.md`, `integration_tests.md`, `status.md`, and relevant specs (`MVP_OVERVIEW.md`, `MCP_SPEC.md`, subsystem docs).
+   - **Execution:** Call `scripts/spec_compliance_check.ts --release vX.Y.Z` to run multi-agent, multi-model spec-compliance review.
+   - **Outputs:** `docs/releases/vX.Y.Z/spec_compliance_report.json` and `spec_compliance_report.md` with findings and severities (P0–P3).
+   - **Policy:** Any unresolved P0 findings MUST be addressed or explicitly deferred with an owner-approved decision log entry before the release can be marked `ready_for_deployment`.
 
+6. **Generate integration test report:**
    - Save to `docs/releases/vX.Y.Z/integration_test_report.md`
    - Include pass/fail summary, performance metrics, issues found
    - Include test coverage summary and threshold validation results
 
-6. **If tests fail:**
-
+7. **If tests fail:**
    - **STOP** and report failures to user
    - User decides: fix issues and re-test, or abort Release
    - Release status remains `in_progress` until tests pass
 
-7. **If all tests pass and coverage thresholds met:**
+8. **If all tests pass and coverage thresholds met:**
    - Update release status to `ready_for_deployment` (if not already)
    - **Record Development Finish Date** in `status.md` (current date/time)
    - **Calculate Actual Development Time** (Development Finish Date - Development Start Date)
@@ -769,39 +733,36 @@ g. **Cleanup worker agents** (terminate completed agents)
 1. **For each FU marked as "completed" in the release:**
 
    a. **Load FU specification:**
-      - Load spec from `docs/feature_units/completed/FU-XXX/FU-XXX_spec.md` or `docs/specs/MVP_FEATURE_UNITS.md`
-      - Extract all "MUST", "MUST NOT", "REQUIRED", and "SHALL" requirements
-   
+   - Load spec from `docs/feature_units/completed/FU-XXX/FU-XXX_spec.md` or `docs/specs/MVP_FEATURE_UNITS.md`
+   - Extract all "MUST", "MUST NOT", "REQUIRED", and "SHALL" requirements
+
    b. **Generate Implementation Decision Log:**
-      - Create `docs/releases/vX.Y.Z/implementation_logs/FU-XXX_implementation_log.md`
-      - Document each implementation decision with requirement text, location, implementation approach, files changed, code references, verification, and status
-   
+   - Create `docs/releases/vX.Y.Z/implementation_logs/FU-XXX_implementation_log.md`
+   - Document each implementation decision with requirement text, location, implementation approach, files changed, code references, verification, and status
+
    c. **Automated Spec Compliance Check:**
-      - For each requirement in spec, verify implementation exists:
-        - **Check code existence:** Grep for required functions/patterns
-        - **Check database schema:** Verify required columns/tables exist
-        - **Check integration:** Verify required service calls are made
-        - **Check validation:** Verify required validation logic exists
-      
-      Uses `scripts/validate_spec_compliance.js` which leverages `scripts/spec_compliance_patterns.js` for reusable check patterns.
-   
+   - For each requirement in spec, verify implementation exists:
+     - **Check code existence:** Grep for required functions/patterns
+     - **Check database schema:** Verify required columns/tables exist
+     - **Check integration:** Verify required service calls are made
+     - **Check validation:** Verify required validation logic exists
+
+   Uses `scripts/validate_spec_compliance.js` which leverages `scripts/spec_compliance_patterns.js` for reusable check patterns.
+
    d. **Generate Compliance Report:**
-      - Create `docs/releases/vX.Y.Z/compliance_reports/FU-XXX_compliance.md`
-      - Structure includes requirements status table and implementation gaps section
-      - Lists specific gaps with requirement references, current state, required state, and files to modify
+   - Create `docs/releases/vX.Y.Z/compliance_reports/FU-XXX_compliance.md`
+   - Structure includes requirements status table and implementation gaps section
+   - Lists specific gaps with requirement references, current state, required state, and files to modify
 
 2. **If gaps found:**
-   
    - **STOP and present compliance report to user:**
      - Show all requirements with ❌ Missing status
      - List specific gaps and required changes
      - Link to implementation decision log
-   
    - **User must choose:**
      a. **Fix gaps:** Agent implements missing requirements
      b. **Update spec:** If requirement is incorrect/outdated, update spec first
      c. **Defer requirement:** Document in decision log why requirement is deferred (requires explicit user approval)
-   
    - **After fixes or deferral:**
      - Re-run compliance check
      - Update compliance report
@@ -809,7 +770,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - **Require user approval** before marking FU complete
 
 3. **If all requirements met:**
-   
    - Update compliance report with ✅ Complete status
    - Add compliance report link to FU status in status.md
    - Proceed with marking FU complete
@@ -846,7 +806,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Database Schema Completeness Validation (REQUIRED):**
-
    - **For each FU in the release**, identify required database tables:
      - Review FU specifications for database requirements
      - Check `supabase/migrations/` for migration files creating required tables
@@ -863,7 +822,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until schema complete
 
 2. **Service Persistence Validation (REQUIRED):**
-
    - **For each service that generates data**, verify persistence:
      - Review service code (e.g., `entity_resolution.ts`, `event_generation.ts`)
      - Verify services that generate IDs/entities/events actually persist to database
@@ -881,7 +839,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until persistence complete
 
 3. **Endpoint Integration Validation (REQUIRED):**
-
    - **For each HTTP/MCP endpoint**, verify full pipeline integration:
      - Review endpoint handlers (e.g., `actions.ts` for HTTP, `server.ts` for MCP)
      - Verify endpoints call all required services in the pipeline
@@ -897,7 +854,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until integration complete
 
 4. **MCP Action Completeness Validation (REQUIRED):**
-
    - **For each MCP action specified in release plan**, verify implementation:
      - Review `release_plan.md` for listed MCP actions (e.g., FU-061 actions)
      - Check `src/server.ts` for action handler implementations
@@ -910,7 +866,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until actions complete
 
 5. **Graph Integrity Validation (REQUIRED):**
-
    - **Verify graph builder handles all node types:**
      - Check `graph_builder.ts` for orphan detection (records, entities, events)
      - Check `graph_builder.ts` for cycle detection (record relationships, entity relationships)
@@ -922,7 +877,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until validation complete
 
 6. **Documentation Consistency Validation (REQUIRED):**
-
    - **Verify status documents are consistent:**
      - Compare `status.md` integration test status with `release_report.md` test results
      - Verify test pass/fail counts match across documents
@@ -934,7 +888,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Release status remains `in_progress` until documents consistent
 
 7. **Generate Architectural Completeness Report:**
-
    - Save to `docs/releases/vX.Y.Z/architectural_completeness_report.md`
    - Include validation results for each category:
      - Database schema: ✅ Complete / ❌ Missing tables: [list]
@@ -945,12 +898,10 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Documentation consistency: ✅ Consistent / ❌ Inconsistencies: [list]
 
 8. **If all validations pass:**
-
    - Mark architectural completeness validation as `completed` in `status.md`
    - Proceed to Step 4 (Checkpoint 2)
 
 9. **If any validation fails:**
-
    - **STOP** and present architectural completeness report to user
    - User must address all gaps before proceeding
    - Release status remains `in_progress` until all validations pass
@@ -967,7 +918,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Present Release summary:**
-
    - FUs completed: X/Y
    - Integration tests: [pass/fail summary]
    - Acceptance criteria: [checklist with status]
@@ -976,7 +926,6 @@ g. **Cleanup worker agents** (terminate completed agents)
    - **Manual test cases:** "See release_report.md Section 9 (Testing Guidance) for all manual test cases to validate functionality before deployment"
 
 2. **Generate release report with Section 9 (Testing Guidance):**
-
    - Extract all test cases from `integration_tests.md`
    - Format as user-facing manual test instructions
    - Include step-by-step actions and expected results
@@ -984,7 +933,6 @@ g. **Cleanup worker agents** (terminate completed agents)
    - See `.cursor/rules/post_build_testing.md` for requirements
 
 3. **REQUIRE Manual Test Execution (BLOCKER):**
-
    - **STOP and prompt user:**
      - "Release vX.Y.Z ready for deployment."
      - "All FUs complete: [list]"
@@ -996,9 +944,7 @@ g. **Cleanup worker agents** (terminate completed agents)
      - "If no, execute all test cases now and document results before proceeding."
 
 4. **Validate Manual Test Results:**
-
    - **If user says "no" or test results incomplete:**
-
      - **BLOCK deployment** - do not proceed to Step 5
      - Provide clear instructions: "Execute all manual test cases from release_report.md Section 9 (Testing Guidance) and document results before deployment approval."
      - Wait for user to complete manual test execution
@@ -1016,7 +962,6 @@ g. **Cleanup worker agents** (terminate completed agents)
        - Proceed to Step 5 (deployment approval)
 
 5. **Final Deployment Approval:**
-
    - **STOP and prompt user:**
      - "All manual test cases executed and passed."
      - "Test results documented: [summary]"
@@ -1024,7 +969,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - "Any final changes needed? (list or 'none')"
 
 6. **If user requests changes:**
-
    - Make changes
    - Re-run affected tests (both automated and manual)
    - Repeat Checkpoint 2 until approved
@@ -1047,13 +991,11 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Load Marketing Plan:**
-
    - Load `docs/releases/vX.Y.Z/marketing_plan.yaml` (metadata/summary) and `marketing_plan.md` (overview)
    - Review user acquisition and reengagement tactics
    - Understand target segments and success criteria
 
 2. **Execute Pre-Launch User Acquisition:**
-
    - Launch waitlist building campaigns (if enabled)
      - Create waitlist landing page
      - Promote via Twitter, email, community, content
@@ -1072,7 +1014,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Cost per waitlist signup
 
 3. **Execute Pre-Launch Reengagement:**
-
    - Send feature teaser emails to existing users (if enabled)
      - Target: dormant users, low-activity users
      - Content: Upcoming features, benefits
@@ -1086,7 +1027,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Pre-launch return rate (users who return before launch)
 
 4. **Generate Pre-Launch Marketing Report:**
-
    - Save to `docs/releases/vX.Y.Z/pre_launch_marketing_report.md`
    - Include:
      - Acquisition baseline metrics (waitlist signups, beta participants, content engagement)
@@ -1096,7 +1036,6 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Quality indicators (waitlist quality, beta activation rate)
 
 5. **Present to User:**
-
    - "Pre-launch marketing complete. Baseline metrics: [summary]"
    - "Waitlist: X signups, Beta: Y participants, Reengagement: Z% return rate"
    - "Ready to proceed with deployment? (yes/no)"
@@ -1115,7 +1054,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Verify Manual Test Execution (PRE-DEPLOYMENT CHECK):**
-
    - **REQUIRED:** Check that all manual test cases from `release_report.md` Section 9 (Testing Guidance) have been executed and documented
    - **REQUIRED:** Verify all manual test cases passed (no failures)
    - **If manual tests not executed or any failed:**
@@ -1123,19 +1061,16 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Error: "Cannot deploy: Manual test cases must be executed and all must pass before deployment."
 
 2. **Execute deployment plan:**
-
    - **All releases deploy to production at neotoma.io**
    - Follow deployment strategy from Release plan (staging first for validation, then production)
    - Run deployment scripts or guide user through manual steps
    - Verify deployment success (health checks, smoke tests)
 
 3. **Update Release status:**
-
    - Mark Release as `deployed`
    - **Record Deployment Date** in `status.md` (current date/time)
 
 4. **Setup post-release monitoring:**
-
    - Verify metrics and alerts are active
    - Start monitoring key metrics from Release acceptance criteria
 
@@ -1161,14 +1096,12 @@ g. **Cleanup worker agents** (terminate completed agents)
 **Agent Actions:**
 
 1. **Load Marketing Plan:**
-
    - Load `docs/releases/vX.Y.Z/marketing_plan.yaml` (metadata/summary) and `marketing_plan.md` (overview)
    - Review post-launch tactics and success criteria
 
 2. **Execute Post-Launch User Acquisition:**
 
    a. **Launch Announcement (Day 0):**
-
    - Product Hunt launch (if applicable)
    - Social media announcement (Twitter, LinkedIn)
    - Email to waitlist (convert waitlist to signups)
@@ -1177,19 +1110,16 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Track: Day 1 signups, press mentions, social shares
 
    b. **Paid Acquisition (Week 1-4, if enabled):**
-
    - Launch paid campaigns (Twitter ads, Google ads, LinkedIn ads)
    - Target ICP segments from marketing plan
    - Track: Cost per signup, signup to activation rate, cost per activated user
 
    c. **Content Marketing (Week 1-4, if enabled):**
-
    - Publish tutorials, case studies, comparisons
    - SEO optimization
    - Track: Organic signups, content to signup conversion rate
 
    d. **Partnership Outreach (Week 1-4, if enabled):**
-
    - Submit to AI tool directories
    - Outreach to productivity communities
    - Indie hacker communities
@@ -1198,27 +1128,23 @@ g. **Cleanup worker agents** (terminate completed agents)
 3. **Execute Post-Launch Reengagement:**
 
    a. **Feature Announcement (Day 0):**
-
    - Send announcement email to all existing users
    - Show in-app notification
    - Publish changelog
    - Track: Email open rate, feature trial rate, reactivation rate
 
    b. **Dormant User Winback (Week 1-2, if enabled):**
-
    - Identify inactive users (30-day, 90-day segments)
    - Send personalized winback emails
    - Content: New features, usage tips, success stories
    - Track: Winback email open rate, return rate, reactivation rate
 
    c. **Usage Nudges (Week 1-4, if enabled):**
-
    - Trigger: No upload 7 days, no search 14 days, no AI query 30 days
    - Format: In-app prompts + email
    - Track: Nudge response rate, nudge to action rate
 
    d. **Success Story Sharing (Week 2-4, if enabled):**
-
    - Share user case studies, usage tips, workflow examples
    - Channels: Email, blog, community
    - Track: Story engagement rate, feature adoption from story
@@ -1226,7 +1152,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 4. **Track Post-Launch Metrics:**
 
    **Acquisition Metrics:**
-
    - Day 1 signups (total, by channel: waitlist, organic, paid, referral)
    - Week 1 signups (total, by channel)
    - Waitlist conversion rate (waitlist signups → Day 1 signups)
@@ -1235,7 +1160,6 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Organic vs paid signup breakdown
 
    **Reengagement Metrics:**
-
    - Announcement email open rate
    - Feature trial rate (existing users who try new features)
    - Dormant user reactivation rate (30-day, 90-day segments)
@@ -1246,7 +1170,6 @@ g. **Cleanup worker agents** (terminate completed agents)
 5. **Marketing Efficacy Analysis:**
 
    **Acquisition Comparison:**
-
    - Waitlist conversion: (Day 1 signups from waitlist) / Waitlist signups
    - Cost efficiency: Pre-launch CPA vs Post-launch CPA
    - Quality comparison: Waitlist activation rate vs Paid activation rate
@@ -1254,7 +1177,6 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Time to value: Waitlist signup → first use vs Paid signup → first use
 
    **Reengagement Comparison:**
-
    - Pre-launch teaser effectiveness: Teasers sent → Pre-launch returns
    - Post-launch announcement effectiveness: Announcements sent → Feature trials
    - Winback efficiency: Winback cost vs New acquisition cost
@@ -1262,7 +1184,6 @@ g. **Cleanup worker agents** (terminate completed agents)
    - Feature adoption: Feature trial rate from reengagement vs from new users
 
 6. **Generate Marketing Efficacy Report:**
-
    - Save to `docs/releases/vX.Y.Z/marketing_efficacy_report.md`
    - Include:
      - Pre-launch metrics summary (acquisition + reengagement)
@@ -1274,14 +1195,12 @@ g. **Cleanup worker agents** (terminate completed agents)
      - Recommendations for next release
 
 7. **Post-Release Validation:**
-
    - Validate outcomes against acceptance criteria
    - Conduct user interviews (new + reengaged users)
    - Analyze user feedback
    - Generate validation report
 
 8. **Present to User:**
-
    - "Post-launch marketing complete. Week 1 metrics: [summary]"
    - "Acquisition: X signups (Y% from waitlist, Z% organic)"
    - "Reengagement: A% feature trial rate, B% reactivation rate"
@@ -1331,7 +1250,6 @@ docs/releases/in_progress/vX.Y.Z/
 All release planning documents MUST follow these principles:
 
 1. **Decompose by Topic**: Large planning documents should be decomposed into topic-specific documents:
-
    - Overview/coordination documents (`*_plan.md`) provide high-level summaries and references
    - Detailed topic documents (`*_*_plan.md`) contain comprehensive details for specific topics
    - Example: `discovery_plan.md` (overview) → `value_discovery_plan.md`, `usability_discovery_plan.md`, etc.
@@ -1339,19 +1257,16 @@ All release planning documents MUST follow these principles:
 2. **Use Markdown for Human-Readable Content**: All detailed documentation should be in Markdown format for better readability, version control, and collaboration.
 
 3. **Use YAML Only When Required**: YAML files should be used ONLY when:
-
    - Required for workflow automation (e.g., `manifest.yaml` for FU dependency resolution)
    - Structured metadata/summaries needed for programmatic access (e.g., `discovery_plan.yaml`, `marketing_plan.yaml`)
    - Machine-readable format is essential (e.g., success criteria, timelines, participant counts)
 
 4. **Eliminate Redundancy**:
-
    - YAML files contain metadata, summaries, hypotheses, success criteria, and references to detailed markdown plans
    - Markdown files contain comprehensive detailed content (interview questions, test scenarios, tactics, etc.)
    - Each piece of information should exist in only one place, with cross-references where needed
 
 5. **Cross-Reference Documents**: All documents should include:
-
    - "Related Documents" section with links to related planning documents
    - "Purpose" section explaining the document's role
    - Clear indication of overview vs detailed documents
@@ -1567,8 +1482,7 @@ marketing:
         - type: "waitlist_building"
           timeline: "Week -4 to Week 0"
           channels: ["twitter", "email", "community", "content"]
-          target_segments:
-            ["AI-Native Operators", "High-Context Knowledge Workers"]
+          target_segments: ["AI-Native Operators", "High-Context Knowledge Workers"]
           goals: ["waitlist_signups", "awareness"]
           metrics:
             - "waitlist_signups (target: X)"
@@ -1624,8 +1538,7 @@ marketing:
 
         - type: "partnership_outreach"
           timeline: "Week 1-4"
-          targets:
-            ["ai_tool_directories", "productivity_communities", "indie_hacker"]
+          targets: ["ai_tool_directories", "productivity_communities", "indie_hacker"]
           goals: ["referral_signups", "backlinks"]
           metrics:
             - "referral_signups (target: X)"
@@ -1671,8 +1584,7 @@ marketing:
 
         - type: "usage_nudges"
           timeline: "Week 1-4"
-          triggers:
-            ["no_upload_7_days", "no_search_14_days", "no_ai_query_30_days"]
+          triggers: ["no_upload_7_days", "no_search_14_days", "no_ai_query_30_days"]
           channels: ["in_app_prompt", "email"]
           goals: ["habit_formation", "feature_discovery"]
           metrics:

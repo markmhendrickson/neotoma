@@ -1,0 +1,162 @@
+release:
+  id: "v0.1.1"
+  name: "Documentation & Support System"
+  type: "not_marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "when ready"
+  priority: "P0"
+  marketing_required: false
+
+# Execution strategy
+execution_strategy:
+  type: "multi_agent" # "multi_agent" or "sequential"
+  max_parallel_fus: 2 # Maximum FUs executing simultaneously
+  max_high_risk_in_parallel: 1 # Maximum high-risk FUs executing simultaneously
+  agent_spawning:
+    enabled: true
+    status_tracking: "file" # "file" or "api"
+    status_file: "docs/releases/v0.1.1/agent_status.json"
+
+feature_units:
+  # Documentation Generation System
+  - id: "FU-300"
+    priority: "P0"
+    dependencies: []
+    risk_level: "medium"
+    notes: "AI-powered repository analysis and comprehensive documentation generation"
+
+  # Static Documentation Web Server
+  - id: "FU-301"
+    priority: "P0"
+    dependencies: ["FU-300"]
+    risk_level: "low"
+    notes: "One-page landing website with README info, directory access, MCP setup instructions, and static file serving with search"
+
+  # MCP Support Inquiry Endpoint
+  - id: "FU-302"
+    priority: "P0"
+    dependencies: ["FU-200"] # MCP Server Core from v0.1.0
+    risk_level: "low"
+    notes: "New MCP action for support queries"
+
+  # Support Agent System
+  - id: "FU-303"
+    priority: "P0"
+    dependencies: ["FU-300", "FU-301", "FU-302"]
+    risk_level: "medium"
+    notes: "RAG-based agent using static documentation as knowledge base"
+
+execution_schedule:
+  batches:
+    # Batch 0: Documentation Generation (can run independently)
+    - batch_id: 0
+      feature_units: ["FU-300"]
+      dependencies: []
+
+    # Batch 1: Documentation Web Server (depends on generated docs)
+    - batch_id: 1
+      feature_units: ["FU-301"]
+      dependencies: ["FU-300"]
+
+    # Batch 2: MCP Support Endpoint (depends on MCP Server Core from v0.1.0)
+    - batch_id: 2
+      feature_units: ["FU-302"]
+      dependencies: ["FU-200"] # Assumes v0.1.0 FU-200 is complete
+
+    # Batch 3: Support Agent System (depends on all previous components)
+    - batch_id: 3
+      feature_units: ["FU-303"]
+      dependencies: ["FU-300", "FU-301", "FU-302"]
+
+checkpoints:
+  checkpoint_1_after_batch: 1 # Review documentation generation before proceeding
+  checkpoint_2_after_batch: 3 # Pre-release sign-off after support agent integration
+
+acceptance_criteria:
+  product:
+    - criterion: "Comprehensive documentation available via web interface"
+      test: "tests/integration/documentation_web.test.ts"
+      metric: null
+    - criterion: "Support agent responds accurately to common inquiries (80%+ accuracy)"
+      test: "tests/integration/support_agent.test.ts"
+      metric: "support_agent_accuracy >= 0.80"
+    - criterion: "Documentation search functional"
+      test: "tests/integration/documentation_search.test.ts"
+      metric: null
+    - criterion: "MCP support endpoint operational"
+      test: "tests/integration/mcp_support_endpoint.test.ts"
+      metric: null
+  technical:
+    - criterion: "All P0 FUs deployed and passing tests"
+      test: null
+      metric: "SELECT COUNT(*) FROM feature_units WHERE priority='P0' AND status='completed'"
+    - criterion: "Documentation generation deterministic"
+      test: "tests/integration/documentation_generation.test.ts"
+      metric: null
+    - criterion: "Static documentation served efficiently (< 200ms page load)"
+      test: "tests/integration/documentation_performance.test.ts"
+      metric: "page_load_p95 < 200"
+    - criterion: "Documentation search responsive (< 500ms query response)"
+      test: "tests/integration/documentation_search.test.ts"
+      metric: "search_query_p95 < 500"
+    - criterion: "Support agent responses cite source documentation"
+      test: "tests/integration/support_agent.test.ts"
+      metric: "citation_rate >= 1.0"
+    - criterion: "MCP endpoint follows MCP protocol specification"
+      test: "tests/integration/mcp_support_endpoint.test.ts"
+      metric: null
+    - criterion: "Documentation generation integrated into build process"
+      test: null
+      metric: "Documentation generation runs automatically on build"
+  business:
+    - criterion: "Users can self-serve answers via documentation web interface"
+      test: null
+      metric: "Manual validation via web interface"
+    - criterion: "Users can query support via MCP without leaving AI tool"
+      test: null
+      metric: "Manual validation via MCP client"
+
+pre_mortem:
+  failure_modes:
+    - mode: "Documentation generation failures"
+      early_warning: "Documentation generation script fails, incomplete docs generated"
+      mitigation: "FU-300 includes validation checks, comprehensive test coverage"
+      rollback: "Revert documentation generation changes, use manual docs"
+    - mode: "Support agent accuracy below threshold"
+      early_warning: "Support agent test suite shows accuracy < 80%"
+      mitigation: "FU-303 includes accuracy validation, iterative improvement process"
+      rollback: "Disable support agent, fall back to static documentation only"
+    - mode: "MCP endpoint protocol violations"
+      early_warning: "MCP integration tests fail, protocol compliance issues"
+      mitigation: "FU-302 includes comprehensive MCP protocol tests"
+      rollback: "Revert MCP endpoint changes, check protocol compliance"
+    - mode: "Design system compliance failures"
+      early_warning: "UI components don't match design system, accessibility tests fail"
+      mitigation: "FU-301 includes design system compliance checks, reference docs/ui/design_system.md"
+      rollback: "Revert UI changes, ensure design system compliance before re-implementation"
+
+deployment:
+  target: "production" # All releases deploy to production at neotoma.io
+  target_url: "neotoma.io"
+  marketing: false # Not marketed release - no marketing activities
+  rollback_plan: "Revert code changes and redeploy to neotoma.io; restore previous documentation version if needed"
+
+monitoring:
+  key_metrics:
+    - "documentation_generation_success_rate"
+    - "documentation_page_load_p95"
+    - "documentation_search_latency_p95"
+    - "support_agent_query_success_rate"
+    - "support_agent_response_accuracy"
+    - "support_agent_citation_rate"
+    - "mcp_support_endpoint_success_rate"
+    - "mcp_support_endpoint_latency_p95"
+
+
+
+
+
+
+
+
+

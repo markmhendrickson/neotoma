@@ -1,9 +1,4 @@
-import type {
-  AccountBase,
-  Institution,
-  Item,
-  Transaction,
-} from "plaid";
+import type { AccountBase, Institution, Item, Transaction } from "plaid";
 
 export interface NormalizedPlaidRecord {
   type: "account" | "transaction";
@@ -36,10 +31,7 @@ function omitUndefined<T extends Record<string, unknown>>(value: T): T {
   ) as T;
 }
 
-function normalizeInstitution(
-  institution?: Institution,
-  fallbackName?: string | null
-) {
+function normalizeInstitution(institution?: Institution, fallbackName?: string | null) {
   if (!institution && !fallbackName) return undefined;
 
   return omitUndefined({
@@ -70,7 +62,7 @@ export function normalizeAccount({
   const legacyAccount = account as LegacyAccountBase;
 
   const properties = omitUndefined({
-    provider: 'plaid',
+    provider: "plaid",
     provider_environment: environment,
     plaid_item_id: plaidItemId,
     plaid_account_id: account.account_id,
@@ -124,10 +116,7 @@ function normalizeLocation(transaction: Transaction) {
   });
 }
 
-function normalizeAccountSnapshot(
-  accountLookup: Map<string, AccountBase>,
-  accountId: string
-) {
+function normalizeAccountSnapshot(accountLookup: Map<string, AccountBase>, accountId: string) {
   const account = accountLookup.get(accountId);
   if (!account) return undefined;
 
@@ -186,7 +175,7 @@ export function normalizeTransaction({
   const externalId = `plaid:transaction:${transaction.transaction_id}`;
 
   const properties = omitUndefined({
-    provider: 'plaid',
+    provider: "plaid",
     provider_environment: environment,
     plaid_item_id: plaidItemId,
     plaid_transaction_id: transaction.transaction_id,
@@ -202,7 +191,7 @@ export function normalizeTransaction({
     iso_currency_code: transaction.iso_currency_code,
     unofficial_currency_code: transaction.unofficial_currency_code,
     pending: transaction.pending,
-    status: transaction.pending ? 'pending' : 'posted',
+    status: transaction.pending ? "pending" : "posted",
     payment_channel: transaction.payment_channel,
     category: transaction.category,
     category_id: transaction.category_id,
@@ -228,10 +217,9 @@ export function normalizeTransaction({
   });
 
   return {
-    type: 'transaction',
-    externalSource: 'plaid',
+    type: "transaction",
+    externalSource: "plaid",
     externalId,
     properties,
   };
 }
-

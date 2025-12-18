@@ -3,14 +3,12 @@
  * Checks for local MCP first, falls back to hosted
  */
 
-<<<<<<< Current (Your changes)
-// Get WS_PORT from environment or use default (8081)
-const WS_PORT = import.meta.env.VITE_WS_PORT || '8081';
-const LOCAL_MCP_URL = `ws://127.0.0.1:${WS_PORT}/mcp`;
-=======
+// Local MCP URL resolution:
+// - If VITE_LOCAL_MCP_URL is set, use it directly
+// - Else, derive from WS_PORT (default 8081) with /mcp path
+const WS_PORT = import.meta.env.VITE_WS_PORT || "8081";
 const LOCAL_MCP_URL =
-  import.meta.env.VITE_LOCAL_MCP_URL ?? 'ws://127.0.0.1:5233';
->>>>>>> Incoming (Background Agent changes)
+  import.meta.env.VITE_LOCAL_MCP_URL ?? `ws://127.0.0.1:${WS_PORT}/mcp`;
 const HOSTED_MCP_URL = 'wss://mcp.neotoma.io'; // Configurable
 
 export interface MCPEndpoint {

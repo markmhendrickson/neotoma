@@ -877,25 +877,11 @@ app.post("/store_record", async (req, res) => {
     insertData.summary = summary;
   }
 
-  // Insert record, with graceful fallback if embedding column is missing
-  const insertOnce = async (payload: Record<string, unknown>) =>
-    supabase.from("records").insert(payload).select().single();
-
-  let { data, error } = await insertOnce(insertData);
-
-  // Handle environments where the `embedding` column (or vector extension)
-  // is not available yet. In that case, retry without the embedding field.
-  if (
-    error &&
-    (error as any).code === "PGRST204" &&
-    typeof (error as any).message === "string" &&
-    (error as any).message.includes("embedding")
-  ) {
-    const fallbackInsert: Record<string, unknown> = { ...insertData };
-    delete (fallbackInsert as any).embedding;
-    ({ data, error } = await insertOnce(fallbackInsert));
-  }
-
+  const { data, error } = await supabase
+    .from("records")
+    .insert(insertData)
+    .select()
+    .single();
   if (error) {
     logError("SupabaseError:store_record", req, error, {
       code: (error as any).code,
@@ -917,7 +903,7 @@ app.post("/store_record", async (req, res) => {
 
   // Extract and persist entities (FU-101)
   try {
-    const { extractEntities, resolveEntity } = await import("./services/entity_resolution.js");
+    const { extractEntities, resolveEntity } = await import('./services/entity_resolution.js');
     const entities = extractEntities(properties, normalizedType);
     const resolvedEntities = [];
     
@@ -939,7 +925,7 @@ app.post("/store_record", async (req, res) => {
 
   // Generate and persist timeline events (FU-102)
   try {
-    const { generateAndPersistEvents } = await import("./services/event_generation.js");
+    const { generateAndPersistEvents } = await import('./services/event_generation.js');
     const events = await generateAndPersistEvents(data.id, properties, normalizedType);
     
     // Create record-event edges
@@ -960,7 +946,7 @@ app.post("/store_record", async (req, res) => {
 
   // Create observations (FU-058)
   try {
-    const { createObservationsFromRecord } = await import("./services/observation_ingestion.js");
+    const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
     await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
   } catch (observationError) {
     // Log observation creation error but don't fail the request
@@ -1074,12 +1060,12 @@ app.post("/update_record", async (req, res) => {
     updated_at: new Date().toISOString(),
   };
 
-  // Fetch existing record to determine if we need to regenerate summary
+  // Fetch existing record to determine if we need to regenerate embedding and summary
   const { data: existing } = await supabase
     .from("records")
-    .select("type, properties, file_urls")
+    .select("type, properties, embedding, file_urls")
     .eq("id", id)
-    .maybeSingle();
+    .single();
 
   let normalizedUpdateType: string | undefined;
   if (type !== undefined) {
@@ -1089,7 +1075,8 @@ app.post("/update_record", async (req, res) => {
 
   // Generate new embedding if:
   // 1. Embedding is explicitly provided (non-empty array), OR
-  // 2. Properties or type changed and no embedding was provided (when OpenAI is configured)
+  // 2. Properties or type changed and no embedding was provided, OR
+  // 3. Existing record has no embedding and OpenAI is configured
   if (providedEmbedding !== undefined) {
     // Filter out empty arrays - they're invalid for PostgreSQL vector type
     if (Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
@@ -1162,39 +1149,22 @@ app.post("/update_record", async (req, res) => {
     }
   }
 
-  const updateOnce = async (payload: Record<string, unknown>) =>
-    supabase
-      .from("records")
-      .update(payload)
-      .eq("id", id)
-      .select()
-      .maybeSingle();
-
-  let { data, error } = await updateOnce(updateData);
-
-  // Handle environments where the `embedding` column is missing from schema cache
-  if (
-    error &&
-    (error as any).code === "PGRST204" &&
-    typeof (error as any).message === "string" &&
-    (error as any).message.includes("embedding")
-  ) {
-    const fallbackUpdate: Record<string, unknown> = { ...updateData };
-    delete (fallbackUpdate as any).embedding;
-    ({ data, error } = await updateOnce(fallbackUpdate));
-  }
+  const { data, error } = await supabase
+    .from("records")
+    .update(updateData)
+    .eq("id", id)
+    .select()
+    .single();
 
   if (error) {
     logError("SupabaseError:update_record:update", req, error, {
       code: (error as any).code,
     });
-    return res
-      .status(500)
-      .json({ error: (error as any).message || "Database error" });
+    return res.status(500).json({ error: error.message });
   }
   if (!data) {
     logWarn("NotFound:update_record", req, { id });
-    return res.status(404).json({ error: "Record not found" });
+    return res.status(404).json({ error: "Not found" });
   }
 
   // Emit RecordUpdated event (event-sourcing foundation - FU-050)
@@ -3675,7 +3645,7 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1") {
  * Check if a record matches keyword search terms
  */
 export function recordMatchesKeywordSearch(
-  record: import("./db.js").NeotomaRecord,
+  record: import('./db.js').NeotomaRecord,
   searchTerms: string[]
 ): boolean {
   const recordText = JSON.stringify(record.properties || {}).toLowerCase();

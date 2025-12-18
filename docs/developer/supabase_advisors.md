@@ -203,3 +203,4 @@ Some warnings may be acceptable (e.g., keeping `pgcrypto` in public schema). You
 - [Row Level Security Guide](https://supabase.com/docs/guides/auth/row-level-security)
 - [Database Functions Guide](https://supabase.com/docs/guides/database/functions)
 
+
