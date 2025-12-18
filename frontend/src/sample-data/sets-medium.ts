@@ -1,0 +1,41 @@
+// CSV content as TypeScript string constant to avoid import issues in Playwright/Vite
+export const setsMediumCsv = `Date,Exercise,Repetitions,Weight,Difficulty,RPE,Notes,Type,Created at
+2024-03-18,Bench press,10,50kg,Moderate,7,,Warmup,2024-03-18T08:45:00Z
+2024-03-18,Bench press,8,55kg,Near failure,9,,Working set,2024-03-18T08:55:00Z
+2024-03-18,Sit-ups,61,Body,Failure,10,Arms swing,Core,2024-03-18T09:10:00Z
+2024-03-20,Squats,10,60kg,Hard,8,,Warmup,2024-03-20T09:20:00Z
+2024-03-20,Squats,8,65kg,Hard,9,,Working set,2024-03-20T09:30:00Z
+2024-03-20,Chin-ups,13,Body,Failure,10,,Pull,2024-03-20T09:45:00Z
+2024-03-23,Shoulder press,7,25kg,Failure,9,,Push,2024-03-23T11:32:00Z
+2024-03-23,Abductor machine,20,55kg,Hard,8,,Accessory,2024-03-23T11:43:00Z
+2024-03-26,Squats,10,50kg,Moderate,7,,Warmup,2024-03-26T08:12:00Z
+2024-03-26,Squats,8,60kg,Hard,9,,Working set,2024-03-26T08:30:00Z
+2024-03-26,Cable row,12,55kg,Failure,9,,Pull,2024-03-26T08:42:00Z
+2024-03-26,Bench press decline,11,40kg,Near failure,8,,Push,2024-03-26T09:01:00Z
+2024-04-01,Bench press,10,50kg,Moderate,7,,Warmup,2024-04-01T08:49:00Z
+2024-04-01,Bench press,8,57.5kg,Hard,9,Palm pain (right),Push,2024-04-01T09:04:00Z
+2024-04-01,Tricep pulldowns,18,25kg,Failure,10,,Accessory,2024-04-01T09:22:00Z
+2024-04-02,Squats,10,60kg,Hard,8,,Working set,2024-04-02T08:33:00Z
+2024-04-02,Chin-ups,9,Body,Failure,10,,Pull,2024-04-02T08:54:00Z
+2024-04-02,Shoulder press,8,20kg,Failure,9,,Push,2024-04-02T09:04:00Z
+2024-04-04,Bench press,14,50kg,Hard,8,,Push,2024-04-04T08:35:00Z
+2024-04-04,Abductor machine,16,65kg,Failure,10,,Accessory,2024-04-04T09:17:00Z
+2024-04-07,Clean,10,50kg,Hard,8,,Power,2024-04-07T10:29:00Z
+2024-04-07,Deadlift,10,70kg,Hard,9,,Pull,2024-04-07T11:26:00Z
+2024-04-13,Bench press,9,55kg,Hard,8,,Push,2024-04-13T10:25:00Z
+2024-04-13,Deadlift,10,50kg,Moderate,7,,Warmup,2024-04-13T09:22:00Z
+2024-04-16,Deadlift,10,60kg,Hard,8,,Working set,2024-04-16T10:23:00Z
+2024-04-18,Pull-ups,7,Body,Failure,10,,Pull,2024-04-18T10:51:00Z
+2024-04-20,Deadlift,10,80kg,Hard,9,,Working set,2024-04-20T09:56:00Z
+2024-04-23,Squats,8,65kg,Hard,9,,Working set,2024-04-23T08:45:00Z
+2024-04-25,Deadlift,10,70kg,Moderate,8,,Warmup,2024-04-25T11:11:00Z
+2024-04-29,Clean,10,95lb,Hard,8,,Power,2024-04-30T01:45:00Z
+2024-05-01,Squats,10,135lb,Hard,8,Left groin tension,Working set,2024-05-02T01:35:00Z
+2024-05-06,Chin-ups,8,Body,Failure,10,,Pull,2024-05-07T12:43:00Z
+2024-05-14,Deadlift,10,70kg,Hard,8,,Working set,2024-05-14T08:27:00Z
+2024-05-21,Bench press decline,15,60kg,Hard,9,,Push,2024-05-21T09:28:00Z
+2024-05-23,Squats,8,70kg,Hard,9,,Working set,2024-05-23T09:14:00Z
+2024-05-25,Deadlift,6,100kg,Hard,9,Grip slippage,Working set,2024-05-25T11:26:00Z
+2024-05-30,Bench press,10,60kg,Hard,8,,Push,2024-05-30T08:06:00Z
+2024-06-01,Squats,6,70kg,Near failure,9,,Working set,2024-06-01T10:39:00Z
+`;
