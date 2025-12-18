@@ -1,28 +1,28 @@
-## Release v0.2.0 — Chat Transcript Extraction Tool
+## Release v0.2.0 — Sources-First Ingestion Architecture
 
-_(Pre-MVP Release for Chat Transcript Processing)_
+_(Pre-MVP Release for Foundational Ingestion Infrastructure)_
 
 ---
 
 ### 1. Release Overview
 
 - **Release ID**: `v0.2.0`
-- **Name**: Chat Transcript Extraction Tool
+- **Name**: Sources-First Ingestion Architecture
 - **Release Type**: Not Marketed (production deployment without marketing activities)
-- **Goal**: Provide a standalone CLI tool for converting chat transcripts (e.g., ChatGPT exports) into structured JSON files with schema types that can be ingested deterministically by Neotoma's Truth Layer.
-- **Priority**: P1 (pre-MVP, enables chat transcript ingestion workflow)
-- **Target Ship Date**: Before MVP (v1.0.0)
+- **Goal**: Implement a sources-first ingestion architecture that decouples raw data storage from interpretation, enabling content-addressed deduplication, versioned interpretation runs, user isolation, and entity merge capabilities.
+- **Priority**: P0 (foundational infrastructure required before MVP)
+- **Target Ship Date**: Before Chat Transcript CLI (v0.3.0) and MVP (v1.0.0)
 - **Marketing Required**: No (not marketed release)
 - **Deployment**: Production (neotoma.io)
 
 #### 1.1 Canonical Specs (Authoritative Sources)
 
+- **Architecture Plan**: `.cursor/plans/sources-first-ingestion-v12-final.plan.md`
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
-- **General Requirements**: `docs/specs/GENERAL_REQUIREMENTS.md`
-- **MVP Feature Units**: `docs/specs/MVP_FEATURE_UNITS.md` (FU-106)
-- **MVP Execution Plan**: `docs/specs/MVP_EXECUTION_PLAN.md` (FU-106)
+- **Schema Registry**: `docs/subsystems/schema_registry.md`
+- **Database Schema**: `docs/subsystems/schema.md`
 
-This release plan coordinates the chat transcript extraction tool into a concrete release.
+This release plan coordinates the sources-first ingestion architecture into a concrete release.
 
 ---
 
@@ -30,470 +30,426 @@ This release plan coordinates the chat transcript extraction tool into a concret
 
 #### 2.1 Included Feature Units
 
-- `FU-106`: Chat Transcript to JSON CLI Tool
-  - CLI tool for converting chat transcripts to structured JSON files
-  - Support for common export formats (ChatGPT JSON, HTML, text)
-  - LLM-based interpretation (OpenAI/Anthropic APIs allowed, outside Truth Layer)
-  - Interactive field mapping/correction mode
-  - JSON output with schema types (one file per record)
-  - Documentation and usage examples
+**Phase 1: Schema + Storage Foundation**
+
+- `FU-110`: Sources Table Migration (content-addressed raw storage with RLS)
+- `FU-111`: Interpretation Runs Table (versioned interpretation tracking with timeout handling)
+- `FU-112`: Storage Infrastructure (upload queue, storage usage tracking, quotas)
+- `FU-113`: Entity Extensions (user_id, merged_to tracking, RLS)
+- `FU-114`: Observation Extensions (source_id, interpretation_run_id linkage)
+- `FU-115`: Raw Fragments Extensions (unknown field storage with provenance)
+- `FU-116`: Entity Merges Table (merge audit log)
+
+**Phase 2: MCP Tools + Services**
+
+- `FU-120`: Raw Storage Service (SHA-256 hashing, Supabase Storage, queue fallback)
+- `FU-121`: Interpretation Service (schema validation, entity resolution, unknown field routing)
+- `FU-122`: MCP ingest() Tool (raw ingestion with optional interpretation)
+- `FU-123`: MCP ingest_structured() Tool (pre-structured data with schema validation)
+- `FU-124`: MCP reinterpret() Tool (versioned re-interpretation with quota enforcement)
+- `FU-125`: MCP correct() Tool (high-priority correction observations)
+- `FU-126`: MCP merge_entities() Tool (entity deduplication with cascade updates)
+
+**Phase 3: Background Workers + Integration**
+
+- `FU-130`: Upload Queue Processor (async retry for failed uploads)
+- `FU-131`: Stale Interpretation Cleanup (timeout handling for hung jobs)
+- `FU-132`: Archival Job (old interpretation run archival)
+- `FU-133`: Duplicate Detection Worker (heuristic duplicate flagging)
+- `FU-134`: Query Updates (provenance chain, merged entity exclusion)
 
 #### 2.2 Explicitly Excluded
 
-- Integration with Truth Layer ingestion pipeline (tool runs separately)
-- UI components (CLI-only tool)
-- Multi-user infrastructure (standalone tool)
-- CSV output format (JSON only)
+- LLM model selection UI (use config/env)
+- Semantic search integration (post-MVP)
+- Multi-user collaboration (entities remain user-isolated)
+- Automated entity merge suggestions (manual/agent-driven only)
+- Schema evolution UI (schemas seeded via migration)
 
 ---
 
-### 3. CLI Interface Specification
+### 3. Release-Level Acceptance Criteria
 
-#### 3.1 Command Syntax
+#### 3.1 Product
 
-**Basic Usage:**
+- Raw files can be ingested and content-addressed (same content = same hash)
+- Interpretation runs are versioned and auditable
+- Users can correct AI-extracted fields via priority observations
+- Duplicate entities can be merged deterministically
+- All data is user-isolated (no cross-user data leakage)
 
-```bash
-npm run chat-to-json <input-file> <output-dir> [options]
-```
-
-**Arguments:**
-
-- `<input-file>`: Path to chat transcript file (required)
-  - Supported formats: JSON (ChatGPT export), HTML, plain text
-  - Auto-detected based on file extension and content
-- `<output-dir>`: Directory for output JSON files (required)
-  - Created if it doesn't exist
-  - One JSON file per extracted record
-
-**Options:**
-
-- `--interactive` / `-i`: Enable interactive field mapping mode
-- `--format <format>`: Force input format (json|html|text)
-- `--model <model>`: LLM model to use (default: gpt-4o-mini)
-- `--provider <provider>`: LLM provider (openai|anthropic, default: openai)
-- `--verbose` / `-v`: Enable verbose logging
-- `--help` / `-h`: Show help message
-
-**Examples:**
-
-```bash
-# Basic conversion
-npm run chat-to-json chat-export.json ./output
-
-# Interactive mode
-npm run chat-to-json -- --interactive chat-export.json ./output
-
-# Force format and specify model
-npm run chat-to-json -- --format html --model gpt-4o chat.html ./output
-
-# Verbose output
-npm run chat-to-json -- --verbose chat-export.json ./output
-```
-
-#### 3.2 Output Format
-
-**JSON File Structure:**
-Each output file follows Neotoma's standard record format:
-
-```json
-{
-  "type": "message",
-  "properties": {
-    "schema_version": "1.0",
-    "sender": "user",
-    "recipient": "assistant",
-    "subject": "Question about API",
-    "body": "How do I use the API?",
-    "sent_at": "2024-01-15T10:30:00Z"
-  },
-  "file_urls": ["local://chat-export.json"],
-  "summary": "User asked about API usage"
-}
-```
-
-**File Naming:**
-
-- Format: `record_<index>_<schema-type>_<timestamp>.json`
-- Example: `record_001_message_20240115T103000Z.json`
-- Index: Sequential number starting from 001
-- Timestamp: ISO 8601 format (UTC)
-
-#### 3.3 Error Handling
-
-**Exit Codes:**
-
-- `0`: Success
-- `1`: General error (invalid arguments, file not found, etc.)
-- `2`: LLM API error (authentication, rate limit, etc.)
-- `3`: Parsing error (invalid input format)
-- `4`: Output error (cannot write to output directory)
-
-**Error Messages:**
-
-- Clear, actionable error messages
-- Include file paths and line numbers where applicable
-- Suggest solutions for common issues
-
-**Example Error Output:**
-
-```
-Error: Input file not found: chat-export.json
-  Hint: Check file path and permissions
-
-Error: LLM API authentication failed
-  Hint: Set OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable
-
-Error: Invalid JSON format in input file
-  Hint: Verify file is valid ChatGPT export JSON
-```
-
-#### 3.4 Interactive Mode
-
-**Flow:**
-
-1. Tool parses input and extracts records using LLM
-2. Displays extracted fields and proposed schema types
-3. User can:
-   - Review and edit field mappings
-   - Change schema type assignments
-   - Skip records
-   - Confirm and proceed
-4. Tool exports final JSON files with user corrections
-
-**UI Format:**
-
-```
-Extracted Record 1/5:
-Schema Type: message
-Fields:
-  sender: user
-  recipient: assistant
-  body: How do I use the API?
-  sent_at: 2024-01-15T10:30:00Z
-
-Actions:
-  [E]dit fields
-  [C]hange schema type
-  [S]kip
-  [A]ccept
-  [Q]uit
-
->
-```
-
----
-
-### 4. Release-Level Acceptance Criteria
-
-#### 4.1 Product
-
-- CLI tool successfully converts chat transcripts to JSON files with schema types
-- Output JSON files can be ingested deterministically by Neotoma's standard ingestion path
-- Interactive mode allows users to correct field mappings before export
-- Tool handles common export formats (ChatGPT JSON, HTML, text)
-
-#### 4.2 Technical
+#### 3.2 Technical
 
 **Implementation Requirements:**
 
-- CLI script functional (`scripts/chat-to-json.ts`)
-- Parsers for supported export formats (ChatGPT JSON, HTML, text)
-- LLM-based interpretation working (OpenAI/Anthropic API integration)
-- JSON output follows standard record format (type, properties, file_urls, summary)
-- Each JSON file contains one record object with schema type
-- Unit tests for format parsers
-- Integration tests for full CLI workflow
-- E2E tests: CLI output → Neotoma JSON ingestion
+- All new tables created with RLS policies
+- `sources` table with `(user_id, content_hash)` uniqueness
+- `interpretation_runs` with timeout/heartbeat columns
+- `entities` extended with `user_id`, `merged_to_entity_id`
+- `observations` linked to `source_id`, `interpretation_run_id`
+- `raw_fragments` stores unknown fields with provenance
+- `entity_merges` audit log with TEXT IDs (matching `entities.id`)
+- `storage_usage` tracks bytes + interpretation counts
+- MCP tools: `ingest()`, `ingest_structured()`, `reinterpret()`, `correct()`, `merge_entities()`
+- Background workers deployed as Supabase Edge Functions
+- Unit tests for schema filtering, unknown routing, merge behavior
+- Integration tests for full ingest → query flow, reinterpretation immutability
 
 **Technical Specifications:**
 
-- **Format Parsers:**
+- **Storage Path**: `sources/{user_id}/{content_hash}`
+- **Deduplication**: SHA-256 content hash with per-user uniqueness
+- **Interpretation Quota**: 100/month (free), 1000/month (pro)
+- **Interpretation Timeout**: 10 minutes with heartbeat monitoring
+- **Source Priorities**: AI=0, structured=100, correction=1000
+- **Entity IDs**: TEXT (not UUID) per baseline schema
 
-  - ChatGPT JSON: Parse standard ChatGPT export format
-  - HTML: Extract text from HTML structure, handle nested elements
-  - Plain Text: Parse line-separated or structured text formats
-  - Auto-detection: Detect format from file extension and content
+#### 3.3 Business
 
-- **LLM Integration:**
-
-  - Provider: OpenAI (default) or Anthropic
-  - Model: Configurable (default: gpt-4o-mini)
-  - Prompt: Structured prompt for record extraction and schema type assignment
-  - Error Handling: Retry logic, rate limit handling, timeout management
-
-- **JSON Output Validation:**
-  - Schema validation against Neotoma record format
-  - Required fields: type, properties, file_urls
-  - Optional fields: summary
-  - Properties must include schema_version
-
-#### 4.3 Business
-
-- Tool enables chat transcript ingestion workflow without violating Truth Layer determinism constraints
-- Users can pre-process chat exports before ingestion
-- Tool preserves separation between non-deterministic interpretation (CLI) and deterministic ingestion (Truth Layer)
+- Foundation enables all subsequent ingestion-dependent features
+- User data isolation satisfies privacy requirements
+- Interpretation auditability enables trust and debugging
+- Entity merge capability addresses inevitable resolution duplicates
 
 ---
 
-### 5. Technical Implementation Details
+### 4. Goals and Benefits
 
-#### 5.1 Architecture
+#### 4.1 Key Goals
 
-**Component Structure:**
+1. **Accept any raw data type** without schema friction at ingest time
+2. **Content-addressed storage** with deterministic deduplication
+3. **Versioned, auditable interpretation** (non-deterministic, but traceable)
+4. **Corrections via high-priority observations** (user always wins)
+5. **User isolation from day one** (all tables user-scoped with RLS)
+6. **Prevent schema pollution** from interpretation (unknown → raw_fragments)
+7. **Bound entity-duplication damage** with minimal merge mechanism
+8. **Prevent unbounded interpretation costs** with quotas and timeouts
 
-```
-scripts/chat-to-json.ts (CLI entry point)
-├── src/cli/parsers/
-│   ├── json_parser.ts (ChatGPT JSON parser)
-│   ├── html_parser.ts (HTML parser)
-│   └── text_parser.ts (Plain text parser)
-├── src/cli/llm/
-│   ├── interpreter.ts (LLM-based interpretation)
-│   └── prompts.ts (Prompt templates)
-├── src/cli/interactive/
-│   └── field_mapper.ts (Interactive field mapping)
-└── src/cli/output/
-    └── json_writer.ts (JSON file writer)
-```
+#### 4.2 Benefits
 
-#### 5.2 LLM Integration
+- **Provenance**: Every observation traceable to raw source and interpretation run
+- **Immutability**: Reinterpretation never modifies existing observations
+- **Flexibility**: Generic fallback type handles unknown schemas gracefully
+- **Cost Control**: Monthly quotas prevent runaway AI costs
+- **Resilience**: Upload queue handles storage failures with retry
+- **Auditability**: Entity merges logged with observation count
 
-**Provider Selection:**
+#### 4.3 Trade-offs
 
-- Environment variable: `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
-- CLI option: `--provider <provider>`
-- Default: OpenAI if `OPENAI_API_KEY` is set, otherwise Anthropic
-
-**Model Selection:**
-
-- Default: `gpt-4o-mini` (cost-effective, sufficient accuracy)
-- Configurable via `--model` option
-- Supported models:
-  - OpenAI: `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`
-  - Anthropic: `claude-3-haiku`, `claude-3-sonnet`, `claude-3-opus`
-
-**Prompt Structure:**
-
-```
-You are extracting structured records from a chat transcript.
-
-Input transcript:
-{transcript_content}
-
-Extract records following these rules:
-1. Identify distinct records (messages, notes, tasks, code snippets)
-2. Assign appropriate schema types from: {schema_types}
-3. Extract fields according to schema type requirements
-4. Include timestamps where available
-5. Generate concise summaries
-
-Output format: JSON array of records
-```
-
-**Error Handling:**
-
-- Retry logic: 3 retries with exponential backoff
-- Rate limit handling: Wait and retry
-- Timeout: 60 seconds per LLM call
-- Fallback: Return partial results if LLM fails
-
-#### 5.3 Format Parsers
-
-**ChatGPT JSON Parser:**
-
-- Parse standard ChatGPT export JSON structure
-- Extract messages, metadata, timestamps
-- Handle nested conversation structures
-- Preserve message order
-
-**HTML Parser:**
-
-- Use HTML parser library (e.g., `cheerio` or `jsdom`)
-- Extract text content from HTML elements
-- Handle common HTML export structures
-- Preserve message boundaries
-
-**Plain Text Parser:**
-
-- Parse line-separated formats
-- Detect message boundaries (timestamps, separators)
-- Handle markdown-like formatting
-- Preserve message order
-
-**Format Detection:**
-
-1. Check file extension (.json, .html, .txt)
-2. Check file content (JSON structure, HTML tags, plain text)
-3. Use detected format or CLI-specified format
-
-#### 5.4 JSON Output Schema
-
-**Record Format:**
-
-```typescript
-interface OutputRecord {
-  type: string; // Schema type (e.g., "message", "note", "task")
-  properties: {
-    schema_version: string; // Required: "1.0"
-    [key: string]: unknown; // Type-specific fields
-  };
-  file_urls: string[]; // Array of source file URLs
-  summary?: string; // Optional human-readable summary
-}
-```
-
-**Schema Type Assignment:**
-
-- Use LLM to analyze content and assign schema types
-- Supported types: `message`, `note`, `task`, `code`, etc.
-- Fallback to `message` if type cannot be determined
-- User can override in interactive mode
-
-**Field Mapping:**
-
-- Extract fields based on schema type requirements
-- Map transcript fields to record properties
-- Handle missing fields gracefully
-- User can correct mappings in interactive mode
-
-#### 5.5 Interactive Mode Implementation
-
-**Data Structures:**
-
-```typescript
-interface ExtractedRecord {
-  proposedType: string;
-  fields: Record<string, unknown>;
-  confidence: number;
-}
-
-interface FieldMapping {
-  sourceField: string;
-  targetField: string;
-  value: unknown;
-}
-```
-
-**User Interface:**
-
-- Terminal-based interactive prompts
-- Display extracted records one at a time
-- Allow editing fields, changing schema types
-- Save corrections to final JSON output
-
-**State Management:**
-
-- Track user corrections
-- Apply corrections to final output
-- Support undo/redo (optional)
-
-#### 5.6 Validation and Error Handling
-
-**Input Validation:**
-
-- File exists and is readable
-- File format is supported
-- Output directory is writable
-- LLM API key is configured
-
-**Output Validation:**
-
-- JSON files are valid JSON
-- Records follow standard format
-- Required fields are present
-- Schema types are valid
-
-**Error Recovery:**
-
-- Continue processing if one record fails
-- Log errors for failed records
-- Generate partial output if possible
+- **Entity resolution remains heuristic**: Duplicates expected; merge is manual
+- **Interpretation is non-deterministic**: Auditability is the guarantee, not replay
+- **Storage overhead**: Raw content stored separately from observations
+- **Complexity**: More tables and relationships than simple record storage
 
 ---
 
-### 6. Cross-FU Integration Scenarios (High-Level)
+### 5. Determinism Doctrine
+
+| Component | Deterministic? | Notes |
+|-----------|----------------|-------|
+| Content hashing (SHA-256) | Yes | Same bytes = same hash |
+| Deduplication | Yes | `(user_id, content_hash)` uniqueness |
+| Storage path | Yes | `{user_id}/{content_hash}` |
+| Observation creation (given fixed validated fields + entity_id) | Yes | Pure insert |
+| Reducer computation | Yes | Same observations + same merge rules → same snapshot |
+| Entity merge | Yes | Deterministic rewrite of observations + snapshot recompute |
+| AI interpretation | No | Outputs vary; config logged for audit |
+| Entity resolution | No | Heuristic; may drift |
+
+**Policy**: The system never claims replay determinism for interpretation. Interpretation config is logged for audit.
+
+---
+
+### 6. Data Model Summary
+
+#### 6.1 New Tables
+
+| Table | Purpose |
+|-------|---------|
+| `sources` | Raw content storage (hash, URL, mime_type, provenance) |
+| `interpretation_runs` | Versioned interpretation attempts with timeout tracking |
+| `upload_queue` | Async retry for failed storage uploads |
+| `storage_usage` | Per-user storage and interpretation quotas |
+| `entity_merges` | Audit log for entity merge operations |
+
+#### 6.2 Extended Tables
+
+| Table | Extensions |
+|-------|------------|
+| `entities` | `user_id`, `merged_to_entity_id`, `merged_at` + RLS |
+| `observations` | `source_id`, `interpretation_run_id` |
+| `raw_fragments` | `source_id`, `interpretation_run_id`, `user_id` |
+| `entity_snapshots` | RLS policies only |
+
+---
+
+### 7. MCP Tools Summary
+
+| Tool | Purpose | Priority |
+|------|---------|----------|
+| `ingest()` | Raw ingestion with optional interpretation | Default |
+| `ingest_structured()` | Pre-structured data with schema validation | 100 |
+| `reinterpret()` | Trigger new interpretation run | 0 |
+| `correct()` | High-priority field correction | 1000 |
+| `merge_entities()` | Merge duplicate entities | N/A |
+
+---
+
+### 8. Cross-FU Integration Scenarios
 
 These scenarios must pass end-to-end before v0.2.0 is approved:
 
-1. **Chat Transcript Conversion Flow**
+#### 8.1 Raw File Ingestion Flow
 
-   - User exports chat transcript from ChatGPT (JSON format)
-   - Run CLI: `npm run chat-to-json -- chat-export.json output_dir/`
-   - Tool parses transcript, uses LLM to interpret content
-   - Tool outputs JSON files (one per extracted record) with schema types
-   - User reviews/corrects field mappings in interactive mode
-   - Final JSON files exported to output directory
+1. Agent calls `ingest()` with PDF file
+2. System computes SHA-256 hash, checks deduplication
+3. File uploaded to Supabase Storage at `sources/{user_id}/{hash}`
+4. Interpretation triggered (if `interpret: true`)
+5. Observations created for extracted entities (schema-validated)
+6. Unknown fields routed to `raw_fragments`
+7. Entity snapshots recomputed
 
-2. **JSON Ingestion Validation**
+**Acceptance Criteria:**
+- ✅ Same file re-ingested → `deduplicated: true`
+- ✅ Observations link to source_id and interpretation_run_id
+- ✅ Unknown fields stored in raw_fragments only (not duplicated)
 
-   - Take JSON files from CLI output
-   - Ingest JSON files via Neotoma's standard ingestion path
-   - Verify records created with correct schema types
-   - Verify properties extracted correctly
-   - Verify deterministic ingestion (same JSON → same record)
+#### 8.2 Reinterpretation Flow
 
-3. **Multiple Format Support**
-   - Test with ChatGPT JSON export
-   - Test with HTML export
-   - Test with plain text export
-   - Verify consistent JSON output format across all input formats
+1. Agent calls `reinterpret()` on existing source
+2. System creates new interpretation run
+3. New observations created (old observations unchanged)
+4. Snapshots recomputed including new observations
+
+**Acceptance Criteria:**
+- ✅ Prior observations remain unchanged
+- ✅ New run has different interpretation_run_id
+- ✅ Quota decremented
+
+#### 8.3 Correction Flow
+
+1. Agent calls `correct()` with entity_id, field, value
+2. System validates field against schema
+3. Correction observation created with priority=1000
+4. Snapshot recomputed (correction wins)
+
+**Acceptance Criteria:**
+- ✅ Correction overrides AI extraction
+- ✅ Correction persists across reinterpretation
+
+#### 8.4 Entity Merge Flow
+
+1. Agent identifies duplicate entities
+2. Agent calls `merge_entities()` with from_id, to_id
+3. System validates same-user ownership
+4. Observations rewritten to target entity
+5. Source entity marked as merged
+6. Snapshots recomputed
+
+**Acceptance Criteria:**
+- ✅ Cross-user merge rejected
+- ✅ Merged entity excluded from queries
+- ✅ Observations redirect to merged target
+- ✅ Audit log created
+
+#### 8.5 Upload Queue Retry Flow
+
+1. Storage upload fails during `ingest()`
+2. Content queued to `upload_queue` with temp file
+3. Source created with `storage_status: 'pending'`
+4. Background worker retries upload
+5. On success: status updated to 'uploaded'
+6. On final failure: status updated to 'failed'
+
+**Acceptance Criteria:**
+- ✅ Partial failure doesn't block ingest response
+- ✅ Retry succeeds after transient failure
+- ✅ Final failure logged with error
 
 ---
 
-### 7. Deployment and Rollout Strategy
+### 9. Implementation Phases
+
+#### Phase 1: Schema + Storage (1-2 weeks)
+
+**Migrations:**
+- `sources` table with RLS
+- `interpretation_runs` table with timeout/heartbeat columns
+- `upload_queue` table
+- `storage_usage` table with interpretation quotas
+- `entity_merges` table (TEXT IDs, user-scoped unique index)
+- Extend `entities` with user_id, merged_to_entity_id, merged_at + RLS
+- Extend `observations` with source_id, interpretation_run_id
+- Extend `raw_fragments` with source_id, interpretation_run_id, user_id
+- Update RLS on `observations`, `entity_snapshots`, `raw_fragments`
+
+**Schema Seeding:**
+- Base types: transaction, merchant, invoice, receipt
+- Generic fallback type (using `object`, not `jsonb`)
+
+**Storage Service:**
+- `raw_storage_service.ts`
+- SHA-256 hashing
+- Supabase Storage upload with retry
+- File-based queue for failures with disk space check
+- Transactional storage usage tracking (idempotent)
+
+**Setup:**
+- Create storage bucket `sources` with user-prefix structure
+- Create temp directory for queue files
+
+#### Phase 2: MCP Tools + Workers (2-3 weeks)
+
+**Interpretation Service:**
+- Schema filtering (valid → observation, unknown → raw_fragments)
+- Multi-entity extraction
+- Advisory lock on source_id
+- Heartbeat updates during long-running interpretation
+- Extraction completeness tracking
+- User-scoped entity resolution
+
+**MCP Tools:**
+- `ingest()` with quota check
+- `ingest_structured()` with schema validation
+- `reinterpret()` with quota + timeout handling
+- `correct()` with schema validation + entity ownership check
+- `merge_entities()` with validation + cascade updates + same-user check
+
+**Background Workers:**
+- Upload queue processor (every 5 min)
+- Stale interpretation cleanup (every 5 min)
+- Archival job (weekly)
+- Duplicate detection (weekly, user-scoped)
+
+**Monitoring:**
+- Instrument all services with metrics logging
+
+#### Phase 3: Integration + Testing (2 weeks)
+
+**Query Updates:**
+- Update `query_records` to return `source_id` in provenance
+- Add `get_source_metadata(source_id)` (no storage URL exposure)
+- Update entity snapshot queries to include source chain
+- Exclude merged entities from default queries
+- Redirect observations to merged entity target
+
+**Testing:**
+- Unit tests: schema filtering, unknown routing, idempotent usage
+- Integration tests: full ingest → query flow, reinterpret immutability, merge behavior
+- Merge tests: cross-user prevention, merged entity redirect/exclusion
+- Performance tests: concurrent uploads, large files
+- Timeout tests: verify stale cleanup works
+
+**Total: 5-7 weeks**
+
+---
+
+### 10. Background Workers
+
+| Worker | Trigger | Purpose |
+|--------|---------|---------|
+| Upload Queue Processor | Cron 5 min | Retry failed storage uploads |
+| Stale Interpretation Cleanup | Cron 5 min | Mark timed-out runs as failed |
+| Archival Job | Cron weekly | Archive old interpretation runs (180 days) |
+| Duplicate Detection | Cron weekly | Flag potential entity duplicates |
+
+All deployed as Supabase Edge Functions with cron triggers.
+
+---
+
+### 11. Monitoring Metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `storage.upload.latency_ms` | histogram | Upload time |
+| `storage.upload.success_total` | counter | Successful uploads |
+| `storage.upload.failure_total` | counter | Failed uploads |
+| `storage.queue.depth` | gauge | Pending queue items |
+| `interpretation.latency_ms` | histogram | Interpretation time |
+| `interpretation.success_total` | counter | Successful interpretations |
+| `interpretation.failure_total` | counter | Failed interpretations |
+| `interpretation.timeout_total` | counter | Timed out interpretations |
+| `interpretation.quota_exceeded_total` | counter | Quota exceeded rejections |
+| `entity.merges_total` | counter | Entity merges performed |
+| `entity.potential_duplicates` | gauge | Entities flagged as potential duplicates |
+
+---
+
+### 12. Security Model
+
+- **RLS**: Client keys (`anon`, `authenticated`) have SELECT-only access
+- **MCP Server**: All mutations via `service_role`; user identity stamped into rows
+- **Storage URLs**: Opaque, never returned to clients; reads via MCP server + ownership check
+- **Cross-User Prevention**: All operations validate `user_id` match; merge cannot cross users
+
+---
+
+### 13. Deployment and Rollout Strategy
 
 - **Deployment Target**: Production (neotoma.io)
   - All releases deploy to production at neotoma.io
-  - CLI tool distributed via npm package
-  - Documentation and tool available at neotoma.io
+  - Greenfield implementation (no migration required)
 - **Marketing Strategy**: Not Marketed
   - No pre-launch marketing activities
-  - No post-launch marketing activities
-  - No user acquisition campaigns
   - No announcement or promotion
   - Release deployed silently to production
-- **Rollback Plan**: Revert code changes and redeploy to neotoma.io
+- **Rollback Plan**: Revert migrations and redeploy; no user data to preserve (pre-release)
 
 ---
 
-### 8. Post-Release Validation
+### 14. Post-Release Validation
 
-- Validate CLI tool functionality:
-  - Tool successfully converts representative chat exports
-  - Output JSON files have correct schema types
-  - Output JSON files can be ingested deterministically
-  - Interactive mode allows field correction
-  - Documentation is clear and complete
+- Validate ingestion pipeline:
+  - Raw file upload succeeds
+  - Content deduplication works
+  - Interpretation creates observations
+  - Unknown fields route to raw_fragments
+  - Entity resolution is user-scoped
+  - Corrections override AI extraction
+  - Entity merge works correctly
+  - Background workers functional
 
 ---
 
-### 9. Success Criteria
+### 15. Success Criteria
 
 **Release is Complete When:**
 
-1. ✅ CLI tool functional (`npm run chat-to-json`)
-2. ✅ Parsers for all supported formats (JSON, HTML, text)
-3. ✅ LLM-based interpretation working
-4. ✅ JSON output follows standard record format
-5. ✅ Interactive field mapping mode functional
-6. ✅ Unit tests passing (format parsers)
-7. ✅ Integration tests passing (full CLI workflow)
-8. ✅ E2E tests passing (CLI output → Neotoma ingestion)
-9. ✅ Documentation complete (usage examples, format specifications)
-10. ✅ Field accuracy ≥80% on representative chat exports
+1. ✅ All migrations applied successfully
+2. ✅ RLS policies enforced on all user tables
+3. ✅ `ingest()` MCP tool functional with deduplication
+4. ✅ `ingest_structured()` MCP tool validates against schema
+5. ✅ `reinterpret()` creates new observations (immutability verified)
+6. ✅ `correct()` creates priority-1000 observations
+7. ✅ `merge_entities()` rewrites observations and updates snapshots
+8. ✅ Upload queue processor retries failed uploads
+9. ✅ Stale interpretation cleanup marks timeouts as failed
+10. ✅ Unit tests passing (schema filtering, merge behavior)
+11. ✅ Integration tests passing (full ingestion flow)
+12. ✅ Cross-user isolation verified (no data leakage)
 
 ---
 
-### 10. Status
+### 16. Known Limitations
+
+1. **Entity resolution remains heuristic**: Merges are manual/agent-driven
+2. **`generic` entities are visibility mechanism**: Not a substitute for schema design
+3. **Interpretation is non-deterministic**: Auditability is the guarantee, not replay
+4. **Merge chains not supported**: Each entity can only be merged once (flat merges only)
+5. **Relationships/timeline_events**: Out of scope unless they become user-scoped
+
+---
+
+### 17. Status
 
 - **Current Status**: `planning`
 - **Owner**: Mark Hendrickson
 - **Notes**:
   - Pre-MVP release (not marketed)
-  - All releases deploy to production at neotoma.io
-  - Enables chat transcript ingestion workflow
-  - Preserves Truth Layer determinism by separating non-deterministic interpretation from ingestion pipeline
-  - Tool runs independently from Neotoma server
+  - Foundational infrastructure for all subsequent ingestion features
+  - Enables Chat Transcript CLI (v0.3.0) and MVP (v1.0.0)
+  - Greenfield implementation (no migration complexity)
+  - AI agent execution assumed
 
 ---

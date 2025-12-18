@@ -7,6 +7,8 @@ release:
   priority: "P0"
   owner: "Mark Hendrickson"
   marketing_required: true
+  depends_on_releases:
+    - "v0.2.0" # Sources-First Ingestion Architecture (foundational)
 
 # NOTE: This manifest contains metadata and summaries for workflow automation.
 # Detailed planning documents are in markdown (see release_plan.md for overview).

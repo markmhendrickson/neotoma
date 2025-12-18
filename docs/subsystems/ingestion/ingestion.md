@@ -9,6 +9,7 @@ _(Deterministic Ingestion from Source to Memory Graph)_
 This document defines the **canonical ingestion pipeline** that transforms user-provided inputs into structured truth. Neotoma supports two primary ingestion paths: **file uploads** (PDFs, images, text files) and **agent interactions** (contextual data provided via MCP `submit_payload` action). This document specifies:
 
 - End-to-end ingestion flow (upload/agent interaction → extraction → graph)
+- **Sources-first architecture**
 - Deterministic extraction rules
 - Schema detection and assignment
 - Entity resolution and event generation
@@ -21,26 +22,58 @@ Ingestion is the **primary entry point** for truth into Neotoma. The dual-path i
 
 ---
 
+## Sources-First Architecture
+
+Neotoma uses a **sources-first architecture** that decouples raw content storage from interpretation:
+
+```
+Raw Content → Sources → Interpretation Runs → Observations → Entity Snapshots
+```
+
+**Key Principles:**
+
+1. **Content-Addressed Storage**: Raw content stored with SHA-256 hash for deduplication
+2. **Versioned Interpretation**: Each interpretation creates a new `interpretation_run` record
+3. **Immutable Observations**: Reinterpretation creates NEW observations; never modifies existing
+4. **User Isolation**: All tables user-scoped with RLS
+5. **Correction via Priority**: User corrections create priority-1000 observations that override AI
+
+**Benefits:**
+
+- **Provenance**: Every observation traces to source and interpretation run
+- **Auditability**: Interpretation config logged; can understand how data was extracted
+- **Flexibility**: Can reinterpret with new models without losing history
+- **Cost Control**: Interpretation quotas prevent runaway AI costs
+
+See [`docs/subsystems/sources.md`](../sources.md) for complete sources-first architecture details.
+
+---
+
 ## Scope
 
 This document covers:
 
 - File upload and normalization
-- Agent interaction ingestion via MCP `submit_payload` action
+- **Sources storage and deduplication**
+- **Interpretation runs**
 - OCR and text extraction (file uploads only)
 - Schema detection
 - Field extraction (rule-based, deterministic)
-- Entity resolution
+- Entity resolution (user-scoped)
 - Event generation
 - Graph insertion
+- **Correction mechanism**
+- **Entity merge**
 
 **Ingestion Paths:**
 
-1. **File Upload:** Users explicitly upload PDFs, images, or text files through the UI or `upload_file` MCP action. Files undergo OCR, schema detection, and rule-based field extraction.
+1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are stored in `sources`, undergo interpretation, and observations are created.
 
-2. **Agent Interactions:** Users provide contextual data during conversations with ChatGPT, Claude, Cursor, or other MCP-compatible agents. Agents store this data via the `submit_payload` MCP action, enabling incremental memory growth that maintains accuracy and comprehensiveness as agent usage scales. This path bypasses file processing and directly creates payloads with user-provided data.
+2. **Structured Data via `ingest_structured()`**: Agents provide pre-structured data with explicit schema types. Bypasses AI interpretation; creates observations directly with priority=100.
 
-Both paths feed into the same four-layer truth model (Document → Entity → Observation → Snapshot), ensuring unified memory regardless of ingestion source.
+3. **Corrections via `correct()`**: Users or agents correct extracted values. Creates priority-1000 observations that override AI extraction.
+
+All paths feed into the same truth model (Sources → Interpretation Runs → Observations → Entity Snapshots), ensuring unified memory regardless of ingestion source.
 
 This document does NOT cover:
 
@@ -48,10 +81,74 @@ This document does NOT cover:
 - Database schema (see `docs/subsystems/schema.md`)
 - Search indexing (see `docs/subsystems/search/search.md`)
 - MCP action specifications (see `docs/specs/MCP_SPEC.md`)
+- Sources-first architecture details (see `docs/subsystems/sources.md`)
 
 ---
 
 ## 1. Ingestion Pipeline Overview
+
+### 1.1 Sources-First Pipeline
+
+```mermaid
+%%{init: {'theme':'neutral'}}%%
+flowchart TD
+    Start[ingest MCP Call] --> Hash[Compute SHA-256 Hash]
+    Hash --> Dedup{Duplicate?}
+    Dedup -->|Yes| ReturnExisting[Return Existing source_id]
+    Dedup -->|No| StoreSource[Create Source Record]
+
+    StoreSource --> Upload[Upload to Storage]
+    Upload -->|Success| UploadOK[storage_status: uploaded]
+    Upload -->|Failure| Queue[Add to Upload Queue]
+    Queue --> UploadPending[storage_status: pending]
+
+    UploadOK --> CheckInterpret{interpret=true?}
+    UploadPending --> CheckInterpret
+    CheckInterpret -->|No| Done[Return source_id]
+    CheckInterpret -->|Yes| CheckQuota{Quota OK?}
+
+    CheckQuota -->|No| QuotaError[Error: QUOTA_EXCEEDED]
+    CheckQuota -->|Yes| CreateRun[Create interpretation_run]
+    CreateRun --> Interpret[Run Interpretation]
+
+    Interpret --> ExtractText[Extract Raw Text]
+    ExtractText --> DetectSchema[Detect Schema Type]
+    DetectSchema --> ExtractFields[Extract Fields]
+    ExtractFields --> ValidateSchema[Validate Against Schema]
+
+    ValidateSchema --> SplitFields{Field Valid?}
+    SplitFields -->|Yes| CreateObs[Create Observation]
+    SplitFields -->|No| StoreFragment[Store in raw_fragments]
+
+    CreateObs --> ResolveEntity[Resolve Entity User-Scoped]
+    ResolveEntity --> TriggerReducer[Trigger Reducer]
+    TriggerReducer --> ComputeSnapshot[Compute Entity Snapshot]
+
+    StoreFragment --> IncrementCount[Increment unknown_field_count]
+    IncrementCount --> CreateObs
+
+    ComputeSnapshot --> Done
+
+    style Start fill:#e1f5ff
+    style Done fill:#e6ffe6
+    style StoreSource fill:#fff4e6
+    style CreateRun fill:#ffe6f0
+    style ValidateSchema fill:#f0f0ff
+```
+
+### 1.2 Key Differences from Legacy Pipeline
+
+| Aspect | Legacy | Sources-First |
+|--------|--------|-------------------------|
+| Storage | Direct to records | Sources → Interpretation Runs → Observations |
+| Deduplication | Via external_hash | Content-addressed via SHA-256 per user |
+| Interpretation | Implicit | Explicit runs with config logging |
+| Reinterpretation | Not supported | Creates new run, new observations |
+| Corrections | Not supported | Priority-1000 observations |
+| User Isolation | Limited | Full RLS on all tables |
+| Unknown Fields | extraction_metadata | raw_fragments with provenance |
+
+### 1.3 Legacy Pipeline (Pre-Sources-First)
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
@@ -630,6 +727,62 @@ function normalizeEntityValue(entityType: string, raw: string): string {
 ```
 
 **Determinism:** Same name → same ID (globally).
+
+### 7.3 User-Scoped Entity Resolution
+
+Entity resolution is **user-scoped** to ensure user isolation:
+
+```typescript
+async function resolveEntity(
+  entityType: string,
+  extractedFields: Record<string, unknown>,
+  userId: string
+): Promise<string> {
+  // 1. Exact match on external_id (user-scoped)
+  if (extractedFields.external_id) {
+    const existing = await findEntityByExternalId(
+      entityType, 
+      extractedFields.external_id, 
+      userId  // Always filter by user
+    );
+    if (existing) return existing.id;
+  }
+
+  // 2. Heuristic match on key fields (user-scoped)
+  const matchKey = getMatchKey(entityType, extractedFields);
+  if (matchKey) {
+    const existing = await findEntityByMatchKey(
+      entityType, 
+      matchKey, 
+      userId  // Always filter by user
+    );
+    if (existing) return existing.id;
+  }
+
+  // 3. Create new entity (stamp user_id)
+  return await createEntity(entityType, extractedFields, userId);
+}
+
+async function findEntityByExternalId(
+  entityType: string,
+  externalId: string,
+  userId: string
+): Promise<{ id: string } | null> {
+  const { data } = await supabase
+    .from('entities')
+    .select('id')
+    .eq('entity_type', entityType)
+    .eq('external_id', externalId)
+    .eq('user_id', userId)
+    .is('merged_to_entity_id', null)  // Exclude merged entities
+    .single();
+  return data;
+}
+```
+
+**Important:** Entity resolution may create duplicates (heuristic matching). Use `merge_entities()` to repair duplicates.
+
+See [`docs/subsystems/entity_merge.md`](../entity_merge.md) for merge mechanism.
 
 ---
 
