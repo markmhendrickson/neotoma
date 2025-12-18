@@ -24,7 +24,7 @@ feature_units:
     status: not_started
     dependencies: [FU-110]
     phase: 1
-    description: Versioned interpretation tracking with timeout handling
+    description: Versioned interpretation tracking with full config logging (provider, model_id, temperature, prompt_hash, code_version, feature_flags)
 
   - id: FU-112
     name: Storage Infrastructure
@@ -81,7 +81,7 @@ feature_units:
     status: not_started
     dependencies: [FU-111, FU-114, FU-115]
     phase: 2
-    description: Schema validation, entity resolution, unknown field routing
+    description: Strict JSON schema validation using schema registry, entity resolution, unknown field routing to raw_fragments
 
   - id: FU-122
     name: MCP ingest() Tool
@@ -142,19 +142,19 @@ feature_units:
 
   - id: FU-132
     name: Archival Job
-    priority: P1
+    priority: P2
     status: not_started
     dependencies: [FU-111]
     phase: 3
-    description: Old interpretation run archival
+    description: Old interpretation run archival (deferred until core flows stable)
 
   - id: FU-133
     name: Duplicate Detection Worker
-    priority: P1
+    priority: P2
     status: not_started
     dependencies: [FU-113]
     phase: 3
-    description: Heuristic duplicate flagging
+    description: Heuristic duplicate flagging (deferred until core flows stable)
 
   - id: FU-134
     name: Query Updates
@@ -208,14 +208,21 @@ success_criteria:
   - All tests passing
 
 determinism_doctrine:
-  deterministic:
+  principle: "Deterministic given fixed source, interpretation config, and resolver version"
+  
+  deterministic_core:
     - Content hashing (SHA-256)
     - Deduplication (user_id, content_hash uniqueness)
     - Storage path (user_id/content_hash)
-    - Observation creation (given fixed fields)
+    - Observation creation (given fixed validated fields + entity_id)
     - Reducer computation
     - Entity merge
 
-  non_deterministic:
-    - AI interpretation (config logged for audit)
-    - Entity resolution (heuristic, may drift)
+  non_deterministic_boundary:
+    - AI interpretation: Config logged (provider, model_id, temperature, prompt_hash, code_version); versioned and auditable
+    - Entity resolution: Heuristic; resolver version tracked in provenance
+
+  validation:
+    - Strict JSON schema validation at ingestion boundary
+    - Reject/quarantine records with invalid shapes
+    - Provenance mandatory: source_id and interpretation_run_id enforced

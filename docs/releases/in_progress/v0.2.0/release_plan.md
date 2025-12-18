@@ -52,11 +52,11 @@ This release plan coordinates the sources-first ingestion architecture into a co
 
 **Phase 3: Background Workers + Integration**
 
-- `FU-130`: Upload Queue Processor (async retry for failed uploads)
-- `FU-131`: Stale Interpretation Cleanup (timeout handling for hung jobs)
-- `FU-132`: Archival Job (old interpretation run archival)
-- `FU-133`: Duplicate Detection Worker (heuristic duplicate flagging)
-- `FU-134`: Query Updates (provenance chain, merged entity exclusion)
+- `FU-130`: Upload Queue Processor (async retry for failed uploads) — **P0**
+- `FU-131`: Stale Interpretation Cleanup (timeout handling for hung jobs) — **P0**
+- `FU-132`: Archival Job (old interpretation run archival) — P2 (deferred)
+- `FU-133`: Duplicate Detection Worker (heuristic duplicate flagging) — P2 (deferred)
+- `FU-134`: Query Updates (provenance chain, merged entity exclusion) — **P0**
 
 #### 2.2 Explicitly Excluded
 
@@ -104,6 +104,13 @@ This release plan coordinates the sources-first ingestion architecture into a co
 - **Source Priorities**: AI=0, structured=100, correction=1000
 - **Entity IDs**: TEXT (not UUID) per baseline schema
 
+**Validation Requirements:**
+
+- **Schema Validation**: Strict JSON schema validation at ingestion boundary using schema registry as single source of truth
+- **Rejection Policy**: Records with invalid shapes/types are rejected (not silently accepted); errors logged and surfaced
+- **Provenance Validation**: Every observation/raw_fragment MUST have valid `source_id` and `interpretation_run_id` (enforced via FK + NOT NULL where applicable)
+- **Integration Tests**: Verify that prompt/model changes cannot silently alter record shapes without corresponding schema version bumps
+
 #### 3.3 Business
 
 - Foundation enables all subsequent ingestion-dependent features
@@ -146,18 +153,53 @@ This release plan coordinates the sources-first ingestion architecture into a co
 
 ### 5. Determinism Doctrine
 
-| Component | Deterministic? | Notes |
-|-----------|----------------|-------|
+#### 5.1 Core Principle
+
+The system is **deterministic given fixed source, interpretation config, and resolver version**—not "deterministic everywhere." Nondeterministic components are explicitly bounded and auditable.
+
+#### 5.2 Determinism Table
+
+| Component | Deterministic? | Boundary Notes |
+|-----------|----------------|----------------|
 | Content hashing (SHA-256) | Yes | Same bytes = same hash |
 | Deduplication | Yes | `(user_id, content_hash)` uniqueness |
 | Storage path | Yes | `{user_id}/{content_hash}` |
-| Observation creation (given fixed validated fields + entity_id) | Yes | Pure insert |
+| Observation creation | Yes | Given fixed validated fields + entity_id |
 | Reducer computation | Yes | Same observations + same merge rules → same snapshot |
-| Entity merge | Yes | Deterministic rewrite of observations + snapshot recompute |
-| AI interpretation | No | Outputs vary; config logged for audit |
-| Entity resolution | No | Heuristic; may drift |
+| Entity merge | Yes | Deterministic rewrite + snapshot recompute |
+| AI interpretation | **No** | Config logged; versioned and auditable |
+| Entity resolution | **No** | Heuristic; resolver version logged |
 
-**Policy**: The system never claims replay determinism for interpretation. Interpretation config is logged for audit.
+#### 5.3 Nondeterminism Boundary
+
+AI interpretation and entity resolution are explicitly outside the deterministic core:
+- **Interpretation**: Outputs vary by model, temperature, prompt. Config is logged for audit, not replay.
+- **Entity Resolution**: Heuristic matching; resolver version tracked for provenance.
+
+#### 5.4 Interpretation Config Requirements
+
+Every `interpretation_run` MUST record:
+- `provider` (e.g., "openai", "anthropic")
+- `model_id` (e.g., "gpt-4o", "claude-3-sonnet")
+- `temperature` 
+- `prompt_hash` (SHA-256 of prompt template)
+- `code_version` (git SHA or release tag)
+- `feature_flags` (any active flags affecting behavior)
+
+This config is stored in `interpretation_config JSONB` column.
+
+#### 5.5 Provenance Chain
+
+Full provenance for any observation:
+```
+Source → InterpretationRun (with config) → Observation → EntitySnapshot
+```
+
+Every `observation` and `raw_fragment` MUST have:
+- `source_id` (mandatory, validated)
+- `interpretation_run_id` (mandatory for AI-derived, validated)
+
+**Policy**: LLM extraction is versioned and auditable outside the deterministic core. The system never claims replay determinism for interpretation.
 
 ---
 
@@ -193,6 +235,26 @@ This release plan coordinates the sources-first ingestion architecture into a co
 | `reinterpret()` | Trigger new interpretation run | 0 |
 | `correct()` | High-priority field correction | 1000 |
 | `merge_entities()` | Merge duplicate entities | N/A |
+
+#### 7.1 Agent API Surface
+
+The MCP surface is **minimal and opinionated**. These five tools cover common flows:
+
+| Flow | Tool | Recipe |
+|------|------|--------|
+| Upload and interpret a document | `ingest()` | Call with file content, `interpret: true` |
+| Upload without interpretation | `ingest()` | Call with `interpret: false`, then `reinterpret()` later |
+| Fix a wrong field | `correct()` | Call with `entity_id`, `field`, `value` |
+| Merge duplicates | `merge_entities()` | Call with `from_entity_id`, `to_entity_id` |
+| Re-process with new model | `reinterpret()` | Call with `source_id` |
+
+#### 7.2 Agent Guardrails
+
+Agents **cannot bypass** the intended flows:
+- **No direct writes** to `sources`, `interpretation_runs`, `observations` (service_role only via MCP)
+- **Provenance enforced**: Observations without valid `source_id`/`interpretation_run_id` are rejected
+- **Schema validated**: Fields not matching active schema version are routed to `raw_fragments` or rejected
+- **User isolation enforced**: All operations validate `user_id` match; cross-user operations fail
 
 ---
 
@@ -316,11 +378,13 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 - `correct()` with schema validation + entity ownership check
 - `merge_entities()` with validation + cascade updates + same-user check
 
-**Background Workers:**
-- Upload queue processor (every 5 min)
-- Stale interpretation cleanup (every 5 min)
-- Archival job (weekly)
-- Duplicate detection (weekly, user-scoped)
+**Background Workers (P0 for v0.2.0):**
+- Upload queue processor (every 5 min) — required
+- Stale interpretation cleanup (every 5 min) — required
+
+**Deferred Workers (P2 — post-core-stability):**
+- Archival job (weekly) — defer until core flows stable
+- Duplicate detection (weekly, user-scoped) — defer until core flows stable
 
 **Monitoring:**
 - Instrument all services with metrics logging
@@ -347,12 +411,14 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 
 ### 10. Background Workers
 
-| Worker | Trigger | Purpose |
-|--------|---------|---------|
-| Upload Queue Processor | Cron 5 min | Retry failed storage uploads |
-| Stale Interpretation Cleanup | Cron 5 min | Mark timed-out runs as failed |
-| Archival Job | Cron weekly | Archive old interpretation runs (180 days) |
-| Duplicate Detection | Cron weekly | Flag potential entity duplicates |
+| Worker | Trigger | Priority | Purpose |
+|--------|---------|----------|---------|
+| Upload Queue Processor | Cron 5 min | **P0** | Retry failed storage uploads |
+| Stale Interpretation Cleanup | Cron 5 min | **P0** | Mark timed-out runs as failed |
+| Archival Job | Cron weekly | P1 (defer) | Archive old interpretation runs (180 days) |
+| Duplicate Detection | Cron weekly | P1 (defer) | Flag potential entity duplicates |
+
+**Prioritization**: P0 workers (Upload Queue, Stale Cleanup) are required for v0.2.0 completion. P1 workers (Archival, Duplicate Detection) are deferred until core flows (ingest, reinterpret, correct, merge) are stable and monitored.
 
 All deployed as Supabase Edge Functions with cron triggers.
 
@@ -360,18 +426,30 @@ All deployed as Supabase Edge Functions with cron triggers.
 
 ### 11. Monitoring Metrics
 
+#### 11.1 Core Flow Metrics (P0 — Gating for v0.2.0)
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `ingest.latency_ms` | histogram | End-to-end ingest time |
+| `ingest.success_total` | counter | Successful ingestions |
+| `ingest.failure_total` | counter | Failed ingestions |
+| `reinterpret.latency_ms` | histogram | Reinterpretation time |
+| `reinterpret.success_total` | counter | Successful reinterpretations |
+| `correct.success_total` | counter | Successful corrections |
+| `merge.success_total` | counter | Successful entity merges |
+| `interpretation.quota_exceeded_total` | counter | Quota exceeded rejections |
+
+**Gating Criteria**: Core flows (ingest, reinterpret, correct, merge) must have <1% error rate and p99 latency <30s before layering additional complexity.
+
+#### 11.2 Infrastructure Metrics
+
 | Metric | Type | Description |
 |--------|------|-------------|
 | `storage.upload.latency_ms` | histogram | Upload time |
 | `storage.upload.success_total` | counter | Successful uploads |
 | `storage.upload.failure_total` | counter | Failed uploads |
 | `storage.queue.depth` | gauge | Pending queue items |
-| `interpretation.latency_ms` | histogram | Interpretation time |
-| `interpretation.success_total` | counter | Successful interpretations |
-| `interpretation.failure_total` | counter | Failed interpretations |
 | `interpretation.timeout_total` | counter | Timed out interpretations |
-| `interpretation.quota_exceeded_total` | counter | Quota exceeded rejections |
-| `entity.merges_total` | counter | Entity merges performed |
 | `entity.potential_duplicates` | gauge | Entities flagged as potential duplicates |
 
 ---
@@ -428,6 +506,9 @@ All deployed as Supabase Edge Functions with cron triggers.
 10. ✅ Unit tests passing (schema filtering, merge behavior)
 11. ✅ Integration tests passing (full ingestion flow)
 12. ✅ Cross-user isolation verified (no data leakage)
+13. ✅ Core flow monitoring instrumented (ingest, reinterpret, correct, merge)
+14. ✅ Interpretation config logging verified (provider, model, temperature, prompt_hash)
+15. ✅ Provenance chain complete (source → interpretation_run → observation → snapshot)
 
 ---
 
@@ -438,6 +519,15 @@ All deployed as Supabase Edge Functions with cron triggers.
 3. **Interpretation is non-deterministic**: Auditability is the guarantee, not replay
 4. **Merge chains not supported**: Each entity can only be merged once (flat merges only)
 5. **Relationships/timeline_events**: Out of scope unless they become user-scoped
+6. **Entity resolution not versioned**: Resolver version tracking deferred to future release (see 16.1)
+
+#### 16.1 Future Enhancements (Post-v0.2.0)
+
+| Enhancement | Description | Why Deferred |
+|-------------|-------------|--------------|
+| **Resolver versioning** | Track which resolver version produced each `entity_id` or merge decision | Requires `resolution_run` abstraction; adds complexity before core flows are stable |
+| **Resolver evolution rules** | Define additive vs breaking changes; audit/rollback capability | Depends on versioning foundation |
+| **Automated merge suggestions** | Proactive duplicate detection with UI | Core merge must be stable first |
 
 ---
 
