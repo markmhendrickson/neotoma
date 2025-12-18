@@ -18,7 +18,12 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { config } from "dotenv";
+import yaml from "js-yaml";
 import { validateFUSpecCompliance } from "./validate_spec_compliance.js";
+
+// Load environment variables from .env file (override existing env vars)
+config({ override: true });
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -34,61 +39,15 @@ const MANIFEST_PATH = `docs/releases/in_progress/${RELEASE_ID}/manifest.yaml`;
 const STATUS_FILE = `docs/releases/in_progress/${RELEASE_ID}/agent_status.json`;
 const EXECUTION_SCHEDULE_PATH = `docs/releases/in_progress/${RELEASE_ID}/execution_schedule.md`;
 
-// Load YAML (simple parser for basic structure)
+// Load YAML using js-yaml library
 async function loadYAML(filePath) {
   const content = await fs.readFile(filePath, "utf-8");
-  const yaml = {};
-
-  // Simple YAML parser for nested structures
-  const lines = content.split("\n");
-  const stack = [{ obj: yaml, indent: -1 }];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const indent = line.length - line.trimStart().length;
-    const match = trimmed.match(/^([^:]+):\s*(.*)$/);
-
-    if (!match) continue;
-
-    const key = match[1].trim();
-    let value = match[2].trim();
-
-    // Strip inline comments (everything after # that's not in quotes)
-    const commentIndex = value.indexOf("#");
-    if (commentIndex !== -1) {
-      // Check if # is inside quotes
-      const beforeComment = value.substring(0, commentIndex);
-      const quoteCount = (beforeComment.match(/"/g) || []).length;
-      if (quoteCount % 2 === 0) {
-        // Not inside quotes, strip comment
-        value = value.substring(0, commentIndex).trim();
-      }
-    }
-
-    // Remove surrounding quotes if present
-    value = value.replace(/^["']|["']$/g, "");
-
-    // Pop stack until we find parent with less indent
-    while (stack.length > 1 && stack[stack.length - 1].indent >= indent) {
-      stack.pop();
-    }
-
-    const current = stack[stack.length - 1].obj;
-
-    if (value === "" || value === "{}") {
-      // Nested object
-      const newObj = {};
-      current[key] = newObj;
-      stack.push({ obj: newObj, indent });
-    } else {
-      // Value
-      current[key] = value;
-    }
+  try {
+    return yaml.load(content);
+  } catch (error) {
+    console.error(`[ERROR] Failed to parse YAML file ${filePath}:`, error.message);
+    throw error;
   }
-
-  return yaml;
 }
 
 // Load execution schedule from markdown
@@ -97,8 +56,7 @@ async function loadExecutionSchedule(filePath) {
   const batches = [];
 
   // Parse markdown execution schedule
-  const batchRegex =
-    /#### Batch (\d+)[\s\S]*?Feature Units:[\s\S]*?(- `FU-\d+`[^\n]*\n)+/g;
+  const batchRegex = /#### Batch (\d+)[\s\S]*?Feature Units:[\s\S]*?(- `FU-\d+`[^\n]*\n)+/g;
   let match;
 
   while ((match = batchRegex.exec(content)) !== null) {
@@ -207,10 +165,10 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
     selectedModel === MODEL_TIERS.low
       ? "low"
       : selectedModel === MODEL_TIERS.medium
-      ? "medium"
-      : selectedModel === MODEL_TIERS.high
-      ? "high"
-      : "unknown";
+        ? "medium"
+        : selectedModel === MODEL_TIERS.high
+          ? "high"
+          : "unknown";
 
   console.log(`[INFO] Spawning worker agent for ${fuId} in Batch ${batchId}`);
   console.log(
@@ -225,31 +183,52 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
   }
 
   const apiUrl = process.env.CURSOR_CLOUD_API_URL.replace(/\/$/, ""); // Remove trailing slash
-  const endpoint = `${apiUrl}/background-agents`;
+  // Allow endpoint override via env var, default to /v0/agents (correct Cursor Cloud API endpoint)
+  const endpointPath = process.env.CURSOR_CLOUD_API_ENDPOINT || "/v0/agents";
+  const endpoint = `${apiUrl}${endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`}`;
 
   try {
+    const repoUrl = process.env.REPO_URL || "https://github.com/markmhendrickson/neotoma";
+    const branch = process.env.RELEASE_BRANCH || "dev";
+    // Remove quotes if present
+    const cleanRepoUrl = repoUrl.replace(/^["']|["']$/g, "");
+
+    // Cursor Cloud API expects:
+    // - prompt.text: The task instructions
+    // - source.repository: Full GitHub repository URL
+    // - source.ref: Branch name
+    // - environment: Optional environment variables (if API supports it)
     const requestBody = {
-      name: `${fuId}-Batch-${batchId}`,
-      repository: process.env.REPO_URL,
-      branch: process.env.RELEASE_BRANCH || "main",
-      instructions: agentInstructions,
-      environment: {
-        FU_ID: fuId,
-        BATCH_ID: batchId.toString(),
-        RELEASE_ID: releaseId,
-        STATUS_FILE: STATUS_FILE,
+      prompt: {
+        text: agentInstructions,
       },
-      max_duration_minutes: duration + 30,
+      source: {
+        repository: cleanRepoUrl,
+        ref: branch,
+      },
     };
 
-    // Add model parameter if API supports it
-    // Note: Check Cursor Cloud API docs for exact parameter name
-    // Common options: "model", "agent_model", "llm_model"
-    if (selectedModel) {
-      requestBody.model = selectedModel;
-      // Also try alternative parameter names if primary doesn't work
-      // requestBody.agent_model = selectedModel;
-      // requestBody.llm_model = selectedModel;
+    // Try to add environment variables if API supports it
+    // Note: This may be rejected by the API - if so, env vars are included in prompt text
+    const envVars = {};
+    if (process.env.DEV_SUPABASE_URL) envVars.DEV_SUPABASE_URL = process.env.DEV_SUPABASE_URL;
+    if (process.env.DEV_SUPABASE_SERVICE_KEY)
+      envVars.DEV_SUPABASE_SERVICE_KEY = process.env.DEV_SUPABASE_SERVICE_KEY;
+    if (process.env.SUPABASE_URL) envVars.SUPABASE_URL = process.env.SUPABASE_URL;
+    if (process.env.SUPABASE_SERVICE_KEY)
+      envVars.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+    if (process.env.OPENAI_API_KEY) envVars.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+    if (process.env.ACTIONS_BEARER_TOKEN)
+      envVars.ACTIONS_BEARER_TOKEN = process.env.ACTIONS_BEARER_TOKEN;
+
+    if (Object.keys(envVars).length > 0) {
+      // Try adding environment field - API may reject it, but worth trying
+      requestBody.environment = envVars;
+      if (process.env.DEBUG) {
+        console.log(
+          `[DEBUG] Attempting to pass environment variables to agent: ${Object.keys(envVars).join(", ")}`
+        );
+      }
     }
 
     const response = await fetch(endpoint, {
@@ -263,9 +242,44 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `Failed to spawn agent: ${response.status} ${response.statusText} - ${errorText}`
-      );
+      let errorMessage = `Failed to spawn agent: ${response.status} ${response.statusText} - ${errorText}`;
+
+      // If environment field was rejected, retry without it
+      if (response.status === 400 && requestBody.environment && errorText.includes("environment")) {
+        console.warn(
+          `[WARN] API rejected 'environment' field, retrying without it (env vars included in prompt)`
+        );
+        delete requestBody.environment;
+
+        const retryResponse = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.CURSOR_CLOUD_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
+
+        if (retryResponse.ok) {
+          const retryData = await retryResponse.json();
+          const agentId = retryData.id || retryData.agent_id;
+          if (agentId) {
+            console.log(
+              `[INFO] Successfully spawned worker agent ${agentId} for ${fuId} (without environment field)`
+            );
+            return agentId;
+          }
+        }
+      }
+
+      if (response.status === 404) {
+        errorMessage += `\n[ERROR] Endpoint not found. Please verify:\n`;
+        errorMessage += `  1. CURSOR_CLOUD_API_URL is correct (currently: ${apiUrl})\n`;
+        errorMessage += `  2. Endpoint path is correct (currently: ${endpointPath})\n`;
+        errorMessage += `  3. API key has permission to create background agents\n`;
+        errorMessage += `  4. Override endpoint via CURSOR_CLOUD_API_ENDPOINT env var if needed\n`;
+      }
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -275,32 +289,63 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
       throw new Error(`API response missing agent ID: ${JSON.stringify(data)}`);
     }
 
-    console.log(
-      `[INFO] Successfully spawned worker agent ${agentId} for ${fuId}`
-    );
+    console.log(`[INFO] Successfully spawned worker agent ${agentId} for ${fuId}`);
     return agentId;
   } catch (error) {
-    console.error(
-      `[ERROR] Failed to spawn worker agent for ${fuId}:`,
-      error.message
-    );
+    console.error(`[ERROR] Failed to spawn worker agent for ${fuId}:`, error.message);
     throw error;
   }
 }
 
 // Generate agent instructions template
 function generateAgentInstructions(fuId, batchId, releaseId) {
+  let repoUrl = process.env.REPO_URL || "https://github.com/markmhendrickson/neotoma";
+  // Remove quotes if present
+  repoUrl = repoUrl.replace(/^["']|["']$/g, "");
+  const branch = process.env.RELEASE_BRANCH || "dev";
+
+  // Collect environment variables that agents need
+  const envVars = [];
+  if (process.env.DEV_SUPABASE_URL) {
+    envVars.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
+  }
+  if (process.env.DEV_SUPABASE_SERVICE_KEY) {
+    envVars.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
+  }
+  if (process.env.SUPABASE_URL) {
+    envVars.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
+  }
+  if (process.env.SUPABASE_SERVICE_KEY) {
+    envVars.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
+  }
+  if (process.env.OPENAI_API_KEY) {
+    envVars.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
+  }
+  if (process.env.ACTIONS_BEARER_TOKEN) {
+    envVars.push(`ACTIONS_BEARER_TOKEN=${process.env.ACTIONS_BEARER_TOKEN}`);
+  }
+
+  const envSetup =
+    envVars.length > 0
+      ? `\n**Required Environment Variables:**\n\`\`\`bash\n${envVars.join("\n")}\n\`\`\`\n\n**IMPORTANT:** Export these environment variables before running tests:\n\`\`\`bash\nexport ${envVars.join("\nexport ")}\n\`\`\`\n\n**Alternative:** Use the setup script: \`source scripts/setup-test-env.sh\` or \`bash scripts/setup-test-env.sh\`\n`
+      : `\n**WARNING:** Required environment variables (DEV_SUPABASE_URL, DEV_SUPABASE_SERVICE_KEY) may not be set. Integration tests will fail without them.\n**Note:** These variables are typically provided in the orchestrator's .env file and should be exported from your instructions above.\n`;
+
   return `You are a worker agent executing Feature Unit ${fuId} in Batch ${batchId} for Release ${releaseId}.
 
+**Repository:** ${repoUrl}
+**Branch:** ${branch}
+**Status File:** ${STATUS_FILE}
+${envSetup}
 **Your Task:**
-1. Load FU specification: \`docs/feature_units/completed/${fuId}/FU-${fuId}_spec.md\` or \`docs/specs/MVP_FEATURE_UNITS.md\`
-2. Execute Feature Unit workflow:
+1. **Set up environment variables** (if provided above) before running any tests
+2. Load FU specification: \`docs/feature_units/completed/${fuId}/FU-${fuId}_spec.md\` or \`docs/specs/MVP_FEATURE_UNITS.md\`
+3. Execute Feature Unit workflow:
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype
    - Run implementation workflow
-   - Run tests (unit, integration, E2E)
+   - Run tests (unit, integration, E2E) - **ensure environment variables are set**
    - Update status file: \`${STATUS_FILE}\`
-3. Report completion:
+4. Report completion:
    - Update status: \`{"fu_id": "${fuId}", "status": "completed", "timestamp": "..."}\`
    - Report any errors or blockers
 
@@ -309,6 +354,7 @@ function generateAgentInstructions(fuId, batchId, releaseId) {
 - Update status file atomically (use file locking)
 - Do not modify FUs assigned to other agents
 - Report failures immediately (don't retry indefinitely)
+- **Integration tests require Supabase credentials** - check for DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY
 
 **Status File Location:** \`${STATUS_FILE}\`
 **Update Frequency:** Every 5-10 minutes
@@ -470,9 +516,7 @@ async function canStartBatch(batch, status) {
     const prevBatch = status.batches.find((b) => b.batch_id === i);
     if (!prevBatch) continue;
 
-    const incomplete = prevBatch.feature_units.some(
-      (fu) => fu.status !== "completed"
-    );
+    const incomplete = prevBatch.feature_units.some((fu) => fu.status !== "completed");
     if (incomplete) {
       return false;
     }
@@ -484,9 +528,7 @@ async function canStartBatch(batch, status) {
     .filter((fu) => fu.status === "running").length;
 
   const manifest = await loadYAML(MANIFEST_PATH);
-  const maxParallel = parseInt(
-    manifest.execution_strategy?.max_parallel_fus || 3
-  );
+  const maxParallel = parseInt(manifest.execution_strategy?.max_parallel_fus || 3);
 
   if (activeAgents >= maxParallel) {
     return false;
@@ -503,6 +545,9 @@ async function monitorWorkers(status) {
   }
 
   const apiUrl = process.env.CURSOR_CLOUD_API_URL.replace(/\/$/, "");
+  // Use /v0/agents endpoint for status checks (matches spawn endpoint)
+  const endpointPath = process.env.CURSOR_CLOUD_API_ENDPOINT || "/v0/agents";
+  const baseEndpoint = `${apiUrl}${endpointPath.startsWith("/") ? endpointPath : `/${endpointPath}`}`;
 
   for (const batch of status.batches) {
     if (batch.status !== "running") continue;
@@ -510,57 +555,130 @@ async function monitorWorkers(status) {
     for (const fu of batch.feature_units) {
       if (fu.status === "running" && fu.worker_agent_id) {
         try {
-          // Poll API for agent status
-          const response = await fetch(
-            `${apiUrl}/background-agents/${fu.worker_agent_id}`,
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.CURSOR_CLOUD_API_KEY}`,
-              },
-            }
-          );
+          // Poll API for agent status using /v0/agents/{id}
+          const response = await fetch(`${baseEndpoint}/${fu.worker_agent_id}`, {
+            headers: {
+              Authorization: `Bearer ${process.env.CURSOR_CLOUD_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+          });
 
           if (response.ok) {
             const agentData = await response.json();
-            const agentStatus = agentData.status || agentData.state;
+            const agentStatus = agentData.status || agentData.state || agentData.status_code;
+
+            // Log agent data for debugging
+            if (process.env.DEBUG) {
+              console.log(
+                `[DEBUG] Agent ${fu.worker_agent_id} status:`,
+                JSON.stringify(agentData, null, 2)
+              );
+            }
+
+            // Retrieve conversation messages to see what the agent is doing
+            try {
+              const conversationResponse = await fetch(
+                `${baseEndpoint}/${fu.worker_agent_id}/conversation`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${process.env.CURSOR_CLOUD_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+
+              if (conversationResponse.ok) {
+                const conversationData = await conversationResponse.json();
+                if (conversationData.messages && conversationData.messages.length > 0) {
+                  // Get the last few messages to see recent activity
+                  const recentMessages = conversationData.messages.slice(-5);
+                  console.log(
+                    `[INFO] Agent ${fu.worker_agent_id} (${fu.fu_id}) recent messages (${conversationData.messages.length} total):`
+                  );
+                  recentMessages.forEach((msg, idx) => {
+                    const prefix = msg.type === "user_message" ? "[USER]" : "[AGENT]";
+                    const text = msg.text.substring(0, 200);
+                    console.log(`[INFO]   ${prefix}: ${text}${msg.text.length > 200 ? "..." : ""}`);
+                  });
+                }
+              } else if (conversationResponse.status !== 404) {
+                // 404 is expected if agent hasn't started conversation yet
+                const errorText = await conversationResponse.text().catch(() => "");
+                console.warn(
+                  `[WARN] Failed to retrieve conversation for agent ${fu.worker_agent_id}: ${conversationResponse.status} ${errorText}`
+                );
+              }
+            } catch (convError) {
+              // Don't fail monitoring if conversation retrieval fails
+              if (process.env.DEBUG) {
+                console.warn(
+                  `[WARN] Error retrieving conversation for agent ${fu.worker_agent_id}: ${convError.message}`
+                );
+              }
+            }
 
             // Update FU status based on agent status
-            if (agentStatus === "completed" || agentStatus === "succeeded") {
+            if (
+              agentStatus === "completed" ||
+              agentStatus === "succeeded" ||
+              agentStatus === "success"
+            ) {
               fu.status = "completed";
               fu.completed_at = new Date().toISOString();
-            } else if (agentStatus === "failed" || agentStatus === "error") {
+              console.log(`[INFO] Agent ${fu.worker_agent_id} (${fu.fu_id}) completed`);
+            } else if (
+              agentStatus === "failed" ||
+              agentStatus === "error" ||
+              agentStatus === "failure"
+            ) {
               fu.status = "failed";
-              fu.error = agentData.error || "Agent failed";
-            } else if (agentStatus === "running" || agentStatus === "active") {
+              fu.error = agentData.error || agentData.message || "Agent failed";
+              console.error(
+                `[ERROR] Agent ${fu.worker_agent_id} (${fu.fu_id}) failed: ${fu.error}`
+              );
+            } else if (
+              agentStatus === "running" ||
+              agentStatus === "active" ||
+              agentStatus === "pending"
+            ) {
               // Agent still running, check for stale updates
-              const lastUpdate = fu.last_update
-                ? new Date(fu.last_update)
-                : null;
+              const lastUpdate = fu.last_update ? new Date(fu.last_update) : null;
               if (lastUpdate) {
-                const minutesSinceUpdate =
-                  (Date.now() - lastUpdate.getTime()) / 1000 / 60;
+                const minutesSinceUpdate = (Date.now() - lastUpdate.getTime()) / 1000 / 60;
                 if (minutesSinceUpdate > 15) {
                   console.warn(
-                    `[WARN] ${
-                      fu.fu_id
-                    } has not updated status file in ${minutesSinceUpdate.toFixed(
+                    `[WARN] ${fu.fu_id} has not updated status file in ${minutesSinceUpdate.toFixed(
                       1
-                    )} minutes (agent still running)`
+                    )} minutes (agent status: ${agentStatus})`
+                  );
+                }
+              }
+
+              // Log agent output/logs if available
+              if (agentData.output || agentData.logs) {
+                const output = agentData.output || agentData.logs;
+                if (typeof output === "string" && output.length > 0) {
+                  console.log(
+                    `[INFO] Agent ${fu.worker_agent_id} (${fu.fu_id}) output:\n${output.substring(0, 500)}${output.length > 500 ? "..." : ""}`
                   );
                 }
               }
             }
           } else if (response.status === 404) {
-            // Agent not found - may have completed and been cleaned up
+            // Agent not found - may have completed and been cleaned up, or endpoint is wrong
             console.warn(
-              `[WARN] Agent ${fu.worker_agent_id} not found (may have completed)`
+              `[WARN] Agent ${fu.worker_agent_id} not found at ${baseEndpoint}/${fu.worker_agent_id} (status: ${response.status})`
+            );
+            // Try to check status file as fallback
+            await monitorWorkersFileBased(status);
+          } else {
+            const errorText = await response.text().catch(() => "");
+            console.error(
+              `[ERROR] Failed to check agent ${fu.worker_agent_id} status: ${response.status} ${response.statusText} - ${errorText}`
             );
           }
         } catch (error) {
-          console.error(
-            `[ERROR] Failed to check agent status for ${fu.fu_id}:`,
-            error.message
-          );
+          console.error(`[ERROR] Failed to check agent status for ${fu.fu_id}:`, error.message);
           // Fallback to file-based monitoring
           await monitorWorkersFileBased(status);
           return;
@@ -616,13 +734,10 @@ async function monitorWorkersFileBased(status) {
       if (fu.status === "running") {
         const lastUpdate = fu.last_update ? new Date(fu.last_update) : null;
         if (lastUpdate) {
-          const minutesSinceUpdate =
-            (Date.now() - lastUpdate.getTime()) / 1000 / 60;
+          const minutesSinceUpdate = (Date.now() - lastUpdate.getTime()) / 1000 / 60;
           if (minutesSinceUpdate > 15) {
             console.warn(
-              `[WARN] ${
-                fu.fu_id
-              } has not updated in ${minutesSinceUpdate.toFixed(1)} minutes`
+              `[WARN] ${fu.fu_id} has not updated in ${minutesSinceUpdate.toFixed(1)} minutes`
             );
             fu.status = "stale";
           }
@@ -646,16 +761,12 @@ async function runIntegrationTests(batchId, releaseId) {
     const tests = parseIntegrationTests(content, batchId);
 
     if (tests.length === 0) {
-      console.log(
-        `[INFO] No integration tests defined for Batch ${batchId}, skipping`
-      );
+      console.log(`[INFO] No integration tests defined for Batch ${batchId}, skipping`);
       return true;
     }
 
     console.log(
-      `[INFO] Found ${
-        tests.length
-      } integration test(s) for Batch ${batchId}: ${tests
+      `[INFO] Found ${tests.length} integration test(s) for Batch ${batchId}: ${tests
         .map((t) => t.id)
         .join(", ")}`
     );
@@ -684,10 +795,7 @@ async function runIntegrationTests(batchId, releaseId) {
     console.log(`[INFO] All integration tests passed for Batch ${batchId}`);
     return true;
   } catch (error) {
-    console.error(
-      `[ERROR] Integration tests failed for Batch ${batchId}:`,
-      error.message
-    );
+    console.error(`[ERROR] Integration tests failed for Batch ${batchId}:`, error.message);
     return false;
   }
 }
@@ -700,9 +808,7 @@ async function executeTestCommand(test) {
   console.log(`${"=".repeat(80)}`);
 
   if (!test.command) {
-    console.warn(
-      `[WARN] No test command defined for ${test.id}, marking as not_run`
-    );
+    console.warn(`[WARN] No test command defined for ${test.id}, marking as not_run`);
     // Don't skip - mark as not_run so it shows up in report
     return null; // null means not_run, true means passed, false means failed
   }
@@ -717,9 +823,7 @@ async function executeTestCommand(test) {
     await fs.access(testFile);
     console.log(`[TEST] ✓ Test file exists`);
   } catch (error) {
-    console.warn(
-      `[WARN] Test file ${testFile} not found for ${test.id}, marking as not_run`
-    );
+    console.warn(`[WARN] Test file ${testFile} not found for ${test.id}, marking as not_run`);
     return null; // Test file doesn't exist yet - mark as not_run
   }
 
@@ -752,12 +856,8 @@ async function executeTestCommand(test) {
     }
 
     // Parse test results from stdout
-    const testFilesMatch = stdout.match(
-      /Test Files\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i
-    );
-    const testsMatch = stdout.match(
-      /Tests\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i
-    );
+    const testFilesMatch = stdout.match(/Test Files\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i);
+    const testsMatch = stdout.match(/Tests\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i);
 
     let failedCount = 0;
     let passedCount = 0;
@@ -780,9 +880,7 @@ async function executeTestCommand(test) {
 
     // If we're running a single test file, check if it passed
     if (passedCount > 0 && failedCount === 0) {
-      console.log(
-        `[TEST] ✓ PASSED: ${test.id} (${passedCount} test(s) passed in ${duration}ms)`
-      );
+      console.log(`[TEST] ✓ PASSED: ${test.id} (${passedCount} test(s) passed in ${duration}ms)`);
       console.log(`${"=".repeat(80)}\n`);
       return true;
     } else if (failedCount > 0) {
@@ -800,9 +898,7 @@ async function executeTestCommand(test) {
 
     // Fallback: check for "passed" in output
     if (stdout.includes("passed") && !stdout.match(/\d+\s+failed/i)) {
-      console.log(
-        `[TEST] ✓ PASSED: ${test.id} (parsed from output in ${duration}ms)`
-      );
+      console.log(`[TEST] ✓ PASSED: ${test.id} (parsed from output in ${duration}ms)`);
       console.log(`${"=".repeat(80)}\n`);
       return true;
     }
@@ -818,15 +914,11 @@ async function executeTestCommand(test) {
     console.error(`[TEST] Error message: ${error.message}`);
 
     if (error.stdout) {
-      console.log(
-        `[TEST] Error stdout available (${error.stdout.length} chars)`
-      );
+      console.log(`[TEST] Error stdout available (${error.stdout.length} chars)`);
       const testFilesMatch = error.stdout.match(
         /Test Files\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i
       );
-      const testsMatch = error.stdout.match(
-        /Tests\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i
-      );
+      const testsMatch = error.stdout.match(/Tests\s+(\d+)\s+failed\s+\|\s+(\d+)\s+passed/i);
 
       let failedCount = 0;
       let passedCount = 0;
@@ -846,9 +938,7 @@ async function executeTestCommand(test) {
       }
 
       if (passedCount > 0 && failedCount === 0) {
-        console.log(
-          `[TEST] ✓ PASSED: ${test.id} (${passedCount} test(s) passed despite error)`
-        );
+        console.log(`[TEST] ✓ PASSED: ${test.id} (${passedCount} test(s) passed despite error)`);
         console.log(`${"=".repeat(80)}\n`);
         return true;
       } else if (failedCount > 0) {
@@ -885,8 +975,7 @@ function parseIntegrationTests(content, batchId) {
   const tests = [];
 
   // Match test definitions (#### IT-XXX: Test Name)
-  const testRegex =
-    /#### (IT-\d+):\s*([^\n]+)\n[\s\S]*?Batches Covered:\s*([^\n]+)/g;
+  const testRegex = /#### (IT-\d+):\s*([^\n]+)\n[\s\S]*?Batches Covered:\s*([^\n]+)/g;
   let match;
 
   while ((match = testRegex.exec(content)) !== null) {
@@ -917,8 +1006,50 @@ function parseIntegrationTests(content, batchId) {
 }
 
 // Main orchestrator loop
+// Check prerequisites before starting
+function checkPrerequisites() {
+  const warnings = [];
+  const errors = [];
+
+  // Required for API communication
+  if (!process.env.CURSOR_CLOUD_API_URL) {
+    errors.push("CURSOR_CLOUD_API_URL is required");
+  }
+  if (!process.env.CURSOR_CLOUD_API_KEY) {
+    errors.push("CURSOR_CLOUD_API_KEY is required");
+  }
+  if (!process.env.REPO_URL) {
+    errors.push("REPO_URL is required");
+  }
+
+  // Recommended for integration tests
+  if (!process.env.DEV_SUPABASE_URL && !process.env.SUPABASE_URL) {
+    warnings.push("DEV_SUPABASE_URL or SUPABASE_URL not set - integration tests will fail");
+  }
+  if (!process.env.DEV_SUPABASE_SERVICE_KEY && !process.env.SUPABASE_SERVICE_KEY) {
+    warnings.push(
+      "DEV_SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_KEY not set - integration tests will fail"
+    );
+  }
+
+  if (errors.length > 0) {
+    console.error("[ERROR] Missing required environment variables:");
+    errors.forEach((err) => console.error(`  - ${err}`));
+    throw new Error("Prerequisites check failed");
+  }
+
+  if (warnings.length > 0) {
+    console.warn("[WARN] Environment variable warnings:");
+    warnings.forEach((warn) => console.warn(`  - ${warn}`));
+    console.warn("[WARN] Agents will include these warnings in their instructions");
+  }
+}
+
 async function main() {
   console.log(`[INFO] Starting orchestrator for Release ${RELEASE_ID}`);
+
+  // Check prerequisites
+  checkPrerequisites();
 
   // Load manifest
   const manifest = await loadYAML(MANIFEST_PATH);
@@ -931,10 +1062,7 @@ async function main() {
   const executionStrategy = manifest.execution_strategy || {};
 
   if (process.env.DEBUG) {
-    console.log(
-      "[DEBUG] Execution strategy:",
-      JSON.stringify(executionStrategy, null, 2)
-    );
+    console.log("[DEBUG] Execution strategy:", JSON.stringify(executionStrategy, null, 2));
   }
 
   if (executionStrategy.type !== "multi_agent") {
@@ -973,16 +1101,12 @@ async function main() {
 
     // Check if we can start this batch
     if (!(await canStartBatch(batch, status))) {
-      console.log(
-        `[INFO] Batch ${batch.batch_id} dependencies not complete, waiting...`
-      );
+      console.log(`[INFO] Batch ${batch.batch_id} dependencies not complete, waiting...`);
       // In production, would wait and retry
       continue;
     }
 
-    console.log(
-      `[INFO] Starting Batch ${batch.batch_id} with ${batch.feature_units.length} FUs`
-    );
+    console.log(`[INFO] Starting Batch ${batch.batch_id} with ${batch.feature_units.length} FUs`);
 
     // Update batch status
     batchStatus.status = "running";
@@ -993,9 +1117,7 @@ async function main() {
     // Spawn worker agents for each FU in batch
     const workerAgents = [];
     for (const fuId of batch.feature_units) {
-      const fuStatus = batchStatus.feature_units.find(
-        (fu) => fu.fu_id === fuId
-      );
+      const fuStatus = batchStatus.feature_units.find((fu) => fu.fu_id === fuId);
 
       // Skip if already completed
       if (fuStatus.status === "completed") {
@@ -1004,12 +1126,7 @@ async function main() {
       }
 
       // Spawn worker agent
-      const agentId = await spawnWorkerAgent(
-        fuId,
-        batch.batch_id,
-        RELEASE_ID,
-        manifest
-      );
+      const agentId = await spawnWorkerAgent(fuId, batch.batch_id, RELEASE_ID, manifest);
 
       // Update status
       fuStatus.worker_agent_id = agentId;
@@ -1022,9 +1139,7 @@ async function main() {
       await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
     }
 
-    console.log(
-      `[INFO] Spawned ${workerAgents.length} worker agents for Batch ${batch.batch_id}`
-    );
+    console.log(`[INFO] Spawned ${workerAgents.length} worker agents for Batch ${batch.batch_id}`);
 
     // Monitor workers until all complete
     let allComplete = false;
@@ -1044,13 +1159,9 @@ async function main() {
       await monitorWorkers(status);
 
       // Log progress
-      const completed = batchStatus.feature_units.filter(
-        (fu) => fu.status === "completed"
-      ).length;
+      const completed = batchStatus.feature_units.filter((fu) => fu.status === "completed").length;
       const total = batchStatus.feature_units.length;
-      console.log(
-        `[INFO] Batch ${batch.batch_id} progress: ${completed}/${total} FUs complete`
-      );
+      console.log(`[INFO] Batch ${batch.batch_id} progress: ${completed}/${total} FUs complete`);
     }
 
     // Check for failures
@@ -1078,27 +1189,18 @@ async function main() {
     // Run integration tests
     const testsPassed = await runIntegrationTests(batch.batch_id, RELEASE_ID);
     if (!testsPassed) {
-      console.error(
-        `[ERROR] Integration tests failed for Batch ${batch.batch_id}`
-      );
+      console.error(`[ERROR] Integration tests failed for Batch ${batch.batch_id}`);
       process.exit(1);
     }
 
     // Run spec compliance validation for each FU in batch
-    console.log(
-      `[INFO] Running spec compliance validation for Batch ${batch.batch_id}...`
-    );
+    console.log(`[INFO] Running spec compliance validation for Batch ${batch.batch_id}...`);
     const complianceErrors = [];
     for (const fu of batchStatus.feature_units) {
       try {
-        const complianceResult = await validateFUSpecCompliance(
-          fu.fu_id,
-          RELEASE_ID
-        );
+        const complianceResult = await validateFUSpecCompliance(fu.fu_id, RELEASE_ID);
         if (!complianceResult.compliant) {
-          console.error(
-            `[ERROR] ${fu.fu_id} failed spec compliance validation:`
-          );
+          console.error(`[ERROR] ${fu.fu_id} failed spec compliance validation:`);
           complianceResult.gaps.forEach((gap) => {
             console.error(`  - ${gap.requirement}`);
           });
@@ -1109,9 +1211,7 @@ async function main() {
             reportPath: complianceResult.reportPath,
           });
         } else {
-          console.log(
-            `[INFO] ${fu.fu_id} passed spec compliance validation`
-          );
+          console.log(`[INFO] ${fu.fu_id} passed spec compliance validation`);
         }
       } catch (error) {
         console.error(
@@ -1145,9 +1245,7 @@ async function main() {
     // Mark batch as completed
     batchStatus.status = "completed";
     batchStatus.completed_at = new Date().toISOString();
-    status.completed_fus.push(
-      ...batchStatus.feature_units.map((fu) => fu.fu_id)
-    );
+    status.completed_fus.push(...batchStatus.feature_units.map((fu) => fu.fu_id));
     await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
 
     // Check and update checkpoints (see .cursor/rules/checkpoint_management.md)
@@ -1157,9 +1255,7 @@ async function main() {
   }
 
   // All batches complete - ALWAYS run full integration test suite (REQUIRED)
-  console.log(
-    `[INFO] All batches complete. Running full integration test suite (REQUIRED)...`
-  );
+  console.log(`[INFO] All batches complete. Running full integration test suite (REQUIRED)...`);
 
   // CRITICAL: Integration tests MUST run after all batches complete
   // This is a required step in the release build process
@@ -1171,14 +1267,10 @@ async function main() {
     const status = await loadStatus();
     const testResults = status.integration_tests || [];
     const failedCount = testResults.filter((t) => t.status === "failed").length;
-    const notRunCount = testResults.filter(
-      (t) => t.status === "not_run"
-    ).length;
+    const notRunCount = testResults.filter((t) => t.status === "not_run").length;
 
     if (failedCount > 0) {
-      console.error(
-        `[ERROR] Full integration test suite failed (${failedCount} test(s) failed)`
-      );
+      console.error(`[ERROR] Full integration test suite failed (${failedCount} test(s) failed)`);
       console.error(
         `[ERROR] Release cannot be marked as ready_for_deployment until all tests pass`
       );
@@ -1208,39 +1300,27 @@ async function main() {
 
   // Generate release report (documentation-driven)
   console.log(`[INFO] Release execution complete. Report generation required.`);
-  console.log(
-    `[INFO] Follow instructions in: docs/feature_units/standards/release_report_spec.md`
-  );
-  console.log(
-    `[INFO] Template: docs/feature_units/standards/release_report_template.md`
-  );
-  console.log(
-    `[INFO] Output: docs/releases/in_progress/${RELEASE_ID}/release_report.md`
-  );
+  console.log(`[INFO] Follow instructions in: docs/feature_units/standards/release_report_spec.md`);
+  console.log(`[INFO] Template: docs/feature_units/standards/release_report_template.md`);
+  console.log(`[INFO] Output: docs/releases/in_progress/${RELEASE_ID}/release_report.md`);
   console.log(
     `[INFO] IMPORTANT: Release report MUST include Section 9 (Testing Guidance) with all manual test cases from integration_tests.md`
   );
-  console.log(
-    `[INFO] See .cursor/rules/post_build_testing.md for requirements`
-  );
+  console.log(`[INFO] See .cursor/rules/post_build_testing.md for requirements`);
 }
 
 // Run full integration test suite after all batches complete
 async function runFullIntegrationTestSuite(releaseId) {
   const suiteStartTime = Date.now();
   console.log(`\n${"#".repeat(80)}`);
-  console.log(
-    `[TEST SUITE] Starting full integration test suite for Release ${releaseId}`
-  );
+  console.log(`[TEST SUITE] Starting full integration test suite for Release ${releaseId}`);
   console.log(`[TEST SUITE] Start time: ${new Date().toISOString()}`);
   console.log(`${"#".repeat(80)}\n`);
 
   const integrationTestsPath = `docs/releases/in_progress/${releaseId}/integration_tests.md`;
 
   try {
-    console.log(
-      `[TEST SUITE] Loading integration tests from: ${integrationTestsPath}`
-    );
+    console.log(`[TEST SUITE] Loading integration tests from: ${integrationTestsPath}`);
     const content = await fs.readFile(integrationTestsPath, "utf-8");
     console.log(`[TEST SUITE] File loaded (${content.length} chars)`);
 
@@ -1259,11 +1339,7 @@ async function runFullIntegrationTestSuite(releaseId) {
       console.log(`[TEST SUITE]      Goal: ${t.goal || "N/A"}`);
       console.log(`[TEST SUITE]      Command: ${t.command || "N/A"}`);
     });
-    console.log(
-      `\n[TEST SUITE] Test execution order: ${allTests
-        .map((t) => t.id)
-        .join(" → ")}\n`
-    );
+    console.log(`\n[TEST SUITE] Test execution order: ${allTests.map((t) => t.id).join(" → ")}\n`);
 
     // Execute each test
     const results = [];
@@ -1275,8 +1351,7 @@ async function runFullIntegrationTestSuite(releaseId) {
       const testResult = await executeTestCommand(test);
 
       // null = not_run, true = passed, false = failed
-      const status =
-        testResult === null ? "not_run" : testResult ? "passed" : "failed";
+      const status = testResult === null ? "not_run" : testResult ? "passed" : "failed";
 
       results.push({
         id: test.id,
@@ -1289,9 +1364,7 @@ async function runFullIntegrationTestSuite(releaseId) {
         console.error(`[TEST SUITE] ✗ ${test.id} FAILED`);
         // Continue running other tests to get full picture
       } else if (testResult === null) {
-        console.warn(
-          `[TEST SUITE] ⏳ ${test.id} NOT RUN (no command or test file missing)`
-        );
+        console.warn(`[TEST SUITE] ⏳ ${test.id} NOT RUN (no command or test file missing)`);
       } else {
         console.log(`[TEST SUITE] ✓ ${test.id} PASSED`);
       }
@@ -1299,9 +1372,7 @@ async function runFullIntegrationTestSuite(releaseId) {
 
     const suiteDuration = Date.now() - suiteStartTime;
     console.log(`\n${"#".repeat(80)}`);
-    console.log(
-      `[TEST SUITE] Test suite execution completed in ${suiteDuration}ms`
-    );
+    console.log(`[TEST SUITE] Test suite execution completed in ${suiteDuration}ms`);
     console.log(`[TEST SUITE] End time: ${new Date().toISOString()}`);
 
     // Update status.md with test results
@@ -1319,12 +1390,7 @@ async function runFullIntegrationTestSuite(releaseId) {
     console.log(`[TEST SUITE]   ✓ Passed: ${passed}`);
     console.log(`[TEST SUITE]   ✗ Failed: ${failed}`);
     console.log(`[TEST SUITE]   ⏳ Not run: ${notRun}`);
-    console.log(
-      `[TEST SUITE]   Success rate: ${(
-        (passed / allTests.length) *
-        100
-      ).toFixed(1)}%`
-    );
+    console.log(`[TEST SUITE]   Success rate: ${((passed / allTests.length) * 100).toFixed(1)}%`);
 
     if (failed > 0) {
       console.log(`\n[TEST SUITE] Failed tests:`);
@@ -1358,8 +1424,7 @@ function parseAllIntegrationTests(content) {
   const tests = [];
 
   // Match test definitions (#### IT-XXX: Test Name)
-  const testRegex =
-    /#### (IT-\d+):\s*([^\n]+)\n[\s\S]*?Batches Covered:\s*([^\n]+)/g;
+  const testRegex = /#### (IT-\d+):\s*([^\n]+)\n[\s\S]*?Batches Covered:\s*([^\n]+)/g;
   let match;
 
   while ((match = testRegex.exec(content)) !== null) {
@@ -1401,23 +1466,16 @@ async function updateIntegrationTestResults(releaseId, results) {
     const match = statusContent.match(testTableRegex);
 
     if (!match) {
-      console.warn(
-        `[WARN] Could not find integration test status table in status.md`
-      );
+      console.warn(`[WARN] Could not find integration test status table in status.md`);
       return;
     }
 
     // Generate new test rows
     const testRows = results
       .map((r) => {
-        const icon =
-          r.status === "passed" ? "✅" : r.status === "failed" ? "❌" : "⏳";
+        const icon = r.status === "passed" ? "✅" : r.status === "failed" ? "❌" : "⏳";
         const statusText =
-          r.status === "passed"
-            ? "passed"
-            : r.status === "failed"
-            ? "failed"
-            : "not_run";
+          r.status === "passed" ? "passed" : r.status === "failed" ? "failed" : "not_run";
         return `| ${r.id} | ${r.name} | ${icon} ${statusText} |`;
       })
       .join("\n");
@@ -1434,9 +1492,7 @@ async function updateIntegrationTestResults(releaseId, results) {
     await fs.writeFile(STATUS_MD_PATH, newContent, "utf-8");
     console.log(`[INFO] Updated integration test results in status.md`);
   } catch (error) {
-    console.warn(
-      `[WARN] Failed to update integration test results: ${error.message}`
-    );
+    console.warn(`[WARN] Failed to update integration test results: ${error.message}`);
   }
 }
 
@@ -1457,29 +1513,22 @@ async function updateCheckpoints(batchId, manifest, batchStatus) {
 
       if (triggerBatchNum === currentBatchNum) {
         // Extract checkpoint name from key (e.g., "checkpoint_0.5_after_batch" -> "0.5")
-        const checkpointId = checkpointKey
-          .replace("checkpoint_", "")
-          .replace("_after_batch", "");
+        const checkpointId = checkpointKey.replace("checkpoint_", "").replace("_after_batch", "");
         const checkpointName =
           checkpointId === "0.5"
             ? "Checkpoint 0.5 — Blockchain Foundation Review"
             : checkpointId === "1"
-            ? "Checkpoint 1 — Mid-Release Review"
-            : `Checkpoint ${checkpointId}`;
+              ? "Checkpoint 1 — Mid-Release Review"
+              : `Checkpoint ${checkpointId}`;
 
         // Check if checkpoint is still pending
         const checkpointRegex = new RegExp(
-          `(- \\*\\*${checkpointName.replace(
-            /[.*+?^${}()|[\]\\]/g,
-            "\\$&"
-          )}\\*\\*: )\`pending\``
+          `(- \\*\\*${checkpointName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\*\\*: )\`pending\``
         );
 
         if (checkpointRegex.test(newContent)) {
           // Update to completed
-          const fuList = batchStatus.feature_units
-            .map((fu) => fu.fu_id)
-            .join(", ");
+          const fuList = batchStatus.feature_units.map((fu) => fu.fu_id).join(", ");
           const completionNote = `  - Batch ${batchId} completed: ${fuList} all complete.`;
 
           newContent = newContent.replace(checkpointRegex, `$1\`completed\``);
@@ -1491,10 +1540,7 @@ async function updateCheckpoints(batchId, manifest, batchStatus) {
               "\\$&"
             )}\\*\\*: \`completed\`\\n)`
           );
-          newContent = newContent.replace(
-            checkpointLineRegex,
-            `$1${completionNote}\n`
-          );
+          newContent = newContent.replace(checkpointLineRegex, `$1${completionNote}\n`);
 
           updated = true;
           console.log(
@@ -1509,9 +1555,7 @@ async function updateCheckpoints(batchId, manifest, batchStatus) {
     }
   } catch (error) {
     console.warn(`[WARN] Failed to update checkpoints: ${error.message}`);
-    console.warn(
-      `[WARN] Please manually update checkpoints in ${STATUS_MD_PATH}`
-    );
+    console.warn(`[WARN] Please manually update checkpoints in ${STATUS_MD_PATH}`);
   }
 }
 
@@ -1523,13 +1567,10 @@ async function ensureCheckpoint2Completed(manifest, status) {
     const statusContent = await fs.readFile(STATUS_MD_PATH, "utf-8");
 
     // Check if Checkpoint 2 exists and is pending
-    const checkpoint2Regex =
-      /(- \*\*Checkpoint 2 — Pre-Release Sign-Off\*\*: )`pending`/;
+    const checkpoint2Regex = /(- \*\*Checkpoint 2 — Pre-Release Sign-Off\*\*: )`pending`/;
 
     if (checkpoint2Regex.test(statusContent)) {
-      const completedBatches = status.batches.filter(
-        (b) => b.status === "completed"
-      ).length;
+      const completedBatches = status.batches.filter((b) => b.status === "completed").length;
       const totalBatches = status.batches.length;
       const completedFUs = status.completed_fus.length;
 
@@ -1537,27 +1578,18 @@ async function ensureCheckpoint2Completed(manifest, status) {
   - Release status: ready_for_deployment.
   - All P0 Feature Units complete (${completedFUs} completed).`;
 
-      let newContent = statusContent.replace(
-        checkpoint2Regex,
-        `$1\`completed\``
-      );
+      let newContent = statusContent.replace(checkpoint2Regex, `$1\`completed\``);
 
       // Add completion note
-      const checkpoint2LineRegex =
-        /(- \*\*Checkpoint 2 — Pre-Release Sign-Off\*\*: `completed`\n)/;
-      newContent = newContent.replace(
-        checkpoint2LineRegex,
-        `$1${completionNote}\n`
-      );
+      const checkpoint2LineRegex = /(- \*\*Checkpoint 2 — Pre-Release Sign-Off\*\*: `completed`\n)/;
+      newContent = newContent.replace(checkpoint2LineRegex, `$1${completionNote}\n`);
 
       await fs.writeFile(STATUS_MD_PATH, newContent, "utf-8");
       console.log(`[INFO] Checkpoint 2 marked as completed`);
     }
   } catch (error) {
     console.warn(`[WARN] Failed to update Checkpoint 2: ${error.message}`);
-    console.warn(
-      `[WARN] Please manually update Checkpoint 2 in ${STATUS_MD_PATH}`
-    );
+    console.warn(`[WARN] Please manually update Checkpoint 2 in ${STATUS_MD_PATH}`);
   }
 }
 
