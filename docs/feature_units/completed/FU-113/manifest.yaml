@@ -1,0 +1,143 @@
+feature_id: "fu_113"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "medium"
+
+metadata:
+  title: "Entity Extensions"
+  description: "Add user_id + merge tracking to entities, tighten RLS, and update ingestion services to be user-aware"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "platform@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+tags:
+  - "schema"
+  - "security"
+  - "ingestion"
+  - "merge"
+
+subsystems:
+  - name: "schema"
+    changes: "Extend entities with user_id/metadata/merged_to columns, add indexes, tighten RLS"
+  - name: "ingestion"
+    changes: "Entity resolution + observation ingestion now require user IDs and respect merged entities"
+  - name: "mcp_actions"
+    changes: "store_record/retrieve_entities endpoints filter by user and hide merged entities"
+
+schema_changes:
+  - table: "entities"
+    operation: "alter_table"
+    columns:
+      - name: "user_id"
+        type: "UUID"
+        nullable: false
+      - name: "metadata"
+        type: "JSONB"
+        nullable: false
+        default_value: "'{}'"
+      - name: "first_seen_at"
+        type: "TIMESTAMPTZ"
+        nullable: false
+        default_value: "NOW()"
+      - name: "last_seen_at"
+        type: "TIMESTAMPTZ"
+        nullable: false
+        default_value: "NOW()"
+      - name: "merged_to_entity_id"
+        type: "TEXT"
+        nullable: true
+      - name: "merged_at"
+        type: "TIMESTAMPTZ"
+        nullable: true
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user"
+    columns: ["user_id"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user_type"
+    columns: ["user_id", "entity_type"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_user_type_name"
+    columns: ["user_id", "entity_type", "canonical_name"]
+  - table: "entities"
+    operation: "add_index"
+    index_name: "idx_entities_merged"
+    columns: ["user_id", "merged_to_entity_id"]
+    where_clause: "WHERE merged_to_entity_id IS NOT NULL"
+
+mcp_actions:
+  - action: "store_record"
+    change_type: "modified"
+    changes: "Entity extraction + observation creation now pass authenticated user_id and respect merged entities"
+  - action: "retrieve_entities"
+    change_type: "modified"
+    changes: "Filters out merged entities and scopes queries to caller user_id"
+
+observability:
+  metrics:
+    - name: "entity.resolve_total"
+      type: "counter"
+      labels: ["result", "entity_type"]
+      description: "Counts entity resolutions by result (created vs reused)"
+    - name: "entity.merged_active_total"
+      type: "gauge"
+      labels: ["user_id"]
+      description: "Active merged entities per user"
+  logs:
+    - level: "info"
+      event: "entity_resolved"
+      fields: ["entity_id", "user_id", "result"]
+    - level: "warn"
+      event: "entity_merge_redirect"
+      fields: ["requested_entity", "target_entity", "user_id"]
+
+risk_mitigation:
+  - risk: "RLS regression exposes cross-user data"
+    mitigation: "Add automated test that fetches entities with mismatched user_id and expects zero rows"
+  - risk: "Existing data missing user_id"
+    mitigation: "Backfill default single-user ID inside migration before enforcing NOT NULL"
+  - risk: "Schema migration fails in Supabase"
+    mitigation: "Run migrations via scripts/run_migrations.js in CI before deploy"
+
+dependencies:
+  requires:
+    - feature_id: "fu_110"
+      reason: "Base schema migration must be applied"
+  blocks:
+    - feature_id: "fu_116"
+      reason: "Merge audit log depends on merged_to metadata"
+    - feature_id: "fu_126"
+      reason: "merge_entities tool requires user-scoped entities"
+
+testing:
+  unit_tests:
+    - name: "entity_resolution"
+      description: "Verify resolveEntity stamps user_id, updates last_seen_at, and handles merges"
+    - name: "observation_ingestion"
+      description: "Ensures observation creation propagates user_id"
+  integration_tests:
+    - name: "actions.store_record"
+      description: "End-to-end ingest ensures entities + observations share same user_id and merged entities excluded"
+  e2e_tests:
+    - name: "playwright:entity_merge"
+      description: "Simulate duplicate entity ingestion and confirm merged entity hidden from queries"
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  monitoring:
+    key_metrics:
+      - metric: "entity.resolve_total"
+        threshold: "<5% increase in created vs baseline"
+      - metric: "entity.merged_active_total"
+        threshold: "<10% of total entities"
+
+notes: |
+  DEFAULT_USER_ID remains a temporary shim until auth wiring forwards real user IDs. Update docs (schema.md, entity_merge.md, ingestion.md) alongside code.
