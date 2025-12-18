@@ -13,9 +13,13 @@ This document defines the doctrine for entity resolution: how entities are ident
 ## 15.1 Entity ID Generation (Deterministic)
 
 ```typescript
-function generateEntityId(entityType: string, canonicalName: string): string {
+function generateEntityId(
+  entityType: string,
+  canonicalName: string,
+  userId: string
+): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
-  const hash = sha256(`${entityType}:${normalized}`);
+  const hash = sha256(`${userId}:${entityType}:${normalized}`);
   return `ent_${hash.substring(0, 24)}`;
 }
 
@@ -34,7 +38,7 @@ function normalizeEntityValue(entityType: string, raw: string): string {
 }
 ```
 
-**Same name → same ID, globally. No duplicates.**
+**Same `(user_id, entity_type, canonical_name)` → same ID.** Different users can produce the same canonical name without colliding because the user_id namespaces the deterministic hash.
 
 ---
 

@@ -5,7 +5,11 @@
  */
 
 import { supabase } from "../db.js";
-import { extractEntities, resolveEntity } from "./entity_resolution.js";
+import {
+  DEFAULT_USER_ID,
+  extractEntities,
+  resolveEntity,
+} from "./entity_resolution.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { emitRecordCreated } from "../events/event_emitter.js";
@@ -28,7 +32,7 @@ export interface ObservationCreationResult {
  */
 export async function createObservationsFromRecord(
   record: NeotomaRecord,
-  userId: string = "00000000-0000-0000-0000-000000000000", // Default for v0.1.0 single-user
+  userId: string = DEFAULT_USER_ID, // Default for v0.1.0 single-user
 ): Promise<ObservationCreationResult> {
   const entities = extractEntities(record.properties, record.type);
   const observations = [];
@@ -46,7 +50,11 @@ export async function createObservationsFromRecord(
 
   // Resolve entities and create observations
   for (const entity of entities) {
-    const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+    const resolved = await resolveEntity(
+      entity.entity_type,
+      entity.raw_value,
+      userId,
+    );
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 
@@ -183,7 +191,7 @@ export async function createObservationsFromRecord(
 export async function createObservationsFromPayload(
   payload: PayloadSubmission,
   capability: Capability,
-  userId: string = "00000000-0000-0000-0000-000000000000",
+  userId: string = DEFAULT_USER_ID,
 ): Promise<ObservationCreationResult> {
   const allEntities: Array<{ entity_type: string; raw_value: string }> = [];
 
@@ -249,7 +257,11 @@ export async function createObservationsFromPayload(
 
   // Resolve all entities and create observations
   for (const entity of allEntities) {
-    const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+    const resolved = await resolveEntity(
+      entity.entity_type,
+      entity.raw_value,
+      userId,
+    );
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 

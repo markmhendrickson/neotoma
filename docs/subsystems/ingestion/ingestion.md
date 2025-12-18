@@ -703,10 +703,14 @@ function extractEntities(properties: any, schemaType: string): Entity[] {
 ```typescript
 import { createHash } from "crypto";
 
-function generateEntityId(entityType: string, canonicalName: string): string {
+function generateEntityId(
+  entityType: string,
+  canonicalName: string,
+  userId: string
+): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
   const hash = createHash("sha256")
-    .update(`${entityType}:${normalized}`)
+    .update(`${userId}:${entityType}:${normalized}`)
     .digest("hex");
 
   return `ent_${hash.substring(0, 24)}`;
@@ -726,7 +730,7 @@ function normalizeEntityValue(entityType: string, raw: string): string {
 }
 ```
 
-**Determinism:** Same name → same ID (globally).
+**Determinism:** Same `(user_id, name)` → same ID.
 
 ### 7.3 User-Scoped Entity Resolution
 

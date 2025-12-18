@@ -24,6 +24,7 @@ import {
   persistEvents,
 } from "../../../../src/services/event_generation.js";
 
+const TEST_USER_ID = "00000000-0000-0000-0000-000000000000";
 describe("IT-004: Graph Integrity Validation", () => {
   let context: TestContext;
   const createdRecordIds: string[] = [];
@@ -92,6 +93,7 @@ describe("IT-004: Graph Integrity Validation", () => {
       entity_type: "company",
       canonical_name: "orphan test company",
       aliases: [],
+      user_id: TEST_USER_ID,
     });
 
     // Detect orphans
@@ -223,16 +225,19 @@ describe("IT-004: Graph Integrity Validation", () => {
         id: "ent_cycle_it004_1",
         entity_type: "company",
         canonical_name: "company 1",
+        user_id: TEST_USER_ID,
       },
       {
         id: "ent_cycle_it004_2",
         entity_type: "company",
         canonical_name: "company 2",
+        user_id: TEST_USER_ID,
       },
       {
         id: "ent_cycle_it004_3",
         entity_type: "company",
         canonical_name: "company 3",
+        user_id: TEST_USER_ID,
       },
     ];
 
@@ -247,21 +252,21 @@ describe("IT-004: Graph Integrity Validation", () => {
         target_entity_id: "ent_cycle_it004_2",
         relationship_type: "PART_OF",
         metadata: {},
-        user_id: "00000000-0000-0000-0000-000000000000",
+        user_id: TEST_USER_ID,
       },
       {
         source_entity_id: "ent_cycle_it004_2",
         target_entity_id: "ent_cycle_it004_3",
         relationship_type: "PART_OF",
         metadata: {},
-        user_id: "00000000-0000-0000-0000-000000000000",
+        user_id: TEST_USER_ID,
       },
       {
         source_entity_id: "ent_cycle_it004_3",
         target_entity_id: "ent_cycle_it004_1",
         relationship_type: "PART_OF",
         metadata: {},
-        user_id: "00000000-0000-0000-0000-000000000000",
+        user_id: TEST_USER_ID,
       },
     ]);
 
@@ -292,6 +297,7 @@ describe("IT-004: Graph Integrity Validation", () => {
       entity_type: "company",
       canonical_name: "integrity test orphan",
       aliases: [],
+      user_id: TEST_USER_ID,
     });
 
     // Validate integrity
