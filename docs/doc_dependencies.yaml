@@ -1,0 +1,325 @@
+# Documentation Dependency Map
+#
+# This file explicitly maps upstream → downstream documentation relationships
+# to enable automated validation and update detection.
+#
+# Format:
+#   upstream_path:
+#     downstream:
+#       - path: relative/path/to/doc.md
+#         type: explicit|implicit|restates
+#         reason: Brief explanation of dependency
+#
+# Types:
+#   - explicit: Document has direct link/reference to upstream
+#   - implicit: Document depends on concepts from upstream
+#   - restates: Document restates information from upstream
+
+# Foundation Layer (root dependencies)
+docs/foundation/core_identity.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: References core identity in Purpose section
+    - path: docs/specs/MVP_OVERVIEW.md
+      type: restates
+      reason: Restates core identity concepts
+    - path: docs/feature_units/standards/feature_unit_spec.md
+      type: implicit
+      reason: Feature units must align with core identity
+    - path: README.md
+      type: restates
+      reason: Restates core identity in overview
+
+docs/foundation/philosophy.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: implicit
+      reason: Architecture must align with philosophy
+    - path: docs/specs/MVP_OVERVIEW.md
+      type: implicit
+      reason: MVP must align with philosophy
+    - path: docs/feature_units/standards/feature_unit_spec.md
+      type: implicit
+      reason: Feature units must follow philosophy
+    - path: README.md
+      type: restates
+      reason: Restates principles from philosophy
+
+docs/foundation/agent_instructions.md:
+  downstream:
+    - path: docs/conventions/documentation_standards.md
+      type: explicit
+      reason: References agent instructions
+    - path: .cursor/rules/downstream_doc_updates.md
+      type: explicit
+      reason: References agent instructions section 23.7
+    - path: README.md
+      type: implicit
+      reason: Development section references agent instructions
+
+docs/foundation/data_models.md:
+  downstream:
+    - path: docs/architecture/architectural_decisions.md
+      type: explicit
+      reason: References four-layer model from data_models
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Implements data model patterns
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: Implements data model patterns
+    - path: docs/specs/DATA_MODELS.md
+      type: restates
+      reason: Restates data model information
+
+docs/foundation/entity_resolution.md:
+  downstream:
+    - path: docs/subsystems/relationships.md
+      type: explicit
+      reason: References entity resolution patterns
+    - path: docs/subsystems/record_types.md
+      type: implicit
+      reason: Record types use entity resolution
+
+# Architecture Layer
+docs/architecture/architecture.md:
+  downstream:
+    - path: docs/subsystems/ingestion/ingestion.md
+      type: explicit
+      reason: References architecture layers
+    - path: docs/subsystems/schema_registry.md
+      type: explicit
+      reason: References architecture layers
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: explicit
+      reason: Feature units reference architecture
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference architecture
+    - path: docs/developer/getting_started.md
+      type: explicit
+      reason: References architecture overview
+    - path: README.md
+      type: restates
+      reason: Restates architecture overview
+
+docs/architecture/architectural_decisions.md:
+  downstream:
+    - path: docs/subsystems/schema_registry.md
+      type: explicit
+      reason: References architectural decisions
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: References architectural decisions
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: References architectural decisions
+    - path: docs/subsystems/relationships.md
+      type: explicit
+      reason: References architectural decisions
+    - path: docs/specs/DATA_MODELS.md
+      type: explicit
+      reason: References four-layer model decision
+
+docs/architecture/determinism.md:
+  downstream:
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: References determinism requirements
+    - path: docs/testing/testing_standard.md
+      type: implicit
+      reason: Testing must ensure determinism
+
+# Specifications Layer
+docs/specs/MVP_OVERVIEW.md:
+  downstream:
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: explicit
+      reason: Feature units implement MVP features
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference MVP scope
+    - path: README.md
+      type: restates
+      reason: Restates MVP capabilities
+
+docs/specs/MCP_SPEC.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: References MCP in architecture
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: explicit
+      reason: Feature units implement MCP actions
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference MCP spec
+    - path: docs/developer/mcp_cursor_setup.md
+      type: explicit
+      reason: Setup guide references MCP spec
+    - path: docs/developer/mcp_chatgpt_setup.md
+      type: explicit
+      reason: Setup guide references MCP spec
+    - path: README.md
+      type: restates
+      reason: Restates MCP integration information
+
+docs/specs/DATA_MODELS.md:
+  downstream:
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: Implements data model patterns
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: Implements data model patterns
+    - path: docs/subsystems/schema_registry.md
+      type: explicit
+      reason: Implements data model patterns
+
+# Standards Layer
+docs/testing/testing_standard.md:
+  downstream:
+    - path: docs/feature_units/standards/feature_unit_spec.md
+      type: explicit
+      reason: Feature unit spec references testing standard
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: implicit
+      reason: Feature units must follow testing standard
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference testing standard
+    - path: README.md
+      type: restates
+      reason: Restates testing information
+
+docs/conventions/documentation_standards.md:
+  downstream:
+    - path: .cursor/rules/downstream_doc_updates.md
+      type: explicit
+      reason: References documentation standards
+    - path: .cursor/rules/readme_maintenance.md
+      type: explicit
+      reason: References documentation standards
+    - path: docs/feature_units/standards/feature_unit_spec.md
+      type: implicit
+      reason: Feature unit specs must follow doc standards
+
+# Subsystems Layer
+docs/subsystems/ingestion/ingestion.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references ingestion
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: explicit
+      reason: Feature units implement ingestion features
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference ingestion
+    - path: docs/developer/getting_started.md
+      type: explicit
+      reason: Developer docs reference ingestion
+    - path: docs/integrations/*/*.md
+      type: implicit
+      reason: Integration guides may reference ingestion
+    - path: README.md
+      type: restates
+      reason: Restates ingestion workflow
+
+docs/subsystems/schema_registry.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references schema registry
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: References schema registry patterns
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: References schema registry patterns
+
+docs/subsystems/reducer.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references reducer
+    - path: docs/subsystems/observation_architecture.md
+      type: explicit
+      reason: References reducer patterns
+    - path: docs/subsystems/schema_registry.md
+      type: explicit
+      reason: References reducer patterns
+
+docs/subsystems/observation_architecture.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references observation layer
+    - path: docs/subsystems/reducer.md
+      type: explicit
+      reason: References observation architecture
+    - path: docs/subsystems/schema_registry.md
+      type: explicit
+      reason: References observation architecture
+
+docs/subsystems/relationships.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references relationships
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: implicit
+      reason: Feature units may implement relationship features
+
+docs/subsystems/events.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: Architecture references events
+    - path: docs/foundation/timeline_events.md
+      type: explicit
+      reason: References events subsystem
+
+docs/subsystems/privacy.md:
+  downstream:
+    - path: docs/legal/compliance.md
+      type: explicit
+      reason: References privacy subsystem
+    - path: docs/architecture/architecture.md
+      type: implicit
+      reason: Architecture must align with privacy requirements
+
+docs/subsystems/auth.md:
+  downstream:
+    - path: docs/legal/compliance.md
+      type: explicit
+      reason: References auth subsystem
+    - path: docs/architecture/architecture.md
+      type: implicit
+      reason: Architecture must align with auth requirements
+
+# Feature Unit Standards
+docs/feature_units/standards/feature_unit_spec.md:
+  downstream:
+    - path: docs/feature_units/completed/*/FU-*_spec.md
+      type: explicit
+      reason: Completed feature units follow spec template
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference feature unit spec
+
+docs/feature_units/standards/release_workflow.md:
+  downstream:
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans follow workflow
+    - path: docs/releases/*/manifest.yaml
+      type: implicit
+      reason: Manifests follow workflow structure
+# README dependencies (all docs → README)
+# Note: README is downstream of all major doc categories
+# This is handled by readme_maintenance.md rule, but listed here for completeness
+
+
+

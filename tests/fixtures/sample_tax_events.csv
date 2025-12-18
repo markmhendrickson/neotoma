@@ -1,0 +1,7 @@
+event_date,event_type,asset_symbol,quantity,cost_basis_usd,proceeds_usd,gain_loss_usd,tax_year,jurisdiction,description
+2024-06-15,sale,AAPL,50,7500.00,9500.00,2000.00,2024,US,Sale of 50 AAPL shares
+2024-08-20,sale,BTC,0.1,4000.00,4500.00,500.00,2024,US,Sale of 0.1 BTC
+2024-09-10,sale,TSLA,25,5000.00,4500.00,-500.00,2024,US,Sale of 25 TSLA shares - loss
+
+
+

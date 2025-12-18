@@ -1,0 +1,7 @@
+snapshot_date,asset_symbol,asset_name,asset_type,quantity,cost_basis_usd,current_value_usd,account_id,account_type,provider
+2024-12-15,AAPL,Apple Inc.,stock,100,15000.00,18500.00,acc-001,brokerage,Fidelity
+2024-12-15,BTC,Bitcoin,crypto,0.5,20000.00,25000.00,wallet-001,wallet,Coinbase
+2024-12-20,AAPL,Apple Inc.,stock,100,15000.00,19000.00,acc-001,brokerage,Fidelity
+
+
+

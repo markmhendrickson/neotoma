@@ -1,0 +1,60 @@
+name: Check Supabase Advisors
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/schema.sql'
+      - 'scripts/check_supabase_advisors.ts'
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/schema.sql'
+
+jobs:
+  check-advisors:
+    name: Check Supabase Security & Performance Advisors
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check Supabase advisors
+        run: npm run check:advisors
+        env:
+          # Optional: Provide credentials to check actual database state
+          # If not provided, script will check migration files only
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          DEV_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          DEV_SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+
+      - name: Comment PR with issues
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync(process.env.GITHUB_STEP_SUMMARY, 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## ⚠️ Supabase Advisor Issues Found\n\n` +
+                    `Please run \`npm run check:advisors:fix\` to generate fixes, or review the issues in the Supabase Dashboard.\n\n` +
+                    `See [docs/developer/supabase_advisors.md](docs/developer/supabase_advisors.md) for details.`
+            });
+

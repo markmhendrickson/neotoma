@@ -27,7 +27,7 @@ export interface EventRepository {
    */
   getEventsByTimestampRange(
     startTimestamp: string,
-    endTimestamp: string
+    endTimestamp: string,
   ): Promise<StateEvent[]>;
 
   /**
@@ -50,7 +50,7 @@ export interface StateRepository {
    */
   getStateAtTimestamp(
     recordId: string,
-    timestamp: string
+    timestamp: string,
   ): Promise<NeotomaRecord | null>;
 
   /**

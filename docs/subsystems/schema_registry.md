@@ -162,6 +162,18 @@ WHERE entity_type = 'invoice'
   AND active = true;
 ```
 
+**Public Schema Snapshots:**
+
+Schema snapshots are automatically exported to [`docs/subsystems/schema_snapshots/`](./schema_snapshots/) whenever schemas are registered, activated, or deactivated. The export runs asynchronously in the background and does not block schema operations.
+
+You can also manually export all schemas:
+
+```bash
+npm run schema:export
+```
+
+This creates versioned JSON files (e.g., `invoice/v1.0.json`) containing complete schema definitions and reducer configs. See the [schema snapshots README](./schema_snapshots/README.md) for details.
+
 ### 3.3 Schema Migration
 
 **Migration Process:**
@@ -296,6 +308,7 @@ async function computeSnapshot(entityId: string): Promise<EntitySnapshot> {
 - [`docs/subsystems/schema.md`](./schema.md) — Database schema
 - [`docs/subsystems/reducer.md`](./reducer.md) — Reducer patterns
 - [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.md) — Automated schema promotion
+- [`docs/subsystems/schema_snapshots/`](./schema_snapshots/) — Public schema snapshots (exported from registry)
 
 ---
 

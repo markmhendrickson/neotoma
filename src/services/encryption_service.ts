@@ -3,9 +3,12 @@
  * Encrypts responses before returning to clients
  */
 
-import { encryptEnvelope } from '../crypto/envelope.js';
-import type { Ed25519KeyPair, X25519KeyPair } from '../crypto/types.js';
-import { generateX25519KeyPair, generateEd25519KeyPair } from '../crypto/keys.js';
+import { encryptEnvelope } from "../crypto/envelope.js";
+import type { Ed25519KeyPair, X25519KeyPair } from "../crypto/types.js";
+import {
+  generateX25519KeyPair,
+  generateEd25519KeyPair,
+} from "../crypto/keys.js";
 
 let serverX25519Key: X25519KeyPair | null = null;
 let serverEd25519Key: Ed25519KeyPair | null = null;
@@ -30,7 +33,7 @@ export async function initServerKeys(): Promise<void> {
  */
 export async function encryptResponse(
   plaintext: unknown,
-  recipientPublicKey: Uint8Array
+  recipientPublicKey: Uint8Array,
 ): Promise<string> {
   if (!serverX25519Key || !serverEd25519Key) {
     await initServerKeys();
@@ -42,7 +45,7 @@ export async function encryptResponse(
   const envelope = await encryptEnvelope(
     payloadBytes,
     recipientPublicKey,
-    serverEd25519Key!
+    serverEd25519Key!,
   );
 
   // Serialize to base64url
@@ -93,10 +96,10 @@ function serializeEnvelope(envelope: {
  */
 function base64UrlEncode(data: Uint8Array): string {
   return Buffer.from(data)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
 }
 
 /**
@@ -105,4 +108,3 @@ function base64UrlEncode(data: Uint8Array): string {
 export function getServerPublicKey(): Uint8Array | null {
   return serverX25519Key?.publicKey || null;
 }
-

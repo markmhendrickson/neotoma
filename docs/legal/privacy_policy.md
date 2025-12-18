@@ -96,7 +96,7 @@ We share data with:
 - Your structured personal data memory is exposed to AI agents (ChatGPT, Claude, Cursor) via Model Context Protocol (MCP)
 - AI agents can read your memory and write new structured data (with your consent)
 - AI agents access only data you explicitly share via MCP
-- Dual-path ingestion: file uploads + agent interactions (`store_record`)
+- Dual-path ingestion: file uploads + agent interactions (`submit_payload`)
 
 ### 5.3 Legal Requirements
 

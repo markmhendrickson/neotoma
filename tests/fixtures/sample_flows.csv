@@ -1,0 +1,7 @@
+flow_name,flow_date,year,timeline,amount_usd,amount_original,currency_original,for_cash_flow,party,flow_type,location,category,notes
+Consulting Income - Q1,2024-03-31,2024,Q1 2024,15000.00,15000.00,USD,true,Acme Corp,income,US,consulting,Q1 consulting income
+Property Tax Payment,2024-04-15,2024,2024-04-15,-5000.00,-5000.00,USD,true,City Tax Office,expense,US,taxes,Annual property tax
+Consulting Income - Q2,2024-06-30,2024,Q2 2024,18000.00,18000.00,USD,true,Acme Corp,income,US,consulting,Q2 consulting income
+
+
+

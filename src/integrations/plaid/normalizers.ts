@@ -3,11 +3,11 @@ import type {
   Institution,
   Item,
   Transaction,
-} from 'plaid';
+} from "plaid";
 
 export interface NormalizedPlaidRecord {
-  type: 'account' | 'transaction';
-  externalSource: 'plaid';
+  type: "account" | "transaction";
+  externalSource: "plaid";
   externalId?: string;
   externalHash?: string;
   properties: Record<string, unknown>;
@@ -102,8 +102,8 @@ export function normalizeAccount({
   });
 
   return {
-    type: 'account',
-    externalSource: 'plaid',
+    type: "account",
+    externalSource: "plaid",
     externalId,
     properties,
   };

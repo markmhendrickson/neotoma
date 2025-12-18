@@ -286,7 +286,7 @@ describe("Graph Builder Service", () => {
       expect(result.valid).toBe(false);
       expect(result.errors.length).toBeGreaterThan(0);
       expect(result.errors.some((e) => e.includes("orphan entities"))).toBe(
-        true
+        true,
       );
     });
 
@@ -376,6 +376,3 @@ describe("Graph Builder Service", () => {
     });
   });
 });
-
-
-

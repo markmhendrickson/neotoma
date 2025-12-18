@@ -3,7 +3,7 @@ import { config } from "./config.js";
 
 export const supabase: SupabaseClient = createClient(
   config.supabaseUrl,
-  config.supabaseKey
+  config.supabaseKey,
 );
 
 export interface NeotomaRecord {
@@ -25,7 +25,7 @@ export async function initDatabase(): Promise<void> {
   try {
     // Use dynamic import to avoid circular dependencies
     // @ts-expect-error - run_migrations.js is a JS file without type definitions
-    const migrationModule = await import("../scripts/run_migrations.js") as {
+    const migrationModule = (await import("../scripts/run_migrations.js")) as {
       runMigrations?: (dryRun: boolean) => Promise<void>;
     };
     if (migrationModule.runMigrations) {
@@ -35,7 +35,7 @@ export async function initDatabase(): Promise<void> {
     console.warn(
       `[WARN] Could not run migrations during init: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
     // Continue anyway - migrations might already be applied or might fail due to permissions
   }

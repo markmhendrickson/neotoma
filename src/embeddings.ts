@@ -1,23 +1,27 @@
-import OpenAI from 'openai';
-import { config } from './config.js';
+import OpenAI from "openai";
+import { config } from "./config.js";
 
-const openai = config.openaiApiKey ? new OpenAI({ apiKey: config.openaiApiKey }) : null;
+const openai = config.openaiApiKey
+  ? new OpenAI({ apiKey: config.openaiApiKey })
+  : null;
 
 /**
  * Generate an embedding vector from text.
- * 
+ *
  * Supports multiple providers (priority order):
  * 1. OpenAI (if OPENAI_API_KEY is set) - uses text-embedding-3-small (1536 dimensions)
  * 2. Future: Add support for Cohere, Hugging Face, local models, etc.
- * 
+ *
  * Returns null if no provider is configured.
  */
-export async function generateEmbedding(text: string): Promise<number[] | null> {
+export async function generateEmbedding(
+  text: string,
+): Promise<number[] | null> {
   // OpenAI provider
   if (openai) {
     try {
       const response = await openai.embeddings.create({
-        model: 'text-embedding-3-small',
+        model: "text-embedding-3-small",
         input: text,
       });
 
@@ -25,10 +29,13 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
       if (embedding && embedding.length === 1536) {
         return embedding;
       }
-      console.error('Invalid embedding dimensions from OpenAI:', embedding?.length);
+      console.error(
+        "Invalid embedding dimensions from OpenAI:",
+        embedding?.length,
+      );
       return null;
     } catch (error) {
-      console.error('Error generating embedding with OpenAI:', error);
+      console.error("Error generating embedding with OpenAI:", error);
       return null;
     }
   }
@@ -46,8 +53,10 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
  * Generate embedding text from a record's properties and type.
  * This creates a searchable text representation for semantic search.
  */
-export function getRecordText(type: string, properties: Record<string, unknown>): string {
+export function getRecordText(
+  type: string,
+  properties: Record<string, unknown>,
+): string {
   const propsText = JSON.stringify(properties);
   return `${type} ${propsText}`;
 }
-

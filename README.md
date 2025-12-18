@@ -118,7 +118,7 @@ Provider memory is conversation-only with contextual limitations. While provider
 
 ### Core Workflow
 
-1. **Ingestion**: Dual-path. User uploads PDFs, images (JPG, PNG) with OCR support, or agents store contextual data via MCP `store_record` during conversations
+1. **Ingestion**: Dual-path. User uploads PDFs, images (JPG, PNG) with OCR support, or agents store contextual data via MCP `submit_payload` during conversations
 2. **Extraction**: Deterministic field extraction via regex/parsing (file uploads) or direct property assignment (agent interactions). No LLM inference in MVP.
 3. **Schema Assignment**: Type detection (invoice, receipt, contract, document, etc.)
 4. **Entity Resolution**: Canonical ID generation for people, companies, locations across all personal data
@@ -141,15 +141,28 @@ Neotoma has three architectural dimensions:
 - **Application Layer**: MCP actions, workflows, orchestration
 - **Presentation Layer**: React frontend, HTTP API
 
-**2. Truth Model (Four Layers):**
+**2. Truth Model (Three Layers):**
 
-- **Document** → **Entity** → **Observation** → **Snapshot**: Hierarchical representation of truth with full provenance
+- **Payload** → **Observation** → **Entity** → **Snapshot**: Hierarchical representation of truth with full provenance
 
 **3. Ecosystem Role (Truth Layer):**
 
 - Neotoma serves as the **Truth Layer** in a broader ecosystem. It supports Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet) above it.
 
 See [`docs/architecture/architecture.md`](docs/architecture/architecture.md) for complete architecture documentation.
+
+### Schema
+
+Neotoma uses a PostgreSQL schema with JSONB fields for flexible, schema-driven data storage. The schema supports:
+
+- **Core tables**: `records`, `observations`, `entity_snapshots`, `relationships`, `schema_registry`
+- **JSONB properties**: Type-specific extracted fields stored in `properties` JSONB column
+- **Schema evolution**: Versioned schemas with backward compatibility and migration protocols
+- **Entity resolution**: Hash-based canonical IDs for deterministic entity unification
+- **Immutable audit trail**: Event-sourced history with full provenance
+- **Schema snapshots**: Public reference schemas exported to [`docs/subsystems/schema_snapshots/`](docs/subsystems/schema_snapshots/) (run `npm run schema:export` to update)
+
+See [`docs/subsystems/schema.md`](docs/subsystems/schema.md) for complete schema documentation including table definitions, JSONB structures, migration rules, and indexing strategies.
 
 ### Releases
 
@@ -176,6 +189,7 @@ See [`docs/releases/`](docs/releases/) for complete release documentation.
 
 - **[Specifications](docs/specs/)**: Requirements, MCP spec, feature units
 - **[Architecture](docs/architecture/)**: System design, decisions, consistency
+- **[Schema](docs/subsystems/schema.md)**: Database schema, JSONB structures, migrations
 - **[Subsystems](docs/subsystems/)**: Ingestion, extraction, search, schema, etc.
 - **[Foundation](docs/foundation/)**: Core identity, philosophy, principles
 - **[Feature Units](docs/feature_units/)**: Completed and in-progress features
@@ -239,6 +253,9 @@ npm run dev:prototype
 # Run MCP server (stdio mode)
 npm run dev
 
+# Auto-rebuild MCP server for Cursor (watch mode)
+npm run dev:mcp
+
 # Run WebSocket MCP bridge
 npm run dev:ws
 ```
@@ -270,7 +287,7 @@ Neotoma provides MCP (Model Context Protocol) integration for AI tools, enabling
 
 **Available Actions:**
 
-- **Record Operations:** `store_record`, `update_record`, `retrieve_records`, `delete_record`
+- **Payload Operations:** `submit_payload`, `update_record`, `retrieve_records`, `delete_record`
 - **File Operations:** `upload_file`, `get_file_url`
 - **Entity Operations:** `retrieve_entities`, `get_entity_by_identifier`, `get_entity_snapshot`, `list_observations`
 - **Relationship Operations:** `create_relationship`, `list_relationships`, `get_related_entities`
@@ -333,7 +350,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 10. **Event-sourced**: Domain Events → Reducers → State updates. Complete event log enables historical replay and time-travel queries.
 11. **Cryptographic integrity**: Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 12. **Dual-path ingestion**: File uploads + agent interactions via MCP
-13. **Four-layer model**: Record → Entity → Observation → Snapshot
+13. **Three-layer model**: Payload → Observation → Entity → Snapshot
 
 ### Testing
 

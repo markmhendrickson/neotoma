@@ -877,11 +877,25 @@ app.post("/store_record", async (req, res) => {
     insertData.summary = summary;
   }
 
-  const { data, error } = await supabase
-    .from("records")
-    .insert(insertData)
-    .select()
-    .single();
+  // Insert record, with graceful fallback if embedding column is missing
+  const insertOnce = async (payload: Record<string, unknown>) =>
+    supabase.from("records").insert(payload).select().single();
+
+  let { data, error } = await insertOnce(insertData);
+
+  // Handle environments where the `embedding` column (or vector extension)
+  // is not available yet. In that case, retry without the embedding field.
+  if (
+    error &&
+    (error as any).code === "PGRST204" &&
+    typeof (error as any).message === "string" &&
+    (error as any).message.includes("embedding")
+  ) {
+    const fallbackInsert: Record<string, unknown> = { ...insertData };
+    delete (fallbackInsert as any).embedding;
+    ({ data, error } = await insertOnce(fallbackInsert));
+  }
+
   if (error) {
     logError("SupabaseError:store_record", req, error, {
       code: (error as any).code,
@@ -903,7 +917,7 @@ app.post("/store_record", async (req, res) => {
 
   // Extract and persist entities (FU-101)
   try {
-    const { extractEntities, resolveEntity } = await import('./services/entity_resolution.js');
+    const { extractEntities, resolveEntity } = await import("./services/entity_resolution.js");
     const entities = extractEntities(properties, normalizedType);
     const resolvedEntities = [];
     
@@ -925,7 +939,7 @@ app.post("/store_record", async (req, res) => {
 
   // Generate and persist timeline events (FU-102)
   try {
-    const { generateAndPersistEvents } = await import('./services/event_generation.js');
+    const { generateAndPersistEvents } = await import("./services/event_generation.js");
     const events = await generateAndPersistEvents(data.id, properties, normalizedType);
     
     // Create record-event edges
@@ -946,7 +960,7 @@ app.post("/store_record", async (req, res) => {
 
   // Create observations (FU-058)
   try {
-    const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
+    const { createObservationsFromRecord } = await import("./services/observation_ingestion.js");
     await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
   } catch (observationError) {
     // Log observation creation error but don't fail the request
@@ -1060,12 +1074,12 @@ app.post("/update_record", async (req, res) => {
     updated_at: new Date().toISOString(),
   };
 
-  // Fetch existing record to determine if we need to regenerate embedding and summary
+  // Fetch existing record to determine if we need to regenerate summary
   const { data: existing } = await supabase
     .from("records")
-    .select("type, properties, embedding, file_urls")
+    .select("type, properties, file_urls")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   let normalizedUpdateType: string | undefined;
   if (type !== undefined) {
@@ -1075,8 +1089,7 @@ app.post("/update_record", async (req, res) => {
 
   // Generate new embedding if:
   // 1. Embedding is explicitly provided (non-empty array), OR
-  // 2. Properties or type changed and no embedding was provided, OR
-  // 3. Existing record has no embedding and OpenAI is configured
+  // 2. Properties or type changed and no embedding was provided (when OpenAI is configured)
   if (providedEmbedding !== undefined) {
     // Filter out empty arrays - they're invalid for PostgreSQL vector type
     if (Array.isArray(providedEmbedding) && providedEmbedding.length > 0) {
@@ -1149,22 +1162,39 @@ app.post("/update_record", async (req, res) => {
     }
   }
 
-  const { data, error } = await supabase
-    .from("records")
-    .update(updateData)
-    .eq("id", id)
-    .select()
-    .single();
+  const updateOnce = async (payload: Record<string, unknown>) =>
+    supabase
+      .from("records")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .maybeSingle();
+
+  let { data, error } = await updateOnce(updateData);
+
+  // Handle environments where the `embedding` column is missing from schema cache
+  if (
+    error &&
+    (error as any).code === "PGRST204" &&
+    typeof (error as any).message === "string" &&
+    (error as any).message.includes("embedding")
+  ) {
+    const fallbackUpdate: Record<string, unknown> = { ...updateData };
+    delete (fallbackUpdate as any).embedding;
+    ({ data, error } = await updateOnce(fallbackUpdate));
+  }
 
   if (error) {
     logError("SupabaseError:update_record:update", req, error, {
       code: (error as any).code,
     });
-    return res.status(500).json({ error: error.message });
+    return res
+      .status(500)
+      .json({ error: (error as any).message || "Database error" });
   }
   if (!data) {
     logWarn("NotFound:update_record", req, { id });
-    return res.status(404).json({ error: "Not found" });
+    return res.status(404).json({ error: "Record not found" });
   }
 
   // Emit RecordUpdated event (event-sourcing foundation - FU-050)
@@ -1727,7 +1757,7 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0 } = parsed.data;
 
-  let query = supabase
+  const query = supabase
     .from("observations")
     .select("*")
     .eq("entity_id", entity_id)
@@ -3406,10 +3436,10 @@ app.get("/import/plaid/link_demo", async (req, res) => {
     <pre id="exchange-result" hidden></pre>
   </div>
   <script>
-    const SANDBOX_BEARER_KEY = 'sandbox_bearer';
+    const SANDBOX_BEARER_KEY = 'sandbox_bearer";
     const tokenInput = document.getElementById('token-input');
     const noticeEl = document.getElementById('auth-notice');
-    const urlToken = new URLSearchParams(window.location.search).get('token') || '';
+    const urlToken = new URLSearchParams(window.location.search).get('token') || '";
     let bearerToken = urlToken;
 
     if (!bearerToken) {
@@ -3440,7 +3470,7 @@ app.get("/import/plaid/link_demo", async (req, res) => {
       return normalizedToken().length > 0;
     }
 
-    const storageKey = 'plaid_demo_last_item';
+    const storageKey = 'plaid_demo_last_item";
     const resultEl = document.getElementById('exchange-result');
     const actionsEl = document.getElementById('item-actions');
     const cacheInfoEl = document.getElementById('cache-info');
@@ -3451,9 +3481,9 @@ app.get("/import/plaid/link_demo", async (req, res) => {
 
     function updateAuthNotice() {
       if (hasBearer()) {
-        noticeEl.textContent = 'Bearer token loaded. Server requests will include authorization automatically.';
+        noticeEl.textContent = 'Bearer token loaded. Server requests will include authorization automatically.";
       } else {
-        noticeEl.textContent = 'Provide a bearer token to enable automatic exchange and server actions. (This should match the sandbox API token.)';
+        noticeEl.textContent = 'Provide a bearer token to enable automatic exchange and server actions. (This should match the sandbox API token.)";
       }
     }
 
@@ -3468,12 +3498,12 @@ app.get("/import/plaid/link_demo", async (req, res) => {
     function updateCacheInfo(payload) {
       if (!payload) {
         cacheInfoEl.hidden = true;
-        cacheInfoEl.textContent = '';
+        cacheInfoEl.textContent = '";
         return;
       }
       const lastConnected = new Date(payload.timestamp || Date.now()).toLocaleString();
       cacheInfoEl.hidden = false;
-      cacheInfoEl.textContent = 'Cached Plaid item ' + (payload.itemId || '(unknown)') + ' from ' + lastConnected;
+      cacheInfoEl.textContent = 'Cached Plaid item ' + (payload.itemId || '(unknown)') + ' from " + lastConnected;
     }
 
     function showActions(itemId) {
@@ -3512,7 +3542,7 @@ app.get("/import/plaid/link_demo", async (req, res) => {
       const authToken = normalizedToken();
       if (!lastItemId || !authToken) return;
       resultEl.hidden = false;
-      resultEl.textContent = 'Calling ' + path + '...';
+      resultEl.textContent = 'Calling ' + path + '...";
       try {
         const resp = await fetch(path, {
           method: 'POST',
@@ -3539,14 +3569,14 @@ app.get("/import/plaid/link_demo", async (req, res) => {
       updateActionsVisibility();
       updateCacheInfo(null);
       resultEl.hidden = true;
-      resultEl.textContent = '';
+      resultEl.textContent = '";
     });
 
     const handler = Plaid.create({
       token: ${tokenJson},
       onSuccess(public_token, metadata) {
         resultEl.hidden = false;
-        resultEl.textContent = 'Exchanging public token...';
+        resultEl.textContent = 'Exchanging public token...";
         if (!hasBearer()) {
           const payload = { public_token, metadata };
           resultEl.textContent = JSON.stringify(payload, null, 2);
@@ -3645,7 +3675,7 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1") {
  * Check if a record matches keyword search terms
  */
 export function recordMatchesKeywordSearch(
-  record: import('./db.js').NeotomaRecord,
+  record: import("./db.js").NeotomaRecord,
   searchTerms: string[]
 ): boolean {
   const recordText = JSON.stringify(record.properties || {}).toLowerCase();

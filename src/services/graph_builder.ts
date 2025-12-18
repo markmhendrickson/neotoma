@@ -66,7 +66,7 @@ export async function detectOrphanNodes(): Promise<{
     }
 
     orphanCounts.orphanRecords = recordIds.filter(
-      (id) => !recordsWithEdges.has(id)
+      (id) => !recordsWithEdges.has(id),
     ).length;
   }
 
@@ -86,7 +86,7 @@ export async function detectOrphanNodes(): Promise<{
     }
 
     orphanCounts.orphanEntities = entityIds.filter(
-      (id) => !entitiesWithEdges.has(id)
+      (id) => !entitiesWithEdges.has(id),
     ).length;
   }
 
@@ -108,7 +108,7 @@ export async function detectOrphanNodes(): Promise<{
     }
 
     orphanCounts.orphanEvents = eventIds.filter(
-      (id) => !eventsWithEdges.has(id)
+      (id) => !eventsWithEdges.has(id),
     ).length;
   }
 
@@ -119,7 +119,7 @@ export async function detectOrphanNodes(): Promise<{
  * Detect cycles in relationships
  */
 export async function detectCycles(
-  relationshipType?: string
+  relationshipType?: string,
 ): Promise<string[][]> {
   const cycles: string[][] = [];
 
@@ -237,13 +237,13 @@ export async function validateGraphIntegrity(): Promise<{
   // But orphan entities and events should not exist - they should always have edges
   if (orphans.orphanEntities > 0) {
     errors.push(
-      `Found ${orphans.orphanEntities} orphan entities (entities with no record_entity_edges)`
+      `Found ${orphans.orphanEntities} orphan entities (entities with no record_entity_edges)`,
     );
   }
 
   if (orphans.orphanEvents > 0) {
     errors.push(
-      `Found ${orphans.orphanEvents} orphan events (events with no record_event_edges)`
+      `Found ${orphans.orphanEvents} orphan events (events with no record_event_edges)`,
     );
   }
 
@@ -275,7 +275,7 @@ export async function insertRecordWithGraph(
     target_id: string;
     relationship: string;
     metadata?: Record<string, unknown>;
-  }> = []
+  }> = [],
 ): Promise<GraphInsertResult> {
   // Use Supabase transaction (RPC function) for atomicity
   // For now, do sequential inserts and validate integrity after
@@ -294,7 +294,7 @@ export async function insertRecordWithGraph(
 
   if (recordError || !recordData) {
     throw new Error(
-      `Failed to insert record: ${recordError?.message || "Unknown error"}`
+      `Failed to insert record: ${recordError?.message || "Unknown error"}`,
     );
   }
 
@@ -318,7 +318,7 @@ export async function insertRecordWithGraph(
 
     if (edgeError) {
       console.error(
-        `Failed to insert record-entity edge: ${edgeError.message}`
+        `Failed to insert record-entity edge: ${edgeError.message}`,
       );
     }
   }
@@ -338,7 +338,7 @@ export async function insertRecordWithGraph(
 
     if (recordEventError) {
       console.error(
-        `Failed to insert record-event edge: ${recordEventError.message}`
+        `Failed to insert record-event edge: ${recordEventError.message}`,
       );
     }
 
@@ -354,7 +354,7 @@ export async function insertRecordWithGraph(
 
       if (entityEventError) {
         console.error(
-          `Failed to insert entity-event edge: ${entityEventError.message}`
+          `Failed to insert entity-event edge: ${entityEventError.message}`,
         );
       }
     }
@@ -387,7 +387,7 @@ export async function insertRecordWithGraph(
     // Rollback by deleting inserted record (simplified - full rollback would need transaction)
     await supabase.from("records").delete().eq("id", recordId);
     throw new Error(
-      `Graph insertion would create cycles: ${JSON.stringify(cycles)}`
+      `Graph insertion would create cycles: ${JSON.stringify(cycles)}`,
     );
   }
 

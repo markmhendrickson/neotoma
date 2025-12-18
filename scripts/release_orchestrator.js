@@ -18,6 +18,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { validateFUSpecCompliance } from "./validate_spec_compliance.js";
 
 const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
@@ -1080,6 +1081,64 @@ async function main() {
       console.error(
         `[ERROR] Integration tests failed for Batch ${batch.batch_id}`
       );
+      process.exit(1);
+    }
+
+    // Run spec compliance validation for each FU in batch
+    console.log(
+      `[INFO] Running spec compliance validation for Batch ${batch.batch_id}...`
+    );
+    const complianceErrors = [];
+    for (const fu of batchStatus.feature_units) {
+      try {
+        const complianceResult = await validateFUSpecCompliance(
+          fu.fu_id,
+          RELEASE_ID
+        );
+        if (!complianceResult.compliant) {
+          console.error(
+            `[ERROR] ${fu.fu_id} failed spec compliance validation:`
+          );
+          complianceResult.gaps.forEach((gap) => {
+            console.error(`  - ${gap.requirement}`);
+          });
+          console.error(`  Report: ${complianceResult.reportPath}`);
+          complianceErrors.push({
+            fu_id: fu.fu_id,
+            gaps: complianceResult.gaps,
+            reportPath: complianceResult.reportPath,
+          });
+        } else {
+          console.log(
+            `[INFO] ${fu.fu_id} passed spec compliance validation`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `[ERROR] Spec compliance validation failed for ${fu.fu_id}: ${error.message}`
+        );
+        complianceErrors.push({
+          fu_id: fu.fu_id,
+          error: error.message,
+        });
+      }
+    }
+
+    if (complianceErrors.length > 0) {
+      console.error(
+        `[ERROR] Batch ${batch.batch_id} has ${complianceErrors.length} FU(s) with spec compliance gaps`
+      );
+      console.error(
+        "[ERROR] FUs cannot be marked complete until all spec requirements are met or explicitly deferred"
+      );
+      // Store compliance errors in status for review
+      status.compliance_errors = status.compliance_errors || [];
+      status.compliance_errors.push({
+        batch_id: batch.batch_id,
+        errors: complianceErrors,
+        timestamp: new Date().toISOString(),
+      });
+      await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
       process.exit(1);
     }
 

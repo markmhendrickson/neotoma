@@ -1,17 +1,21 @@
-import { supabase } from '../db.js';
-import { buildPlaidItemContext, normalizePlaidError, syncTransactions } from '../integrations/plaid/client.js';
+import { supabase } from "../db.js";
+import {
+  buildPlaidItemContext,
+  normalizePlaidError,
+  syncTransactions,
+} from "../integrations/plaid/client.js";
 import {
   normalizeAccount,
   normalizeTransaction,
   type NormalizedPlaidRecord,
-} from '../integrations/plaid/normalizers.js';
+} from "../integrations/plaid/normalizers.js";
 import {
   markExternalRecordRemoved,
   upsertExternalRecords,
   type UpsertResult,
-} from './records.js';
-import { config } from '../config.js';
-import { generateEmbedding, getRecordText } from '../embeddings.js';
+} from "./records.js";
+import { config } from "../config.js";
+import { generateEmbedding, getRecordText } from "../embeddings.js";
 
 export interface PlaidItemRow {
   id: string;
@@ -73,7 +77,7 @@ export interface PlaidSyncSummary {
   lastSuccessfulSync: string;
 }
 
-export type SanitizedPlaidItem = Omit<PlaidItemRow, 'access_token'>;
+export type SanitizedPlaidItem = Omit<PlaidItemRow, "access_token">;
 
 function mapPlaidItem(row: any): PlaidItemRow {
   return {
@@ -116,7 +120,9 @@ export function redactPlaidItem(item: PlaidItemRow): SanitizedPlaidItem {
   return rest;
 }
 
-export async function upsertPlaidItem(input: UpsertPlaidItemInput): Promise<PlaidItemRow> {
+export async function upsertPlaidItem(
+  input: UpsertPlaidItemInput,
+): Promise<PlaidItemRow> {
   const payload = {
     item_id: input.itemId,
     access_token: input.accessToken,
@@ -129,8 +135,8 @@ export async function upsertPlaidItem(input: UpsertPlaidItemInput): Promise<Plai
   };
 
   const { data, error } = await supabase
-    .from('plaid_items')
-    .upsert(payload, { onConflict: 'item_id' })
+    .from("plaid_items")
+    .upsert(payload, { onConflict: "item_id" })
     .select()
     .single();
 
@@ -146,45 +152,49 @@ export async function updatePlaidItemCursor(
   cursor: string,
   lastSuccessfulSync: string,
   institutionId?: string | null,
-  institutionName?: string | null
+  institutionName?: string | null,
 ): Promise<void> {
   const { error } = await supabase
-    .from('plaid_items')
+    .from("plaid_items")
     .update({
       cursor,
       last_successful_sync: lastSuccessfulSync,
       institution_id: institutionId ?? null,
       institution_name: institutionName ?? null,
     })
-    .eq('id', plaidItemId);
+    .eq("id", plaidItemId);
 
   if (error) {
     throw error;
   }
 }
 
-export async function getPlaidItemById(plaidItemId: string): Promise<PlaidItemRow | null> {
+export async function getPlaidItemById(
+  plaidItemId: string,
+): Promise<PlaidItemRow | null> {
   const { data, error } = await supabase
-    .from('plaid_items')
-    .select('*')
-    .eq('id', plaidItemId)
+    .from("plaid_items")
+    .select("*")
+    .eq("id", plaidItemId)
     .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
+  if (error && error.code !== "PGRST116") {
     throw error;
   }
 
   return data ? mapPlaidItem(data) : null;
 }
 
-export async function getPlaidItemByItemId(itemId: string): Promise<PlaidItemRow | null> {
+export async function getPlaidItemByItemId(
+  itemId: string,
+): Promise<PlaidItemRow | null> {
   const { data, error } = await supabase
-    .from('plaid_items')
-    .select('*')
-    .eq('item_id', itemId)
+    .from("plaid_items")
+    .select("*")
+    .eq("item_id", itemId)
     .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
+  if (error && error.code !== "PGRST116") {
     throw error;
   }
 
@@ -193,9 +203,9 @@ export async function getPlaidItemByItemId(itemId: string): Promise<PlaidItemRow
 
 export async function listPlaidItems(): Promise<PlaidItemRow[]> {
   const { data, error } = await supabase
-    .from('plaid_items')
-    .select('*')
-    .order('created_at', { ascending: false });
+    .from("plaid_items")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (error) {
     throw error;
@@ -218,7 +228,9 @@ export interface PlaidPreviewSummary {
 }
 
 // Preview counts of changes without mutating database state
-export async function previewPlaidItemSync(plaidItemId: string): Promise<PlaidPreviewSummary> {
+export async function previewPlaidItemSync(
+  plaidItemId: string,
+): Promise<PlaidPreviewSummary> {
   const item = await getPlaidItemById(plaidItemId);
   if (!item) {
     throw new Error(`Plaid item ${plaidItemId} not found`);
@@ -243,10 +255,10 @@ export async function previewPlaidItemSync(plaidItemId: string): Promise<PlaidPr
 
 async function startSyncRun(plaidItemId: string): Promise<PlaidSyncRunRow> {
   const { data, error } = await supabase
-    .from('plaid_sync_runs')
+    .from("plaid_sync_runs")
     .insert({
       plaid_item_id: plaidItemId,
-      status: 'running',
+      status: "running",
     })
     .select()
     .single();
@@ -266,12 +278,12 @@ async function completeSyncRun(
     removedTransactions: number;
     nextCursor: string;
     error?: unknown;
-  }
+  },
 ): Promise<void> {
   const { error } = await supabase
-    .from('plaid_sync_runs')
+    .from("plaid_sync_runs")
     .update({
-      status: data.error ? 'failed' : 'success',
+      status: data.error ? "failed" : "success",
       completed_at: new Date().toISOString(),
       added_transactions: data.addedTransactions,
       modified_transactions: data.modifiedTransactions,
@@ -279,7 +291,7 @@ async function completeSyncRun(
       next_cursor: data.nextCursor,
       error: data.error ?? null,
     })
-    .eq('id', syncRunId);
+    .eq("id", syncRunId);
 
   if (error) {
     throw error;
@@ -288,7 +300,7 @@ async function completeSyncRun(
 
 function toExternalRecords(
   records: NormalizedPlaidRecord[],
-  generateEmbedding: boolean
+  generateEmbedding: boolean,
 ): {
   type: string;
   externalSource: string;
@@ -307,7 +319,10 @@ function toExternalRecords(
   }));
 }
 
-function summarizeUpserts(results: UpsertResult[]): { created: number; updated: number } {
+function summarizeUpserts(results: UpsertResult[]): {
+  created: number;
+  updated: number;
+} {
   return results.reduce(
     (acc, result) => {
       if (result.created) {
@@ -317,11 +332,13 @@ function summarizeUpserts(results: UpsertResult[]): { created: number; updated: 
       }
       return acc;
     },
-    { created: 0, updated: 0 }
+    { created: 0, updated: 0 },
   );
 }
 
-export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyncSummary> {
+export async function syncPlaidItem(
+  options: PlaidSyncOptions,
+): Promise<PlaidSyncSummary> {
   const plaidItem = await getPlaidItemById(options.plaidItemId);
   if (!plaidItem) {
     throw new Error(`Plaid item ${options.plaidItemId} not found`);
@@ -330,22 +347,38 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
   const syncRun = await startSyncRun(plaidItem.id);
 
   try {
-    const { accounts, added, modified, removed, nextCursor } = await syncTransactions({
-      accessToken: plaidItem.access_token,
-      cursor: options.forceFullSync ? null : plaidItem.cursor,
-    });
+    const { accounts, added, modified, removed, nextCursor } =
+      await syncTransactions({
+        accessToken: plaidItem.access_token,
+        cursor: options.forceFullSync ? null : plaidItem.cursor,
+      });
 
-    const shouldGenerateEmbeddings = options.generateEmbeddings ?? Boolean(config.openaiApiKey);
-    const embeddingBuilder = shouldGenerateEmbeddings && config.openaiApiKey
-      ? async ({ type, properties }: { type: string; properties: Record<string, unknown> }) => {
-          const embedding = await generateEmbedding(getRecordText(type, properties));
-          return embedding && embedding.length > 0 ? embedding : null;
-        }
-      : undefined;
+    const shouldGenerateEmbeddings =
+      options.generateEmbeddings ?? Boolean(config.openaiApiKey);
+    const embeddingBuilder =
+      shouldGenerateEmbeddings && config.openaiApiKey
+        ? async ({
+            type,
+            properties,
+          }: {
+            type: string;
+            properties: Record<string, unknown>;
+          }) => {
+            const embedding = await generateEmbedding(
+              getRecordText(type, properties),
+            );
+            return embedding && embedding.length > 0 ? embedding : null;
+          }
+        : undefined;
 
-    const context = await buildPlaidItemContext(plaidItem.access_token, accounts);
+    const context = await buildPlaidItemContext(
+      plaidItem.access_token,
+      accounts,
+    );
 
-    const accountLookup = new Map(context.accounts.map((account) => [account.account_id, account]));
+    const accountLookup = new Map(
+      context.accounts.map((account) => [account.account_id, account]),
+    );
 
     const accountRecords = context.accounts.map((account) =>
       normalizeAccount({
@@ -354,7 +387,7 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
         item: context.item,
         institution: context.institution,
         account,
-      })
+      }),
     );
 
     const transactionRecords = [...added, ...modified].map((transaction) =>
@@ -365,22 +398,22 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
         institution: context.institution,
         accountLookup,
         transaction,
-      })
+      }),
     );
 
     const accountUpserts = await upsertExternalRecords(
       toExternalRecords(accountRecords, shouldGenerateEmbeddings),
-      embeddingBuilder
+      embeddingBuilder,
     );
     const transactionUpserts = await upsertExternalRecords(
       toExternalRecords(transactionRecords, shouldGenerateEmbeddings),
-      embeddingBuilder
+      embeddingBuilder,
     );
 
     let removedCount = 0;
     for (const removedTx of removed) {
       const externalId = `plaid:transaction:${removedTx.transaction_id}`;
-      const updated = await markExternalRecordRemoved('transaction', 'plaid', {
+      const updated = await markExternalRecordRemoved("transaction", "plaid", {
         externalId,
       });
       if (updated) {
@@ -397,7 +430,7 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
       nextCursor,
       lastSuccessfulSync,
       context.item.institution_id ?? null,
-      context.institution?.name ?? plaidItem.institution_name ?? null
+      context.institution?.name ?? plaidItem.institution_name ?? null,
     );
 
     await completeSyncRun(syncRun.id, {
@@ -421,20 +454,20 @@ export async function syncPlaidItem(options: PlaidSyncOptions): Promise<PlaidSyn
     };
   } catch (error) {
     const normalizedError = normalizePlaidError(error) || {
-      type: 'unknown_error',
-      code: 'unknown',
-      message: error instanceof Error ? error.message : 'Unknown Plaid sync error',
+      type: "unknown_error",
+      code: "unknown",
+      message:
+        error instanceof Error ? error.message : "Unknown Plaid sync error",
     };
 
     await completeSyncRun(syncRun.id, {
       addedTransactions: 0,
       modifiedTransactions: 0,
       removedTransactions: 0,
-      nextCursor: plaidItem.cursor ?? '',
+      nextCursor: plaidItem.cursor ?? "",
       error: normalizedError,
     });
 
     throw error;
   }
 }
-

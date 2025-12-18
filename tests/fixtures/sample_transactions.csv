@@ -1,0 +1,7 @@
+transaction_date,posting_date,amount_usd,amount_original,currency_original,description,category,account_id,bank_provider
+2024-12-10,2024-12-11,-50.00,-50.00,USD,Coffee Shop,food,acc-checking-001,Chase Bank
+2024-12-15,2024-12-15,5000.00,5000.00,USD,Acme Corp,income,acc-checking-001,Chase Bank
+2024-12-20,2024-12-21,-1200.00,-1100.00,EUR,Rent Payment,housing,acc-checking-001,Chase Bank
+
+
+

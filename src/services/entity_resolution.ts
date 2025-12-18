@@ -19,7 +19,7 @@ export interface Entity {
  */
 export function generateEntityId(
   entityType: string,
-  canonicalName: string
+  canonicalName: string,
 ): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
   const hash = createHash("sha256")
@@ -53,7 +53,7 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
  */
 export async function resolveEntity(
   entityType: string,
-  rawValue: string
+  rawValue: string,
 ): Promise<Entity> {
   const canonicalName = normalizeEntityValue(entityType, rawValue);
   const entityId = generateEntityId(entityType, canonicalName);
@@ -103,7 +103,7 @@ export async function resolveEntity(
  */
 export function extractEntities(
   properties: Record<string, unknown>,
-  schemaType: string
+  schemaType: string,
 ): Array<{ entity_type: string; raw_value: string }> {
   const entities: Array<{ entity_type: string; raw_value: string }> = [];
 
@@ -197,7 +197,7 @@ export async function listEntities(filters?: {
   if (filters?.offset) {
     query = query.range(
       filters.offset,
-      filters.offset + (filters.limit || 10) - 1
+      filters.offset + (filters.limit || 10) - 1,
     );
   }
 
@@ -212,7 +212,3 @@ export async function listEntities(filters?: {
 
   return data as Entity[];
 }
-
-
-
-

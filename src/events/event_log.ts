@@ -1,21 +1,23 @@
 /**
  * Event Log for Event-Sourcing Foundation (FU-050)
- * 
+ *
  * Append-only event log operations for storing and retrieving state events.
  */
 
-import { supabase } from '../db.js';
-import { StateEvent } from './event_schema.js';
-import { validateEvent } from './event_validator.js';
+import { supabase } from "../db.js";
+import { StateEvent } from "./event_schema.js";
+import { validateEvent } from "./event_validator.js";
 
 /**
  * Append event to event log (append-only)
  */
-export async function appendEvent(event: Omit<StateEvent, 'created_at'>): Promise<StateEvent> {
+export async function appendEvent(
+  event: Omit<StateEvent, "created_at">,
+): Promise<StateEvent> {
   // Validate event before storage
   const validation = validateEvent(event);
   if (!validation.valid) {
-    throw new Error(`Event validation failed: ${validation.errors.join(', ')}`);
+    throw new Error(`Event validation failed: ${validation.errors.join(", ")}`);
   }
 
   const eventWithTimestamp: StateEvent = {
@@ -24,7 +26,7 @@ export async function appendEvent(event: Omit<StateEvent, 'created_at'>): Promis
   };
 
   const { data, error } = await supabase
-    .from('state_events')
+    .from("state_events")
     .insert(eventWithTimestamp)
     .select()
     .single();
@@ -39,15 +41,19 @@ export async function appendEvent(event: Omit<StateEvent, 'created_at'>): Promis
 /**
  * Get all events for a record (chronological order)
  */
-export async function getEventsByRecordId(recordId: string): Promise<StateEvent[]> {
+export async function getEventsByRecordId(
+  recordId: string,
+): Promise<StateEvent[]> {
   const { data, error } = await supabase
-    .from('state_events')
-    .select('*')
-    .eq('record_id', recordId)
-    .order('timestamp', { ascending: true });
+    .from("state_events")
+    .select("*")
+    .eq("record_id", recordId)
+    .order("timestamp", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to get events for record ${recordId}: ${error.message}`);
+    throw new Error(
+      `Failed to get events for record ${recordId}: ${error.message}`,
+    );
   }
 
   return (data || []) as StateEvent[];
@@ -58,17 +64,19 @@ export async function getEventsByRecordId(recordId: string): Promise<StateEvent[
  */
 export async function getEventsByTimestampRange(
   startTimestamp: string,
-  endTimestamp: string
+  endTimestamp: string,
 ): Promise<StateEvent[]> {
   const { data, error } = await supabase
-    .from('state_events')
-    .select('*')
-    .gte('timestamp', startTimestamp)
-    .lte('timestamp', endTimestamp)
-    .order('timestamp', { ascending: true });
+    .from("state_events")
+    .select("*")
+    .gte("timestamp", startTimestamp)
+    .lte("timestamp", endTimestamp)
+    .order("timestamp", { ascending: true });
 
   if (error) {
-    throw new Error(`Failed to get events by timestamp range: ${error.message}`);
+    throw new Error(
+      `Failed to get events by timestamp range: ${error.message}`,
+    );
   }
 
   return (data || []) as StateEvent[];
@@ -78,7 +86,10 @@ export async function getEventsByTimestampRange(
  * Get all events (for testing/debugging)
  */
 export async function getAllEvents(limit?: number): Promise<StateEvent[]> {
-  let query = supabase.from('state_events').select('*').order('timestamp', { ascending: true });
+  let query = supabase
+    .from("state_events")
+    .select("*")
+    .order("timestamp", { ascending: true });
 
   if (limit) {
     query = query.limit(limit);
@@ -92,10 +103,3 @@ export async function getAllEvents(limit?: number): Promise<StateEvent[]> {
 
   return (data || []) as StateEvent[];
 }
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-import { normalizeRecordType } from '../config/record_types.js';
+import { normalizeRecordType } from "../config/record_types.js";
 
 type Primitive = string | number | boolean | null | undefined;
 
@@ -20,36 +20,57 @@ interface RowSummaryParams {
   properties: Record<string, unknown>;
 }
 
-const LABEL_FIELDS = ['name', 'title', 'exercise', 'summary', 'note', 'description', 'item'];
-const DATE_FIELDS = ['date', 'day', 'created', 'created_at', 'timestamp', 'time'];
+const LABEL_FIELDS = [
+  "name",
+  "title",
+  "exercise",
+  "summary",
+  "note",
+  "description",
+  "item",
+];
+const DATE_FIELDS = [
+  "date",
+  "day",
+  "created",
+  "created_at",
+  "timestamp",
+  "time",
+];
 const QUANTITY_FIELDS = [
-  'amount',
-  'total',
-  'value',
-  'balance',
-  'repetitions',
-  'reps',
-  'sets',
-  'weight',
-  'duration',
-  'distance',
-  'count',
-  'quantity',
+  "amount",
+  "total",
+  "value",
+  "balance",
+  "repetitions",
+  "reps",
+  "sets",
+  "weight",
+  "duration",
+  "distance",
+  "count",
+  "quantity",
 ];
 
 const MAX_SUMMARY_LENGTH = 220;
 
 function cleanValue(value: Primitive): string | undefined {
   if (value === null || value === undefined) return undefined;
-  if (typeof value === 'boolean') return value ? 'yes' : 'no';
-  if (typeof value === 'number') return Number.isFinite(value) ? value.toString() : undefined;
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "number")
+    return Number.isFinite(value) ? value.toString() : undefined;
   const trimmed = String(value).trim();
   return trimmed.length ? trimmed : undefined;
 }
 
-function findFieldValue(props: Record<string, unknown>, candidates: string[]): { key: string; value: string } | null {
+function findFieldValue(
+  props: Record<string, unknown>,
+  candidates: string[],
+): { key: string; value: string } | null {
   for (const candidate of candidates) {
-    const key = Object.keys(props).find(k => k.toLowerCase() === candidate.toLowerCase());
+    const key = Object.keys(props).find(
+      (k) => k.toLowerCase() === candidate.toLowerCase(),
+    );
     if (!key) continue;
     const value = cleanValue(props[key] as Primitive);
     if (value) {
@@ -62,61 +83,70 @@ function findFieldValue(props: Record<string, unknown>, candidates: string[]): {
 function humanizeType(type: string): string {
   const normalized = normalizeRecordType(type).type || type;
   return normalized
-    .split('_')
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function formatDate(value: string): string | null {
   const asDate = new Date(value);
   if (!isNaN(asDate.getTime())) {
-    return asDate.toISOString().split('T')[0];
+    return asDate.toISOString().split("T")[0];
   }
   return value.length <= 30 ? value : `${value.slice(0, 27)}...`;
 }
 
 export function summarizeDatasetRecord(params: DatasetSummaryParams): string {
-  const { fileName = 'dataset', rowCount, truncated = false, samples } = params;
-  const sampleProps = samples.flatMap(sample => Object.keys(sample.properties || {}));
+  const { fileName = "dataset", rowCount, truncated = false, samples } = params;
+  const sampleProps = samples.flatMap((sample) =>
+    Object.keys(sample.properties || {}),
+  );
   const headers = Array.from(
     new Set(
       sampleProps
-        .filter(key => key !== 'csv_origin')
-        .filter(key => typeof key === 'string' && key.trim().length > 0)
-    )
+        .filter((key) => key !== "csv_origin")
+        .filter((key) => typeof key === "string" && key.trim().length > 0),
+    ),
   );
 
   const typeCounts = new Map<string, number>();
-  samples.forEach(sample => {
+  samples.forEach((sample) => {
     if (sample.type) {
       const label = humanizeType(sample.type);
       typeCounts.set(label, (typeCounts.get(label) ?? 0) + 1);
     }
   });
 
-  const headerSnippet = headers.length ? headers.slice(0, 4).join(', ') : 'columns detected';
+  const headerSnippet = headers.length
+    ? headers.slice(0, 4).join(", ")
+    : "columns detected";
   const typeSnippet = [...typeCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 2)
     .map(([label, count]) => `${label} (${count})`)
-    .join(', ');
+    .join(", ");
 
   const rowDescriptor = truncated ? `${rowCount}+ rows` : `${rowCount} rows`;
   const clauses = [`${rowDescriptor}`];
   if (headers.length) {
-    clauses.push(`fields ${headerSnippet}${headers.length > 4 ? '…' : ''}`);
+    clauses.push(`fields ${headerSnippet}${headers.length > 4 ? "…" : ""}`);
   }
   if (typeSnippet) {
     clauses.push(`types ${typeSnippet}`);
   }
 
-  const summary = `${fileName} dataset with ${clauses.join('; ')}`;
-  return summary.length > MAX_SUMMARY_LENGTH ? `${summary.slice(0, MAX_SUMMARY_LENGTH - 1)}…` : summary;
+  const summary = `${fileName} dataset with ${clauses.join("; ")}`;
+  return summary.length > MAX_SUMMARY_LENGTH
+    ? `${summary.slice(0, MAX_SUMMARY_LENGTH - 1)}…`
+    : summary;
 }
 
 export function summarizeCsvRowRecord(params: RowSummaryParams): string {
   const { rowIndex, type, properties } = params;
-  const props: Record<string, Primitive> = { ...properties } as Record<string, Primitive>;
+  const props: Record<string, Primitive> = { ...properties } as Record<
+    string,
+    Primitive
+  >;
   delete props.csv_origin;
 
   const label = findFieldValue(props, LABEL_FIELDS);
@@ -148,13 +178,13 @@ export function summarizeCsvRowRecord(params: RowSummaryParams): string {
     parts.push(...secondary);
   }
 
-  const prefix = label ? '' : `${humanizeType(type)} row ${rowIndex + 1}`;
+  const prefix = label ? "" : `${humanizeType(type)} row ${rowIndex + 1}`;
   const assembled = prefix ? [prefix, ...parts] : parts;
-  const summary = assembled.join(parts.length ? ' — ' : '');
+  const summary = assembled.join(parts.length ? " — " : "");
   if (summary.trim().length === 0) {
     return `${humanizeType(type)} row ${rowIndex + 1}`;
   }
-  return summary.length > MAX_SUMMARY_LENGTH ? `${summary.slice(0, MAX_SUMMARY_LENGTH - 1)}…` : summary;
+  return summary.length > MAX_SUMMARY_LENGTH
+    ? `${summary.slice(0, MAX_SUMMARY_LENGTH - 1)}…`
+    : summary;
 }
-
-

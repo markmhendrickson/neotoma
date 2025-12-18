@@ -10,20 +10,22 @@ This document defines the global data model commitments for Neotoma, including t
 
 ---
 
-## Four-Layer Truth Model
+## Three-Layer Truth Model
 
-Neotoma implements a four-layer truth model that decouples ingestion order from truth:
+Neotoma implements a three-layer truth model that decouples ingestion order from truth:
 
-1. **Document** — the file itself (PDF, email, CSV, image)
-2. **Entity** — the logical thing in the world with a stable ID
-3. **Observation** — granular, source-specific facts extracted from documents
+1. **Payload (Document)** — unified ingestion primitive (files + agent data)
+2. **Observation** — granular, source-specific facts extracted from payloads
+3. **Entity** — the logical thing in the world with a stable ID
 4. **Snapshot** — deterministic reducer output representing current truth
 
 This model enables:
+
 - Multiple sources to contribute observations about the same entity
 - Deterministic merging via reducers
-- Full provenance: every snapshot field traces to specific observations and documents
+- Full provenance: every snapshot field traces to specific observations and payloads
 - Out-of-order ingestion support
+- Unified ingestion: files and agent submissions both create payloads
 
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
 
@@ -31,12 +33,16 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 
 ## Core Entities
 
-### Document
+### Payload
 
-- `id` (UUID, deterministic from content hash + user + timestamp)
-- `type` (file type: PDF, JPG, PNG, CSV, etc.)
-- `raw_text` (original extracted text, immutable)
-- `provenance` (source_file, ingestion_timestamp, user_id)
+- `id` (UUID)
+- `payload_submission_id` (UUIDv7: time-ordered submission ID)
+- `payload_content_id` (hash-based: deterministic for deduplication)
+- `capability_id` (versioned intent: e.g., "neotoma:store_invoice:v1")
+- `body` (JSONB: payload data)
+- `provenance` (source_refs, extracted_at, extractor_version, agent_id)
+- `embedding` (1536-dim vector, optional)
+- `summary` (text summary, optional)
 
 ### Observation
 
@@ -44,11 +50,11 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 - `entity_id` (hash-based: `ent_{sha256(type:normalized_name)}`)
 - `entity_type` (person, company, location, invoice, etc.)
 - `schema_version` (version of schema used for extraction)
-- `source_record_id` (which document/record this observation came from)
+- `source_payload_id` (which payload this observation came from)
 - `observed_at` (timestamp when observation was made)
 - `specificity_score` (0-1, how specific this observation is)
 - `source_priority` (integer, priority of source)
-- `fields` (JSONB: granular facts extracted from document)
+- `fields` (JSONB: granular facts extracted from payload)
 
 ### Entity
 
@@ -120,4 +126,3 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 - [`docs/subsystems/schema.md`](../subsystems/schema.md) — Schema handling
 - [`docs/foundation/entity_resolution.md`](./entity_resolution.md) — Entity resolution doctrine
 - [`docs/foundation/timeline_events.md`](./timeline_events.md) — Timeline and event doctrine
-

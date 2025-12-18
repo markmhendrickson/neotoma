@@ -1,15 +1,18 @@
-import type { ConnectorSecrets, ExternalConnector } from '../../services/connectors.js';
+import type {
+  ConnectorSecrets,
+  ExternalConnector,
+} from "../../services/connectors.js";
 
 export type ProviderCapability =
-  | 'messages'
-  | 'tasks'
-  | 'calendar'
-  | 'media'
-  | 'email'
-  | 'files'
-  | 'notes'
-  | 'records'
-  | 'tickets';
+  | "messages"
+  | "tasks"
+  | "calendar"
+  | "media"
+  | "email"
+  | "files"
+  | "notes"
+  | "records"
+  | "tickets";
 
 export interface ProviderRecord {
   type: string;
@@ -52,4 +55,3 @@ export interface ProviderClient {
   readonly defaultRecordType: string;
   fetchUpdates(input: FetchUpdatesInput): Promise<FetchUpdatesResult>;
 }
-

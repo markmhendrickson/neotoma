@@ -7,6 +7,7 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { supabase, type NeotomaRecord } from "./db.js";
+import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { generateEmbedding, getRecordText } from "./embeddings.js";
 import { generateRecordSummary } from "./services/summary.js";
@@ -61,7 +62,7 @@ export class NeotomaServer {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     this.setupToolHandlers();
@@ -72,34 +73,52 @@ export class NeotomaServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "store_record",
+          name: "submit_payload",
           description:
-            "Store a new data record with extensible properties and optional file uploads. Optionally include an embedding vector for semantic search.",
+            "Submit a payload envelope for compilation into payloads and observations. Agents submit capability_id + body + provenance; server handles schema reasoning, deduplication, and entity extraction.",
           inputSchema: {
             type: "object",
             properties: {
-              type: {
+              capability_id: {
                 type: "string",
                 description:
-                  "Record type identifier (e.g., transaction, exercise, note)",
+                  "Versioned capability identifier (e.g., 'neotoma:store_invoice:v1', 'neotoma:store_note:v1')",
               },
-              properties: {
+              body: {
                 type: "object",
-                description: "Flexible properties as key-value pairs",
+                description: "Payload data as key-value pairs",
               },
-              file_urls: {
-                type: "array",
-                items: { type: "string" },
-                description: "URLs to files associated with this record",
+              provenance: {
+                type: "object",
+                properties: {
+                  source_refs: {
+                    type: "array",
+                    items: { type: "string" },
+                    description:
+                      "Immediate source payload IDs (not full chain)",
+                  },
+                  extracted_at: {
+                    type: "string",
+                    description: "ISO 8601 timestamp",
+                  },
+                  extractor_version: {
+                    type: "string",
+                    description:
+                      "Extractor version (e.g., 'neotoma-mcp:v0.1.1')",
+                  },
+                  agent_id: {
+                    type: "string",
+                    description: "Optional agent identifier",
+                  },
+                },
+                required: ["source_refs", "extracted_at", "extractor_version"],
               },
-              embedding: {
-                type: "array",
-                items: { type: "number" },
-                description:
-                  "Optional 1536-dimensional embedding vector for semantic search (e.g., OpenAI text-embedding-3-small)",
+              client_request_id: {
+                type: "string",
+                description: "Optional client request ID for retry correlation",
               },
             },
-            required: ["type", "properties"],
+            required: ["capability_id", "body", "provenance"],
           },
         },
         {
@@ -668,8 +687,8 @@ export class NeotomaServer {
         }
 
         switch (name) {
-          case "store_record":
-            return await this.storeRecord(args);
+          case "submit_payload":
+            return await this.submitPayload(args);
           case "update_record":
             return await this.updateRecord(args);
           case "retrieve_records":
@@ -715,7 +734,7 @@ export class NeotomaServer {
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
-              `Unknown tool: ${name}`
+              `Unknown tool: ${name}`,
             );
         }
       } catch (error) {
@@ -724,78 +743,60 @@ export class NeotomaServer {
         }
         throw new McpError(
           ErrorCode.InternalError,
-          error instanceof Error ? error.message : "Unknown error"
+          error instanceof Error ? error.message : "Unknown error",
         );
       }
     });
   }
 
-  private async storeRecord(
-    args: unknown
+  private async submitPayload(
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      type: z.string(),
-      properties: z.record(z.unknown()),
-      file_urls: z.array(z.string()).optional(),
-      embedding: z.array(z.number()).optional(),
-    });
+    // Import payload services dynamically
+    const { validatePayloadEnvelope } =
+      await import("./services/payload_schema.js");
+    const { compilePayload } = await import("./services/payload_compiler.js");
 
-    const {
-      type,
-      properties,
-      file_urls,
-      embedding: providedEmbedding,
-    } = schema.parse(args);
-    const normalizedType = normalizeRecordType(type).type;
+    // Validate payload envelope
+    const envelope = validatePayloadEnvelope(args);
 
-    // Generate embedding if not provided and OpenAI is configured
-    // Filter out empty arrays - they're invalid for PostgreSQL vector type
-    let embedding: number[] | null = null;
-    if (
-      providedEmbedding &&
-      Array.isArray(providedEmbedding) &&
-      providedEmbedding.length > 0
-    ) {
-      embedding = providedEmbedding;
-    } else if (!providedEmbedding && config.openaiApiKey) {
-      const recordText = getRecordText(normalizedType, properties);
-      embedding = await generateEmbedding(recordText);
-    }
-
-    // Generate summary
-    const summary = await generateRecordSummary(
-      normalizedType,
-      properties,
-      file_urls || []
-    );
-
-    const insertData: Record<string, unknown> = {
-      type: normalizedType,
-      properties: properties,
-      file_urls: file_urls || [],
-    };
-    if (embedding) {
-      insertData.embedding = embedding;
-    }
-    if (summary) {
-      insertData.summary = summary;
-    }
-
-    const { data, error } = await supabase
-      .from("records")
-      .insert(insertData)
-      .select()
-      .single();
-
-    if (error) throw error;
+    // Compile payload (handles deduplication, normalization, observation extraction)
+    const result = await compilePayload(envelope);
 
     return {
-      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              payload_id: result.payload_id,
+              payload_content_id: result.payload_content_id,
+              payload_submission_id: result.payload_submission_id,
+              created: result.created,
+              message: result.created
+                ? "Payload created and observations extracted"
+                : "Duplicate payload found, returning existing",
+            },
+            null,
+            2,
+          ),
+        },
+      ],
     };
   }
 
+  // DEPRECATED: store_record replaced by submit_payload in v0.1.1
+  // Kept for reference only - not exposed in MCP tool list
+  private async storeRecord(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    throw new Error(
+      "store_record has been replaced by submit_payload in v0.1.1. Please use submit_payload instead.",
+    );
+  }
+
   private async updateRecord(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       id: z.string(),
@@ -897,7 +898,7 @@ export class NeotomaServer {
       const generatedSummary = await generateRecordSummary(
         newType,
         newProperties,
-        newFileUrls
+        newFileUrls,
       );
       if (generatedSummary) {
         updateData.summary = generatedSummary;
@@ -920,7 +921,7 @@ export class NeotomaServer {
   }
 
   private async retrieveRecords(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       type: z.string().optional(),
@@ -960,7 +961,7 @@ export class NeotomaServer {
         query_embedding = generated || undefined;
         if (!query_embedding && search_mode === "semantic") {
           throw new Error(
-            "Failed to generate query embedding. Ensure OPENAI_API_KEY is configured or provide query_embedding."
+            "Failed to generate query embedding. Ensure OPENAI_API_KEY is configured or provide query_embedding.",
           );
         }
       }
@@ -968,13 +969,13 @@ export class NeotomaServer {
       if (!query_embedding) {
         if (search_mode === "semantic") {
           throw new Error(
-            "query_embedding required for semantic search, or configure OPENAI_API_KEY for automatic generation"
+            "query_embedding required for semantic search, or configure OPENAI_API_KEY for automatic generation",
           );
         }
         // If both mode, just skip semantic and do keyword only
       } else if (query_embedding.length !== 1536) {
         throw new Error(
-          "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)"
+          "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)",
         );
       }
 
@@ -997,7 +998,7 @@ export class NeotomaServer {
 
         if (candidates) {
           const queryNorm = Math.sqrt(
-            query_embedding.reduce((sum, val) => sum + val * val, 0)
+            query_embedding.reduce((sum, val) => sum + val * val, 0),
           );
 
           const semanticMatches = candidates
@@ -1013,13 +1014,13 @@ export class NeotomaServer {
 
               const dotProduct = query_embedding.reduce(
                 (sum, val, i) => sum + val * recEmbedding[i],
-                0
+                0,
               );
               const recNorm = Math.sqrt(
                 recEmbedding.reduce(
                   (sum: number, val: number) => sum + val * val,
-                  0
-                )
+                  0,
+                ),
               );
               const similarity = dotProduct / (queryNorm * recNorm);
 
@@ -1060,7 +1061,7 @@ export class NeotomaServer {
       if (keywordCandidates) {
         const searchTerms = search.map((term) => term.toLowerCase());
         const keywordMatches = keywordCandidates.filter((rec: NeotomaRecord) =>
-          recordMatchesKeywordSearch(rec, searchTerms)
+          recordMatchesKeywordSearch(rec, searchTerms),
         );
 
         // Track total count before limiting
@@ -1175,7 +1176,7 @@ export class NeotomaServer {
           text: JSON.stringify(
             { records: results, total: totalCount },
             null,
-            2
+            2,
           ),
         },
       ],
@@ -1183,7 +1184,7 @@ export class NeotomaServer {
   }
 
   private async deleteRecord(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({ id: z.string() });
     const { id } = schema.parse(args);
@@ -1203,7 +1204,7 @@ export class NeotomaServer {
   }
 
   private async uploadFile(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       record_id: z.string().uuid().optional(),
@@ -1226,13 +1227,13 @@ export class NeotomaServer {
             ErrorCode.InvalidParams,
             `properties must be valid JSON: ${
               error instanceof Error ? error.message : "parse error"
-            }`
+            }`,
           );
         }
         if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
           throw new McpError(
             ErrorCode.InvalidParams,
-            "properties must be a JSON object"
+            "properties must be a JSON object",
           );
         }
         overrideProperties = parsed as Record<string, unknown>;
@@ -1267,7 +1268,7 @@ export class NeotomaServer {
       if (fetchError || !existing) {
         throw new McpError(
           ErrorCode.InvalidParams,
-          `Record ${record_id} not found`
+          `Record ${record_id} not found`,
         );
       }
 
@@ -1284,7 +1285,7 @@ export class NeotomaServer {
       : safeBase;
     const fileName = `${recordId}/${Date.now()}-${baseName.replace(
       /\.+/g,
-      "-"
+      "-",
     )}${ext}`;
 
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -1326,7 +1327,7 @@ export class NeotomaServer {
   }
 
   private async getFileUrl(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       file_path: z.string(),
@@ -1356,7 +1357,7 @@ export class NeotomaServer {
     if (!isPlaidConfigured()) {
       throw new McpError(
         ErrorCode.InternalError,
-        "Plaid integration is not configured. Set PLAID_CLIENT_ID and PLAID_SECRET."
+        "Plaid integration is not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.",
       );
     }
   }
@@ -1393,19 +1394,19 @@ export class NeotomaServer {
 
   private requirePlaidItem(
     item: PlaidItemRow | null,
-    identifier: string | undefined
+    identifier: string | undefined,
   ): PlaidItemRow {
     if (!item) {
       throw new McpError(
         ErrorCode.InvalidRequest,
-        `Plaid item ${identifier ?? "(unknown)"} not found`
+        `Plaid item ${identifier ?? "(unknown)"} not found`,
       );
     }
     return item;
   }
 
   private async plaidCreateLinkToken(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.ensurePlaidConfigured();
     const schema = z.object({
@@ -1429,7 +1430,7 @@ export class NeotomaServer {
   }
 
   private async plaidExchangePublicToken(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.ensurePlaidConfigured();
     const schema = z.object({
@@ -1470,13 +1471,13 @@ export class NeotomaServer {
             primary_color: context.institution.primary_color,
           }
         : context.item.institution_id
-        ? {
-            id: context.item.institution_id,
-            name: storedItem.institution_name,
-          }
-        : null,
+          ? {
+              id: context.item.institution_id,
+              name: storedItem.institution_name,
+            }
+          : null,
       accounts: context.accounts.map((account) =>
-        this.summarizePlaidAccount(account)
+        this.summarizePlaidAccount(account),
       ),
       request_id: exchangeResult.requestId,
       initial_sync: syncSummary,
@@ -1486,7 +1487,7 @@ export class NeotomaServer {
   }
 
   private async plaidSync(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.ensurePlaidConfigured();
     const schema = z.object({
@@ -1501,7 +1502,7 @@ export class NeotomaServer {
     if (parsed.sync_all && (parsed.plaid_item_id || parsed.item_id)) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        "sync_all cannot be combined with plaid_item_id or item_id."
+        "sync_all cannot be combined with plaid_item_id or item_id.",
       );
     }
 
@@ -1512,26 +1513,26 @@ export class NeotomaServer {
       if (items.length === 0) {
         throw new McpError(
           ErrorCode.InvalidRequest,
-          "No Plaid items available to sync."
+          "No Plaid items available to sync.",
         );
       }
       targets.push(...items);
     } else if (parsed.plaid_item_id) {
       const item = this.requirePlaidItem(
         await getPlaidItemById(parsed.plaid_item_id),
-        parsed.plaid_item_id
+        parsed.plaid_item_id,
       );
       targets.push(item);
     } else if (parsed.item_id) {
       const item = this.requirePlaidItem(
         await getPlaidItemByItemId(parsed.item_id),
-        parsed.item_id
+        parsed.item_id,
       );
       targets.push(item);
     } else {
       throw new McpError(
         ErrorCode.InvalidParams,
-        "Provide plaid_item_id, item_id, or set sync_all to true."
+        "Provide plaid_item_id, item_id, or set sync_all to true.",
       );
     }
 
@@ -1556,7 +1557,7 @@ export class NeotomaServer {
   }
 
   private async plaidListItems(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     this.ensurePlaidConfigured();
     const schema = z.object({
@@ -1570,13 +1571,13 @@ export class NeotomaServer {
     if (parsed.plaid_item_id) {
       const item = this.requirePlaidItem(
         await getPlaidItemById(parsed.plaid_item_id),
-        parsed.plaid_item_id
+        parsed.plaid_item_id,
       );
       items = [item];
     } else if (parsed.item_id) {
       const item = this.requirePlaidItem(
         await getPlaidItemByItemId(parsed.item_id),
-        parsed.item_id
+        parsed.item_id,
       );
       items = [item];
     } else {
@@ -1594,7 +1595,7 @@ export class NeotomaServer {
   }
 
   private async syncProviderImports(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       provider: z.string(),
@@ -1608,7 +1609,7 @@ export class NeotomaServer {
     if (!definition) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `Unknown provider: ${parsed.provider}`
+        `Unknown provider: ${parsed.provider}`,
       );
     }
 
@@ -1634,7 +1635,7 @@ export class NeotomaServer {
   }
 
   private async getEntitySnapshot(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string(),
@@ -1650,7 +1651,7 @@ export class NeotomaServer {
     if (error || !snapshot) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `Entity snapshot not found for ID: ${parsed.entity_id}`
+        `Entity snapshot not found for ID: ${parsed.entity_id}`,
       );
     }
 
@@ -1658,7 +1659,7 @@ export class NeotomaServer {
   }
 
   private async listObservations(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string(),
@@ -1677,7 +1678,7 @@ export class NeotomaServer {
     if (error) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to list observations: ${error.message}`
+        `Failed to list observations: ${error.message}`,
       );
     }
 
@@ -1688,7 +1689,7 @@ export class NeotomaServer {
   }
 
   private async getFieldProvenance(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string(),
@@ -1706,7 +1707,7 @@ export class NeotomaServer {
     if (snapshotError || !snapshot) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `Entity snapshot not found for ID: ${parsed.entity_id}`
+        `Entity snapshot not found for ID: ${parsed.entity_id}`,
       );
     }
 
@@ -1716,7 +1717,7 @@ export class NeotomaServer {
     if (!observationId) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `Field '${parsed.field_name}' not found in entity snapshot`
+        `Field '${parsed.field_name}' not found in entity snapshot`,
       );
     }
 
@@ -1730,7 +1731,7 @@ export class NeotomaServer {
     if (obsError || !observation) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to get observation: ${obsError?.message}`
+        `Failed to get observation: ${obsError?.message}`,
       );
     }
 
@@ -1744,7 +1745,7 @@ export class NeotomaServer {
     if (recordError || !record) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to get source record: ${recordError?.message}`
+        `Failed to get source record: ${recordError?.message}`,
       );
     }
 
@@ -1764,7 +1765,7 @@ export class NeotomaServer {
   }
 
   private async createRelationship(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       relationship_type: z.string(),
@@ -1793,7 +1794,7 @@ export class NeotomaServer {
     if (error) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to create relationship: ${error.message}`
+        `Failed to create relationship: ${error.message}`,
       );
     }
 
@@ -1801,7 +1802,7 @@ export class NeotomaServer {
   }
 
   private async listRelationships(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string(),
@@ -1809,7 +1810,7 @@ export class NeotomaServer {
     });
     const parsed = schema.parse(args ?? {});
 
-    let relationships: any[] = [];
+    const relationships: any[] = [];
 
     if (parsed.direction === "outbound" || parsed.direction === "both") {
       const { data: outbound, error: outboundError } = await supabase
@@ -1819,7 +1820,7 @@ export class NeotomaServer {
 
       if (!outboundError && outbound) {
         relationships.push(
-          ...outbound.map((r) => ({ ...r, direction: "outbound" }))
+          ...outbound.map((r) => ({ ...r, direction: "outbound" })),
         );
       }
     }
@@ -1832,7 +1833,7 @@ export class NeotomaServer {
 
       if (!inboundError && inbound) {
         relationships.push(
-          ...inbound.map((r) => ({ ...r, direction: "inbound" }))
+          ...inbound.map((r) => ({ ...r, direction: "inbound" })),
         );
       }
     }
@@ -1844,7 +1845,7 @@ export class NeotomaServer {
   }
 
   private async retrieveEntities(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_type: z.string().optional(),
@@ -1867,7 +1868,7 @@ export class NeotomaServer {
     if (countError) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to count entities: ${countError.message}`
+        `Failed to count entities: ${countError.message}`,
       );
     }
 
@@ -1903,7 +1904,7 @@ export class NeotomaServer {
   }
 
   private async listTimelineEvents(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       event_type: z.string().optional(),
@@ -1960,7 +1961,7 @@ export class NeotomaServer {
     if (countError) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to count timeline events: ${countError.message}`
+        `Failed to count timeline events: ${countError.message}`,
       );
     }
 
@@ -1972,7 +1973,7 @@ export class NeotomaServer {
     if (error) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to list timeline events: ${error.message}`
+        `Failed to list timeline events: ${error.message}`,
       );
     }
 
@@ -1983,7 +1984,7 @@ export class NeotomaServer {
   }
 
   private async getEntityByIdentifier(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       identifier: z.string(),
@@ -2011,7 +2012,7 @@ export class NeotomaServer {
     if (error) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to search entities: ${error.message}`
+        `Failed to search entities: ${error.message}`,
       );
     }
 
@@ -2019,7 +2020,7 @@ export class NeotomaServer {
     if ((!entities || entities.length === 0) && parsed.entity_type) {
       const possibleId = generateEntityId(
         parsed.entity_type,
-        parsed.identifier
+        parsed.identifier,
       );
       const { data: entityById, error: idError } = await supabase
         .from("entities")
@@ -2060,7 +2061,7 @@ export class NeotomaServer {
   }
 
   private async getRelatedEntities(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       entity_id: z.string(),
@@ -2094,7 +2095,7 @@ export class NeotomaServer {
           ) {
             outboundQuery = outboundQuery.in(
               "relationship_type",
-              parsed.relationship_types
+              parsed.relationship_types,
             );
           }
 
@@ -2125,7 +2126,7 @@ export class NeotomaServer {
           ) {
             inboundQuery = inboundQuery.in(
               "relationship_type",
-              parsed.relationship_types
+              parsed.relationship_types,
             );
           }
 
@@ -2182,13 +2183,13 @@ export class NeotomaServer {
       total_relationships: allRelationships.length,
       hops_traversed: Math.min(
         parsed.max_hops,
-        Array.from(visited).length > 1 ? 1 : 0
+        Array.from(visited).length > 1 ? 1 : 0,
       ),
     });
   }
 
   private async getGraphNeighborhood(
-    args: unknown
+    args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const schema = z.object({
       node_id: z.string(),
@@ -2216,7 +2217,7 @@ export class NeotomaServer {
       if (entityError || !entity) {
         throw new McpError(
           ErrorCode.InvalidParams,
-          `Entity not found: ${parsed.node_id}`
+          `Entity not found: ${parsed.node_id}`,
         );
       }
 
@@ -2239,7 +2240,7 @@ export class NeotomaServer {
           .from("relationships")
           .select("*")
           .or(
-            `source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`
+            `source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`,
           );
 
         if (!relError && relationships) {
@@ -2321,7 +2322,7 @@ export class NeotomaServer {
       if (recordError || !record) {
         throw new McpError(
           ErrorCode.InvalidParams,
-          `Record not found: ${parsed.node_id}`
+          `Record not found: ${parsed.node_id}`,
         );
       }
 
@@ -2369,8 +2370,8 @@ export class NeotomaServer {
                   .select("*")
                   .or(
                     `source_entity_id.in.(${entityIds.join(
-                      ","
-                    )}),target_entity_id.in.(${entityIds.join(",")})`
+                      ",",
+                    )}),target_entity_id.in.(${entityIds.join(",")})`,
                   )
                   .limit(1000);
 
@@ -2389,7 +2390,7 @@ export class NeotomaServer {
 
   private setupErrorHandler(): void {
     this.server.onerror = (error) => {
-      console.error("[MCP Error]", error);
+      logger.error("[MCP Error]", error);
     };
 
     process.on("SIGINT", async () => {
@@ -2401,6 +2402,6 @@ export class NeotomaServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("[Neotoma MCP] Server running on stdio");
+    logger.error("[Neotoma MCP] Server running on stdio");
   }
 }

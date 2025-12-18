@@ -2,7 +2,7 @@
  * Unit tests for crypto library
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   generateX25519KeyPair,
   generateEd25519KeyPair,
@@ -17,7 +17,7 @@ import {
   exportKeyPair,
   importKeyPair,
   maskPrivateKey,
-} from './index.js';
+} from "./index.js";
 
 describe('Key Generation', () => {
   it('should generate X25519 keypair', async () => {
@@ -221,7 +221,7 @@ describe('Request Authentication', () => {
     const body = '{"test": "data"}';
 
     const { bearerToken } = signRequest(body, keyPair);
-    const wrongSignature = 'invalid_signature';
+    const wrongSignature = "invalid_signature";
 
     const isValid = verifyRequest(body, wrongSignature, bearerToken);
     expect(isValid).toBe(false);

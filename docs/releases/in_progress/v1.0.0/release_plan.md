@@ -26,7 +26,7 @@ This document provides the overview and coordination framework for v1.0.0. Detai
 - **Release Type**: Marketed (public launch with marketing activities)
 - **Goal**: Ship the first production-capable Neotoma Truth Layer with structured personal data memory (dual-path ingestion), entity resolution, timelines, cross-platform MCP access, and minimal UI to support Tier 1 ICP workflows.
 - **Priority**: P0 (critical)
-- **Target Ship Date**: 2026-02-24 (tentative, based on Dec 9, 2025 start date)
+- **Target Ship Date**: 2026-01-23 (revised Dec 12, 2025: discovery + marketing in parallel starting Dec 12, then 2-3 days development)
 - **Discovery Required**: Yes (pre-release discovery + continuous discovery)
 - **Marketing Required**: Yes (hybrid: pre-launch + post-launch)
 - **Deployment**: Production (neotoma.io)
@@ -201,7 +201,7 @@ Marketing is **required** for MVP (marketed release).
 - **Strategy**: Hybrid (pre-launch + post-launch)
 - **Platform Prioritization**: P0 (Twitter, Indie Hackers, Product Hunt, Hacker News) for launch; P1 (LinkedIn, Reddit, Discord) for sustained growth
 - **Automation**: Planned for post-MVP (see `marketing_automation_plan.md`)
-- **Pre-Launch Activities** (Week -4 to Week 0): Waitlist building, early access beta, content teasers
+- **Pre-Launch Activities** (Week -8 to -5, parallel with discovery): Waitlist building, early access beta, content teasers
 - **Post-Launch Activities** (Day 0 to Week 4): Launch announcement, waitlist conversion, organic growth, partnership outreach
 - **Budget**: $0 (organic only for MVP)
 - **Detailed Plans**: See `pre_launch_marketing_plan.md`, `post_launch_marketing_plan.md`, `marketing_segments_plan.md`, `marketing_metrics_plan.md`, `marketing_automation_plan.md`

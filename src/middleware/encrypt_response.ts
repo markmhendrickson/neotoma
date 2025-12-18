@@ -3,8 +3,8 @@
  * Encrypts HTTP responses when client requests encrypted mode
  */
 
-import type { Request, Response, NextFunction } from 'express';
-import { encryptResponse } from '../services/encryption_service.js';
+import type { Request, Response, NextFunction } from "express";
+import { encryptResponse } from "../services/encryption_service.js";
 
 /**
  * Middleware to encrypt responses if requested

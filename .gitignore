@@ -17,3 +17,5 @@ docs/private/
 data.vite/
 data
 public/assets/
+.cursor/mcp.json
+docs/developer/mcp.json.example

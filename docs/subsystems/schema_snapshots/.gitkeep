@@ -1,0 +1,6 @@
+# This file ensures the schema_snapshots directory is tracked by git
+# Schema snapshot JSON files will be created here by npm run schema:export
+
+
+
+

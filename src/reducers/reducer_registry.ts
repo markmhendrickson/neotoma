@@ -1,22 +1,25 @@
 /**
  * Reducer Registry for Reducer Versioning (FU-052)
- * 
+ *
  * Registry that maps reducer versions to reducer functions.
  */
 
-import { StateEvent } from '../events/event_schema.js';
-import { applyReducer } from './record_reducer.js';
-import type { NeotomaRecord } from '../db.js';
+import { StateEvent } from "../events/event_schema.js";
+import { applyReducer } from "./record_reducer.js";
+import type { NeotomaRecord } from "../db.js";
 
-export type ReducerFunction = (event: StateEvent, currentState: NeotomaRecord | null) => NeotomaRecord;
+export type ReducerFunction = (
+  event: StateEvent,
+  currentState: NeotomaRecord | null,
+) => NeotomaRecord;
 
 export class ReducerRegistry {
   private reducers: Map<string, ReducerFunction> = new Map();
-  private defaultVersion: string = '1.0';
+  private defaultVersion: string = "1.0";
 
   constructor() {
     // Register default reducer version 1.0
-    this.register('1.0', applyReducer);
+    this.register("1.0", applyReducer);
   }
 
   /**
@@ -35,7 +38,9 @@ export class ReducerRegistry {
       // Fallback to default version if version not found
       const defaultReducer = this.reducers.get(this.defaultVersion);
       if (!defaultReducer) {
-        throw new Error(`No reducer found for version ${version} and default version ${this.defaultVersion} not available`);
+        throw new Error(
+          `No reducer found for version ${version} and default version ${this.defaultVersion} not available`,
+        );
       }
       return defaultReducer;
     }
@@ -81,7 +86,7 @@ export function getReducerVersion(event: StateEvent): string {
  */
 export function applyVersionedReducer(
   event: StateEvent,
-  currentState: NeotomaRecord | null
+  currentState: NeotomaRecord | null,
 ): NeotomaRecord {
   return reducerRegistry.apply(event, currentState);
 }
@@ -89,13 +94,18 @@ export function applyVersionedReducer(
 /**
  * Migrate event to new reducer version (stub for future migrations)
  */
-export function migrateEventToVersion(event: StateEvent, targetVersion: string): StateEvent {
+export function migrateEventToVersion(
+  event: StateEvent,
+  targetVersion: string,
+): StateEvent {
   // Stub: Future implementation will handle event migration
   // For now, return event as-is
   if (event.reducer_version === targetVersion) {
     return event;
   }
-  
+
   // In future, this will transform event payload to match new reducer version
-  throw new Error(`Event migration from version ${event.reducer_version || '1.0'} to ${targetVersion} not yet implemented`);
+  throw new Error(
+    `Event migration from version ${event.reducer_version || "1.0"} to ${targetVersion} not yet implemented`,
+  );
 }

@@ -1,7 +1,7 @@
-import { supabase, type NeotomaRecord } from '../db.js';
-import { generateRecordSummary } from './summary.js';
+import { supabase, type NeotomaRecord } from "../db.js";
+import { generateRecordSummary } from "./summary.js";
 
-export type MergeStrategy = 'replace' | 'merge';
+export type MergeStrategy = "replace" | "merge";
 
 export interface ExternalRecordInput {
   type: string;
@@ -25,7 +25,7 @@ function ensureExternalIdentifiers(
   properties: Record<string, unknown>,
   externalSource: string,
   externalId?: string,
-  externalHash?: string
+  externalHash?: string,
 ): Record<string, unknown> {
   const next: Record<string, unknown> = {
     ...properties,
@@ -43,9 +43,9 @@ function ensureExternalIdentifiers(
 function mergeProperties(
   existing: Record<string, unknown> | null,
   incoming: Record<string, unknown>,
-  strategy: MergeStrategy
+  strategy: MergeStrategy,
 ): Record<string, unknown> {
-  if (strategy === 'merge' && existing) {
+  if (strategy === "merge" && existing) {
     return {
       ...existing,
       ...incoming,
@@ -56,49 +56,70 @@ function mergeProperties(
 
 export async function upsertExternalRecord(
   payload: ExternalRecordInput,
-  embeddingBuilder?: (record: { type: string; properties: Record<string, unknown> }) => Promise<number[] | null>
+  embeddingBuilder?: (record: {
+    type: string;
+    properties: Record<string, unknown>;
+  }) => Promise<number[] | null>,
 ): Promise<UpsertResult> {
-  const { type, externalSource, externalId, externalHash, mergeStrategy = 'replace' } = payload;
+  const {
+    type,
+    externalSource,
+    externalId,
+    externalHash,
+    mergeStrategy = "replace",
+  } = payload;
 
   if (!externalSource) {
-    throw new Error('externalSource is required for external record upserts');
+    throw new Error("externalSource is required for external record upserts");
   }
   if (!externalId && !externalHash) {
-    throw new Error('externalId or externalHash is required for external record upserts');
+    throw new Error(
+      "externalId or externalHash is required for external record upserts",
+    );
   }
 
   const propertiesWithExternal = ensureExternalIdentifiers(
     payload.properties,
     externalSource,
     externalId,
-    externalHash
+    externalHash,
   );
 
-  const maybeBuildEmbedding = async (recordType: string, recordProps: Record<string, unknown>) => {
+  const maybeBuildEmbedding = async (
+    recordType: string,
+    recordProps: Record<string, unknown>,
+  ) => {
     if (!payload.generateEmbedding || !embeddingBuilder) return null;
     try {
-      const built = await embeddingBuilder({ type: recordType, properties: recordProps });
+      const built = await embeddingBuilder({
+        type: recordType,
+        properties: recordProps,
+      });
       return built && built.length > 0 ? built : null;
     } catch (error) {
-      console.warn('Failed to build embedding for external record', { type: recordType, externalId, error });
+      console.warn("Failed to build embedding for external record", {
+        type: recordType,
+        externalId,
+        error,
+      });
       return null;
     }
   };
 
   let recordQuery = supabase
-    .from('records')
-    .select('id, properties, file_urls')
-    .eq('external_source', externalSource);
+    .from("records")
+    .select("id, properties, file_urls")
+    .eq("external_source", externalSource);
 
   if (externalId) {
-    recordQuery = recordQuery.eq('external_id', externalId);
+    recordQuery = recordQuery.eq("external_id", externalId);
   } else {
-    recordQuery = recordQuery.eq('external_hash', externalHash);
+    recordQuery = recordQuery.eq("external_hash", externalHash);
   }
 
   const { data: existing, error: fetchError } = await recordQuery.maybeSingle();
 
-  if (fetchError && fetchError.code !== 'PGRST116') {
+  if (fetchError && fetchError.code !== "PGRST116") {
     throw fetchError;
   }
 
@@ -107,15 +128,17 @@ export async function upsertExternalRecord(
       mergeProperties(
         (existing.properties as Record<string, unknown>) ?? null,
         propertiesWithExternal,
-        mergeStrategy
+        mergeStrategy,
       ),
       externalSource,
       externalId,
-      externalHash
+      externalHash,
     );
 
     const updatedFileUrls =
-      payload.fileUrls !== undefined ? payload.fileUrls : (existing.file_urls as string[]) || [];
+      payload.fileUrls !== undefined
+        ? payload.fileUrls
+        : (existing.file_urls as string[]) || [];
 
     const updateData: Record<string, unknown> = {
       properties: mergedProperties,
@@ -132,15 +155,19 @@ export async function upsertExternalRecord(
     }
 
     // Generate summary
-    const summary = await generateRecordSummary(type, mergedProperties, updatedFileUrls);
+    const summary = await generateRecordSummary(
+      type,
+      mergedProperties,
+      updatedFileUrls,
+    );
     if (summary) {
       updateData.summary = summary;
     }
 
     const { data, error } = await supabase
-      .from('records')
+      .from("records")
       .update(updateData)
-      .eq('id', existing.id)
+      .eq("id", existing.id)
       .select()
       .single();
 
@@ -165,19 +192,26 @@ export async function upsertExternalRecord(
     external_hash: externalHash ?? null,
   };
 
-  const insertEmbedding = await maybeBuildEmbedding(type, propertiesWithExternal);
+  const insertEmbedding = await maybeBuildEmbedding(
+    type,
+    propertiesWithExternal,
+  );
   if (insertEmbedding) {
     insertPayload.embedding = insertEmbedding;
   }
 
   // Generate summary
-  const summary = await generateRecordSummary(type, propertiesWithExternal, payload.fileUrls ?? []);
+  const summary = await generateRecordSummary(
+    type,
+    propertiesWithExternal,
+    payload.fileUrls ?? [],
+  );
   if (summary) {
     insertPayload.summary = summary;
   }
 
   const { data, error } = await supabase
-    .from('records')
+    .from("records")
     .insert(insertPayload)
     .select()
     .single();
@@ -196,7 +230,10 @@ export async function upsertExternalRecord(
 
 export async function upsertExternalRecords(
   records: ExternalRecordInput[],
-  embeddingBuilder?: (record: { type: string; properties: Record<string, unknown> }) => Promise<number[] | null>
+  embeddingBuilder?: (record: {
+    type: string;
+    properties: Record<string, unknown>;
+  }) => Promise<number[] | null>,
 ): Promise<UpsertResult[]> {
   const results: UpsertResult[] = [];
   for (const record of records) {
@@ -210,25 +247,27 @@ export async function markExternalRecordRemoved(
   type: string,
   externalSource: string,
   identifiers: { externalId?: string; externalHash?: string },
-  removedAt: string = new Date().toISOString()
+  removedAt: string = new Date().toISOString(),
 ): Promise<NeotomaRecord | null> {
   if (!identifiers.externalId && !identifiers.externalHash) {
-    throw new Error('externalId or externalHash is required to mark a record removed');
+    throw new Error(
+      "externalId or externalHash is required to mark a record removed",
+    );
   }
 
   const { data: existing, error: fetchError } = await supabase
-    .from('records')
-    .select('id, properties')
-    .eq('type', type)
-    .eq('external_source', externalSource)
+    .from("records")
+    .select("id, properties")
+    .eq("type", type)
+    .eq("external_source", externalSource)
     .match(
       identifiers.externalId
         ? { external_id: identifiers.externalId }
-        : { external_hash: identifiers.externalHash }
+        : { external_hash: identifiers.externalHash },
     )
     .maybeSingle();
 
-  if (fetchError && fetchError.code !== 'PGRST116') {
+  if (fetchError && fetchError.code !== "PGRST116") {
     throw fetchError;
   }
 
@@ -239,17 +278,17 @@ export async function markExternalRecordRemoved(
   const currentProps = (existing.properties as Record<string, unknown>) || {};
   const updatedProps = {
     ...currentProps,
-    status: 'removed',
+    status: "removed",
     removed_at: removedAt,
   };
 
   const { data, error } = await supabase
-    .from('records')
+    .from("records")
     .update({
       properties: updatedProps,
       updated_at: removedAt,
     })
-    .eq('id', existing.id)
+    .eq("id", existing.id)
     .select()
     .single();
 
@@ -259,4 +298,3 @@ export async function markExternalRecordRemoved(
 
   return data as NeotomaRecord;
 }
-

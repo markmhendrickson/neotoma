@@ -3,15 +3,18 @@
  * Maps bearer tokens (base64url-encoded public keys) to user identities
  */
 
-import { parseBearerToken } from '../crypto/keys.js';
+import { parseBearerToken } from "../crypto/keys.js";
 
 // In-memory registry (in production, use persistent storage)
-const publicKeyRegistry = new Map<string, {
-  publicKey: Uint8Array;
-  userId?: string;
-  createdAt: Date;
-  lastUsed: Date;
-}>();
+const publicKeyRegistry = new Map<
+  string,
+  {
+    publicKey: Uint8Array;
+    userId?: string;
+    createdAt: Date;
+    lastUsed: Date;
+  }
+>();
 
 /**
  * Register a public key (derived from bearer token)
@@ -26,7 +29,7 @@ export function registerPublicKey(bearerToken: string, userId?: string): void {
       lastUsed: new Date(),
     });
   } catch (error) {
-    throw new Error('Invalid bearer token format');
+    throw new Error("Invalid bearer token format");
   }
 }
 
@@ -71,11 +74,14 @@ export function ensurePublicKeyRegistered(bearerToken: string): boolean {
 /**
  * Get all registered public keys (for admin/debugging)
  */
-export function getAllPublicKeys(): Array<{ bearerToken: string; userId?: string; createdAt: Date }> {
+export function getAllPublicKeys(): Array<{
+  bearerToken: string;
+  userId?: string;
+  createdAt: Date;
+}> {
   return Array.from(publicKeyRegistry.entries()).map(([token, entry]) => ({
     bearerToken: token,
     userId: entry.userId,
     createdAt: entry.createdAt,
   }));
 }
-

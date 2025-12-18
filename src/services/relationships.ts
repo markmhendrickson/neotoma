@@ -77,7 +77,7 @@ export class RelationshipsService {
    */
   async getRelationshipsForEntity(
     entityId: string,
-    direction: "outgoing" | "incoming" | "both" = "both"
+    direction: "outgoing" | "incoming" | "both" = "both",
   ): Promise<Relationship[]> {
     let query;
 
@@ -113,7 +113,7 @@ export class RelationshipsService {
    * Get relationships by type
    */
   async getRelationshipsByType(
-    type: RelationshipType
+    type: RelationshipType,
   ): Promise<Relationship[]> {
     const { data, error } = await supabase
       .from("relationships")
@@ -130,9 +130,3 @@ export class RelationshipsService {
 }
 
 export const relationshipsService = new RelationshipsService();
-
-
-
-
-
-

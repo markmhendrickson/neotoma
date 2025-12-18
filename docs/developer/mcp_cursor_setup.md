@@ -261,6 +261,22 @@ This means Cursor can't find the `node` executable. This often happens when Node
 
 If you're actively developing the MCP server:
 
+1. **Run automatic rebuild in watch mode** (recommended for Cursor integration):
+
+   ```bash
+   npm run dev:mcp
+   ```
+
+   This runs `tsc --watch` which automatically rebuilds `dist/` whenever you save TypeScript files. Keep this running in a terminal while developing.
+
+2. **Restart Cursor** after code changes to pick up the rebuilt version
+
+   **Note:** Cursor needs to restart to reload the MCP server, but the build happens automatically in the background.
+
+### Alternative: Manual Rebuild
+
+If you prefer manual control:
+
 1. **Run in development mode** (stdio, for testing):
 
    ```bash
@@ -290,14 +306,23 @@ When running manual test cases from `docs/releases/in_progress/v0.1.0/release_re
 
 To use the Neotoma MCP server from a different workspace/repository:
 
-1. **Ensure Neotoma is built:**
+1. **For auto-rebuild on code changes** (recommended for active development):
+
+   ```bash
+   cd /path/to/neotoma
+   npm run dev:mcp
+   ```
+
+   Keep this running in a terminal - it watches for TypeScript changes and automatically rebuilds `dist/`.
+
+2. **Or build once** (if not actively developing):
 
    ```bash
    cd /path/to/neotoma
    npm run build
    ```
 
-2. **Create `.cursor/mcp.json` in your other workspace:**
+3. **Create `.cursor/mcp.json` in your other workspace:**
 
    ```json
    {
@@ -319,6 +344,8 @@ To use the Neotoma MCP server from a different workspace/repository:
    - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
    - Set `cwd` to the Neotoma project root (required for `.env.development` loading)
    - The server will load credentials from Neotoma's `.env.development` file automatically
+   - **For auto-rebuild:** Run `npm run dev:mcp` in the Neotoma repo to watch for changes
+   - **After code changes:** Restart Cursor to reload the MCP server with the new build
 
 3. **Or use environment variables:**
    If you want to override credentials from the other workspace:
@@ -355,10 +382,13 @@ To use the Neotoma MCP server from a different workspace/repository:
 ## Quick Reference
 
 ```bash
-# Build MCP server
+# Build MCP server (one-time)
 npm run build
 
-# Run in development mode (stdio)
+# Auto-rebuild on code changes (for Cursor integration)
+npm run dev:mcp
+
+# Run in development mode (stdio, for testing)
 npm run dev
 
 # Set environment variables (macOS/Linux)

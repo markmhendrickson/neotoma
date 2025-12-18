@@ -10,34 +10,44 @@
 - **Release Type**: Marketed
 - **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson
-- **Target Date**: 2026-02-24 (based on Dec 9, 2025 start date)
+- **Target Date**: 2026-01-23 (revised Dec 12, 2025: discovery + marketing parallel starting Dec 12, then 2-3 days development)
 - **Marketing**: Yes (hybrid: pre-launch + post-launch)
+
+### 1.1 Time Tracking
+
+- **Development Start Date**: _[To be recorded when status changes to `in_progress`]_
+- **Development Finish Date**: _[To be recorded when status changes to `ready_for_deployment`]_
+- **Deployment Date**: _[To be recorded when status changes to `deployed`]_
+- **Completion Date**: _[To be recorded when status changes to `completed`]_
+- **Estimated Development Time**: 2-3 days (from `execution_schedule.md`)
+- **Actual Development Time**: _[Calculated: Development Finish Date - Development Start Date]_
+- **Estimation Accuracy**: _[Calculated: (Actual / Estimated) × 100%]_
 
 ---
 
 ### 2. Batch Progress
 
-| Batch ID | Feature Units          | Status      | Notes |
-| -------- | ---------------------- | ----------- | ----- |
-| 0        | FU-100, FU-300, FU-700 | not_started |       |
-| 1        | FU-101, FU-102         | not_started |       |
-| 2        | FU-103                 | not_started |       |
-| 3        | FU-105, FU-701         | not_started |       |
+| Batch ID | Feature Units          | Status      | Notes                                    |
+| -------- | ---------------------- | ----------- | ---------------------------------------- |
+| 0        | FU-100, FU-300, FU-700 | not_started | FU-100 ✅ complete from v0.1.0          |
+| 1        | FU-101, FU-102         | not_started | ✅ Complete from v0.1.0                  |
+| 2        | FU-103                 | not_started | ✅ Complete from v0.1.0                  |
+| 3        | FU-105, FU-701         | not_started | FU-105 ✅ complete from v0.1.0          |
 
 ---
 
 ### 3. Feature Unit Status
 
-| FU ID  | Name                           | Status      | Notes |
-| ------ | ------------------------------ | ----------- | ----- |
-| FU-100 | File Analysis Service Update   | not_started |       |
-| FU-101 | Entity Resolution Service      | not_started |       |
-| FU-102 | Event Generation Service       | not_started |       |
-| FU-103 | Graph Builder Service          | not_started |       |
-| FU-105 | Search Service (Deterministic) | not_started |       |
-| FU-300 | Design System Implementation   | not_started |       |
-| FU-700 | Authentication UI              | not_started |       |
-| FU-701 | RLS Implementation             | not_started |       |
+| FU ID  | Name                           | Status      | Notes                                    |
+| ------ | ------------------------------ | ----------- | ---------------------------------------- |
+| FU-100 | File Analysis Service Update   | ✅ Complete | Complete from v0.1.0 (rule-based extraction) |
+| FU-101 | Entity Resolution Service      | ✅ Complete | Complete from v0.1.0 (with DB persistence) |
+| FU-102 | Event Generation Service       | ✅ Complete | Complete from v0.1.0 (with DB persistence) |
+| FU-103 | Graph Builder Service          | ✅ Complete | Complete from v0.1.0 (with integrity checks) |
+| FU-105 | Search Service (Deterministic) | ✅ Complete | Complete from v0.1.0                     |
+| FU-300 | Design System Implementation   | not_started | Foundation exists, needs polish (~0.5 days) |
+| FU-700 | Authentication UI              | not_started | Supabase Auth integrated, UI needed (~0.5-1 day) |
+| FU-701 | RLS Implementation             | not_started | Migration + policies + service updates (~1-2 days) |
 
 _(Statuses mirror individual FU manifests / implementation reality; update as work proceeds.)_
 
@@ -74,6 +84,8 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 | ---------- | ------------------------------------------------------------ | -------------------------------------------------- |
 | 2025-02-10 | Release workflow pattern defined                             | Standardize multi-FU orchestration                 |
 | 2025-02-10 | MVP specs remain in `docs/specs/`, referenced not duplicated | Avoid duplication, maintain single source of truth |
+| 2025-12-11 | Revised v1.0.0 estimates based on v0.1.0 velocity            | v0.1.0 completed 26 FUs in 2-3 days; v1.0.0 requires only 3 new FUs |
+| 2025-12-11 | Updated target date from Feb 24 to Jan 20                    | Reflects realistic 2-3 day development timeline   |
 
 ---
 
@@ -123,13 +135,20 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 - ✅ Response rate optimization strategies documented (`participant_recruitment_log.md`)
 - ✅ Early access incentive strategy defined (`participant_recruitment_log.md`)
 
-**Next Checkpoint:** Checkpoint 0.5 — Pre-Release Discovery (Week -8 to -5)
+**Next Checkpoint:** Checkpoint 0.5 — Pre-Release Discovery + Pre-Launch Marketing (Week -8 to -5, parallel execution)
 
 **Pre-Discovery Tasks (Week -10 to -9):**
 
 - Build discovery lead sourcing tools (LinkedIn, Twitter/X, Indie Hackers, GitHub, Reddit/Discord)
 - Configure API credentials for agent-driven execution
 - Review filtering criteria and keywords
+
+**Parallel Execution Strategy:**
+
+- **Discovery** (Week -8 to -5): Value, usability, and business viability interviews
+- **Pre-Launch Marketing** (Week -8 to -5, parallel): Waitlist building, early access beta, content teasers
+- **Synthesis** (Week -5 to -4): Discovery synthesis + marketing finalization
+- **Development** (Week 0): Starts immediately after both complete (2-3 days)
 
 ---
 

@@ -1,0 +1,29 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Fidelity Brokerage",
+    "number": 1,
+    "accounts": "acc-001,acc-002",
+    "categories": "investments,retirement",
+    "url": "https://fidelity.com",
+    "urls": "https://fidelity.com,https://fidelity.com/login",
+    "investments": "AAPL,TSLA,BTC",
+    "status": "active",
+    "notes": "Primary brokerage account"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Coinbase Wallet",
+    "number": 2,
+    "accounts": "wallet-001",
+    "categories": "crypto",
+    "url": "https://coinbase.com",
+    "urls": "https://coinbase.com",
+    "investments": "BTC,ETH",
+    "status": "active",
+    "notes": "Cryptocurrency wallet"
+  }
+]
+
+
+

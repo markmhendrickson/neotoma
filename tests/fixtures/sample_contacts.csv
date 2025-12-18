@@ -1,0 +1,6 @@
+name,email,phone,contact_type,category,platform,address,country,website,notes,first_contact_date,last_contact_date,created_date,updated_date
+John Doe,john.doe@example.com,+1-555-0100,business,client,minted,123 Business St City State 12345,US,https://acmecorp.com,Primary client contact,2023-01-15,2024-12-10,2023-01-15,2024-12-10
+Jane Smith,jane.smith@example.com,+1-555-0200,personal,friend,gmail,456 Personal Ave City State 12345,US,,Personal friend,2022-06-01,2024-11-20,2022-06-01,2024-11-20
+
+
+

@@ -46,7 +46,7 @@ export function extractPreview(buffer: Buffer): string {
 function looksLikePdf(
   buffer: Buffer,
   fileName?: string,
-  mimeType?: string
+  mimeType?: string,
 ): boolean {
   if (mimeType?.toLowerCase().includes("pdf")) {
     return true;
@@ -114,7 +114,7 @@ async function extractPdfPreview(buffer: Buffer): Promise<string | null> {
   } catch (error) {
     console.warn(
       "PDF preview extraction failed; falling back to binary text",
-      error
+      error,
     );
     return null;
   } finally {
@@ -124,7 +124,7 @@ async function extractPdfPreview(buffer: Buffer): Promise<string | null> {
 
 export async function buildFilePreview(
   buffer: Buffer,
-  options: { fileName?: string; mimeType?: string } = {}
+  options: { fileName?: string; mimeType?: string } = {},
 ): Promise<string> {
   if (looksLikePdf(buffer, options.fileName, options.mimeType)) {
     const pdfText = await extractPdfPreview(buffer);
@@ -189,7 +189,7 @@ function normalizeOverride(override: Record<string, unknown> | undefined): {
 
 function mergeMetadata(
   properties: Record<string, unknown>,
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown>,
 ): Record<string, unknown> {
   if (
     !properties.source_file ||
@@ -210,7 +210,7 @@ function mergeMetadata(
  * No LLM calls - pure rule-based extraction.
  */
 export async function analyzeFileForRecord(
-  options: AnalyzeFileOptions
+  options: AnalyzeFileOptions,
 ): Promise<FileAnalysisResult> {
   const { buffer, fileName, mimeType } = options;
   const preview = await buildFilePreview(buffer, { fileName, mimeType });
@@ -248,7 +248,7 @@ export async function analyzeFileForRecord(
 }
 
 export async function createRecordFromUploadedFile(
-  options: CreateRecordFromFileOptions
+  options: CreateRecordFromFileOptions,
 ): Promise<NeotomaRecord> {
   const { buffer, fileName, mimeType, fileSize, fileUrl, overrideProperties } =
     options;
@@ -293,12 +293,12 @@ export async function createRecordFromUploadedFile(
   if (config.openaiApiKey) {
     try {
       embedding = await generateEmbedding(
-        getRecordText(canonicalType, finalProperties)
+        getRecordText(canonicalType, finalProperties),
       );
     } catch (error) {
       console.warn(
         "Embedding generation failed for uploaded file record",
-        error
+        error,
       );
     }
   }

@@ -11,7 +11,7 @@ import type { NeotomaRecord } from "../db.js";
  */
 export function rankSearchResults(
   results: NeotomaRecord[],
-  query?: string
+  query?: string,
 ): NeotomaRecord[] {
   if (results.length === 0) {
     return results;
@@ -48,7 +48,7 @@ function calculateScore(record: NeotomaRecord, query: string): number {
   const queryLower = query.toLowerCase();
   const regex = new RegExp(
     queryLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-    "gi"
+    "gi",
   );
 
   // Exact type match
@@ -87,7 +87,7 @@ function calculateScore(record: NeotomaRecord, query: string): number {
  * Sort records deterministically (for non-search queries)
  */
 export function sortRecordsDeterministically(
-  records: NeotomaRecord[]
+  records: NeotomaRecord[],
 ): NeotomaRecord[] {
   return [...records].sort((a, b) => {
     // Primary: created_at DESC (newer first)
@@ -100,9 +100,3 @@ export function sortRecordsDeterministically(
     return a.id.localeCompare(b.id);
   });
 }
-
-
-
-
-
-

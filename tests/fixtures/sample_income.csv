@@ -1,0 +1,7 @@
+income_date,income_type,source,amount_usd,amount_original,currency_original,description,entity,tax_year
+2024-01-15,consulting,Acme Corp,5000.00,5000.00,USD,Q1 2024 consulting services,Acme Corp,2024
+2024-02-01,dividend,AAPL,150.00,150.00,USD,Quarterly dividend,,2024
+2024-03-15,consulting,Acme Corp,5200.00,4800.00,EUR,Q1 2024 consulting services - updated,Acme Corp,2024
+
+
+

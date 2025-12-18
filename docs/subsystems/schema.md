@@ -343,19 +343,19 @@ CREATE TABLE observations (
 
 **Field Definitions:**
 
-| Field              | Type        | Purpose                                                      | Mutable | Indexed     |
-| ------------------ | ----------- | ------------------------------------------------------------ | ------- | ----------- |
-| `id`               | UUID        | Unique observation ID                                        | No      | Primary key |
-| `entity_id`        | TEXT        | Target entity ID (hash-based)                                | No      | Yes         |
-| `entity_type`      | TEXT        | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
-| `schema_version`   | TEXT        | Schema version used for extraction                            | No      | No          |
-| `source_record_id` | UUID        | Source document/record                                       | No      | Yes         |
-| `observed_at`      | TIMESTAMPTZ | Timestamp when observation was made                          | No      | Yes         |
-| `specificity_score`| NUMERIC     | How specific this observation is (0-1)                       | No      | No          |
-| `source_priority`  | INTEGER     | Priority of source (higher = more trusted)                   | No      | No          |
-| `fields`           | JSONB       | Granular facts extracted from document                       | No      | No          |
-| `created_at`       | TIMESTAMPTZ | Observation creation timestamp                               | No      | No          |
-| `user_id`          | UUID        | User who owns this observation                                | No      | Yes         |
+| Field               | Type        | Purpose                                      | Mutable | Indexed     |
+| ------------------- | ----------- | -------------------------------------------- | ------- | ----------- |
+| `id`                | UUID        | Unique observation ID                        | No      | Primary key |
+| `entity_id`         | TEXT        | Target entity ID (hash-based)                | No      | Yes         |
+| `entity_type`       | TEXT        | Entity type (person, company, invoice, etc.) | No      | Yes         |
+| `schema_version`    | TEXT        | Schema version used for extraction           | No      | No          |
+| `source_record_id`  | UUID        | Source document/record                       | No      | Yes         |
+| `observed_at`       | TIMESTAMPTZ | Timestamp when observation was made          | No      | Yes         |
+| `specificity_score` | NUMERIC     | How specific this observation is (0-1)       | No      | No          |
+| `source_priority`   | INTEGER     | Priority of source (higher = more trusted)   | No      | No          |
+| `fields`            | JSONB       | Granular facts extracted from document       | No      | No          |
+| `created_at`        | TIMESTAMPTZ | Observation creation timestamp               | No      | No          |
+| `user_id`           | UUID        | User who owns this observation               | No      | Yes         |
 
 **Indexes:**
 
@@ -396,17 +396,17 @@ CREATE TABLE entity_snapshots (
 
 **Field Definitions:**
 
-| Field                  | Type        | Purpose                                                      | Mutable | Indexed     |
-| ---------------------- | ----------- | ------------------------------------------------------------ | ------- | ----------- |
-| `entity_id`            | TEXT        | Entity ID (hash-based, primary key)                         | No      | Primary key |
-| `entity_type`          | TEXT        | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
-| `schema_version`       | TEXT        | Schema version used for snapshot computation                 | No      | No          |
-| `snapshot`             | JSONB       | Current truth, computed by reducer                           | Yes     | Yes (GIN)   |
-| `computed_at`          | TIMESTAMPTZ | When snapshot was computed                                   | Yes     | No          |
-| `observation_count`    | INTEGER     | Number of observations merged                                | Yes     | No          |
-| `last_observation_at` | TIMESTAMPTZ | Timestamp of most recent observation                         | Yes     | No          |
-| `provenance`           | JSONB       | Maps field → observation_id, traces each field to source    | Yes     | No          |
-| `user_id`              | UUID        | User who owns this entity                                    | No      | Yes         |
+| Field                 | Type        | Purpose                                                  | Mutable | Indexed     |
+| --------------------- | ----------- | -------------------------------------------------------- | ------- | ----------- |
+| `entity_id`           | TEXT        | Entity ID (hash-based, primary key)                      | No      | Primary key |
+| `entity_type`         | TEXT        | Entity type (person, company, invoice, etc.)             | No      | Yes         |
+| `schema_version`      | TEXT        | Schema version used for snapshot computation             | No      | No          |
+| `snapshot`            | JSONB       | Current truth, computed by reducer                       | Yes     | Yes (GIN)   |
+| `computed_at`         | TIMESTAMPTZ | When snapshot was computed                               | Yes     | No          |
+| `observation_count`   | INTEGER     | Number of observations merged                            | Yes     | No          |
+| `last_observation_at` | TIMESTAMPTZ | Timestamp of most recent observation                     | Yes     | No          |
+| `provenance`          | JSONB       | Maps field → observation_id, traces each field to source | Yes     | No          |
+| `user_id`             | UUID        | User who owns this entity                                | No      | Yes         |
 
 **Indexes:**
 
@@ -446,15 +446,15 @@ CREATE TABLE schema_registry (
 
 **Field Definitions:**
 
-| Field              | Type    | Purpose                                                      | Mutable | Indexed     |
-| ------------------ | ------- | ------------------------------------------------------------ | ------- | ----------- |
-| `id`               | UUID    | Unique registry entry ID                                     | No      | Primary key |
-| `entity_type`      | TEXT    | Entity type (person, company, invoice, etc.)                 | No      | Yes         |
-| `schema_version`   | TEXT    | Schema version (e.g., "1.0", "1.1")                          | No      | Yes         |
-| `schema_definition`| JSONB   | Field definitions, types, validators                         | No      | No          |
-| `reducer_config`   | JSONB   | Merge policies per field                                     | No      | No          |
-| `active`           | BOOLEAN | Whether this version is active                               | Yes     | Yes         |
-| `created_at`       | TIMESTAMPTZ | When schema version was created                            | No      | No          |
+| Field               | Type        | Purpose                                      | Mutable | Indexed     |
+| ------------------- | ----------- | -------------------------------------------- | ------- | ----------- |
+| `id`                | UUID        | Unique registry entry ID                     | No      | Primary key |
+| `entity_type`       | TEXT        | Entity type (person, company, invoice, etc.) | No      | Yes         |
+| `schema_version`    | TEXT        | Schema version (e.g., "1.0", "1.1")          | No      | Yes         |
+| `schema_definition` | JSONB       | Field definitions, types, validators         | No      | No          |
+| `reducer_config`    | JSONB       | Merge policies per field                     | No      | No          |
+| `active`            | BOOLEAN     | Whether this version is active               | Yes     | Yes         |
+| `created_at`        | TIMESTAMPTZ | When schema version was created              | No      | No          |
 
 **Indexes:**
 
@@ -468,6 +468,7 @@ CREATE INDEX idx_schema_active ON schema_registry(entity_type, active) WHERE act
 - Reducer config defines merge strategies per field (last_write, highest_priority, most_specific, merge_array)
 - Only one active schema version per entity_type at a time
 - See [`docs/subsystems/schema_registry.md`](./schema_registry.md) for details
+- Public schema snapshots are exported to [`docs/subsystems/schema_snapshots/`](./schema_snapshots/) for reference (run `npm run schema:export` to update)
 
 ---
 
@@ -493,17 +494,17 @@ CREATE TABLE raw_fragments (
 
 **Field Definitions:**
 
-| Field            | Type        | Purpose                                                      | Mutable | Indexed     |
-| ---------------- | ----------- | ------------------------------------------------------------ | ------- | ----------- |
-| `id`             | UUID        | Unique fragment ID                                            | No      | Primary key |
-| `record_id`      | UUID        | Source record                                                | No      | Yes         |
-| `fragment_type`  | TEXT        | Fragment type (unknown_field, unstructured_text, etc.)       | No      | No          |
-| `fragment_key`   | TEXT        | Field name/key                                               | No      | Yes         |
-| `fragment_value` | JSONB       | Field value                                                   | No      | No          |
-| `fragment_envelope` | JSONB    | Type metadata (type, confidence, etc.)                       | No      | No          |
-| `frequency_count`| INTEGER     | How many times this fragment appeared                        | Yes     | Yes         |
-| `first_seen`     | TIMESTAMPTZ | When fragment first appeared                                  | No      | No          |
-| `last_seen`      | TIMESTAMPTZ | When fragment last appeared                                   | Yes     | No          |
+| Field               | Type        | Purpose                                                | Mutable | Indexed     |
+| ------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
+| `id`                | UUID        | Unique fragment ID                                     | No      | Primary key |
+| `record_id`         | UUID        | Source record                                          | No      | Yes         |
+| `fragment_type`     | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
+| `fragment_key`      | TEXT        | Field name/key                                         | No      | Yes         |
+| `fragment_value`    | JSONB       | Field value                                            | No      | No          |
+| `fragment_envelope` | JSONB       | Type metadata (type, confidence, etc.)                 | No      | No          |
+| `frequency_count`   | INTEGER     | How many times this fragment appeared                  | Yes     | Yes         |
+| `first_seen`        | TIMESTAMPTZ | When fragment first appeared                           | No      | No          |
+| `last_seen`         | TIMESTAMPTZ | When fragment last appeared                            | Yes     | No          |
 
 **Indexes:**
 
@@ -542,16 +543,16 @@ CREATE TABLE relationships (
 
 **Field Definitions:**
 
-| Field              | Type        | Purpose                                                      | Mutable | Indexed     |
-| ------------------ | ----------- | ------------------------------------------------------------ | ------- | ----------- |
-| `id`               | UUID        | Unique relationship ID                                        | No      | Primary key |
-| `relationship_type`| TEXT       | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.)      | No      | Yes         |
-| `source_entity_id` | TEXT        | Source entity ID                                             | No      | Yes         |
-| `target_entity_id` | TEXT        | Target entity ID                                             | No      | Yes         |
-| `source_record_id` | UUID        | Document that created this relationship                      | No      | No          |
-| `metadata`         | JSONB       | Relationship-specific metadata                               | No      | No          |
-| `created_at`       | TIMESTAMPTZ | When relationship was created                                | No      | No          |
-| `user_id`          | UUID        | User who owns this relationship                              | No      | Yes         |
+| Field               | Type        | Purpose                                                | Mutable | Indexed     |
+| ------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
+| `id`                | UUID        | Unique relationship ID                                 | No      | Primary key |
+| `relationship_type` | TEXT        | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.) | No      | Yes         |
+| `source_entity_id`  | TEXT        | Source entity ID                                       | No      | Yes         |
+| `target_entity_id`  | TEXT        | Target entity ID                                       | No      | Yes         |
+| `source_record_id`  | UUID        | Document that created this relationship                | No      | No          |
+| `metadata`          | JSONB       | Relationship-specific metadata                         | No      | No          |
+| `created_at`        | TIMESTAMPTZ | When relationship was created                          | No      | No          |
+| `user_id`           | UUID        | User who owns this relationship                        | No      | Yes         |
 
 **Indexes:**
 
