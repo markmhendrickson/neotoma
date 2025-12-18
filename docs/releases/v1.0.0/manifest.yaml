@@ -1,0 +1,160 @@
+release:
+  id: "v1.0.0"
+  name: "MVP"
+  type: "marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "2026-01-23"
+  priority: "P0"
+  owner: "Mark Hendrickson"
+  marketing_required: true
+  depends_on_releases:
+    - "v0.2.0" # Sources-First Ingestion Architecture (foundational)
+
+# NOTE: This manifest contains metadata and summaries for workflow automation.
+# Detailed planning documents are in markdown (see release_plan.md for overview).
+
+# WIP and parallelization limits
+execution_limits:
+  max_parallel_fus: 3 # Maximum FUs executing simultaneously
+  max_high_risk_in_parallel: 1 # Maximum high-risk FUs executing simultaneously
+
+feature_units:
+  # Core services
+  - id: "FU-100"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-101"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-102"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-103"
+    priority: "P0"
+    dependencies: ["FU-101", "FU-102"]
+  - id: "FU-105"
+    priority: "P0"
+    dependencies: ["FU-103"]
+
+  # UI / design system
+  - id: "FU-300"
+    priority: "P0"
+    dependencies: []
+
+  # Auth + RLS
+  - id: "FU-700"
+    priority: "P0"
+    dependencies: []
+  - id: "FU-701"
+    priority: "P0"
+    dependencies: ["FU-700"]
+
+  # Tooling / release automation
+  - id: "FU-710"
+    priority: "P1"
+    dependencies: ["FU-100"]
+    notes: "Spec Compliance Automation: multi-agent, multi-model spec-compliance checks and reports for marketed/high-risk releases"
+
+execution_schedule:
+  # Detailed execution schedule in execution_schedule.md
+  detailed_plan: "execution_schedule.md"
+  batches:
+    # Batch 0: FUs with no dependencies (can run in parallel)
+    - batch_id: 0
+      feature_units: ["FU-100", "FU-300", "FU-700"]
+      dependencies: []
+
+    # Batch 1: Depend only on FU-100
+    - batch_id: 1
+      feature_units: ["FU-101", "FU-102"]
+      dependencies: ["FU-100"]
+
+    # Batch 2: Depend on FU-101 and FU-102
+    - batch_id: 2
+      feature_units: ["FU-103"]
+      dependencies: ["FU-101", "FU-102"]
+
+    # Batch 3: Depend on FU-103 and FU-700
+    - batch_id: 3
+      feature_units: ["FU-105", "FU-701"]
+      dependencies: ["FU-103", "FU-700"]
+
+checkpoints:
+  checkpoint_1_after_batch: 1 # Optional mid-release review after batch 1
+
+acceptance_criteria:
+  product:
+    - criterion: "Core workflows functional (upload → extraction → timeline → AI query)"
+      test: "playwright/tests/e2e/core_workflows.spec.ts"
+      metric: null
+    - criterion: "Empty states handled in main UI views"
+      test: "playwright/tests/e2e/empty_states.spec.ts"
+      metric: null
+    - criterion: "Error states handled with clear messaging and retry guidance"
+      test: "playwright/tests/e2e/error_states.spec.ts"
+      metric: null
+  technical:
+    - criterion: "All P0 FUs deployed and passing tests"
+      test: null
+      metric: "SELECT COUNT(*) FROM feature_units WHERE priority='P0' AND status='completed'"
+    - criterion: "0 orphan nodes, 0 cycles in memory graph"
+      test: "tests/integration/graph_integrity.test.ts"
+      metric: "SELECT COUNT(*) FROM events WHERE record_id NOT IN (SELECT id FROM records) = 0"
+    - criterion: "Deterministic ingestion and search per GENERAL_REQUIREMENTS.md"
+      test: "tests/integration/determinism.test.ts"
+      metric: null
+    - criterion: "100% critical path test coverage"
+      test: "npm run test:coverage -- --critical-path"
+      metric: "coverage.critical_path >= 100"
+  business:
+    - criterion: "10 DAU at or shortly after launch"
+      test: null
+      metric: "SELECT COUNT(DISTINCT user_id) FROM user_sessions WHERE date = CURRENT_DATE >= 10"
+    - criterion: "≥ 100 records ingested in first week"
+      test: null
+      metric: "SELECT COUNT(*) FROM records WHERE created_at >= NOW() - INTERVAL '7 days' >= 100"
+
+pre_mortem:
+  # Detailed pre-mortem analysis in pre_mortem.md
+  detailed_plan: "pre_mortem.md"
+  failure_modes_summary:
+    - mode: "RLS implementation issues (per-user isolation)"
+      probability: "low"
+      impact: "medium"
+    - mode: "Graph integrity regressions (orphans/cycles)"
+      probability: "medium"
+      impact: "high"
+    - mode: "MVP date slips by 2+ weeks"
+      probability: "high"
+      impact: "medium"
+    - mode: "OCR determinism fails in production"
+      probability: "low"
+      impact: "critical"
+    - mode: "Discovery reveals low willingness-to-pay (<€25/month)"
+      probability: "medium"
+      impact: "high"
+
+deployment:
+  strategy: "staging_first" # staging_first | canary | full_rollout
+  rollback_plan: "Revert to previous release tag; restore database from last known-good snapshot if needed."
+  detailed_plan: "deployment_strategy.md"
+
+discovery:
+  enabled: true # true for early releases
+  plan_file: "discovery_plan.md"
+
+marketing:
+  enabled: true # true for external releases, false for internal
+  plan_file: "marketing_plan.md"
+  strategy: "hybrid" # pre_launch | post_launch | hybrid | none
+
+monitoring:
+  # Detailed monitoring plan in monitoring_plan.md
+  detailed_plan: "monitoring_plan.md"
+  key_metrics_summary:
+    - "upload_success_rate"
+    - "upload_latency_p95"
+    - "search_latency_p95"
+    - "graph_orphan_count"
+    - "graph_cycle_count"
+    - "dau"

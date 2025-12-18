@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { supabase } from "../db.js";
 import { config } from "../config.js";
 
-export type ConnectorStatus = 'active' | 'paused' | 'error';
+export type ConnectorStatus = "active" | "paused" | "error";
 
 export interface ConnectorSecrets {
   accessToken?: string;
@@ -58,8 +58,8 @@ export interface UpdateConnectorInput {
 export interface ExternalSyncRun {
   id: string;
   connectorId: string;
-  syncType: 'initial' | 'incremental' | string;
-  status: 'pending' | 'running' | 'success' | 'failed';
+  syncType: "initial" | "incremental" | string;
+  status: "pending" | "running" | "success" | "failed";
   startedAt: string;
   completedAt: string | null;
   stats: Record<string, unknown>;
@@ -72,13 +72,13 @@ export interface ExternalSyncRun {
 
 export interface StartSyncRunInput {
   connectorId: string;
-  syncType?: 'initial' | 'incremental' | string;
+  syncType?: "initial" | "incremental" | string;
   traceId?: string;
 }
 
 export interface CompleteSyncRunInput {
   syncRunId: string;
-  status: 'success' | 'failed';
+  status: "success" | "failed";
   stats?: Record<string, unknown>;
   cursor?: Record<string, unknown> | string | null;
   error?: Record<string, unknown> | null;
@@ -98,7 +98,7 @@ function mapConnector(row: any): ExternalConnector {
     providerType: row.provider_type,
     accountIdentifier: row.account_identifier ?? null,
     accountLabel: row.account_label ?? null,
-    status: row.status ?? 'active',
+    status: row.status ?? "active",
     capabilities: row.capabilities ?? [],
     oauthScopes: row.oauth_scopes ?? [],
     secretsEnvelope: row.secrets_envelope ?? null,
@@ -115,8 +115,8 @@ function mapSyncRun(row: any): ExternalSyncRun {
   return {
     id: row.id,
     connectorId: row.connector_id,
-    syncType: row.sync_type ?? 'incremental',
-    status: row.status ?? 'pending',
+    syncType: row.sync_type ?? "incremental",
+    status: row.status ?? "pending",
     startedAt: row.started_at,
     completedAt: row.completed_at ?? null,
     stats: row.stats ?? {},
@@ -132,7 +132,7 @@ let cachedSecretKey: Buffer | null = null;
 
 function requireSupabaseClient() {
   if (!supabase) {
-    throw new Error('Supabase client not initialized (USE_LOCAL_STORAGE mode)');
+    throw new Error("Supabase client not initialized (USE_LOCAL_STORAGE mode)");
   }
   return supabase;
 }
@@ -144,35 +144,39 @@ function getConnectorSecretKey(): Buffer {
 
   const secret = config.connectorSecretKey;
   if (!secret || secret.length < 16) {
-    throw new Error('CONNECTOR_SECRET_KEY must be defined and at least 16 characters long');
+    throw new Error("CONNECTOR_SECRET_KEY must be defined and at least 16 characters long");
   }
 
-  cachedSecretKey = crypto.createHash('sha256').update(secret).digest();
+  cachedSecretKey = crypto.createHash("sha256").update(secret).digest();
   return cachedSecretKey;
 }
 
-export function encryptConnectorSecrets(payload: ConnectorSecrets | null | undefined): string | null {
+export function encryptConnectorSecrets(
+  payload: ConnectorSecrets | null | undefined
+): string | null {
   if (!payload) {
     return null;
   }
   const key = getConnectorSecretKey();
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-  const plaintext = Buffer.from(JSON.stringify(payload), 'utf8');
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const plaintext = Buffer.from(JSON.stringify(payload), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   const authTag = cipher.getAuthTag();
 
   const envelope: SecretsEnvelope = {
     v: 1,
-    iv: iv.toString('base64'),
-    tag: authTag.toString('base64'),
-    data: ciphertext.toString('base64'),
+    iv: iv.toString("base64"),
+    tag: authTag.toString("base64"),
+    data: ciphertext.toString("base64"),
   };
 
   return JSON.stringify(envelope);
 }
 
-export function decryptConnectorSecrets(envelope: string | null | undefined): ConnectorSecrets | null {
+export function decryptConnectorSecrets(
+  envelope: string | null | undefined
+): ConnectorSecrets | null {
   if (!envelope) {
     return null;
   }
@@ -181,22 +185,22 @@ export function decryptConnectorSecrets(envelope: string | null | undefined): Co
   try {
     parsed = JSON.parse(envelope);
   } catch (error) {
-    throw new Error('Failed to parse connector secrets envelope');
+    throw new Error("Failed to parse connector secrets envelope");
   }
 
   if (parsed.v !== 1) {
     throw new Error(`Unsupported connector secrets envelope version: ${parsed.v}`);
   }
 
-  const iv = Buffer.from(parsed.iv, 'base64');
-  const authTag = Buffer.from(parsed.tag, 'base64');
-  const ciphertext = Buffer.from(parsed.data, 'base64');
+  const iv = Buffer.from(parsed.iv, "base64");
+  const authTag = Buffer.from(parsed.tag, "base64");
+  const ciphertext = Buffer.from(parsed.data, "base64");
 
-  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
   decipher.setAuthTag(authTag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
 
-  return JSON.parse(plaintext.toString('utf8'));
+  return JSON.parse(plaintext.toString("utf8"));
 }
 
 export async function createConnector(input: CreateConnectorInput): Promise<ExternalConnector> {
@@ -204,13 +208,13 @@ export async function createConnector(input: CreateConnectorInput): Promise<Exte
 
   const client = requireSupabaseClient();
   const { data, error } = await client
-    .from('external_connectors')
+    .from("external_connectors")
     .insert({
       provider: input.provider,
       provider_type: input.providerType,
       account_identifier: input.accountIdentifier ?? null,
       account_label: input.accountLabel ?? null,
-      status: input.status ?? 'active',
+      status: input.status ?? "active",
       capabilities: input.capabilities ?? [],
       oauth_scopes: input.oauthScopes ?? [],
       secrets_envelope: secretsEnvelope,
@@ -233,16 +237,18 @@ export async function updateConnector(
 ): Promise<ExternalConnector> {
   const payload: Record<string, unknown> = {};
 
-  if ('accountIdentifier' in updates) payload.account_identifier = updates.accountIdentifier ?? null;
-  if ('accountLabel' in updates) payload.account_label = updates.accountLabel ?? null;
-  if ('status' in updates) payload.status = updates.status;
-  if ('capabilities' in updates) payload.capabilities = updates.capabilities ?? [];
-  if ('oauthScopes' in updates) payload.oauth_scopes = updates.oauthScopes ?? [];
-  if ('metadata' in updates) payload.metadata = updates.metadata ?? {};
-  if ('syncCursor' in updates) payload.sync_cursor = updates.syncCursor ?? null;
-  if ('lastSuccessfulSync' in updates) payload.last_successful_sync = updates.lastSuccessfulSync ?? null;
-  if ('lastError' in updates) payload.last_error = updates.lastError ?? null;
-  if ('secrets' in updates) payload.secrets_envelope = encryptConnectorSecrets(updates.secrets);
+  if ("accountIdentifier" in updates)
+    payload.account_identifier = updates.accountIdentifier ?? null;
+  if ("accountLabel" in updates) payload.account_label = updates.accountLabel ?? null;
+  if ("status" in updates) payload.status = updates.status;
+  if ("capabilities" in updates) payload.capabilities = updates.capabilities ?? [];
+  if ("oauthScopes" in updates) payload.oauth_scopes = updates.oauthScopes ?? [];
+  if ("metadata" in updates) payload.metadata = updates.metadata ?? {};
+  if ("syncCursor" in updates) payload.sync_cursor = updates.syncCursor ?? null;
+  if ("lastSuccessfulSync" in updates)
+    payload.last_successful_sync = updates.lastSuccessfulSync ?? null;
+  if ("lastError" in updates) payload.last_error = updates.lastError ?? null;
+  if ("secrets" in updates) payload.secrets_envelope = encryptConnectorSecrets(updates.secrets);
 
   if (Object.keys(payload).length === 0) {
     const connector = await getConnectorById(connectorId);
@@ -254,9 +260,9 @@ export async function updateConnector(
 
   const client = requireSupabaseClient();
   const { data, error } = await client
-    .from('external_connectors')
+    .from("external_connectors")
     .update(payload)
-    .eq('id', connectorId)
+    .eq("id", connectorId)
     .select()
     .single();
 
@@ -270,12 +276,12 @@ export async function updateConnector(
 export async function getConnectorById(connectorId: string): Promise<ExternalConnector | null> {
   const client = requireSupabaseClient();
   const { data, error } = await client
-    .from('external_connectors')
-    .select('*')
-    .eq('id', connectorId)
+    .from("external_connectors")
+    .select("*")
+    .eq("id", connectorId)
     .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
+  if (error && error.code !== "PGRST116") {
     throw error;
   }
 
@@ -287,13 +293,16 @@ export async function listConnectors(filter?: {
   status?: ConnectorStatus;
 }): Promise<ExternalConnector[]> {
   const client = requireSupabaseClient();
-  let query = client.from('external_connectors').select('*').order('created_at', { ascending: false });
+  let query = client
+    .from("external_connectors")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (filter?.provider) {
-    query = query.eq('provider', filter.provider);
+    query = query.eq("provider", filter.provider);
   }
   if (filter?.status) {
-    query = query.eq('status', filter.status);
+    query = query.eq("status", filter.status);
   }
 
   const { data, error } = await query;
@@ -326,28 +335,26 @@ export async function getConnectorByProviderAccount(
 ): Promise<ExternalConnector | null> {
   const client = requireSupabaseClient();
   const { data, error } = await client
-    .from('external_connectors')
-    .select('*')
-    .eq('provider', provider)
-    .eq('account_identifier', accountIdentifier)
+    .from("external_connectors")
+    .select("*")
+    .eq("provider", provider)
+    .eq("account_identifier", accountIdentifier)
     .maybeSingle();
 
-  if (error && error.code !== 'PGRST116') {
+  if (error && error.code !== "PGRST116") {
     throw error;
   }
 
   return data ? mapConnector(data) : null;
 }
 
-export async function startExternalSyncRun(
-  input: StartSyncRunInput
-): Promise<ExternalSyncRun> {
+export async function startExternalSyncRun(input: StartSyncRunInput): Promise<ExternalSyncRun> {
   const { data, error } = await supabase
-    .from('external_sync_runs')
+    .from("external_sync_runs")
     .insert({
       connector_id: input.connectorId,
-      sync_type: input.syncType ?? 'incremental',
-      status: 'running',
+      sync_type: input.syncType ?? "incremental",
+      status: "running",
       trace_id: input.traceId ?? null,
     })
     .select()
@@ -360,11 +367,9 @@ export async function startExternalSyncRun(
   return mapSyncRun(data);
 }
 
-export async function completeExternalSyncRun(
-  input: CompleteSyncRunInput
-): Promise<void> {
+export async function completeExternalSyncRun(input: CompleteSyncRunInput): Promise<void> {
   const { error } = await supabase
-    .from('external_sync_runs')
+    .from("external_sync_runs")
     .update({
       status: input.status,
       completed_at: new Date().toISOString(),
@@ -372,10 +377,9 @@ export async function completeExternalSyncRun(
       cursor: input.cursor ?? null,
       error: input.error ?? null,
     })
-    .eq('id', input.syncRunId);
+    .eq("id", input.syncRunId);
 
   if (error) {
     throw error;
   }
 }
-

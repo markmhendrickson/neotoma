@@ -6,7 +6,7 @@ import { supabase } from "./db.js";
 
 let testApp: Application;
 
-const createBearerToken = () => Buffer.from(randomBytes(32)).toString("base64url");
+const createBearerToken = () => Buffer.from(randomBytes(32)).toString('base64url');
 
 // Mock OpenAI for embedding and comparison tests
 const mockOpenAI = {
@@ -20,15 +20,15 @@ const mockOpenAI = {
   },
 };
 
-describe("HTTP actions endpoints", () => {
+describe('HTTP actions endpoints', () => {
   let server: ReturnType<Application['listen']> | null = null;
-  let baseUrl = "";
-  let bearerToken = "";
+  let baseUrl = '';
+  let bearerToken = '';
 
   beforeAll(async () => {
     const originalAutostart = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART;
-    process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART = "1";
-    const actionsModule = await import("./actions.js");
+    process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART = '1';
+    const actionsModule = await import('./actions.js');
     testApp = actionsModule.app;
     if (originalAutostart === undefined) {
       delete process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART;
@@ -45,19 +45,19 @@ describe("HTTP actions endpoints", () => {
     server?.close();
   });
 
-  it("retrieves records explicitly by ids in the provided order", async () => {
+  it('retrieves records explicitly by ids in the provided order', async () => {
     const inserts = [
-      { type: "chat_test_alpha", properties: { label: "first" } },
-      { type: "chat_test_alpha", properties: { label: "second" } },
+      { type: 'chat_test_alpha', properties: { label: 'first' } },
+      { type: 'chat_test_alpha', properties: { label: 'second' } },
     ];
     const { data } = await supabase.from('records').insert(inserts).select();
     expect(data).toBeTruthy();
     const [first, second] = data!;
 
     const response = await fetch(`${baseUrl}/retrieve_records`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${bearerToken}`,
       },
       body: JSON.stringify({ ids: [second.id, first.id] }),
@@ -253,23 +253,23 @@ describe("HTTP actions endpoints", () => {
       expect(error.error).toBeDefined();
     });
 
-    it("returns 503 when OpenAI API key is not configured", async () => {
+    it('returns 503 when OpenAI API key is not configured', async () => {
       // Skip if OpenAI is actually configured (module is cached)
-      const { config } = await import("./config.js");
+      const { config } = await import('./config.js');
       if (config.openaiApiKey) {
         console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
         return;
       }
 
       const response = await fetch(`${baseUrl}/generate_embedding`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          type: "test_record",
-          properties: { label: "test" },
+          type: 'test_record',
+          properties: { label: 'test' },
         }),
       });
 
@@ -278,31 +278,31 @@ describe("HTTP actions endpoints", () => {
       expect(error.error).toContain('OpenAI API key');
     });
 
-    it("generates embedding when OpenAI is configured", async () => {
-      const { config } = await import("./config.js");
+    it('generates embedding when OpenAI is configured', async () => {
+      const { config } = await import('./config.js');
       if (!config.openaiApiKey) {
-        console.warn("Skipping test: OPENAI_API_KEY not configured");
+        console.warn('Skipping test: OPENAI_API_KEY not configured');
         return;
       }
 
       const mockEmbedding = Array.from({ length: 1536 }, () => Math.random());
       
       // Mock the OpenAI embeddings.create method
-      const embeddingsModule = await import("./embeddings.js");
+      const embeddingsModule = await import('./embeddings.js');
       const originalGenerate = embeddingsModule.generateEmbedding;
       
       vi.spyOn(embeddingsModule, 'generateEmbedding').mockResolvedValue(mockEmbedding);
 
       try {
         const response = await fetch(`${baseUrl}/generate_embedding`, {
-          method: "POST",
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${bearerToken}`,
           },
           body: JSON.stringify({
-            type: "test_record",
-            properties: { label: "test", amount: 100 },
+            type: 'test_record',
+            properties: { label: 'test', amount: 100 },
           }),
         });
 
@@ -362,32 +362,32 @@ describe("HTTP actions endpoints", () => {
       expect(error.error).toBeDefined();
     });
 
-    it("returns 503 when OpenAI API key is not configured", async () => {
+    it('returns 503 when OpenAI API key is not configured', async () => {
       // Skip if OpenAI is actually configured (module is cached)
-      const { config } = await import("./config.js");
+      const { config } = await import('./config.js');
       if (config.openaiApiKey) {
         console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
         return;
       }
 
       const response = await fetch(`${baseUrl}/record_comparison`, {
-        method: "POST",
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
           new_record: {
-            id: "new-1",
-            type: "transaction",
-            summary: "New transaction",
+            id: 'new-1',
+            type: 'transaction',
+            summary: 'New transaction',
             properties: { amount: 100 },
           },
           similar_records: [
             {
-              id: "similar-1",
-              type: "transaction",
-              summary: "Similar transaction",
+              id: 'similar-1',
+              type: 'transaction',
+              summary: 'Similar transaction',
               properties: { amount: 90 },
             },
           ],
@@ -399,17 +399,17 @@ describe("HTTP actions endpoints", () => {
       expect(error.error).toContain('OpenAI API key');
     });
 
-    it("generates comparison analysis when OpenAI is configured", async () => {
-      const { config } = await import("./config.js");
+    it('generates comparison analysis when OpenAI is configured', async () => {
+      const { config } = await import('./config.js');
       if (!config.openaiApiKey) {
-        console.warn("Skipping test: OPENAI_API_KEY not configured");
+        console.warn('Skipping test: OPENAI_API_KEY not configured');
         return;
       }
 
-      const mockAnalysis = "This transaction is higher than similar transactions.";
+      const mockAnalysis = 'This transaction is higher than similar transactions.';
 
       // Mock the record comparison service
-      const comparisonModule = await import("./services/record_comparison.js");
+      const comparisonModule = await import('./services/record_comparison.js');
       const originalGenerate = comparisonModule.generateRecordComparisonInsight;
       
       vi.spyOn(comparisonModule, 'generateRecordComparisonInsight').mockResolvedValue(mockAnalysis);

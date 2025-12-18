@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import { getPlaidConfig } from "./config/plaid.js";
 
-const env = process.env.NODE_ENV || "development";
+const env = process.env.NODE_ENV || 'development';
 
 // Load environment-specific .env files
 if (env === 'production') {
@@ -16,7 +16,7 @@ if (env === 'production') {
 function getSupabaseConfig() {
   const buildUrl = (projectId: string | undefined, fallbackUrl: string | undefined) => {
     if (projectId) return `https://${projectId}.supabase.co`;
-    return fallbackUrl || "";
+    return fallbackUrl || '';
   };
 
   if (env === 'production') {
@@ -49,7 +49,7 @@ export const config = {
 };
 
 if (!config.supabaseUrl || !config.supabaseKey) {
-  const envFile = env === "production" ? ".env.production" : ".env.development";
+  const envFile = env === 'production' ? '.env.production' : '.env.development';
   throw new Error(
     `Missing Supabase configuration for ${env} environment. ` +
     `Create ${envFile} or .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY (for dev/test), ` +

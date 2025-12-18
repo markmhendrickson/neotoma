@@ -1,0 +1,291 @@
+release:
+  id: "v0.1.0"
+  name: "Internal MCP Release"
+  type: "not_marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "when ready"
+  priority: "P0"
+  marketing_required: false
+
+# Execution strategy
+execution_strategy:
+  type: "multi_agent" # "multi_agent" or "sequential"
+  max_parallel_fus: 3 # Maximum FUs executing simultaneously
+  max_high_risk_in_parallel: 1 # Maximum high-risk FUs executing simultaneously
+  agent_spawning:
+    enabled: true
+    status_tracking: "file" # "file" or "api"
+    status_file: "docs/releases/v0.1.0/agent_status.json"
+
+feature_units:
+  # Infrastructure
+  - id: "FU-000"
+    priority: "P0"
+    dependencies: []
+  - id: "FU-002"
+    priority: "P0"
+    dependencies: []
+
+  # Blockchain-ready architecture foundation
+  - id: "FU-050"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-051"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-052"
+    priority: "P0"
+    dependencies: ["FU-050"]
+  - id: "FU-053"
+    priority: "P0"
+    dependencies: ["FU-050"]
+  - id: "FU-054"
+    priority: "P0"
+    dependencies: ["FU-050"]
+
+  # Observation architecture (builds on event-sourcing foundation)
+  - id: "FU-055"
+    priority: "P0"
+    dependencies: ["FU-050", "FU-051", "FU-052"]
+  - id: "FU-056"
+    priority: "P0"
+    dependencies: ["FU-050", "FU-052", "FU-055"]
+  - id: "FU-057"
+    priority: "P0"
+    dependencies: ["FU-000", "FU-055"]
+  - id: "FU-058"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-056", "FU-100", "FU-101"]
+  - id: "FU-059"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-103"]
+  - id: "FU-060"
+    priority: "P1"
+    dependencies: ["FU-057", "FU-058"]
+  - id: "FU-061"
+    priority: "P0"
+    dependencies: ["FU-055", "FU-056", "FU-059", "FU-200"]
+
+  # Core services
+  - id: "FU-100"
+    priority: "P0"
+    dependencies: ["FU-000"]
+    notes: "Includes type detection analytics (see type_detection_analytics.md)"
+  - id: "FU-101"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-102"
+    priority: "P0"
+    dependencies: ["FU-100"]
+  - id: "FU-103"
+    priority: "P0"
+    dependencies: ["FU-101", "FU-102"]
+  - id: "FU-105"
+    priority: "P0"
+    dependencies: ["FU-103"]
+
+  # MCP layer
+  - id: "FU-200"
+    priority: "P0"
+    dependencies: ["FU-000"]
+  - id: "FU-201"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-202"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-105"]
+  - id: "FU-203"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-204"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-050", "FU-051"]
+  - id: "FU-205"
+    priority: "P0"
+    dependencies: ["FU-200", "FU-100"]
+  - id: "FU-206"
+    priority: "P0"
+    dependencies: ["FU-200"]
+
+  # Optional
+  - id: "FU-104"
+    priority: "P1"
+    dependencies: ["FU-100"]
+  - id: "FU-208"
+    priority: "P1"
+    dependencies: ["FU-200"]
+
+execution_schedule:
+  batches:
+    # Batch 0: Infrastructure (can run in parallel)
+    - batch_id: 0
+      feature_units: ["FU-000", "FU-002"]
+      dependencies: []
+
+    # Batch 0.5: Blockchain-ready architecture foundation (can run in parallel)
+    - batch_id: 0.5
+      feature_units: ["FU-050", "FU-051"]
+      dependencies: ["FU-000"]
+
+    # Batch 0.6: Complete blockchain foundation (depends on FU-050)
+    - batch_id: 0.6
+      feature_units: ["FU-052", "FU-053", "FU-054"]
+      dependencies: ["FU-050"]
+
+    # Batch 0.7: Observation architecture storage (can run in parallel after blockchain foundation)
+    - batch_id: 0.7
+      feature_units: ["FU-055", "FU-057"]
+      dependencies: ["FU-050", "FU-051", "FU-052"]
+
+    # Batch 0.8: Observation services (depends on observation storage)
+    - batch_id: 0.8
+      feature_units: ["FU-056", "FU-059"]
+      dependencies: ["FU-055", "FU-057"]
+
+    # Batch 1: MCP core + File analysis (can run in parallel)
+    - batch_id: 1
+      feature_units: ["FU-200", "FU-100"]
+      dependencies: ["FU-000"]
+
+    # Batch 2: Entity and event services (can run in parallel)
+    - batch_id: 2
+      feature_units: ["FU-101", "FU-102"]
+      dependencies: ["FU-100"]
+
+    # Batch 3: Graph builder
+    - batch_id: 3
+      feature_units: ["FU-103"]
+      dependencies: ["FU-101", "FU-102"]
+
+    # Batch 4: Search service
+    - batch_id: 4
+      feature_units: ["FU-105"]
+      dependencies: ["FU-103"]
+
+    # Batch 5: Core MCP actions (can run in parallel, now use event-sourcing)
+    - batch_id: 5
+      feature_units: ["FU-201", "FU-203", "FU-204", "FU-206"]
+      dependencies: ["FU-200", "FU-050", "FU-051"]
+
+    # Batch 6: MCP actions requiring services
+    - batch_id: 6
+      feature_units: ["FU-202", "FU-205"]
+      dependencies: ["FU-200", "FU-105", "FU-100"]
+
+    # Batch 6.5: Observation-aware ingestion (depends on observation services)
+    - batch_id: 6.5
+      feature_units: ["FU-058"]
+      dependencies: ["FU-055", "FU-056", "FU-100", "FU-101"]
+
+    # Batch 6.6: Observation MCP actions (depends on observation services and MCP core)
+    - batch_id: 6.6
+      feature_units: ["FU-061"]
+      dependencies: ["FU-055", "FU-056", "FU-059", "FU-200"]
+
+    # Batch 7: Optional features (can run in parallel)
+    - batch_id: 7
+      feature_units: ["FU-104", "FU-208", "FU-060"]
+      dependencies: ["FU-100", "FU-200", "FU-057", "FU-058"]
+
+checkpoints:
+  checkpoint_0.5_after_batch: 0.6 # Review blockchain foundation before proceeding
+  checkpoint_1_after_batch: 4 # Mid-release review after graph builder and search
+
+acceptance_criteria:
+  product:
+    - criterion: "Core workflow functional via MCP (upload → extraction → query)"
+      test: "tests/integration/mcp_workflow.test.ts"
+      metric: null
+    - criterion: "Entity resolution validated (canonical IDs)"
+      test: "tests/integration/entity_resolution.test.ts"
+      metric: null
+    - criterion: "Timeline events validated"
+      test: "tests/integration/event_generation.test.ts"
+      metric: null
+  technical:
+    - criterion: "All P0 FUs deployed and passing tests"
+      test: null
+      metric: "SELECT COUNT(*) FROM feature_units WHERE priority='P0' AND status='completed'"
+    - criterion: "0 orphan nodes, 0 cycles in memory graph"
+      test: "tests/integration/graph_integrity.test.ts"
+      metric: "SELECT COUNT(*) FROM events WHERE record_id NOT IN (SELECT id FROM records) = 0"
+    - criterion: "Deterministic ingestion (same file → same output)"
+      test: "tests/integration/determinism.test.ts"
+      metric: null
+    - criterion: "Deterministic search ranking"
+      test: "tests/integration/search_determinism.test.ts"
+      metric: null
+    - criterion: "100% critical path test coverage"
+      test: "npm run test:coverage -- --critical-path"
+      metric: "coverage.critical_path >= 100"
+    - criterion: "MCP server operational with 6 core actions"
+      test: "tests/integration/mcp_actions.test.ts"
+      metric: null
+    - criterion: "Event-sourcing foundation operational (events emitted, reducers applied)"
+      test: "tests/integration/event_sourcing.test.ts"
+      metric: null
+    - criterion: "Historical replay functional (get record at timestamp)"
+      test: "tests/integration/historical_replay.test.ts"
+      metric: null
+    - criterion: "Repository abstractions in place (domain logic isolated from storage)"
+      test: "tests/integration/repository_abstractions.test.ts"
+      metric: null
+    - criterion: "Type detection analytics functional (metadata stored, telemetry emitted)"
+      test: "tests/integration/type_detection_analytics.test.ts"
+      metric: null
+    - criterion: "Observation layer operational (observations created, snapshots computed)"
+      test: "tests/integration/observation_flow.test.ts"
+      metric: null
+    - criterion: "4-layer model functional (Document → Entity → Observation → Snapshot)"
+      test: "tests/integration/four_layer_model.test.ts"
+      metric: null
+    - criterion: "Reducer determinism validated (same observations → same snapshot)"
+      test: "tests/integration/reducer_determinism.test.ts"
+      metric: null
+    - criterion: "Provenance tracking functional (every snapshot field traces to observations)"
+      test: "tests/integration/provenance_tracking.test.ts"
+      metric: null
+    - criterion: "Relationship types operational (PART_OF, CORRECTS, etc.)"
+      test: "tests/integration/relationships.test.ts"
+      metric: null
+    - criterion: "Schema registry functional (config-driven schemas loaded and applied)"
+      test: "tests/integration/schema_registry.test.ts"
+      metric: null
+  business:
+    - criterion: "Cursor integration tested"
+      test: null
+      metric: "Manual validation via Cursor MCP integration"
+    - criterion: "ChatGPT integration tested"
+      test: null
+      metric: "Manual validation via ChatGPT MCP integration"
+
+pre_mortem:
+  failure_modes:
+    - mode: "Graph integrity regressions"
+      early_warning: "Integration tests fail, orphan node count > 0"
+      mitigation: "FU-103 includes property-based tests, batch-level integration tests"
+      rollback: "Disable graph builder, revert to single-record inserts"
+    - mode: "Determinism failures"
+      early_warning: "Property-based tests fail, same input produces different output"
+      mitigation: "FU-100, FU-101, FU-102 include determinism tests, 100-run validation"
+      rollback: "Identify and fix nondeterministic code paths"
+    - mode: "MCP action failures"
+      early_warning: "MCP integration tests fail, Cursor/ChatGPT cannot connect"
+      mitigation: "FU-200 includes comprehensive MCP protocol tests"
+      rollback: "Revert MCP server changes, check protocol compliance"
+
+deployment:
+  target: "production" # All releases deploy to production at neotoma.io
+  target_url: "neotoma.io"
+  marketing: false # Not marketed release - no marketing activities
+  rollback_plan: "Revert code changes and redeploy to neotoma.io"
+
+monitoring:
+  key_metrics:
+    - "upload_success_rate"
+    - "upload_latency_p95"
+    - "search_latency_p95"
+    - "graph_orphan_count"
+    - "graph_cycle_count"
+    - "mcp_action_success_rate"
+    - "determinism_test_pass_rate"

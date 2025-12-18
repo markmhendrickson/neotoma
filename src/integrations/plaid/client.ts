@@ -23,7 +23,7 @@ import type { PlaidEnvironment } from "../../config/plaid.js";
 type SyncCursor = string | null | undefined;
 
 const MAX_SYNC_PAGES = 10;
-const DEFAULT_CLIENT_NAME = "Neotoma";
+const DEFAULT_CLIENT_NAME = 'Neotoma';
 
 const productAllowList = [
   Products.Assets,
@@ -113,7 +113,7 @@ export function isPlaidConfigured(): boolean {
 export class PlaidNotConfiguredError extends Error {
   constructor() {
     super('Plaid configuration missing. Set PLAID_CLIENT_ID and PLAID_SECRET.');
-    this.name = "PlaidNotConfiguredError";
+    this.name = 'PlaidNotConfiguredError';
   }
 }
 
