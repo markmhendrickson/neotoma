@@ -1,0 +1,127 @@
+feature_id: "fu_112"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "medium"
+
+tags:
+  - "schema"
+  - "ingestion"
+  - "storage"
+  - "quotas"
+
+kill_switch:
+  conditions:
+    - condition: "Upload queue inserts fail in staging/prod"
+      action: "Disable retry worker, revert ingestion to fail-fast mode"
+    - condition: "storage_usage counters drift"
+      action: "Pause quota enforcement, run reconciliation script"
+
+metadata:
+  title: "Storage Infrastructure (upload_queue + storage_usage)"
+  description: "Adds durable retry queue and per-user storage usage tracking to support sources-first ingestion"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "techlead@neotoma.com"
+    - "data-platform@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+subsystems:
+  - name: "schema"
+    changes: "New upload_queue and storage_usage tables plus helper functions"
+  - name: "ingestion"
+    changes: "Foundational services for raw storage + quota enforcement"
+  - name: "observability"
+    changes: "Adds metrics/log hooks for queue depth and usage increments"
+
+schema_changes:
+  - table: "upload_queue"
+    operation: "create_table"
+    columns:
+      - { name: "id", type: "UUID", nullable: false, primary_key: true, default_value: "gen_random_uuid()" }
+      - { name: "source_id", type: "UUID", nullable: false }
+      - { name: "temp_file_path", type: "TEXT", nullable: false }
+      - { name: "content_hash", type: "TEXT", nullable: false }
+      - { name: "byte_size", type: "BIGINT", nullable: false }
+      - { name: "retry_count", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "max_retries", type: "INTEGER", nullable: false, default_value: "5" }
+      - { name: "next_retry_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "error_message", type: "TEXT", nullable: true }
+      - { name: "created_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "user_id", type: "UUID", nullable: false }
+
+  - table: "upload_queue"
+    operation: "add_index"
+    index_name: "idx_upload_queue_retry"
+    columns: ["next_retry_at"]
+    where_clause: "WHERE retry_count < max_retries"
+
+  - table: "upload_queue"
+    operation: "add_index"
+    index_name: "idx_upload_queue_user"
+    columns: ["user_id"]
+
+  - table: "storage_usage"
+    operation: "create_table"
+    columns:
+      - { name: "user_id", type: "UUID", nullable: false, primary_key: true }
+      - { name: "total_bytes", type: "BIGINT", nullable: false, default_value: "0" }
+      - { name: "total_sources", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "last_calculated", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "interpretation_count_month", type: "INTEGER", nullable: false, default_value: "0" }
+      - { name: "interpretation_limit_month", type: "INTEGER", nullable: false, default_value: "100" }
+      - { name: "billing_month", type: "TEXT", nullable: false, default_value: "to_char(NOW(), 'YYYY-MM')" }
+
+  - table: "storage_usage"
+    operation: "add_function"
+    function_name: "increment_storage_usage"
+    arguments:
+      - { name: "p_user_id", type: "UUID" }
+      - { name: "p_bytes", type: "BIGINT" }
+    language: "plpgsql"
+    purpose: "Idempotently increment total_bytes and total_sources per user"
+
+  - table: "storage_usage"
+    operation: "add_function"
+    function_name: "increment_interpretation_count"
+    arguments:
+      - { name: "p_user_id", type: "UUID" }
+    language: "plpgsql"
+    purpose: "Increment monthly interpretation count and roll over billing month"
+
+mcp_actions: []
+
+observability:
+  metrics:
+    - { name: "storage.queue.depth", type: "gauge", description: "Pending upload retries per user" }
+    - { name: "storage.queue.retry_total", type: "counter", description: "Total retry attempts" }
+    - { name: "storage_usage.bytes", type: "gauge", description: "Total stored bytes per user" }
+  logs:
+    - { level: "info", event: "storage.queue.enqueued", fields: ["user_id", "source_id", "retry_count"] }
+    - { level: "warn", event: "storage.queue.retry_saturated", fields: ["user_id", "source_id", "retry_count"] }
+    - { level: "info", event: "storage.usage.incremented", fields: ["user_id", "bytes", "total_bytes"] }
+  events: []
+  traces:
+    - { span_name: "storage.queue.enqueue", attributes: ["user_id", "source_id"] }
+    - { span_name: "storage.usage.increment", attributes: ["user_id", "bytes"] }
+
+testing:
+  unit_tests:
+    - file: "src/services/storage_queue.test.ts"
+      description: "Ensures queue helper sanitizes payloads and surfaces Supabase errors"
+    - file: "src/services/storage_usage.test.ts"
+      description: "Validates usage helper builds correct RPC payloads"
+  integration_tests:
+    - file: "tests/storage_infrastructure.integration.test.ts"
+      description: "Applies migration, asserts tables + functions exist, exercises RLS policies"
+  e2e_tests: []
+
+rollout:
+  feature_flags: []
+  monitoring:
+    - metric: "storage.queue.depth"
+      target: "< 10 pending items during initial rollout"
+    - metric: "storage_usage.bytes"
+      target: "Matches manual reconciliation after seed uploads"
+  rollback_plan: "Drop upload_queue & storage_usage tables (greenfield) and revert ingestion to fail-fast mode if regressions appear"
