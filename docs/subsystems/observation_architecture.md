@@ -86,16 +86,27 @@ Observations are created during ingestion:
 
 1. **Extract Fields:** Use schema-specific extraction rules
 2. **Categorize Fields:** Separate known (match schema) vs unknown (raw_fragments)
-3. **Resolve Entities:** Identify entities mentioned in extracted fields
+3. **Resolve Entities:** Identify entities mentioned in extracted fields (user-scoped)
 4. **Create Observations:** For each entity, create observation with:
    - `entity_id` — target entity
    - `entity_type` — entity type
    - `schema_version` — schema version used
-   - `source_record_id` — source document
+   - `source_record_id` — source document (legacy)
+   - `source_id` — source that produced this observation
+   - `interpretation_run_id` — interpretation run that created this
    - `observed_at` — observation timestamp
    - `specificity_score` — how specific this observation is
    - `source_priority` — priority of source
    - `fields` — granular facts
+   - `user_id` — user who owns this observation
+
+**Source Priority Levels:**
+
+| Source | Priority | Use Case |
+|--------|----------|----------|
+| AI interpretation | 0 | Automated extraction |
+| `ingest_structured()` | 100 | Agent-provided facts |
+| `correct()` | 1000 | User corrections (always wins) |
 
 **Example:**
 
@@ -104,17 +115,42 @@ const observation = {
   entity_id: "ent_acme_corp",
   entity_type: "company",
   schema_version: "1.0",
-  source_record_id: "rec_invoice_123",
+  source_id: "src_abc123",
+  interpretation_run_id: "run_xyz",
   observed_at: new Date("2024-01-15"),
   specificity_score: 0.9,
-  source_priority: 10,
+  source_priority: 0,                // AI interpretation
   fields: {
     name: "Acme Corp",
     address: "123 Main St",
     tax_id: "12-3456789",
   },
+  user_id: "user_123",
 };
 ```
+
+### 2.2 Correction Observations
+
+User corrections are modeled as high-priority observations:
+
+```typescript
+const correctionObservation = {
+  entity_id: "ent_acme_corp",
+  entity_type: "company",
+  schema_version: "1.0",
+  source_id: null,                   // No source for corrections
+  interpretation_run_id: null,       // No interpretation run
+  observed_at: new Date(),
+  specificity_score: 1.0,            // Maximum specificity
+  source_priority: 1000,             // Corrections always win
+  fields: {
+    name: "Acme Corporation",        // Corrected value
+  },
+  user_id: "user_123",
+};
+```
+
+**Key property:** Corrections persist across reinterpretation. Even if a source is reinterpreted with a new model, the correction observation remains and continues to override AI-extracted values.
 
 ### 2.2 Observation Storage
 
@@ -375,6 +411,66 @@ See [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.m
 
 ---
 
+## 8. Entity Merge and Observation Rewriting
+
+### 8.1 Merge Mechanism
+
+When duplicate entities are merged, observations are rewritten:
+
+```typescript
+async function mergeEntities(
+  fromEntityId: string,
+  toEntityId: string,
+  userId: string
+): Promise<void> {
+  // 1. Validate same-user ownership
+  // 2. Rewrite observations: UPDATE entity_id = toEntityId WHERE entity_id = fromEntityId
+  // 3. Mark from_entity as merged: merged_to_entity_id = toEntityId
+  // 4. Delete snapshot for from_entity
+  // 5. Recompute snapshot for to_entity
+}
+```
+
+### 8.2 Observation Redirect
+
+If an observation is created targeting a merged entity, it should redirect to the target:
+
+```typescript
+async function createObservation(entityId: string, userId: string, fields: any) {
+  // Check if entity is merged
+  const entity = await getEntity(entityId, userId);
+  
+  // Redirect if merged
+  const targetEntityId = entity.merged_to_entity_id || entityId;
+  
+  await observationRepo.create({
+    entity_id: targetEntityId,  // Redirected
+    user_id: userId,
+    fields,
+    // ...
+  });
+}
+```
+
+### 8.3 Merged Entity Exclusion
+
+Default queries should exclude merged entities:
+
+```typescript
+async function queryEntities(userId: string, filters: any) {
+  return await supabase
+    .from('entities')
+    .select('*')
+    .eq('user_id', userId)
+    .is('merged_to_entity_id', null)  // Exclude merged
+    .match(filters);
+}
+```
+
+See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for complete merge semantics.
+
+---
+
 ## Related Documents
 
 - [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) — Core architectural decisions
@@ -383,6 +479,8 @@ See [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.m
 - [`docs/subsystems/relationships.md`](./relationships.md) — Relationship patterns
 - [`docs/subsystems/schema.md`](./schema.md) — Database schema
 - [`docs/subsystems/ingestion/ingestion.md`](./ingestion/ingestion.md) — Ingestion pipeline
+- [`docs/subsystems/sources.md`](./sources.md) — Sources-first architecture
+- [`docs/subsystems/entity_merge.md`](./entity_merge.md) — Entity merge mechanism
 
 ---
 

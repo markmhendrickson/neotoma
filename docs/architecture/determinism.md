@@ -39,6 +39,44 @@ This document does NOT cover:
 
 **Determinism:** Given the same inputs, a system MUST always produce the same outputs, in the same order, with the same internal state.
 
+### 1.2 Determinism Doctrine
+
+**Explicit Classification:**
+
+Not all Neotoma components are deterministic. The following table explicitly classifies each component:
+
+| Component | Deterministic? | Notes |
+|-----------|----------------|-------|
+| Content hashing (SHA-256) | **Yes** | Same bytes = same hash |
+| Deduplication | **Yes** | `(user_id, content_hash)` uniqueness |
+| Storage path | **Yes** | `{user_id}/{content_hash}` |
+| Observation creation (given fixed validated fields + entity_id) | **Yes** | Pure insert |
+| Reducer computation | **Yes** | Same observations + same merge rules → same snapshot |
+| Entity merge | **Yes** | Deterministic rewrite of observations + snapshot recompute |
+| Rule-based extraction | **Yes** | Same text + same rules → same fields |
+| AI interpretation | **No** | Outputs vary; config logged for audit |
+| Entity resolution (heuristic) | **No** | May drift; duplicates expected |
+
+**Policy:** Neotoma never claims replay determinism for AI interpretation. Interpretation config is logged for audit, but outputs may vary across runs.
+
+### 1.3 Interpretation Auditability vs Replay Determinism
+
+**Key Distinction:**
+
+- **Replay Determinism**: Same input always produces identical output
+- **Auditability**: Process is logged with enough detail to understand what happened
+
+AI interpretation is **auditable but not replay-deterministic**:
+
+- `interpretation_runs` table stores `interpretation_config` (model, version, parameters)
+- Multiple interpretation runs for the same source create NEW observations
+- Prior observations are never modified (immutability preserved)
+- Audit trail shows exactly how data was interpreted at each point in time
+
+**Implication:** Entity resolution may create duplicates. The `merge_entities()` capability exists to repair duplicates deterministically after the fact.
+
+### 1.4 What is Determinism? (Continued)
+
 **Inputs include:**
 - Function arguments
 - File contents
@@ -837,15 +875,18 @@ for (const batch of chunk(files.sort(), 100)) {
 ### MUST
 
 1. **ID generation MUST be deterministic** (hash-based)
-2. **Entity resolution MUST be deterministic** (same name → same ID)
+2. **Entity resolution MUST be deterministic** (same name → same ID) — note: heuristic matching may create duplicates; merge is the repair mechanism
 3. **Event generation MUST be deterministic** (same fields → same events)
 4. **Search ranking MUST be deterministic** (tiebreakers required)
 5. **Sorting MUST use deterministic tiebreakers** (never rely on insertion order)
 6. **Tests MUST be reproducible** (run 100 times, all pass)
 7. **Iteration MUST be sorted** (Maps, Sets, filesystem)
-8. **Extraction MUST be rule-based** (no LLM in MVP)
+8. **Rule-based extraction MUST be deterministic** (same text + rules → same fields)
 9. **Deduplication MUST use content hash** (not timing)
-10. **All nondeterminism MUST be documented** (e.g., audit timestamps)
+10. **All nondeterminism MUST be documented** (e.g., AI interpretation, audit timestamps)
+11. **Reducer computation MUST be deterministic** (same observations → same snapshot)
+12. **Entity merge MUST be deterministic** (observations rewritten, snapshot recomputed)
+13. **Reinterpretation MUST create NEW observations** (never modify existing)
 
 ### MUST NOT
 
@@ -853,12 +894,14 @@ for (const batch of chunk(files.sort(), 100)) {
 2. **MUST NOT use Date.now() in business logic** (metadata only)
 3. **MUST NOT iterate unsorted** (Maps, Sets, Objects)
 4. **MUST NOT rely on filesystem order** (always sort)
-5. **MUST NOT use LLM extraction** (MVP constraint)
+5. **MUST NOT claim replay determinism for AI interpretation** (config is logged, outputs may vary)
 6. **MUST NOT use nondeterministic ranking** (no random sorting)
 7. **MUST NOT introduce race conditions** (concurrent writes to shared state)
 8. **MUST NOT skip tiebreakers** (all sorting must have secondary sort)
 9. **MUST NOT allow flaky tests** (fix or remove)
 10. **MUST NOT hide nondeterminism** (document if unavoidable)
+11. **MUST NOT modify existing observations** (immutability invariant)
+12. **MUST NOT merge entities across users** (user isolation)
 
 ---
 

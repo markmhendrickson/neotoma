@@ -1,54 +1,221 @@
 release:
   id: v0.2.0
-  name: Chat Transcript Extraction Tool
+  name: Sources-First Ingestion Architecture
   type: "not_marketed" # marketed | not_marketed
-  priority: P1
+  priority: P0
   status: planning
-  target_ship_date: null # Before MVP (v1.0.0)
+  target_ship_date: null # Before v0.3.0 and v1.0.0
   owner: Mark Hendrickson
   marketing_required: false
 
 feature_units:
-  - id: FU-106
-    name: Chat Transcript to JSON CLI Tool
-    priority: P1
+  # Phase 1: Schema + Storage Foundation
+  - id: FU-110
+    name: Sources Table Migration
+    priority: P0
     status: not_started
     dependencies: []
+    phase: 1
+    description: Content-addressed raw storage with RLS
+
+  - id: FU-111
+    name: Interpretation Runs Table
+    priority: P0
+    status: not_started
+    dependencies: [FU-110]
+    phase: 1
+    description: Versioned interpretation tracking with timeout handling
+
+  - id: FU-112
+    name: Storage Infrastructure
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Upload queue, storage usage tracking, quotas
+
+  - id: FU-113
+    name: Entity Extensions
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: user_id, merged_to tracking, RLS
+
+  - id: FU-114
+    name: Observation Extensions
+    priority: P0
+    status: not_started
+    dependencies: [FU-110, FU-111]
+    phase: 1
+    description: source_id, interpretation_run_id linkage
+
+  - id: FU-115
+    name: Raw Fragments Extensions
+    priority: P0
+    status: not_started
+    dependencies: [FU-110, FU-111]
+    phase: 1
+    description: Unknown field storage with provenance
+
+  - id: FU-116
+    name: Entity Merges Table
+    priority: P0
+    status: not_started
+    dependencies: [FU-113]
+    phase: 1
+    description: Merge audit log with TEXT IDs
+
+  # Phase 2: MCP Tools + Services
+  - id: FU-120
+    name: Raw Storage Service
+    priority: P0
+    status: not_started
+    dependencies: [FU-110, FU-112]
+    phase: 2
+    description: SHA-256 hashing, Supabase Storage, queue fallback
+
+  - id: FU-121
+    name: Interpretation Service
+    priority: P0
+    status: not_started
+    dependencies: [FU-111, FU-114, FU-115]
+    phase: 2
+    description: Schema validation, entity resolution, unknown field routing
+
+  - id: FU-122
+    name: MCP ingest() Tool
+    priority: P0
+    status: not_started
+    dependencies: [FU-120, FU-121]
+    phase: 2
+    description: Raw ingestion with optional interpretation
+
+  - id: FU-123
+    name: MCP ingest_structured() Tool
+    priority: P0
+    status: not_started
+    dependencies: [FU-121]
+    phase: 2
+    description: Pre-structured data with schema validation
+
+  - id: FU-124
+    name: MCP reinterpret() Tool
+    priority: P0
+    status: not_started
+    dependencies: [FU-121]
+    phase: 2
+    description: Versioned re-interpretation with quota enforcement
+
+  - id: FU-125
+    name: MCP correct() Tool
+    priority: P0
+    status: not_started
+    dependencies: [FU-121]
+    phase: 2
+    description: High-priority correction observations
+
+  - id: FU-126
+    name: MCP merge_entities() Tool
+    priority: P0
+    status: not_started
+    dependencies: [FU-113, FU-116]
+    phase: 2
+    description: Entity deduplication with cascade updates
+
+  # Phase 3: Background Workers + Integration
+  - id: FU-130
+    name: Upload Queue Processor
+    priority: P0
+    status: not_started
+    dependencies: [FU-112, FU-120]
+    phase: 3
+    description: Async retry for failed uploads
+
+  - id: FU-131
+    name: Stale Interpretation Cleanup
+    priority: P0
+    status: not_started
+    dependencies: [FU-111]
+    phase: 3
+    description: Timeout handling for hung jobs
+
+  - id: FU-132
+    name: Archival Job
+    priority: P1
+    status: not_started
+    dependencies: [FU-111]
+    phase: 3
+    description: Old interpretation run archival
+
+  - id: FU-133
+    name: Duplicate Detection Worker
+    priority: P1
+    status: not_started
+    dependencies: [FU-113]
+    phase: 3
+    description: Heuristic duplicate flagging
+
+  - id: FU-134
+    name: Query Updates
+    priority: P0
+    status: not_started
+    dependencies: [FU-110, FU-113, FU-114]
+    phase: 3
+    description: Provenance chain, merged entity exclusion
 
 scope:
   included:
-    - FU-106: Chat Transcript to JSON CLI Tool
+    - FU-110 through FU-116: Schema + Storage Foundation
+    - FU-120 through FU-126: MCP Tools + Services
+    - FU-130 through FU-134: Background Workers + Integration
 
   excluded:
-    - Truth Layer integration (tool runs separately)
-    - UI components (CLI-only)
-    - Multi-user infrastructure (standalone tool)
-    - CSV output format (JSON only)
+    - LLM model selection UI
+    - Semantic search integration
+    - Multi-user collaboration
+    - Automated entity merge suggestions
+    - Schema evolution UI
 
 acceptance_criteria:
   product:
-    - CLI tool converts chat transcripts to JSON files with schema types
-    - Output JSON files can be ingested deterministically
-    - Interactive mode allows field correction
-    - Tool handles common export formats (ChatGPT JSON, HTML, text)
+    - Raw files can be ingested and content-addressed
+    - Interpretation runs are versioned and auditable
+    - Users can correct AI-extracted fields
+    - Duplicate entities can be merged deterministically
+    - All data is user-isolated
 
   technical:
-    - CLI script functional (scripts/chat-to-json.ts)
-    - Parsers for supported formats
-    - LLM-based interpretation working
-    - JSON output follows standard record format
-    - Unit, integration, and E2E tests passing
+    - All new tables created with RLS policies
+    - Sources table with content hash uniqueness per user
+    - Interpretation runs with timeout handling
+    - Entities extended with user_id and merge tracking
+    - MCP tools functional (ingest, ingest_structured, reinterpret, correct, merge_entities)
+    - Background workers deployed as Edge Functions
+    - Unit and integration tests passing
 
   business:
-    - Tool enables chat transcript ingestion workflow
-    - Preserves Truth Layer determinism constraints
+    - Foundation enables all subsequent ingestion-dependent features
+    - User data isolation satisfies privacy requirements
+    - Interpretation auditability enables trust and debugging
 
 success_criteria:
-  - CLI tool functional
-  - All format parsers working
-  - LLM interpretation working
-  - JSON output format correct
-  - Interactive mode functional
+  - All migrations applied successfully
+  - RLS policies enforced on all user tables
+  - All MCP tools functional
+  - Background workers operational
+  - Cross-user isolation verified
   - All tests passing
-  - Documentation complete
-  - Field accuracy ≥80%
+
+determinism_doctrine:
+  deterministic:
+    - Content hashing (SHA-256)
+    - Deduplication (user_id, content_hash uniqueness)
+    - Storage path (user_id/content_hash)
+    - Observation creation (given fixed fields)
+    - Reducer computation
+    - Entity merge
+
+  non_deterministic:
+    - AI interpretation (config logged for audit)
+    - Entity resolution (heuristic, may drift)

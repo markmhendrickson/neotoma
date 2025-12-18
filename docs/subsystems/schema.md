@@ -321,7 +321,7 @@ CREATE INDEX idx_external_sync_runs_status ON external_sync_runs(status);
 
 ### 2.7 `observations` Table
 
-**Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots.
+**Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots. Links to sources and interpretation runs for full provenance.
 
 **Schema:**
 
@@ -331,7 +331,9 @@ CREATE TABLE observations (
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   schema_version TEXT NOT NULL,
-  source_record_id UUID NOT NULL REFERENCES records(id),
+  source_record_id UUID REFERENCES records(id),
+  source_id UUID REFERENCES sources(id),
+  interpretation_run_id UUID REFERENCES interpretation_runs(id),
   observed_at TIMESTAMPTZ NOT NULL,
   specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
   source_priority INTEGER DEFAULT 0,
@@ -343,26 +345,48 @@ CREATE TABLE observations (
 
 **Field Definitions:**
 
-| Field               | Type        | Purpose                                      | Mutable | Indexed     |
-| ------------------- | ----------- | -------------------------------------------- | ------- | ----------- |
-| `id`                | UUID        | Unique observation ID                        | No      | Primary key |
-| `entity_id`         | TEXT        | Target entity ID (hash-based)                | No      | Yes         |
-| `entity_type`       | TEXT        | Entity type (person, company, invoice, etc.) | No      | Yes         |
-| `schema_version`    | TEXT        | Schema version used for extraction           | No      | No          |
-| `source_record_id`  | UUID        | Source document/record                       | No      | Yes         |
-| `observed_at`       | TIMESTAMPTZ | Timestamp when observation was made          | No      | Yes         |
-| `specificity_score` | NUMERIC     | How specific this observation is (0-1)       | No      | No          |
-| `source_priority`   | INTEGER     | Priority of source (higher = more trusted)   | No      | No          |
-| `fields`            | JSONB       | Granular facts extracted from document       | No      | No          |
-| `created_at`        | TIMESTAMPTZ | Observation creation timestamp               | No      | No          |
-| `user_id`           | UUID        | User who owns this observation               | No      | Yes         |
+| Field                   | Type        | Purpose                                           | Mutable | Indexed     |
+| ----------------------- | ----------- | ------------------------------------------------- | ------- | ----------- |
+| `id`                    | UUID        | Unique observation ID                             | No      | Primary key |
+| `entity_id`             | TEXT        | Target entity ID (hash-based)                     | No      | Yes         |
+| `entity_type`           | TEXT        | Entity type (person, company, invoice, etc.)      | No      | Yes         |
+| `schema_version`        | TEXT        | Schema version used for extraction                | No      | No          |
+| `source_record_id`      | UUID        | Source document/record (legacy)                   | No      | Yes         |
+| `source_id`             | UUID        | Source that produced this observation             | No      | Yes         |
+| `interpretation_run_id` | UUID        | Interpretation run that created this              | No      | Yes         |
+| `observed_at`           | TIMESTAMPTZ | Timestamp when observation was made               | No      | Yes         |
+| `specificity_score`     | NUMERIC     | How specific this observation is (0-1)            | No      | No          |
+| `source_priority`       | INTEGER     | Priority of source (higher = more trusted)        | No      | No          |
+| `fields`                | JSONB       | Granular facts extracted from document            | No      | No          |
+| `created_at`            | TIMESTAMPTZ | Observation creation timestamp                    | No      | No          |
+| `user_id`               | UUID        | User who owns this observation                    | No      | Yes         |
+
+**Source Priority Levels:**
+
+| Source | Priority | Use Case |
+|--------|----------|----------|
+| AI interpretation | 0 | Automated extraction |
+| `ingest_structured()` | 100 | Agent-provided facts |
+| `correct()` | 1000 | User corrections (always wins) |
 
 **Indexes:**
 
 ```sql
 CREATE INDEX idx_observations_entity ON observations(entity_id, observed_at DESC);
 CREATE INDEX idx_observations_record ON observations(source_record_id);
+CREATE INDEX idx_observations_source ON observations(source_id) WHERE source_id IS NOT NULL;
+CREATE INDEX idx_observations_run ON observations(interpretation_run_id) WHERE interpretation_run_id IS NOT NULL;
 CREATE INDEX idx_observations_user ON observations(user_id);
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE observations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own observations" ON observations
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON observations
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
 
 **Notes:**
@@ -370,7 +394,10 @@ CREATE INDEX idx_observations_user ON observations(user_id);
 - Observations are immutable once created
 - Multiple observations can exist for the same entity from different sources
 - Reducers merge observations into entity snapshots deterministically
+- `source_id` and `interpretation_run_id` provide full provenance chain
+- Corrections use `source_priority = 1000` to override AI extraction
 - See [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) for details
+- See [`docs/subsystems/sources.md`](./sources.md) for sources-first architecture
 
 ---
 
@@ -474,43 +501,62 @@ CREATE INDEX idx_schema_active ON schema_registry(entity_type, active) WHERE act
 
 ### 2.10 `raw_fragments` Table
 
-**Purpose:** Store unknown fields that don't match current schemas. Enables schema discovery and automated promotion.
+**Purpose:** Store unknown fields that don't match current schemas. Enables schema discovery and automated promotion. Links to sources and interpretation runs for full provenance.
 
 **Schema:**
 
 ```sql
 CREATE TABLE raw_fragments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  record_id UUID NOT NULL REFERENCES records(id),
+  record_id UUID REFERENCES records(id),
+  source_id UUID REFERENCES sources(id),
+  interpretation_run_id UUID REFERENCES interpretation_runs(id),
   fragment_type TEXT NOT NULL,
   fragment_key TEXT NOT NULL,
   fragment_value JSONB NOT NULL,
   fragment_envelope JSONB NOT NULL,
   frequency_count INTEGER DEFAULT 1,
   first_seen TIMESTAMPTZ DEFAULT NOW(),
-  last_seen TIMESTAMPTZ DEFAULT NOW()
+  last_seen TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL
 );
 ```
 
 **Field Definitions:**
 
-| Field               | Type        | Purpose                                                | Mutable | Indexed     |
-| ------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
-| `id`                | UUID        | Unique fragment ID                                     | No      | Primary key |
-| `record_id`         | UUID        | Source record                                          | No      | Yes         |
-| `fragment_type`     | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
-| `fragment_key`      | TEXT        | Field name/key                                         | No      | Yes         |
-| `fragment_value`    | JSONB       | Field value                                            | No      | No          |
-| `fragment_envelope` | JSONB       | Type metadata (type, confidence, etc.)                 | No      | No          |
-| `frequency_count`   | INTEGER     | How many times this fragment appeared                  | Yes     | Yes         |
-| `first_seen`        | TIMESTAMPTZ | When fragment first appeared                           | No      | No          |
-| `last_seen`         | TIMESTAMPTZ | When fragment last appeared                            | Yes     | No          |
+| Field                   | Type        | Purpose                                                | Mutable | Indexed     |
+| ----------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
+| `id`                    | UUID        | Unique fragment ID                                     | No      | Primary key |
+| `record_id`             | UUID        | Source record (legacy, nullable)                       | No      | Yes         |
+| `source_id`             | UUID        | Source that produced this fragment                     | No      | Yes         |
+| `interpretation_run_id` | UUID        | Interpretation run that produced this fragment         | No      | Yes         |
+| `fragment_type`         | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
+| `fragment_key`          | TEXT        | Field name/key                                         | No      | Yes         |
+| `fragment_value`        | JSONB       | Field value                                            | No      | No          |
+| `fragment_envelope`     | JSONB       | Type metadata (type, confidence, etc.)                 | No      | No          |
+| `frequency_count`       | INTEGER     | How many times this fragment appeared                  | Yes     | Yes         |
+| `first_seen`            | TIMESTAMPTZ | When fragment first appeared                           | No      | No          |
+| `last_seen`             | TIMESTAMPTZ | When fragment last appeared                            | Yes     | No          |
+| `user_id`               | UUID        | User who owns this fragment                            | No      | Yes         |
 
 **Indexes:**
 
 ```sql
 CREATE INDEX idx_fragments_record ON raw_fragments(record_id);
+CREATE INDEX idx_fragments_source ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
+CREATE INDEX idx_fragments_run ON raw_fragments(interpretation_run_id) WHERE interpretation_run_id IS NOT NULL;
 CREATE INDEX idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
+CREATE INDEX idx_fragments_user ON raw_fragments(user_id);
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE raw_fragments ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own raw_fragments" ON raw_fragments
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON raw_fragments
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
 
 **Notes:**
@@ -518,11 +564,304 @@ CREATE INDEX idx_fragments_frequency ON raw_fragments(fragment_key, frequency_co
 - Raw fragments accumulate until patterns emerge
 - Automated schema promotion analyzes fragments to propose schema updates
 - Frequency tracking enables pattern detection
+- `source_id` and `interpretation_run_id` provide full provenance
 - See [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.md) for promotion pipeline
+- See [`docs/subsystems/sources.md`](./sources.md) for sources-first architecture
 
 ---
 
-### 2.11 `relationships` Table
+### 2.11 `sources` Table
+
+**Purpose:** Store raw content with content-addressed deduplication. Central to the sources-first ingestion architecture.
+
+**Schema:**
+
+```sql
+CREATE TABLE sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  content_hash TEXT NOT NULL,
+  storage_url TEXT NOT NULL,
+  storage_status TEXT NOT NULL DEFAULT 'uploaded',
+  mime_type TEXT NOT NULL,
+  file_name TEXT,
+  byte_size INTEGER NOT NULL,
+  source_type TEXT NOT NULL,
+  source_agent_id TEXT,
+  source_metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL,
+  CONSTRAINT unique_content_per_user UNIQUE(content_hash, user_id)
+);
+```
+
+**Field Definitions:**
+
+| Field             | Type        | Purpose                                         | Mutable | Indexed     |
+| ----------------- | ----------- | ----------------------------------------------- | ------- | ----------- |
+| `id`              | UUID        | Unique source ID                                | No      | Primary key |
+| `content_hash`    | TEXT        | SHA-256 hash of content                         | No      | Yes         |
+| `storage_url`     | TEXT        | URL in object storage                           | No      | No          |
+| `storage_status`  | TEXT        | 'uploaded', 'pending', 'failed'                 | Yes     | Yes         |
+| `mime_type`       | TEXT        | MIME type of content                            | No      | No          |
+| `file_name`       | TEXT        | Original filename (optional)                    | No      | No          |
+| `byte_size`       | INTEGER     | Size in bytes                                   | No      | No          |
+| `source_type`     | TEXT        | Type: 'file_upload', 'agent_submission', etc.   | No      | No          |
+| `source_agent_id` | TEXT        | Agent ID if submitted via MCP                   | No      | No          |
+| `source_metadata` | JSONB       | Additional metadata                             | No      | No          |
+| `created_at`      | TIMESTAMPTZ | When source was created                         | No      | Yes         |
+| `user_id`         | UUID        | User who owns this source                       | No      | Yes         |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_sources_hash ON sources(content_hash);
+CREATE INDEX idx_sources_user ON sources(user_id);
+CREATE INDEX idx_sources_created ON sources(created_at DESC);
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own sources" ON sources
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON sources
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+**Notes:**
+
+- Content-addressed storage: same content = same hash
+- Per-user deduplication via `(content_hash, user_id)` unique constraint
+- Storage path convention: `sources/{user_id}/{content_hash}`
+- See [`docs/subsystems/sources.md`](./sources.md) for complete architecture
+
+---
+
+### 2.12 `interpretation_runs` Table
+
+**Purpose:** Track versioned interpretation attempts. Enables audit trail of how raw content was interpreted and supports reinterpretation without losing history.
+
+**Schema:**
+
+```sql
+CREATE TABLE interpretation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id UUID NOT NULL REFERENCES sources(id),
+  interpretation_config JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_message TEXT,
+  extracted_entities JSONB DEFAULT '[]',
+  confidence NUMERIC(3,2),
+  unknown_field_count INTEGER NOT NULL DEFAULT 0,
+  extraction_completeness TEXT DEFAULT 'unknown' 
+    CHECK (extraction_completeness IN ('complete', 'partial', 'failed', 'unknown')),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  archived_at TIMESTAMPTZ,
+  user_id UUID NOT NULL,
+  timeout_at TIMESTAMPTZ,
+  heartbeat_at TIMESTAMPTZ
+);
+```
+
+**Field Definitions:**
+
+| Field                     | Type        | Purpose                                         | Mutable | Indexed     |
+| ------------------------- | ----------- | ----------------------------------------------- | ------- | ----------- |
+| `id`                      | UUID        | Unique run ID                                   | No      | Primary key |
+| `source_id`               | UUID        | Source being interpreted                        | No      | Yes         |
+| `interpretation_config`   | JSONB       | Config used (model, version, params)            | No      | No          |
+| `status`                  | TEXT        | 'pending', 'running', 'completed', 'failed'     | Yes     | Yes         |
+| `error_message`           | TEXT        | Error details if failed                         | Yes     | No          |
+| `extracted_entities`      | JSONB       | Summary of entities extracted                   | Yes     | No          |
+| `confidence`              | NUMERIC     | Overall confidence (0-1)                        | Yes     | No          |
+| `unknown_field_count`     | INTEGER     | Count of unknown fields routed to raw_fragments | Yes     | No          |
+| `extraction_completeness` | TEXT        | 'complete', 'partial', 'failed', 'unknown'      | Yes     | No          |
+| `started_at`              | TIMESTAMPTZ | When interpretation started                     | Yes     | No          |
+| `completed_at`            | TIMESTAMPTZ | When interpretation completed                   | Yes     | No          |
+| `created_at`              | TIMESTAMPTZ | When run was created                            | No      | No          |
+| `archived_at`             | TIMESTAMPTZ | When run was archived (null = active)           | Yes     | No          |
+| `user_id`                 | UUID        | User who owns this run                          | No      | Yes         |
+| `timeout_at`              | TIMESTAMPTZ | When run should timeout                         | Yes     | No          |
+| `heartbeat_at`            | TIMESTAMPTZ | Last heartbeat for long-running runs            | Yes     | Yes         |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_runs_source ON interpretation_runs(source_id);
+CREATE INDEX idx_runs_status ON interpretation_runs(status);
+CREATE INDEX idx_runs_active ON interpretation_runs(source_id) WHERE archived_at IS NULL;
+CREATE INDEX idx_runs_stale ON interpretation_runs(heartbeat_at) WHERE status = 'running';
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE interpretation_runs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own runs" ON interpretation_runs
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON interpretation_runs
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+**Notes:**
+
+- Interpretation is non-deterministic but auditable via `interpretation_config`
+- Reinterpretation creates NEW run; never modifies existing
+- Unknown fields count tracked; actual fields stored in `raw_fragments`
+- Timeout handling via `timeout_at` and `heartbeat_at` columns
+
+---
+
+### 2.13 `upload_queue` Table
+
+**Purpose:** Async retry queue for failed storage uploads. Enables resilient ingestion when object storage is temporarily unavailable.
+
+**Schema:**
+
+```sql
+CREATE TABLE upload_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id UUID NOT NULL REFERENCES sources(id),
+  temp_file_path TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 5,
+  next_retry_at TIMESTAMPTZ DEFAULT NOW(),
+  error_message TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL
+);
+```
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_upload_queue_retry ON upload_queue(next_retry_at) 
+  WHERE retry_count < max_retries;
+CREATE INDEX idx_upload_queue_user ON upload_queue(user_id);
+```
+
+**Notes:**
+
+- Background worker processes queue every 5 minutes
+- Exponential backoff: 30s, 60s, 120s, 300s, 600s
+- After max retries, source marked as `storage_status = 'failed'`
+
+---
+
+### 2.14 `storage_usage` Table
+
+**Purpose:** Track per-user storage consumption and interpretation quotas.
+
+**Schema:**
+
+```sql
+CREATE TABLE storage_usage (
+  user_id UUID PRIMARY KEY,
+  total_bytes BIGINT DEFAULT 0,
+  total_sources INTEGER DEFAULT 0,
+  last_calculated TIMESTAMPTZ DEFAULT NOW(),
+  interpretation_count_month INTEGER DEFAULT 0,
+  interpretation_limit_month INTEGER DEFAULT 100,
+  billing_month TEXT DEFAULT to_char(NOW(), 'YYYY-MM')
+);
+```
+
+**Functions:**
+
+```sql
+CREATE OR REPLACE FUNCTION increment_storage_usage(
+  p_user_id UUID,
+  p_bytes BIGINT
+) RETURNS void AS $$
+BEGIN
+  INSERT INTO storage_usage (user_id, total_bytes, total_sources, last_calculated)
+  VALUES (p_user_id, p_bytes, 1, NOW())
+  ON CONFLICT (user_id) DO UPDATE SET
+    total_bytes = storage_usage.total_bytes + p_bytes,
+    total_sources = storage_usage.total_sources + 1,
+    last_calculated = NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION increment_interpretation_count(
+  p_user_id UUID
+) RETURNS void AS $$
+DECLARE
+  current_billing_month TEXT := to_char(NOW(), 'YYYY-MM');
+BEGIN
+  INSERT INTO storage_usage (user_id, interpretation_count_month, billing_month)
+  VALUES (p_user_id, 1, current_billing_month)
+  ON CONFLICT (user_id) DO UPDATE SET
+    interpretation_count_month = CASE 
+      WHEN storage_usage.billing_month = current_billing_month 
+      THEN storage_usage.interpretation_count_month + 1
+      ELSE 1
+    END,
+    billing_month = current_billing_month;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+**Notes:**
+
+- Interpretation quota resets monthly
+- Default limit: 100/month (free tier)
+
+---
+
+### 2.15 `entity_merges` Table
+
+**Purpose:** Audit log for entity merge operations. Tracks when duplicate entities are merged.
+
+**Schema:**
+
+```sql
+CREATE TABLE entity_merges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  from_entity_id TEXT NOT NULL REFERENCES entities(id),
+  to_entity_id TEXT NOT NULL REFERENCES entities(id),
+  reason TEXT,
+  merged_by TEXT NOT NULL,
+  observations_rewritten INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT entity_merges_no_self_merge CHECK (from_entity_id <> to_entity_id)
+);
+```
+
+**Indexes:**
+
+```sql
+CREATE UNIQUE INDEX idx_entity_merges_from_unique ON entity_merges(user_id, from_entity_id);
+CREATE INDEX idx_entity_merges_user ON entity_merges(user_id);
+CREATE INDEX idx_entity_merges_to ON entity_merges(user_id, to_entity_id);
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE entity_merges ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own entity_merges" ON entity_merges
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON entity_merges
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+**Notes:**
+
+- `from_entity_id` and `to_entity_id` are TEXT (matching `entities.id` type)
+- Unique constraint on `(user_id, from_entity_id)` prevents merge chains
+- Merge rewrites observations, not the original entity record
+- See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for merge semantics
+
+---
+
+### 2.16 `relationships` Table
 
 **Purpose:** Store first-class typed relationships between entities. Enables flexible graph modeling without hard-coded hierarchies.
 
@@ -987,11 +1326,11 @@ CREATE INDEX idx_records_unknown_fields
 
 ---
 
-## 4. Entity and Event Schema (Future)
+## 4. Entity and Event Schema
 
-**MVP Note:** Neotoma MVP stores entities and events implicitly within `properties` or as separate records. Future versions will have dedicated `entities` and `events` tables.
+### 4.1 `entities` Table
 
-**Planned `entities` Table:**
+**Purpose:** Store canonical entities (people, companies, locations) with deterministic IDs, including user isolation and merge tracking.
 
 ```sql
 CREATE TABLE entities (
@@ -1002,11 +1341,48 @@ CREATE TABLE entities (
   metadata JSONB DEFAULT '{}',
   first_seen_at TIMESTAMP WITH TIME ZONE,
   last_seen_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  user_id UUID NOT NULL,
+  merged_to_entity_id TEXT REFERENCES entities(id),
+  merged_at TIMESTAMPTZ
 );
 ```
 
-**Planned `events` Table:**
+**Extensions:**
+
+| Field                 | Type        | Purpose                                         |
+| --------------------- | ----------- | ----------------------------------------------- |
+| `user_id`             | UUID        | User who owns this entity (user isolation)      |
+| `merged_to_entity_id` | TEXT        | Target entity if this entity was merged         |
+| `merged_at`           | TIMESTAMPTZ | Timestamp when merge occurred                   |
+
+**Indexes:**
+
+```sql
+CREATE INDEX idx_entities_user ON entities(user_id);
+CREATE INDEX idx_entities_user_type ON entities(user_id, entity_type);
+CREATE INDEX idx_entities_user_type_name ON entities(user_id, entity_type, canonical_name);
+CREATE INDEX idx_entities_merged ON entities(user_id, merged_to_entity_id)
+  WHERE merged_to_entity_id IS NOT NULL;
+```
+
+**RLS Policies:**
+
+```sql
+ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own entities" ON entities
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access - entities" ON entities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+**Merge Semantics:**
+
+- Merged entities have `merged_to_entity_id` set to target entity
+- Default queries should exclude merged entities: `WHERE merged_to_entity_id IS NULL`
+- See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for complete merge behavior
+
+### 4.2 `events` Table
 
 ```sql
 CREATE TABLE events (
@@ -1031,7 +1407,43 @@ CREATE TABLE events (
 
 ## 5. Row-Level Security (RLS)
 
-### 5.1 Current RLS Policies
+### 5.1 RLS Architecture
+
+All user-owned tables have RLS enabled with user isolation. The security model is:
+
+- **Client keys** (`anon`, `authenticated`): SELECT-only access via RLS
+- **Service role**: Full access for all mutations (MCP server uses service_role)
+- **User identity**: Enforced at MCP layer and stamped into rows
+
+### 5.2 User-Isolated Tables
+
+The following tables are user-scoped with RLS policies:
+
+| Table | User Column | RLS Policy |
+|-------|-------------|------------|
+| `sources` | `user_id` | SELECT for own records |
+| `interpretation_runs` | `user_id` | SELECT for own records |
+| `observations` | `user_id` | SELECT for own records |
+| `entity_snapshots` | `user_id` | SELECT for own records |
+| `entities` | `user_id` | SELECT for own records |
+| `raw_fragments` | `user_id` | SELECT for own records |
+| `entity_merges` | `user_id` | SELECT for own records |
+
+**Standard RLS Policy Pattern:**
+
+```sql
+ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
+
+-- Users can only read their own records
+CREATE POLICY "Users read own <table_name>" ON <table_name>
+  FOR SELECT USING (user_id = auth.uid());
+
+-- Service role has full access for mutations
+CREATE POLICY "Service role full access" ON <table_name>
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+### 5.3 Records Table (Legacy)
 
 **Service Role (Full Access):**
 
@@ -1052,32 +1464,22 @@ CREATE POLICY "public write" ON records
   WITH CHECK ( auth.role() = 'authenticated' );
 ```
 
-**Public Read (All Records):**
+### 5.4 Entity Snapshots RLS
 
 ```sql
-CREATE POLICY "public read" ON records
-  FOR SELECT USING ( true );
+ALTER TABLE entity_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own snapshots" ON entity_snapshots
+  FOR SELECT USING (user_id = auth.uid());
+CREATE POLICY "Service role full access" ON entity_snapshots
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
 
-**MVP Limitation:** No multi-user isolation (all authenticated users see all records). Future versions will add `user_id` column and per-user RLS.
+### 5.5 Security Invariants
 
----
-
-### 5.2 Future Multi-User RLS
-
-**Planned `user_id` Column:**
-
-```sql
-ALTER TABLE records ADD COLUMN user_id UUID REFERENCES auth.users(id);
-```
-
-**Planned Per-User Policy:**
-
-```sql
-CREATE POLICY "Users see only their records" ON records
-  FOR SELECT
-  USING (user_id = auth.uid());
-```
+1. **No client writes**: All INSERT/UPDATE/DELETE via MCP server using `service_role` key
+2. **User stamping**: `user_id` explicitly set by MCP server from authenticated context
+3. **Storage URLs**: Opaque, never exposed to clients; all reads via MCP server + ownership check
+4. **Cross-user prevention**: All operations validate `user_id` match; merge cannot cross users
 
 ---
 
