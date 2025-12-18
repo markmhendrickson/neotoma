@@ -1,0 +1,128 @@
+feature_id: "fu_110"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+risk_level: "medium"
+
+tags:
+  - "schema"
+  - "ingestion"
+  - "security"
+
+kill_switch:
+  conditions:
+    - condition: "Migration fails in staging or prod"
+      action: "Stop deployment, roll back schema change"
+    - condition: "Unexpected RLS denials in ingestion path"
+      action: "Disable new writes, investigate policies"
+
+metadata:
+  title: "Sources Table Migration"
+  description: "Add content-addressed raw storage table with deduplication and RLS policies"
+  owner: "engineering@neotoma.com"
+  reviewers:
+    - "storage@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+subsystems:
+  - name: "schema"
+    changes: "Adds sources table, indexes, constraints, and RLS policies"
+  - name: "sources"
+    changes: "Enables provenance + dedup foundation for ingestion"
+
+schema_changes:
+  - table: "sources"
+    operation: "create_table"
+    columns:
+      - { name: "id", type: "UUID", nullable: false, primary_key: true, default_value: "gen_random_uuid()" }
+      - { name: "content_hash", type: "TEXT", nullable: false }
+      - { name: "storage_url", type: "TEXT", nullable: false }
+      - { name: "storage_status", type: "TEXT", nullable: false, default_value: "'uploaded'" }
+      - { name: "mime_type", type: "TEXT", nullable: false }
+      - { name: "file_name", type: "TEXT", nullable: true }
+      - { name: "byte_size", type: "INTEGER", nullable: false, check: "byte_size >= 0" }
+      - { name: "source_type", type: "TEXT", nullable: false }
+      - { name: "source_agent_id", type: "TEXT", nullable: true }
+      - { name: "source_metadata", type: "JSONB", nullable: false, default_value: "'{}'::jsonb" }
+      - { name: "created_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "user_id", type: "UUID", nullable: false }
+    constraints:
+      - type: "unique"
+        columns: ["content_hash", "user_id"]
+        name: "unique_content_per_user"
+
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_hash"
+    columns: ["content_hash"]
+
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_user"
+    columns: ["user_id"]
+
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_created"
+    columns: ["created_at DESC"]
+
+rls_policies:
+  - table: "sources"
+    name: "Users read own sources"
+    command: "select"
+    role: "authenticated"
+    using: "auth.uid() = user_id"
+  - table: "sources"
+    name: "Service role full access - sources"
+    command: "all"
+    role: "service_role"
+    using: "true"
+    with_check: "true"
+
+testing:
+  unit_tests:
+    - file: "tests/schema/sources_schema.test.ts"
+      description: "Ensures schema snapshot includes sources table, indexes, and policies"
+
+observability:
+  metrics:
+    - name: "sources_insert_total"
+      type: "counter"
+      description: "Counts insert attempts by status"
+    - name: "sources_deduplicated_total"
+      type: "counter"
+      description: "Counts dedup hits per user"
+  logs:
+    - level: "info"
+      event: "source.created"
+      fields: ["source_id", "user_id", "content_hash", "storage_status"]
+    - level: "warn"
+      event: "source.deduplicated"
+      fields: ["user_id", "content_hash"]
+
+dependencies:
+  requires: []
+  blocks:
+    - feature_id: "fu_111"
+      reason: "interpretation_runs references sources"
+    - feature_id: "fu_120"
+      reason: "raw storage service writes to sources"
+    - feature_id: "fu_122"
+      reason: "ingest tool must insert sources before observations"
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "schema_migration"
+  rollback:
+    steps:
+      - "Stop ingestion writes"
+      - "Drop dependent foreign keys"
+      - "Drop sources table if unreleased"
+    triggers:
+      - condition: "Widespread dedup constraint violations"
+        action: "Investigate hashing input, halt ingestion"
+      - condition: "RLS prevents service role writes"
+        action: "Review policies, re-run migration"
