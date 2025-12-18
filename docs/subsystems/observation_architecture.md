@@ -1,4 +1,4 @@
-# Neotoma Observation Architecture — Four-Layer Truth Model
+# Neotoma Observation Architecture — Three-Layer Truth Model
 
 _(Complete Overview of Observation Layer)_
 
@@ -6,7 +6,7 @@ _(Complete Overview of Observation Layer)_
 
 ## Purpose
 
-This document provides a complete overview of Neotoma's observation architecture — the four-layer truth model that enables deterministic, explainable, multi-source entity resolution.
+This document provides a complete overview of Neotoma's observation architecture — the three-layer truth model that enables deterministic, explainable, multi-source entity resolution.
 
 ---
 
@@ -14,7 +14,7 @@ This document provides a complete overview of Neotoma's observation architecture
 
 This document covers:
 
-- Four-layer truth model overview
+- Three-layer truth model overview
 - Observation lifecycle
 - Snapshot computation flow
 - Provenance tracking
@@ -28,21 +28,21 @@ This document does NOT cover:
 
 ---
 
-## 1. Four-Layer Truth Model
+## 1. Three-Layer Truth Model
 
 ### 1.1 Model Overview
 
-Neotoma implements a four-layer truth model:
+Neotoma implements a three-layer truth model:
 
 ```
-Document → Entity → Observation → Snapshot
+Payload → Observation → Entity → Snapshot
 ```
 
 **Layers:**
 
-1. **Document** — the file itself (PDF, email, CSV, image)
-2. **Entity** — the logical thing in the world with a stable ID
-3. **Observation** — granular, source-specific facts extracted from documents
+1. **Payload (Document)** — unified ingestion primitive (files + agent data)
+2. **Observation** — granular, source-specific facts extracted from payloads
+3. **Entity** — the logical thing in the world with a stable ID
 4. **Snapshot** — deterministic reducer output representing current truth
 
 **Model Diagram:**
@@ -50,17 +50,17 @@ Document → Entity → Observation → Snapshot
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
-    Document[Document<br/>PDF, Email, CSV]
+    Payload[Payload<br/>Files + Agent Data]
     Observation[Observation<br/>Granular Facts]
     Entity[Entity<br/>Stable ID]
     Snapshot[Snapshot<br/>Current Truth]
 
-    Document -->|Extract| Observation
+    Payload -->|Extract| Observation
     Observation -->|Merge via Reducer| Snapshot
     Entity -.->|Target| Observation
     Entity -.->|Represents| Snapshot
 
-    style Document fill:#e1f5ff
+    style Payload fill:#e1f5ff
     style Observation fill:#fff4e6
     style Entity fill:#e6ffe6
     style Snapshot fill:#ffe6f0
@@ -70,8 +70,9 @@ flowchart TD
 
 - **Decouples ingestion order from truth:** Observations can arrive in any order
 - **Enables multi-source merging:** Multiple sources contribute observations about same entity
-- **Provides full provenance:** Every snapshot field traces to specific observations and documents
+- **Provides full provenance:** Every snapshot field traces to specific observations and payloads
 - **Supports deterministic merging:** Reducers compute snapshots deterministically
+- **Unified ingestion:** Files and agent submissions both create payloads
 
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
 

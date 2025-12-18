@@ -1,0 +1,50 @@
+[
+  {
+    "schema_version": "1.0",
+    "item_name": "Office Desk",
+    "status": "pending",
+    "location": "Home Office",
+    "priority": "medium",
+    "estimated_cost_usd": 500.0,
+    "actual_cost_usd": 0,
+    "currency": "USD",
+    "category": "furniture",
+    "vendor": "IKEA",
+    "created_date": "2024-12-01T00:00:00Z",
+    "completed_date": null,
+    "notes": "Need ergonomic desk for home office"
+  },
+  {
+    "schema_version": "1.0",
+    "item_name": "Office Desk",
+    "status": "in_progress",
+    "location": "Home Office",
+    "priority": "medium",
+    "estimated_cost_usd": 500.0,
+    "actual_cost_usd": 0,
+    "currency": "USD",
+    "category": "furniture",
+    "vendor": "IKEA",
+    "created_date": "2024-12-01T00:00:00Z",
+    "completed_date": null,
+    "notes": "Ordered, waiting for delivery"
+  },
+  {
+    "schema_version": "1.0",
+    "item_name": "Office Desk",
+    "status": "completed",
+    "location": "Home Office",
+    "priority": "medium",
+    "estimated_cost_usd": 500.0,
+    "actual_cost_usd": 475.0,
+    "currency": "USD",
+    "category": "furniture",
+    "vendor": "IKEA",
+    "created_date": "2024-12-01T00:00:00Z",
+    "completed_date": "2024-12-10T00:00:00Z",
+    "notes": "Delivered and assembled"
+  }
+]
+
+
+

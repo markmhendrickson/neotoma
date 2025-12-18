@@ -1,0 +1,51 @@
+[
+  {
+    "schema_version": "1.0",
+    "merchant": "Netflix",
+    "expense_name": "Netflix Subscription",
+    "expense_type": "entertainment",
+    "location": "US",
+    "frequency_per_year": 12,
+    "payment_amount_eur": 0,
+    "payment_amount_usd": 15.99,
+    "yearly_amount_eur": 0,
+    "yearly_amount_usd": 191.88,
+    "monthly_amount_eur": 0,
+    "monthly_amount_usd": 15.99,
+    "percent_fixed_expenses": 2.5,
+    "percent_net_income": 0.5,
+    "inflates": true,
+    "status": "active",
+    "notes": "Monthly streaming subscription",
+    "renews": "monthly",
+    "started": "2020-01-01",
+    "ended": "",
+    "payment_method": "credit_card"
+  },
+  {
+    "schema_version": "1.0",
+    "merchant": "Netflix",
+    "expense_name": "Netflix Subscription",
+    "expense_type": "entertainment",
+    "location": "US",
+    "frequency_per_year": 12,
+    "payment_amount_eur": 0,
+    "payment_amount_usd": 16.99,
+    "yearly_amount_eur": 0,
+    "yearly_amount_usd": 203.88,
+    "monthly_amount_eur": 0,
+    "monthly_amount_usd": 16.99,
+    "percent_fixed_expenses": 2.6,
+    "percent_net_income": 0.5,
+    "inflates": true,
+    "status": "active",
+    "notes": "Monthly streaming subscription - price increased",
+    "renews": "monthly",
+    "started": "2020-01-01",
+    "ended": "",
+    "payment_method": "credit_card"
+  }
+]
+
+
+

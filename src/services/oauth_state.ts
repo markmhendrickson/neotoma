@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, createHash } from "node:crypto";
 
 interface OAuthStateEntry {
   provider: string;
@@ -60,13 +60,11 @@ function purgeExpired() {
 
 function randomString(length = 32): string {
   return randomBytes(length)
-    .toString('base64url')
-    .replace(/[^a-zA-Z0-9-_]/g, '')
+    .toString("base64url")
+    .replace(/[^a-zA-Z0-9-_]/g, "")
     .slice(0, length);
 }
 
 function pkceChallenge(verifier: string): string {
-  return createHash('sha256').update(verifier).digest('base64url');
+  return createHash("sha256").update(verifier).digest("base64url");
 }
-
-

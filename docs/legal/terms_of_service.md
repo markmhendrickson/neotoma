@@ -27,7 +27,7 @@ Neotoma is a **deterministic, structured memory substrate** that transforms frag
 
 - Accepts personal data via dual-path ingestion:
   - File uploads (PDFs, images)
-  - Agent interactions (structured data via MCP `store_record`)
+  - Agent interactions (structured data via MCP `submit_payload`)
 - Extracts structured fields (invoice numbers, amounts, dates, etc.) from documents OR accepts structured data from agents
 - Identifies entities (people, companies, locations) across all personal data
 - Builds timelines from dates across all personal data

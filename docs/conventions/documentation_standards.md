@@ -13,6 +13,10 @@ Every documentation file is governed by three root-of-truth documents:
 1. **`docs/NEOTOMA_MANIFEST.md`** — Unified architectural and product context
 2. **`docs/private/governance/00_GENERATION.md`** — Required documentation artifacts and sections
 
+**Related Conventions:**
+
+- **`docs/conventions/code_conventions.md`** — Code style, naming, and patterns for TypeScript, SQL, YAML, and Shell scripts
+
 All documentation MUST:
 
 - Remain consistent with these three sources
@@ -710,10 +714,14 @@ Agents modifying documentation MUST:
 6. Include proper Agent Instructions section
 7. Cross-link to foundational documents where relevant
 8. Update the `docs/context/index.md` if adding new files
-9. **Identify and update downstream documentation** that depends on changes (see `.cursor/rules/downstream_doc_updates.md`)
+9. **Identify and update downstream documentation** that depends on changes:
+   - Check `docs/doc_dependencies.yaml` for explicit dependencies
+   - Run `node scripts/validate-doc-dependencies.js [modified-doc-path]` to validate
+   - Update downstream docs as needed (see `.cursor/rules/downstream_doc_updates.md`)
+   - Update dependency map if new relationships discovered
 10. **Update README.md** if changes affect user-facing information (see `.cursor/rules/readme_maintenance.md`)
 11. **Follow writing style rules** (Section 5.4): No em dashes, no AI-generated patterns, use commas/periods/colons instead
-12. Run documentation linter (if available) before committing
+12. Run documentation validation before committing (automatic via pre-commit hook)
 
 ---
 
@@ -742,8 +750,12 @@ Load this document whenever:
 5. Agent Instructions section is present in every doc
 6. No PII or secrets in examples (Section 13)
 7. Timeline estimates assume Cursor agent execution (Section 11)
-8. Downstream documentation updated when upstream docs change (see `.cursor/rules/downstream_doc_updates.md`)
+8. Downstream documentation updated when upstream docs change:
+   - Use `docs/doc_dependencies.yaml` to identify dependencies
+   - Run validation script: `node scripts/validate-doc-dependencies.js [doc-path]`
+   - See `.cursor/rules/downstream_doc_updates.md` for complete requirements
 9. README.md updated when documentation changes affect user-facing information (see `.cursor/rules/readme_maintenance.md`)
+10. Dependency map (`docs/doc_dependencies.yaml`) updated when new doc relationships are created
 
 ### Forbidden Patterns
 
@@ -767,7 +779,8 @@ Load this document whenever:
 - [ ] Cross-references use correct relative paths
 - [ ] No PII or secrets in examples
 - [ ] Consistent with NEOTOMA_MANIFEST.md
-- [ ] Downstream documentation updated if upstream doc changed
+- [ ] Downstream documentation updated if upstream doc changed (validated via script)
+- [ ] Dependency map (`docs/doc_dependencies.yaml`) updated if new relationships created
 - [ ] README.md updated if changes affect user-facing information
 - [ ] No em dashes (—) or en dashes (–) used (use commas, periods, or colons instead)
 - [ ] No AI-generated writing patterns (conversational transitions, soft questions, motivational language)

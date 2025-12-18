@@ -1,0 +1,84 @@
+{
+  "entity_type": "flow",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "flow_name": {
+        "type": "string",
+        "required": true
+      },
+      "flow_date": {
+        "type": "date",
+        "required": true
+      },
+      "year": {
+        "type": "number",
+        "required": false
+      },
+      "timeline": {
+        "type": "string",
+        "required": false
+      },
+      "amount_usd": {
+        "type": "number",
+        "required": true
+      },
+      "amount_original": {
+        "type": "number",
+        "required": false
+      },
+      "currency_original": {
+        "type": "string",
+        "required": false
+      },
+      "for_cash_flow": {
+        "type": "boolean",
+        "required": false
+      },
+      "party": {
+        "type": "string",
+        "required": false
+      },
+      "flow_type": {
+        "type": "string",
+        "required": false
+      },
+      "location": {
+        "type": "string",
+        "required": false
+      },
+      "category": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "amount_usd": {
+        "strategy": "last_write"
+      },
+      "flow_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

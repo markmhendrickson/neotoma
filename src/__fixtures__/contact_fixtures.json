@@ -1,0 +1,62 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1-555-0100",
+    "organization": "Acme Corp",
+    "role": "CEO",
+    "contact_type": "business",
+    "category": "client",
+    "platform": "minted",
+    "address": "123 Business St, City, State 12345",
+    "country": "US",
+    "website": "https://acmecorp.com",
+    "notes": "Primary client contact",
+    "first_contact_date": "2023-01-15T00:00:00Z",
+    "last_contact_date": "2024-12-10T00:00:00Z",
+    "created_date": "2023-01-15T00:00:00Z",
+    "updated_date": "2024-12-10T00:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Jane Smith",
+    "email": "jane.smith@example.com",
+    "phone": "+1-555-0200",
+    "organization": "",
+    "role": "",
+    "contact_type": "personal",
+    "category": "friend",
+    "platform": "gmail",
+    "address": "456 Personal Ave, City, State 12345",
+    "country": "US",
+    "website": "",
+    "notes": "Personal friend",
+    "first_contact_date": "2022-06-01T00:00:00Z",
+    "last_contact_date": "2024-11-20T00:00:00Z",
+    "created_date": "2022-06-01T00:00:00Z",
+    "updated_date": "2024-11-20T00:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "John Doe",
+    "email": "john.doe@example.com",
+    "phone": "+1-555-0100",
+    "organization": "Acme Corp",
+    "role": "CEO",
+    "contact_type": "business",
+    "category": "client",
+    "platform": "minted",
+    "address": "456 New Business St, City, State 12345",
+    "country": "US",
+    "website": "https://acmecorp.com",
+    "notes": "Primary client contact - updated address",
+    "first_contact_date": "2023-01-15T00:00:00Z",
+    "last_contact_date": "2024-12-15T00:00:00Z",
+    "created_date": "2023-01-15T00:00:00Z",
+    "updated_date": "2024-12-15T00:00:00Z"
+  }
+]
+
+
+

@@ -1,0 +1,83 @@
+{
+  "entity_type": "tax_filing",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "jurisdiction": {
+        "type": "string",
+        "required": true
+      },
+      "year": {
+        "type": "number",
+        "required": true
+      },
+      "filings": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": true
+      },
+      "companies": {
+        "type": "string",
+        "required": false
+      },
+      "due_date": {
+        "type": "date",
+        "required": false
+      },
+      "filed_date": {
+        "type": "date",
+        "required": false
+      },
+      "amount_owed": {
+        "type": "number",
+        "required": false
+      },
+      "amount_paid": {
+        "type": "number",
+        "required": false
+      },
+      "currency": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "status": {
+        "strategy": "last_write"
+      },
+      "filed_date": {
+        "strategy": "last_write"
+      },
+      "amount_paid": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

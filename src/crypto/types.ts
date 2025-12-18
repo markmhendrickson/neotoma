@@ -8,11 +8,11 @@ export interface KeyPair {
 }
 
 export interface X25519KeyPair extends KeyPair {
-  type: 'x25519';
+  type: "x25519";
 }
 
 export interface Ed25519KeyPair extends KeyPair {
-  type: 'ed25519';
+  type: "ed25519";
 }
 
 export interface EncryptedEnvelope {
@@ -42,8 +42,7 @@ export interface KeyExport {
   /** Base64url-encoded public key */
   publicKey: string;
   /** Key type */
-  type: 'x25519' | 'ed25519';
+  type: "x25519" | "ed25519";
   /** Timestamp when exported */
   exportedAt: string;
 }
-

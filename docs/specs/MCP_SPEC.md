@@ -13,7 +13,7 @@ This document provides the complete specification for Neotoma's Model Context Pr
 **Dual-Path Ingestion:** MCP enables dual-path ingestion for structured personal data memory:
 
 1. `upload_file` — File uploads (PDFs, images, receipts)
-2. `store_record` — Agent interactions (structured data from conversations)
+2. `submit_payload` — Agent interactions (structured data from conversations)
 
 Both paths feed into the same structured memory with entity resolution and timelines.
 
@@ -86,14 +86,23 @@ flowchart LR
 
 ## 2. Complete MCP Action Catalog
 
-### 2.1 Core Record Operations
+### 2.1 Core Payload Operations
 
-| Action             | Purpose                           | Consistency                                        | Deterministic          |
-| ------------------ | --------------------------------- | -------------------------------------------------- | ---------------------- |
-| `store_record`     | Create new record                 | Strong                                             | Yes (given same input) |
-| `update_record`    | Update record metadata/properties | Strong                                             | Yes                    |
-| `retrieve_records` | Query records with filters        | Strong (metadata), Bounded Eventual (search index) | Yes (ranking)          |
-| `delete_record`    | Remove record                     | Strong                                             | Yes                    |
+| Action           | Purpose                 | Consistency | Deterministic          |
+| ---------------- | ----------------------- | ----------- | ---------------------- |
+| `submit_payload` | Submit payload envelope | Strong      | Yes (given same input) |
+
+**Note:** `submit_payload` is the primary ingestion action in v0.1.1+. It replaces `store_record` and provides capability-based processing with deterministic deduplication.
+
+### 2.1.1 Legacy Record Operations (Deprecated)
+
+| Action             | Purpose                           | Consistency                                        | Deterministic |
+| ------------------ | --------------------------------- | -------------------------------------------------- | ------------- |
+| `update_record`    | Update record metadata/properties | Strong                                             | Yes           |
+| `retrieve_records` | Query records with filters        | Strong (metadata), Bounded Eventual (search index) | Yes (ranking) |
+| `delete_record`    | Remove record                     | Strong                                             | Yes           |
+
+**Note:** These operations are deprecated in v0.1.1+ and maintained for backward compatibility. New code should use `submit_payload` and entity-based operations (`get_entity_snapshot`, `list_observations`).
 
 ---
 
@@ -142,24 +151,29 @@ flowchart LR
 | `create_relationship`  | Create typed relationship between entities | Strong      | Yes           | ✅ MVP     |
 | `list_relationships`   | Query entity relationships                 | Strong      | Yes           | ✅ MVP     |
 
-**Note:** These actions enable AI agents to work with entities, observations, and snapshots — the core of Neotoma's four-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
+**Note:** These actions enable AI agents to work with entities, observations, and snapshots — the core of Neotoma's three-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
 
 ---
 
 ## 3. Action Specifications
 
-### 3.1 `store_record`
+### 3.1 `submit_payload`
 
-**Purpose:** Create a new record with properties and optional files.
+**Purpose:** Submit a payload envelope for compilation into payloads and observations. Agents submit `capability_id` + `body` + `provenance`; server handles schema reasoning, deduplication, and entity extraction.
 
 **Request Schema:**
 
 ```typescript
 {
-  type: string;                    // Required: Application type (e.g., 'invoice', 'transaction', 'note')
-  properties: Record<string, any>; // Required: Flexible key-value properties
-  file_urls?: string[];            // Optional: Associated file URLs
-  embedding?: number[];            // Optional: 1536-dim vector for semantic search
+  capability_id: string;           // Required: Versioned capability (e.g., "neotoma:store_invoice:v1")
+  body: Record<string, unknown>;   // Required: Payload data
+  provenance: {
+    source_refs: string[];         // Required: Immediate source payload IDs (not full chain)
+    extracted_at: string;          // Required: ISO 8601 timestamp
+    extractor_version: string;     // Required: Extractor version (e.g., "neotoma-mcp:v0.1.1")
+    agent_id?: string;             // Optional: Agent identifier
+  };
+  client_request_id?: string;      // Optional: Retry correlation ID
 }
 ```
 
@@ -167,63 +181,81 @@ flowchart LR
 
 ```typescript
 {
-  id: string;                      // UUID of created record
-  type: string;                    // Application type (matches request)
-  properties: Record<string, any>;
-  file_urls: string[];
-  created_at: string;              // ISO 8601
-  updated_at: string;              // ISO 8601
+  payload_id: string; // UUID of created/found payload
+  payload_content_id: string; // Hash-based content ID (for deduplication)
+  payload_submission_id: string; // UUIDv7 submission ID (time-ordered)
+  created: boolean; // true if new payload, false if duplicate
+  message: string; // Human-readable status message
 }
 ```
 
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
-| `VALIDATION_ERROR` | 400 | Invalid input schema | No |
+| `VALIDATION_ERROR` | 400 | Invalid payload envelope schema | No |
+| `UNKNOWN_CAPABILITY` | 400 | Capability ID not found | No |
 | `DB_INSERT_FAILED` | 500 | Database write failed | Yes |
 
-**Type Validation:**
+**Capability Validation:**
 
-- `type` MUST be one of the canonical application types defined in [`docs/subsystems/record_types.md`](../subsystems/record_types.md)
-- Examples: `"invoice"`, `"receipt"`, `"transaction"`, `"contract"`, `"note"`, `"travel_document"`, `"identity_document"`
+- `capability_id` MUST be a valid capability (e.g., `"neotoma:store_invoice:v1"`)
+- Available capabilities: `neotoma:store_invoice:v1`, `neotoma:store_transaction:v1`, `neotoma:store_receipt:v1`, `neotoma:store_contract:v1`, `neotoma:store_note:v1`
+- See [`docs/architecture/payload_model.md`](../architecture/payload_model.md) for capability details
 
 **Example:**
 
 ```json
 // Request
 {
-  "type": "transaction",
-  "properties": {
+  "capability_id": "neotoma:store_invoice:v1",
+  "body": {
+    "invoice_number": "INV-001",
     "amount": 1500.00,
-    "currency": "USD",
-    "vendor": "Acme Corp",
-    "date": "2024-01-15"
+    "vendor_name": "Acme Corp",
+    "customer_name": "Test Customer",
+    "date": "2025-01-15"
+  },
+  "provenance": {
+    "source_refs": [],
+    "extracted_at": "2025-01-15T10:30:00Z",
+    "extractor_version": "neotoma-mcp:v0.1.1",
+    "agent_id": "claude-3-opus"
   }
 }
 
 // Response
 {
-  "id": "rec_abc123...",
-  "type": "transaction",
-  "properties": {
-    "amount": 1500.00,
-    "currency": "USD",
-    "vendor": "Acme Corp",
-    "date": "2024-01-15"
-  },
-  "file_urls": [],
-  "created_at": "2024-01-15T10:30:00Z",
-  "updated_at": "2024-01-15T10:30:00Z"
+  "payload_id": "550e8400-e29b-41d4-a716-446655440000",
+  "payload_content_id": "payload_a1b2c3d4e5f6g7h8i9j0k1l2",
+  "payload_submission_id": "sub_01234567-89ab-cdef-0123-456789abcdef",
+  "created": true,
+  "message": "Payload created and observations extracted"
 }
 ```
 
-**Consistency:** Strong (record immediately queryable)
+**Deduplication:**
 
-**Determinism:** Yes (same properties → same structure; different `id` and timestamps per call)
+- Same payload content (after normalization) → same `payload_content_id`
+- Duplicate submissions return existing payload with `created: false`
+- Normalization includes: field selection, string normalization, array sorting
+
+**Entity Extraction:**
+
+- All payloads extract at least one entity (the payload itself)
+- Additional entities extracted per capability rules (field_value, array_items)
+- Observations created automatically with `source_payload_id` reference
+
+**Consistency:** Strong (payload immediately queryable, observations created synchronously)
+
+**Determinism:** Yes (same payload content → same `payload_content_id`; deterministic entity extraction)
 
 ---
 
-### 3.2 `update_record`
+### 3.2 `update_record` (Deprecated)
+
+**Status:** Deprecated in v0.1.1+. Use `submit_payload` with updated data instead.
+
+**Purpose:** Update existing record's properties or metadata.
 
 **Purpose:** Update existing record's properties or metadata.
 
@@ -265,7 +297,11 @@ flowchart LR
 
 ---
 
-### 3.3 `retrieve_records`
+### 3.3 `retrieve_records` (Deprecated)
+
+**Status:** Deprecated in v0.1.1+. Use entity-based operations (`get_entity_snapshot`, `list_observations`) instead.
+
+**Purpose:** Query records with filters, search, and semantic matching.
 
 **Purpose:** Query records with filters, search, and semantic matching.
 
@@ -316,7 +352,11 @@ flowchart LR
 
 ---
 
-### 3.4 `delete_record`
+### 3.4 `delete_record` (Deprecated)
+
+**Status:** Deprecated in v0.1.1+. Payloads are immutable; use entity-based operations for data management.
+
+**Purpose:** Delete a record and its associated files.
 
 **Purpose:** Delete a record and its associated files.
 
@@ -434,7 +474,7 @@ flowchart LR
 
 **Purpose:** Get entity snapshot with provenance. Returns current truth for entity computed by reducer from observations.
 
-**Four-Layer Model Context:** This action returns the **Snapshot** layer — the deterministic output of the reducer engine that merges multiple **Observations** (extracted from **Documents**) about an **Entity**. The snapshot represents the current truth, with every field traceable to its source observation and document.
+**Three-Layer Model Context:** This action returns the **Snapshot** layer — the deterministic output of the reducer engine that merges multiple **Observations** (extracted from **Payloads**) about an **Entity**. The snapshot represents the current truth, with every field traceable to its source observation and payload.
 
 **Use Cases:**
 

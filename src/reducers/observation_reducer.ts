@@ -49,7 +49,7 @@ export class ObservationReducer {
    */
   async computeSnapshot(
     entityId: string,
-    observations: Observation[]
+    observations: Observation[],
   ): Promise<EntitySnapshot> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -64,7 +64,9 @@ export class ObservationReducer {
     const schemaEntry = await schemaRegistry.loadActiveSchema(entityType);
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
-      console.warn(`No active schema found for entity type ${entityType}, using defaults`);
+      console.warn(
+        `No active schema found for entity type ${entityType}, using defaults`,
+      );
       return this.computeSnapshotWithDefaults(entityId, observations);
     }
 
@@ -94,7 +96,7 @@ export class ObservationReducer {
         field,
         sortedObservations,
         strategy,
-        tieBreaker
+        tieBreaker,
       );
 
       if (result.value !== undefined && result.value !== null) {
@@ -143,11 +145,11 @@ export class ObservationReducer {
     field: string,
     observations: Observation[],
     strategy: MergeStrategy,
-    tieBreaker: "observed_at" | "source_priority"
+    tieBreaker: "observed_at" | "source_priority",
   ): { value: unknown; source_observation_id: string } {
     // Filter observations that have this field
     const relevantObservations = observations.filter(
-      (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null
+      (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null,
     );
 
     if (relevantObservations.length === 0) {
@@ -177,7 +179,7 @@ export class ObservationReducer {
    */
   private lastWriteWins(
     field: string,
-    observations: Observation[]
+    observations: Observation[],
   ): { value: unknown; source_observation_id: string } {
     // Observations already sorted by observed_at DESC
     const latest = observations[0];
@@ -193,7 +195,7 @@ export class ObservationReducer {
   private highestPriority(
     field: string,
     observations: Observation[],
-    tieBreaker: "observed_at" | "source_priority"
+    tieBreaker: "observed_at" | "source_priority",
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: source_priority DESC
@@ -222,7 +224,7 @@ export class ObservationReducer {
   private mostSpecific(
     field: string,
     observations: Observation[],
-    tieBreaker: "observed_at" | "source_priority"
+    tieBreaker: "observed_at" | "source_priority",
   ): { value: unknown; source_observation_id: string } {
     const sorted = [...observations].sort((a, b) => {
       // Primary: specificity_score DESC
@@ -252,7 +254,7 @@ export class ObservationReducer {
    */
   private mergeArray(
     field: string,
-    observations: Observation[]
+    observations: Observation[],
   ): { value: unknown; source_observation_id: string } {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
@@ -281,7 +283,7 @@ export class ObservationReducer {
    */
   private async computeSnapshotWithDefaults(
     entityId: string,
-    observations: Observation[]
+    observations: Observation[],
   ): Promise<EntitySnapshot> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
@@ -304,10 +306,14 @@ export class ObservationReducer {
     }
 
     for (const field of allFields) {
-      const result = this.lastWriteWins(field, sortedObservations.filter(
-        (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null
-      ));
-      
+      const result = this.lastWriteWins(
+        field,
+        sortedObservations.filter(
+          (obs) =>
+            obs.fields[field] !== undefined && obs.fields[field] !== null,
+        ),
+      );
+
       if (result.value !== undefined && result.value !== null) {
         snapshot[field] = result.value;
         provenance[field] = result.source_observation_id;
@@ -332,9 +338,3 @@ export class ObservationReducer {
 }
 
 export const observationReducer = new ObservationReducer();
-
-
-
-
-
-

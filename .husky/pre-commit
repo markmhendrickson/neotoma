@@ -6,3 +6,9 @@ npm run validate:coverage
 
 # Check Playwright test coverage for UI changes
 npm run check:pw-coverage
+
+# Validate documentation dependencies for modified docs
+npm run validate:doc-deps
+
+# Check Supabase advisor issues (migrations only, non-blocking)
+npm run check:advisors || echo "⚠️  Supabase advisor issues found. Run 'npm run check:advisors:fix' to generate fixes."

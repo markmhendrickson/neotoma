@@ -6,7 +6,7 @@ _(Deterministic Ingestion from Source to Memory Graph)_
 
 ## Purpose
 
-This document defines the **canonical ingestion pipeline** that transforms user-provided inputs into structured truth. Neotoma supports two primary ingestion paths: **file uploads** (PDFs, images, text files) and **agent interactions** (contextual data provided via MCP `store_record` action). This document specifies:
+This document defines the **canonical ingestion pipeline** that transforms user-provided inputs into structured truth. Neotoma supports two primary ingestion paths: **file uploads** (PDFs, images, text files) and **agent interactions** (contextual data provided via MCP `submit_payload` action). This document specifies:
 
 - End-to-end ingestion flow (upload/agent interaction → extraction → graph)
 - Deterministic extraction rules
@@ -26,7 +26,7 @@ Ingestion is the **primary entry point** for truth into Neotoma. The dual-path i
 This document covers:
 
 - File upload and normalization
-- Agent interaction ingestion via MCP `store_record` action
+- Agent interaction ingestion via MCP `submit_payload` action
 - OCR and text extraction (file uploads only)
 - Schema detection
 - Field extraction (rule-based, deterministic)
@@ -38,7 +38,7 @@ This document covers:
 
 1. **File Upload:** Users explicitly upload PDFs, images, or text files through the UI or `upload_file` MCP action. Files undergo OCR, schema detection, and rule-based field extraction.
 
-2. **Agent Interactions:** Users provide contextual data during conversations with ChatGPT, Claude, Cursor, or other MCP-compatible agents. Agents store this data via the `store_record` MCP action, enabling incremental memory growth that maintains accuracy and comprehensiveness as agent usage scales. This path bypasses file processing and directly creates records with user-provided properties.
+2. **Agent Interactions:** Users provide contextual data during conversations with ChatGPT, Claude, Cursor, or other MCP-compatible agents. Agents store this data via the `submit_payload` MCP action, enabling incremental memory growth that maintains accuracy and comprehensiveness as agent usage scales. This path bypasses file processing and directly creates payloads with user-provided data.
 
 Both paths feed into the same four-layer truth model (Document → Entity → Observation → Snapshot), ensuring unified memory regardless of ingestion source.
 

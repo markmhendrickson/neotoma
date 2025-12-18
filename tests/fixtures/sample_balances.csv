@@ -1,0 +1,7 @@
+snapshot_date,account_id,account_type,account_name,balance_usd,balance_original,currency_original,provider
+2024-12-01,acc-checking-001,checking,Primary Checking,10000.00,10000.00,USD,Chase Bank
+2024-12-15,acc-checking-001,checking,Primary Checking,12500.00,12500.00,USD,Chase Bank
+2025-01-01,acc-checking-001,checking,Primary Checking,11000.00,11000.00,USD,Chase Bank
+
+
+

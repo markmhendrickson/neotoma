@@ -4,11 +4,11 @@
  * File-based event repository using append-only files.
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
-import { StateEvent } from '../../events/event_schema.js';
-import { validateEvent } from '../../events/event_validator.js';
-import type { EventRepository } from '../interfaces.js';
+import { promises as fs } from "fs';
+import path from "path';
+import { StateEvent } from "../../events/event_schema.js";
+import { validateEvent } from "../../events/event_validator.js";
+import type { EventRepository } from "../interfaces.js";
 
 export class FileEventRepository implements EventRepository {
   private eventsDir: string;

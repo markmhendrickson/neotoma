@@ -1,0 +1,7 @@
+item_name,status,location,priority,estimated_cost_usd,actual_cost_usd,currency,category,vendor,created_date,completed_date,notes
+Office Desk,pending,Home Office,medium,500.00,0,USD,furniture,IKEA,2024-12-01,,Need ergonomic desk for home office
+Office Desk,in_progress,Home Office,medium,500.00,0,USD,furniture,IKEA,2024-12-01,,Ordered waiting for delivery
+Office Desk,completed,Home Office,medium,500.00,475.00,USD,furniture,IKEA,2024-12-01,2024-12-10,Delivered and assembled
+
+
+

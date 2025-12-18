@@ -66,11 +66,12 @@ describe("IT-008: Observation Architecture Validation", () => {
     // Step 3: Verify observations were created
     expect(result.observations.length).toBeGreaterThan(0);
 
-    // Step 4: Verify observations exist in database
+    // Step 4: Verify observations exist in database for the extracted entities
+    const entityIds = result.observations.map((obs) => obs.entity_id);
     const { data: observations, error } = await supabase
       .from("observations")
       .select("*")
-      .eq("source_record_id", record.id);
+      .in("entity_id", entityIds);
 
     expect(error).toBeNull();
     expect(observations).toBeDefined();

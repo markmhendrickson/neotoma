@@ -1,0 +1,72 @@
+{
+  "entity_type": "tax_event",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "event_date": {
+        "type": "date",
+        "required": true
+      },
+      "event_type": {
+        "type": "string",
+        "required": false
+      },
+      "asset_symbol": {
+        "type": "string",
+        "required": true
+      },
+      "quantity": {
+        "type": "number",
+        "required": false
+      },
+      "cost_basis_usd": {
+        "type": "number",
+        "required": false
+      },
+      "proceeds_usd": {
+        "type": "number",
+        "required": false
+      },
+      "gain_loss_usd": {
+        "type": "number",
+        "required": true
+      },
+      "tax_year": {
+        "type": "number",
+        "required": true
+      },
+      "jurisdiction": {
+        "type": "string",
+        "required": false
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "gain_loss_usd": {
+        "strategy": "last_write"
+      },
+      "event_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

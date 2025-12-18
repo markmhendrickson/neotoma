@@ -1,0 +1,112 @@
+{
+  "entity_type": "fixed_cost",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "merchant": {
+        "type": "string",
+        "required": true
+      },
+      "expense_name": {
+        "type": "string",
+        "required": true
+      },
+      "expense_type": {
+        "type": "string",
+        "required": false
+      },
+      "location": {
+        "type": "string",
+        "required": false
+      },
+      "frequency_per_year": {
+        "type": "number",
+        "required": true
+      },
+      "payment_amount_eur": {
+        "type": "number",
+        "required": false
+      },
+      "payment_amount_usd": {
+        "type": "number",
+        "required": false
+      },
+      "yearly_amount_eur": {
+        "type": "number",
+        "required": false
+      },
+      "yearly_amount_usd": {
+        "type": "number",
+        "required": false
+      },
+      "monthly_amount_eur": {
+        "type": "number",
+        "required": false
+      },
+      "monthly_amount_usd": {
+        "type": "number",
+        "required": false
+      },
+      "percent_fixed_expenses": {
+        "type": "number",
+        "required": false
+      },
+      "percent_net_income": {
+        "type": "number",
+        "required": false
+      },
+      "inflates": {
+        "type": "boolean",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": true
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "renews": {
+        "type": "string",
+        "required": false
+      },
+      "started": {
+        "type": "string",
+        "required": false
+      },
+      "ended": {
+        "type": "string",
+        "required": false
+      },
+      "payment_method": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "status": {
+        "strategy": "last_write"
+      },
+      "payment_amount_usd": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

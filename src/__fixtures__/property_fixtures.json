@@ -1,0 +1,27 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Primary Residence",
+    "address": "123 Main St, City, State 12345",
+    "type": "residential",
+    "purchase_date": "2020-06-15T00:00:00Z",
+    "purchase_price": 500000.0,
+    "current_value": 650000.0,
+    "currency": "USD",
+    "notes": "Primary residence purchased in 2020"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Primary Residence",
+    "address": "123 Main St, City, State 12345",
+    "type": "residential",
+    "purchase_date": "2020-06-15T00:00:00Z",
+    "purchase_price": 500000.0,
+    "current_value": 675000.0,
+    "currency": "USD",
+    "notes": "Primary residence - updated valuation"
+  }
+]
+
+
+

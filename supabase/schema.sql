@@ -1,4 +1,9 @@
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Create extensions schema for better security organization
+CREATE SCHEMA IF NOT EXISTS extensions;
+GRANT USAGE ON SCHEMA extensions TO public;
+
+-- Install vector extension in extensions schema (not public)
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA extensions;
 -- Enable pgcrypto for gen_random_uuid()
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -56,13 +61,18 @@ CREATE INDEX IF NOT EXISTS idx_records_external_hash ON records (external_hash)
   WHERE external_hash IS NOT NULL;
 
 -- Create function to update updated_at timestamp
+-- Set search_path to prevent search_path injection attacks
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Create trigger to automatically update updated_at
 DROP TRIGGER IF EXISTS update_records_updated_at ON records;
@@ -300,6 +310,33 @@ DROP POLICY IF EXISTS "public read - state_events" ON state_events;
 CREATE POLICY "public read - state_events" ON state_events
   FOR SELECT USING ( true );
 
+-- Payload submissions table (unified ingestion primitive)
+CREATE TABLE IF NOT EXISTS payload_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  payload_submission_id TEXT UNIQUE NOT NULL,
+  payload_content_id TEXT NOT NULL,
+  capability_id TEXT NOT NULL,
+  body JSONB NOT NULL,
+  provenance JSONB NOT NULL,
+  client_request_id TEXT,
+  embedding vector(1536),
+  summary TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_payload_content_id ON payload_submissions(payload_content_id);
+CREATE INDEX IF NOT EXISTS idx_payload_capability ON payload_submissions(capability_id);
+CREATE INDEX IF NOT EXISTS idx_payload_created_at ON payload_submissions(created_at DESC);
+
+ALTER TABLE payload_submissions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role full access - payload_submissions" ON payload_submissions;
+CREATE POLICY "Service role full access - payload_submissions" ON payload_submissions
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "public read - payload_submissions" ON payload_submissions;
+CREATE POLICY "public read - payload_submissions" ON payload_submissions FOR SELECT USING (true);
+
 -- Observation architecture tables (FU-055, FU-057)
 -- Observations table
 CREATE TABLE IF NOT EXISTS observations (
@@ -307,7 +344,7 @@ CREATE TABLE IF NOT EXISTS observations (
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   schema_version TEXT NOT NULL,
-  source_record_id UUID NOT NULL REFERENCES records(id),
+  source_payload_id UUID NOT NULL REFERENCES payload_submissions(id),
   observed_at TIMESTAMPTZ NOT NULL,
   specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
   source_priority INTEGER DEFAULT 0,
@@ -356,7 +393,7 @@ CREATE TABLE IF NOT EXISTS schema_registry (
 
 -- Indexes for observations
 CREATE INDEX IF NOT EXISTS idx_observations_entity ON observations(entity_id, observed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_observations_record ON observations(source_record_id);
+CREATE INDEX IF NOT EXISTS idx_observations_payload ON observations(source_payload_id);
 CREATE INDEX IF NOT EXISTS idx_observations_user ON observations(user_id);
 
 -- Indexes for entity_snapshots

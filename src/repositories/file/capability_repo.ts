@@ -20,7 +20,7 @@ export class FileCapabilityRepository implements CapabilityRepository {
   async validateCapability(capabilityId: string): Promise<boolean> {
     // Stub: Not implemented yet
     throw new Error(
-      "CapabilityRepository.validateCapability not yet implemented"
+      "CapabilityRepository.validateCapability not yet implemented",
     );
   }
 }

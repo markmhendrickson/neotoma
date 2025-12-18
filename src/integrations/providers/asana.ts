@@ -1,5 +1,9 @@
-import { RestProviderClient } from './base.js';
-import type { FetchUpdatesInput, FetchUpdatesResult, ProviderRecord } from './types.js';
+import { RestProviderClient } from "./base.js";
+import type {
+  FetchUpdatesInput,
+  FetchUpdatesResult,
+  ProviderRecord,
+} from "./types.js";
 
 interface AsanaTask {
   gid: string;
@@ -25,9 +29,9 @@ interface AsanaResponse {
 }
 
 export class AsanaProviderClient extends RestProviderClient {
-  readonly id = 'asana';
-  readonly capabilities = ['tasks'] as const;
-  readonly defaultRecordType = 'task';
+  readonly id = "asana";
+  readonly capabilities = ["tasks"] as const;
+  readonly defaultRecordType = "task";
 
   async fetchUpdates(input: FetchUpdatesInput): Promise<FetchUpdatesResult> {
     const token = this.requireAccessToken(input.secrets);
@@ -36,23 +40,23 @@ export class AsanaProviderClient extends RestProviderClient {
         (input.secrets?.workspaceGid as string) ??
         (input.secrets?.workspace as string) ??
         (input.connector.metadata?.workspace as string),
-      'workspaceGid'
+      "workspaceGid",
     );
 
     const limit = Math.min(input.limit ?? 50, 100);
     const params = new URLSearchParams({
       workspace,
-      assignee: 'me',
+      assignee: "me",
       limit: `${limit}`,
       opt_fields:
-        'gid,name,notes,completed,completed_at,due_on,due_at,start_on,permalink_url,modified_at,created_at,assignee,projects,tags,custom_fields',
+        "gid,name,notes,completed,completed_at,due_on,due_at,start_on,permalink_url,modified_at,created_at,assignee,projects,tags,custom_fields",
     });
 
     if (input.since) {
-      params.set('modified_since', new Date(input.since).toISOString());
+      params.set("modified_since", new Date(input.since).toISOString());
     }
-    if (typeof input.cursor === 'string') {
-      params.set('offset', input.cursor);
+    if (typeof input.cursor === "string") {
+      params.set("offset", input.cursor);
     }
 
     const url = `https://app.asana.com/api/1.0/tasks?${params.toString()}`;
@@ -63,14 +67,14 @@ export class AsanaProviderClient extends RestProviderClient {
     });
 
     const records: ProviderRecord[] = (response.data ?? []).map((task) => ({
-      type: 'task',
-      externalSource: 'asana',
+      type: "task",
+      externalSource: "asana",
       externalId: task.gid,
       properties: {
-        provider: 'asana',
+        provider: "asana",
         task_gid: task.gid,
         name: task.name,
-        notes: task.notes ?? '',
+        notes: task.notes ?? "",
         completed: task.completed ?? false,
         completed_at: task.completed_at ?? null,
         due_on: task.due_on ?? null,
@@ -94,7 +98,3 @@ export class AsanaProviderClient extends RestProviderClient {
     };
   }
 }
-
-
-
-

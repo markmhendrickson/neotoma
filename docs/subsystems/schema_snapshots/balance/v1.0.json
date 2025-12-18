@@ -1,0 +1,64 @@
+{
+  "entity_type": "balance",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "snapshot_date": {
+        "type": "date",
+        "required": true
+      },
+      "account_id": {
+        "type": "string",
+        "required": true
+      },
+      "account_type": {
+        "type": "string",
+        "required": false
+      },
+      "account_name": {
+        "type": "string",
+        "required": false
+      },
+      "balance_usd": {
+        "type": "number",
+        "required": true
+      },
+      "balance_original": {
+        "type": "number",
+        "required": false
+      },
+      "currency_original": {
+        "type": "string",
+        "required": false
+      },
+      "provider": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "balance_usd": {
+        "strategy": "last_write"
+      },
+      "snapshot_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

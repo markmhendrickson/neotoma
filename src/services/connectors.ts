@@ -1,6 +1,6 @@
-import crypto from 'node:crypto';
-import { supabase } from '../db.js';
-import { config } from '../config.js';
+import crypto from "node:crypto";
+import { supabase } from "../db.js";
+import { config } from "../config.js";
 
 export type ConnectorStatus = 'active' | 'paused' | 'error';
 

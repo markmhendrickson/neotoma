@@ -5,6 +5,11 @@
  */
 
 import { supabase } from "../db.js";
+import { spawn } from "child_process";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export interface SchemaDefinition {
   fields: Record<
@@ -73,6 +78,9 @@ export class SchemaRegistryService {
       throw new Error(`Failed to register schema: ${error.message}`);
     }
 
+    // Automatically export schema snapshots (non-blocking)
+    this.exportSnapshotsAsync();
+
     return data as SchemaRegistryEntry;
   }
 
@@ -80,7 +88,7 @@ export class SchemaRegistryService {
    * Load active schema for entity type
    */
   async loadActiveSchema(
-    entityType: string
+    entityType: string,
   ): Promise<SchemaRegistryEntry | null> {
     const { data, error } = await supabase
       .from("schema_registry")
@@ -121,6 +129,9 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to activate schema: ${error.message}`);
     }
+
+    // Automatically export schema snapshots (non-blocking)
+    this.exportSnapshotsAsync();
   }
 
   /**
@@ -136,6 +147,9 @@ export class SchemaRegistryService {
     if (error) {
       throw new Error(`Failed to deactivate schema: ${error.message}`);
     }
+
+    // Automatically export schema snapshots (non-blocking)
+    this.exportSnapshotsAsync();
   }
 
   /**
@@ -174,7 +188,7 @@ export class SchemaRegistryService {
     for (const [fieldName, fieldDef] of Object.entries(definition.fields)) {
       if (!validTypes.includes(fieldDef.type)) {
         throw new Error(
-          `Invalid field type for ${fieldName}: ${fieldDef.type}`
+          `Invalid field type for ${fieldName}: ${fieldDef.type}`,
         );
       }
     }
@@ -185,7 +199,7 @@ export class SchemaRegistryService {
    */
   private validateReducerConfig(
     config: ReducerConfig,
-    schemaDefinition: SchemaDefinition
+    schemaDefinition: SchemaDefinition,
   ): void {
     if (!config.merge_policies || typeof config.merge_policies !== "object") {
       throw new Error("Reducer config must have merge_policies object");
@@ -206,7 +220,7 @@ export class SchemaRegistryService {
 
       if (!validStrategies.includes(policy.strategy)) {
         throw new Error(
-          `Invalid merge strategy for ${fieldName}: ${policy.strategy}`
+          `Invalid merge strategy for ${fieldName}: ${policy.strategy}`,
         );
       }
 
@@ -215,17 +229,52 @@ export class SchemaRegistryService {
         !validTieBreakers.includes(policy.tie_breaker)
       ) {
         throw new Error(
-          `Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`
+          `Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`,
         );
       }
     }
   }
+
+  /**
+   * Export schema snapshots asynchronously (non-blocking)
+   * Automatically exports snapshots after schema changes without blocking operations
+   */
+  private exportSnapshotsAsync(): void {
+    // Only export if we're in a Node.js environment (not browser)
+    if (typeof process === "undefined" || !process.env) {
+      return;
+    }
+
+    // Skip export in test environments to avoid side effects
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      return;
+    }
+
+    // Run export script asynchronously (fire-and-forget)
+    const scriptPath = join(
+      __dirname,
+      "../../scripts/export_schema_snapshots.ts",
+    );
+    const child = spawn("tsx", [scriptPath], {
+      stdio: "ignore", // Suppress output to avoid cluttering logs
+      detached: true,
+      env: { ...process.env, NODE_ENV: process.env.NODE_ENV || "development" },
+    });
+
+    // Don't wait for completion - let it run in background
+    child.unref();
+
+    // Handle errors silently (don't fail schema operations if export fails)
+    child.on("error", (error) => {
+      // Silently ignore export errors - schema operations should not fail
+      // if snapshot export fails (e.g., in CI/CD or restricted environments)
+      if (process.env.NODE_ENV === "development") {
+        console.warn(
+          `[Schema Registry] Failed to export snapshots: ${error.message}`,
+        );
+      }
+    });
+  }
 }
 
 export const schemaRegistry = new SchemaRegistryService();
-
-
-
-
-
-

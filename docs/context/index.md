@@ -67,11 +67,19 @@ These documents are the **root of truth** for all Neotoma work:
 ### 1.2 Documentation Conventions
 
 4. **[`docs/conventions/documentation_standards.md`](../conventions/documentation_standards.md)**
+
    - Shared formatting, structure, and style rules
    - Mermaid diagram standards
    - Example formatting requirements
    - MUST/MUST NOT language conventions
    - **Load when creating or modifying any documentation**
+
+5. **[`docs/conventions/code_conventions.md`](../conventions/code_conventions.md)**
+   - Code style, naming, and organization patterns
+   - TypeScript/TSX, SQL, YAML, and Shell script conventions
+   - Determinism requirements, error handling patterns
+   - Testing patterns and code organization
+   - **Load when writing or reviewing code**
 
 ---
 
@@ -582,7 +590,18 @@ graph TD
 3. `docs/private/governance/00_GENERATION.md` — Required sections for doc type
 4. `docs/conventions/documentation_standards.md` — Formatting and style rules
 
-### 4.14 Debugging or Error Handling
+### 4.14 Writing Code
+
+**Required Reading Order:**
+
+1. `docs/conventions/code_conventions.md` — Code style, naming, organization patterns
+2. `docs/architecture/determinism.md` — Determinism requirements (no randomness, hash-based IDs)
+3. `docs/subsystems/errors.md` — Error handling patterns (ErrorEnvelope structure)
+4. `docs/testing/testing_standard.md` — Testing patterns and coverage requirements
+5. Relevant subsystem docs for domain logic
+6. `.eslintrc.json` and `tsconfig.json` — Linting and type checking rules
+
+### 4.15 Debugging or Error Handling
 
 **Required Reading Order:**
 
@@ -592,7 +611,7 @@ graph TD
 4. `docs/observability/tracing.md` — Distributed tracing if multi-service
 5. `docs/feature_units/standards/error_protocol.md` — Error classification
 
-### 4.15 Agent or Automated Development
+### 4.16 Agent or Automated Development
 
 **Required Reading Order:**
 

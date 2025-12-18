@@ -21,7 +21,7 @@ export interface TimelineEvent {
 export function generateEventId(
   recordId: string,
   fieldName: string,
-  date: string
+  date: string,
 ): string {
   const hash = createHash("sha256")
     .update(`${recordId}:${fieldName}:${date}`)
@@ -103,7 +103,7 @@ function mapFieldToEventType(fieldName: string, schemaType: string): string {
 export function generateEvents(
   recordId: string,
   properties: Record<string, unknown>,
-  schemaType: string
+  schemaType: string,
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
   const dateFields = getDateFields(schemaType);
@@ -178,7 +178,7 @@ export function generateEvents(
 
   // Sort events by timestamp for deterministic order
   return events.sort((a, b) =>
-    a.event_timestamp.localeCompare(b.event_timestamp)
+    a.event_timestamp.localeCompare(b.event_timestamp),
   );
 }
 
@@ -186,7 +186,7 @@ export function generateEvents(
  * Persist events to database
  */
 export async function persistEvents(
-  events: TimelineEvent[]
+  events: TimelineEvent[],
 ): Promise<TimelineEvent[]> {
   if (events.length === 0) {
     return [];
@@ -219,7 +219,7 @@ export async function persistEvents(
  * Get events by record ID
  */
 export async function getEventsByRecordId(
-  recordId: string
+  recordId: string,
 ): Promise<TimelineEvent[]> {
   const { data, error } = await supabase
     .from("timeline_events")
@@ -239,7 +239,7 @@ export async function getEventsByRecordId(
  * Get events by entity ID (via record-entity-event edges)
  */
 export async function getEventsByEntityId(
-  entityId: string
+  entityId: string,
 ): Promise<TimelineEvent[]> {
   // Query entity_event_edges to find event IDs
   const { data: edges, error: edgesError } = await supabase
@@ -273,12 +273,8 @@ export async function getEventsByEntityId(
 export async function generateAndPersistEvents(
   recordId: string,
   properties: Record<string, unknown>,
-  schemaType: string
+  schemaType: string,
 ): Promise<TimelineEvent[]> {
   const events = generateEvents(recordId, properties, schemaType);
   return await persistEvents(events);
 }
-
-
-
-

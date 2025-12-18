@@ -1,5 +1,9 @@
-import { RestProviderClient } from './base.js';
-import type { FetchUpdatesInput, FetchUpdatesResult, ProviderRecord } from './types.js';
+import { RestProviderClient } from "./base.js";
+import type {
+  FetchUpdatesInput,
+  FetchUpdatesResult,
+  ProviderRecord,
+} from "./types.js";
 
 interface FacebookAttachment {
   media_type?: string;
@@ -29,21 +33,26 @@ interface FacebookResponse {
 }
 
 export class FacebookProviderClient extends RestProviderClient {
-  readonly id = 'facebook';
-  readonly capabilities = ['messages', 'media'] as const;
-  readonly defaultRecordType = 'message';
+  readonly id = "facebook";
+  readonly capabilities = ["messages", "media"] as const;
+  readonly defaultRecordType = "message";
 
   async fetchUpdates(input: FetchUpdatesInput): Promise<FetchUpdatesResult> {
     const token = this.requireAccessToken(input.secrets);
-    const pageId = (input.connector.metadata?.pageId as string) ?? 'me';
+    const pageId = (input.connector.metadata?.pageId as string) ?? "me";
     const limit = Math.min(input.limit ?? 50, 50);
 
     const params = new URLSearchParams({
-      fields: 'id,message,story,created_time,permalink_url,attachments{media_type,media,target,url}',
+      fields:
+        "id,message,story,created_time,permalink_url,attachments{media_type,media,target,url}",
       limit: `${limit}`,
     });
-    if (input.cursor && typeof input.cursor === 'object' && 'after' in input.cursor) {
-      params.set('after', String((input.cursor as any).after));
+    if (
+      input.cursor &&
+      typeof input.cursor === "object" &&
+      "after" in input.cursor
+    ) {
+      params.set("after", String((input.cursor as any).after));
     }
 
     const url = `https://graph.facebook.com/v18.0/${pageId}/feed?${params.toString()}`;
@@ -56,17 +65,22 @@ export class FacebookProviderClient extends RestProviderClient {
     const records: ProviderRecord[] = (response.data ?? []).map((post) => {
       const attachments = post.attachments?.data ?? [];
       const fileUrls = attachments
-        .map((attachment) => attachment.media?.image?.src ?? attachment.media?.source ?? attachment.url)
+        .map(
+          (attachment) =>
+            attachment.media?.image?.src ??
+            attachment.media?.source ??
+            attachment.url,
+        )
         .filter((value): value is string => Boolean(value));
 
       return {
-        type: 'message',
-        externalSource: 'facebook',
+        type: "message",
+        externalSource: "facebook",
         externalId: post.id,
         properties: {
-          provider: 'facebook',
+          provider: "facebook",
           post_id: post.id,
-          message: post.message ?? post.story ?? '',
+          message: post.message ?? post.story ?? "",
           story: post.story ?? null,
           created_at: post.created_time ?? null,
           permalink: post.permalink_url ?? null,
@@ -78,13 +92,11 @@ export class FacebookProviderClient extends RestProviderClient {
 
     return {
       records: this.mapRecordsWithSource(records),
-      nextCursor: response.paging?.cursors?.after ? { after: response.paging.cursors.after } : null,
+      nextCursor: response.paging?.cursors?.after
+        ? { after: response.paging.cursors.after }
+        : null,
       hasMore: Boolean(response.paging?.next),
       raw: response,
     };
   }
 }
-
-
-
-

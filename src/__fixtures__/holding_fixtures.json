@@ -1,0 +1,44 @@
+[
+  {
+    "schema_version": "1.0",
+    "snapshot_date": "2024-12-15T00:00:00Z",
+    "asset_symbol": "AAPL",
+    "asset_name": "Apple Inc.",
+    "asset_type": "stock",
+    "quantity": 100,
+    "cost_basis_usd": 15000.0,
+    "current_value_usd": 18500.0,
+    "account_id": "acc-001",
+    "account_type": "brokerage",
+    "provider": "Fidelity"
+  },
+  {
+    "schema_version": "1.0",
+    "snapshot_date": "2024-12-15T00:00:00Z",
+    "asset_symbol": "BTC",
+    "asset_name": "Bitcoin",
+    "asset_type": "crypto",
+    "quantity": 0.5,
+    "cost_basis_usd": 20000.0,
+    "current_value_usd": 25000.0,
+    "account_id": "wallet-001",
+    "account_type": "wallet",
+    "provider": "Coinbase"
+  },
+  {
+    "schema_version": "1.0",
+    "snapshot_date": "2024-12-20T00:00:00Z",
+    "asset_symbol": "AAPL",
+    "asset_name": "Apple Inc.",
+    "asset_type": "stock",
+    "quantity": 100,
+    "cost_basis_usd": 15000.0,
+    "current_value_usd": 19000.0,
+    "account_id": "acc-001",
+    "account_type": "brokerage",
+    "provider": "Fidelity"
+  }
+]
+
+
+

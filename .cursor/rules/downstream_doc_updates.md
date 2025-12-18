@@ -6,6 +6,12 @@
 
 Ensures that when upstream documentation is updated, all downstream documentation that depends on it is also updated to maintain consistency across the documentation tree.
 
+**Automated Validation:** This rule is enforced via:
+
+- Dependency mapping: `docs/doc_dependencies.yaml` — Explicit upstream→downstream relationships
+- Validation script: `scripts/validate-doc-dependencies.js` — Checks downstream docs for outdated references
+- Pre-commit hook: Automatically validates modified docs before commit
+
 ---
 
 ## Trigger Patterns
@@ -89,21 +95,27 @@ README.md
 
 ### Step 2: Identify Downstream Dependencies
 
-**Agents MUST search for:**
+**Agents MUST:**
 
-1. **Explicit references:**
+1. **Use dependency map first:**
+
+   - Check `docs/doc_dependencies.yaml` for explicit downstream dependencies
+   - Run validation script: `node scripts/validate-doc-dependencies.js [upstream-doc-path]`
+   - Review script output for missing references or broken links
+
+2. **Search for explicit references:**
 
    - Links to the modified document
-   - Cross-references in "Related Documents" sections
+   - Cross-references in "Related Documents" sections (see format below)
    - Mentions of concepts from the upstream doc
 
-2. **Implicit dependencies:**
+3. **Identify implicit dependencies:**
 
    - Docs that restate information from upstream
    - Docs that depend on concepts defined upstream
    - Docs that must align with upstream changes
 
-3. **Common downstream locations:**
+4. **Check common downstream locations:**
    - Feature unit specs (reference architecture, specs, standards)
    - Release plans (reference specs, feature units, architecture)
    - Developer docs (reference architecture, subsystems, standards)
@@ -136,22 +148,33 @@ README.md
 
 **Before completing, agents MUST:**
 
-1. **Verify consistency:**
+1. **Run validation script:**
+
+   ```bash
+   node scripts/validate-doc-dependencies.js [modified-upstream-doc-path]
+   ```
+
+   - Fix any errors (broken links, missing files)
+   - Review warnings (missing explicit references)
+   - Ensure all downstream dependencies are validated
+
+2. **Verify consistency:**
 
    - Downstream docs align with upstream changes
    - No contradictions between docs
    - Terminology consistent across docs
 
-2. **Check references:**
+3. **Check references:**
 
    - All links resolve correctly
    - Cross-references are accurate
-   - Related Documents sections are current
+   - Related Documents sections are current (see format below)
 
-3. **Ensure completeness:**
+4. **Ensure completeness:**
    - All affected downstream docs identified
    - All necessary updates made
    - No critical dependencies missed
+   - Dependency map updated if new relationships discovered
 
 ---
 
@@ -230,15 +253,98 @@ README.md
 
 ---
 
+## Related Documents Format
+
+**Standard format for "Related Documents" sections:**
+
+```markdown
 ## Related Documents
 
+- [`docs/path/to/doc.md`](../relative/path/to/doc.md) — Brief description
+- [`docs/another/doc.md`](./relative/path.md) — Brief description
+```
+
+**Requirements:**
+
+- Use `## Related Documents` heading (level 2)
+- List items with markdown links using backticks
+- Include relative paths (not absolute)
+- Provide brief description after link
+- List upstream dependencies first, then related docs
+
+**Example:**
+
+```markdown
+## Related Documents
+
+- [`docs/architecture/architecture.md`](../architecture/architecture.md) — System architecture
+- [`docs/subsystems/schema_registry.md`](./schema_registry.md) — Schema registry patterns
+- [`docs/foundation/core_identity.md`](../foundation/core_identity.md) — Core identity
+```
+
+---
+
+## Automated Validation
+
+### Dependency Map
+
+The dependency map (`docs/doc_dependencies.yaml`) explicitly defines upstream→downstream relationships:
+
+```yaml
+docs/foundation/core_identity.md:
+  downstream:
+    - path: docs/architecture/architecture.md
+      type: explicit
+      reason: References core identity in Purpose section
+```
+
+**Types:**
+
+- `explicit`: Document has direct link/reference to upstream (MUST have reference)
+- `implicit`: Document depends on concepts from upstream
+- `restates`: Document restates information from upstream (MUST stay in sync)
+
+### Validation Script
+
+Run validation manually:
+
+```bash
+# Check specific upstream doc
+node scripts/validate-doc-dependencies.js docs/foundation/core_identity.md
+
+# Check all upstream docs
+node scripts/validate-doc-dependencies.js --all
+
+# Check modified docs (git diff)
+node scripts/validate-doc-dependencies.js --check-modified
+```
+
+**Script checks:**
+
+- ✅ Downstream docs exist
+- ✅ Explicit dependencies have references
+- ✅ Links resolve correctly
+- ⚠️ Warns on missing explicit references
+- ❌ Errors on broken links or missing files
+
+### Pre-commit Hook
+
+The pre-commit hook automatically validates modified documentation files before commit. Agents MUST:
+
+- Fix validation errors before committing
+- Review warnings and update downstream docs if needed
+- Update dependency map if new relationships are discovered
+
+---
+
+## Related Documents
+
+- `docs/doc_dependencies.yaml` — Explicit dependency mapping
+- `scripts/validate-doc-dependencies.js` — Validation script
 - `.cursor/rules/readme_maintenance.md` — README synchronization rules
 - `.cursor/rules/instruction_documentation.md` — Instruction documentation rule
 - `docs/conventions/documentation_standards.md` — Documentation standards
 - `docs/context/index.md` — Documentation navigation guide
-
-
-
 
 
 

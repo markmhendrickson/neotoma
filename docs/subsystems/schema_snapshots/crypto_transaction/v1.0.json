@@ -1,0 +1,76 @@
+{
+  "entity_type": "crypto_transaction",
+  "schema_version": "1.0",
+  "active": false,
+  "created_at": "2025-12-12T12:34:53.041Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "transaction_date": {
+        "type": "date",
+        "required": true
+      },
+      "transaction_type": {
+        "type": "string",
+        "required": false
+      },
+      "blockchain": {
+        "type": "string",
+        "required": false
+      },
+      "from_address": {
+        "type": "string",
+        "required": false
+      },
+      "to_address": {
+        "type": "string",
+        "required": false
+      },
+      "asset_symbol": {
+        "type": "string",
+        "required": true
+      },
+      "quantity": {
+        "type": "number",
+        "required": false
+      },
+      "value_usd": {
+        "type": "number",
+        "required": true
+      },
+      "fee_usd": {
+        "type": "number",
+        "required": false
+      },
+      "tx_hash": {
+        "type": "string",
+        "required": true
+      },
+      "wallet_id": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "tx_hash": {
+        "strategy": "last_write"
+      },
+      "value_usd": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

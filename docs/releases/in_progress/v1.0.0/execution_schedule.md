@@ -4,6 +4,8 @@ _(Generated from FU dependencies; follows `release_workflow.md` pattern)_
 
 **Note:** This schedule assumes discovery is complete (Week -8 to -5) and go decision made. For discovery planning, see `discovery_plan.md` and related discovery documents.
 
+**Estimation Methodology:** See `docs/conventions/estimation_methodology.md` for velocity-based estimation approach. Estimates revised Dec 11, 2025 based on v0.1.0 actual velocity (26 FUs in 2-3 days).
+
 ---
 
 ### Batches Overview
@@ -65,51 +67,75 @@ Batching is derived from the dependency graph in `manifest.yaml`. All FUs in the
 
 **With Cloud Agent Parallelization (max 3 agents):**
 
-Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h) + implementation (2-8h) + testing (1-4h) + docs (0.5-1h) + 20% review overhead
+**Estimation Methodology:** Based on v0.1.0 actual velocity (26 FUs completed in 2-3 days = ~8-13 FUs/day). Estimates account for existing foundation and agent parallelization.
 
-- **Phase 1 (Batch 0)** — Estimated: 1.5-2 weeks
+**Note:** FU-100, FU-101, FU-102, FU-103, FU-105 are already complete from v0.1.0. Only FU-300, FU-700, and FU-701 require new work.
 
-  - Cloud Agents: `FU-100` (2.5 days), `FU-300` (1.5 weeks design system), `FU-700` (1 week auth UI) in parallel
-  - **Bottleneck**: FU-300 (longest in batch)
-  - **Timeline**: Week 0-2
+- **Phase 1 (Batch 0)** — Estimated: 1 day
 
-- **Phase 2 (Batch 1)** — Estimated: 1 week
+  - Cloud Agents: `FU-100` ✅ (already complete), `FU-300` (0.5 days design system polish), `FU-700` (0.5-1 day auth UI) in parallel
+  - **Bottleneck**: FU-700 (longest in batch)
+  - **Timeline**: Day 0-1
+  - **Note**: FU-100 already complete from v0.1.0 (rule-based extraction implemented)
 
-  - Cloud Agents: `FU-101` (1 day), `FU-102` (0.75 days) in parallel
-  - **Bottleneck**: FU-101 (longest in batch)
-  - **Timeline**: Week 2-3
+- **Phase 2 (Batch 1)** — Estimated: 0 days
 
-- **Phase 3 (Batch 2)** — Estimated: 0.5 days
+  - Cloud Agents: `FU-101` ✅ (already complete), `FU-102` ✅ (already complete)
+  - **Timeline**: Day 0 (no work needed)
+  - **Note**: Both FUs already complete from v0.1.0
 
-  - Sequential: `FU-103` (0.5 days)
-  - **Timeline**: Week 3
+- **Phase 3 (Batch 2)** — Estimated: 0 days
 
-- **Phase 4 (Batch 3)** — Estimated: 1 week
-  - Cloud Agents: `FU-105` (0.5 days), `FU-701` (1 week RLS implementation) in parallel
-  - **Bottleneck**: FU-701 (longest in batch)
-  - **Timeline**: Week 3-4
+  - Sequential: `FU-103` ✅ (already complete)
+  - **Timeline**: Day 0 (no work needed)
+  - **Note**: FU-103 already complete from v0.1.0
 
-**Total Estimated Development Time**: 3-4 weeks (with cloud agent parallelization, 25-35% reduction from sequential)
+- **Phase 4 (Batch 3)** — Estimated: 1-2 days
+  - Cloud Agents: `FU-105` ✅ (already complete), `FU-701` (1-2 days RLS implementation) in parallel
+  - **Bottleneck**: FU-701 (only work item in batch)
+  - **Timeline**: Day 1-2
+  - **Note**: FU-105 already complete from v0.1.0. FU-701 requires migration, RLS policies, service updates, and MCP action updates.
 
-**Sequential Timeline (for comparison):** ~4-5 weeks
+**Total Estimated Development Time**: 2-3 days (with cloud agent parallelization)
 
-**Overall Timeline** (as of December 9, 2025):
+**Rationale:** v0.1.0 demonstrated 26 FUs in 2-3 days. v1.0.0 requires only 3 new FUs (FU-300 polish, FU-700 auth UI, FU-701 RLS), with remaining FUs already complete.
 
-- **Week -10 to -9** (Nov 25 - Dec 8, 2025): Build discovery lead sourcing tools, configure API credentials
-- **Week -8 to -5** (Dec 9, 2025 - Jan 6, 2026): Pre-release discovery (3-4 weeks)
-  - Week -8: Execute lead sourcing tools, launch screening survey, begin recruitment
-  - Week -8 to -6: Value discovery interviews (13 participants)
-  - Week -7 to -6: Usability discovery testing (8 participants)
-  - Week -6 to -5: Business viability discovery interviews (8 participants)
-- **Week -5 to -4** (Jan 6-13, 2026): Discovery synthesis, go/no-go decision, scope refinement (1 week)
-- **Week -4 to 0** (Jan 6-13, 2026): Pre-launch marketing activities (overlaps with Week -5 to -4)
-- **Week 0 to 4** (Jan 13 - Feb 10, 2026): Development execution (3-4 weeks with cloud agents)
-- **Week 4 to 5** (Feb 10-17, 2026): Cross-release integration testing (1 week)
-- **Week 5** (Feb 17, 2026): Pre-release sign-off, staging deployment, pre-launch marketing finalization
-- **Week 6** (Feb 24, 2026): Production deployment (Day 0)
-- **Week 6 to 10** (Feb 24 - Mar 24, 2026): Post-launch marketing and validation (4 weeks)
+**Overall Timeline** (as of December 12, 2025):
 
-**Target Ship Date**: February 24, 2026 (Week 6 from development start, adjustable based on discovery findings)
+**Parallel Pre-Development Phase (3-4 weeks):**
+
+- **Week 0** (Dec 12-19, 2025): Build discovery lead sourcing tools, configure API credentials, begin discovery recruitment
+- **Week 1-4** (Dec 19, 2025 - Jan 9, 2026): **Discovery AND Pre-launch marketing in parallel** (3-4 weeks)
+  
+  **Discovery Activities (parallel):**
+  - Week 1 (Dec 19-26): Execute lead sourcing tools, launch screening survey, begin recruitment
+  - Week 1-3 (Dec 19 - Jan 2): Value discovery interviews (13 participants)
+  - Week 2-3 (Dec 26 - Jan 2): Usability discovery testing (8 participants)
+  - Week 3-4 (Jan 2-9): Business viability discovery interviews (8 participants)
+  
+  **Pre-Launch Marketing Activities (parallel):**
+  - Week 1-4 (Dec 19 - Jan 9): Waitlist building campaigns (Twitter, email, community, content)
+  - Week 2-4 (Dec 26 - Jan 9): Early access beta signups (invite discovery participants + waitlist top users)
+  - Week 3-4 (Jan 2-9): Content teasers (blog posts, demo videos, Twitter threads)
+  - Week 3-4 (Jan 2-9): Feature teaser emails to existing users (if any)
+
+- **Week 5** (Jan 9-16, 2026): Discovery synthesis + Marketing finalization (1 week)
+  - Discovery synthesis, go/no-go decision, scope refinement
+  - Marketing metrics review, waitlist quality assessment
+  - Finalize pre-launch marketing materials
+
+**Development Phase (1-2 weeks):**
+
+- **Week 6** (Jan 16-23, 2026): Development execution (2-3 days with cloud agents) + Cross-release integration testing (3-5 days)
+- **Week 7** (Jan 23-30, 2026): Pre-release sign-off, staging deployment, production deployment (Day 0, adjustable based on testing)
+
+**Post-Launch Phase:**
+
+- **Week 7-11** (Jan 30 - Feb 27, 2026): Post-launch marketing and validation (4 weeks)
+
+**Target Ship Date**: January 23-30, 2026 (Week 7, adjustable based on discovery findings and testing)
+
+**Note:** Discovery and pre-launch marketing run in parallel (Week 1-4), reducing total pre-development time from 5-6 weeks to 4-5 weeks. Development starts immediately after both complete (Week 6).
 
 ---
 
@@ -126,12 +152,10 @@ Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h)
 
 ### Integration Tests per Batch (High-Level)
 
-- **After Batch 0** (Week 3):
+- **After Batch 0** (Day 1):
 
-  - Basic ingestion smoke tests (FU-100):
-    - Upload PDF, CSV, image
-    - Verify extraction produces valid JSON
-    - Test determinism (3x upload → identical output)
+  - Basic ingestion smoke tests (FU-100) ✅:
+    - Already validated in v0.1.0
   - Visual/UI-level checks for design system (FU-300):
     - Component rendering tests
     - Responsive layout validation
@@ -142,35 +166,29 @@ Estimates follow methodology from `docs/specs/MVP_FEATURE_UNITS.md`: spec (1-3h)
 
   **Continuous Discovery**: 2-3 user interviews on upload experience
 
-- **After Batch 1** (Week 6):
+- **After Batch 1** (Day 0):
 
-  - Ingestion → extraction → entity resolution → event generation path:
-    - Upload financial statements and CSVs
-    - Verify entities created and deduplicated correctly
-    - Verify events created with correct timestamps and linkage
-    - Test determinism across full pipeline
+  - Ingestion → extraction → entity resolution → event generation path ✅:
+    - Already validated in v0.1.0 (IT-001 through IT-011 passing)
 
   **Mid-Release Checkpoint (Checkpoint 1)**: Review progress, validate integration
 
   **Continuous Discovery**: Prototype testing with 3-5 users on entity/event views
 
-- **After Batch 2** (Week 9):
+- **After Batch 2** (Day 0):
 
-  - Graph integrity:
-    - Verify 0 orphans after batch inserts
-    - Verify 0 cycles after batch inserts
-    - Test transactional insert behavior under failure scenarios
-    - Test concurrent insert handling
+  - Graph integrity ✅:
+    - Already validated in v0.1.0 (IT-004 passing, 0 orphans/cycles)
 
   **Continuous Discovery**: 2-3 user interviews on timeline/graph views
 
-- **After Batch 3** (Week 11):
+- **After Batch 3** (Day 2-3):
 
   - End-to-end flows:
-    - Upload → extraction → graph → search → UI → MCP
-    - Multi-user flows with RLS enforced
-    - All IT-001 through IT-005 from `integration_tests.md`
+    - Upload → extraction → graph → search → UI → MCP ✅ (validated in v0.1.0)
+    - Multi-user flows with RLS enforced (new for v1.0.0)
+    - All IT-001 through IT-005 from `integration_tests.md` ✅ (IT-001 through IT-011 already passing)
 
-  **Continuous Discovery**: Beta testing with discovery participants (Week 11-12)
+  **Continuous Discovery**: Beta testing with discovery participants
 
 See `integration_tests.md` for detailed test definitions.

@@ -41,12 +41,12 @@ const execAsync = promisify(exec);
 const BRANCH_PORTS_SENTINEL = path.join(
   process.cwd(),
   ".branch-ports",
-  "ui-integration-tests.json"
+  "ui-integration-tests.json",
 );
 
 function ensureBranchPortsFile(
   frontendPort: string,
-  backendPort: string
+  backendPort: string,
 ): void {
   try {
     const wsPort = String(Number(backendPort) + 1);
@@ -146,7 +146,7 @@ describe("UI Integration Tests", () => {
   async function waitForServerReady(
     url: string,
     retries = 20,
-    intervalMs = 1000
+    intervalMs = 1000,
   ): Promise<boolean> {
     for (let attempt = 0; attempt < retries; attempt++) {
       try {
@@ -197,7 +197,7 @@ describe("UI Integration Tests", () => {
         const ready = await waitForServerReady(backendHealthUrl, 20);
         if (!ready) {
           console.warn(
-            `Backend server did not become ready on port ${backendPort}`
+            `Backend server did not become ready on port ${backendPort}`,
           );
         }
       }
@@ -221,7 +221,7 @@ describe("UI Integration Tests", () => {
         const ready = await waitForServerReady(frontendUrl, 30);
         if (!ready) {
           console.warn(
-            `Frontend server did not become ready on port ${frontendPort}`
+            `Frontend server did not become ready on port ${frontendPort}`,
           );
         }
       }
@@ -246,7 +246,7 @@ describe("UI Integration Tests", () => {
           `http://localhost:${backendPort}/health`,
           {
             signal: AbortSignal.timeout(2000), // 2 second timeout
-          }
+          },
         );
         expect(response.ok).toBe(true);
       } catch (error: any) {
@@ -260,11 +260,12 @@ describe("UI Integration Tests", () => {
             Array.isArray(error.errors) &&
             error.errors.some(
               (e: any) =>
-                e.code === "ECONNREFUSED" || e.message?.includes("ECONNREFUSED")
+                e.code === "ECONNREFUSED" ||
+                e.message?.includes("ECONNREFUSED"),
             ));
         if (isConnectionError) {
           console.warn(
-            "Backend server not available, skipping health check test (expected for v0.1.0 where UI is excluded)"
+            "Backend server not available, skipping health check test (expected for v0.1.0 where UI is excluded)",
           );
           // Skip test if server not available (expected for v0.1.0 where UI is excluded)
           return;
@@ -279,7 +280,7 @@ describe("UI Integration Tests", () => {
           `http://localhost:${backendPort}/openapi.yaml`,
           {
             signal: AbortSignal.timeout(2000), // 2 second timeout
-          }
+          },
         );
         expect(response.ok).toBe(true);
         const text = await response.text();
@@ -294,11 +295,12 @@ describe("UI Integration Tests", () => {
             Array.isArray(error.errors) &&
             error.errors.some(
               (e: any) =>
-                e.code === "ECONNREFUSED" || e.message?.includes("ECONNREFUSED")
+                e.code === "ECONNREFUSED" ||
+                e.message?.includes("ECONNREFUSED"),
             ));
         if (isConnectionError) {
           console.warn(
-            "Backend server not available, skipping OpenAPI spec test (expected for v0.1.0 where UI is excluded)"
+            "Backend server not available, skipping OpenAPI spec test (expected for v0.1.0 where UI is excluded)",
           );
           // Skip test if server not available (expected for v0.1.0 where UI is excluded)
           return;
@@ -312,7 +314,7 @@ describe("UI Integration Tests", () => {
     it("should serve the frontend application", async () => {
       try {
         const response = await globalThis.fetch(
-          `http://localhost:${frontendPort}`
+          `http://localhost:${frontendPort}`,
         );
         expect(response.ok).toBe(true);
         const text = await response.text();
@@ -334,7 +336,7 @@ describe("UI Integration Tests", () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ limit: 10 }),
             signal: AbortSignal.timeout(2000), // 2 second timeout
-          }
+          },
         );
         expect(response.status).toBe(401);
       } catch (error: any) {
@@ -347,11 +349,12 @@ describe("UI Integration Tests", () => {
             Array.isArray(error.errors) &&
             error.errors.some(
               (e: any) =>
-                e.code === "ECONNREFUSED" || e.message?.includes("ECONNREFUSED")
+                e.code === "ECONNREFUSED" ||
+                e.message?.includes("ECONNREFUSED"),
             ));
         if (isConnectionError) {
           console.warn(
-            "Backend server not available, skipping authentication test (expected for v0.1.0 where UI is excluded)"
+            "Backend server not available, skipping authentication test (expected for v0.1.0 where UI is excluded)",
           );
           // Skip test if server not available (expected for v0.1.0 where UI is excluded)
           return;
@@ -374,7 +377,7 @@ describe("UI Integration Tests", () => {
               Authorization: "Bearer invalid-token",
             },
             body: JSON.stringify({ limit: 10 }),
-          }
+          },
         );
         // Should return 401 or 403, not 404
         expect([401, 403]).toContain(response.status);
@@ -405,7 +408,7 @@ describe("UI Integration Tests", () => {
           {
             method: "POST",
             body: formData,
-          }
+          },
         );
         expect(response.status).toBe(401);
       } catch (error) {
@@ -437,7 +440,7 @@ describe("UI Integration Tests", () => {
               Authorization: "Bearer invalid-token",
             },
             body: formData,
-          }
+          },
         );
         // Should return 401/403 (auth error), not 404/415 (not found/wrong content type)
         expect([401, 403]).toContain(response.status);
@@ -459,7 +462,7 @@ describe("UI Integration Tests", () => {
       it("should serve header with app title", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           expect(text.toLowerCase()).toContain("neotoma");
@@ -471,7 +474,7 @@ describe("UI Integration Tests", () => {
       it("should serve React app HTML structure", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           // Check for React root div and script tags (components render client-side)
@@ -479,7 +482,7 @@ describe("UI Integration Tests", () => {
           expect(text.toLowerCase()).toContain("script");
         } catch (error) {
           console.warn(
-            "Frontend not available, skipping header HTML structure test"
+            "Frontend not available, skipping header HTML structure test",
           );
         }
       });
@@ -566,16 +569,16 @@ describe("UI Integration Tests", () => {
       it("should contain welcome message in HTML", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           // Check for welcome message content
           expect(text.toLowerCase()).toMatch(
-            /welcome|neotoma|personal operating system/i
+            /welcome|neotoma|personal operating system/i,
           );
         } catch (error) {
           console.warn(
-            "Frontend not available, skipping chat welcome message test"
+            "Frontend not available, skipping chat welcome message test",
           );
         }
       });
@@ -618,7 +621,7 @@ describe("UI Integration Tests", () => {
             {
               method: "POST",
               body: formData,
-            }
+            },
           );
           // Should require authentication
           expect(response.status).toBe(401);
@@ -635,7 +638,7 @@ describe("UI Integration Tests", () => {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ messages: [] }),
-            }
+            },
           );
           // Should require authentication or return appropriate error
           expect([401, 403, 404]).toContain(response.status);
@@ -707,7 +710,7 @@ describe("UI Integration Tests", () => {
       it("should serve React app for records table", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           // React components render client-side, so we verify the app structure
@@ -715,7 +718,7 @@ describe("UI Integration Tests", () => {
           expect(response.ok).toBe(true);
         } catch (error) {
           console.warn(
-            "Frontend not available, skipping records table app test"
+            "Frontend not available, skipping records table app test",
           );
         }
       });
@@ -792,7 +795,7 @@ describe("UI Integration Tests", () => {
             {
               method: "GET",
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
           // Should require authentication or parameters
           expect([400, 401, 403]).toContain(response.status);
@@ -840,7 +843,7 @@ describe("UI Integration Tests", () => {
         ];
 
         const uniqueTypes = Array.from(
-          new Set(records.map((r) => r.type))
+          new Set(records.map((r) => r.type)),
         ).sort();
         expect(uniqueTypes).toEqual(["type-a", "type-b", "type-c"]);
       });
@@ -963,7 +966,7 @@ describe("UI Integration Tests", () => {
       it("should have worker file in frontend", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           // Check for worker-related content or script tags
@@ -994,7 +997,7 @@ describe("UI Integration Tests", () => {
         // The bridge runs on a separate port, but we can verify the code exists
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${backendPort}/health`
+            `http://localhost:${backendPort}/health`,
           );
           expect(response.ok).toBe(true);
         } catch (error) {
@@ -1021,7 +1024,7 @@ describe("UI Integration Tests", () => {
       it("should serve React app with toast support", async () => {
         try {
           const response = await globalThis.fetch(
-            `http://localhost:${frontendPort}`
+            `http://localhost:${frontendPort}`,
           );
           const text = await response.text();
           // React components render client-side, so we verify the app structure
@@ -1029,7 +1032,7 @@ describe("UI Integration Tests", () => {
           expect(response.ok).toBe(true);
         } catch (error) {
           console.warn(
-            "Frontend not available, skipping toast notifications app test"
+            "Frontend not available, skipping toast notifications app test",
           );
         }
       });
@@ -1088,7 +1091,7 @@ describe("UI Integration Tests", () => {
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
           // Should return 404 or 401, not crash
           expect([404, 401, 403]).toContain(response.status);
@@ -1117,7 +1120,7 @@ describe("UI Integration Tests", () => {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ limit: 10 }),
-            }
+            },
           );
           expect(response.status).toBe(401);
         } catch (error) {
@@ -1152,7 +1155,7 @@ describe("UI Integration Tests", () => {
               Authorization: "Bearer invalid-token",
             },
             body: formData,
-          }
+          },
         );
         // Should return 400 (bad request) or 401 (unauthorized), not 500
         expect([400, 401, 403]).toContain(response.status);

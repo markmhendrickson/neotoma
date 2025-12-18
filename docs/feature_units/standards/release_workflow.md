@@ -552,6 +552,7 @@ Before creating a Release, verify:
 
    - Update Release plan based on discovery learnings (adjust scope, refine FUs)
    - Mark Release status as `in_progress`
+   - **Record Development Start Date** in `status.md` (current date/time)
    - Proceed to Step 1 (Execute FU Batches)
 
 10. **If Pivot (Adjust Scope):**
@@ -749,7 +750,90 @@ g. **Cleanup worker agents** (terminate completed agents)
 
 7. **If all tests pass and coverage thresholds met:**
    - Update release status to `ready_for_deployment` (if not already)
-   - Proceed to Step 3.5 (Architectural Completeness Validation)
+   - **Record Development Finish Date** in `status.md` (current date/time)
+   - **Calculate Actual Development Time** (Development Finish Date - Development Start Date)
+   - **Calculate Estimation Accuracy** ((Actual / Estimated) × 100%)
+   - **Update estimation methodology** if accuracy significantly off (see `docs/conventions/estimation_methodology.md`)
+   - Proceed to Step 3.6 (Feature Unit Spec Compliance Validation)
+
+---
+
+### Step 3.6: Feature Unit Spec Compliance Validation (REQUIRED)
+
+**Trigger:** All integration tests pass, coverage thresholds met, before marking FUs complete
+
+**Purpose:** Validate that implementation matches spec requirements - prevent incomplete implementations like FU-100 where extraction validation was required but not implemented.
+
+**Agent Actions:**
+
+1. **For each FU marked as "completed" in the release:**
+
+   a. **Load FU specification:**
+      - Load spec from `docs/feature_units/completed/FU-XXX/FU-XXX_spec.md` or `docs/specs/MVP_FEATURE_UNITS.md`
+      - Extract all "MUST", "MUST NOT", "REQUIRED", and "SHALL" requirements
+   
+   b. **Generate Implementation Decision Log:**
+      - Create `docs/releases/vX.Y.Z/implementation_logs/FU-XXX_implementation_log.md`
+      - Document each implementation decision with requirement text, location, implementation approach, files changed, code references, verification, and status
+   
+   c. **Automated Spec Compliance Check:**
+      - For each requirement in spec, verify implementation exists:
+        - **Check code existence:** Grep for required functions/patterns
+        - **Check database schema:** Verify required columns/tables exist
+        - **Check integration:** Verify required service calls are made
+        - **Check validation:** Verify required validation logic exists
+      
+      Uses `scripts/validate_spec_compliance.js` which leverages `scripts/spec_compliance_patterns.js` for reusable check patterns.
+   
+   d. **Generate Compliance Report:**
+      - Create `docs/releases/vX.Y.Z/compliance_reports/FU-XXX_compliance.md`
+      - Structure includes requirements status table and implementation gaps section
+      - Lists specific gaps with requirement references, current state, required state, and files to modify
+
+2. **If gaps found:**
+   
+   - **STOP and present compliance report to user:**
+     - Show all requirements with ❌ Missing status
+     - List specific gaps and required changes
+     - Link to implementation decision log
+   
+   - **User must choose:**
+     a. **Fix gaps:** Agent implements missing requirements
+     b. **Update spec:** If requirement is incorrect/outdated, update spec first
+     c. **Defer requirement:** Document in decision log why requirement is deferred (requires explicit user approval)
+   
+   - **After fixes or deferral:**
+     - Re-run compliance check
+     - Update compliance report
+     - Update implementation decision log
+     - **Require user approval** before marking FU complete
+
+3. **If all requirements met:**
+   
+   - Update compliance report with ✅ Complete status
+   - Add compliance report link to FU status in status.md
+   - Proceed with marking FU complete
+
+**Critical Rules:**
+
+- **NO FU can be marked "complete" without passing spec compliance validation**
+- **All implementation decisions MUST be logged before validation**
+- **All gaps MUST be resolved OR explicitly deferred with user approval**
+- **Deferred requirements MUST be tracked in decision log for future work**
+
+**Implementation Notes:**
+
+- This step runs automatically in `scripts/release_orchestrator.js` after integration tests pass and before marking FUs complete
+- Can run in parallel for multiple FUs
+- Decision logs can be used for post-release audits
+- Compliance reports provide traceability for releases
+- If any FU fails compliance, the entire batch is blocked from completion
+
+**Integration:**
+
+- Executed by `scripts/release_orchestrator.js` via `validateFUSpecCompliance()` function
+- Runs after batch integration tests pass, before updating `status.completed_fus`
+- Exits with error if critical gaps found, preventing FU completion
 
 ---
 
@@ -1048,7 +1132,7 @@ g. **Cleanup worker agents** (terminate completed agents)
 3. **Update Release status:**
 
    - Mark Release as `deployed`
-   - Record deployment timestamp
+   - **Record Deployment Date** in `status.md` (current date/time)
 
 4. **Setup post-release monitoring:**
 
@@ -1058,11 +1142,13 @@ g. **Cleanup worker agents** (terminate completed agents)
 5. **If marketed release:**
    - Proceed to Step 6 (Post-Release Marketing & Validation)
    - **If not_marketed release:**
+     - **Record Completion Date** in `status.md` (current date/time)
      - Move Release files from `in_progress/` to `completed/`:
        ```bash
        mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z
        ```
      - Update Release status to `completed`
+     - **Generate time tracking summary** comparing actual vs estimated times for future calibration
 
 ---
 
@@ -1203,11 +1289,13 @@ g. **Cleanup worker agents** (terminate completed agents)
    - "Recommendations: [for next release]"
 
 9. **COMPLETE:**
+   - **Record Completion Date** in `status.md` (current date/time)
    - Move Release files from `in_progress/` to `completed/`:
      ```bash
      mv docs/releases/in_progress/vX.Y.Z docs/releases/completed/vX.Y.Z
      ```
    - Update Release status to `completed`
+   - **Generate time tracking summary** comparing actual vs estimated times for future calibration
 
 **Note:** This step is skipped for not_marketed releases.
 

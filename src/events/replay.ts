@@ -1,24 +1,24 @@
 /**
  * Event Replay for Event-Sourcing Foundation (FU-050)
- * 
+ *
  * Historical replay functionality to reconstruct state from events.
  */
 
-import { getEventsByRecordId, getEventsByTimestampRange } from './event_log.js';
-import { StateEvent } from './event_schema.js';
-import { applyVersionedReducer } from '../reducers/reducer_registry.js';
-import type { NeotomaRecord } from '../db.js';
+import { getEventsByRecordId, getEventsByTimestampRange } from "./event_log.js";
+import { StateEvent } from "./event_schema.js";
+import { applyVersionedReducer } from "../reducers/reducer_registry.js";
+import type { NeotomaRecord } from "../db.js";
 
 /**
  * Replay events to reconstruct state
- * 
+ *
  * @param recordId - Record ID to replay events for
  * @param upToTimestamp - Optional timestamp to replay up to (exclusive)
  * @returns Reconstructed record state, or null if record doesn't exist
  */
 export async function replayEvents(
   recordId: string,
-  upToTimestamp?: string
+  upToTimestamp?: string,
 ): Promise<NeotomaRecord | null> {
   let events: StateEvent[];
 
@@ -47,19 +47,21 @@ export async function replayEvents(
 
 /**
  * Get record state at specific timestamp
- * 
+ *
  * @param recordId - Record ID
  * @param timestamp - ISO 8601 timestamp
  * @returns Record state at timestamp, or null if record doesn't exist at that time
  */
 export async function getRecordAtTimestamp(
   recordId: string,
-  timestamp: string
+  timestamp: string,
 ): Promise<NeotomaRecord | null> {
   // Validate timestamp
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) {
-    throw new Error(`Invalid timestamp format: ${timestamp}. Must be ISO 8601.`);
+    throw new Error(
+      `Invalid timestamp format: ${timestamp}. Must be ISO 8601.`,
+    );
   }
 
   return replayEvents(recordId, timestamp);
@@ -70,7 +72,7 @@ export async function getRecordAtTimestamp(
  */
 export async function replayEventsForRecords(
   recordIds: string[],
-  upToTimestamp?: string
+  upToTimestamp?: string,
 ): Promise<Map<string, NeotomaRecord | null>> {
   const results = new Map<string, NeotomaRecord | null>();
 
@@ -81,4 +83,3 @@ export async function replayEventsForRecords(
 
   return results;
 }
-

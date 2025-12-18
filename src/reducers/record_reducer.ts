@@ -1,22 +1,29 @@
 /**
  * Record Reducer for Event-Sourcing Foundation (FU-050)
- * 
+ *
  * Pure reducer functions for computing record state from events.
  * Reducers are deterministic: same events → same state.
  */
 
-import { StateEvent, RecordCreatedEvent, RecordUpdatedEvent, RecordDeletedEvent } from '../events/event_schema.js';
-import type { NeotomaRecord } from '../db.js';
+import {
+  StateEvent,
+  RecordCreatedEvent,
+  RecordUpdatedEvent,
+  RecordDeletedEvent,
+} from "../events/event_schema.js";
+import type { NeotomaRecord } from "../db.js";
 
 /**
  * Reduce RecordCreated event to initial record state
  */
 export function reduceRecordCreated(event: StateEvent): NeotomaRecord {
-  if (event.event_type !== 'RecordCreated') {
-    throw new Error(`Invalid event type for reduceRecordCreated: ${event.event_type}`);
+  if (event.event_type !== "RecordCreated") {
+    throw new Error(
+      `Invalid event type for reduceRecordCreated: ${event.event_type}`,
+    );
   }
 
-  const payload = event.payload as RecordCreatedEvent['payload'];
+  const payload = event.payload as RecordCreatedEvent["payload"];
 
   return {
     id: payload.id,
@@ -36,12 +43,17 @@ export function reduceRecordCreated(event: StateEvent): NeotomaRecord {
 /**
  * Reduce RecordUpdated event to updated record state
  */
-export function reduceRecordUpdated(event: StateEvent, currentState: NeotomaRecord): NeotomaRecord {
-  if (event.event_type !== 'RecordUpdated') {
-    throw new Error(`Invalid event type for reduceRecordUpdated: ${event.event_type}`);
+export function reduceRecordUpdated(
+  event: StateEvent,
+  currentState: NeotomaRecord,
+): NeotomaRecord {
+  if (event.event_type !== "RecordUpdated") {
+    throw new Error(
+      `Invalid event type for reduceRecordUpdated: ${event.event_type}`,
+    );
   }
 
-  const payload = event.payload as RecordUpdatedEvent['payload'];
+  const payload = event.payload as RecordUpdatedEvent["payload"];
 
   // Merge properties (payload properties override current state)
   const mergedProperties = {
@@ -52,7 +64,10 @@ export function reduceRecordUpdated(event: StateEvent, currentState: NeotomaReco
   return {
     ...currentState,
     properties: mergedProperties,
-    file_urls: payload.file_urls !== undefined ? payload.file_urls : currentState.file_urls,
+    file_urls:
+      payload.file_urls !== undefined
+        ? payload.file_urls
+        : currentState.file_urls,
     updated_at: payload.updated_at,
   };
 }
@@ -60,12 +75,17 @@ export function reduceRecordUpdated(event: StateEvent, currentState: NeotomaReco
 /**
  * Reduce RecordDeleted event to deleted record state
  */
-export function reduceRecordDeleted(event: StateEvent, currentState: NeotomaRecord): NeotomaRecord {
-  if (event.event_type !== 'RecordDeleted') {
-    throw new Error(`Invalid event type for reduceRecordDeleted: ${event.event_type}`);
+export function reduceRecordDeleted(
+  event: StateEvent,
+  currentState: NeotomaRecord,
+): NeotomaRecord {
+  if (event.event_type !== "RecordDeleted") {
+    throw new Error(
+      `Invalid event type for reduceRecordDeleted: ${event.event_type}`,
+    );
   }
 
-  const payload = event.payload as RecordDeletedEvent['payload'];
+  const payload = event.payload as RecordDeletedEvent["payload"];
 
   // Mark record as deleted by adding deleted_at to properties
   return {
@@ -81,23 +101,26 @@ export function reduceRecordDeleted(event: StateEvent, currentState: NeotomaReco
 /**
  * Apply reducer to event and current state
  */
-export function applyReducer(event: StateEvent, currentState: NeotomaRecord | null): NeotomaRecord {
+export function applyReducer(
+  event: StateEvent,
+  currentState: NeotomaRecord | null,
+): NeotomaRecord {
   switch (event.event_type) {
-    case 'RecordCreated':
+    case "RecordCreated":
       if (currentState !== null) {
-        throw new Error('Cannot create record that already exists');
+        throw new Error("Cannot create record that already exists");
       }
       return reduceRecordCreated(event);
 
-    case 'RecordUpdated':
+    case "RecordUpdated":
       if (currentState === null) {
-        throw new Error('Cannot update record that does not exist');
+        throw new Error("Cannot update record that does not exist");
       }
       return reduceRecordUpdated(event, currentState);
 
-    case 'RecordDeleted':
+    case "RecordDeleted":
       if (currentState === null) {
-        throw new Error('Cannot delete record that does not exist');
+        throw new Error("Cannot delete record that does not exist");
       }
       return reduceRecordDeleted(event, currentState);
 
@@ -105,10 +128,3 @@ export function applyReducer(event: StateEvent, currentState: NeotomaRecord | nu
       throw new Error(`Unknown event type: ${event.event_type}`);
   }
 }
-
-
-
-
-
-
-

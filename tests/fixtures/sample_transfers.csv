@@ -1,0 +1,6 @@
+name,status,amount,origin_account,destination_account,created_time,deposit_address,fees,transaction,transactions,notes
+Transfer to Savings,pending,1000.00,acc-checking-001,acc-savings-001,2024-12-10T09:00:00Z,,0,,,Monthly savings transfer
+Transfer to Savings,completed,1000.00,acc-checking-001,acc-savings-001,2024-12-10T09:00:00Z,,0,tx-12345,tx-12345,Monthly savings transfer - completed
+
+
+

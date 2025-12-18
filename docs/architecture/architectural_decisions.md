@@ -39,7 +39,7 @@ This document does NOT cover:
 **Rationale:**
 
 - Users and agents interact with entities, relationships, and properties—not files
-- Files are secondary: treated as immutable *evidence nodes* rather than first-class records
+- Files are secondary: treated as immutable _evidence nodes_ rather than first-class records
 - Entity-centric design enables natural navigation and query patterns
 - Supports multi-source entity resolution and merging
 
@@ -57,13 +57,13 @@ This document does NOT cover:
 
 ---
 
-## 2. Four-Layer Truth Model
+## 2. Three-Layer Truth Model
 
-**Decision:** Neotoma implements a four-layer truth model:
+**Decision:** Neotoma implements a three-layer truth model:
 
-1. **Document** — the file itself (PDF, email, CSV, image)
-2. **Entity** — the logical thing in the world with a stable ID
-3. **Observation** — granular, source-specific facts extracted from documents
+1. **Payload (Document)** — unified ingestion primitive (files + agent data)
+2. **Observation** — granular, source-specific facts extracted from payloads
+3. **Entity** — the logical thing in the world with a stable ID
 4. **Snapshot** — deterministic reducer output representing current truth
 
 **Rationale:**
@@ -71,24 +71,25 @@ This document does NOT cover:
 - Decouples ingestion order from truth
 - Enables multiple sources to contribute observations about the same entity
 - Supports deterministic merging via reducers
-- Provides full provenance: every snapshot field traces to specific observations and documents
+- Provides full provenance: every snapshot field traces to specific observations and payloads
+- Unifies file uploads and agent submissions into single ingestion primitive
 
 **Model Diagram:**
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
-    Document[Document<br/>PDF, Email, CSV]
+    Payload[Payload<br/>Files + Agent Data]
     Observation[Observation<br/>Granular Facts]
     Entity[Entity<br/>Stable ID]
     Snapshot[Snapshot<br/>Current Truth]
-    
-    Document -->|Extract| Observation
+
+    Payload -->|Extract| Observation
     Observation -->|Merge via Reducer| Snapshot
     Entity -.->|Target| Observation
     Entity -.->|Represents| Snapshot
-    
-    style Document fill:#e1f5ff
+
+    style Payload fill:#e1f5ff
     style Observation fill:#fff4e6
     style Entity fill:#e6ffe6
     style Snapshot fill:#ffe6f0
@@ -99,7 +100,8 @@ flowchart TD
 - Ingestion creates observations, not direct entity updates
 - Reducers compute snapshots from observations deterministically
 - Multiple observations about same entity can coexist
-- Provenance tracks observation → document → file chain
+- Provenance tracks observation → payload chain
+- File uploads and agent submissions both create payloads (unified ingestion)
 
 **Related Documents:**
 
@@ -199,8 +201,8 @@ flowchart TD
 
 ```typescript
 interface MergePolicy {
-  strategy: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array';
-  tie_breaker?: 'observed_at' | 'source_priority';
+  strategy: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+  tie_breaker?: "observed_at" | "source_priority";
 }
 ```
 
@@ -273,13 +275,13 @@ flowchart LR
     Approval[Human/Agent<br/>Approval]
     Migration[Deterministic<br/>Migration]
     Registry[Schema Registry<br/>Updated]
-    
+
     RawFragments --> Analytics
     Analytics --> Suggestions
     Suggestions --> Approval
     Approval --> Migration
     Migration --> Registry
-    
+
     style RawFragments fill:#ffe6e6
     style Registry fill:#e6ffe6
 ```
@@ -515,7 +517,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 ### Validation Checklist
 
 - [ ] Entity-centric design maintained
-- [ ] Four-layer model respected (Document → Entity → Observation → Snapshot)
+- [ ] Three-layer model respected (Payload → Observation → Entity → Snapshot)
 - [ ] Reducers are deterministic (same inputs → same outputs)
 - [ ] Schemas managed via registry, not code
 - [ ] Provenance tracked for all snapshot fields
@@ -547,10 +549,5 @@ Load `docs/architecture/architectural_decisions.md` when:
 - **Entity-centric:** Entities are primary unit of truth
 - **Relationship-first:** Hierarchies emerge from edges
 - **Config-driven:** Schema evolution via registry, not code
-
-
-
-
-
 
 
