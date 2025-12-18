@@ -7,6 +7,7 @@ import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { supabase } from "./db.js";
 import { config } from "./config.js";
+import { DEFAULT_USER_ID } from "./constants.js";
 import {
   listCanonicalRecordTypes,
   normalizeRecordType,
@@ -843,6 +844,7 @@ app.post("/store_record", async (req, res) => {
     embedding: providedEmbedding,
   } = parsed.data;
   const normalizedType = normalizeRecordType(type).type;
+  const userId = DEFAULT_USER_ID;
 
   // Generate embedding if not provided and OpenAI is configured
   // Filter out empty arrays - they're invalid for PostgreSQL vector type
@@ -903,14 +905,20 @@ app.post("/store_record", async (req, res) => {
 
   // Extract and persist entities (FU-101)
   try {
-    const { extractEntities, resolveEntity } = await import('./services/entity_resolution.js');
+    const { extractEntities, resolveEntity } = await import(
+      "./services/entity_resolution.js"
+    );
     const entities = extractEntities(properties, normalizedType);
     const resolvedEntities = [];
-    
+
     for (const entity of entities) {
-      const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+      const resolved = await resolveEntity(
+        entity.entity_type,
+        entity.raw_value,
+        userId,
+      );
       resolvedEntities.push(resolved);
-      
+
       // Create record-entity edge
       await supabase.from("record_entity_edges").insert({
         record_id: data.id,
@@ -946,8 +954,10 @@ app.post("/store_record", async (req, res) => {
 
   // Create observations (FU-058)
   try {
-    const { createObservationsFromRecord } = await import('./services/observation_ingestion.js');
-    await createObservationsFromRecord(data as any, "00000000-0000-0000-0000-000000000000");
+    const { createObservationsFromRecord } = await import(
+      "./services/observation_ingestion.js"
+    );
+    await createObservationsFromRecord(data as any, userId);
   } catch (observationError) {
     // Log observation creation error but don't fail the request
     logError("ObservationCreationError:store_record", req, observationError);
@@ -1851,7 +1861,7 @@ app.post("/create_relationship", async (req, res) => {
     metadata,
   } = parsed.data;
 
-  const userId = "00000000-0000-0000-0000-000000000000"; // v0.1.0 single-user
+  const userId = DEFAULT_USER_ID;
 
   const { relationshipsService } = await import("./services/relationships.js");
 

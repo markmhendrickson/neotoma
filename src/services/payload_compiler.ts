@@ -14,6 +14,7 @@
  */
 
 import { supabase } from "../db.js";
+import { DEFAULT_USER_ID } from "../constants.js";
 import { getCapability } from "./capability_registry.js";
 import type {
   PayloadEnvelope,
@@ -38,7 +39,7 @@ export async function compilePayload(
   options: CompilePayloadOptions = {},
 ): Promise<CompilationResult> {
   const {
-    userId = "00000000-0000-0000-0000-000000000000",
+    userId = DEFAULT_USER_ID,
     skipObservations = false,
   } = options;
 

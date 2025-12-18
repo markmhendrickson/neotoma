@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { supabase } from "../db.js";
+import { DEFAULT_USER_ID } from "../constants.js";
 import {
   detectOrphanNodes,
   detectCycles,
@@ -59,6 +60,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "orphan test company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -126,6 +128,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "test company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -214,16 +217,19 @@ describe("Graph Builder Service", () => {
           id: "ent_cycle_test_1",
           entity_type: "company",
           canonical_name: "company 1",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_test_2",
           entity_type: "company",
           canonical_name: "company 2",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_test_3",
           entity_type: "company",
           canonical_name: "company 3",
+          user_id: DEFAULT_USER_ID,
         },
       ];
 
@@ -239,21 +245,21 @@ describe("Graph Builder Service", () => {
           target_entity_id: "ent_cycle_test_2",
           relationship_type: "PART_OF",
           metadata: {},
-          user_id: "00000000-0000-0000-0000-000000000000",
+          user_id: DEFAULT_USER_ID,
         },
         {
           source_entity_id: "ent_cycle_test_2",
           target_entity_id: "ent_cycle_test_3",
           relationship_type: "PART_OF",
           metadata: {},
-          user_id: "00000000-0000-0000-0000-000000000000",
+          user_id: DEFAULT_USER_ID,
         },
         {
           source_entity_id: "ent_cycle_test_3",
           target_entity_id: "ent_cycle_test_1",
           relationship_type: "PART_OF",
           metadata: {},
-          user_id: "00000000-0000-0000-0000-000000000000",
+          user_id: DEFAULT_USER_ID,
         },
       ]);
 
@@ -274,6 +280,7 @@ describe("Graph Builder Service", () => {
           entity_type: "company",
           canonical_name: "orphan company",
           aliases: [],
+          user_id: DEFAULT_USER_ID,
         })
         .select()
         .single();
@@ -336,11 +343,13 @@ describe("Graph Builder Service", () => {
           id: "ent_cycle_val_1",
           entity_type: "company",
           canonical_name: "company 1",
+          user_id: DEFAULT_USER_ID,
         },
         {
           id: "ent_cycle_val_2",
           entity_type: "company",
           canonical_name: "company 2",
+          user_id: DEFAULT_USER_ID,
         },
       ];
 
@@ -356,14 +365,14 @@ describe("Graph Builder Service", () => {
           target_entity_id: "ent_cycle_val_2",
           relationship_type: "PART_OF",
           metadata: {},
-          user_id: "00000000-0000-0000-0000-000000000000",
+          user_id: DEFAULT_USER_ID,
         },
         {
           source_entity_id: "ent_cycle_val_2",
           target_entity_id: "ent_cycle_val_1",
           relationship_type: "PART_OF",
           metadata: {},
-          user_id: "00000000-0000-0000-0000-000000000000",
+          user_id: DEFAULT_USER_ID,
         },
       ]);
 
