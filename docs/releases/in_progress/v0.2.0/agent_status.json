@@ -13,28 +13,29 @@
       "feature_units": [
         {
           "fu_id": "FU-110",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
+          "worker_agent_id": "cursor_worker_fu_110",
+          "status": "failed",
+          "progress": 0.0,
+          "started_at": "2025-12-18T17:11:46Z",
+          "last_update": "2025-12-18T17:11:46Z",
           "completed_at": null,
-          "error": null,
+          "error": "Tests failed: Supabase CLI missing project link and API calls returned 500/400 responses while running suites.",
           "tests": {
             "unit": {
-              "passed": null,
+              "passed": false,
               "coverage": null,
-              "command": null
+              "command": "npm run test"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:integration"
             },
             "e2e": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:e2e"
             }
-          }
+          },
+          "message": "Blocked on Supabase linking; record mutations hit 500 responses during integration/E2E tests."
         },
         {
           "fu_id": "FU-112",
