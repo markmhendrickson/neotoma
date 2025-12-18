@@ -6,7 +6,7 @@ import { supabase } from "./db.js";
 
 let testApp: Application;
 
-const createBearerToken = () => Buffer.from(randomBytes(32)).toString('base64url');
+const createBearerToken = () => Buffer.from(randomBytes(32)).toString("base64url");
 
 // Mock OpenAI for embedding and comparison tests
 const mockOpenAI = {
@@ -20,15 +20,15 @@ const mockOpenAI = {
   },
 };
 
-describe('HTTP actions endpoints', () => {
-  let server: ReturnType<Application['listen']> | null = null;
-  let baseUrl = '';
-  let bearerToken = '';
+describe("HTTP actions endpoints", () => {
+  let server: ReturnType<Application["listen"]> | null = null;
+  let baseUrl = "";
+  let bearerToken = "";
 
   beforeAll(async () => {
     const originalAutostart = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART;
-    process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART = '1';
-    const actionsModule = await import('./actions.js');
+    process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART = "1";
+    const actionsModule = await import("./actions.js");
     testApp = actionsModule.app;
     if (originalAutostart === undefined) {
       delete process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART;
@@ -45,39 +45,42 @@ describe('HTTP actions endpoints', () => {
     server?.close();
   });
 
-  it('retrieves records explicitly by ids in the provided order', async () => {
+  it("retrieves records explicitly by ids in the provided order", async () => {
     const inserts = [
-      { type: 'chat_test_alpha', properties: { label: 'first' } },
-      { type: 'chat_test_alpha', properties: { label: 'second' } },
+      { type: "chat_test_alpha", properties: { label: "first" } },
+      { type: "chat_test_alpha", properties: { label: "second" } },
     ];
-    const { data } = await supabase.from('records').insert(inserts).select();
+    const { data } = await supabase.from("records").insert(inserts).select();
     expect(data).toBeTruthy();
     const [first, second] = data!;
 
     const response = await fetch(`${baseUrl}/retrieve_records`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         Authorization: `Bearer ${bearerToken}`,
       },
       body: JSON.stringify({ ids: [second.id, first.id] }),
     });
 
     expect(response.status).toBe(200);
-    const records = (await response.json()) as Array<{ id: string; properties: Record<string, unknown> }>;
+    const records = (await response.json()) as Array<{
+      id: string;
+      properties: Record<string, unknown>;
+    }>;
     expect(records).toHaveLength(2);
     expect(records[0].id).toBe(second.id);
     expect(records[1].id).toBe(first.id);
 
-    await supabase.from('records').delete().in('id', [first.id, second.id]);
+    await supabase.from("records").delete().in("id", [first.id, second.id]);
   });
 
-  it('uses recent_records for chat follow-ups without extra search terms', async () => {
+  it("uses recent_records for chat follow-ups without extra search terms", async () => {
     const { data: created } = await supabase
-      .from('records')
+      .from("records")
       .insert({
-        type: 'chat_recent_record',
-        properties: { title: 'Inline session record' },
+        type: "chat_recent_record",
+        properties: { title: "Inline session record" },
       })
       .select()
       .single();
@@ -88,10 +91,10 @@ describe('HTTP actions endpoints', () => {
         choices: [
           {
             message: {
-              role: 'assistant',
+              role: "assistant",
               content: null,
               function_call: {
-                name: 'retrieve_records',
+                name: "retrieve_records",
                 arguments: JSON.stringify({ ids: [created!.id], limit: 1 }),
               },
             },
@@ -102,8 +105,8 @@ describe('HTTP actions endpoints', () => {
         choices: [
           {
             message: {
-              role: 'assistant',
-              content: 'Here is the record you just added.',
+              role: "assistant",
+              content: "Here is the record you just added.",
             },
           },
         ],
@@ -112,18 +115,19 @@ describe('HTTP actions endpoints', () => {
 
     const originalFetch = globalThis.fetch;
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .spyOn(globalThis, "fetch")
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes('api.openai.com/v1/chat/completions')) {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes("api.openai.com/v1/chat/completions")) {
           const payload = openAIResponses.shift();
           if (!payload) {
-            throw new Error('No stubbed OpenAI response remaining');
+            throw new Error("No stubbed OpenAI response remaining");
           }
           return Promise.resolve(
             new Response(JSON.stringify(payload), {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { "Content-Type": "application/json" },
             })
           );
         }
@@ -132,13 +136,13 @@ describe('HTTP actions endpoints', () => {
 
     try {
       const response = await fetch(`${baseUrl}/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: 'tell me about it' }],
+          messages: [{ role: "user", content: "tell me about it" }],
           recent_records: [{ id: created!.id, persisted: true }],
         }),
       });
@@ -149,16 +153,16 @@ describe('HTTP actions endpoints', () => {
       expect(openAIResponses).toHaveLength(0);
     } finally {
       fetchSpy.mockRestore();
-      await supabase.from('records').delete().eq('id', created!.id);
+      await supabase.from("records").delete().eq("id", created!.id);
     }
   });
 
-  it('omits records_queried when assistant never calls retrieve_records', async () => {
+  it("omits records_queried when assistant never calls retrieve_records", async () => {
     const { data: created } = await supabase
-      .from('records')
+      .from("records")
       .insert({
-        type: 'chat_recent_record_skip',
-        properties: { title: 'Context only record' },
+        type: "chat_recent_record_skip",
+        properties: { title: "Context only record" },
       })
       .select()
       .single();
@@ -169,8 +173,8 @@ describe('HTTP actions endpoints', () => {
         choices: [
           {
             message: {
-              role: 'assistant',
-              content: 'Noted. Let me know if you need anything else.',
+              role: "assistant",
+              content: "Noted. Let me know if you need anything else.",
             },
           },
         ],
@@ -179,18 +183,19 @@ describe('HTTP actions endpoints', () => {
 
     const originalFetch = globalThis.fetch;
     const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
+      .spyOn(globalThis, "fetch")
       .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
-        if (url.includes('api.openai.com/v1/chat/completions')) {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes("api.openai.com/v1/chat/completions")) {
           const payload = openAIResponses.shift();
           if (!payload) {
-            throw new Error('No stubbed OpenAI response remaining');
+            throw new Error("No stubbed OpenAI response remaining");
           }
           return Promise.resolve(
             new Response(JSON.stringify(payload), {
               status: 200,
-              headers: { 'Content-Type': 'application/json' },
+              headers: { "Content-Type": "application/json" },
             })
           );
         }
@@ -199,13 +204,13 @@ describe('HTTP actions endpoints', () => {
 
     try {
       const response = await fetch(`${baseUrl}/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          messages: [{ role: 'user', content: 'acknowledge the last upload' }],
+          messages: [{ role: "user", content: "acknowledge the last upload" }],
           recent_records: [{ id: created!.id, persisted: true }],
         }),
       });
@@ -216,31 +221,31 @@ describe('HTTP actions endpoints', () => {
       expect(openAIResponses).toHaveLength(0);
     } finally {
       fetchSpy.mockRestore();
-      await supabase.from('records').delete().eq('id', created!.id);
+      await supabase.from("records").delete().eq("id", created!.id);
     }
   });
 
-  describe('generate_embedding endpoint', () => {
-    it('requires authentication', async () => {
+  describe("generate_embedding endpoint", () => {
+    it("requires authentication", async () => {
       const response = await fetch(`${baseUrl}/generate_embedding`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          type: 'test_record',
-          properties: { label: 'test' },
+          type: "test_record",
+          properties: { label: "test" },
         }),
       });
 
       expect(response.status).toBe(401);
     });
 
-    it('validates request payload', async () => {
+    it("validates request payload", async () => {
       const response = await fetch(`${baseUrl}/generate_embedding`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
@@ -253,56 +258,56 @@ describe('HTTP actions endpoints', () => {
       expect(error.error).toBeDefined();
     });
 
-    it('returns 503 when OpenAI API key is not configured', async () => {
+    it("returns 503 when OpenAI API key is not configured", async () => {
       // Skip if OpenAI is actually configured (module is cached)
-      const { config } = await import('./config.js');
+      const { config } = await import("./config.js");
       if (config.openaiApiKey) {
-        console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
+        console.warn("Skipping test: OPENAI_API_KEY is configured (module cached)");
         return;
       }
 
       const response = await fetch(`${baseUrl}/generate_embedding`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
-          type: 'test_record',
-          properties: { label: 'test' },
+          type: "test_record",
+          properties: { label: "test" },
         }),
       });
 
       expect(response.status).toBe(503);
       const error = await response.json();
-      expect(error.error).toContain('OpenAI API key');
+      expect(error.error).toContain("OpenAI API key");
     });
 
-    it('generates embedding when OpenAI is configured', async () => {
-      const { config } = await import('./config.js');
+    it("generates embedding when OpenAI is configured", async () => {
+      const { config } = await import("./config.js");
       if (!config.openaiApiKey) {
-        console.warn('Skipping test: OPENAI_API_KEY not configured');
+        console.warn("Skipping test: OPENAI_API_KEY not configured");
         return;
       }
 
       const mockEmbedding = Array.from({ length: 1536 }, () => Math.random());
-      
+
       // Mock the OpenAI embeddings.create method
-      const embeddingsModule = await import('./embeddings.js');
+      const embeddingsModule = await import("./embeddings.js");
       const originalGenerate = embeddingsModule.generateEmbedding;
-      
-      vi.spyOn(embeddingsModule, 'generateEmbedding').mockResolvedValue(mockEmbedding);
+
+      vi.spyOn(embeddingsModule, "generateEmbedding").mockResolvedValue(mockEmbedding);
 
       try {
         const response = await fetch(`${baseUrl}/generate_embedding`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${bearerToken}`,
           },
           body: JSON.stringify({
-            type: 'test_record',
-            properties: { label: 'test', amount: 100 },
+            type: "test_record",
+            properties: { label: "test", amount: 100 },
           }),
         });
 
@@ -317,25 +322,25 @@ describe('HTTP actions endpoints', () => {
     });
   });
 
-  describe('record_comparison endpoint', () => {
-    it('requires authentication', async () => {
+  describe("record_comparison endpoint", () => {
+    it("requires authentication", async () => {
       const response = await fetch(`${baseUrl}/record_comparison`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           new_record: {
-            id: 'new-1',
-            type: 'transaction',
-            summary: 'New transaction',
+            id: "new-1",
+            type: "transaction",
+            summary: "New transaction",
             properties: { amount: 100 },
           },
           similar_records: [
             {
-              id: 'similar-1',
-              type: 'transaction',
-              summary: 'Similar transaction',
+              id: "similar-1",
+              type: "transaction",
+              summary: "Similar transaction",
               properties: { amount: 90 },
             },
           ],
@@ -345,11 +350,11 @@ describe('HTTP actions endpoints', () => {
       expect(response.status).toBe(401);
     });
 
-    it('validates request payload', async () => {
+    it("validates request payload", async () => {
       const response = await fetch(`${baseUrl}/record_comparison`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
@@ -362,32 +367,32 @@ describe('HTTP actions endpoints', () => {
       expect(error.error).toBeDefined();
     });
 
-    it('returns 503 when OpenAI API key is not configured', async () => {
+    it("returns 503 when OpenAI API key is not configured", async () => {
       // Skip if OpenAI is actually configured (module is cached)
-      const { config } = await import('./config.js');
+      const { config } = await import("./config.js");
       if (config.openaiApiKey) {
-        console.warn('Skipping test: OPENAI_API_KEY is configured (module cached)');
+        console.warn("Skipping test: OPENAI_API_KEY is configured (module cached)");
         return;
       }
 
       const response = await fetch(`${baseUrl}/record_comparison`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
           Authorization: `Bearer ${bearerToken}`,
         },
         body: JSON.stringify({
           new_record: {
-            id: 'new-1',
-            type: 'transaction',
-            summary: 'New transaction',
+            id: "new-1",
+            type: "transaction",
+            summary: "New transaction",
             properties: { amount: 100 },
           },
           similar_records: [
             {
-              id: 'similar-1',
-              type: 'transaction',
-              summary: 'Similar transaction',
+              id: "similar-1",
+              type: "transaction",
+              summary: "Similar transaction",
               properties: { amount: 90 },
             },
           ],
@@ -396,46 +401,46 @@ describe('HTTP actions endpoints', () => {
 
       expect(response.status).toBe(503);
       const error = await response.json();
-      expect(error.error).toContain('OpenAI API key');
+      expect(error.error).toContain("OpenAI API key");
     });
 
-    it('generates comparison analysis when OpenAI is configured', async () => {
-      const { config } = await import('./config.js');
+    it("generates comparison analysis when OpenAI is configured", async () => {
+      const { config } = await import("./config.js");
       if (!config.openaiApiKey) {
-        console.warn('Skipping test: OPENAI_API_KEY not configured');
+        console.warn("Skipping test: OPENAI_API_KEY not configured");
         return;
       }
 
-      const mockAnalysis = 'This transaction is higher than similar transactions.';
+      const mockAnalysis = "This transaction is higher than similar transactions.";
 
       // Mock the record comparison service
-      const comparisonModule = await import('./services/record_comparison.js');
+      const comparisonModule = await import("./services/record_comparison.js");
       const originalGenerate = comparisonModule.generateRecordComparisonInsight;
-      
-      vi.spyOn(comparisonModule, 'generateRecordComparisonInsight').mockResolvedValue(mockAnalysis);
+
+      vi.spyOn(comparisonModule, "generateRecordComparisonInsight").mockResolvedValue(mockAnalysis);
 
       try {
         const response = await fetch(`${baseUrl}/record_comparison`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             Authorization: `Bearer ${bearerToken}`,
           },
           body: JSON.stringify({
             new_record: {
-              id: 'new-1',
-              type: 'transaction',
-              summary: 'New transaction',
+              id: "new-1",
+              type: "transaction",
+              summary: "New transaction",
               properties: { amount: 100 },
-              metrics: { amount: 100, currency: 'USD' },
+              metrics: { amount: 100, currency: "USD" },
             },
             similar_records: [
               {
-                id: 'similar-1',
-                type: 'transaction',
-                summary: 'Similar transaction',
+                id: "similar-1",
+                type: "transaction",
+                summary: "Similar transaction",
                 properties: { amount: 90 },
-                metrics: { amount: 90, currency: 'USD' },
+                metrics: { amount: 90, currency: "USD" },
               },
             ],
           }),
@@ -450,4 +455,3 @@ describe('HTTP actions endpoints', () => {
     });
   });
 });
-
