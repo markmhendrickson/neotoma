@@ -13,26 +13,26 @@
       "feature_units": [
         {
           "fu_id": "FU-110",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
-          "completed_at": null,
+          "worker_agent_id": "worker_fu110_agent",
+          "status": "completed",
+          "progress": 1.0,
+          "started_at": "2025-12-18T13:33:21Z",
+          "last_update": "2025-12-18T13:36:42Z",
+          "completed_at": "2025-12-18T13:36:42Z",
           "error": null,
           "tests": {
             "unit": {
-              "passed": null,
+              "passed": true,
               "coverage": null,
-              "command": null
+              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test -- src/utils/property_sanitizer.test.ts"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test -- tests/integration/payload/payload_submission.test.ts"
             },
             "e2e": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "DEV_SUPABASE_URL=http://localhost DEV_SUPABASE_SERVICE_KEY=dummy npm run test:e2e"
             }
           }
         },

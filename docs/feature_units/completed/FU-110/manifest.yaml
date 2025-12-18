@@ -1,0 +1,126 @@
+feature_id: "fu_110"
+version: "1.0.0"
+status: "in_progress"
+priority: "p0"
+risk_level: "medium"
+
+tags:
+  - "schema"
+  - "storage"
+  - "rls"
+
+kill_switch:
+  conditions:
+    - condition: "Migration fails or introduces locking/slow queries"
+      action: "Rollback migration, restore previous schema snapshot"
+    - condition: "RLS misconfiguration exposes cross-user data"
+      action: "Disable Supabase client access, drop policies, reapply with verified predicates"
+
+metadata:
+  title: "Sources Table Migration"
+  description: "Create content-addressed sources table with per-user deduplication and strict RLS."
+  owner: "worker_fu110_agent"
+  reviewers:
+    - "mark@neotoma.com"
+  created_at: "2025-12-18"
+  target_release: "v0.2.0"
+
+subsystems:
+  - name: "schema"
+    changes: "Adds sources table and indexes per docs/subsystems/schema.md"
+  - name: "storage"
+    changes: "Defines metadata + policies needed for Supabase Storage bucket `sources`"
+
+schema_changes:
+  - table: "sources"
+    operation: "create_table"
+    columns:
+      - { name: "id", type: "UUID", nullable: false, default_value: "gen_random_uuid()", primary_key: true }
+      - { name: "content_hash", type: "TEXT", nullable: false }
+      - { name: "storage_url", type: "TEXT", nullable: false }
+      - { name: "storage_status", type: "TEXT", nullable: false, default_value: "'uploaded'" }
+      - { name: "mime_type", type: "TEXT", nullable: false }
+      - { name: "file_name", type: "TEXT", nullable: true }
+      - { name: "byte_size", type: "INTEGER", nullable: false }
+      - { name: "source_type", type: "TEXT", nullable: false }
+      - { name: "source_agent_id", type: "TEXT", nullable: true }
+      - { name: "source_metadata", type: "JSONB", nullable: true, default_value: "'{}'::jsonb" }
+      - { name: "created_at", type: "TIMESTAMPTZ", nullable: false, default_value: "NOW()" }
+      - { name: "user_id", type: "UUID", nullable: false }
+    constraints:
+      - name: "unique_content_per_user"
+        type: "unique"
+        columns: ["content_hash", "user_id"]
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_hash"
+    index_type: "btree"
+    columns: ["content_hash"]
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_user"
+    index_type: "btree"
+    columns: ["user_id"]
+  - table: "sources"
+    operation: "add_index"
+    index_name: "idx_sources_created"
+    index_type: "btree"
+    columns: ["created_at"]
+
+rls_policies:
+  - table: "sources"
+    policy_name: "Users read own sources"
+    command: "select"
+    using: "user_id = auth.uid()"
+  - table: "sources"
+    policy_name: "Service role full access - sources"
+    role: "service_role"
+    command: "all"
+    using: "true"
+    with_check: "true"
+
+tests:
+  unit:
+    - name: "sources_unique_constraint"
+      description: "Duplicate `(content_hash, user_id)` insert fails."
+    - name: "sources_cross_user_duplicate"
+      description: "Same hash under different user succeeds."
+  integration:
+    - name: "it_sources_table"
+      description: "RLS enforcement + index presence check via information_schema."
+
+observability:
+  metrics:
+    - name: "raw_storage.upload_total"
+      description: "Future counter for uploads; dependency noted for FU-120."
+    - name: "raw_storage.dedupe_total"
+      description: "Future counter for dedup detection."
+  logs:
+    - event: "raw_storage.dedupe"
+      fields: ["user_id", "content_hash", "deduplicated"]
+
+dependencies:
+  requires: []
+  blocks:
+    - feature_id: "fu_111"
+      reason: "Interpretation runs reference sources.id"
+    - feature_id: "fu_120"
+      reason: "Raw storage service writes to sources table"
+    - feature_id: "fu_122"
+      reason: "ingest() relies on sources rows"
+
+feature_flags:
+  enabled: false
+
+rollout:
+  strategy: "instant"
+  rollback:
+    steps:
+      - "Drop sources policies and table if issues occur (no user data yet)."
+      - "Reapply previous schema snapshot via Supabase migration rollback."
+    triggers:
+      - condition: "Constraint errors detected for legitimate new uploads"
+        action: "Pause ingestion + rollback migration"
+      - condition: "RLS auditing detects cross-user access"
+        action: "Disable client queries, fix policies, redeploy"
+
