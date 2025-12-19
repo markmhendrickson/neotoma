@@ -38,26 +38,26 @@
         },
         {
           "fu_id": "FU-112",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
-          "completed_at": null,
-          "error": null,
+          "worker_agent_id": "worker_fu112_deferred",
+          "status": "deferred",
+          "progress": 1.0,
+          "started_at": "2025-12-19T17:20:00.000Z",
+          "last_update": "2025-12-19T17:25:00.000Z",
+          "completed_at": "2025-12-19T17:25:00.000Z",
+          "error": "DEFERRED TO v0.3.0: Per release_plan.md section 2.2 - FU-112 Storage Infrastructure (upload_queue, storage_usage tables) is explicitly deferred. Reason: Don't optimize throughput before confirming adoption.",
           "tests": {
             "unit": {
               "passed": null,
               "coverage": null,
-              "command": null
+              "command": "N/A - FU deferred to v0.3.0"
             },
             "integration": {
               "passed": null,
-              "command": null
+              "command": "N/A - FU deferred to v0.3.0"
             },
             "e2e": {
               "passed": null,
-              "command": null
+              "command": "N/A - FU deferred to v0.3.0"
             }
           }
         },
@@ -415,5 +415,5 @@
     }
   ],
   "errors": [],
-  "completed_fus": []
+  "completed_fus": ["FU-112"]
 }

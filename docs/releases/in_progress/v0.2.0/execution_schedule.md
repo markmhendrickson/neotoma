@@ -15,8 +15,9 @@
 **Feature Units:**
 
 - `FU-110`
-- `FU-112`
 - `FU-113`
+
+_Note: `FU-112` (Storage Infrastructure) was removed from Batch 0 as it is deferred to v0.3.0 per release_plan.md section 2.2._
 
 ---
 
