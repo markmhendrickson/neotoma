@@ -471,12 +471,15 @@ CREATE POLICY "Service role full access - relationships" ON relationships
 DROP POLICY IF EXISTS "public read - relationships" ON relationships;
 CREATE POLICY "public read - relationships" ON relationships FOR SELECT USING (true);
 
--- Entities table (FU-101)
+-- Entities table (FU-101, extended by FU-113)
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
   canonical_name TEXT NOT NULL,
   aliases JSONB DEFAULT '[]',
+  user_id UUID,                                    -- FU-113: User isolation
+  merged_to_entity_id TEXT REFERENCES entities(id), -- FU-113: Merge tracking
+  merged_at TIMESTAMPTZ,                           -- FU-113: Merge timestamp
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -485,6 +488,9 @@ CREATE TABLE IF NOT EXISTS entities (
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_user_id ON entities(user_id);
+CREATE INDEX IF NOT EXISTS idx_entities_merged_to ON entities(merged_to_entity_id) WHERE merged_to_entity_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_entities_not_merged ON entities(user_id) WHERE merged_to_entity_id IS NULL;
 
 -- RLS policies for entities
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
@@ -493,8 +499,76 @@ DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
 CREATE POLICY "Service role full access - entities" ON entities
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS "public read - entities" ON entities;
-CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+-- Users can only read their own entities (when authenticated)
+DROP POLICY IF EXISTS "Users can read own entities" ON entities;
+CREATE POLICY "Users can read own entities" ON entities
+  FOR SELECT
+  TO authenticated
+  USING (user_id = auth.uid());
+
+-- Users can only insert their own entities
+DROP POLICY IF EXISTS "Users can insert own entities" ON entities;
+CREATE POLICY "Users can insert own entities" ON entities
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+-- Users can only update their own entities
+DROP POLICY IF EXISTS "Users can update own entities" ON entities;
+CREATE POLICY "Users can update own entities" ON entities
+  FOR UPDATE
+  TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Users can only delete their own entities
+DROP POLICY IF EXISTS "Users can delete own entities" ON entities;
+CREATE POLICY "Users can delete own entities" ON entities
+  FOR DELETE
+  TO authenticated
+  USING (user_id = auth.uid());
+
+-- Anon/public read access (for backward compatibility in single-user mode)
+DROP POLICY IF EXISTS "Public read fallback - entities" ON entities;
+CREATE POLICY "Public read fallback - entities" ON entities
+  FOR SELECT
+  TO anon
+  USING (true);
+
+-- Trigger to validate entity merges (same-user only)
+CREATE OR REPLACE FUNCTION validate_entity_merge()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $$
+DECLARE
+  target_user_id UUID;
+BEGIN
+  IF NEW.merged_to_entity_id IS NOT NULL AND 
+     (OLD.merged_to_entity_id IS NULL OR NEW.merged_to_entity_id != OLD.merged_to_entity_id) THEN
+    SELECT user_id INTO target_user_id
+    FROM entities
+    WHERE id = NEW.merged_to_entity_id;
+    
+    IF target_user_id IS DISTINCT FROM NEW.user_id THEN
+      RAISE EXCEPTION 'Cannot merge entities across different users';
+    END IF;
+    
+    IF NEW.merged_at IS NULL THEN
+      NEW.merged_at = NOW();
+    END IF;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS validate_entity_merge_trigger ON entities;
+CREATE TRIGGER validate_entity_merge_trigger
+  BEFORE UPDATE ON entities
+  FOR EACH ROW
+  EXECUTE FUNCTION validate_entity_merge();
 
 -- Timeline events table (FU-102)
 CREATE TABLE IF NOT EXISTS timeline_events (
