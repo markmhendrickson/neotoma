@@ -25,20 +25,31 @@ else
   else
     echo "[INFO] Supabase project ref: $PROJECT_REF"
     
-    # Step 3: Try to link Supabase project and apply migrations
-    echo "[INFO] Attempting to link Supabase project..."
+    # Step 3: Apply database migrations
+    echo "[INFO] Applying database migrations..."
     
-    # Try CLI link (may fail without authentication in cloud agents)
+    # Try CLI first (if available and authenticated)
     LINK_OUTPUT=$(npx supabase link --project-ref "$PROJECT_REF" 2>&1)
     if echo "$LINK_OUTPUT" | grep -q "already linked\|Finished supabase link"; then
       echo "[INFO] ✅ Supabase project linked"
-      echo "[INFO] Applying database migrations..."
-      npx supabase db push 2>&1 | grep -v "^$" || echo "[WARN] Migration push completed (check output above for errors)"
+      echo "[INFO] Applying migrations via CLI..."
+      if npx supabase db push 2>&1 | grep -v "^$"; then
+        echo "[INFO] ✅ Migrations applied via CLI"
+      else
+        echo "[WARN] CLI migration failed, trying Node.js script..."
+        # Fallback to Node.js script
+        node scripts/apply_migrations_direct.js 2>&1 || echo "[WARN] Node.js migration script failed"
+      fi
     else
-      echo "[WARN] Supabase CLI linking failed (authentication required)"
-      echo "[WARN] This is expected in cloud agent environments"
-      echo "[WARN] Migrations will need to be applied manually via Supabase Dashboard SQL Editor"
-      echo "[WARN] For now, integration/E2E tests that require migrations may fail"
+      echo "[INFO] Supabase CLI linking unavailable (authentication required in cloud agents)"
+      echo "[INFO] Applying migrations via Management API (using service key)..."
+      # Use Node.js script that applies migrations via Management API
+      if node scripts/apply_migrations_direct.js 2>&1; then
+        echo "[INFO] ✅ Migrations applied via Management API"
+      else
+        echo "[WARN] Migration application failed - check logs above"
+        echo "[WARN] Migrations may need to be applied manually via Supabase Dashboard SQL Editor"
+      fi
     fi
   fi
 fi
