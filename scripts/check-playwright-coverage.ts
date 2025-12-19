@@ -22,6 +22,7 @@ const EXEMPT_PATTERNS = [
   /\.eslintrc/,
   /\.prettierrc/,
   /\.gitignore$/,
+  /sample-data/, // Data files don't require UI test coverage
 ];
 
 /**
