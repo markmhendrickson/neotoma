@@ -213,18 +213,7 @@ ${envSetup}
     },
   };
 
-  const envVars = {};
-  creds.forEach((cred) => {
-    const [key, ...valueParts] = cred.split("=");
-    if (key && valueParts.length > 0) {
-      const value = valueParts.join("=");
-      envVars[key.trim()] = value.trim();
-    }
-  });
-
-  if (Object.keys(envVars).length > 0) {
-    requestBody.environment = envVars;
-  }
+  // Note: Environment variables are injected via Cursor Secrets, not passed via API environment field
 
   const response = await fetch(endpoint, {
     method: "POST",
