@@ -471,20 +471,41 @@ CREATE POLICY "Service role full access - relationships" ON relationships
 DROP POLICY IF EXISTS "public read - relationships" ON relationships;
 CREATE POLICY "public read - relationships" ON relationships FOR SELECT USING (true);
 
--- Entities table (FU-101)
+-- Entities table (FU-101, extended by FU-113)
 CREATE TABLE IF NOT EXISTS entities (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
   canonical_name TEXT NOT NULL,
   aliases JSONB DEFAULT '[]',
+  user_id UUID,                           -- FU-113: Owner user ID for RLS isolation
+  merged_to_entity_id TEXT,               -- FU-113: ID of entity this was merged into
+  merged_at TIMESTAMPTZ,                  -- FU-113: Timestamp when entity was merged
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Add foreign key constraint for merged_to_entity_id (self-referencing)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'entities_merged_to_entity_id_fkey'
+    AND table_name = 'entities'
+  ) THEN
+    ALTER TABLE entities 
+    ADD CONSTRAINT entities_merged_to_entity_id_fkey 
+    FOREIGN KEY (merged_to_entity_id) REFERENCES entities(id);
+  END IF;
+END $$;
 
 -- Indexes for entities
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_user_id ON entities(user_id);
+CREATE INDEX IF NOT EXISTS idx_entities_merged_to ON entities(merged_to_entity_id) WHERE merged_to_entity_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_entities_user_type ON entities(user_id, entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_user_not_merged ON entities(user_id) WHERE merged_to_entity_id IS NULL;
 
 -- RLS policies for entities
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
@@ -493,8 +514,31 @@ DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
 CREATE POLICY "Service role full access - entities" ON entities
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users can read own entities" ON entities;
+CREATE POLICY "Users can read own entities" ON entities
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid() OR user_id IS NULL);
+
+DROP POLICY IF EXISTS "Users can insert own entities" ON entities;
+CREATE POLICY "Users can insert own entities" ON entities
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can update own entities" ON entities;
+CREATE POLICY "Users can update own entities" ON entities
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Users can delete own entities" ON entities;
+CREATE POLICY "Users can delete own entities" ON entities
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
 DROP POLICY IF EXISTS "public read - entities" ON entities;
-CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+CREATE POLICY "public read - entities" ON entities
+  FOR SELECT TO anon
+  USING (user_id IS NULL);
 
 -- Timeline events table (FU-102)
 CREATE TABLE IF NOT EXISTS timeline_events (

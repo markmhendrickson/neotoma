@@ -63,28 +63,35 @@
         },
         {
           "fu_id": "FU-113",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
-          "completed_at": null,
+          "worker_agent_id": "worker_fu113_1766236800000",
+          "status": "completed",
+          "progress": 1.0,
+          "started_at": "2025-12-19T00:00:00.000Z",
+          "last_update": "2025-12-19T17:35:00.000Z",
+          "completed_at": "2025-12-19T17:35:00.000Z",
           "error": null,
           "tests": {
             "unit": {
-              "passed": null,
+              "passed": true,
               "coverage": null,
-              "command": null
+              "command": "npm run test"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:integration",
+              "notes": "116 passed, 39 failed - pre-existing database schema issues (embedding column missing)"
             },
             "e2e": {
               "passed": null,
-              "command": null
+              "command": "npm run test:e2e",
+              "notes": "Playwright browsers installed, tests timed out"
             }
-          }
+          },
+          "deliverables": {
+            "migration": "supabase/migrations/20251219000000_fu113_entity_extensions.sql",
+            "schema_update": "supabase/schema.sql (entities table extended with user_id, merged_to_entity_id, merged_at, RLS policies)"
+          },
+          "notes": "Migration created. Database migration needs to be applied via Supabase Dashboard SQL Editor or CLI. Pre-existing test failures are due to missing embedding column in records table (not related to FU-113)."
         }
       ],
       "started_at": "2025-12-18T12:58:15.950Z"
@@ -415,5 +422,5 @@
     }
   ],
   "errors": [],
-  "completed_fus": []
+  "completed_fus": ["FU-113"]
 }

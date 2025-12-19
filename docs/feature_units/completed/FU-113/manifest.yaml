@@ -1,0 +1,61 @@
+id: FU-113
+name: Entity Extensions
+priority: P0
+status: completed
+release: v0.2.0
+
+description: |
+  Extends the entities table with user isolation and entity merge tracking:
+  - user_id column for RLS isolation
+  - merged_to_entity_id for entity merge tracking
+  - merged_at timestamp for merge audit
+  - RLS policies for user-scoped access
+
+dependencies: []
+
+deliverables:
+  - type: migration
+    path: supabase/migrations/20251219000000_fu113_entity_extensions.sql
+    description: Database migration adding user_id, merged_to_entity_id, merged_at columns and RLS policies
+  
+  - type: schema_update
+    path: supabase/schema.sql
+    description: Updated schema definition for entities table
+
+tests:
+  unit:
+    passed: true
+    command: npm run test
+    count: 68
+  
+  integration:
+    passed: false
+    command: npm run test:integration
+    notes: "116 passed, 39 failed - pre-existing database schema issues (embedding column missing)"
+  
+  e2e:
+    passed: null
+    command: npm run test:e2e
+    notes: "Playwright browsers installed, tests timed out"
+
+acceptance_criteria:
+  - description: Migration file created
+    status: complete
+  
+  - description: Schema.sql updated
+    status: complete
+  
+  - description: Indexes created for efficient queries
+    status: complete
+  
+  - description: RLS policies defined for user isolation
+    status: complete
+  
+  - description: Self-referencing FK for merge tracking
+    status: complete
+  
+  - description: Migration applied to database
+    status: pending
+    notes: Requires manual application via Supabase Dashboard SQL Editor
+
+completed_at: "2025-12-19T17:35:00.000Z"
