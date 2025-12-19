@@ -151,9 +151,8 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
     );
   }
 
-  if (!process.env.REPO_URL) {
-    throw new Error("Missing required environment variable: REPO_URL");
-  }
+  // REPO_URL defaults to markmhendrickson/neotoma (ensure Cursor has GitHub access to this repo)
+  // If using a different repository, ensure it's accessible via Cursor Cloud Agents Settings
 
   // Select model based on FU complexity
   const selectedModel = selectModelForFU(fuId, manifest);
@@ -366,13 +365,21 @@ This script will:
 - Install Playwright browsers (if needed)
 - Verify npm dependencies
 
-**Step 3: Run tests**
+**Step 3: Run tests (REQUIRED: All tests must pass)**
+
+Run all test suites and ensure they pass:
 
 \`\`\`bash
 npm run test
 npm run test:integration
 npm run test:e2e
 \`\`\`
+
+**CRITICAL:** If tests fail:
+1. Check if migrations were applied (setup script should have handled this)
+2. Fix any issues preventing tests from passing
+3. Re-run tests until ALL tests pass
+4. Do not mark the FU as complete until all tests are passing
 
 **Step 4: Update status file with test results**
 
