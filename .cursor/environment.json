@@ -1,0 +1,5 @@
+{
+  "agentCanUpdateSnapshot": true,
+  "install": "npm install",
+  "start": "echo 'Environment ready. Run scripts/setup_agent_environment.sh for full setup.'"
+}
