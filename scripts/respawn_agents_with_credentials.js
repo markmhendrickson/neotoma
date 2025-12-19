@@ -313,19 +313,8 @@ async function main() {
     console.log(`  - ${agent.fuId} (Batch ${agent.batchId}): ${agent.agentId}`);
   });
   console.log("");
-
-  const creds = loadCredentials();
-  if (creds.length > 0) {
-    console.log(`[INFO] Credentials available: ${creds.length} variable(s)`);
-    creds.forEach((cred) => {
-      const [key] = cred.split("=");
-      console.log(`  - ${key}`);
-    });
-    console.log("");
-  } else {
-    console.warn("[WARN] No credentials found - agents will still be respawned but may not have credentials");
-    console.log("");
-  }
+  console.log("[INFO] Credentials should be configured via Cursor Settings → Cloud Agents → Secrets");
+  console.log("[INFO] Agents will verify environment variables are available (injected automatically)\n");
 
   // Terminate existing agents
   console.log("[INFO] Terminating existing agents...\n");
