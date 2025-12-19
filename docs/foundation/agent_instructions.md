@@ -238,6 +238,7 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 8. **Privacy:** MUST NOT log PII from `properties` (record IDs only, not extracted fields)
 9. **Multi-pattern matching:** MUST use 2+ patterns for schema detection (see `record_types.md`)
 10. **Consistency models:** MUST apply correct consistency tier per subsystem (strong vs bounded eventual)
+11. **Security:** MUST NOT include credentials (API keys, tokens, service keys) in agent instructions, conversation text, or commit messages. Credentials MUST be injected via secure mechanisms (e.g., Cursor Cloud Agents Secrets) and agents MUST verify their availability via environment variable checks, not export commands with credential values
 
 ### Forbidden Patterns
 
@@ -251,6 +252,7 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - Synthetic data (guessing missing information, hallucinating fields)
 - Upward dependencies (Domain layer calling Application or Presentation layers)
 - Non-transactional graph writes (all record+entity+event inserts must be atomic)
+- Including credentials in agent instructions (no API keys, tokens, or service keys in prompt text, conversation messages, or code comments; use secure injection mechanisms like Cursor Secrets)
 
 ### Validation Checklist
 
