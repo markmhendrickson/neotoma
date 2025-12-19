@@ -1,0 +1,60 @@
+feature_unit:
+  id: FU-112
+  name: Storage Infrastructure
+  version: 1.0.0
+  status: completed
+  priority: P0
+  risk_level: medium
+  target_release: v0.2.0
+
+description: |
+  Implement storage infrastructure tables for upload queue management
+  and per-user storage usage tracking. Enables async upload retry
+  mechanisms and quota enforcement.
+
+owner:
+  agent_id: worker_fu112_1734611000
+  created_at: 2025-12-19T12:30:00.000Z
+
+dependencies: []
+
+blocks:
+  - FU-120  # Raw Storage Service
+  - FU-130  # Upload Queue Processor
+
+artifacts:
+  spec: docs/feature_units/completed/FU-112/FU-112_spec.md
+  migration: supabase/migrations/20251219123000_add_storage_infrastructure.sql
+
+schema_changes:
+  new_tables:
+    - upload_queue
+    - storage_usage
+  new_indexes:
+    - idx_upload_queue_user_status
+    - idx_upload_queue_status_queued
+    - idx_storage_usage_user_id
+
+testing:
+  unit:
+    required: true
+    coverage_target: 100
+  integration:
+    required: true
+  e2e:
+    required: false
+
+observability:
+  metrics:
+    - upload_queue_depth
+    - upload_queue_failed_total
+    - storage_usage_bytes
+  logs:
+    - level: info
+      message: "Upload queued"
+    - level: error
+      message: "Upload failed"
+
+rollout:
+  feature_flags: false
+  rollback_plan: "Drop tables via migration rollback"
