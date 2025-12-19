@@ -13,26 +13,39 @@
       "feature_units": [
         {
           "fu_id": "FU-110",
-          "worker_agent_id": null,
-          "status": "pending",
-          "progress": 0,
-          "started_at": null,
-          "last_update": null,
+          "worker_agent_id": "worker_fu110_testing",
+          "status": "blocked",
+          "progress": 0.5,
+          "started_at": "2025-12-19T17:16:00.000Z",
+          "last_update": "2025-12-19T17:50:00.000Z",
           "completed_at": null,
-          "error": null,
+          "error": "BLOCKED: Migration file created but cannot be applied. Database DDL requires Supabase Dashboard access or authenticated CLI. Additionally, pre-existing database schema issues (missing 'embedding' column in records table) are causing 500 errors in tests.",
+          "notes": {
+            "migration_file": "supabase/migrations/20251219172405_add_sources_table.sql",
+            "schema_updated": "supabase/schema.sql includes sources table definition",
+            "blocker_1": "No database DDL access - Supabase Management API requires OAuth token, not service key",
+            "blocker_2": "Pre-existing: 'embedding' column missing from records table in database",
+            "action_required": "1. Apply migrations via Supabase Dashboard SQL Editor, 2. Add embedding column to records table"
+          },
           "tests": {
             "unit": {
-              "passed": null,
+              "passed": false,
               "coverage": null,
-              "command": null
+              "command": "npm run test",
+              "result": "342 passed, 41 failed (pre-existing issues with embedding column)",
+              "notes": "Most failures due to missing 'embedding' column in records table"
             },
             "integration": {
-              "passed": null,
-              "command": null
+              "passed": false,
+              "command": "npm run test:integration",
+              "result": "116 passed, 39 failed",
+              "notes": "Failures due to 500 errors when inserting records with embeddings"
             },
             "e2e": {
               "passed": null,
-              "command": null
+              "command": "npm run test:e2e",
+              "result": "Not fully executed - environment issues",
+              "notes": "Playwright browsers installed, but tests timing out due to upstream API issues"
             }
           }
         },
@@ -414,6 +427,21 @@
       ]
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "timestamp": "2025-12-19T17:50:00.000Z",
+      "fu_id": "FU-110",
+      "type": "blocker",
+      "message": "Cannot apply database migrations: Supabase service key cannot execute DDL via REST API. The Management API requires OAuth authentication. Migration file 'supabase/migrations/20251219172405_add_sources_table.sql' created but must be applied manually.",
+      "resolution": "Apply migration via Supabase Dashboard SQL Editor: https://supabase.com/dashboard/project/htczllkfgrqjyqxygymh/sql"
+    },
+    {
+      "timestamp": "2025-12-19T17:50:00.000Z",
+      "fu_id": "BASELINE",
+      "type": "pre-existing",
+      "message": "Database schema incomplete: 'embedding' column missing from 'records' table. This causes 500 errors in store_record operations when OPENAI_API_KEY is configured (embeddings are generated but cannot be stored).",
+      "resolution": "Add embedding column to records table: ALTER TABLE records ADD COLUMN embedding vector(1536); Requires pgvector extension in public schema."
+    }
+  ],
   "completed_fus": []
 }
