@@ -415,11 +415,14 @@ ${envSetup}
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype
    - Run implementation workflow
-   - Run tests (unit, integration, E2E) - **ensure environment variables are set**
-   - Update status file: \`${STATUS_FILE}\`
-4. Report completion:
-   - Update status: \`{"fu_id": "${fuId}", "status": "completed", "timestamp": "..."}\`
-   - Report any errors or blockers
+   - Run setup script: \`./scripts/setup_agent_environment.sh\` (applies migrations automatically)
+   - Run tests (unit, integration, E2E) - **ALL TESTS MUST PASS**
+   - If tests fail, fix issues and re-run until all pass
+   - Update status file: \`${STATUS_FILE}\` with actual test results
+4. Report completion (ONLY after all tests pass):
+   - Update status: \`{"fu_id": "${fuId}", "status": "completed", "progress": 1.0, "tests": {...}}\`
+   - Ensure all test results show \`passed: true\`
+   - Report any blockers if tests cannot be made to pass
 
 **Constraints:**
 - Follow all constraints from \`docs/foundation/agent_instructions.md\`
