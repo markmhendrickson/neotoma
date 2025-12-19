@@ -266,6 +266,7 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - [ ] Privacy preserved (no PII in logs, only record IDs)
 - [ ] Provenance maintained (all outputs trace to source + rule)
 - [ ] Consistency model correct (strong vs bounded eventual per subsystem)
+- [ ] Security: No credentials included in agent instructions, conversation text, or code (use secure injection mechanisms)
 - [ ] Tests cover all new paths (unit, integration, E2E as appropriate)
 - [ ] Documentation updated to reflect changes
 - [ ] Downstream documentation updated if upstream docs changed
