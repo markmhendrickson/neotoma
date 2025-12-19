@@ -208,18 +208,20 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
       },
     };
 
-    // Try to add environment variables if API supports it
-    // Note: This may be rejected by the API - if so, env vars are included in prompt text
+    // Try to pass environment variables via API environment field
+    // If rejected, credentials are included in agent instructions below
+    // Load from environment variables (.env file loaded by dotenv)
+    const creds = loadCredentials();
     const envVars = {};
-    if (process.env.DEV_SUPABASE_URL) envVars.DEV_SUPABASE_URL = process.env.DEV_SUPABASE_URL;
-    if (process.env.DEV_SUPABASE_SERVICE_KEY)
-      envVars.DEV_SUPABASE_SERVICE_KEY = process.env.DEV_SUPABASE_SERVICE_KEY;
-    if (process.env.SUPABASE_URL) envVars.SUPABASE_URL = process.env.SUPABASE_URL;
-    if (process.env.SUPABASE_SERVICE_KEY)
-      envVars.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-    if (process.env.OPENAI_API_KEY) envVars.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    if (process.env.ACTIONS_BEARER_TOKEN)
-      envVars.ACTIONS_BEARER_TOKEN = process.env.ACTIONS_BEARER_TOKEN;
+
+    // Parse credentials into env var object
+    creds.forEach((cred) => {
+      const [key, ...valueParts] = cred.split("=");
+      if (key && valueParts.length > 0) {
+        const value = valueParts.join("="); // Handle values with = in them
+        envVars[key.trim()] = value.trim();
+      }
+    });
 
     if (Object.keys(envVars).length > 0) {
       // Try adding environment field - API may reject it, but worth trying
@@ -245,9 +247,10 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
       let errorMessage = `Failed to spawn agent: ${response.status} ${response.statusText} - ${errorText}`;
 
       // If environment field was rejected, retry without it
+      // Credentials are included in agent instructions, so agent can still use them
       if (response.status === 400 && requestBody.environment && errorText.includes("environment")) {
         console.warn(
-          `[WARN] API rejected 'environment' field, retrying without it (env vars included in prompt)`
+          `[WARN] API rejected 'environment' field. Credentials included in agent instructions instead.`
         );
         delete requestBody.environment;
 
@@ -297,6 +300,30 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
   }
 }
 
+/**
+ * Load credentials from environment variables (.env file loaded via dotenv)
+ */
+function loadCredentials() {
+  const creds = [];
+
+  // Load from environment variables (loaded from .env by dotenv at startup)
+  if (process.env.SUPABASE_URL) creds.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
+  if (process.env.SUPABASE_SERVICE_KEY)
+    creds.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
+  if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
+  if (process.env.DEV_SUPABASE_SERVICE_KEY)
+    creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
+  if (process.env.OPENAI_API_KEY) creds.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
+  if (process.env.ACTIONS_BEARER_TOKEN)
+    creds.push(`ACTIONS_BEARER_TOKEN=${process.env.ACTIONS_BEARER_TOKEN}`);
+
+  if (creds.length > 0) {
+    console.log(`[INFO] Loaded ${creds.length} credential(s) from environment variables`);
+  }
+
+  return creds;
+}
+
 // Generate agent instructions template
 function generateAgentInstructions(fuId, batchId, releaseId) {
   let repoUrl = process.env.REPO_URL || "https://github.com/markmhendrickson/neotoma";
@@ -304,31 +331,69 @@ function generateAgentInstructions(fuId, batchId, releaseId) {
   repoUrl = repoUrl.replace(/^["']|["']$/g, "");
   const branch = process.env.RELEASE_BRANCH || "dev";
 
-  // Collect environment variables that agents need
-  const envVars = [];
-  if (process.env.DEV_SUPABASE_URL) {
-    envVars.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
-  }
-  if (process.env.DEV_SUPABASE_SERVICE_KEY) {
-    envVars.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
-  }
-  if (process.env.SUPABASE_URL) {
-    envVars.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
-  }
-  if (process.env.SUPABASE_SERVICE_KEY) {
-    envVars.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
-  }
-  if (process.env.OPENAI_API_KEY) {
-    envVars.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
-  }
-  if (process.env.ACTIONS_BEARER_TOKEN) {
-    envVars.push(`ACTIONS_BEARER_TOKEN=${process.env.ACTIONS_BEARER_TOKEN}`);
-  }
+  // Load credentials to include in agent instructions
+  const creds = loadCredentials();
 
-  const envSetup =
-    envVars.length > 0
-      ? `\n**Required Environment Variables:**\n\`\`\`bash\n${envVars.join("\n")}\n\`\`\`\n\n**IMPORTANT:** Export these environment variables before running tests:\n\`\`\`bash\nexport ${envVars.join("\nexport ")}\n\`\`\`\n\n**Alternative:** Use the setup script: \`source scripts/setup-test-env.sh\` or \`bash scripts/setup-test-env.sh\`\n`
-      : `\n**WARNING:** Required environment variables (DEV_SUPABASE_URL, DEV_SUPABASE_SERVICE_KEY) may not be set. Integration tests will fail without them.\n**Note:** These variables are typically provided in the orchestrator's .env file and should be exported from your instructions above.\n`;
+  // Extract project ref from SUPABASE_URL for linking
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.DEV_SUPABASE_URL || "";
+  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || "";
+
+  // Build environment variable verification instructions
+  // Note: Secrets are injected automatically via Cursor Cloud Agents Secrets configuration
+  let envSetup = `\n**Environment Variables and Testing:**
+
+**Step 1: Verify environment variables are available**
+
+Environment variables should be automatically injected via Cursor Cloud Agents Secrets. Verify they're set:
+\`\`\`bash
+env | grep -E "SUPABASE.*=" || echo "No Supabase credentials found"
+env | grep -E "OPENAI_API_KEY" || echo "No OpenAI API key found"
+\`\`\`
+
+If environment variables are missing, they need to be configured in Cursor Settings → Cloud Agents → Secrets.
+
+**Step 2: Set up infrastructure (automated)**
+
+Run the setup script to handle all infrastructure setup:
+\`\`\`bash
+chmod +x scripts/setup_agent_environment.sh
+./scripts/setup_agent_environment.sh
+\`\`\`
+
+This script will:
+- Link Supabase project (if not already linked)
+- Apply database migrations
+- Install Playwright browsers (if needed)
+- Verify npm dependencies
+
+**Step 3: Run tests**
+
+\`\`\`bash
+npm run test
+npm run test:integration
+npm run test:e2e
+\`\`\`
+
+**Step 4: Update status file with test results**
+
+\`\`\`json
+{
+  "fu_id": "FU-XXX",
+  "status": "completed",
+  "progress": 1.0,
+  "tests": {
+    "unit": { "passed": true/false, "command": "npm run test" },
+    "integration": { "passed": true/false, "command": "npm run test:integration" },
+    "e2e": { "passed": true/false, "command": "npm run test:e2e" }
+  }
+}
+\`\`\`
+
+**Important:**
+- Environment variables are injected automatically via Cursor Secrets (no need to export manually)
+- Run the setup script to configure infrastructure (Supabase linking, migrations, Playwright)
+- Update status file with actual test results
+`;
 
   return `You are a worker agent executing Feature Unit ${fuId} in Batch ${batchId} for Release ${releaseId}.
 
@@ -337,7 +402,7 @@ function generateAgentInstructions(fuId, batchId, releaseId) {
 **Status File:** ${STATUS_FILE}
 ${envSetup}
 **Your Task:**
-1. **Set up environment variables** (if provided above) before running any tests
+1. **Verify environment variables are available** (they should be injected automatically via Cursor Secrets)
 2. Load FU specification: \`docs/feature_units/completed/${fuId}/FU-${fuId}_spec.md\` or \`docs/specs/MVP_FEATURE_UNITS.md\`
 3. Execute Feature Unit workflow:
    - Check if FU spec exists (if not, create it)
