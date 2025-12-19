@@ -25,17 +25,21 @@ else
   else
     echo "[INFO] Supabase project ref: $PROJECT_REF"
     
-    # Step 3: Link Supabase project (if not already linked)
-    echo "[INFO] Linking Supabase project..."
-    if npx supabase link --project-ref "$PROJECT_REF" 2>&1 | grep -q "already linked\|Finished supabase link"; then
-      echo "[INFO] ✅ Supabase project linked"
-    else
-      echo "[WARN] Supabase link may have failed or project already linked"
-    fi
+    # Step 3: Try to link Supabase project and apply migrations
+    echo "[INFO] Attempting to link Supabase project..."
     
-    # Step 4: Apply database migrations
-    echo "[INFO] Applying database migrations..."
-    npx supabase db push 2>&1 | grep -v "^$" || echo "[INFO] Migrations check complete"
+    # Try CLI link (may fail without authentication in cloud agents)
+    LINK_OUTPUT=$(npx supabase link --project-ref "$PROJECT_REF" 2>&1)
+    if echo "$LINK_OUTPUT" | grep -q "already linked\|Finished supabase link"; then
+      echo "[INFO] ✅ Supabase project linked"
+      echo "[INFO] Applying database migrations..."
+      npx supabase db push 2>&1 | grep -v "^$" || echo "[WARN] Migration push completed (check output above for errors)"
+    else
+      echo "[WARN] Supabase CLI linking failed (authentication required)"
+      echo "[WARN] This is expected in cloud agent environments"
+      echo "[WARN] Migrations will need to be applied manually via Supabase Dashboard SQL Editor"
+      echo "[WARN] For now, integration/E2E tests that require migrations may fail"
+    fi
   fi
 fi
 
