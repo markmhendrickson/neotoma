@@ -1,6 +1,10 @@
 <!-- 99397386-4554-4597-be10-9818176a1cc0 094b6b34-3152-4835-b37b-4e25cc962a56 -->
 # Neotoma Local-First E2EE Architecture Build Plan
 
+**Release:** v2.0.0 — End-to-End Encryption (E2EE)  
+**Status:** Planning  
+**See:** `docs/releases/v2.0.0/` for detailed release plan and manifest
+
 ## Architecture Goals
 
 - Browser is authoritative datastore (SQLite WASM + OPFS, encrypted-at-rest)

@@ -2,7 +2,7 @@ import {
   Primitive,
   useCallbackRef,
   useLayoutEffect2
-} from "./chunk-46KKQMAN.js";
+} from "./chunk-HD4RDK7H.js";
 import {
   useComposedRefs
 } from "./chunk-JBZRCD6T.js";
@@ -16,16 +16,32 @@ import {
   __toESM
 } from "./chunk-DC5AMYBS.js";
 
-// node_modules/@radix-ui/react-id/dist/index.mjs
+// node_modules/@radix-ui/react-focus-guards/dist/index.mjs
 var React = __toESM(require_react(), 1);
-var useReactId = React[" useId ".trim().toString()] || (() => void 0);
 var count = 0;
-function useId(deterministicId) {
-  const [id, setId] = React.useState(useReactId());
-  useLayoutEffect2(() => {
-    if (!deterministicId) setId((reactId) => reactId ?? String(count++));
-  }, [deterministicId]);
-  return deterministicId || (id ? `radix-${id}` : "");
+function useFocusGuards() {
+  React.useEffect(() => {
+    const edgeGuards = document.querySelectorAll("[data-radix-focus-guard]");
+    document.body.insertAdjacentElement("afterbegin", edgeGuards[0] ?? createFocusGuard());
+    document.body.insertAdjacentElement("beforeend", edgeGuards[1] ?? createFocusGuard());
+    count++;
+    return () => {
+      if (count === 1) {
+        document.querySelectorAll("[data-radix-focus-guard]").forEach((node) => node.remove());
+      }
+      count--;
+    };
+  }, []);
+}
+function createFocusGuard() {
+  const element = document.createElement("span");
+  element.setAttribute("data-radix-focus-guard", "");
+  element.tabIndex = 0;
+  element.style.outline = "none";
+  element.style.opacity = "0";
+  element.style.position = "fixed";
+  element.style.pointerEvents = "none";
+  return element;
 }
 
 // node_modules/@radix-ui/react-focus-scope/dist/index.mjs
@@ -233,33 +249,138 @@ function removeLinks(items) {
   return items.filter((item) => item.tagName !== "A");
 }
 
-// node_modules/@radix-ui/react-focus-guards/dist/index.mjs
+// node_modules/@radix-ui/react-id/dist/index.mjs
 var React3 = __toESM(require_react(), 1);
+var useReactId = React3[" useId ".trim().toString()] || (() => void 0);
 var count2 = 0;
-function useFocusGuards() {
-  React3.useEffect(() => {
-    const edgeGuards = document.querySelectorAll("[data-radix-focus-guard]");
-    document.body.insertAdjacentElement("afterbegin", edgeGuards[0] ?? createFocusGuard());
-    document.body.insertAdjacentElement("beforeend", edgeGuards[1] ?? createFocusGuard());
-    count2++;
-    return () => {
-      if (count2 === 1) {
-        document.querySelectorAll("[data-radix-focus-guard]").forEach((node) => node.remove());
+function useId(deterministicId) {
+  const [id, setId] = React3.useState(useReactId());
+  useLayoutEffect2(() => {
+    if (!deterministicId) setId((reactId) => reactId ?? String(count2++));
+  }, [deterministicId]);
+  return deterministicId || (id ? `radix-${id}` : "");
+}
+
+// node_modules/aria-hidden/dist/es2015/index.js
+var getDefaultParent = function(originalTarget) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  var sampleTarget = Array.isArray(originalTarget) ? originalTarget[0] : originalTarget;
+  return sampleTarget.ownerDocument.body;
+};
+var counterMap = /* @__PURE__ */ new WeakMap();
+var uncontrolledNodes = /* @__PURE__ */ new WeakMap();
+var markerMap = {};
+var lockCount = 0;
+var unwrapHost = function(node) {
+  return node && (node.host || unwrapHost(node.parentNode));
+};
+var correctTargets = function(parent, targets) {
+  return targets.map(function(target) {
+    if (parent.contains(target)) {
+      return target;
+    }
+    var correctedTarget = unwrapHost(target);
+    if (correctedTarget && parent.contains(correctedTarget)) {
+      return correctedTarget;
+    }
+    console.error("aria-hidden", target, "in not contained inside", parent, ". Doing nothing");
+    return null;
+  }).filter(function(x) {
+    return Boolean(x);
+  });
+};
+var applyAttributeToOthers = function(originalTarget, parentNode, markerName, controlAttribute) {
+  var targets = correctTargets(parentNode, Array.isArray(originalTarget) ? originalTarget : [originalTarget]);
+  if (!markerMap[markerName]) {
+    markerMap[markerName] = /* @__PURE__ */ new WeakMap();
+  }
+  var markerCounter = markerMap[markerName];
+  var hiddenNodes = [];
+  var elementsToKeep = /* @__PURE__ */ new Set();
+  var elementsToStop = new Set(targets);
+  var keep = function(el) {
+    if (!el || elementsToKeep.has(el)) {
+      return;
+    }
+    elementsToKeep.add(el);
+    keep(el.parentNode);
+  };
+  targets.forEach(keep);
+  var deep = function(parent) {
+    if (!parent || elementsToStop.has(parent)) {
+      return;
+    }
+    Array.prototype.forEach.call(parent.children, function(node) {
+      if (elementsToKeep.has(node)) {
+        deep(node);
+      } else {
+        try {
+          var attr = node.getAttribute(controlAttribute);
+          var alreadyHidden = attr !== null && attr !== "false";
+          var counterValue = (counterMap.get(node) || 0) + 1;
+          var markerValue = (markerCounter.get(node) || 0) + 1;
+          counterMap.set(node, counterValue);
+          markerCounter.set(node, markerValue);
+          hiddenNodes.push(node);
+          if (counterValue === 1 && alreadyHidden) {
+            uncontrolledNodes.set(node, true);
+          }
+          if (markerValue === 1) {
+            node.setAttribute(markerName, "true");
+          }
+          if (!alreadyHidden) {
+            node.setAttribute(controlAttribute, "true");
+          }
+        } catch (e) {
+          console.error("aria-hidden: cannot operate on ", node, e);
+        }
       }
-      count2--;
+    });
+  };
+  deep(parentNode);
+  elementsToKeep.clear();
+  lockCount++;
+  return function() {
+    hiddenNodes.forEach(function(node) {
+      var counterValue = counterMap.get(node) - 1;
+      var markerValue = markerCounter.get(node) - 1;
+      counterMap.set(node, counterValue);
+      markerCounter.set(node, markerValue);
+      if (!counterValue) {
+        if (!uncontrolledNodes.has(node)) {
+          node.removeAttribute(controlAttribute);
+        }
+        uncontrolledNodes.delete(node);
+      }
+      if (!markerValue) {
+        node.removeAttribute(markerName);
+      }
+    });
+    lockCount--;
+    if (!lockCount) {
+      counterMap = /* @__PURE__ */ new WeakMap();
+      counterMap = /* @__PURE__ */ new WeakMap();
+      uncontrolledNodes = /* @__PURE__ */ new WeakMap();
+      markerMap = {};
+    }
+  };
+};
+var hideOthers = function(originalTarget, parentNode, markerName) {
+  if (markerName === void 0) {
+    markerName = "data-aria-hidden";
+  }
+  var targets = Array.from(Array.isArray(originalTarget) ? originalTarget : [originalTarget]);
+  var activeParentNode = parentNode || getDefaultParent(originalTarget);
+  if (!activeParentNode) {
+    return function() {
+      return null;
     };
-  }, []);
-}
-function createFocusGuard() {
-  const element = document.createElement("span");
-  element.setAttribute("data-radix-focus-guard", "");
-  element.tabIndex = 0;
-  element.style.outline = "none";
-  element.style.opacity = "0";
-  element.style.position = "fixed";
-  element.style.pointerEvents = "none";
-  return element;
-}
+  }
+  targets.push.apply(targets, Array.from(activeParentNode.querySelectorAll("[aria-live], script")));
+  return applyAttributeToOthers(targets, activeParentNode, markerName, "aria-hidden");
+};
 
 // node_modules/tslib/tslib.es6.mjs
 var __assign = function() {
@@ -985,132 +1106,11 @@ var ReactRemoveScroll = React12.forwardRef(function(props, ref) {
 ReactRemoveScroll.classNames = RemoveScroll.classNames;
 var Combination_default = ReactRemoveScroll;
 
-// node_modules/aria-hidden/dist/es2015/index.js
-var getDefaultParent = function(originalTarget) {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  var sampleTarget = Array.isArray(originalTarget) ? originalTarget[0] : originalTarget;
-  return sampleTarget.ownerDocument.body;
-};
-var counterMap = /* @__PURE__ */ new WeakMap();
-var uncontrolledNodes = /* @__PURE__ */ new WeakMap();
-var markerMap = {};
-var lockCount = 0;
-var unwrapHost = function(node) {
-  return node && (node.host || unwrapHost(node.parentNode));
-};
-var correctTargets = function(parent, targets) {
-  return targets.map(function(target) {
-    if (parent.contains(target)) {
-      return target;
-    }
-    var correctedTarget = unwrapHost(target);
-    if (correctedTarget && parent.contains(correctedTarget)) {
-      return correctedTarget;
-    }
-    console.error("aria-hidden", target, "in not contained inside", parent, ". Doing nothing");
-    return null;
-  }).filter(function(x) {
-    return Boolean(x);
-  });
-};
-var applyAttributeToOthers = function(originalTarget, parentNode, markerName, controlAttribute) {
-  var targets = correctTargets(parentNode, Array.isArray(originalTarget) ? originalTarget : [originalTarget]);
-  if (!markerMap[markerName]) {
-    markerMap[markerName] = /* @__PURE__ */ new WeakMap();
-  }
-  var markerCounter = markerMap[markerName];
-  var hiddenNodes = [];
-  var elementsToKeep = /* @__PURE__ */ new Set();
-  var elementsToStop = new Set(targets);
-  var keep = function(el) {
-    if (!el || elementsToKeep.has(el)) {
-      return;
-    }
-    elementsToKeep.add(el);
-    keep(el.parentNode);
-  };
-  targets.forEach(keep);
-  var deep = function(parent) {
-    if (!parent || elementsToStop.has(parent)) {
-      return;
-    }
-    Array.prototype.forEach.call(parent.children, function(node) {
-      if (elementsToKeep.has(node)) {
-        deep(node);
-      } else {
-        try {
-          var attr = node.getAttribute(controlAttribute);
-          var alreadyHidden = attr !== null && attr !== "false";
-          var counterValue = (counterMap.get(node) || 0) + 1;
-          var markerValue = (markerCounter.get(node) || 0) + 1;
-          counterMap.set(node, counterValue);
-          markerCounter.set(node, markerValue);
-          hiddenNodes.push(node);
-          if (counterValue === 1 && alreadyHidden) {
-            uncontrolledNodes.set(node, true);
-          }
-          if (markerValue === 1) {
-            node.setAttribute(markerName, "true");
-          }
-          if (!alreadyHidden) {
-            node.setAttribute(controlAttribute, "true");
-          }
-        } catch (e) {
-          console.error("aria-hidden: cannot operate on ", node, e);
-        }
-      }
-    });
-  };
-  deep(parentNode);
-  elementsToKeep.clear();
-  lockCount++;
-  return function() {
-    hiddenNodes.forEach(function(node) {
-      var counterValue = counterMap.get(node) - 1;
-      var markerValue = markerCounter.get(node) - 1;
-      counterMap.set(node, counterValue);
-      markerCounter.set(node, markerValue);
-      if (!counterValue) {
-        if (!uncontrolledNodes.has(node)) {
-          node.removeAttribute(controlAttribute);
-        }
-        uncontrolledNodes.delete(node);
-      }
-      if (!markerValue) {
-        node.removeAttribute(markerName);
-      }
-    });
-    lockCount--;
-    if (!lockCount) {
-      counterMap = /* @__PURE__ */ new WeakMap();
-      counterMap = /* @__PURE__ */ new WeakMap();
-      uncontrolledNodes = /* @__PURE__ */ new WeakMap();
-      markerMap = {};
-    }
-  };
-};
-var hideOthers = function(originalTarget, parentNode, markerName) {
-  if (markerName === void 0) {
-    markerName = "data-aria-hidden";
-  }
-  var targets = Array.from(Array.isArray(originalTarget) ? originalTarget : [originalTarget]);
-  var activeParentNode = parentNode || getDefaultParent(originalTarget);
-  if (!activeParentNode) {
-    return function() {
-      return null;
-    };
-  }
-  targets.push.apply(targets, Array.from(activeParentNode.querySelectorAll("[aria-live], script")));
-  return applyAttributeToOthers(targets, activeParentNode, markerName, "aria-hidden");
-};
-
 export {
-  useId,
-  FocusScope,
   useFocusGuards,
-  Combination_default,
-  hideOthers
+  FocusScope,
+  useId,
+  hideOthers,
+  Combination_default
 };
-//# sourceMappingURL=chunk-XFRNN5P4.js.map
+//# sourceMappingURL=chunk-2J5MRUKJ.js.map

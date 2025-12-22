@@ -75,7 +75,7 @@ flowchart TD
 - **Enables reinterpretation:** Same source can be reinterpreted with new models; observations immutable
 - **Auditability without replay determinism:** Interpretation config logged; outputs may vary
 
-See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale and [`docs/subsystems/sources.md`](./sources.md) for source and interpretation run details.
+See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale and [`docs/subsystems/sources.md`](./sources.md) for source and interpretation details.
 
 ---
 
@@ -94,7 +94,7 @@ Observations are created during ingestion:
    - `schema_version` — schema version used
    - `source_record_id` — source document (legacy)
    - `source_id` — source that produced this observation
-   - `interpretation_run_id` — interpretation run that created this
+   - `interpretation_run_id` — interpretation that created this
    - `observed_at` — observation timestamp
    - `specificity_score` — how specific this observation is
    - `source_priority` — priority of source
@@ -140,7 +140,7 @@ const correctionObservation = {
   entity_type: "company",
   schema_version: "1.0",
   source_id: null,                   // No source for corrections
-  interpretation_run_id: null,       // No interpretation run
+  interpretation_run_id: null,       // No interpretation
   observed_at: new Date(),
   specificity_score: 1.0,            // Maximum specificity
   source_priority: 1000,             // Corrections always win
@@ -263,7 +263,7 @@ snapshot.vendor_name = "Acme Corp"
 
 **Key Fields:**
 - `observation.source_id` — links to source
-- `observation.interpretation_run_id` — links to interpretation run
+- `observation.interpretation_run_id` — links to interpretation
 - `interpretation_run.interpretation_config` — model, temperature, prompt_hash, code_version
 
 This enables questions like:
@@ -284,7 +284,7 @@ async function getFieldProvenance(
   const observationId = snapshot.provenance[field];
   const observation = await observationRepo.findById(observationId);
   
-  // Get interpretation run (if AI-derived)
+  // Get interpretation (if AI-derived)
   const interpretationRun = observation.interpretation_run_id
     ? await interpretationRunRepo.findById(observation.interpretation_run_id)
     : null;

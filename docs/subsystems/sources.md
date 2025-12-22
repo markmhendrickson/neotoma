@@ -9,7 +9,7 @@ _(Content-Addressed Storage and Versioned Interpretation)_
 This document defines the **sources-first ingestion architecture**. It specifies:
 
 - Content-addressed raw storage
-- Versioned interpretation runs
+- Versioned interpretations
 - Deduplication strategy
 - Provenance chain
 - Correction mechanism
@@ -44,14 +44,14 @@ This document does NOT cover:
 ### 1.1 Data Flow
 
 ```
-Raw Content → Sources → Interpretation Runs → Observations → Entity Snapshots
+Raw Content → Sources → Interpretations → Observations → Entity Snapshots
 ```
 
 **Layers:**
 
 1. **Sources**: Raw content stored with content hash for deduplication
-2. **Interpretation Runs**: Versioned interpretation attempts with config logging
-3. **Observations**: Granular facts extracted from sources (via interpretation runs)
+2. **Interpretations**: Versioned interpretation attempts with config logging (stored in `interpretation_runs` table)
+3. **Observations**: Granular facts extracted from sources (via interpretations)
 4. **Entity Snapshots**: Deterministic reducer output
 
 ### 1.2 Key Principles
@@ -60,7 +60,7 @@ Raw Content → Sources → Interpretation Runs → Observations → Entity Snap
 |-----------|-------------|
 | Content-Addressed | Same bytes = same hash; deduplication per user |
 | Immutable Sources | Raw content never modified after storage |
-| Versioned Interpretation | Each interpretation creates a new run record |
+| Versioned Interpretation | Each interpretation creates a new interpretation record |
 | Observation Immutability | Reinterpretation creates NEW observations; never modifies existing |
 | User Isolation | All tables user-scoped with RLS |
 | Auditability | Interpretation config logged; can understand how data was extracted |
@@ -146,7 +146,7 @@ async function ingestSource(content: Buffer, userId: string): Promise<Source> {
 
 ---
 
-## 3. Interpretation Runs Table
+## 3. Interpretations Table (`interpretation_runs`)
 
 ### 3.1 Schema
 
@@ -193,7 +193,7 @@ The `interpretation_config` JSONB field stores all parameters needed to understa
 
 | Status | Meaning |
 |--------|---------|
-| `pending` | Run created, not yet started |
+| `pending` | Interpretation created, not yet started |
 | `running` | Interpretation in progress |
 | `completed` | Interpretation finished successfully |
 | `failed` | Interpretation failed (see `error_message`) |
@@ -227,13 +227,13 @@ The `interpretation_config` JSONB field stores all parameters needed to understa
 
 ### 5.1 Immutability Invariant
 
-**Rule:** `reinterpret()` always creates a new `interpretation_run` and new observations. Existing observations remain unchanged and linked to their original run.
+**Rule:** `reinterpret()` always creates a new interpretation and new observations. Existing observations remain unchanged and linked to their original interpretation.
 
 ```
 Source A
-  └─ Interpretation Run 1 (2024-01-01)
+  └─ Interpretation 1 (2024-01-01)
   │    └─ Observation X → Entity E1
-  └─ Interpretation Run 2 (2024-06-01, new model)
+  └─ Interpretation 2 (2024-06-01, new model)
        └─ Observation Y → Entity E1 (same entity, new observation)
 ```
 
@@ -257,7 +257,7 @@ reinterpret({
 **Preconditions:**
 
 1. `storage_status = 'uploaded'` (else `STORAGE_PENDING`)
-2. No concurrent run with `status = 'running'` for this source (else `INTERPRETATION_IN_PROGRESS`)
+2. No concurrent interpretation with `status = 'running'` for this source (else `INTERPRETATION_IN_PROGRESS`)
 3. User has not exceeded `interpretation_limit_month` (else `INTERPRETATION_QUOTA_EXCEEDED`)
 
 ---
@@ -449,9 +449,9 @@ ALTER TABLE raw_fragments
 **NOT NULL Constraints:**
 
 - `observations.source_id` — MUST link to source
-- `observations.interpretation_run_id` — MUST link to interpretation run (for AI-derived; NULL for corrections)
+- `observations.interpretation_run_id` — MUST link to interpretation (for AI-derived; NULL for corrections)
 - `raw_fragments.source_id` — MUST link to source
-- `raw_fragments.interpretation_run_id` — MUST link to interpretation run
+- `raw_fragments.interpretation_run_id` — MUST link to interpretation
 
 ### 9.5 Validation Service
 

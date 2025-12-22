@@ -39,7 +39,6 @@ This release plan coordinates the documentation and support system scope into a 
 **Documentation Generation System:**
 
 - `FU-300`: AI-Powered Documentation Analysis & Generation
-
   - Repository analysis via AI (codebase structure, architecture, APIs, workflows)
   - Comprehensive documentation generation (API references, architecture diagrams, guides)
   - Static markdown/HTML output for web viewing
@@ -58,7 +57,6 @@ This release plan coordinates the documentation and support system scope into a 
 **MCP Support System:**
 
 - `FU-302`: MCP Support Inquiry Endpoint
-
   - New MCP action: `query_support`
   - Request/response schema for support queries
   - Error handling and validation
@@ -160,7 +158,6 @@ This release plan coordinates the documentation and support system scope into a 
 These scenarios must pass end-to-end before v0.2.1 is approved:
 
 1. **Documentation Generation → Web Viewing**
-
    - Run documentation generation process
    - Verify comprehensive docs generated (architecture, APIs, guides)
    - Access landing page at root URL
@@ -172,14 +169,12 @@ These scenarios must pass end-to-end before v0.2.1 is approved:
    - Verify cross-links functional
 
 2. **Support Query → Agent Response**
-
    - Query MCP `query_support` action with question
    - Verify agent retrieves relevant documentation context
    - Verify response includes accurate answer with citations
    - Verify response format follows MCP response schema
 
 3. **Documentation Update → Support Agent Knowledge**
-
    - Update source documentation
    - Regenerate static documentation
    - Query support agent with question about updated content
@@ -306,12 +301,3 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
 - FU-303: Depends on FU-300, FU-301, FU-302 (needs docs, web server, MCP endpoint)
 
 ---
-
-
-
-
-
-
-
-
-

@@ -1,0 +1,152 @@
+release:
+  id: v0.5.0
+  name: Agent Cryptographic Signing
+  type: "not_marketed"
+  priority: P1
+  status: planning
+  target_ship_date: null # After v0.3.0 validation, before v1.0.0
+  owner: Mark Hendrickson
+  marketing_required: false
+  gate: "v0.3.0 must be validated with real usage before starting"
+  guiding_principle: "Enable cryptographic attribution and permissioning for multi-agent systems without breaking existing workflows"
+
+dependencies:
+  - v0.3.0 # Operational Hardening
+
+feature_units:
+  # Phase 1: Core Infrastructure
+  - id: FU-200
+    name: Agent Keypair Generation Utilities
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Client-side utilities for generating per-chat Ed25519 keypairs, key storage, and key management
+
+  - id: FU-201
+    name: Payload Signature Extension
+    priority: P0
+    status: not_started
+    dependencies: []
+    phase: 1
+    description: Extend PayloadEnvelope provenance to include signer_public_key and signature fields
+
+  - id: FU-202
+    name: Agent Identity Service Implementation
+    priority: P0
+    status: not_started
+    dependencies: [FU-200]
+    phase: 1
+    description: Implement getAgentPublicKey() to extract public key from request context, replace stub
+
+  # Phase 2: MCP Integration
+  - id: FU-203
+    name: MCP Payload Signing
+    priority: P0
+    status: not_started
+    dependencies: [FU-200, FU-201]
+    phase: 2
+    description: MCP client library helpers for signing submit_payload requests with agent keypairs
+
+  - id: FU-204
+    name: Signature Verification Middleware
+    priority: P0
+    status: not_started
+    dependencies: [FU-201, FU-202]
+    phase: 2
+    description: Verify payload signatures in submit_payload handler (optional initially, required post-MVP)
+
+  # Phase 3: Permission System Foundation
+  - id: FU-205
+    name: Agent Public Key Registry
+    priority: P1
+    status: not_started
+    dependencies: [FU-202]
+    phase: 3
+    description: Registry for agent public keys with metadata (agent_id, permissions, created_at, revoked_at)
+
+  - id: FU-206
+    name: Permission Enforcement Framework
+    priority: P1
+    status: not_started
+    dependencies: [FU-205]
+    phase: 3
+    description: Permission checking based on public key (read-only, write, financial operations, etc.)
+
+deferred_to_post_mvp:
+  - id: FU-207
+    name: Required Signatures
+    description: Make signatures mandatory for all write operations
+    reason: Requires migration period for existing clients
+
+  - id: FU-208
+    name: Agent Trust Profiles
+    description: User-configurable trust levels per agent public key
+    reason: Requires UI and user workflow
+
+  - id: FU-209
+    name: Agent Revocation UI
+    description: UI for revoking agent access
+    reason: Requires UI layer (v1.0.0+)
+
+scope:
+  included:
+    - FU-200: Agent Keypair Generation Utilities
+    - FU-201: Payload Signature Extension
+    - FU-202: Agent Identity Service Implementation
+    - FU-203: MCP Payload Signing
+    - FU-204: Signature Verification Middleware
+    - FU-205: Agent Public Key Registry (P1, optional)
+    - FU-206: Permission Enforcement Framework (P1, optional)
+
+  deferred_post_mvp:
+    - FU-207: Required Signatures (migration period needed)
+    - FU-208: Agent Trust Profiles (requires UI)
+    - FU-209: Agent Revocation UI (requires UI layer)
+
+  excluded:
+    - UI components (v1.0.0+)
+    - Multi-user agent management (v1.0.0+)
+    - Agent analytics dashboard (v1.0.0+)
+
+acceptance_criteria:
+  product:
+    - Agents can generate Ed25519 keypairs per chat session
+    - Payloads can include cryptographic signatures
+    - Signatures are verified (when provided)
+    - Agent public keys are extractable from request context
+    - MCP clients can sign payloads using provided utilities
+
+  technical:
+    - generateEd25519KeyPair() available for client-side use
+    - PayloadEnvelope.provenance includes signer_public_key and signature fields
+    - getAgentPublicKey() extracts public key from request context
+    - Signature verification in submit_payload handler (optional)
+    - MCP client library helpers for signing
+    - Agent public key registry table (if FU-205 included)
+    - Permission checking framework (if FU-206 included)
+
+  business:
+    - Enables multi-agent coordination with attribution
+    - Foundation for permission system
+    - Cryptographic audit trail for compliance
+    - Backward compatible (signatures optional initially)
+
+success_criteria:
+  - Agent keypair generation utilities functional
+  - Payload signatures can be included and verified
+  - MCP clients can sign payloads
+  - Signature verification middleware functional
+  - Integration tests passing
+  - Backward compatibility maintained (unsigned payloads still work)
+  - Documentation updated (MCP_SPEC.md, payload_model.md)
+
+release_spacing:
+  v030: "Operational hardening (prerequisite)"
+  v050: "Agent cryptographic signing (this release)"
+  v040: "Intelligence + housekeeping (can run in parallel)"
+  v1x: "Experience + growth (future)"
+
+
+
+

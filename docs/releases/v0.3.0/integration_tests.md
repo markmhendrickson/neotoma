@@ -20,12 +20,12 @@ Define the **integration test suite** for Release `v0.3.0` (Operational Hardenin
 
 ## 2. Test Matrix
 
-| ID     | Name                               | FUs Involved              | Acceptance Criteria Covered                  |
-| ------ | ---------------------------------- | ------------------------- | -------------------------------------------- |
-| IT-001 | Upload Queue Retry Flow            | FU-112, FU-130            | Async retry, queue behavior                  |
-| IT-002 | Stale Interpretation Cleanup Flow  | FU-135, FU-131            | Timeout handling, cleanup correctness        |
-| IT-003 | Storage Usage Tracking & Quotas    | FU-112, FU-136            | Quota tracking, rejection behavior           |
-| IT-004 | Combined Operational Metrics Check | FU-112, FU-130, FU-131    | Monitoring of queue depth, timeouts, quotas  |
+| ID     | Name                               | FUs Involved           | Acceptance Criteria Covered                 |
+| ------ | ---------------------------------- | ---------------------- | ------------------------------------------- |
+| IT-001 | Upload Queue Retry Flow            | FU-112, FU-130         | Async retry, queue behavior                 |
+| IT-002 | Stale Interpretation Cleanup Flow  | FU-135, FU-131         | Timeout handling, cleanup correctness       |
+| IT-003 | Storage Usage Tracking & Quotas    | FU-112, FU-136         | Quota tracking, rejection behavior          |
+| IT-004 | Combined Operational Metrics Check | FU-112, FU-130, FU-131 | Monitoring of queue depth, timeouts, quotas |
 
 ---
 

@@ -540,6 +540,13 @@ Load `docs/architecture/architectural_decisions.md` when:
 - `docs/architecture/consistency.md` — Consistency models
 - `docs/foundation/data_models.md` — Data model definitions
 
+### Release Documentation
+
+- `docs/releases/v0.1.0/` — Internal MCP Release (foundational architecture)
+- `docs/releases/v0.2.0/` — Sources-First Ingestion Architecture (sources table, interpretations, provenance)
+- `docs/releases/v2.0.0/` — End-to-End Encryption (local-first E2EE architecture)
+- `docs/releases/v2.1.0/` — GDPR & Privacy Compliance
+
 ### Architectural Principles
 
 - **Determinism:** Same input → same output, always

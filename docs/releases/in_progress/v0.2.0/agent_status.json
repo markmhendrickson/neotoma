@@ -4,7 +4,8 @@
     "agent_id": "orch_1766062695948",
     "started_at": "2025-12-18T12:58:15.948Z",
     "current_batch": 0,
-    "status": "running"
+    "status": "completed",
+    "completed_at": "2025-12-18T13:51:39.909Z"
   },
   "batches": [
     {
@@ -13,11 +14,11 @@
       "feature_units": [
         {
           "fu_id": "FU-110",
-          "worker_agent_id": null,
-          "status": "pending",
+          "worker_agent_id": "bc-5f3be56c-7b29-43d2-bc60-3097954593fd",
+          "status": "running",
           "progress": 0,
-          "started_at": null,
-          "last_update": null,
+          "started_at": "2025-12-19T17:14:29.101Z",
+          "last_update": "2025-12-19T17:14:29.107Z",
           "completed_at": null,
           "error": null,
           "tests": {
@@ -38,11 +39,11 @@
         },
         {
           "fu_id": "FU-112",
-          "worker_agent_id": null,
-          "status": "pending",
+          "worker_agent_id": "bc-6ef61116-3d0b-4d9d-92f2-a564d125a3cf",
+          "status": "running",
           "progress": 0,
-          "started_at": null,
-          "last_update": null,
+          "started_at": "2025-12-19T17:14:34.645Z",
+          "last_update": "2025-12-19T17:14:34.645Z",
           "completed_at": null,
           "error": null,
           "tests": {
@@ -63,11 +64,11 @@
         },
         {
           "fu_id": "FU-113",
-          "worker_agent_id": null,
-          "status": "pending",
+          "worker_agent_id": "bc-35964f01-ffc7-429e-8bfa-495e13ff4c21",
+          "status": "running",
           "progress": 0,
-          "started_at": null,
-          "last_update": null,
+          "started_at": "2025-12-19T17:14:39.087Z",
+          "last_update": "2025-12-19T17:14:39.087Z",
           "completed_at": null,
           "error": null,
           "tests": {
@@ -87,7 +88,7 @@
           }
         }
       ],
-      "started_at": "2025-12-18T12:58:15.950Z"
+      "started_at": "2025-12-18T13:26:04.669Z"
     },
     {
       "batch_id": 1,

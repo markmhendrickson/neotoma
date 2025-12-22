@@ -321,7 +321,7 @@ CREATE INDEX idx_external_sync_runs_status ON external_sync_runs(status);
 
 ### 2.7 `observations` Table
 
-**Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots. Links to sources and interpretation runs for full provenance.
+**Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots. Links to sources and interpretations for full provenance.
 
 **Schema:**
 
@@ -353,7 +353,7 @@ CREATE TABLE observations (
 | `schema_version`        | TEXT        | Schema version used for extraction                | No      | No          |
 | `source_record_id`      | UUID        | Source document/record (legacy)                   | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this observation             | No      | Yes         |
-| `interpretation_run_id` | UUID        | Interpretation run that created this              | No      | Yes         |
+| `interpretation_run_id` | UUID        | Interpretation that created this                  | No      | Yes         |
 | `observed_at`           | TIMESTAMPTZ | Timestamp when observation was made               | No      | Yes         |
 | `specificity_score`     | NUMERIC     | How specific this observation is (0-1)            | No      | No          |
 | `source_priority`       | INTEGER     | Priority of source (higher = more trusted)        | No      | No          |
@@ -501,7 +501,7 @@ CREATE INDEX idx_schema_active ON schema_registry(entity_type, active) WHERE act
 
 ### 2.10 `raw_fragments` Table
 
-**Purpose:** Store unknown fields that don't match current schemas. Enables schema discovery and automated promotion. Links to sources and interpretation runs for full provenance.
+**Purpose:** Store unknown fields that don't match current schemas. Enables schema discovery and automated promotion. Links to sources and interpretations for full provenance.
 
 **Schema:**
 
@@ -529,7 +529,7 @@ CREATE TABLE raw_fragments (
 | `id`                    | UUID        | Unique fragment ID                                     | No      | Primary key |
 | `record_id`             | UUID        | Source record (legacy, nullable)                       | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this fragment                     | No      | Yes         |
-| `interpretation_run_id` | UUID        | Interpretation run that produced this fragment         | No      | Yes         |
+| `interpretation_run_id` | UUID        | Interpretation that produced this fragment             | No      | Yes         |
 | `fragment_type`         | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
 | `fragment_key`          | TEXT        | Field name/key                                         | No      | Yes         |
 | `fragment_value`        | JSONB       | Field value                                            | No      | No          |
@@ -638,7 +638,7 @@ CREATE POLICY "Service role full access" ON sources
 
 ---
 
-### 2.12 `interpretation_runs` Table
+### 2.12 `interpretation_runs` Table (Interpretations)
 
 **Purpose:** Track versioned interpretation attempts. Enables audit trail of how raw content was interpreted and supports reinterpretation without losing history.
 
@@ -670,7 +670,7 @@ CREATE TABLE interpretation_runs (
 
 | Field                     | Type        | Purpose                                         | Mutable | Indexed     |
 | ------------------------- | ----------- | ----------------------------------------------- | ------- | ----------- |
-| `id`                      | UUID        | Unique run ID                                   | No      | Primary key |
+| `id`                      | UUID        | Unique interpretation ID                        | No      | Primary key |
 | `source_id`               | UUID        | Source being interpreted                        | No      | Yes         |
 | `interpretation_config`   | JSONB       | Config used (model, version, params)            | No      | No          |
 | `status`                  | TEXT        | 'pending', 'running', 'completed', 'failed'     | Yes     | Yes         |
@@ -681,11 +681,11 @@ CREATE TABLE interpretation_runs (
 | `extraction_completeness` | TEXT        | 'complete', 'partial', 'failed', 'unknown'      | Yes     | No          |
 | `started_at`              | TIMESTAMPTZ | When interpretation started                     | Yes     | No          |
 | `completed_at`            | TIMESTAMPTZ | When interpretation completed                   | Yes     | No          |
-| `created_at`              | TIMESTAMPTZ | When run was created                            | No      | No          |
-| `archived_at`             | TIMESTAMPTZ | When run was archived (null = active)           | Yes     | No          |
-| `user_id`                 | UUID        | User who owns this run                          | No      | Yes         |
-| `timeout_at`              | TIMESTAMPTZ | When run should timeout                         | Yes     | No          |
-| `heartbeat_at`            | TIMESTAMPTZ | Last heartbeat for long-running runs            | Yes     | Yes         |
+| `created_at`              | TIMESTAMPTZ | When interpretation was created                 | No      | No          |
+| `archived_at`             | TIMESTAMPTZ | When interpretation was archived (null = active) | Yes     | No          |
+| `user_id`                 | UUID        | User who owns this interpretation               | No      | Yes         |
+| `timeout_at`              | TIMESTAMPTZ | When interpretation should timeout              | Yes     | No          |
+| `heartbeat_at`            | TIMESTAMPTZ | Last heartbeat for long-running interpretations | Yes     | Yes         |
 
 **Indexes:**
 

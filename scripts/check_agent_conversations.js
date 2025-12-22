@@ -5,11 +5,25 @@ import { config } from "dotenv";
 // Load environment variables
 config({ override: true });
 
-const agentIds = [
-  { id: 'bc-395bcfb0-5279-4c07-85c2-ebb2f0a102b2', fu: 'FU-110' },
-  { id: 'bc-ff034820-0d20-4230-988e-f9627a70ca62', fu: 'FU-112' },
-  { id: 'bc-36035315-07e5-477b-a762-1e86f8ff3ab3', fu: 'FU-113' }
-];
+// Get agent IDs from status file
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const STATUS_FILE = join(__dirname, '..', 'docs', 'releases', 'in_progress', 'v0.2.0', 'agent_status.json');
+const status = JSON.parse(readFileSync(STATUS_FILE, 'utf-8'));
+
+const agentIds = [];
+for (const batch of status.batches || []) {
+  for (const fu of batch.feature_units || []) {
+    if (fu.worker_agent_id && (fu.status === 'running' || fu.status === 'completed')) {
+      agentIds.push({ id: fu.worker_agent_id, fu: fu.fu_id });
+    }
+  }
+}
 
 const apiUrl = (process.env.CURSOR_CLOUD_API_URL || 'https://api.cursor.com').replace(/\/$/, '').replace(/\/v1$/, '');
 const apiKey = process.env.CURSOR_CLOUD_API_KEY;

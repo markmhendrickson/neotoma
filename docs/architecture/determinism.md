@@ -69,7 +69,7 @@ Not all Neotoma components are deterministic. The following table explicitly cla
 AI interpretation is **auditable but not replay-deterministic**:
 
 - `interpretation_runs` table stores `interpretation_config` (model, version, parameters)
-- Multiple interpretation runs for the same source create NEW observations
+- Multiple interpretations for the same source create NEW observations
 - Prior observations are never modified (immutability preserved)
 - Audit trail shows exactly how data was interpreted at each point in time
 
@@ -235,7 +235,7 @@ const entities = await llm.extract(rawText);
 
 **Requirements for AI interpretation:**
 - Config logging: model, temperature, prompt_hash, code_version
-- Immutable interpretation runs: reinterpretation creates NEW observations
+- Immutable interpretations: reinterpretation creates NEW observations
 - Never claim replay determinism
 - Entity resolution may create duplicates; `merge_entities()` repairs
 
@@ -826,7 +826,7 @@ Use this checklist when reviewing code:
 - [ ] All filesystem reads are sorted
 - [ ] All IDs are hash-based (not random)
 - [ ] All sorting has deterministic tiebreakers
-- [ ] LLM extraction (if used) has config logging and immutable interpretation runs
+- [ ] LLM extraction (if used) has config logging and immutable interpretations
 - [ ] Tests are reproducible (run 100 times, all pass)
 - [ ] External API calls are isolated from core truth
 
@@ -944,7 +944,7 @@ Load `docs/architecture/determinism.md` when:
 - Random UUID generation for IDs
 - Date.now() in business logic
 - Unsorted iteration over collections
-- LLM extraction without config logging and immutable interpretation runs
+- LLM extraction without config logging and immutable interpretations
 - Nondeterministic ranking or sorting
 - Flaky tests left unfixed
 - Race conditions in concurrent code

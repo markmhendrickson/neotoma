@@ -28,3 +28,6 @@ echo "Environment variables configured for tests"
 echo "DEV_SUPABASE_URL=${DEV_SUPABASE_URL:-not set}"
 echo "DEV_SUPABASE_SERVICE_KEY=${DEV_SUPABASE_SERVICE_KEY:+set}"
 
+
+
+
