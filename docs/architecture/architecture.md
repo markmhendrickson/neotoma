@@ -42,9 +42,11 @@ This document does NOT cover:
 
 ## Implementation Status
 
-**v0.1.0 (2025-12-11):** Full architecture implementation complete.
+### Completed Releases
 
-All architectural components described in this document are now fully implemented:
+**v0.1.0 (2025-12-11):** Internal MCP Release — Full architecture implementation complete.
+
+All foundational architectural components described in this document are now fully implemented:
 
 - ✅ Four-layer truth model (Document → Entity → Observation → Snapshot)
 - ✅ Five-layer internal architecture (External → Infrastructure → Domain → Application → Presentation)
@@ -55,7 +57,83 @@ All architectural components described in this document are now fully implemente
 - ✅ Graph integrity validation (orphan detection, cycle detection)
 - ✅ Deterministic entity resolution and event generation with database persistence
 
-See `docs/releases/in_progress/v0.1.0/test_coverage_gap_analysis.md` for remediation details.
+See `docs/releases/v0.1.0/` for release details.
+
+### Planned Releases
+
+**v0.2.0:** Sources-First Ingestion Architecture — Minimal Ingestion + Correction Loop
+
+- Sources table migration (content-addressed raw storage with RLS)
+- Interpretations table (`interpretation_runs`) for versioned interpretation tracking
+- Observation and raw fragments extensions with provenance (`source_id`, `interpretation_run_id` linkage)
+- Entity extensions with user_id and merge tracking
+- Minimal MCP tools: ingest(), ingest_structured(), reinterpret(), correct(), merge_entities()
+- Query updates with provenance chain support
+
+See `docs/releases/v0.2.0/` for detailed release plan.
+
+**v0.2.1:** Documentation & Support System
+
+- AI-powered repository analysis and comprehensive documentation generation
+- Static documentation web server
+- MCP support inquiry endpoint
+- RAG-based support agent system
+
+See `docs/releases/v0.2.1/` for detailed release plan.
+
+**v0.3.0:** Operational Hardening
+
+- Storage infrastructure (upload queue, storage usage tracking, quotas)
+- Background workers (upload queue processor, stale interpretation cleanup)
+- Strict quota enforcement
+- Interpretation timeout columns
+
+See `docs/releases/v0.3.0/` for detailed release plan.
+
+**v0.4.0:** Intelligence + Housekeeping
+
+- Duplicate detection worker
+- Archival job for old interpretations
+- Raw fragments analytics for schema promotion candidates
+- Chat transcript extraction CLI
+
+See `docs/releases/v0.4.0/` for detailed release plan.
+
+**v1.0.0:** MVP
+
+- Core workflows functional (upload → extraction → timeline → AI query)
+- Empty states and error handling
+- Full P0 feature units deployed
+- Production readiness with monitoring and marketing
+
+See `docs/releases/v1.0.0/` for detailed release plan.
+
+**v2.0.0:** End-to-End Encryption (E2EE)
+
+Major architectural transformation to local-first, end-to-end encrypted architecture:
+
+- Browser becomes authoritative datastore (SQLite WASM + OPFS, encrypted-at-rest)
+- Server stores only encrypted ciphertext
+- X25519/Ed25519 crypto library with envelope encryption
+- Encrypted WebSocket bridge for MCP communication
+- Public key authentication (bearer token = Ed25519 public key)
+- Dual-mode operation (plaintext + encrypted) for backward compatibility
+- Migration tooling for existing Supabase records
+- Optional multi-device sync via encrypted deltas
+
+See `docs/releases/v2.0.0/` and `docs/architecture/local-first-e2ee-architecture.md` for detailed architecture and release plan.
+
+**v2.1.0:** GDPR & US State Privacy Compliance
+
+- Automated GDPR data export and account deletion
+- Request tracking and management system
+- Identity verification and security (rate limiting, audit logging)
+- E2EE-specific handling (lost keys, encrypted data cleanup)
+- Legal document serving (Privacy Policy, Terms of Service)
+- Consent management and cookie consent banner
+- US state privacy law compliance (GPC signals, sensitive data opt-in, right to correct)
+
+See `docs/releases/v2.1.0/` for detailed release plan.
 
 ---
 
@@ -440,9 +518,9 @@ flowchart TD
 
 **Components:**
 
-- **Ingestion Service:** File upload → normalization → chunking → OCR
-- **Extraction Service:** Deterministic field extraction via regex/parsing
-- **Observation Storage:** Store granular, source-specific facts extracted from documents
+- **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, Supabase Storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
+- **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
+- **Observation Storage:** Store granular, source-specific facts extracted from documents/sources with provenance (source_id, interpretation_run_id)
 - **Reducer Engine:** Compute entity snapshots from observations using deterministic merge strategies
 - **Schema Registry:** Manage config-driven schema definitions, versions, and merge policies
 - **Entity Resolution:** Canonical entity ID generation and deduplication
@@ -467,7 +545,8 @@ flowchart TD
 
 **Components:**
 
-- **MCP Actions:** `upload_file`, `list_records`, `fetch_record`, `search`, `create_entity`, `link`
+- **MCP Actions (v0.1.0):** `upload_file`, `list_records`, `fetch_record`, `search`, `create_entity`, `link` (13/13 actions operational)
+- **MCP Actions (v0.2.0+):** `ingest()`, `ingest_structured()`, `reinterpret()`, `correct()`, `merge_entities()` (sources-first ingestion architecture)
 - **Workflows:** Multi-step operations orchestrating domain services
 - **Orchestration:** Request routing, validation, error handling
 
@@ -548,7 +627,9 @@ No global singletons for services.
 
 ## 4. Data Flow Patterns
 
-### 4.1 Ingestion Flow (File Upload → Memory Graph)
+### 4.1 Ingestion Flow (Sources-First Architecture, v0.2.0+)
+
+**Note:** This flow reflects the sources-first ingestion architecture introduced in v0.2.0. See `docs/releases/v0.2.0/` for details.
 
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
@@ -556,64 +637,81 @@ sequenceDiagram
     participant User
     participant UI
     participant API
-    participant MCP_Action as MCP Action<br/>(upload_file)
-    participant Ingestion as Ingestion<br/>Service
-    participant Extraction as Extraction<br/>Service
+    participant MCP_Action as MCP Action<br/>(ingest / ingest_structured)
+    participant Storage as Raw Storage<br/>Service
+    participant Sources as Sources<br/>Table
+    participant Interp as Interpretation<br/>Service
+    participant InterpRun as Interpretation<br/>(interpretation_runs table)
     participant EntityRes as Entity<br/>Resolution
-    participant EventGen as Event<br/>Generation
-    participant Graph as Graph<br/>Builder
+    participant Observations as Observations<br/>Storage
+    participant Reducer as Reducer<br/>Engine
+    participant Snapshots as Entity<br/>Snapshots
     participant DB
 
     User->>UI: Upload file
     UI->>API: POST /api/upload
-    API->>MCP_Action: upload_file(file)
+    API->>MCP_Action: ingest(file) or ingest_structured(data)
 
-    MCP_Action->>Ingestion: ingest(file)
-    Ingestion->>Ingestion: Normalize format
-    Ingestion->>Ingestion: Extract raw_text (OCR if needed)
-    Ingestion->>Ingestion: Detect schema_type
+    alt Raw file ingestion (ingest)
+        MCP_Action->>Storage: Store file (SHA-256 hash)
+        Storage->>Storage: Compute content_hash
+        Storage->>Sources: Check for existing (user_id, content_hash)
+        Sources-->>Storage: existing_source_id or null
 
-    Ingestion->>Extraction: extract_fields(raw_text, schema_type)
-    Extraction->>Extraction: Apply schema rules
-    Extraction-->>Ingestion: extracted_fields
+        alt New source
+            Storage->>Sources: INSERT source (content-addressed)
+            Sources-->>Storage: source_id
+            Storage->>Interp: Trigger interpretation (optional)
+        else Duplicate source
+            Sources-->>MCP_Action: existing_source_id (deduplicated)
+        end
 
-    Ingestion->>Ingestion: Categorize known vs unknown fields
-    Ingestion->>Ingestion: Store raw_fragments for unknown fields
+        Interp->>InterpRun: CREATE interpretation (versioned)
+        InterpRun-->>Interp: interpretation_id
 
-    Ingestion->>EntityRes: resolve_entities(extracted_fields)
-    EntityRes->>EntityRes: Generate canonical IDs
-    EntityRes-->>Ingestion: entity_ids
+        Interp->>Interp: Extract fields via AI (non-deterministic)
+        Interp->>Interp: Validate against schema_registry
+        Interp->>Interp: Categorize known vs unknown fields
 
-    Ingestion->>Ingestion: Create observations for each entity
-    Ingestion->>Ingestion: Store observations with provenance
-    Ingestion->>Ingestion: Trigger reducer to compute snapshots
-    Ingestion->>Ingestion: Store entity snapshots
+        Interp->>Observations: Store unknown fields in raw_fragments
+        Interp->>EntityRes: resolve_entities(validated_fields)
+        EntityRes->>EntityRes: Generate canonical entity IDs
+        EntityRes-->>Interp: entity_ids
 
-    Ingestion->>EventGen: generate_events(extracted_fields)
-    EventGen->>EventGen: Extract dates → events
-    EventGen-->>Ingestion: events
+        Interp->>Observations: CREATE observations (source_id, interpretation_run_id, entity_id)
+        Observations-->>Interp: observation_ids
 
-    Ingestion->>Graph: insert_record(record, entities, events, relationships)
-    Graph->>DB: BEGIN TRANSACTION
-    Graph->>DB: INSERT record
-    Graph->>DB: INSERT entities (if new)
-    Graph->>DB: INSERT events
-    Graph->>DB: INSERT edges (record→entity, record→event, event→entity)
-    Graph->>DB: COMMIT
-    Graph-->>Ingestion: record_id
+        Interp->>Reducer: Trigger reducer computation
+        Reducer->>Reducer: Compute snapshots from observations
+        Reducer->>Snapshots: UPDATE entity_snapshots
 
-    Ingestion-->>MCP_Action: record
-    MCP_Action-->>API: {record_id, schema_type, ...}
+        Interp->>InterpRun: UPDATE status = 'completed'
+    else Structured data (ingest_structured)
+        MCP_Action->>Interp: Validate against schema_registry
+        Interp->>EntityRes: resolve_entities(properties)
+        EntityRes-->>Interp: entity_ids
+        Interp->>Observations: CREATE observations (source_priority=100)
+        Observations-->>Interp: observation_ids
+        Interp->>Reducer: Compute snapshots
+    end
+
+    MCP_Action-->>API: {source_id, interpretation_run_id?, entities, ...}
     API-->>UI: 201 Created
-    UI-->>User: Show record details
+    UI-->>User: Show entity details
 ```
 
-**Key Characteristics:**
+**Key Characteristics (v0.2.0+):**
 
-- **Deterministic:** Same file + same timestamp → same record_id, entities, events
-- **Transactional:** All graph inserts in a single transaction
-- **Immutable:** Once committed, raw_text and schema_type never change
-- **Provenance:** All entities and events trace back to source record
+- **Content-addressed storage:** Same file content = same source (deduplication via SHA-256)
+- **Versioned interpretation:** Each interpretation creates new observations; prior observations immutable
+- **Provenance chain:** Observations link to `source_id` and `interpretation_run_id` (from `interpretation_runs` table) for full auditability
+- **Schema validation:** Unknown fields stored in `raw_fragments`, schema-valid fields create observations
+- **Deterministic components:** Content hashing, entity resolution, reducer computation
+- **Non-deterministic boundary:** AI interpretation outputs vary; config logged for audit
+- **Correction support:** High-priority observations via `correct()` tool
+- **Entity merging:** `merge_entities()` tool for duplicate resolution
+
+**See also:** `docs/architecture/ingestion/sources-first_ingestion_v12_final.md` for detailed architecture.
 
 ### 4.2 Search Flow (Query → Results)
 
@@ -948,6 +1046,30 @@ Application layer MUST distinguish and signal retry eligibility.
 ## 10. Future Architectural Extensions
 
 ### 10.1 Planned Additions (Post-MVP)
+
+**v2.0.0: End-to-End Encryption (E2EE) Architecture**
+
+Major architectural transformation planned for v2.0.0:
+
+- **Local-first datastore:** Browser becomes authoritative (SQLite WASM + OPFS, encrypted-at-rest)
+- **End-to-end encryption:** X25519 envelope encryption + Ed25519 signatures
+- **Encrypted MCP bridge:** Server stores only ciphertext; MCP servers cannot decrypt
+- **Public key authentication:** Bearer token = Ed25519 public key
+- **Multi-device sync (optional):** Encrypted delta sync via conflict-free merge
+
+See `docs/releases/v2.0.0/` and `docs/architecture/local-first-e2ee-architecture.md` for detailed architecture.
+
+**v2.1.0: GDPR & Privacy Compliance**
+
+- Automated GDPR data export and account deletion
+- Request tracking and identity verification
+- Legal document serving
+- Consent management
+- US state privacy law compliance
+
+See `docs/releases/v2.1.0/` for detailed release plan.
+
+**Post-MVP Enhancements:**
 
 **Horizontal Scaling:**
 

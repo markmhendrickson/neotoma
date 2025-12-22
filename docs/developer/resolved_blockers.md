@@ -39,9 +39,42 @@ This document tracks blockers that have been resolved for cloud agent execution.
 
 ---
 
+---
+
+## Blocker 3: Infrastructure Setup Automation ✅ RESOLVED
+
+**Issue**: Agents were failing tests due to:
+- Supabase CLI not linked to project (migrations couldn't run)
+- Database migrations not applied (missing schema objects like `records.embedding`)
+- Playwright browsers not installed (E2E tests failed)
+
+**Solution**: Created automated setup script that handles all infrastructure setup:
+- Created `scripts/setup_agent_environment.sh` that:
+  - Links Supabase project automatically (extracts project ref from SUPABASE_URL)
+  - Applies database migrations via `supabase db push`
+  - Installs Playwright browsers (`npx playwright install --with-deps chromium`)
+  - Verifies npm dependencies are installed
+- Updated orchestrator (`scripts/release_orchestrator.js`) to include setup script in agent instructions
+- Agents now automatically run setup script before tests
+
+**Files Changed**:
+- `scripts/setup_agent_environment.sh` (new file)
+- `scripts/release_orchestrator.js` (updated `generateAgentInstructions` to include setup steps)
+
+**Status**: ✅ Fixed - Future agents will automatically run `./scripts/setup_agent_environment.sh` to resolve infrastructure issues
+
+**Usage**:
+```bash
+# Agents run this automatically, but can also run manually:
+./scripts/setup_agent_environment.sh
+```
+
+---
+
 ## Next Steps
 
-1. Agents should export environment variables from instructions before running tests
-2. CSV import issue is resolved - no further action needed
-3. Test suites should now run without CSV parsing errors
+1. ✅ Infrastructure setup is now automated - agents run setup script automatically
+2. ✅ CSV import issue is resolved - no further action needed
+3. ✅ Environment variables provided in agent instructions
+4. Test suites should now run successfully with proper infrastructure setup
 

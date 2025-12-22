@@ -58,7 +58,6 @@
 ## 4. Checkpoints
 
 - **Checkpoint 1 — Documentation Review**: `pending`
-
   - Trigger: After Batch 1 completion
   - Review documentation completeness and quality
 
@@ -139,12 +138,3 @@ See `acceptance_criteria.md` for detailed criteria.
 - **Acceptance Criteria:** `docs/releases/v0.2.1/acceptance_criteria.md`
 
 ---
-
-
-
-
-
-
-
-
-

@@ -40,7 +40,7 @@ Raw Content → Sources → Interpretation Runs → Observations → Entity Snap
 
 **Benefits:**
 
-- **Provenance**: Every observation traces to source and interpretation run
+- **Provenance**: Every observation traces to source and interpretation
 - **Auditability**: Interpretation config logged; can understand how data was extracted
 - **Flexibility**: Can reinterpret with new models without losing history
 - **Cost Control**: Interpretation quotas prevent runaway AI costs

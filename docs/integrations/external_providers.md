@@ -44,6 +44,7 @@ This document does NOT cover:
 | **X (Twitter)** | Media import | ImageContext, Note | ⏳ Post-MVP |
 | **Instagram** | Photo import | ImageContext | ⏳ Post-MVP |
 | **Plaid** | Bank transactions | transaction, account | ⏳ Post-MVP (Tier 3+ use case) |
+| **Venice AI** | AI text/image generation, coding assistance | Note, ImageContext | 🔍 Integration Candidate |
 
 **Rationale:** X and Instagram integrations provide media/photo import capabilities but don't align with Tier 1 ICP primary use cases (document management, financial records, travel documents). These integrations are deferred to post-MVP to focus MVP scope on core document ingestion workflows.
 
@@ -238,6 +239,82 @@ curl -X POST http://localhost:8080/import/instagram/sync \
 
 ---
 
+## Venice AI Integration (Integration Candidate)
+
+### Overview
+
+Venice AI is a privacy-first AI platform offering APIs for text and image generation, coding assistance, and other AI capabilities. This integration is documented as a candidate for future evaluation and potential implementation.
+
+### Potential Use Cases
+
+- **AI-Generated Content**: Generate text and images via Venice AI API
+- **Coding Assistance**: Integrate Venice AI for code generation and assistance workflows
+- **Privacy-First AI**: Leverage Venice AI's privacy-first approach for sensitive document processing
+- **Alternative AI Provider**: Provide users with additional AI provider options beyond OpenAI
+
+### Integration Approach
+
+Unlike data source providers (Gmail, X, Instagram), Venice AI would function as an AI service provider rather than a data import source. Integration would involve:
+
+1. **API Key Configuration**: Simple API key-based authentication (no OAuth required)
+2. **Service Integration**: Add Venice AI as an alternative AI provider in Neotoma's AI service layer
+3. **Content Generation**: Support for text and image generation endpoints
+4. **Streaming Support**: Leverage Venice AI's streaming capabilities for real-time responses
+
+### Setup Requirements
+
+1. **Sign up for Venice AI account**: https://venice.ai
+2. **Obtain API key**: Available in account dashboard
+3. **Environment variable configuration**:
+   ```bash
+   # Venice AI Configuration
+   VENICE_AI_API_KEY=your_api_key
+   VENICE_AI_BASE_URL=https://api.venice.ai  # Default, may vary
+   ```
+
+### API Capabilities
+
+Based on Venice AI documentation:
+- **Text Generation**: Chat completions, text generation
+- **Image Generation**: Image creation and manipulation
+- **Coding Assistance**: Code generation and analysis
+- **Streaming**: Real-time streaming responses
+- **Privacy-First**: Data handling aligned with privacy requirements
+
+### Integration Considerations
+
+**Advantages:**
+- Privacy-first approach aligns with Neotoma's privacy principles
+- Alternative to OpenAI for users seeking provider diversity
+- Supports both text and image generation
+- JavaScript and Python SDKs available
+
+**Evaluation Needed:**
+- Cost comparison with existing AI providers
+- Performance and latency characteristics
+- Feature parity with current AI integrations
+- User demand and use case alignment
+- API stability and reliability
+
+### Documentation References
+
+- **Venice AI API Docs**: https://docs.venice.ai
+- **JavaScript SDK**: Available via npm/package managers
+- **Python Client**: Available via pip
+- **Integrations Guide**: https://docs.venice.ai/overview/guides/integrations
+
+### Status
+
+**Current Status**: 🔍 Integration Candidate
+
+This integration is documented for future evaluation. Implementation would require:
+1. Assessment of user demand and use cases
+2. Technical evaluation of API capabilities and performance
+3. Cost-benefit analysis
+4. Integration with Neotoma's existing AI service architecture
+
+---
+
 ## Provider-Specific Considerations
 
 ### Rate Limits
@@ -250,6 +327,7 @@ Each provider has different rate limits:
 | **Plaid** | 500 requests/minute | Sandbox only |
 | **X (Twitter)** | 300 requests/15min | Varies by endpoint |
 | **Instagram** | 200 requests/hour | Per access token |
+| **Venice AI** | TBD | Check current API documentation |
 
 **Best Practices:**
 - Implement exponential backoff

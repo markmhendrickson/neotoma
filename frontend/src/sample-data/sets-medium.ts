@@ -40,3 +40,6 @@ export const setsMediumCsv = `Date,Exercise,Repetitions,Weight,Difficulty,RPE,No
 2024-06-01,Squats,6,70kg,Near failure,9,,Working set,2024-06-01T10:39:00Z
 `;
 
+
+
+
