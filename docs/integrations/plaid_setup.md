@@ -45,7 +45,7 @@ This document does NOT cover:
 ## Step 2: Create Plaid Application
 
 1. In Plaid Dashboard, go to **"Team Settings"** → **"Keys"**
-2. Note your **Client ID** and **Secret** (you'll add these to `.env.development`)
+2. Note your **Client ID** and **Secret** (you'll add these to `.env`)
 3. **Environment**: Select **"Sandbox"** for development
 
 **Sandbox Features:**
@@ -58,7 +58,7 @@ This document does NOT cover:
 
 ## Step 3: Configure Environment Variables
 
-Add to `.env.development`:
+Add to `.env`:
 
 ```bash
 # Plaid Configuration
@@ -382,7 +382,7 @@ Sandbox institutions have pre-populated transactions:
 ### Issue: "invalid_client_id" or "invalid_secret"
 
 **Solution:**
-- Verify `PLAID_CLIENT_ID` and `PLAID_SECRET` in `.env.development`
+- Verify `PLAID_CLIENT_ID` and `PLAID_SECRET` in `.env`
 - Check for extra spaces or quotes
 - Ensure using sandbox credentials (not production)
 

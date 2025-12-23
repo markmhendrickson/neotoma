@@ -12,7 +12,7 @@ const nodeEnv = process.env.NODE_ENV || 'development';
 const envFiles =
   nodeEnv === 'production'
     ? [path.join(projectRoot, '.env.production'), path.join(projectRoot, '.env')]
-    : [path.join(projectRoot, '.env.development'), path.join(projectRoot, '.env')];
+    : [path.join(projectRoot, '.env')];
 
 envFiles.forEach((file) => {
   dotenv.config({ path: file });
@@ -50,7 +50,7 @@ const diagnostics = [
   {
     test: /Missing Supabase configuration|Missing SUPABASE_URL|Missing SUPABASE_SERVICE_KEY/i,
     message:
-      'Supabase environment missing. Populate .env.development with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or provide SUPABASE_URL/SUPABASE_SERVICE_KEY.',
+      'Supabase environment missing. Populate .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or provide SUPABASE_URL/SUPABASE_SERVICE_KEY.',
   },
   {
     test: /listen EADDRINUSE/i,
@@ -160,7 +160,7 @@ function ensureBaseEnv() {
   if (missing.length > 0) {
     console.error(`[dev-serve] Missing required environment values: ${missing.join(', ')}`);
     console.error(
-      '[dev-serve] Create .env.development with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or use SUPABASE_URL/SUPABASE_SERVICE_KEY.',
+      '[dev-serve] Create .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or use SUPABASE_URL/SUPABASE_SERVICE_KEY.',
     );
     process.exit(1);
   }

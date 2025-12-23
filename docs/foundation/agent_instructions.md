@@ -123,6 +123,39 @@ When upstream documentation is updated:
 
 See `.cursor/rules/downstream_doc_updates.md` for complete requirements.
 
+### 23.8 Documentation Location Rules
+
+When creating or moving documentation:
+
+1. **MUST NOT store documentation in repo root** — All documentation files MUST be placed in appropriate subdirectories under `docs/`
+2. **Summary files, review files, implementation notes** — MUST be placed in relevant `docs/` subdirectories (e.g., `docs/conventions/`, `docs/developer/`, `docs/architecture/`)
+3. **Only configuration and essential project files** belong in repo root (e.g., `package.json`, `tsconfig.json`, `README.md`, `LICENSE`)
+4. **When moving files from root to docs/**, agents MUST:
+   - Identify appropriate subdirectory based on content type
+   - Move file to correct location
+   - Update any references to the file location
+   - Delete original file from root
+
+See `.cursor/rules/instruction_documentation.md` for complete documentation location guidance.
+
+### 23.9 Permanent Instruction Documentation Rules
+
+When user provides instructions during conversation (especially "always" or "never" statements):
+
+1. **MUST document immediately** — All "always" and "never" instructions MUST be documented in repository files during the same conversation
+2. **MUST NOT defer** — Documentation MUST happen before proceeding with other work, not in a future conversation
+3. **MUST use repo files** — Instructions MUST be written to appropriate documentation files (not just conversation memory)
+4. **MUST classify and place correctly** — Determine appropriate location (agent_instructions.md, conventions/, architecture/, etc.)
+5. **MUST make discoverable** — Ensure instruction is available to all agents via appropriate documentation or rule files
+
+**Examples of instructions requiring immediate documentation:**
+- "always do X" or "never do Y"
+- "remember to" or "make sure to"
+- "all agents should" or "everyone must"
+- Any persistent behavioral constraint or policy
+
+See `.cursor/rules/instruction_documentation.md` for complete workflow and requirements.
+
 ---
 
 ## 24. Risk Classification and Hold Points
@@ -253,6 +286,7 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - Upward dependencies (Domain layer calling Application or Presentation layers)
 - Non-transactional graph writes (all record+entity+event inserts must be atomic)
 - Including credentials in agent instructions (no API keys, tokens, or service keys in prompt text, conversation messages, or code comments; use secure injection mechanisms like Cursor Secrets)
+- Storing documentation files in repo root (all documentation MUST be in appropriate `docs/` subdirectories)
 
 ### Validation Checklist
 
@@ -267,6 +301,7 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - [ ] Provenance maintained (all outputs trace to source + rule)
 - [ ] Consistency model correct (strong vs bounded eventual per subsystem)
 - [ ] Security: No credentials included in agent instructions, conversation text, or code (use secure injection mechanisms)
+- [ ] Documentation location: No documentation files stored in repo root (all docs in `docs/` subdirectories)
 - [ ] Tests cover all new paths (unit, integration, E2E as appropriate)
 - [ ] Documentation updated to reflect changes
 - [ ] Downstream documentation updated if upstream docs changed

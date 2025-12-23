@@ -14,7 +14,15 @@ Ensures that important instructions, constraints, and guidelines are:
 
 ## Trigger Patterns
 
-When any of the following occur, agents MUST ensure instructions are documented:
+**CRITICAL:** When any of the following occur, agents MUST **IMMEDIATELY** document the instruction in the appropriate repository documentation file. Documentation MUST happen during the same conversation, before proceeding with other work.
+
+### High-Priority Triggers (Immediate Documentation Required)
+
+- User says **"always do X"** or **"never do Y"** — These are permanent instructions that MUST be documented immediately
+- User says **"remember to"** or **"make sure to"** — Persistent behavioral instructions
+- User says **"all agents should"** or **"everyone must"** — Repository-wide requirements
+
+### Standard Triggers
 
 - User provides explicit instructions about:
 
@@ -29,11 +37,9 @@ When any of the following occur, agents MUST ensure instructions are documented:
 
 - User mentions:
 
-  - "always do X" or "never do Y"
   - "follow this pattern" or "use this approach"
-  - "remember to" or "make sure to"
   - "this is important" or "critical requirement"
-  - "all agents should" or "everyone must"
+  - "never store docs in repo root" or similar documentation location constraints
 
 - Instructions that affect:
   - Multiple files or subsystems
@@ -126,7 +132,12 @@ When any of the following occur, agents MUST ensure instructions are documented:
    - `docs/architecture/` for architectural rules
    - `docs/feature_units/standards/` for workflow standards
 
-2. **Reference in `repo_doctrine.md`:**
+2. **MUST NOT store documentation in repo root:**
+   - All documentation files MUST be placed in appropriate subdirectories under `docs/`
+   - Summary files, review files, implementation notes, and similar documentation MUST be placed in relevant `docs/` subdirectories (e.g., `docs/conventions/`, `docs/developer/`)
+   - Only configuration files (e.g., `package.json`, `tsconfig.json`) and essential project files (e.g., `README.md`, `LICENSE`) belong in repo root
+
+3. **Reference in `repo_doctrine.md`:**
    - Add to "Required Reading" section if critical
    - Add to relevant workflow section if process-related
 
@@ -229,36 +240,53 @@ When [conditions], agents MUST [action].
 
 ## Agent Actions When Instructions Are Given
 
-### During Conversation
+### During Conversation (MANDATORY Workflow)
 
-**When user provides instructions:**
+**When user provides instructions (especially "always" or "never" statements):**
 
-1. **Acknowledge instruction:**
+**CRITICAL:** Agents MUST follow this workflow IMMEDIATELY, before proceeding with any other work.
 
-   - "I'll document this instruction in [location]"
+1. **Detect instruction trigger:**
 
-2. **Classify instruction:**
+   - Identify if instruction matches trigger patterns (especially "always"/"never")
+   - Recognize this as a permanent instruction requiring documentation
 
-   - Determine appropriate documentation location
+2. **Acknowledge and commit to documentation:**
+
+   - "I'll document this instruction permanently in [location]"
+   - Do NOT proceed with other work until documentation is complete
+
+3. **Classify instruction type:**
+
+   - Determine appropriate documentation location (see Step 1: Detect Instruction Type)
    - Determine if Cursor repo rule is needed
+   - Determine if both documentation and rule file are needed
 
-3. **Document immediately:**
+4. **Document IMMEDIATELY (same conversation):**
 
-   - Add to appropriate file
-   - Create rule file if needed
-   - Update `repo_doctrine.md` if needed
+   - Read the target documentation file
+   - Add instruction to appropriate section using proper format
+   - Create or update rule file in `.cursor/rules/` if needed
+   - Update `repo_doctrine.md` if new rule file created
+   - Use clear, directive language (MUST/SHOULD/MUST NOT/ALWAYS/NEVER)
 
-4. **Update downstream documentation:**
+5. **Update downstream documentation (if applicable):**
 
-   - Identify downstream docs that depend on the new instruction
+   - Identify downstream docs that reference or depend on this instruction
    - Update downstream docs to maintain consistency
    - See `.cursor/rules/downstream_doc_updates.md` for requirements
 
-5. **Confirm completion:**
-   - "Instruction documented in [location]"
-   - "Rule created at `.cursor/rules/[name].md`"
-   - "Downstream docs updated: [list]"
+6. **Confirm completion with details:**
+   - "Instruction documented permanently in [location]"
+   - "Rule created at `.cursor/rules/[name].md`" (if applicable)
+   - "Downstream docs updated: [list]" (if applicable)
    - "Available to all agents via [reference]"
+
+**MUST NOT:**
+- Skip documentation and proceed with other work
+- Promise to document "later" or in a future conversation
+- Document only in conversation memory without updating repo files
+- Assume the instruction is temporary or context-specific
 
 ### When Reviewing Existing Instructions
 
@@ -279,12 +307,16 @@ When [conditions], agents MUST [action].
 ## Constraints
 
 - **NEVER** skip documenting important instructions
+- **MUST document "always" and "never" instructions IMMEDIATELY** during the same conversation
+- **MUST NOT** defer documentation to a future conversation or session
+- **MUST NOT** document only in conversation memory — all permanent instructions MUST be in repo files
 - **ALWAYS** classify instruction type before documenting
 - **ALWAYS** update `repo_doctrine.md` when adding new rules
 - **ALWAYS** update downstream documentation when upstream docs change
-- **ALWAYS** use clear, directive language (MUST/SHOULD/MUST NOT)
+- **ALWAYS** use clear, directive language (MUST/SHOULD/MUST NOT/ALWAYS/NEVER)
 - **NEVER** duplicate instructions across multiple files without cross-references
 - **ALWAYS** ensure instructions are discoverable via `repo_doctrine.md` or `.cursor/rules/`
+- **MUST NOT** store documentation files in repo root — all documentation MUST be placed in appropriate `docs/` subdirectories
 
 ---
 

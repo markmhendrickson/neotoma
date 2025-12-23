@@ -2,8 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import dotenv from "dotenv";
 
 // Load .env file before setting any defaults
-dotenv.config({ path: ".env.development" });
-dotenv.config(); // Load .env as fallback
+dotenv.config(); // Load .env
 
 // Only set test key if no real key exists (don't override real keys)
 if (!process.env.OPENAI_API_KEY) {

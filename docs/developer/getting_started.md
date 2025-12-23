@@ -104,7 +104,7 @@ This creates:
 
 ## Step 5: Configure Environment Variables
 
-Create `.env.development` in the project root:
+Create `.env` in the project root:
 
 ```bash
 # Supabase Configuration
@@ -131,7 +131,7 @@ OPENAI_API_KEY=sk-your-api-key-here
 - **Project URL**: Settings → API → Project URL
 - **Service Role Key**: Settings → API → service_role key (NOT anon key)
 
-**Security Note:** Never commit `.env.development` to git. It's already in `.gitignore`.
+**Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
 
 ---
 
@@ -206,7 +206,7 @@ npm test -- src/index.test.ts
 ### Issue: "Missing SUPABASE_URL or SUPABASE_SERVICE_KEY"
 
 **Solution:**
-- Ensure `.env.development` exists in project root
+- Ensure `.env` exists in project root
 - Verify variable names: `DEV_SUPABASE_URL` and `DEV_SUPABASE_SERVICE_KEY`
 - Restart terminal/IDE to reload environment variables
 
@@ -273,7 +273,7 @@ Before starting development, verify:
 - [ ] Supabase project created and active
 - [ ] Database schema applied (`supabase/schema.sql` run)
 - [ ] Storage bucket `files` created (public)
-- [ ] `.env.development` configured with valid credentials
+- [ ] `.env` configured with valid credentials
 - [ ] Tests pass (`npm test`)
 - [ ] Dev server starts (`npm run dev` or `npm run dev:http`)
 - [ ] Can access Supabase dashboard

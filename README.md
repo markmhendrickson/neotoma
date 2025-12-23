@@ -228,7 +228,7 @@ See [`docs/prototypes/`](docs/prototypes/) for full documentation.
 npm install
 
 # Configure environment (see docs/developer/getting_started.md)
-# Create .env.development with Supabase credentials
+# Create .env with Supabase credentials
 
 # Run database schema
 # Execute supabase/schema.sql in Supabase SQL Editor

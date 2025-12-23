@@ -94,7 +94,7 @@ The following provider integrations are post-MVP and documented here for future 
 
 ### Step 4: Environment Variables
 
-Add to `.env.development`:
+Add to `.env`:
 
 ```bash
 # X (Twitter) OAuth Configuration
@@ -189,7 +189,7 @@ Instagram uses Facebook's OAuth system:
 
 ### Step 4: Environment Variables
 
-Add to `.env.development`:
+Add to `.env`:
 
 ```bash
 # Instagram OAuth Configuration

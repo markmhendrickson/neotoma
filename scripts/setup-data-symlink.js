@@ -18,9 +18,8 @@ if (env === 'production') {
   dotenv.config({ path: '.env.production' });
   dotenv.config(); // Load .env as fallback
 } else {
-  // Development/test: load .env.development if it exists, otherwise .env
-  dotenv.config({ path: '.env.development' });
-  dotenv.config(); // Always load .env as fallback
+  // Development/test: load .env
+  dotenv.config(); // Load .env
 }
 
 // Check for environment variable (try multiple common names)

@@ -29,8 +29,7 @@ const execAsync = promisify(exec);
 
 // Load environment variables
 const env = process.env.NODE_ENV || "development";
-dotenv.config({ path: ".env.development" });
-dotenv.config(); // Load .env as fallback
+dotenv.config(); // Load .env
 
 // Get Supabase config from environment
 function getSupabaseConfig() {

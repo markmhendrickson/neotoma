@@ -8,9 +8,8 @@ if (env === "production") {
   dotenv.config({ path: ".env.production" });
   dotenv.config(); // Load .env as fallback
 } else {
-  // Development/test: load .env.development if it exists, otherwise .env
-  dotenv.config({ path: ".env.development" });
-  dotenv.config(); // Always load .env as fallback
+  // Development/test: load .env
+  dotenv.config(); // Load .env
 }
 
 function getSupabaseConfig() {
@@ -49,10 +48,10 @@ export const config = {
 };
 
 if (!config.supabaseUrl || !config.supabaseKey) {
-  const envFile = env === "production" ? ".env.production" : ".env.development";
+  const envFile = env === "production" ? ".env.production" : ".env";
   throw new Error(
     `Missing Supabase configuration for ${env} environment. ` +
-      `Create ${envFile} or .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY (for dev/test), ` +
+      `Create ${envFile} with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY (for dev/test), ` +
       `or PROD_SUPABASE_URL and PROD_SUPABASE_SERVICE_KEY (for production), ` +
       `or use generic SUPABASE_URL and SUPABASE_SERVICE_KEY for backward compatibility.`
   );

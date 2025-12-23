@@ -20,5 +20,5 @@ fi
 
 echo "✓ Worktree setup complete"
 echo ""
-echo "If the dev server fails to start, ensure you have a .env.development file:"
+echo "If the dev server fails to start, ensure you have a .env file:"
 echo "  npm run copy:env"
