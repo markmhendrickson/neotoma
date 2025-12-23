@@ -1,4 +1,21 @@
+-- Ensure vector extension is available (may be in extensions schema)
+DO $$
+BEGIN
+  -- Try to create in extensions schema first (preferred)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+    WHERE e.extname = 'vector'
+  ) THEN
+    -- Create extensions schema if needed
+    CREATE SCHEMA IF NOT EXISTS extensions;
+    GRANT USAGE ON SCHEMA extensions TO public;
+    CREATE EXTENSION IF NOT EXISTS vector SCHEMA extensions;
+  END IF;
+END $$;
+
 -- Add payload_submissions table
+-- Note: vector type should be accessible via search_path
 CREATE TABLE IF NOT EXISTS payload_submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   payload_submission_id TEXT UNIQUE NOT NULL,
@@ -7,7 +24,7 @@ CREATE TABLE IF NOT EXISTS payload_submissions (
   body JSONB NOT NULL,
   provenance JSONB NOT NULL,
   client_request_id TEXT,
-  embedding vector(1536),
+  embedding extensions.vector(1536),
   summary TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

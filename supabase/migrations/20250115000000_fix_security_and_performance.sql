@@ -233,9 +233,22 @@ END $$;
 DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'records') THEN
-    CREATE INDEX IF NOT EXISTS idx_records_type_external 
-      ON records(type, external_source, external_id) 
-      WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
+    -- Only create index if columns exist
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'records' 
+        AND column_name = 'external_source'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_schema = 'public' 
+        AND table_name = 'records' 
+        AND column_name = 'external_id'
+    ) THEN
+      CREATE INDEX IF NOT EXISTS idx_records_type_external 
+        ON records(type, external_source, external_id) 
+        WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
+    END IF;
   END IF;
 END $$;
 
@@ -243,12 +256,22 @@ END $$;
 -- COMMENTS
 -- ============================================================================
 
-COMMENT ON INDEX idx_records_type_created_at IS 
-  'Composite index for common query pattern: filter by type, order by created_at DESC';
+-- Add comments only if indexes exist
+DO $$
+BEGIN
+  IF EXISTS (SELECT FROM pg_indexes WHERE indexname = 'idx_records_type_created_at') THEN
+    COMMENT ON INDEX idx_records_type_created_at IS 
+      'Composite index for common query pattern: filter by type, order by created_at DESC';
+  END IF;
 
-COMMENT ON INDEX idx_relationships_source_record IS 
-  'Index on foreign key to records table for efficient joins';
+  IF EXISTS (SELECT FROM pg_indexes WHERE indexname = 'idx_relationships_source_record') THEN
+    COMMENT ON INDEX idx_relationships_source_record IS 
+      'Index on foreign key to records table for efficient joins';
+  END IF;
 
-COMMENT ON INDEX idx_relationships_user IS 
-  'Index on user_id for user-scoped queries';
+  IF EXISTS (SELECT FROM pg_indexes WHERE indexname = 'idx_relationships_user') THEN
+    COMMENT ON INDEX idx_relationships_user IS 
+      'Index on user_id for user-scoped queries';
+  END IF;
+END $$;
 
