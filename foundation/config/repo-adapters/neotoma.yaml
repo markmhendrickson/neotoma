@@ -1,0 +1,50 @@
+# Neotoma Repository Adapter
+# Neotoma-specific configuration overrides
+
+repo_name: "neotoma"
+extends: null
+
+# Neotoma uses snake_case for files (except React components)
+conventions:
+  typescript:
+    files: "snake_case"
+    string_quotes: "double"
+
+# Neotoma requires Agent Instructions in all docs
+documentation:
+  required_sections:
+    - "Purpose"
+    - "Scope"
+    - "Agent Instructions"
+  structure:
+    manifest_path: "docs/NEOTOMA_MANIFEST.md"
+    architecture_path: "docs/architecture/"
+    foundation_path: "docs/foundation/"
+  validation:
+    check_dependencies: true
+    enforce_agent_instructions: true
+
+# Neotoma has Feature Unit-based workflow
+development:
+  branch_strategy:
+    naming_pattern: "{prefix}/FU-{id}-{description}"
+  commit_format:
+    require_id: true
+    pattern: "FU-{id}: {description}"
+
+# Neotoma requires deterministic patterns
+custom:
+  determinism:
+    enabled: true
+    no_random_ids: true
+    no_current_timestamps: true
+    hash_based_ids: true
+  truth_layer:
+    enabled: true
+    no_strategy_logic: true
+    no_execution_logic: true
+  spec_compliance:
+    enabled: true
+  doc_dependencies:
+    enabled: true
+
