@@ -19,18 +19,29 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Collect environment variables for agents (check both DEV_* and non-DEV variants)
+// Collect environment variables for agents (use environment-specific variables only)
 const envVars = [];
-const supabaseUrl = process.env.DEV_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseKey = process.env.DEV_SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_KEY;
+const env = process.env.NODE_ENV || "development";
+const supabaseUrl = env === "production"
+  ? (process.env.PROD_SUPABASE_PROJECT_ID ? `https://${process.env.PROD_SUPABASE_PROJECT_ID}.supabase.co` : process.env.PROD_SUPABASE_URL)
+  : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL);
+const supabaseKey = env === "production"
+  ? process.env.PROD_SUPABASE_SERVICE_KEY
+  : process.env.DEV_SUPABASE_SERVICE_KEY;
 
 if (supabaseUrl) {
-  envVars.push(`DEV_SUPABASE_URL=${supabaseUrl}`);
-  envVars.push(`SUPABASE_URL=${supabaseUrl}`);
+  if (env === "production") {
+    envVars.push(`PROD_SUPABASE_URL=${supabaseUrl}`);
+  } else {
+    envVars.push(`DEV_SUPABASE_URL=${supabaseUrl}`);
+  }
 }
 if (supabaseKey) {
-  envVars.push(`DEV_SUPABASE_SERVICE_KEY=${supabaseKey}`);
-  envVars.push(`SUPABASE_SERVICE_KEY=${supabaseKey}`);
+  if (env === "production") {
+    envVars.push(`PROD_SUPABASE_SERVICE_KEY=${supabaseKey}`);
+  } else {
+    envVars.push(`DEV_SUPABASE_SERVICE_KEY=${supabaseKey}`);
+  }
 }
 if (process.env.OPENAI_API_KEY) {
   envVars.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);

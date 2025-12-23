@@ -50,7 +50,7 @@ const diagnostics = [
   {
     test: /Missing Supabase configuration|Missing SUPABASE_URL|Missing SUPABASE_SERVICE_KEY/i,
     message:
-      'Supabase environment missing. Populate .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or provide SUPABASE_URL/SUPABASE_SERVICE_KEY.',
+      'Supabase environment missing. Populate .env with DEV_SUPABASE_PROJECT_ID (or DEV_SUPABASE_URL) and DEV_SUPABASE_SERVICE_KEY.',
   },
   {
     test: /listen EADDRINUSE/i,
@@ -146,21 +146,22 @@ function clearDevServeState() {
 }
 
 function ensureBaseEnv() {
-  const urlKeys = ['DEV_SUPABASE_PROJECT_ID', 'DEV_SUPABASE_URL', 'SUPABASE_PROJECT_ID', 'SUPABASE_URL'];
-  const keyKeys = ['DEV_SUPABASE_SERVICE_KEY', 'SUPABASE_SERVICE_KEY'];
+  // Dev environment: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
+  const urlKeys = ['DEV_SUPABASE_PROJECT_ID', 'DEV_SUPABASE_URL'];
+  const keyKeys = ['DEV_SUPABASE_SERVICE_KEY'];
   const missing = [];
 
   if (!urlKeys.some((key) => hasValue(process.env[key]))) {
-    missing.push('Supabase URL or project id');
+    missing.push('Supabase URL or project id (DEV_SUPABASE_PROJECT_ID or DEV_SUPABASE_URL)');
   }
   if (!keyKeys.some((key) => hasValue(process.env[key]))) {
-    missing.push('Supabase service role key');
+    missing.push('Supabase service role key (DEV_SUPABASE_SERVICE_KEY)');
   }
 
   if (missing.length > 0) {
     console.error(`[dev-serve] Missing required environment values: ${missing.join(', ')}`);
     console.error(
-      '[dev-serve] Create .env with DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY or use SUPABASE_URL/SUPABASE_SERVICE_KEY.',
+      '[dev-serve] Create .env with DEV_SUPABASE_PROJECT_ID (or DEV_SUPABASE_URL) and DEV_SUPABASE_SERVICE_KEY.',
     );
     process.exit(1);
   }

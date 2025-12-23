@@ -28,31 +28,19 @@ function getSupabaseConfig() {
 
   const env = process.env.NODE_ENV || "development";
   if (env === "production") {
-    const prodId =
-      process.env.PROD_SUPABASE_PROJECT_ID || process.env.SUPABASE_PROJECT_ID;
+    // Production: ONLY use PROD_* variables, never generic SUPABASE_* to prevent accidental dev/prod mixups
+    const prodId = process.env.PROD_SUPABASE_PROJECT_ID;
     return {
-      url: buildUrl(
-        prodId,
-        process.env.PROD_SUPABASE_URL || process.env.SUPABASE_URL
-      ),
-      key:
-        process.env.PROD_SUPABASE_SERVICE_KEY ||
-        process.env.SUPABASE_SERVICE_KEY ||
-        "",
+      url: buildUrl(prodId, process.env.PROD_SUPABASE_URL),
+      key: process.env.PROD_SUPABASE_SERVICE_KEY || "",
     };
   }
 
-  const devId =
-    process.env.DEV_SUPABASE_PROJECT_ID || process.env.SUPABASE_PROJECT_ID;
+  // Development/test: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
+  const devId = process.env.DEV_SUPABASE_PROJECT_ID;
   return {
-    url: buildUrl(
-      devId,
-      process.env.DEV_SUPABASE_URL || process.env.SUPABASE_URL
-    ),
-    key:
-      process.env.DEV_SUPABASE_SERVICE_KEY ||
-      process.env.SUPABASE_SERVICE_KEY ||
-      "",
+    url: buildUrl(devId, process.env.DEV_SUPABASE_URL),
+    key: process.env.DEV_SUPABASE_SERVICE_KEY || "",
   };
 }
 

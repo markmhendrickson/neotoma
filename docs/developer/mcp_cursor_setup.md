@@ -33,14 +33,19 @@ This compiles TypeScript to JavaScript in the `dist/` directory. The `.cursor/mc
 The MCP server automatically loads Supabase credentials from `.env`. Create this file in the project root:
 
 ```bash
-# Supabase Configuration
-DEV_SUPABASE_URL=https://your-project-id.supabase.co
+# Supabase Configuration (preferred: use Project ID)
+DEV_SUPABASE_PROJECT_ID=your-project-id
 DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
+
+# Alternative: Full URL (also supported)
+# DEV_SUPABASE_URL=https://your-project-id.supabase.co
+# DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 ```
 
 **Where to find Supabase credentials:**
 
-- **Project URL**: Settings → API → Project URL
+- **Project ID**: Settings → General → Project ID (preferred)
+- **Project URL**: Settings → API → Project URL (alternative - extract ID from URL)
 - **Service Role Key**: Settings → API → service_role key (NOT anon key)
 
 **Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
