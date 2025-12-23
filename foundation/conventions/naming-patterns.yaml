@@ -1,0 +1,88 @@
+# Naming Patterns Configuration
+# Template for configuring naming conventions across all languages
+
+typescript:
+  # File naming
+  files: "snake_case"  # Options: "snake_case", "kebab-case", "camelCase"
+  components: "PascalCase"  # React/Vue components
+  
+  # Code naming
+  functions: "camelCase"
+  types: "PascalCase"
+  interfaces: "PascalCase"
+  variables: "camelCase"
+  constants: "UPPER_SNAKE_CASE"
+  classes: "PascalCase"
+  
+  # String quotes
+  string_quotes: "double"  # Options: "double", "single"
+  
+  # Export patterns
+  prefer_named_exports: true
+  
+  # Import organization
+  import_order:
+    - "external"  # node_modules
+    - "internal"  # from src/
+    - "relative"  # ./ or ../
+
+sql:
+  # Database naming
+  tables: "snake_case"  # Always plural
+  columns: "snake_case"
+  indexes: "idx_{table}_{columns}"
+  constraints: "{table}_{constraint_type}"  # e.g., users_pkey
+  
+  # RLS policies
+  policies: "{action} - {table}"  # e.g., "Service role full access - users"
+  
+  # Common suffixes
+  timestamp_columns:
+    created: "created_at"
+    updated: "updated_at"
+    deleted: "deleted_at"
+
+yaml:
+  # Key naming
+  keys: "snake_case"
+  
+  # Formatting
+  indentation: 2
+  use_quotes: "when_needed"  # Options: "always", "never", "when_needed"
+  
+  # Booleans
+  boolean_style: "lowercase"  # true/false
+
+shell:
+  # Variable naming
+  constants: "UPPER_SNAKE_CASE"
+  local_variables: "lowercase"
+  
+  # Function naming
+  functions: "snake_case"  # Options: "snake_case", "camelCase"
+  
+  # File naming
+  scripts: "kebab-case.sh"  # Options: "kebab-case.sh", "snake_case.sh"
+
+# Project-specific prefixes/suffixes
+prefixes:
+  entity_id: "ent_"
+  record_id: "rec_"
+  user_id: "usr_"
+  # Add project-specific prefixes here
+
+suffixes:
+  test_file: ".test.ts"
+  spec_file: ".spec.ts"
+  integration_test: ".integration.test.ts"
+  e2e_test: ".e2e.test.ts"
+
+# Branch naming
+git:
+  feature_prefix: "feature"
+  bugfix_prefix: "bugfix"
+  hotfix_prefix: "hotfix"
+  release_prefix: "release"
+  naming_pattern: "{prefix}/{id}-{description}"  # or "{prefix}/{description}"
+  require_id: true
+

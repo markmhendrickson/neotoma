@@ -1,0 +1,291 @@
+# Foundation Configuration Template
+# Configure all foundation processes for your repository
+
+# Repository information
+repository:
+  name: "your-project"
+  type: "application"  # or "library", "service", "monorepo"
+  languages:
+    - "typescript"
+    - "sql"
+    - "yaml"
+    - "shell"
+
+# Development workflow configuration
+development:
+  # Branch strategy
+  branch_strategy:
+    main_branches:
+      - "main"
+      - "dev"
+    feature_prefix: "feature"
+    bugfix_prefix: "bugfix"
+    hotfix_prefix: "hotfix"
+    release_prefix: "release"
+    naming_pattern: "{prefix}/{id}-{description}"  # or "{prefix}/{description}"
+    require_id: true  # whether ID is required in branch names
+  
+  # Workflow preferences
+  workflow:
+    use_worktrees: true
+    worktree_base_path: "../{repo}-{branch}"
+    env_copy_script: "scripts/copy-env-to-worktree.js"  # optional
+  
+  # Commit format
+  commit_format:
+    require_id: true  # whether ID is required in commit messages
+    require_references: false  # whether "References:" line is required
+    pattern: "{id}: {description}"  # or custom pattern
+  
+  # Pull requests
+  pull_requests:
+    require_id_in_title: true
+    title_pattern: "{id}: {description}"
+    min_approvals: 1
+    high_risk_approvals: 2
+    require_review_from_code_owners: false
+    merge_strategy: "squash"  # or "merge", "rebase"
+    delete_branch_on_merge: true
+    require_linear_history: false
+
+# Code conventions
+conventions:
+  typescript:
+    files: "snake_case"  # or "kebab-case", "camelCase"
+    components: "PascalCase"  # React/Vue components
+    functions: "camelCase"
+    types: "PascalCase"
+    interfaces: "PascalCase"
+    variables: "camelCase"
+    constants: "UPPER_SNAKE_CASE"
+    classes: "PascalCase"
+    string_quotes: "double"  # or "single"
+    prefer_named_exports: true
+    import_order:
+      - "external"  # node_modules
+      - "internal"  # from src/
+      - "relative"  # ./ or ../
+  
+  sql:
+    tables: "snake_case"  # Always plural
+    columns: "snake_case"
+    indexes: "idx_{table}_{columns}"
+    constraints: "{table}_{constraint_type}"
+    policies: "{action} - {table}"  # if using RLS
+    use_rls: false  # Postgres Row Level Security
+    timestamp_columns:
+      created: "created_at"
+      updated: "updated_at"
+      deleted: "deleted_at"
+  
+  yaml:
+    keys: "snake_case"
+    indentation: 2
+    use_quotes: "when_needed"  # or "always", "never"
+    boolean_style: "lowercase"  # true/false
+  
+  shell:
+    constants: "UPPER_SNAKE_CASE"
+    local_variables: "lowercase"
+    functions: "snake_case"  # or "camelCase"
+    scripts: "kebab-case.sh"
+
+# Testing configuration
+testing:
+  framework: "vitest"  # or "jest", "mocha", "pytest", "go test"
+  coverage:
+    domain_logic: 85
+    application_layer: 80
+    ui_components: 75
+    infrastructure: 70
+  test_types:
+    - "unit"
+    - "integration"
+    - "e2e"
+  test_file_suffix: ".test.ts"  # or ".spec.ts", "_test.py"
+
+# Documentation standards
+documentation:
+  required_sections:
+    - "Purpose"
+    - "Scope"
+    # "Agent Instructions"  # Optional, uncomment to enable
+  structure:
+    manifest_path: null  # or "docs/manifest.md"
+    architecture_path: "docs/architecture/"
+    foundation_path: null  # or "docs/foundation/"
+  validation:
+    check_dependencies: false  # whether to validate doc dependencies
+    check_links: true
+    enforce_agent_instructions: false
+  writing_style:
+    avoid_ai_patterns: true
+    require_rfc_2119: true  # MUST/MUST NOT language
+    max_sentence_length: null  # or number for enforcement
+
+# Validation systems
+validation:
+  spec_compliance:
+    enabled: false  # whether to validate code against specs
+    spec_paths:
+      - "docs/specs/**/*.md"
+      - "docs/features/**/*.md"
+    requirement_patterns:
+      - "MUST"
+      - "MUST NOT"
+      - "SHALL"
+      - "REQUIRED"
+    check_types:
+      - "code_existence"
+      - "database_schema"
+      - "validation_logic"
+      - "testing"
+  
+  doc_dependencies:
+    enabled: false
+    dependency_map_path: "docs/doc_dependencies.yaml"
+    check_on_commit: false
+    auto_suggest_updates: false
+
+# Security configuration
+security:
+  enabled: true
+  pre_commit_audit:
+    enabled: true
+    protected_paths:
+      - "docs/private/"  # Repo-specific
+      - "data/"          # Repo-specific
+      - ".env*"
+    protected_patterns:
+      - "\.env"
+      - "secrets"
+      - "credentials"
+  credential_management:
+    enabled: true
+    require_env_separation: false  # whether to require DEV_*/PROD_* prefixes
+    secrets_manager:
+      enabled: false
+      storage_path: ".secrets/secrets.enc"
+      key_path: ".secrets/.key"
+      algorithm: "aes-256-gcm"
+      master_key_env: "SECRETS_MASTER_KEY"
+
+# Tooling configuration
+tooling:
+  secrets:
+    enabled: false
+    storage_path: ".secrets/secrets.enc"
+    key_path: ".secrets/.key"
+    algorithm: "aes-256-gcm"
+    master_key_env: "SECRETS_MASTER_KEY"
+  
+  env_management:
+    enabled: true
+    env_file_priority:
+      - ".env.dev"
+      - ".env"
+      - ".env.development"
+    worktree_detection:
+      cursor_worktrees: true
+      custom_patterns: []
+    environment_separation:
+      enabled: false
+      dev_prefix: "DEV_"
+      prod_prefix: "PROD_"
+      require_explicit_env: false  # whether to prevent generic variables
+  
+  agent_setup:
+    enabled: false
+    database:
+      type: null  # "supabase", "postgres", "mysql", etc.
+      migration_command: null  # "supabase db push" or custom
+      fallback_script: null  # "scripts/apply_migrations.js"
+    tools: []
+      # - name: "playwright"
+      #   install_command: "npx playwright install --with-deps chromium"
+      # - name: "database_cli"
+      #   verify_command: "npx supabase --version"
+  
+  readme_generation:
+    enabled: false
+    source_documents: []
+      # - "docs/foundation/core_identity.md"
+      # - "docs/specs/overview.md"
+    structure_template: null  # "templates/readme-structure.md"
+    regenerate_triggers: []
+      # - "docs/foundation/**/*.md"
+      # - "docs/specs/**/*.md"
+
+# Agent instructions configuration
+agent_instructions:
+  enabled: false
+  location: "docs/foundation/agent_instructions.md"  # or ".cursor/rules/"
+  cursor_rules:
+    enabled: false
+    location: ".cursor/rules/"
+  cursor_commands:
+    enabled: false
+    location: ".cursor/commands/"
+  constraints: []
+    # Project-specific constraints
+    # - "Never commit secrets"
+    # - "Always update documentation when code changes"
+  validation_checklist:
+    enabled: false
+    custom_checks: []  # Repo-specific checks
+
+# Strategy evaluation (optional)
+strategy:
+  discovery:
+    enabled: false
+    framework: "cagan"  # or "lean", "jobs-to-be-done"
+    risks:
+      value:
+        enabled: false
+        method: "interviews"  # or "surveys", "prototypes"
+        success_threshold: 70  # % validating problem
+        min_participants: 5
+      usability:
+        enabled: false
+        method: "prototype_testing"
+        success_threshold: 80  # % completing workflows
+        min_participants: 5
+      feasibility:
+        enabled: false
+        method: "poc"  # or "architectural_review"
+        success_criteria: "meets_requirements"
+      business_viability:
+        enabled: false
+        method: "pricing_interviews"
+        success_threshold: 50  # % willing to pay
+        min_participants: 5
+    mom_test:
+      enabled: false
+      require_live_interviews: false
+      commitment_signals:
+        - "time_spent"
+        - "money_spent"
+        - "reputation_risk"
+        - "emotional_intensity"
+    continuous_discovery:
+      enabled: false
+      frequency: "weekly"  # or "bi-weekly", "monthly"
+      min_participants_per_cycle: 2
+
+# Release orchestration (optional)
+orchestration:
+  release:
+    enabled: false
+    execution_strategy: "sequential"  # or "multi_agent", "parallel"
+    max_parallel_items: 3
+    agent_spawning:
+      enabled: false  # Requires Cursor Cloud API
+      api_url: "${CURSOR_CLOUD_API_URL}"
+      api_key: "${CURSOR_CLOUD_API_KEY}"
+
+# Project-specific extensions
+# Add custom configuration sections here
+custom:
+  # Your project-specific config
+  example_setting: "value"
+
