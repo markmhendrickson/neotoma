@@ -26,7 +26,8 @@ if (process.env.SUPABASE_URL) creds.push(`SUPABASE_URL=${process.env.SUPABASE_UR
 if (process.env.SUPABASE_SERVICE_KEY) creds.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
 if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
 if (process.env.DEV_SUPABASE_SERVICE_KEY) creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
-if (process.env.OPENAI_API_KEY) creds.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
+if (process.env.DEV_OPENAI_API_KEY) creds.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
+if (process.env.PROD_OPENAI_API_KEY) creds.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
 
 if (creds.length === 0) {
   console.error('[ERROR] No Supabase credentials available in orchestrator environment');

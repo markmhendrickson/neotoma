@@ -961,7 +961,7 @@ export class NeotomaServer {
         query_embedding = generated || undefined;
         if (!query_embedding && search_mode === "semantic") {
           throw new Error(
-            "Failed to generate query embedding. Ensure OPENAI_API_KEY is configured or provide query_embedding.",
+            "Failed to generate query embedding. Ensure DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) is configured or provide query_embedding.",
           );
         }
       }
@@ -969,7 +969,7 @@ export class NeotomaServer {
       if (!query_embedding) {
         if (search_mode === "semantic") {
           throw new Error(
-            "query_embedding required for semantic search, or configure OPENAI_API_KEY for automatic generation",
+            "query_embedding required for semantic search, or configure DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) for automatic generation",
           );
         }
         // If both mode, just skip semantic and do keyword only

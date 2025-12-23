@@ -37,11 +37,43 @@ function getSupabaseConfig() {
 
 const supabaseConfig = getSupabaseConfig();
 
+function getOpenAIConfig() {
+  if (env === "production") {
+    // Production: ONLY use PROD_* variables, never generic OPENAI_API_KEY to prevent accidental dev/prod mixups
+    return process.env.PROD_OPENAI_API_KEY || "";
+  }
+
+  // Development/test: ONLY use DEV_* variables, never generic OPENAI_API_KEY to prevent accidental prod usage
+  return process.env.DEV_OPENAI_API_KEY || "";
+}
+
+function getConnectorSecretKey() {
+  if (env === "production") {
+    // Production: ONLY use PROD_* variables, never generic CONNECTOR_SECRET_KEY to prevent accidental dev/prod mixups
+    return (
+      process.env.PROD_CONNECTOR_SECRET_KEY ||
+      // Backward compatibility: support generic name during transition
+      process.env.CONNECTOR_SECRET_KEY ||
+      process.env.CONNECTOR_SECRETS_KEY ||
+      ""
+    );
+  }
+
+  // Development/test: ONLY use DEV_* variables, never generic CONNECTOR_SECRET_KEY to prevent accidental prod usage
+  return (
+    process.env.DEV_CONNECTOR_SECRET_KEY ||
+    // Backward compatibility: support generic name during transition
+    process.env.CONNECTOR_SECRET_KEY ||
+    process.env.CONNECTOR_SECRETS_KEY ||
+    ""
+  );
+}
+
 export const config = {
   supabaseUrl: supabaseConfig.url,
   supabaseKey: supabaseConfig.key,
-  openaiApiKey: process.env.OPENAI_API_KEY || "",
-  connectorSecretKey: process.env.CONNECTOR_SECRET_KEY || process.env.CONNECTOR_SECRETS_KEY || "",
+  openaiApiKey: getOpenAIConfig(),
+  connectorSecretKey: getConnectorSecretKey(),
   port: parseInt(process.env.PORT || "3000", 10),
   httpPort: parseInt(process.env.HTTP_PORT || "8080", 10),
   environment: env,

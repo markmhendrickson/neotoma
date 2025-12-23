@@ -31,8 +31,9 @@ node scripts/secrets_manager.js set DEV_SUPABASE_SERVICE_KEY "your-service-role-
 node scripts/secrets_manager.js set SUPABASE_URL "https://your-project.supabase.co"
 node scripts/secrets_manager.js set SUPABASE_SERVICE_KEY "your-service-role-key"
 
-# OpenAI API key
-node scripts/secrets_manager.js set OPENAI_API_KEY "sk-your-key"
+# OpenAI API keys (environment-specific)
+node scripts/secrets_manager.js set DEV_OPENAI_API_KEY "sk-your-dev-key"
+node scripts/secrets_manager.js set PROD_OPENAI_API_KEY "sk-your-prod-key"
 ```
 
 ### 3. Retrieve Secrets

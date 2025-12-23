@@ -144,7 +144,14 @@ function getConnectorSecretKey(): Buffer {
 
   const secret = config.connectorSecretKey;
   if (!secret || secret.length < 16) {
-    throw new Error("CONNECTOR_SECRET_KEY must be defined and at least 16 characters long");
+    const envVar =
+      config.environment === "production"
+        ? "PROD_CONNECTOR_SECRET_KEY"
+        : "DEV_CONNECTOR_SECRET_KEY";
+    throw new Error(
+      `${envVar} must be defined and at least 16 characters long. ` +
+        `This key encrypts OAuth tokens and must remain static within each environment.`
+    );
   }
 
   cachedSecretKey = crypto.createHash("sha256").update(secret).digest();

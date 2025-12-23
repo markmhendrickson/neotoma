@@ -1274,11 +1274,11 @@ app.post("/retrieve_records", async (req, res) => {
       if (search_mode === "semantic") {
         logWarn("ValidationError:retrieve_records:no_embedding", req, {
           message:
-            "query_embedding required for semantic search or OPENAI_API_KEY must be configured",
+            "query_embedding required for semantic search or DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) must be configured",
         });
         return res.status(400).json({
           error:
-            "query_embedding required for semantic search, or configure OPENAI_API_KEY for automatic generation",
+            "query_embedding required for semantic search, or configure DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) for automatic generation",
         });
       }
       // If both mode, just skip semantic and do keyword only
@@ -2930,7 +2930,7 @@ app.post("/chat", async (req, res) => {
   if (!config.openaiApiKey) {
     return res
       .status(400)
-      .json({ error: "OPENAI_API_KEY not configured on server" });
+      .json({ error: "DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) not configured on server" });
   }
 
   const {
