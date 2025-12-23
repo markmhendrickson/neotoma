@@ -36,6 +36,7 @@ This document does NOT cover:
 **Diagnosis:**
 ```bash
 # Check environment variables
+echo $DEV_SUPABASE_PROJECT_ID
 echo $DEV_SUPABASE_URL
 echo $DEV_SUPABASE_SERVICE_KEY
 
@@ -45,7 +46,7 @@ ls -la .env
 
 **Solution:**
 1. Verify `.env` exists in project root
-2. Check variable names: `DEV_SUPABASE_URL` and `DEV_SUPABASE_SERVICE_KEY`
+2. Check variable names: `DEV_SUPABASE_PROJECT_ID` (preferred) or `DEV_SUPABASE_URL`, and `DEV_SUPABASE_SERVICE_KEY`
 3. Ensure no extra spaces or quotes around values
 4. Restart terminal/IDE to reload environment variables
 5. For GUI apps (macOS), load env explicitly:

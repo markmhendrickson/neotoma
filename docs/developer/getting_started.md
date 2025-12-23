@@ -107,9 +107,13 @@ This creates:
 Create `.env` in the project root:
 
 ```bash
-# Supabase Configuration
-DEV_SUPABASE_URL=https://your-project-id.supabase.co
+# Supabase Configuration (preferred: use Project ID)
+DEV_SUPABASE_PROJECT_ID=your-project-id
 DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
+
+# Alternative: Full URL (also supported)
+# DEV_SUPABASE_URL=https://your-project-id.supabase.co
+# DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 
 # Optional: MCP/HTTP Server
 PORT=3000
@@ -128,7 +132,8 @@ OPENAI_API_KEY=sk-your-api-key-here
 ```
 
 **Where to find Supabase credentials:**
-- **Project URL**: Settings → API → Project URL
+- **Project ID**: Settings → General → Project ID (preferred)
+- **Project URL**: Settings → API → Project URL (alternative - extract ID from URL)
 - **Service Role Key**: Settings → API → service_role key (NOT anon key)
 
 **Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
@@ -207,7 +212,7 @@ npm test -- src/index.test.ts
 
 **Solution:**
 - Ensure `.env` exists in project root
-- Verify variable names: `DEV_SUPABASE_URL` and `DEV_SUPABASE_SERVICE_KEY`
+- Verify variable names: `DEV_SUPABASE_PROJECT_ID` (preferred) or `DEV_SUPABASE_URL`, and `DEV_SUPABASE_SERVICE_KEY`
 - Restart terminal/IDE to reload environment variables
 
 ### Issue: Tests Fail with "relation does not exist"

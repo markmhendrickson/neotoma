@@ -287,9 +287,14 @@ async function main() {
 
   console.log("[INFO] Checking Supabase Advisor issues...\n");
 
-  // Get Supabase config
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.DEV_SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.DEV_SUPABASE_SERVICE_KEY;
+  // Get Supabase config - use environment-specific variables only
+  const env = process.env.NODE_ENV || "development";
+  const supabaseUrl = env === "production" 
+    ? (process.env.PROD_SUPABASE_PROJECT_ID ? `https://${process.env.PROD_SUPABASE_PROJECT_ID}.supabase.co` : process.env.PROD_SUPABASE_URL)
+    : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL);
+  const supabaseKey = env === "production"
+    ? process.env.PROD_SUPABASE_SERVICE_KEY
+    : process.env.DEV_SUPABASE_SERVICE_KEY;
 
   let supabase: any = null;
   if (supabaseUrl && supabaseKey) {

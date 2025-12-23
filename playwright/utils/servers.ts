@@ -122,14 +122,13 @@ export function buildBackendEnv(
   port: number,
   options: { bearerToken: string; wsPort?: number },
 ): NodeJS.ProcessEnv {
-  const supabaseUrl =
-    ensureValue(process.env.DEV_SUPABASE_URL, process.env.SUPABASE_URL) ||
-    'https://example.supabase.co';
+  // Test environment: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
+  const supabaseProjectId = process.env.DEV_SUPABASE_PROJECT_ID;
+  const supabaseUrl = supabaseProjectId
+    ? `https://${supabaseProjectId}.supabase.co`
+    : ensureValue(process.env.DEV_SUPABASE_URL) || 'https://example.supabase.co';
   const supabaseKey =
-    ensureValue(
-      process.env.DEV_SUPABASE_SERVICE_KEY,
-      process.env.SUPABASE_SERVICE_KEY,
-    ) || 'test-service-role-key';
+    ensureValue(process.env.DEV_SUPABASE_SERVICE_KEY) || 'test-service-role-key';
   const connectorSecret =
     ensureValue(
       process.env.CONNECTOR_SECRET_KEY,
@@ -150,8 +149,6 @@ export function buildBackendEnv(
     CONNECTOR_SECRETS_KEY: connectorSecret,
     DEV_SUPABASE_URL: supabaseUrl,
     DEV_SUPABASE_SERVICE_KEY: supabaseKey,
-    SUPABASE_URL: supabaseUrl,
-    SUPABASE_SERVICE_KEY: supabaseKey,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
   };
 }
