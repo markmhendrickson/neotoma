@@ -45,7 +45,10 @@ function loadCredentials() {
   if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
   if (process.env.DEV_SUPABASE_SERVICE_KEY)
     creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
-  if (process.env.OPENAI_API_KEY) creds.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
+  if (process.env.DEV_OPENAI_API_KEY)
+    creds.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
+  if (process.env.PROD_OPENAI_API_KEY)
+    creds.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
   if (process.env.ACTIONS_BEARER_TOKEN)
     creds.push(`ACTIONS_BEARER_TOKEN=${process.env.ACTIONS_BEARER_TOKEN}`);
   return creds;
@@ -62,7 +65,7 @@ Environment variables should be automatically injected via Cursor Cloud Agents S
 1. **Verify environment variables are available:**
    \`\`\`bash
    env | grep -E "SUPABASE.*=" || echo "No Supabase credentials found"
-   env | grep -E "OPENAI_API_KEY" || echo "No OpenAI API key found"
+   env | grep -E "OPENAI_API_KEY|DEV_OPENAI_API_KEY|PROD_OPENAI_API_KEY" || echo "No OpenAI API key found"
    \`\`\`
 
 2. **If environment variables are missing**, they need to be configured in Cursor Settings → Cloud Agents → Secrets.

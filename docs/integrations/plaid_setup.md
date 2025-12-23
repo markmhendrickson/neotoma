@@ -61,12 +61,17 @@ This document does NOT cover:
 Add to `.env`:
 
 ```bash
-# Plaid Configuration
-PLAID_CLIENT_ID=your_client_id_here
-PLAID_SECRET=your_secret_here
+# Plaid Configuration - Development Environment
+DEV_PLAID_CLIENT_ID=your_dev_client_id_here
+DEV_PLAID_SECRET=your_dev_secret_here
 PLAID_ENV=sandbox  # or 'production' for live
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
+
+# Production Environment (if needed)
+# PROD_PLAID_CLIENT_ID=your_prod_client_id_here
+# PROD_PLAID_SECRET=your_prod_secret_here
+# PLAID_ENV=production
 
 # Optional: Webhook URL (for production)
 PLAID_WEBHOOK_URL=https://your-domain.com/import/plaid/webhook
@@ -382,9 +387,10 @@ Sandbox institutions have pre-populated transactions:
 ### Issue: "invalid_client_id" or "invalid_secret"
 
 **Solution:**
-- Verify `PLAID_CLIENT_ID` and `PLAID_SECRET` in `.env`
+- Verify `DEV_PLAID_CLIENT_ID` and `DEV_PLAID_SECRET` (or `PROD_*` for production) in `.env`
 - Check for extra spaces or quotes
-- Ensure using sandbox credentials (not production)
+- Ensure using sandbox credentials for development (not production)
+- Ensure environment-specific variables match your `NODE_ENV` setting
 
 ### Issue: "link_token expired"
 
@@ -454,8 +460,8 @@ Sandbox institutions have pre-populated transactions:
 2. **Update Environment Variables:**
    ```bash
    PLAID_ENV=production
-   PLAID_CLIENT_ID=<production-client-id>
-   PLAID_SECRET=<production-secret>
+   PROD_PLAID_CLIENT_ID=<production-client-id>
+   PROD_PLAID_SECRET=<production-secret>
    ```
 
 3. **Update Redirect URIs:**

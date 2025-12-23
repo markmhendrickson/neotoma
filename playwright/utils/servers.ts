@@ -131,6 +131,8 @@ export function buildBackendEnv(
     ensureValue(process.env.DEV_SUPABASE_SERVICE_KEY) || 'test-service-role-key';
   const connectorSecret =
     ensureValue(
+      process.env.DEV_CONNECTOR_SECRET_KEY,
+      // Backward compatibility: support generic name during transition
       process.env.CONNECTOR_SECRET_KEY,
       process.env.CONNECTOR_SECRETS_KEY,
     ) || 'test-connector-secret-test-connector-secret';

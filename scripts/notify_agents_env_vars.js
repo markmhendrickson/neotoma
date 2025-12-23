@@ -43,8 +43,14 @@ if (supabaseKey) {
     envVars.push(`DEV_SUPABASE_SERVICE_KEY=${supabaseKey}`);
   }
 }
-if (process.env.OPENAI_API_KEY) {
-  envVars.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
+if (env === "production") {
+  if (process.env.PROD_OPENAI_API_KEY) {
+    envVars.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
+  }
+} else {
+  if (process.env.DEV_OPENAI_API_KEY) {
+    envVars.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
+  }
 }
 if (process.env.ACTIONS_BEARER_TOKEN) {
   envVars.push(`ACTIONS_BEARER_TOKEN=${process.env.ACTIONS_BEARER_TOKEN}`);

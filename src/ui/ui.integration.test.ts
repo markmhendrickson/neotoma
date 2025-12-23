@@ -77,6 +77,8 @@ function buildBackendEnv(port: string): NodeJS.ProcessEnv {
     process.env.SUPABASE_SERVICE_KEY ||
     "test-service-role-key";
   const connectorSecret =
+    process.env.DEV_CONNECTOR_SECRET_KEY ||
+    // Backward compatibility: support generic name during transition
     process.env.CONNECTOR_SECRET_KEY ||
     process.env.CONNECTOR_SECRETS_KEY ||
     "test-connector-secret-test-connector-secret";

@@ -9,7 +9,7 @@ const openai = config.openaiApiKey
  * Generate an embedding vector from text.
  *
  * Supports multiple providers (priority order):
- * 1. OpenAI (if OPENAI_API_KEY is set) - uses text-embedding-3-small (1536 dimensions)
+ * 1. OpenAI (if DEV_OPENAI_API_KEY or PROD_OPENAI_API_KEY is set) - uses text-embedding-3-small (1536 dimensions)
  * 2. Future: Add support for Cohere, Hugging Face, local models, etc.
  *
  * Returns null if no provider is configured.
