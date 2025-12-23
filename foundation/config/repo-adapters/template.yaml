@@ -1,0 +1,36 @@
+# Repository Adapter Template
+# Copy this file and customize for your repository
+
+repo_name: "example-repo"
+extends: null  # or path to another adapter to extend from
+
+# Override any foundation-config.yaml settings here
+# Only include settings you want to change
+
+development:
+  branch_strategy:
+    feature_prefix: "feat"  # Override default
+    # naming_pattern: "{prefix}/{description}"  # No ID required
+
+conventions:
+  typescript:
+    files: "kebab-case"  # Override default
+    string_quotes: "single"  # Override default
+
+documentation:
+  required_sections:
+    - "Purpose"
+    - "Scope"
+    # Don't require "Agent Instructions" for this repo
+
+security:
+  pre_commit_audit:
+    protected_paths:
+      - "private/"  # Different from default "docs/private/"
+      - "sensitive/"
+
+# Add repo-specific config
+custom:
+  deploy_target: "production"
+  api_version: "v2"
+
