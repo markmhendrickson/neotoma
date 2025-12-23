@@ -78,13 +78,13 @@ This document does NOT cover:
 5. **Save credentials:**
    - Copy **Client ID**
    - Copy **Client Secret**
-   - Store securely (you'll add these to `.env.development`)
+   - Store securely (you'll add these to `.env`)
 
 ---
 
 ## Step 4: Configure Environment Variables
 
-Add to `.env.development`:
+Add to `.env`:
 
 ```bash
 # Gmail OAuth Configuration

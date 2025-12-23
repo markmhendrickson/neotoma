@@ -10,7 +10,7 @@ For ChatGPT Custom GPT setup, see [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md)
 
 1. **Node.js** v18.x or v20.x installed
 2. **Supabase project** set up with schema applied (see `docs/developer/getting_started.md`)
-3. **Environment variables** configured in `.env.development`
+3. **Environment variables** configured in `.env`
 
 ---
 
@@ -30,7 +30,7 @@ This compiles TypeScript to JavaScript in the `dist/` directory. The `.cursor/mc
 
 ## Step 2: Configure Environment Variables
 
-The MCP server automatically loads Supabase credentials from `.env.development`. Create this file in the project root:
+The MCP server automatically loads Supabase credentials from `.env`. Create this file in the project root:
 
 ```bash
 # Supabase Configuration
@@ -43,9 +43,9 @@ DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 - **Project URL**: Settings → API → Project URL
 - **Service Role Key**: Settings → API → service_role key (NOT anon key)
 
-**Security Note:** Never commit `.env.development` to git. It's already in `.gitignore`.
+**Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
 
-The `.cursor/mcp.json` file doesn't need environment variables because the server loads them automatically from `.env.development` when it starts.
+The `.cursor/mcp.json` file doesn't need environment variables because the server loads them automatically from `.env` when it starts.
 
 ---
 
@@ -193,7 +193,7 @@ This error means the environment variables aren't being passed to the MCP server
 
    **Security Note:** This exposes credentials in the config file. Only use for local development.
 
-3. **Use a wrapper script** that loads from `.env.development`:
+3. **Use a wrapper script** that loads from `.env`:
    Create a script that loads env vars and then runs the server.
 
 ### Issue: "Database connection failed"
@@ -342,8 +342,8 @@ To use the Neotoma MCP server from a different workspace/repository:
    **Important:**
 
    - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
-   - Set `cwd` to the Neotoma project root (required for `.env.development` loading)
-   - The server will load credentials from Neotoma's `.env.development` file automatically
+   - Set `cwd` to the Neotoma project root (required for `.env` loading)
+   - The server will load credentials from Neotoma's `.env` file automatically
    - **For auto-rebuild:** Run `npm run dev:mcp` in the Neotoma repo to watch for changes
    - **After code changes:** Restart Cursor to reload the MCP server with the new build
 

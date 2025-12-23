@@ -40,17 +40,17 @@ echo $DEV_SUPABASE_URL
 echo $DEV_SUPABASE_SERVICE_KEY
 
 # Or check .env file exists
-ls -la .env.development
+ls -la .env
 ```
 
 **Solution:**
-1. Verify `.env.development` exists in project root
+1. Verify `.env` exists in project root
 2. Check variable names: `DEV_SUPABASE_URL` and `DEV_SUPABASE_SERVICE_KEY`
 3. Ensure no extra spaces or quotes around values
 4. Restart terminal/IDE to reload environment variables
 5. For GUI apps (macOS), load env explicitly:
    ```bash
-   set -a; source .env.development; set +a
+   set -a; source .env; set +a
    ```
 
 ---

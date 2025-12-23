@@ -16,7 +16,7 @@ import { createClient } from "@supabase/supabase-js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Load environment variables
-dotenv.config({ path: ".env.development" });
+dotenv.config();
 dotenv.config();
 
 // Get Supabase config
