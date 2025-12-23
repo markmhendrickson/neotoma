@@ -15,14 +15,29 @@ if (!process.env.OPENAI_API_KEY) {
     // Use dynamic import to avoid issues with module resolution
     const migrationModule = await import("./scripts/run_migrations.js");
     if (migrationModule.runMigrations) {
-      await migrationModule.runMigrations(false);
+      const success = await migrationModule.runMigrations(false);
+      if (!success) {
+        console.error(
+          "[ERROR] Migrations could not be applied. Tests may fail due to missing tables."
+        );
+        console.error(
+          "[ERROR] Required tables: state_events, entities, payload_submissions, schema_registry"
+        );
+        console.error(
+          "[ERROR] To fix: Run supabase/migrations/APPLY_ALL_MISSING_TABLES.sql in Supabase Dashboard SQL Editor"
+        );
+        // Don't exit - let tests run and fail clearly rather than silently
+      }
     }
   } catch (error) {
-    console.warn(
-      `[WARN] Could not run migrations in vitest.setup: ${
+    console.error(
+      `[ERROR] Could not run migrations in vitest.setup: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
-    // Continue anyway - migrations might already be applied
+    console.error(
+      "[ERROR] Tests may fail due to missing database tables."
+    );
+    // Don't exit - let tests run and fail clearly
   }
 })();

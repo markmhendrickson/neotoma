@@ -293,9 +293,18 @@ export async function runMigrations(dryRun = false) {
     console.log("  supabase db push");
   }
 
-  // For test environments, we'll assume migrations are already applied
-  // or will be applied manually
-  return true;
+  // For test environments, try to apply migrations directly if possible
+  // Otherwise, fail so tests don't run with missing tables
+  console.error(
+    "\n[ERROR] Migrations could not be applied automatically."
+  );
+  console.error(
+    "[ERROR] Tests will fail without these tables: state_events, entities, payload_submissions, schema_registry"
+  );
+  console.error(
+    "\n[ERROR] To fix: Apply migrations via Supabase Dashboard SQL Editor or ensure Supabase CLI is configured."
+  );
+  return false;
 }
 
 // Main execution (only if run directly, not imported)
