@@ -18,8 +18,14 @@ Every AI assistant (Cursor, ChatGPT, Claude) working on Neotoma MUST follow:
 
 1. **Load `docs/context/index.md` FIRST** (navigation guide and entry point)
 2. Load foundation documents from `docs/foundation/` as indicated by context index
-3. Load task-specific docs as indicated by context index
-4. Load `docs/conventions/documentation_standards.md` if creating/editing docs
+3. **Load shared foundation processes from `foundation/` submodule** when needed:
+   - `foundation/development/workflow.md` - For git workflow, branching, PRs
+   - `foundation/conventions/code-conventions.md` - For code style and naming
+   - `foundation/conventions/documentation-standards.md` - For documentation structure
+   - `foundation/security/security-rules.md` - For security practices
+   - `foundation-config.yaml` - For Neotoma-specific configuration
+4. Load task-specific docs as indicated by context index
+5. Load `docs/conventions/documentation_standards.md` if creating/editing docs
 
 ### 23.2 Absolute Constraints
 
@@ -66,20 +72,32 @@ Every AI assistant (Cursor, ChatGPT, Claude) working on Neotoma MUST follow:
 When generating docs, specs, or Feature Units:
 
 1. **Treat foundation documents in `docs/foundation/` as root context** (resolve ambiguities here)
-2. **Reject scope creep** (stay within Truth Layer)
-3. **Validate against invariants** (MUST/MUST NOT lists)
-4. **Apply constraints to all artifacts** (specs, code, tests)
-5. **Treat forbidden patterns as errors** (halt and report)
+2. **Follow shared foundation documentation standards** from `foundation/conventions/documentation-standards.md`:
+   - Required document structure (Purpose, Scope, Agent Instructions)
+   - Writing style (no AI-generated patterns, RFC 2119 language)
+   - Mermaid diagram standards
+   - Example formatting requirements
+3. **Reject scope creep** (stay within Truth Layer)
+4. **Validate against invariants** (MUST/MUST NOT lists)
+5. **Apply constraints to all artifacts** (specs, code, tests)
+6. **Treat forbidden patterns as errors** (halt and report)
 
 ### 23.4 Code Generation Rules
 
 When writing code:
 
-1. **Extraction MUST be rule-based** (regex, parsing; no LLM)
-2. **IDs MUST be hash-based** (entities, events, records)
-3. **All collections MUST be sorted** (deterministic iteration)
-4. **Graph writes MUST be transactional** (all-or-nothing)
-5. **Errors MUST use ErrorEnvelope** (structured, trace_id)
+1. **Follow shared foundation code conventions** from `foundation/conventions/code-conventions.md`:
+   - File naming: `snake_case.ts` (except React components: `PascalCase.tsx`)
+   - Function naming: `camelCase`
+   - Type/interface naming: `PascalCase`
+   - String quotes: double quotes (`"`)
+   - Import order: external → internal → relative
+   - See `foundation-config.yaml` for Neotoma-specific overrides
+2. **Extraction MUST be rule-based** (regex, parsing; no LLM)
+3. **IDs MUST be hash-based** (entities, events, records)
+4. **All collections MUST be sorted** (deterministic iteration)
+5. **Graph writes MUST be transactional** (all-or-nothing)
+6. **Errors MUST use ErrorEnvelope** (structured, trace_id)
 
 ### 23.5 Release Build Completion Rules
 
@@ -252,10 +270,12 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 
 **Before committing:**
 
+- **Run security audit** from `foundation/security/pre-commit-audit.sh` (prevents committing secrets, protected files)
 - Verify alignment with manifest
 - Check MUST/MUST NOT lists
 - Run full test suite
 - Update docs if patterns changed
+- **Follow foundation commit format** from `foundation/development/workflow.md`: `FU-{id}: {description}`
 
 ---
 
@@ -317,3 +337,58 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 - [`docs/foundation/philosophy.md`](./philosophy.md) — Core philosophy and architectural invariants
 - [`docs/foundation/layered_architecture.md`](./layered_architecture.md) — Layered architecture
 - [`docs/conventions/documentation_standards.md`](../conventions/documentation_standards.md) — Documentation standards
+
+## Using Foundation Submodule
+
+Neotoma uses the shared **foundation** submodule (`foundation/`) for development processes and conventions:
+
+### When to Reference Foundation
+
+**Development Workflow:**
+- Creating branches: See `foundation/development/workflow.md` and `foundation/development/branch-strategy.md`
+- Creating worktrees: Use `foundation/development/worktree-setup.sh`
+- PR process: Follow `foundation/development/pr-process.md`
+- Commit format: `FU-{id}: {description}` (configured in `foundation-config.yaml`)
+
+**Code Conventions:**
+- Code style: See `foundation/conventions/code-conventions.md`
+- Naming patterns: See `foundation/conventions/naming-patterns.yaml`
+- Neotoma overrides: Check `foundation-config.yaml` for repo-specific settings
+
+**Documentation:**
+- Doc structure: Follow `foundation/conventions/documentation-standards.md`
+- Writing style: Avoid AI-generated patterns, use RFC 2119 language
+- Agent Instructions: Use template from `foundation/agent-instructions/README.md`
+
+**Security:**
+- Pre-commit audit: Run `foundation/security/pre-commit-audit.sh` before commits
+- Credential management: See `foundation/security/credential-management.md`
+- Security rules: See `foundation/security/security-rules.md`
+
+**Configuration:**
+- Neotoma config: `foundation-config.yaml` (repo root)
+- Foundation defaults: `foundation/config/foundation-config.yaml`
+- Neotoma adapter: `foundation/config/repo-adapters/neotoma.yaml`
+
+### Foundation vs Neotoma Foundation Docs
+
+- **`foundation/` submodule**: Shared development processes (workflow, conventions, security) - can be used by other repos
+- **`docs/foundation/`**: Neotoma-specific foundation (philosophy, architecture, product positioning) - Neotoma only
+
+Both are important:
+- Use `foundation/` for development practices (how to code, commit, review)
+- Use `docs/foundation/` for Neotoma architecture (what to build, why, constraints)
+
+### Syncing Foundation Updates
+
+When foundation submodule is updated:
+
+```bash
+# Update to latest foundation
+git submodule update --remote foundation
+
+# Or use sync script
+./foundation/scripts/sync-foundation.sh
+```
+
+See `foundation/README.md` for complete foundation documentation.
