@@ -20,6 +20,24 @@ Always load these files FIRST for context:
 
 ---
 
+## Foundation Generic Rules
+
+Neotoma uses foundation generic Cursor rules (from `foundation/agent-instructions/cursor-rules/`):
+
+**Generic Rules (from foundation):**
+- **Security** (`.cursor/rules/security.md`) — Pre-commit security audit with Neotoma-specific protected paths (`docs/private/`, `data/`)
+- **Worktree Environment** (`.cursor/rules/worktree_env.md`) — Environment file handling in git worktrees
+- **README Maintenance** (`.cursor/rules/readme_maintenance.md`) — Automatic README synchronization with documentation
+- **Downstream Doc Updates** (`.cursor/rules/downstream_doc_updates.md`) — Documentation dependency management
+- **Instruction Documentation** (`.cursor/rules/instruction_documentation.md`) — Rules for documenting agent instructions
+
+**Generic Commands (from foundation):**
+- **Commit** (`.cursor/commands/commit.md`) — Comprehensive commit workflow with security audit and nested repo handling
+
+**Note:** Foundation generic rules are installed via `foundation/scripts/setup-cursor-rules.sh` and configured in `foundation-config.yaml`. See `foundation/agent-instructions/CURSOR_RULES.md` for detailed documentation.
+
+---
+
 ## Workflow Detection Rules
 
 **Release Detection:**
