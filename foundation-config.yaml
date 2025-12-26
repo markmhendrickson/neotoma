@@ -155,11 +155,12 @@ security:
     protected_paths:
       - "docs/private/"  # Neotoma private docs
       - "data/"          # Neotoma data directory
-      - ".env*"
     protected_patterns:
       - "\.env"
       - "secrets"
       - "credentials"
+    check_env_files: true
+    check_data_directory: true  # Neotoma has data/ directory
   credential_management:
     enabled: true
     require_env_separation: false  # whether to require DEV_*/PROD_* prefixes
@@ -218,20 +219,46 @@ tooling:
 
 # Agent instructions configuration
 agent_instructions:
-  enabled: false
-  location: "docs/foundation/agent_instructions.md"  # or ".cursor/rules/"
+  enabled: true
+  location: "docs/foundation/agent_instructions.md"
   cursor_rules:
-    enabled: false
+    enabled: true
     location: ".cursor/rules/"
+    generic_rules:
+      - security
+      - worktree_env
+      - readme_maintenance
+      - downstream_doc_updates
+      - instruction_documentation
+    custom_rules:
+      - repo_doctrine
+      - post_build_testing
+      - release_detection
+      - feature_unit_detection
+      - bug_fix_detection
+      - checkpoint_management
   cursor_commands:
-    enabled: false
+    enabled: true
     location: ".cursor/commands/"
+    generic_commands:
+      - commit
+    custom_commands:
+      - create_feature_unit
+      - create_release
+      - fix_feature_bug
+      - run_feature_workflow
+      - ui_workflow
+      - modify_subsystem
+      - ingestion_flow
+      - gather_ux_input
+      - create_prototype
+      - final_review
   constraints: []
     # Project-specific constraints
     # - "Never commit secrets"
     # - "Always update documentation when code changes"
   validation_checklist:
-    enabled: false
+    enabled: true
     custom_checks: []  # Repo-specific checks
 
 # Strategy evaluation (optional)
