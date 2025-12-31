@@ -33,6 +33,60 @@ export async function createObservationsFromRecord(
   const entities = extractEntities(record.properties, record.type);
   const observations = [];
 
+  // Create a payload_submission entry for this record (required for observations)
+  // This allows observations to reference payload_submissions as required by the schema
+  // Check if payload_submission already exists for this record
+  let payloadId: string | null = null;
+  const { data: existingPayload } = await supabase
+    .from("payload_submissions")
+    .select("id")
+    .eq("payload_content_id", record.id)
+    .maybeSingle();
+
+  if (existingPayload) {
+    payloadId = existingPayload.id;
+  } else {
+    // Create a new payload_submission for this record
+    // Use a synthetic capability_id for record-based observations
+    const syntheticCapabilityId = `neotoma:record:${record.type}:v1`;
+    const payloadSubmissionId = `record-${record.id}`;
+    const { data: payloadSubmission, error: payloadError } = await supabase
+      .from("payload_submissions")
+      .insert({
+        payload_submission_id: payloadSubmissionId,
+        payload_content_id: record.id,
+        capability_id: syntheticCapabilityId,
+        body: record.properties,
+        provenance: {
+          source: "record",
+          record_type: record.type,
+          extracted_at: new Date().toISOString(),
+        },
+      })
+      .select()
+      .single();
+
+    if (payloadError) {
+      console.error(`Failed to create payload_submission: ${payloadError.message}`);
+      // Return early if we can't create the required payload_submission
+      return {
+        record,
+        observations: [],
+        snapshotUpdated: false,
+      };
+    }
+
+    payloadId = payloadSubmission?.id || null;
+    if (!payloadId) {
+      console.error("Cannot create observations: no payload_submission ID available");
+      return {
+        record,
+        observations: [],
+        snapshotUpdated: false,
+      };
+    }
+  }
+
   // Load active schema for entity types
   const entityTypes = new Set(entities.map((e) => e.entity_type));
   const schemaMap = new Map<string, any>();
@@ -86,6 +140,7 @@ export async function createObservationsFromRecord(
     }
 
     // Create observation
+    // Use the payload_submission ID we created/found above
     const observedAt = new Date().toISOString();
     const { data: observationData, error: obsError } = await supabase
       .from("observations")
@@ -93,7 +148,7 @@ export async function createObservationsFromRecord(
         entity_id: resolved.id,
         entity_type: resolved.entity_type,
         schema_version: schemaVersion,
-        source_record_id: record.id,
+        source_payload_id: payloadId,
         observed_at: observedAt,
         specificity_score: 0.8, // Default specificity
         source_priority: 0, // Default priority
