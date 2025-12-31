@@ -23,6 +23,23 @@ CREATE INDEX IF NOT EXISTS idx_state_events_timestamp ON state_events(timestamp)
 CREATE INDEX IF NOT EXISTS idx_state_events_type ON state_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_state_events_previous_hash ON state_events(previous_event_hash) WHERE previous_event_hash IS NOT NULL;
 
+-- Enable RLS
+ALTER TABLE state_events ENABLE ROW LEVEL SECURITY;
+
+-- Service role has full access
+DROP POLICY IF EXISTS "Service role full access - state_events" ON state_events;
+CREATE POLICY "Service role full access - state_events"
+  ON state_events
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Public read access for state_events (for historical queries)
+DROP POLICY IF EXISTS "public read - state_events" ON state_events;
+CREATE POLICY "public read - state_events" ON state_events
+  FOR SELECT USING (true);
+
 -- Add comment to table
 COMMENT ON TABLE state_events IS 'Append-only event log for event-sourcing architecture. Events are immutable and serve as the single source of truth for state changes.';
 

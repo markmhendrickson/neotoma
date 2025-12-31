@@ -92,16 +92,26 @@ async function checkRLSInMigrations(): Promise<void> {
   for (const file of migrationFiles) {
     const content = await readFile(join(migrationsDir, file), "utf-8");
     
-    // Find tables with policies
-    const policyMatches = content.matchAll(/CREATE POLICY.*ON\s+(\w+)/gi);
+    // Find tables with policies (match table name after ON, including underscores)
+    const policyMatches = content.matchAll(/CREATE POLICY[^;]*ON\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi);
     for (const match of policyMatches) {
       tablesWithPolicies.add(match[1]);
     }
 
-    // Find tables with RLS enabled
-    const rlsMatches = content.matchAll(/ALTER TABLE\s+(\w+)\s+ENABLE ROW LEVEL SECURITY/gi);
+    // Find tables with RLS enabled (match table name after ALTER TABLE, including underscores)
+    // Exclude matches inside DO blocks with IF EXISTS (conditional execution)
+    const rlsMatches = content.matchAll(/ALTER TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+ENABLE ROW LEVEL SECURITY/gi);
     for (const match of rlsMatches) {
-      tablesWithRLS.add(match[1]);
+      const matchIndex = match.index || 0;
+      // Check if this ALTER TABLE is inside a DO block with IF EXISTS
+      const beforeMatch = content.substring(Math.max(0, matchIndex - 500), matchIndex);
+      const isInConditionalBlock = /DO\s+\$\$[\s\S]*?IF\s+EXISTS[\s\S]*?THEN/gi.test(beforeMatch);
+      
+      // Only count as RLS enabled if it's NOT in a conditional block
+      // (conditional blocks may not execute if table doesn't exist yet)
+      if (!isInConditionalBlock) {
+        tablesWithRLS.add(match[1]);
+      }
     }
   }
 
@@ -109,13 +119,19 @@ async function checkRLSInMigrations(): Promise<void> {
   const schemaPath = join(__dirname, "../supabase/schema.sql");
   try {
     const schemaContent = await readFile(schemaPath, "utf-8");
-    const schemaPolicyMatches = schemaContent.matchAll(/CREATE POLICY.*ON\s+(\w+)/gi);
+    const schemaPolicyMatches = schemaContent.matchAll(/CREATE POLICY[^;]*ON\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi);
     for (const match of schemaPolicyMatches) {
       tablesWithPolicies.add(match[1]);
     }
-    const schemaRLSMatches = schemaContent.matchAll(/ALTER TABLE\s+(\w+)\s+ENABLE ROW LEVEL SECURITY/gi);
+    const schemaRLSMatches = schemaContent.matchAll(/ALTER TABLE\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+ENABLE ROW LEVEL SECURITY/gi);
     for (const match of schemaRLSMatches) {
-      tablesWithRLS.add(match[1]);
+      const matchIndex = match.index || 0;
+      const beforeMatch = schemaContent.substring(Math.max(0, matchIndex - 500), matchIndex);
+      const isInConditionalBlock = /DO\s+\$\$[\s\S]*?IF\s+EXISTS[\s\S]*?THEN/gi.test(beforeMatch);
+      
+      if (!isInConditionalBlock) {
+        tablesWithRLS.add(match[1]);
+      }
     }
   } catch (err) {
     // Schema file might not exist

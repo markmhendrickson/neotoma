@@ -50,12 +50,37 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
 
 /**
  * Resolve entity (get or create)
+ * 
+ * @param options - Entity resolution options
+ * @param options.entityType - Type of entity (e.g., "person", "company")
+ * @param options.fields - Entity fields containing identifying information
+ * @param options.userId - User ID for user-scoped resolution (optional for backwards compatibility)
  */
 export async function resolveEntity(
-  entityType: string,
-  rawValue: string,
-): Promise<Entity> {
-  const canonicalName = normalizeEntityValue(entityType, rawValue);
+  options: { entityType: string; fields: Record<string, unknown>; userId?: string } | string,
+  rawValue?: string,
+): Promise<string> {
+  // Support both old and new signatures for backwards compatibility
+  let entityType: string;
+  let canonicalName: string;
+  let userId: string | undefined;
+
+  if (typeof options === "string") {
+    // Old signature: resolveEntity(entityType, rawValue)
+    entityType = options;
+    canonicalName = normalizeEntityValue(entityType, rawValue || "");
+  } else {
+    // New signature: resolveEntity({ entityType, fields, userId })
+    entityType = options.entityType;
+    userId = options.userId;
+    
+    // Extract canonical name from fields (use 'name' field or first string field)
+    const nameField = options.fields.name || 
+                     options.fields.canonical_name ||
+                     Object.values(options.fields).find(v => typeof v === "string");
+    canonicalName = normalizeEntityValue(entityType, String(nameField || "unknown"));
+  }
+
   const entityId = generateEntityId(entityType, canonicalName);
 
   // Check if entity exists
@@ -63,21 +88,22 @@ export async function resolveEntity(
     .from("entities")
     .select("*")
     .eq("id", entityId)
-    .single();
+    .maybeSingle();
 
   if (existing) {
-    return existing as Entity;
+    return entityId;
   }
 
   // Create new entity
   const now = new Date().toISOString();
-  const { data: newEntity, error } = await supabase
+  const { error } = await supabase
     .from("entities")
     .insert({
       id: entityId,
       entity_type: entityType,
       canonical_name: canonicalName,
       aliases: [],
+      user_id: userId || null,
       created_at: now,
       updated_at: now,
     })
@@ -86,16 +112,9 @@ export async function resolveEntity(
 
   if (error) {
     console.error(`Failed to insert entity ${entityId}:`, error);
-    // Return entity structure even if insert fails (for backwards compatibility)
-    return {
-      id: entityId,
-      entity_type: entityType,
-      canonical_name: canonicalName,
-      created_at: now,
-    };
   }
 
-  return newEntity as Entity;
+  return entityId;
 }
 
 /**
