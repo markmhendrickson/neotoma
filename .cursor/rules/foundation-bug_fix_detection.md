@@ -1,0 +1,1 @@
+../../foundation/agent-instructions/cursor-rules/bug_fix_detection.md

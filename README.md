@@ -329,14 +329,13 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 
 **Additional Resources:**
 
-- **Context** (`docs/context/`): Documentation navigation guide, reading order
 - **Conventions** (`docs/conventions/`): Documentation standards, README generation framework
 - **Legal** (`docs/legal/`): Compliance, privacy policy, terms of service, changelogs
 - **Migration** (`docs/migration/`): Migration guides, breaking changes
 - **Templates** (`docs/templates/`): Issue templates, PR templates
 - **Vocabulary** (`docs/vocabulary/`): Canonical terminology and definitions
 
-**Primary Entry Point:** [`docs/context/index.md`](docs/context/index.md): Complete documentation navigation guide
+**Primary Entry Point:** Foundation rules in `.cursor/rules/` provide agent instructions and documentation loading order
 
 ### Core Principles
 

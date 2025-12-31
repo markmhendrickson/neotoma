@@ -1,12 +1,7 @@
 # All Feature Units Compliance Summary
-
 **Generated:** 2025-12-14T06:22:11.460Z  
 **Total FUs Validated:** 26
-
----
-
 ## Executive Summary
-
 - **Overall Compliance Rate:** 69.4%
 - **Total Requirements Checked:** 121
 - **Total Passed:** 84
@@ -14,11 +9,7 @@
 - **Fully Compliant FUs:** 0 (0.0%)
 - **FUs with Gaps:** 26
 - **Validation Errors:** 0
-
----
-
 ## Per-FU Compliance Status
-
 | FU ID | Name | Release | Requirements | Passed | Failed | Compliance | Status | Report |
 |-------|------|---------|--------------|--------|--------|------------|--------|--------|
 | FU-000 | Database Schema v1.0 | v0.1.0 | 4 | 3 | 1 | 75.0% | ⚠️ Gaps | [View](docs/releases/v0.1.0/compliance_reports/FU-000_compliance.md) |
@@ -47,61 +38,40 @@
 | FU-204 | MCP Action — delete_record | v0.1.0 | 4 | 3 | 1 | 75.0% | ⚠️ Gaps | [View](docs/releases/v0.1.0/compliance_reports/FU-204_compliance.md) |
 | FU-205 | MCP Action — upload_file | v0.1.0 | 4 | 3 | 1 | 75.0% | ⚠️ Gaps | [View](docs/releases/v0.1.0/compliance_reports/FU-205_compliance.md) |
 | FU-206 | MCP Action — get_file_url | v0.1.0 | 4 | 3 | 1 | 75.0% | ⚠️ Gaps | [View](docs/releases/v0.1.0/compliance_reports/FU-206_compliance.md) |
-
----
-
 ## Top Compliance Issues
-
 1. **code changes to comply with manifest****
    - Occurrences: 21 FU(s)
    - Affected: FU-000, FU-002, FU-055, FU-056, FU-057, FU-058, FU-059, FU-061, FU-100, FU-101, FU-102, FU-103, FU-105, FU-200, FU-201, FU-202, FU-203, FU-204, FU-205, FU-206, FU-104
-
 2. **Events MUST be append-only (never updated or deleted)**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 3. **Reducers MUST be pure functions (no side effects, no I/O)**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 4. **Event schema MUST include all future fields (crypto, hash) even if unused**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 5. **Event validation MUST reject invalid events before storage**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 6. **MUST NOT skip event validation**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 7. **MUST NOT write directly to `records` table (only via materialized view refresh)**
    - Occurrences: 1 FU(s)
    - Affected: FU-050
-
 8. **Domain logic MUST use repository interfaces (no direct storage access)**
    - Occurrences: 1 FU(s)
    - Affected: FU-051
-
 9. **Repository implementations MUST be swappable (same interface, different backend)**
    - Occurrences: 1 FU(s)
    - Affected: FU-051
-
 10. **MUST NOT introduce non-determinism**
    - Occurrences: 1 FU(s)
    - Affected: FU-051
-
----
-
 ## Validation Errors
-
 _No validation errors._
-
----
-
 ## Individual Reports
-
 - [FU-000 — Database Schema v1.0](docs/releases/v0.1.0/compliance_reports/FU-000_compliance.md)
 - [FU-002 — Configuration Management](docs/releases/v0.1.0/compliance_reports/FU-002_compliance.md)
 - [FU-050 — Event-Sourcing Foundation](docs/releases/v0.1.0/compliance_reports/FU-050_compliance.md)
@@ -128,25 +98,15 @@ _No validation errors._
 - [FU-205 — MCP Action — upload_file](docs/releases/v0.1.0/compliance_reports/FU-205_compliance.md)
 - [FU-206 — MCP Action — get_file_url](docs/releases/v0.1.0/compliance_reports/FU-206_compliance.md)
 - [FU-104 — Embedding Service](docs/releases/v0.1.0/compliance_reports/FU-104_compliance.md)
-
----
-
 ## Recommendations
-
 **26 Feature Unit(s) have specification compliance gaps** that should be addressed to ensure implementation matches documented requirements.
-
 ### Priority Actions:
 1. Review individual compliance reports for FUs with gaps
 2. Address common issues appearing across multiple FUs
 3. Update implementation to match specification requirements
 4. Re-run validation after fixes
-
 ### Most Common Issues:
 1. code changes to comply with manifest**... (21 FUs affected)
 2. Events MUST be append-only (never updated or deleted)... (1 FUs affected)
 3. Reducers MUST be pure functions (no side effects, no I/O)... (1 FUs affected)
-
-
----
-
 **Note:** This report validates that code implementation matches documented specifications. It does not validate functional correctness or test coverage.

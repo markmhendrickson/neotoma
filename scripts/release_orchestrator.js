@@ -3,8 +3,9 @@
 /**
  * Release Orchestrator
  *
- * Spawns and coordinates worker agents for parallel Feature Unit execution.
- * Uses Cursor Cloud Agents API to spawn background agents.
+ * Supports both single-agent sequential execution and multi-agent parallel execution.
+ * - Single-agent: Executes Feature Units sequentially with model recommendations
+ * - Multi-agent: Spawns worker agents for parallel execution via Cursor Cloud Agents API
  *
  * Usage:
  *   node scripts/release_orchestrator.js <release_id>
@@ -20,6 +21,7 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { config } from "dotenv";
 import yaml from "js-yaml";
+import readline from "readline";
 import { validateFUSpecCompliance } from "./validate_spec_compliance.js";
 
 // Load environment variables from .env file (override existing env vars)
@@ -587,6 +589,148 @@ function selectModelForFU(fuId, manifest) {
   }
 }
 
+// Recommend model for single-agent execution based on entire release
+function recommendModelForSingleAgent(manifest, batches) {
+  const fus = manifest.feature_units || [];
+  const totalFUs = fus.length;
+  
+  // Calculate aggregate complexity
+  let totalComplexity = 0;
+  let maxComplexity = 0;
+  let highRiskCount = 0;
+  let p0Count = 0;
+  let totalDuration = 0;
+
+  for (const fu of fus) {
+    const fuId = fu.id;
+    const metadata = getFUMetadata(fuId, manifest);
+    const duration = estimateFUDuration(fuId);
+    
+    // Calculate FU complexity score
+    let complexityScore = 0;
+    
+    const priorityWeight = {
+      P0: 3,
+      P1: 2,
+      P2: 1,
+      P3: 0.5,
+    };
+    complexityScore += priorityWeight[metadata.priority] || 1;
+    
+    const riskWeight = {
+      high: 3,
+      medium: 1.5,
+      low: 0.5,
+    };
+    complexityScore += riskWeight[metadata.risk_level] || 1.5;
+    
+    let durationWeight = 0.5;
+    if (duration >= 480) {
+      durationWeight = 2;
+    } else if (duration >= 240) {
+      durationWeight = 1;
+    }
+    complexityScore += durationWeight;
+    
+    const dependencyWeight = Math.min((metadata.dependencies || []).length * 0.5, 2);
+    complexityScore += dependencyWeight;
+    
+    totalComplexity += complexityScore;
+    maxComplexity = Math.max(maxComplexity, complexityScore);
+    
+    if (metadata.risk_level === "high") highRiskCount++;
+    if (metadata.priority === "P0") p0Count++;
+    totalDuration += duration;
+  }
+
+  // Average complexity per FU
+  const avgComplexity = totalComplexity / totalFUs;
+  
+  // Release-level complexity assessment
+  // Factors:
+  // - High number of FUs (>10) = more coordination needed
+  // - High average complexity = better model needed
+  // - Many high-risk FUs (>3) = better model needed
+  // - Many P0 FUs (>5) = critical release = better model needed
+  // - Long total duration (>40 hours) = complex release
+  
+  let releaseComplexityScore = 0;
+  
+  // FU count weight
+  if (totalFUs > 10) releaseComplexityScore += 2;
+  else if (totalFUs > 5) releaseComplexityScore += 1;
+  
+  // Average complexity weight
+  if (avgComplexity > 6) releaseComplexityScore += 2;
+  else if (avgComplexity > 4) releaseComplexityScore += 1;
+  
+  // High risk count weight
+  if (highRiskCount > 3) releaseComplexityScore += 2;
+  else if (highRiskCount > 1) releaseComplexityScore += 1;
+  
+  // P0 count weight
+  if (p0Count > 5) releaseComplexityScore += 2;
+  else if (p0Count > 2) releaseComplexityScore += 1;
+  
+  // Total duration weight (normalized)
+  const totalHours = totalDuration / 60;
+  if (totalHours > 40) releaseComplexityScore += 2;
+  else if (totalHours > 20) releaseComplexityScore += 1;
+  
+  // Batch count (more batches = more coordination)
+  if (batches.length > 5) releaseComplexityScore += 1;
+  
+  // Select model based on release complexity
+  // Low: < 4, Medium: 4-7, High: > 7
+  if (releaseComplexityScore < 4) {
+    return {
+      model: MODEL_TIERS.medium, // Even simple releases benefit from medium tier
+      tier: "medium",
+      reasoning: `Release has ${totalFUs} FUs with average complexity ${avgComplexity.toFixed(1)}, ${highRiskCount} high-risk FUs, ${p0Count} P0 FUs, ${batches.length} batches, and estimated ${(totalHours).toFixed(1)} hours total. Medium tier model recommended.`,
+    };
+  } else if (releaseComplexityScore < 7) {
+    return {
+      model: MODEL_TIERS.medium,
+      tier: "medium",
+      reasoning: `Release has ${totalFUs} FUs with average complexity ${avgComplexity.toFixed(1)}, ${highRiskCount} high-risk FUs, ${p0Count} P0 FUs, ${batches.length} batches, and estimated ${(totalHours).toFixed(1)} hours total. Medium tier model recommended for balanced performance and cost.`,
+    };
+  } else {
+    return {
+      model: MODEL_TIERS.high,
+      tier: "high",
+      reasoning: `Release has ${totalFUs} FUs with average complexity ${avgComplexity.toFixed(1)}, ${highRiskCount} high-risk FUs, ${p0Count} P0 FUs, ${batches.length} batches, and estimated ${(totalHours).toFixed(1)} hours total. High tier model recommended for complex release with critical path FUs.`,
+    };
+  }
+}
+
+// Prompt user for execution strategy
+function promptExecutionStrategy() {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    console.log("\n=== Release Execution Strategy Selection ===\n");
+    console.log("How would you like to execute this release build?");
+    console.log("  1. Single-agent (sequential execution)");
+    console.log("  2. Multi-agent (parallel execution)\n");
+    
+    rl.question("Enter choice (1 or 2): ", (answer) => {
+      rl.close();
+      const choice = answer.trim();
+      if (choice === "1") {
+        resolve("single_agent");
+      } else if (choice === "2") {
+        resolve("multi_agent");
+      } else {
+        console.error("[ERROR] Invalid choice. Please enter 1 or 2.");
+        process.exit(1);
+      }
+    });
+  });
+}
+
 // Check if batch dependencies are complete
 async function canStartBatch(batch, status) {
   // Check all FUs in previous batches are complete
@@ -1085,19 +1229,21 @@ function parseIntegrationTests(content, batchId) {
 
 // Main orchestrator loop
 // Check prerequisites before starting
-function checkPrerequisites() {
+function checkPrerequisites(executionMode) {
   const warnings = [];
   const errors = [];
 
-  // Required for API communication
-  if (!process.env.CURSOR_CLOUD_API_URL) {
-    errors.push("CURSOR_CLOUD_API_URL is required");
-  }
-  if (!process.env.CURSOR_CLOUD_API_KEY) {
-    errors.push("CURSOR_CLOUD_API_KEY is required");
-  }
-  if (!process.env.REPO_URL) {
-    errors.push("REPO_URL is required");
+  // API credentials only required for multi-agent mode
+  if (executionMode === "multi_agent") {
+    if (!process.env.CURSOR_CLOUD_API_URL) {
+      errors.push("CURSOR_CLOUD_API_URL is required for multi-agent execution");
+    }
+    if (!process.env.CURSOR_CLOUD_API_KEY) {
+      errors.push("CURSOR_CLOUD_API_KEY is required for multi-agent execution");
+    }
+    if (!process.env.REPO_URL) {
+      errors.push("REPO_URL is required for multi-agent execution");
+    }
   }
 
   // Recommended for integration tests
@@ -1119,15 +1265,160 @@ function checkPrerequisites() {
   if (warnings.length > 0) {
     console.warn("[WARN] Environment variable warnings:");
     warnings.forEach((warn) => console.warn(`  - ${warn}`));
-    console.warn("[WARN] Agents will include these warnings in their instructions");
+    if (executionMode === "multi_agent") {
+      console.warn("[WARN] Agents will include these warnings in their instructions");
+    }
   }
+}
+
+// Execute single-agent sequential execution
+async function executeSingleAgent(manifest, batches, status, releaseId) {
+  console.log(`[INFO] Starting single-agent sequential execution`);
+  
+  // Recommend model
+  const modelRecommendation = recommendModelForSingleAgent(manifest, batches);
+  console.log(`[INFO] Model recommendation: ${modelRecommendation.model} (${modelRecommendation.tier} tier)`);
+  console.log(`[INFO] Reasoning: ${modelRecommendation.reasoning}`);
+  console.log(`[INFO] Note: Use this model in your Cursor session for optimal execution\n`);
+
+  // Execute batches sequentially
+  for (const batch of batches) {
+    let batchStatus = status.batches.find((b) => b.batch_id === batch.batch_id);
+
+    // Skip if already completed
+    if (batchStatus.status === "completed") {
+      console.log(`[INFO] Batch ${batch.batch_id} already completed, skipping`);
+      continue;
+    }
+
+    // Check if we can start this batch
+    if (!(await canStartBatch(batch, status))) {
+      console.log(`[INFO] Batch ${batch.batch_id} dependencies not complete, waiting...`);
+      continue;
+    }
+
+    console.log(`[INFO] Starting Batch ${batch.batch_id} with ${batch.feature_units.length} FUs`);
+    console.log(`[INFO] FUs: ${batch.feature_units.join(", ")}`);
+
+    // Update batch status
+    batchStatus.status = "running";
+    batchStatus.started_at = new Date().toISOString();
+    status.orchestrator.current_batch = batch.batch_id;
+    await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
+
+    // Execute FUs sequentially
+    for (const fuId of batch.feature_units) {
+      const fuStatus = batchStatus.feature_units.find((fu) => fu.fu_id === fuId);
+
+      // Skip if already completed
+      if (fuStatus.status === "completed") {
+        console.log(`[INFO] ${fuId} already completed, skipping`);
+        continue;
+      }
+
+      console.log(`\n[INFO] Executing ${fuId}...`);
+      fuStatus.status = "running";
+      fuStatus.started_at = new Date().toISOString();
+      fuStatus.last_update = new Date().toISOString();
+      await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
+
+      // In single-agent mode, the user's Cursor session executes the FU
+      // This script just tracks progress via status file updates
+      // The agent should update the status file as it works
+      console.log(`[INFO] ${fuId} execution started. Update status file as work progresses.`);
+      console.log(`[INFO] Status file: ${STATUS_FILE}`);
+      
+      // Wait for FU completion (user will mark as complete via status file)
+      // For now, just mark it as needing manual execution
+      console.log(`[INFO] Execute ${fuId} in your Cursor session, then mark as complete in status file.`);
+    }
+
+    // Mark batch as completed (after all FUs are marked complete by user)
+    // This will be updated when user marks all FUs complete
+    console.log(`[INFO] Batch ${batch.batch_id} execution complete. Mark FUs as complete in status file.`);
+    
+    // Run integration tests
+    const testsPassed = await runIntegrationTests(batch.batch_id, releaseId);
+    if (!testsPassed) {
+      console.error(`[ERROR] Integration tests failed for Batch ${batch.batch_id}`);
+      process.exit(1);
+    }
+
+    // Run spec compliance validation
+    console.log(`[INFO] Running spec compliance validation for Batch ${batch.batch_id}...`);
+    const complianceErrors = [];
+    for (const fu of batchStatus.feature_units) {
+      try {
+        const complianceResult = await validateFUSpecCompliance(fu.fu_id, releaseId);
+        if (!complianceResult.compliant) {
+          console.error(`[ERROR] ${fu.fu_id} failed spec compliance validation:`);
+          complianceResult.gaps.forEach((gap) => {
+            console.error(`  - ${gap.requirement}`);
+          });
+          complianceErrors.push({
+            fu_id: fu.fu_id,
+            gaps: complianceResult.gaps,
+          });
+        }
+      } catch (error) {
+        console.error(`[ERROR] Spec compliance validation failed for ${fu.fu_id}: ${error.message}`);
+        complianceErrors.push({
+          fu_id: fu.fu_id,
+          error: error.message,
+        });
+      }
+    }
+
+    if (complianceErrors.length > 0) {
+      console.error(`[ERROR] Batch ${batch.batch_id} has ${complianceErrors.length} FU(s) with spec compliance gaps`);
+      process.exit(1);
+    }
+
+    // Mark batch as completed
+    batchStatus.status = "completed";
+    batchStatus.completed_at = new Date().toISOString();
+    status.completed_fus.push(...batchStatus.feature_units.map((fu) => fu.fu_id));
+    await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
+
+    // Update checkpoints
+    await updateCheckpoints(batch.batch_id, manifest, batchStatus);
+
+    console.log(`[INFO] Batch ${batch.batch_id} completed successfully`);
+  }
+
+  // All batches complete - ALWAYS run full integration test suite (REQUIRED)
+  console.log(`[INFO] All batches complete. Running full integration test suite (REQUIRED)...`);
+
+  // CRITICAL: Integration tests MUST run after all batches complete
+  const fullTestSuitePassed = await runFullIntegrationTestSuite(releaseId);
+
+  if (!fullTestSuitePassed) {
+    const currentStatus = await loadStatus();
+    const testResults = currentStatus.integration_tests || [];
+    const failedCount = testResults.filter((t) => t.status === "failed").length;
+    const notRunCount = testResults.filter((t) => t.status === "not_run").length;
+
+    if (failedCount > 0) {
+      console.error(`[ERROR] Full integration test suite failed (${failedCount} test(s) failed)`);
+      console.error(
+        `[ERROR] Release cannot be marked as ready_for_deployment until all tests pass`
+      );
+      process.exit(1);
+    } else if (notRunCount > 0) {
+      console.warn(
+        `[WARN] ${notRunCount} test(s) not run (no test commands defined or test files missing)`
+      );
+      console.warn(
+        `[WARN] Release can proceed, but tests should be implemented for full validation`
+      );
+    }
+  }
+
+  console.log(`[INFO] Full integration test suite execution completed`);
 }
 
 async function main() {
   console.log(`[INFO] Starting orchestrator for Release ${RELEASE_ID}`);
-
-  // Check prerequisites
-  checkPrerequisites();
 
   // Load manifest
   const manifest = await loadYAML(MANIFEST_PATH);
@@ -1137,24 +1428,37 @@ async function main() {
     console.log("[DEBUG] Parsed manifest:", JSON.stringify(manifest, null, 2));
   }
 
-  const executionStrategy = manifest.execution_strategy || {};
+  // Load execution schedule
+  const batches = await loadExecutionSchedule(EXECUTION_SCHEDULE_PATH);
+  console.log(`[INFO] Loaded ${batches.length} batches`);
+
+  // Determine execution strategy
+  let executionStrategy = manifest.execution_strategy || {};
+  let executionMode = executionStrategy.type;
+
+  // If not set in manifest, prompt user
+  if (!executionMode) {
+    console.log(`[INFO] Execution strategy not set in manifest.yaml`);
+    executionMode = await promptExecutionStrategy();
+    
+    // Update manifest with selected strategy
+    if (!manifest.execution_strategy) {
+      manifest.execution_strategy = {};
+    }
+    manifest.execution_strategy.type = executionMode;
+    
+    // Save updated manifest
+    const yamlContent = yaml.dump(manifest);
+    await fs.writeFile(MANIFEST_PATH, yamlContent, "utf-8");
+    console.log(`[INFO] Updated manifest.yaml with execution_strategy.type: ${executionMode}\n`);
+  }
 
   if (process.env.DEBUG) {
     console.log("[DEBUG] Execution strategy:", JSON.stringify(executionStrategy, null, 2));
   }
 
-  if (executionStrategy.type !== "multi_agent") {
-    console.log(
-      `[INFO] Execution strategy type is "${
-        executionStrategy.type || "undefined"
-      }", expected "multi_agent". Skipping orchestrator.`
-    );
-    return;
-  }
-
-  // Load execution schedule
-  const batches = await loadExecutionSchedule(EXECUTION_SCHEDULE_PATH);
-  console.log(`[INFO] Loaded ${batches.length} batches`);
+  // Check prerequisites based on execution mode
+  checkPrerequisites(executionMode);
 
   // Initialize or load status
   let status = await loadStatus();
@@ -1165,7 +1469,29 @@ async function main() {
 
   // Update orchestrator status
   status.orchestrator.status = "running";
+  status.orchestrator.execution_mode = executionMode;
   await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
+
+  // Route to appropriate execution mode
+  if (executionMode === "single_agent") {
+    await executeSingleAgent(manifest, batches, status, RELEASE_ID);
+  } else if (executionMode === "multi_agent") {
+    await executeMultiAgent(manifest, batches, status, RELEASE_ID);
+  } else {
+    console.error(`[ERROR] Unknown execution mode: ${executionMode}`);
+    process.exit(1);
+  }
+
+  // Initialize or load status
+  let status = await loadStatus();
+  if (!status) {
+    status = await initializeStatus(RELEASE_ID, batches);
+    console.log("[INFO] Initialized status file");
+  }
+
+// Execute multi-agent parallel execution
+async function executeMultiAgent(manifest, batches, status, releaseId) {
+  console.log(`[INFO] Starting multi-agent parallel execution`);
 
   // Execute batches
   for (const batch of batches) {
@@ -1204,7 +1530,7 @@ async function main() {
       }
 
       // Spawn worker agent
-      const agentId = await spawnWorkerAgent(fuId, batch.batch_id, RELEASE_ID, manifest);
+      const agentId = await spawnWorkerAgent(fuId, batch.batch_id, releaseId, manifest);
 
       // Update status
       fuStatus.worker_agent_id = agentId;
@@ -1337,7 +1663,7 @@ async function main() {
 
   // CRITICAL: Integration tests MUST run after all batches complete
   // This is a required step in the release build process
-  const fullTestSuitePassed = await runFullIntegrationTestSuite(RELEASE_ID);
+  const fullTestSuitePassed = await runFullIntegrationTestSuite(releaseId);
 
   // Note: Tests may show as "not_run" if test commands aren't defined yet
   // This is acceptable for initial releases, but should be addressed
@@ -1377,10 +1703,21 @@ async function main() {
   console.log(`[INFO] Release ${RELEASE_ID} execution complete!`);
 
   // Generate release report (documentation-driven)
+  // All batches complete
+  status.orchestrator.status = "completed";
+  status.orchestrator.completed_at = new Date().toISOString();
+  await fs.writeFile(STATUS_FILE, JSON.stringify(status, null, 2));
+
+  // Ensure Checkpoint 2 is completed
+  await ensureCheckpoint2Completed(manifest, status);
+
+  console.log(`[INFO] Release ${releaseId} execution complete!`);
+
+  // Generate release report (documentation-driven)
   console.log(`[INFO] Release execution complete. Report generation required.`);
   console.log(`[INFO] Follow instructions in: docs/feature_units/standards/release_report_spec.md`);
   console.log(`[INFO] Template: docs/feature_units/standards/release_report_template.md`);
-  console.log(`[INFO] Output: docs/releases/in_progress/${RELEASE_ID}/release_report.md`);
+  console.log(`[INFO] Output: docs/releases/in_progress/${releaseId}/release_report.md`);
   console.log(
     `[INFO] IMPORTANT: Release report MUST include Section 9 (Testing Guidance) with all manual test cases from integration_tests.md`
   );

@@ -1,9 +1,5 @@
 ## Release v0.1.0 — Status
-
----
-
 ### 1. Summary
-
 - **Release ID**: `v0.1.0`
 - **Name**: Internal MCP Release
 - **Status**: `ready_for_deployment` ✅ (remediation validated)
@@ -15,9 +11,7 @@
 - **Remediation Date**: 2025-12-11
 - **Test Validation Date**: 2025-12-11
 - **Test Pass Rate**: 99.5% (373/375 overall, 146/146 v0.1.0 tests)
-
 ### 1.1 Time Tracking
-
 - **Development Start Date**: 2025-12-09 _(Estimated based on remediation date)_
 - **Development Finish Date**: 2025-12-11
 - **Deployment Date**: _[To be recorded when deployed]_
@@ -25,11 +19,7 @@
 - **Estimated Development Time**: _[Not recorded in original plan]_
 - **Actual Development Time**: ~2-3 days (Dec 9-11, 2025)
 - **Estimation Accuracy**: _[Baseline established for future estimates]_
-
----
-
 ### 2. Batch Progress
-
 | Batch ID | Feature Units                  | Status      | Notes                              |
 | -------- | ------------------------------ | ----------- | ---------------------------------- |
 | 0        | FU-000, FU-002                 | ✅ Complete |                                    |
@@ -46,11 +36,7 @@
 | 6.5      | FU-058                         | ✅ Complete |                                    |
 | 6.6      | FU-061                         | ✅ Complete | Enhanced with 5 new MCP actions    |
 | 7        | FU-104, FU-208                 | ✅ Complete | Optional (FU-208 not started)      |
-
----
-
 ### 3. Feature Unit Status
-
 | FU ID  | Name                          | Status         | Notes                                          |
 | ------ | ----------------------------- | -------------- | ---------------------------------------------- |
 | FU-000 | Database Schema v1.0          | ✅ Complete    | Enhanced with entities, events, edges tables   |
@@ -80,13 +66,7 @@
 | FU-206 | MCP Action — get_file_url     | ✅ Complete    |                                                |
 | FU-104 | Embedding Service             | ✅ Complete    | Optional                                       |
 | FU-208 | MCP Provider Integrations     | ⏳ Not Started | Optional                                       |
-
-_(Statuses mirror individual FU manifests / implementation reality; updated post-remediation 2025-12-11)_
-
----
-
 ### 4. Checkpoints
-
 - **Checkpoint 0 — Release Planning**: `completed`
   - `release_plan.md` and `manifest.yaml` created.
   - Execution schedule defined in `execution_schedule.md`.
@@ -106,11 +86,7 @@ _(Statuses mirror individual FU manifests / implementation reality; updated post
   - Fidelity review completed on 2025-12-11
   - All critical gaps addressed
   - Pending: migration execution, test execution, coverage validation
-
----
-
 ### 5. Integration Test Status
-
 | Test ID | Name                                | Status     | Tests Passed | Notes                            |
 | ------- | ----------------------------------- | ---------- | ------------ | -------------------------------- |
 | IT-001  | File Upload → Extraction → Query    | ✅ Passing | All          | Pipeline integration complete    |
@@ -124,28 +100,21 @@ _(Statuses mirror individual FU manifests / implementation reality; updated post
 | IT-009  | Multi-Source Entity Resolution      | ✅ Passing | All          | Multi-source merging validated   |
 | IT-010  | Reducer Determinism Validation      | ✅ Passing | All          | Reducer determinism confirmed    |
 | IT-011  | Relationship Types Validation       | ✅ Passing | 4/4          | Relationship MCP actions working |
-
 **Summary:** 11/11 integration test suites passing (146/146 tests - 100%)
-
 **Additional Test Files Created:**
-
 | Test ID | Name                     | Status      | Test Count |
 | ------- | ------------------------ | ----------- | ---------- |
 | NEW-001 | Error Case Tests         | ✅ Complete | ~40 tests  |
 | NEW-002 | Edge Case Tests          | ✅ Complete | ~30 tests  |
 | NEW-003 | Validation Schema Tests  | ✅ Complete | ~25 tests  |
 | NEW-004 | Graph Builder Unit Tests | ✅ Complete | ~6 tests   |
-
 **Remediation Summary (2025-12-11):**
-
 - Database tables created: 3 migrations (entities, timeline_events, graph edges)
 - Services updated: 4 files (entity resolution, event generation, graph builder, observation ingestion)
 - MCP actions implemented: 5 new actions (get_entity_snapshot, list_observations, get_field_provenance, create_relationship, list_relationships)
 - Integration tests enhanced: 6 files updated with database validation
 - New test files created: 4 files (~101 new test cases)
-
 **Deployment Requirements Status:**
-
 1. ✅ Database migrations applied (`npm run migrate`)
 2. ✅ All tests executed (375 tests, 373 passing - 99.5%)
 3. ✅ All v0.1.0 integration tests passing (146/146 - 100%)
@@ -153,20 +122,12 @@ _(Statuses mirror individual FU manifests / implementation reality; updated post
 5. ⏳ Install `@vitest/coverage-v8` package (optional)
 6. ⏳ Generate coverage report (optional)
 7. ⏳ Manual validation via Cursor/ChatGPT MCP integration
-
 **Test Execution Results (2025-12-11):**
-
 - Total tests: 375
 - Passed: 373 (99.5%)
 - Failed: 2 (pre-existing record_types.test.ts issues, non-blocking)
 - v0.1.0 integration tests: 146/146 (100%)
-
----
-
 ### 6. Decision Log
-
-_(Timestamped record of scope changes, FU deferrals, priority shifts, and other mid-course corrections)_
-
 | Date       | Decision                                  | Rationale                                                 |
 | ---------- | ----------------------------------------- | --------------------------------------------------------- |
 | 2024-12-02 | Created v0.1.0 not marketed MCP release   | Split single-user MCP capabilities from MVP               |
@@ -176,11 +137,7 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 | 2025-12-11 | Added 3 database migrations               | Complete four-layer truth model (entities, events, edges) |
 | 2025-12-11 | Implemented 5 missing MCP actions         | FU-061 completion (observation/relationship actions)      |
 | 2025-12-11 | Created comprehensive test coverage       | Added error cases, edge cases, validation schema tests    |
-
----
-
 ### 7. Notes
-
 - Not marketed release - deploys to production without marketing activities.
 - All releases deploy to production at neotoma.io.
 - No UI or multi-user infrastructure required.
@@ -189,13 +146,3 @@ _(Timestamped record of scope changes, FU deferrals, priority shifts, and other 
 - Release workflow pattern defined in `docs/feature_units/standards/release_workflow.md`.
 - This status file is the **single source of truth** for v0.1.0 release progress.
 - **Remediation (2025-12-11)**: Critical fidelity gaps addressed. See `test_coverage_gap_analysis.md` for complete details.
-
----
-
-
-
-
-
-
-
-

@@ -1,27 +1,12 @@
 # Neotoma Tracing Standard
 *(Distributed Tracing Spans and Context Propagation)*
-
----
-
-## Purpose
-
-Defines distributed tracing for debugging and performance analysis.
-
----
-
 ## Span Naming
-
 **Pattern:** `{subsystem}.{operation}`
-
 **Examples:**
 - `ingestion.ingest_file`
 - `extraction.extract_fields`
 - `search.execute_query`
-
----
-
 ## Span Attributes
-
 ```typescript
 {
   "span_name": "ingestion.ingest_file",
@@ -34,13 +19,8 @@ Defines distributed tracing for debugging and performance analysis.
   }
 }
 ```
-
----
-
 ## Trace Propagation
-
 **Pattern:** `trace_id` passed through all layers.
-
 ```typescript
 async function ingestFile(file: File, traceId: string): Promise<Record> {
   const span = startSpan('ingestion.ingest_file', { trace_id: traceId });
@@ -53,34 +33,9 @@ async function ingestFile(file: File, traceId: string): Promise<Record> {
   }
 }
 ```
-
----
-
 ## Agent Instructions
-
 Load when adding tracing or debugging distributed flows.
-
 Required co-loaded: `docs/observability/logging.md`
-
 Constraints:
 - MUST propagate trace_id
 - MUST NOT include PII in attributes
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

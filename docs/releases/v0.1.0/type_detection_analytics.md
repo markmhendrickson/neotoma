@@ -1,37 +1,14 @@
 # Type Detection Analytics Strategy for v0.1.0
-
-_(Forward-Compatible Approach for E2EE Migration)_
-
----
-
-## Purpose
-
-This document defines how to store type detection metadata in v0.1.0 in a way that:
-1. Works immediately (accessible via service role in v0.1.0)
-2. Remains accessible to app creators after E2EE (v2.0.0)
-3. Supports user debugging and schema expansion
-
----
-
 ## Problem Statement
-
 **Requirement:** Track unknown schema types being uploaded to inform schema expansion decisions.
-
 **Challenge:**
 - v0.1.0: Data stored in Supabase, service role can access (no encryption)
 - v2.0.0: Data encrypted end-to-end, app creators cannot decrypt user data
 - Need: Analytics data accessible to app creators even after E2EE
-
----
-
 ## Solution: Dual-Storage Approach
-
 ### 1. Store in `extraction_metadata` (User-Facing)
-
 **Purpose:** User debugging, future schema expansion, data preservation
-
 **Location:** `extraction_metadata.type_detection` (JSONB in `records` table)
-
 **Structure:**
 ```typescript
 extraction_metadata: {
@@ -50,21 +27,13 @@ extraction_metadata: {
   // ... other extraction_metadata fields
 }
 ```
-
 **Access:**
 - v0.1.0: Accessible via service role (app creators can query)
 - v2.0.0: Encrypted, only user can access (for debugging)
-
----
-
 ### 2. Emit Telemetry Events (App Creator Analytics)
-
 **Purpose:** Analytics accessible to app creators (always, even after E2EE)
-
 **Location:** Telemetry/analytics system (PostHog/Mixpanel, Prometheus, or separate analytics table)
-
 **Event Type:** `schema_detection.fallback` or `schema_detection.attempted`
-
 **Structure:**
 ```typescript
 // Emitted BEFORE encryption (in v0.1.0) or BEFORE encryption (in v2.0.0)
@@ -87,35 +56,25 @@ extraction_metadata: {
   trace_id?: "trace_123"
 }
 ```
-
 **Access:**
 - v0.1.0: Accessible via analytics platform (PostHog/Mixpanel)
 - v2.0.0: Still accessible (emitted BEFORE encryption)
-
 **Storage Options:**
 1. **PostHog/Mixpanel** (recommended for v0.1.0+)
    - Already planned for product analytics (FU-803)
    - Designed for app creator access
    - No PII (only metadata)
-
 2. **Separate Analytics Table** (alternative)
    - `schema_detection_analytics` table (not encrypted)
    - Accessible via service role (always)
    - Aggregated queries for analytics
-
 3. **Prometheus Metrics** (for aggregated stats)
    - `neotoma_schema_detection_fallback_total{type="document"}`
    - `neotoma_schema_detection_attempted_total{type="invoice",match_count="1"}`
    - Aggregated counters (no per-record data)
-
----
-
 ## Implementation for v0.1.0
-
 ### Step 1: Store in `extraction_metadata`
-
 **Location:** `src/services/file_analysis.ts` or schema detection function
-
 **Code:**
 ```typescript
 function detectSchemaType(rawText: string, fileName?: string): {
@@ -156,17 +115,14 @@ function detectSchemaType(rawText: string, fileName?: string): {
   };
 }
 ```
-
 **Storage:**
 ```typescript
 // In record creation flow
 const { detectedType, typeDetectionMetadata } = detectSchemaType(rawText, fileName);
-
 const extraction_metadata = {
   type_detection: typeDetectionMetadata,
   // ... other extraction_metadata fields
 };
-
 await db.insert('records', {
   type: detectedType,
   properties: structuredProperties,
@@ -174,13 +130,8 @@ await db.insert('records', {
   // ...
 });
 ```
-
----
-
 ### Step 2: Emit Telemetry Events
-
 **Location:** `src/services/file_analysis.ts` or schema detection function
-
 **Code:**
 ```typescript
 // Emit telemetry event BEFORE storing record
@@ -226,7 +177,6 @@ async function emitTypeDetectionTelemetry(
   }
 }
 ```
-
 **Telemetry Service:**
 ```typescript
 // src/services/telemetry.ts
@@ -258,13 +208,8 @@ async function emitTelemetryEvent(event: TelemetryEvent): Promise<void> {
   }
 }
 ```
-
----
-
 ## Analytics Queries
-
 ### Query 1: Unknown Schema Types (Most Common Fallbacks)
-
 **PostHog/Mixpanel:**
 ```sql
 -- Count fallback events by detected_type
@@ -274,14 +219,11 @@ WHERE event_type = 'schema_detection.fallback'
 GROUP BY detected_type
 ORDER BY count DESC
 ```
-
 **Prometheus:**
 ```
 neotoma_schema_detection_fallback_total
 ```
-
 ### Query 2: Near-Miss Types (Types That Almost Matched)
-
 **PostHog/Mixpanel:**
 ```sql
 -- Find types that matched 1 pattern (near-misses)
@@ -293,9 +235,7 @@ WHERE event_type = 'schema_detection.attempted'
 GROUP BY attempted_type
 ORDER BY count DESC
 ```
-
 ### Query 3: Filename Hints (What Users Are Trying to Upload)
-
 **PostHog/Mixpanel:**
 ```sql
 -- Analyze filename hints for fallback cases
@@ -306,73 +246,38 @@ WHERE event_type = 'schema_detection.fallback'
 GROUP BY filename_extension
 ORDER BY count DESC
 ```
-
----
-
 ## Migration to v2.0.0
-
 **No Changes Required:**
 - Telemetry events already emitted BEFORE encryption
 - Analytics remain accessible (not encrypted)
 - `extraction_metadata` becomes encrypted (user-only access)
-
 **Optional Enhancement:**
 - Add analytics aggregation job (pre-compute common queries)
 - Create analytics dashboard (unknown types, near-misses)
 - Alert on new unknown types (potential schema candidates)
-
----
-
 ## Privacy Considerations
-
 **What's Stored:**
 - ✅ Record IDs (UUIDs, not PII)
 - ✅ Schema types (not PII)
 - ✅ Pattern match counts (not PII)
 - ✅ File extensions (not full filenames)
 - ✅ File sizes (not content)
-
 **What's NOT Stored:**
 - ❌ Full filenames (may contain PII)
 - ❌ File content (PII)
 - ❌ Properties (PII)
 - ❌ Raw text (PII)
-
 **Compliance:**
 - No PII in telemetry events (per `docs/subsystems/privacy.md`)
 - Analytics data separate from user data
 - User data remains encrypted in v2.0.0
-
----
-
 ## Success Criteria
-
 **v0.1.0 Implementation:**
 - ✅ Type detection metadata stored in `extraction_metadata`
 - ✅ Telemetry events emitted for fallback cases
 - ✅ Analytics queries functional (unknown types, near-misses)
 - ✅ Zero PII in telemetry events
-
 **v2.0.0 Compatibility:**
 - ✅ Analytics remain accessible (emitted before encryption)
 - ✅ User data encrypted (extraction_metadata encrypted)
 - ✅ No changes required to analytics system
-
----
-
-## Related Documentation
-
-- `docs/architecture/schema_handling.md` — Extraction metadata structure
-- `docs/subsystems/privacy.md` — PII handling rules
-- `docs/observability/metrics_standard.md` — Telemetry standards
-- `docs/specs/MVP_FEATURE_UNITS.md` — FU-803 (Product Analytics)
-
-
-
-
-
-
-
-
-
-

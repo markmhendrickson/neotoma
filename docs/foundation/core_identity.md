@@ -1,40 +1,22 @@
 # Neotoma Core Identity
 
-_(What Neotoma Is and Is Not)_
-
----
-
-## Purpose
-
-This document defines what Neotoma is and what it is not, establishing the fundamental boundaries and scope of the Truth Layer platform.
-
----
-
 ## What Neotoma Is
-
 Neotoma is a **Truth Layer** — a privacy-first, deterministic, cross-platform personal-data substrate designed for AI-native workflows.
-
 It is:
-
 - The **lowest-level, canonical source of truth** for a user's personal and professional data (documents + agent-created data)
 - A **substrate** for AI-native personal computing
 - A **privacy-first structured memory system** that transforms fragmented personal data into structured, queryable truth via dual-path ingestion
 - The **foundation layer** beneath agent-driven layers (e.g., Strategy Layer with Agentic Portfolio as example instance, Execution Layer with Agentic Wallet as part)
-
 **Core Architectural Choices (Defensible Differentiators):**
-
 1. **Privacy-First:** User-controlled memory, no provider access, never used for training
 2. **Deterministic:** Same input → same output, always (reproducible, explainable, no hallucinations); hash-based entity IDs ensure deterministic, tamper-evident records
 3. **Cross-Platform:** Works with all AI tools via MCP (ChatGPT, Claude, Cursor), not platform-locked
 4. **Immutable Audit Trail:** Every change permanently recorded with full provenance; event-sourced architecture enables historical replay and time-travel queries
 5. **Cryptographic Integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
-
 These architectural choices are defensible because competitors (model providers, OS providers, startups) cannot pursue them due to structural constraints (business model conflicts, architectural constraints, platform lock-in revenue models). See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
 
 ### Core Responsibilities
-
 Neotoma focuses exclusively on:
-
 1. **Ingestion** — Dual-path ingestion: user-provided file uploads (explicit, never automatic) and agent interactions where users provide contextual data via MCP `submit_payload` action, enabling incremental memory growth as agent usage scales
 2. **Normalization** — Format conversion, text extraction, OCR (file uploads only)
 3. **Extraction** — Deterministic field extraction via rule-based parsing (file uploads) or direct property assignment (agent interactions)
@@ -48,12 +30,8 @@ Neotoma focuses exclusively on:
 11. **Deterministic Retrieval** — Structured search and queries
 12. **AI-Safe Access** — Truth exposure via MCP tools, enabling agents to both read and write structured memory (cross-platform: ChatGPT, Claude, Cursor)
 
----
-
 ## What Neotoma Is NOT
-
 Neotoma is **not**:
-
 - An LLM agent or autonomous system
 - A productivity tool, task manager, or workflow engine
 - A note-taking system or PKM app
@@ -62,15 +40,4 @@ Neotoma is **not**:
 - A crypto wallet or semantic search platform
 - A strategy layer (e.g., [Agentic Portfolio](../architecture/agentic_portfolio_overview.md) as an example instance for financial strategy)
 - An execution layer (e.g., [Agentic Wallet](../architecture/agentic_wallet_overview.md) as part of the execution layer for financial execution)
-
 **Any attempt to generate features outside this scope MUST be rejected.**
-
----
-
-## Related Documents
-
-- [`docs/context/index.md`](../context/index.md) — Documentation navigation guide
-- [`docs/architecture/architecture.md`](../architecture/architecture.md) — System architecture
-- [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) — Core architectural decisions
-- [`docs/foundation/philosophy.md`](./philosophy.md) — Core philosophy and principles
-- [`docs/foundation/data_models.md`](./data_models.md) — Data model definitions

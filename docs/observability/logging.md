@@ -1,27 +1,13 @@
 # Neotoma Logging Standard
 *(Log Levels, Schema, and PII Restrictions)*
-
----
-
-## Purpose
-
-Defines logging standards and PII protection rules.
-
----
-
 ## Log Levels
-
 | Level | When to Use |
 |-------|-------------|
 | `error` | Failures requiring attention |
 | `warn` | Degraded state, retry attempted |
 | `info` | Normal operations (ingestion, search) |
 | `debug` | Detailed debugging (dev only) |
-
----
-
 ## Log Schema
-
 ```typescript
 interface LogEntry {
   level: 'error' | 'warn' | 'info' | 'debug';
@@ -31,7 +17,6 @@ interface LogEntry {
   fields: Record<string, any>;         // NO PII
 }
 ```
-
 **Example:**
 ```json
 {
@@ -46,50 +31,20 @@ interface LogEntry {
   }
 }
 ```
-
----
-
 ## PII Restrictions
-
 **MUST NOT Log:**
 - PII from `properties` (names, SSN, addresses)
 - Full `raw_text`
 - Auth tokens
-
 **MAY Log:**
 - Record IDs
 - Schema types
 - Error codes
 - Performance metrics
-
----
-
 ## Agent Instructions
-
 Load when adding logging or debugging.
-
 Required co-loaded: `docs/subsystems/privacy.md`
-
 Constraints:
 - MUST NOT log PII
 - MUST include trace_id
 - MUST use structured logging
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

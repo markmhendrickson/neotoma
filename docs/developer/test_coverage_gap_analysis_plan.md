@@ -1,4 +1,3 @@
----
 name: Test Coverage Gap Analysis
 overview: Create a comprehensive test coverage gap analysis document for v0.1.0 release that identifies missing implementations, test coverage gaps, error case gaps, and edge case gaps to guide test improvements.
 todos:
@@ -35,5 +34,3 @@ todos:
     status: pending
     dependencies:
       - create_gap_analysis
----
-

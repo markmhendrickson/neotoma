@@ -1,56 +1,17 @@
 # Neotoma MCP Specification
-
-_(Model Context Protocol Actions and Contracts)_
-
----
-
-## Purpose
-
-This document provides the complete specification for Neotoma's Model Context Protocol (MCP) server. MCP is the **primary AI-safe interface** for accessing and modifying Neotoma's Truth Layer from AI tools (ChatGPT, Claude, Cursor, custom agents).
-
-**Architectural Note:** Neotoma externalizes all conversational interactions to MCP-compatible agents. Neotoma does not provide internal chat UI or conversational interfaces. See `docs/architecture/conversational_ux_architecture.md` for the architectural rationale.
-
-**Dual-Path Ingestion:** MCP enables dual-path ingestion for structured personal data memory:
-
-1. `upload_file` — File uploads (PDFs, images, receipts)
-2. `submit_payload` — Agent interactions (structured data from conversations)
-
-Both paths feed into the same structured memory with entity resolution and timelines.
-
-MCP ensures:
-
-- Structured, validated access to truth
-- No direct database manipulation
-- Deterministic, reproducible responses
-- Full provenance and traceability
-- Error handling with clear codes
-- Cross-platform access (ChatGPT, Claude, Cursor)
-
-**Defensible Differentiation:** MCP integration provides cross-platform access (vs. platform-locked provider memory), supports privacy-first architecture (user-controlled access via MCP), and enables deterministic operations (reproducible responses). These are defensible differentiators competitors cannot pursue due to structural constraints. See [`docs/private/competitive/defensible_differentiation_framework.md`](../private/competitive/defensible_differentiation_framework.md).
-
----
-
 ## Scope
-
 This document covers:
-
 - Complete catalog of MCP actions (8 MVP actions + 4 post-MVP Plaid actions + 2 post-MVP Metrics actions)
 - Request/response schemas for each action
 - Error envelopes and error codes
 - Consistency guarantees per action
 - Determinism requirements
 - Versioning and backward compatibility
-
 This document does NOT cover:
-
 - MCP protocol details (see MCP SDK docs)
 - Implementation internals (see `src/server.ts`)
 - Database schema (see `docs/subsystems/schema.md`)
-
----
-
 ## 1. MCP Architecture in Neotoma
-
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart LR
@@ -59,64 +20,42 @@ flowchart LR
     App[Application Layer<br/>Actions/Workflows]
     Domain[Domain Layer<br/>Services]
     DB[(PostgreSQL<br/>Supabase)]
-
     AI -->|MCP Protocol| MCP
     MCP -->|Validate & Route| App
     App -->|Orchestrate| Domain
     Domain -->|Query/Write| DB
-
     DB -->|Results| Domain
     Domain -->|Structured Data| App
     App -->|JSON Response| MCP
     MCP -->|MCP Protocol| AI
-
     style AI fill:#ffe6f0
     style MCP fill:#e1f5ff
     style DB fill:#e6ffe6
 ```
-
 **Key Points:**
-
 - AI tools never access database directly
 - All requests validated at MCP layer
 - All responses structured and typed
 - All errors use ErrorEnvelope
-
----
-
 ## 2. Complete MCP Action Catalog
-
 ### 2.1 Core Payload Operations
-
 | Action           | Purpose                 | Consistency | Deterministic          |
 | ---------------- | ----------------------- | ----------- | ---------------------- |
 | `submit_payload` | Submit payload envelope | Strong      | Yes (given same input) |
-
 **Note:** `submit_payload` is the primary ingestion action in v0.2.1+. It replaces `store_record` and provides capability-based processing with deterministic deduplication.
-
 ### 2.1.1 Legacy Record Operations (Deprecated)
-
 | Action             | Purpose                           | Consistency                                        | Deterministic |
 | ------------------ | --------------------------------- | -------------------------------------------------- | ------------- |
 | `update_record`    | Update record metadata/properties | Strong                                             | Yes           |
 | `retrieve_records` | Query records with filters        | Strong (metadata), Bounded Eventual (search index) | Yes (ranking) |
 | `delete_record`    | Remove record                     | Strong                                             | Yes           |
-
 **Note:** These operations are deprecated in v0.2.1+ and maintained for backward compatibility. New code should use `submit_payload` and entity-based operations (`get_entity_snapshot`, `list_observations`).
-
----
-
 ### 2.2 File Operations
-
 | Action         | Purpose                              | Consistency | Deterministic            |
 | -------------- | ------------------------------------ | ----------- | ------------------------ |
 | `upload_file`  | Upload file and create/attach record | Strong      | Yes (content-hash based) |
 | `get_file_url` | Get signed URL for file access       | Strong      | N/A (URL signing)        |
-
----
-
 ### 2.3 Integration Operations
-
 | Action                        | Purpose                             | Consistency      | Deterministic         | MVP Status  |
 | ----------------------------- | ----------------------------------- | ---------------- | --------------------- | ----------- |
 | `list_provider_catalog`       | List available external providers   | Strong           | Yes                   | ✅ MVP      |
@@ -125,24 +64,14 @@ flowchart LR
 | `plaid_exchange_public_token` | Exchange token and store Plaid item | Strong           | Yes                   | ⏳ Post-MVP |
 | `plaid_sync`                  | Sync Plaid transactions             | Bounded Eventual | Yes (per transaction) | ⏳ Post-MVP |
 | `plaid_list_items`            | List connected Plaid accounts       | Strong           | Yes                   | ⏳ Post-MVP |
-
 **Note:** Plaid actions (4 total) moved to post-MVP. Plaid serves Tier 3+ ICPs (Cross-Border Solopreneurs, Agentic Portfolio) who need live bank transaction sync, not Tier 1 MVP targets who primarily upload static documents (PDF invoices/receipts/statements).
-
----
-
 ### 2.4 Metrics and Analytics Operations
-
 | Action                  | Purpose                                                             | Consistency                                   | Deterministic                         | MVP Status  |
 | ----------------------- | ------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------- | ----------- |
 | `get_technical_metrics` | Query Prometheus technical metrics (latency, errors, system health) | Bounded Eventual (Prometheus scrape interval) | Yes (same query + time → same result) | ⏳ Post-MVP |
 | `get_product_analytics` | Query product analytics (activation, retention, usage)              | Bounded Eventual (analytics platform sync)    | Yes (same query + time → same result) | ⏳ Post-MVP |
-
 **Note:** Metrics actions are post-MVP. They enable AI-generated reports on system performance and user behavior. Requires Prometheus and PostHog/Mixpanel integration (Phase 8 observability).
-
----
-
 ### 2.5 Observation and Snapshot Operations
-
 | Action                 | Purpose                                    | Consistency | Deterministic | MVP Status |
 | ---------------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
 | `get_entity_snapshot`  | Get entity snapshot with provenance        | Strong      | Yes           | ✅ MVP     |
@@ -150,19 +79,11 @@ flowchart LR
 | `get_field_provenance` | Trace field to source documents            | Strong      | Yes           | ✅ MVP     |
 | `create_relationship`  | Create typed relationship between entities | Strong      | Yes           | ✅ MVP     |
 | `list_relationships`   | Query entity relationships                 | Strong      | Yes           | ✅ MVP     |
-
 **Note:** These actions enable AI agents to work with entities, observations, and snapshots — the core of Neotoma's three-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
-
----
-
 ## 3. Action Specifications
-
 ### 3.1 `submit_payload`
-
 **Purpose:** Submit a payload envelope for compilation into payloads and observations. Agents submit `capability_id` + `body` + `provenance`; server handles schema reasoning, deduplication, and entity extraction.
-
 **Request Schema:**
-
 ```typescript
 {
   capability_id: string;           // Required: Versioned capability (e.g., "neotoma:store_invoice:v1")
@@ -176,9 +97,7 @@ flowchart LR
   client_request_id?: string;      // Optional: Retry correlation ID
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   payload_id: string; // UUID of created/found payload
@@ -188,22 +107,17 @@ flowchart LR
   message: string; // Human-readable status message
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `VALIDATION_ERROR` | 400 | Invalid payload envelope schema | No |
 | `UNKNOWN_CAPABILITY` | 400 | Capability ID not found | No |
 | `DB_INSERT_FAILED` | 500 | Database write failed | Yes |
-
 **Capability Validation:**
-
 - `capability_id` MUST be a valid capability (e.g., `"neotoma:store_invoice:v1"`)
 - Available capabilities: `neotoma:store_invoice:v1`, `neotoma:store_transaction:v1`, `neotoma:store_receipt:v1`, `neotoma:store_contract:v1`, `neotoma:store_note:v1`
 - See [`docs/architecture/payload_model.md`](../architecture/payload_model.md) for capability details
-
 **Example:**
-
 ```json
 // Request
 {
@@ -222,7 +136,6 @@ flowchart LR
     "agent_id": "claude-3-opus"
   }
 }
-
 // Response
 {
   "payload_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -232,35 +145,21 @@ flowchart LR
   "message": "Payload created and observations extracted"
 }
 ```
-
 **Deduplication:**
-
 - Same payload content (after normalization) → same `payload_content_id`
 - Duplicate submissions return existing payload with `created: false`
 - Normalization includes: field selection, string normalization, array sorting
-
 **Entity Extraction:**
-
 - All payloads extract at least one entity (the payload itself)
 - Additional entities extracted per capability rules (field_value, array_items)
 - Observations created automatically with `source_payload_id` reference
-
 **Consistency:** Strong (payload immediately queryable, observations created synchronously)
-
 **Determinism:** Yes (same payload content → same `payload_content_id`; deterministic entity extraction)
-
----
-
 ### 3.2 `update_record` (Deprecated)
-
 **Status:** Deprecated in v0.2.1+. Use `submit_payload` with updated data instead.
-
 **Purpose:** Update existing record's properties or metadata.
-
 **Purpose:** Update existing record's properties or metadata.
-
 **Request Schema:**
-
 ```typescript
 {
   id: string;                      // Required: Record UUID
@@ -270,9 +169,7 @@ flowchart LR
   embedding?: number[];            // Optional: Update embedding
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   id: string;
@@ -283,30 +180,19 @@ flowchart LR
   updated_at: string;              // Updated timestamp
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `RECORD_NOT_FOUND` | 404 | Record ID doesn't exist | No |
 | `VALIDATION_ERROR` | 400 | Invalid update data | No |
 | `DB_UPDATE_FAILED` | 500 | Database write failed | Yes |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same update → same result)
-
----
-
 ### 3.3 `retrieve_records` (Deprecated)
-
 **Status:** Deprecated in v0.2.1+. Use entity-based operations (`get_entity_snapshot`, `list_observations`) instead.
-
 **Purpose:** Query records with filters, search, and semantic matching.
-
 **Purpose:** Query records with filters, search, and semantic matching.
-
 **Request Schema:**
-
 ```typescript
 {
   type?: string;                   // Optional: Filter by record type
@@ -318,9 +204,7 @@ flowchart LR
   query_embedding?: number[];      // Optional: Pre-computed query embedding
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   records: Array<{
@@ -335,66 +219,43 @@ flowchart LR
   total: number; // Total matching records (before limit)
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `VALIDATION_ERROR` | 400 | Invalid query | No |
 | `SEARCH_FAILED` | 500 | Search execution failed | Yes |
-
 **Consistency:**
-
 - Metadata: Strong
 - Search index: Bounded Eventual (max 5s delay)
 - Embeddings: Bounded Eventual (max 10s delay)
-
 **Determinism:** Yes (same query + same DB state → same order)
-
----
-
 ### 3.4 `delete_record` (Deprecated)
-
 **Status:** Deprecated in v0.2.1+. Payloads are immutable; use entity-based operations for data management.
-
 **Purpose:** Delete a record and its associated files.
-
 **Purpose:** Delete a record and its associated files.
-
 **Request Schema:**
-
 ```typescript
 {
   id: string; // Required: Record UUID to delete
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   success: boolean;
   deleted_id: string;
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `RECORD_NOT_FOUND` | 404 | Record doesn't exist | No |
 | `DB_DELETE_FAILED` | 500 | Deletion failed | Yes |
-
 **Consistency:** Strong (record immediately gone)
-
 **Determinism:** Yes
-
----
-
 ### 3.5 `upload_file`
-
 **Purpose:** Upload file from local path, optionally create analyzed record.
-
 **Request Schema:**
-
 ```typescript
 {
   file_path: string;               // Required: Local file path
@@ -403,9 +264,7 @@ flowchart LR
   properties?: string;             // Optional: JSON properties (skips analysis)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   record?: {                       // Present if new record created
@@ -420,7 +279,6 @@ flowchart LR
   content_type: string;
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
@@ -429,88 +287,58 @@ flowchart LR
 | `UNSUPPORTED_FILE_TYPE` | 400 | File type not supported | No |
 | `UPLOAD_FAILED` | 500 | Storage upload failed | Yes |
 | `ANALYSIS_FAILED` | 500 | File analysis failed | Partial (file uploaded, analysis failed) |
-
 **Consistency:** Strong (file + record)
-
 **Determinism:** Yes (content-hash prevents duplicates)
-
----
-
 ### 3.6 `get_file_url`
-
 **Purpose:** Get signed URL for accessing stored file.
-
 **Request Schema:**
-
 ```typescript
 {
   file_path: string;               // Required: File path in storage
   expires_in?: number;             // Optional: URL expiry seconds (default: 3600)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   signed_url: string; // Time-limited access URL
   expires_at: string; // ISO 8601 expiration timestamp
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `FILE_NOT_FOUND` | 404 | File doesn't exist in storage | No |
 | `SIGNING_FAILED` | 500 | URL signing failed | Yes |
-
 **Consistency:** Strong
-
 **Determinism:** No (signed URL contains timestamp)
-
----
-
 ### 3.7 `get_entity_snapshot`
-
 **Purpose:** Get entity snapshot with provenance. Returns current truth for entity computed by reducer from observations.
-
 **Three-Layer Model Context:** This action returns the **Snapshot** layer — the deterministic output of the reducer engine that merges multiple **Observations** (extracted from **Payloads**) about an **Entity**. The snapshot represents the current truth, with every field traceable to its source observation and payload.
-
 **Use Cases:**
-
 - Get current state of an entity (company, person, invoice)
 - **Historical state (primary):** Get entity state at any point in time by filtering observations up to a timestamp and recomputing snapshot—enables understanding how entities evolved as new observations arrived
 - Trace which documents contributed to current truth
 - Understand how multiple sources were merged over time
 - See how entity properties changed across multiple documents (e.g., company address updates, person role changes)
-
 **Request Schema:**
-
 ```typescript
 {
   entity_id: string; // Required: Entity ID (hash-based)
   at?: string; // Optional: ISO 8601 timestamp to get historical snapshot state
 }
 ```
-
 **Historical State (Primary Use Case):**
-
 Entity historical state inspection is more important than record historical state because:
-
 - **Entities are the primary unit of truth** — agents query and reason about entities, not individual records
 - **Entities evolve over time** — they merge information from multiple documents as new observations arrive
 - **Understanding entity evolution is core to reasoning** — seeing how a company's address changed or a person's role evolved across time
-
 To get historical entity state:
-
 1. Filter observations up to a timestamp using `list_observations` with `observed_at <= timestamp`
 2. Recompute the snapshot from those observations using the reducer
 3. This shows what the entity truth was at that point in time
-
 **Future Enhancement:** Add optional `at` parameter to `get_entity_snapshot` to directly return historical entity state, mirroring `getRecordAtTimestamp` but prioritizing entities as the primary historical inspection target.
-
 **Response Schema:**
-
 ```typescript
 {
   entity_id: string;
@@ -523,22 +351,17 @@ To get historical entity state:
   last_observation_at: string; // ISO 8601
 }
 ```
-
 **Errors:**
-
 | Code               | HTTP | Meaning                  | Retry? |
 | ------------------ | ---- | ------------------------ | ------ |
 | `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist  | No     |
 | `VALIDATION_ERROR` | 400  | Invalid entity_id format | No     |
-
 **Example:**
-
 ```json
 // Request
 {
   "entity_id": "ent_abc123def456"
 }
-
 // Response
 {
   "entity_id": "ent_abc123def456",
@@ -559,35 +382,22 @@ To get historical entity state:
   "last_observation_at": "2024-01-15T10:30:00Z"
 }
 ```
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same entity_id → same snapshot)
-
 **Related Documents:**
-
 - [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) — Four-layer truth model
 - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
 - [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer patterns and merge strategies
 - [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry merge policies
-
----
-
 ### 3.8 `list_observations`
-
 **Purpose:** Query observations for entity. Returns all observations that contributed to entity snapshot.
-
 **Four-Layer Model Context:** This action returns the **Observation** layer — granular, source-specific facts extracted from **Documents** about an **Entity**. Each observation represents what one document said about the entity at a specific point in time. The reducer merges these observations into a snapshot using merge policies from schema registry.
-
 **Use Cases:**
-
 - See all facts extracted about an entity from different documents
 - Understand how entity truth evolved over time
 - Debug conflicts between multiple sources
 - Audit which documents contributed specific facts
-
 **Request Schema:**
-
 ```typescript
 {
   entity_id: string; // Required: Entity ID
@@ -595,9 +405,7 @@ To get historical entity state:
   offset?: number; // Optional: Pagination offset (default: 0)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   observations: Array<{
@@ -617,51 +425,34 @@ To get historical entity state:
   offset: number;
 }
 ```
-
 **Errors:**
-
 | Code               | HTTP | Meaning                  | Retry? |
 | ------------------ | ---- | ------------------------ | ------ |
 | `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist  | No     |
 | `VALIDATION_ERROR` | 400  | Invalid entity_id format | No     |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same entity_id → same observations, sorted by observed_at DESC)
-
----
-
 ### 3.9 `get_field_provenance`
-
 **Purpose:** Trace field to source documents. Returns full provenance chain: snapshot field → observation → document → file.
-
 **Four-Layer Model Context:** This action traverses the complete four-layer truth model:
-
 1. **Snapshot** field (current truth) →
 2. **Observation** (which observation contributed this value) →
 3. **Document** (which record/document contained the observation) →
 4. **File** (original source file)
-
 This enables full explainability: for any fact in the system, you can trace it back to the exact source document and understand why it was selected (via specificity_score and source_priority).
-
 **Use Cases:**
-
 - Answer "where did this value come from?"
 - Audit trail for compliance
 - Debug incorrect entity data
 - Understand reducer merge decisions
-
 **Request Schema:**
-
 ```typescript
 {
   entity_id: string; // Required: Entity ID
   field: string; // Required: Field name
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   field: string;
@@ -682,27 +473,17 @@ This enables full explainability: for any fact in the system, you can trace it b
   observed_at: string; // ISO 8601
 }
 ```
-
 **Errors:**
-
 | Code               | HTTP | Meaning                    | Retry? |
 | ------------------ | ---- | -------------------------- | ------ |
 | `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist    | No     |
 | `FIELD_NOT_FOUND`  | 404  | Field not in snapshot      | No     |
 | `VALIDATION_ERROR` | 400  | Invalid entity_id or field | No     |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same entity_id + field → same provenance)
-
----
-
 ### 3.10 `create_relationship`
-
 **Purpose:** Create typed relationship between entities.
-
 **Request Schema:**
-
 ```typescript
 {
   relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES'; // Required
@@ -711,9 +492,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   metadata?: Record<string, any>; // Optional: Relationship-specific metadata
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   id: string; // UUID
@@ -724,32 +503,20 @@ This enables full explainability: for any fact in the system, you can trace it b
   created_at: string; // ISO 8601
 }
 ```
-
 **Errors:**
-
 | Code                        | HTTP | Meaning                               | Retry? |
 | --------------------------- | ---- | ------------------------------------- | ------ |
 | `ENTITY_NOT_FOUND`          | 404  | Source or target entity doesn't exist | No     |
 | `INVALID_RELATIONSHIP_TYPE` | 400  | Invalid relationship type             | No     |
 | `CYCLE_DETECTED`            | 400  | Relationship would create cycle       | No     |
 | `VALIDATION_ERROR`          | 400  | Invalid entity IDs                    | No     |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same inputs → same relationship ID)
-
 **Related Documents:**
-
 - [`docs/subsystems/relationships.md`](../subsystems/relationships.md) — Relationship patterns
-
----
-
 ### 3.11 `list_relationships`
-
 **Purpose:** Query entity relationships. Returns all relationships for entity (inbound, outbound, or both).
-
 **Request Schema:**
-
 ```typescript
 {
   entity_id: string; // Required: Entity ID
@@ -759,9 +526,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   offset?: number; // Optional: Pagination offset (default: 0)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   relationships: Array<{
@@ -777,26 +542,16 @@ This enables full explainability: for any fact in the system, you can trace it b
   offset: number;
 }
 ```
-
 **Errors:**
-
 | Code               | HTTP | Meaning                        | Retry? |
 | ------------------ | ---- | ------------------------------ | ------ |
 | `ENTITY_NOT_FOUND` | 404  | Entity ID doesn't exist        | No     |
 | `VALIDATION_ERROR` | 400  | Invalid entity_id or direction | No     |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same entity_id + filters → same relationships, sorted by created_at DESC)
-
----
-
 ### 3.12 `plaid_create_link_token`
-
 **Purpose:** Create Plaid Link token for OAuth flow.
-
 **Request Schema:**
-
 ```typescript
 {
   user_id?: string;                // Optional: User identifier
@@ -806,43 +561,30 @@ This enables full explainability: for any fact in the system, you can trace it b
   redirect_uri?: string;           // Optional: OAuth redirect
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   link_token: string; // Plaid Link token (short-lived)
   expiration: string; // ISO 8601
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `PLAID_NOT_CONFIGURED` | 503 | Plaid credentials missing | No |
 | `PLAID_API_ERROR` | 500 | Plaid API call failed | Yes |
-
 **Consistency:** Strong
-
 **Determinism:** No (Plaid generates token)
-
----
-
 ### 3.8 `plaid_exchange_public_token`
-
 **Purpose:** Exchange Plaid public token for permanent access token, store item.
-
 **Request Schema:**
-
 ```typescript
 {
   public_token: string;            // Required: From Plaid Link
   trigger_initial_sync?: boolean;  // Optional: Run sync immediately (default: false)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   plaid_item: {
@@ -863,26 +605,17 @@ This enables full explainability: for any fact in the system, you can trace it b
   };
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `PLAID_INVALID_TOKEN` | 400 | Public token invalid/expired | No |
 | `PLAID_API_ERROR` | 500 | Plaid API error | Yes |
 | `DB_INSERT_FAILED` | 500 | Failed to store item | Yes |
-
 **Consistency:** Strong
-
 **Determinism:** Yes (same public_token → same item_id)
-
----
-
 ### 3.9 `plaid_sync`
-
 **Purpose:** Sync transactions from Plaid for stored item(s).
-
 **Request Schema:**
-
 ```typescript
 {
   plaid_item_id?: string;          // Optional: Internal UUID
@@ -891,9 +624,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   force_full_sync?: boolean;       // Optional: Ignore cursor (default: false)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   syncs: Array<{
@@ -911,35 +642,24 @@ This enables full explainability: for any fact in the system, you can trace it b
   total_synced_items: number;
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `PLAID_ITEM_NOT_FOUND` | 404 | Item not in database | No |
 | `PLAID_API_ERROR` | 500 | Plaid API error | Yes |
 | `SYNC_FAILED` | 500 | Sync operation failed | Yes |
-
 **Consistency:** Bounded Eventual (transactions indexed asynchronously)
-
 **Determinism:** Yes (same transaction data → same record)
-
----
-
 ### 3.10 `plaid_list_items`
-
 **Purpose:** List connected Plaid items (without access tokens).
-
 **Request Schema:**
-
 ```typescript
 {
   plaid_item_id?: string;          // Optional: Filter by internal UUID
   item_id?: string;                // Optional: Filter by Plaid item_id
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   items: Array<{
@@ -953,32 +673,21 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
-
 **Consistency:** Strong
-
 **Determinism:** Yes
-
----
-
 ### 3.11 `list_provider_catalog`
-
 **Purpose:** List available external data providers (X, Instagram, Gmail, etc.).
-
 **Request Schema:**
-
 ```typescript
 {
   // No parameters
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   providers: Array<{
@@ -993,22 +702,13 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
 }
 ```
-
 **Errors:**
 None (static catalog)
-
 **Consistency:** Strong
-
 **Determinism:** Yes
-
----
-
 ### 3.12 `sync_provider_imports`
-
 **Purpose:** Trigger import sync for external provider.
-
 **Request Schema:**
-
 ```typescript
 {
   provider: string;                // Required: Provider ID (e.g., 'x', 'instagram')
@@ -1018,9 +718,7 @@ None (static catalog)
   max_pages?: number;              // Optional: Max pages to fetch
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   sync_run_id: string;             // UUID of sync operation
@@ -1035,20 +733,13 @@ None (static catalog)
   completed_at?: string;
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `PROVIDER_NOT_FOUND` | 404 | Provider ID invalid | No |
-
----
-
 ### 3.13 `get_technical_metrics`
-
 **Purpose:** Query technical/operational metrics from Prometheus for AI-generated performance reports.
-
 **Request Schema:**
-
 ```typescript
 {
   metric_name: string;                // Required: Metric name (e.g., 'neotoma_record_upload_duration_ms')
@@ -1061,9 +752,7 @@ None (static catalog)
   step?: string;                      // Optional: Query resolution step (e.g., '1m', '5m', '1h')
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   metric_name: string;
@@ -1082,7 +771,6 @@ None (static catalog)
   };
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
@@ -1090,9 +778,7 @@ None (static catalog)
 | `METRIC_NOT_FOUND` | 404 | Metric name doesn't exist | No |
 | `PROMETHEUS_QUERY_FAILED` | 500 | Prometheus query execution failed | Yes |
 | `METRICS_SERVICE_UNAVAILABLE` | 503 | Prometheus unavailable | Yes |
-
 **Example:**
-
 ```json
 // Request
 {
@@ -1104,7 +790,6 @@ None (static catalog)
   "aggregation": "p95",
   "step": "1h"
 }
-
 // Response
 {
   "metric_name": "neotoma_record_upload_duration_ms",
@@ -1124,13 +809,9 @@ None (static catalog)
   }
 }
 ```
-
 **Consistency:** Bounded Eventual (Prometheus scrape interval, typically 15-30 seconds)
-
 **Determinism:** Yes (same metric name + time range + aggregation → same result)
-
 **Available Metrics:**
-
 - `neotoma_record_upload_duration_ms` (histogram)
 - `neotoma_record_upload_total` (counter, labels: status)
 - `neotoma_search_duration_ms` (histogram)
@@ -1139,15 +820,9 @@ None (static catalog)
 - `neotoma_graph_orphan_nodes_total` (gauge)
 - `neotoma_db_connection_pool_usage` (gauge)
 - See `docs/specs/METRICS_REQUIREMENTS.md` for complete list
-
----
-
 ### 3.14 `get_product_analytics`
-
 **Purpose:** Query product analytics from PostHog/Mixpanel for AI-generated user behavior reports.
-
 **Request Schema:**
-
 ```typescript
 {
   metric_type: 'activation' | 'retention' | 'usage' | 'funnel' | 'cohort'; // Required
@@ -1160,9 +835,7 @@ None (static catalog)
   filters?: Record<string, any>;     // Optional: Additional filters (platform-specific)
 }
 ```
-
 **Response Schema:**
-
 ```typescript
 {
   metric_type: string;
@@ -1184,7 +857,6 @@ None (static catalog)
   };
 }
 ```
-
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
@@ -1192,9 +864,7 @@ None (static catalog)
 | `METRIC_NOT_FOUND` | 404 | Metric name doesn't exist | No |
 | `ANALYTICS_QUERY_FAILED` | 500 | Analytics platform query failed | Yes |
 | `ANALYTICS_SERVICE_UNAVAILABLE` | 503 | PostHog/Mixpanel unavailable | Yes |
-
 **Example:**
-
 ```json
 // Request - Activation rate
 {
@@ -1205,7 +875,6 @@ None (static catalog)
     "end": "2024-01-31T23:59:59Z"
   }
 }
-
 // Response
 {
   "metric_type": "activation",
@@ -1223,7 +892,6 @@ None (static catalog)
     }
   }
 }
-
 // Request - Retention time series
 {
   "metric_type": "retention",
@@ -1233,7 +901,6 @@ None (static catalog)
     "end": "2024-01-31T23:59:59Z"
   }
 }
-
 // Response
 {
   "metric_type": "retention",
@@ -1256,34 +923,20 @@ None (static catalog)
   }
 }
 ```
-
 **Consistency:** Bounded Eventual (analytics platform sync interval, typically 1-5 minutes)
-
 **Determinism:** Yes (same metric + time range → same result)
-
 **Available Metrics:**
-
 - **Activation:** `activation_first_upload_rate`, `activation_first_extraction_rate`, `activation_first_entity_rate`, `activation_first_event_rate`, `activation_first_search_rate`, `activation_first_ai_query_rate`
 - **Retention:** `day_1_retention`, `week_1_retention`, `month_1_retention`
 - **Usage:** `daily_active_users`, `weekly_active_users`, `avg_uploads_per_user_per_week`, `avg_searches_per_user_per_week`
 - **Funnels:** signup → upload → extraction → entity → timeline
 - See `docs/specs/METRICS_REQUIREMENTS.md` for complete list
-
----
-
 | `CONNECTOR_NOT_FOUND` | 404 | Connector not connected | No |
 | `SYNC_FAILED` | 500 | Sync operation failed | Yes |
-
 **Consistency:** Bounded Eventual (records indexed asynchronously)
-
 **Determinism:** Yes (per imported record)
-
----
-
 ## 4. Error Envelope Standard
-
 All MCP actions return errors using this structure:
-
 ```typescript
 interface MCPErrorEnvelope {
   error: {
@@ -1294,9 +947,7 @@ interface MCPErrorEnvelope {
   };
 }
 ```
-
 **Example:**
-
 ```json
 {
   "error": {
@@ -1310,13 +961,8 @@ interface MCPErrorEnvelope {
   }
 }
 ```
-
----
-
 ## 5. Canonical Error Codes
-
 ### 5.1 Validation Errors (4xx)
-
 | Code                    | HTTP | Meaning                   |
 | ----------------------- | ---- | ------------------------- |
 | `VALIDATION_ERROR`      | 400  | Invalid input schema      |
@@ -1327,11 +973,7 @@ interface MCPErrorEnvelope {
 | `PLAID_INVALID_TOKEN`   | 400  | Plaid token invalid       |
 | `PROVIDER_NOT_FOUND`    | 404  | Provider ID invalid       |
 | `METRIC_NOT_FOUND`      | 404  | Metric name doesn't exist |
-
----
-
 ### 5.2 Server Errors (5xx)
-
 | Code                      | HTTP | Meaning                           |
 | ------------------------- | ---- | --------------------------------- |
 | `DB_INSERT_FAILED`        | 500  | Database insert failed            |
@@ -1346,67 +988,41 @@ interface MCPErrorEnvelope {
 | `ANALYTICS_QUERY_FAILED`  | 500  | Analytics platform query failed   |
 | `PROMETHEUS_QUERY_FAILED` | 500  | Prometheus query execution failed |
 | `ANALYTICS_QUERY_FAILED`  | 500  | Analytics platform query failed   |
-
----
-
 ### 5.3 Service Unavailable (503)
-
 | Code                            | HTTP | Meaning                      |
 | ------------------------------- | ---- | ---------------------------- |
 | `PLAID_NOT_CONFIGURED`          | 503  | Plaid credentials missing    |
 | `METRICS_SERVICE_UNAVAILABLE`   | 503  | Prometheus unavailable       |
 | `ANALYTICS_SERVICE_UNAVAILABLE` | 503  | PostHog/Mixpanel unavailable |
 | `SERVICE_UNAVAILABLE`           | 503  | Temporary service outage     |
-
----
-
 ## 6. Consistency Guarantees
-
 ### 6.1 Strong Consistency Actions
-
 **Immediate read-after-write:**
-
 - `store_record` → record queryable immediately
 - `update_record` → changes visible immediately
 - `delete_record` → record gone immediately
 - `plaid_exchange_public_token` → item queryable immediately
-
 **Guarantee:** After action returns success, subsequent queries reflect the change.
-
----
-
 ### 6.2 Bounded Eventual Actions
-
 **Delayed visibility (max delay documented):**
-
 - `retrieve_records` with search: Max 5s index delay
 - `upload_file` with analysis: Max 5s for search index
 - `plaid_sync`: Max 5s for transaction search
 - `sync_provider_imports`: Max 5s for record search
 - `get_technical_metrics`: Max 30s (Prometheus scrape interval)
 - `get_product_analytics`: Max 5min (analytics platform sync)
-
 **Guarantee:** After max delay, all changes visible.
-
 **Client Behavior:** AI should wait or inform user of potential staleness.
-
----
-
 ## 7. Determinism Guarantees
-
 ### 7.1 Deterministic Actions
-
 **Same input → same output (modulo timestamps/IDs):**
-
 - `store_record` — Same properties → same structure
 - `retrieve_records` — Same query + DB state → same order
 - `plaid_sync` — Same transaction data → same records
 - `sync_provider_imports` — Same source data → same records
 - `get_technical_metrics` — Same metric + time range → same values
 - `get_product_analytics` — Same metric + time range → same values
-
 **Testing:**
-
 ```typescript
 test("retrieve_records returns deterministic order", async () => {
   const results1 = await mcpClient.call("retrieve_records", {
@@ -1415,61 +1031,35 @@ test("retrieve_records returns deterministic order", async () => {
   const results2 = await mcpClient.call("retrieve_records", {
     type: "transaction",
   });
-
   expect(results1.records.map((r) => r.id)).toEqual(
     results2.records.map((r) => r.id)
   );
 });
 ```
-
----
-
 ### 7.2 Non-Deterministic Actions (Documented)
-
 **Acceptable nondeterminism:**
-
 - `plaid_create_link_token` — Plaid generates token (different each time)
 - `get_file_url` — Signed URL contains timestamp
-
 **Reason:** External service generates values.
-
----
-
 ## 8. Versioning and Backward Compatibility
-
 ### 8.1 Action Versioning
-
 **Current Version:** `1.0.0`
-
 **Versioning Strategy:**
-
 - Major version bump: Breaking changes (required param added, response schema changed)
 - Minor version bump: Additive changes (optional param added)
 - Patch version bump: Bug fixes, error code additions
-
----
-
 ### 8.2 Backward Compatibility Rules
-
 **MUST:**
-
 - New optional parameters only
 - Response schema additive (new fields OK, removing fields forbidden)
 - Error codes additive (new codes OK, removing codes forbidden)
-
 **MUST NOT:**
-
 - Remove required parameters
 - Change parameter types
 - Remove response fields
 - Change response field types
-
----
-
 ## 9. Rate Limiting and Quotas
-
 ### 9.1 Rate Limits (MVP)
-
 | Action                  | Limit   | Window   | Notes          |
 | ----------------------- | ------- | -------- | -------------- |
 | `store_record`          | 100/min | Per user | Create records |
@@ -1477,9 +1067,7 @@ test("retrieve_records returns deterministic order", async () => {
 | `upload_file`           | 10/min  | Per user | File upload    |
 | `plaid_sync`            | 5/min   | Per user | Plaid sync     |
 | `sync_provider_imports` | 5/min   | Per user | Provider sync  |
-
 **Exceeding Limit:**
-
 ```json
 {
   "error": {
@@ -1491,13 +1079,8 @@ test("retrieve_records returns deterministic order", async () => {
   }
 }
 ```
-
----
-
 ## 10. Testing MCP Actions
-
 ### 10.1 Unit Tests (Action Logic)
-
 ```typescript
 describe("MCP Actions", () => {
   test("store_record validates input", async () => {
@@ -1505,91 +1088,62 @@ describe("MCP Actions", () => {
       mcpServer.storeRecord({ type: "", properties: {} })
     ).rejects.toThrow("VALIDATION_ERROR");
   });
-
   test("retrieve_records returns deterministic order", async () => {
     // Insert test records
     await insertTestRecords();
-
     const result1 = await mcpServer.retrieveRecords({ type: "transaction" });
     const result2 = await mcpServer.retrieveRecords({ type: "transaction" });
-
     expect(result1.records).toEqual(result2.records);
   });
 });
 ```
-
----
-
 ### 10.2 Integration Tests (with Real DB)
-
 ```typescript
 test("store and retrieve record", async () => {
   const stored = await mcpClient.call("store_record", {
     type: "transaction",
     properties: { amount: 100 },
   });
-
   const retrieved = await mcpClient.call("retrieve_records", {
     type: "transaction",
   });
-
   expect(retrieved.records).toContainEqual(
     expect.objectContaining({ id: stored.id })
   );
 });
 ```
-
----
-
 ### 10.3 E2E Tests (via MCP Client)
-
 ```typescript
 test("upload_file creates analyzed record", async () => {
   const result = await mcpClient.call("upload_file", {
     file_path: "fixtures/sample_invoice.pdf",
   });
-
   expect(result.record).toBeDefined();
   expect(result.record.type).toBe("FinancialRecord");
   expect(result.record.properties.invoice_number).toBeDefined();
 });
 ```
-
----
-
 ## Detailed Documentation References
-
 For implementation details, see:
-
 - [`src/server.ts`](../../src/server.ts) — MCP action implementations
 - [`docs/NEOTOMA_MANIFEST.md`](../NEOTOMA_MANIFEST.md) — Section 17: MCP rules
 - [`docs/subsystems/errors.md`](../subsystems/errors.md) — Error codes and envelopes
 - [`docs/architecture/consistency.md`](../architecture/consistency.md) — Consistency tiers
 - [`docs/architecture/determinism.md`](../architecture/determinism.md) — Determinism requirements
-
----
-
 ## Agent Instructions
-
 ### When to Load This Document
-
 Load when:
-
 - Implementing new MCP actions
 - Modifying existing MCP action signatures
 - Understanding MCP contracts for AI tool integration
 - Debugging MCP call failures
 - Planning MCP-based features
-
 ### Required Co-Loaded Documents
-
 - `docs/NEOTOMA_MANIFEST.md` (MCP rules and boundaries)
 - `docs/subsystems/errors.md` (error codes)
 - `docs/architecture/consistency.md` (consistency guarantees)
 - `docs/architecture/determinism.md` (deterministic requirements)
-
 ### Constraints Agents Must Enforce
-
 1. All actions MUST validate inputs (Zod schemas)
 2. All responses MUST use structured types (no free-form text)
 3. All errors MUST use ErrorEnvelope
@@ -1597,18 +1151,14 @@ Load when:
 5. All deterministic actions MUST be testable for determinism
 6. Backward compatibility MUST be maintained
 7. No PII in error messages or logs
-
 ### Forbidden Patterns
-
 - Returning unvalidated data
 - Bypassing error envelope
 - Breaking backward compatibility
 - Nondeterministic ranking without documentation
 - PII in error details
 - Unbounded queries (no limit parameter)
-
 ### Validation Checklist
-
 - [ ] All 14 actions documented with complete schemas (8 MVP + 4 Plaid + 2 Metrics)
 - [ ] All error codes enumerated (including METRIC_NOT_FOUND, PROMETHEUS_QUERY_FAILED, ANALYTICS_QUERY_FAILED)
 - [ ] Consistency tier specified per action
