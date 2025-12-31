@@ -230,13 +230,7 @@ agent_instructions:
       - readme_maintenance
       - downstream_doc_updates
       - instruction_documentation
-    custom_rules:
-      - repo_doctrine
-      - post_build_testing
-      - release_detection
-      - feature_unit_detection
-      - bug_fix_detection
-      - checkpoint_management
+    custom_rules: []  # Repo-specific rules (most workflow rules now in foundation)
   cursor_commands:
     enabled: true
     location: ".cursor/commands/"
@@ -248,8 +242,8 @@ agent_instructions:
       - fix_feature_bug
       - run_feature_workflow
       - ui_workflow
-      - modify_subsystem
-      - ingestion_flow
+      - modify-subsystem
+      - ingestion-flow
       - gather_ux_input
       - create_prototype
       - final_review
@@ -299,10 +293,89 @@ strategy:
       frequency: "weekly"  # or "bi-weekly", "monthly"
       min_participants_per_cycle: 2
 
+# Feature Unit development workflow
+feature_units:
+  enabled: true
+  directory: "docs/feature_units/"
+  completed_subdir: "completed"
+  in_progress_subdir: "in_progress"
+  id_pattern: "FU-YYYY-MM-NNN"
+  id_regex: "^FU-\\d{4}-\\d{2}-\\d{3}$"
+  manifest_complexity: "extended"
+  
+  required_sections:
+    - "Overview"
+    - "Requirements"
+    - "Testing Strategy"
+    - "Observability"
+  
+  optional_sections:
+    - "UX Requirements"
+    - "Architecture Details"
+  
+  product_strategy:
+    enabled: true
+    track_defensible_differentiation: true
+    differentiation_types:
+      - "privacy-first"
+      - "deterministic"
+      - "cross-platform"
+    track_user_value: true
+    track_competitive_positioning: false
+  
+  architecture:
+    track_subsystems: true
+    subsystems:
+      - "ingestion"
+      - "schema"
+      - "search"
+      - "graph"
+      - "auth"
+      - "vector_ops"
+      - "events"
+      - "errors"
+      - "i18n"
+      - "accessibility"
+      - "privacy"
+    track_schema_changes: true
+    track_api_changes: true
+    track_ui_changes: true
+    track_state_machines: true
+  
+  dependencies:
+    validate_on_create: true
+    allow_partial_dependencies: true
+    reject_missing_dependencies: true
+  
+  testing:
+    require_unit_tests: true
+    require_integration_tests: true
+    require_e2e_tests: false
+    require_observability: true
+    coverage_targets:
+      lines: 80
+      branches: 80
+      critical_paths: 100
+  
+  checkpoints:
+    checkpoint_0_spec_creation: true
+    checkpoint_1_prototype_review: true
+    checkpoint_2_final_review: true
+  
+  git_workflow:
+    use_worktrees: true
+    worktree_path_pattern: "../neotoma-{feature_id}"
+    branch_prefix: "feature"
+    require_pr: true
+  
+  kill_switch:
+    enabled: true
+    check_on_execution: true
+
 # Release orchestration (optional)
 orchestration:
   release:
-    enabled: false
+    enabled: true
     execution_strategy: "sequential"  # or "multi_agent", "parallel"
     max_parallel_items: 3
     agent_spawning:

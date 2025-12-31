@@ -1,0 +1,1 @@
+../../foundation/agent-instructions/cursor-commands/setup-symlinks.md

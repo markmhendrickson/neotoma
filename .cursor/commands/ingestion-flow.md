@@ -1,0 +1,69 @@
+# Ingestion Flow Development
+
+Implement or modify an ingestion flow for Neotoma.
+
+feature_id = {{input:feature_id}}
+
+## Load
+
+- docs/context/index.md
+- docs/subsystems/ingestion/ingestion.md
+- docs/subsystems/ingestion/state_machines.md
+- docs/subsystems/schema.md
+- docs/subsystems/vector_ops.md
+- docs/subsystems/search/search.md
+- docs/subsystems/privacy.md
+- docs/subsystems/i18n.md
+- docs/feature_units/standards/feature_unit_spec.md
+- docs/feature_units/standards/execution_instructions.md
+
+## Workflow
+
+1. Load or create spec at docs/feature_units/in_progress/{{input:feature_id}}/{{input:feature_id}}_spec.md.
+   - Use `Create New Feature Unit` command first if spec doesn't exist
+   - Add ingestion goals, invariants, edge cases, limits.
+
+2. Check or create a state machine entry in the manifest.
+   - Ingestion must follow a declared state machine.
+
+3. Review ingestion invariants:
+   - deduplication
+   - content-language detection
+   - structured event emission
+   - privacy redaction (if needed)
+   - chunking rules
+   - embedding + vector indexing
+   - search indexing timing (bounded eventual consistency)
+
+4. Implement ingestion:
+   - queue job
+   - normalizer
+   - chunker
+   - embedding generator
+   - index writers (vector + search)
+   - event emission
+
+5. Update manifest:
+   - schema paths
+   - migrations
+   - metrics
+   - state machine
+
+6. Write FULL tests:
+   - unit tests (parsing, chunking, detection)
+   - integration tests (source → memory)
+   - contract tests (API ingestion endpoint)
+   - E2E tests (upload PDF → search)
+   - regression tests (all prior ingestion bugs)
+
+7. Run full suite:
+   - TEST_CHANGED
+   - ingestion subsystem tests
+   - TEST_ALL (recommended)
+
+## Inputs
+
+- `feature_id` (string): The feature identifier
+
+
+

@@ -10,7 +10,6 @@ dist/
 .dev-serve/
 .dev-certs/
 
-
 playwright/report/
 playwright/test-results/
 docs/private/
@@ -20,3 +19,4 @@ public/assets/
 .cursor/mcp.json
 docs/developer/mcp.json.example
 .secrets/
+tmp/

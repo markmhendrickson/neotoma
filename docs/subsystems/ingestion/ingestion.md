@@ -1,58 +1,23 @@
 # Neotoma Ingestion Pipeline — File Processing and Truth Extraction
-
-_(Deterministic Ingestion from Source to Memory Graph)_
-
----
-
-## Purpose
-
-This document defines the **canonical ingestion pipeline** that transforms user-provided inputs into structured truth. Neotoma supports two primary ingestion paths: **file uploads** (PDFs, images, text files) and **agent interactions** (contextual data provided via MCP `submit_payload` action). This document specifies:
-
-- End-to-end ingestion flow (upload/agent interaction → extraction → graph)
-- **Sources-first architecture**
-- Deterministic extraction rules
-- Schema detection and assignment
-- Entity resolution and event generation
-- Error handling and retry logic
-- Testing requirements
-
-Ingestion is the **primary entry point** for truth into Neotoma. The dual-path ingestion model—file uploads and agent interactions—enables incremental structured personal data memory growth as users scale their agent usage, with structured data from agent conversations persisting alongside extracted document data.
-
-**Competitive Context:** Provider memory (ChatGPT, Claude, Gemini) is conversation-only. Neotoma's dual-path ingestion provides structured personal data memory (documents + agent-created data) with entity resolution and timelines working across all data.
-
----
-
 ## Sources-First Architecture
-
 Neotoma uses a **sources-first architecture** that decouples raw content storage from interpretation:
-
 ```
 Raw Content → Sources → Interpretation Runs → Observations → Entity Snapshots
 ```
-
 **Key Principles:**
-
 1. **Content-Addressed Storage**: Raw content stored with SHA-256 hash for deduplication
 2. **Versioned Interpretation**: Each interpretation creates a new `interpretation_run` record
 3. **Immutable Observations**: Reinterpretation creates NEW observations; never modifies existing
 4. **User Isolation**: All tables user-scoped with RLS
 5. **Correction via Priority**: User corrections create priority-1000 observations that override AI
-
 **Benefits:**
-
 - **Provenance**: Every observation traces to source and interpretation
 - **Auditability**: Interpretation config logged; can understand how data was extracted
 - **Flexibility**: Can reinterpret with new models without losing history
 - **Cost Control**: Interpretation quotas prevent runaway AI costs
-
 See [`docs/subsystems/sources.md`](../sources.md) for complete sources-first architecture details.
-
----
-
 ## Scope
-
 This document covers:
-
 - File upload and normalization
 - **Sources storage and deduplication**
 - **Interpretation runs**
@@ -64,31 +29,19 @@ This document covers:
 - Graph insertion
 - **Correction mechanism**
 - **Entity merge**
-
 **Ingestion Paths:**
-
 1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are stored in `sources`, undergo interpretation, and observations are created.
-
 2. **Structured Data via `ingest_structured()`**: Agents provide pre-structured data with explicit schema types. Bypasses AI interpretation; creates observations directly with priority=100.
-
 3. **Corrections via `correct()`**: Users or agents correct extracted values. Creates priority-1000 observations that override AI extraction.
-
 All paths feed into the same truth model (Sources → Interpretation Runs → Observations → Entity Snapshots), ensuring unified memory regardless of ingestion source.
-
 This document does NOT cover:
-
 - UI implementation (see `docs/ui/`)
 - Database schema (see `docs/subsystems/schema.md`)
 - Search indexing (see `docs/subsystems/search/search.md`)
 - MCP action specifications (see `docs/specs/MCP_SPEC.md`)
 - Sources-first architecture details (see `docs/subsystems/sources.md`)
-
----
-
 ## 1. Ingestion Pipeline Overview
-
 ### 1.1 Sources-First Pipeline
-
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
@@ -96,48 +49,37 @@ flowchart TD
     Hash --> Dedup{Duplicate?}
     Dedup -->|Yes| ReturnExisting[Return Existing source_id]
     Dedup -->|No| StoreSource[Create Source Record]
-
     StoreSource --> Upload[Upload to Storage]
     Upload -->|Success| UploadOK[storage_status: uploaded]
     Upload -->|Failure| Queue[Add to Upload Queue]
     Queue --> UploadPending[storage_status: pending]
-
     UploadOK --> CheckInterpret{interpret=true?}
     UploadPending --> CheckInterpret
     CheckInterpret -->|No| Done[Return source_id]
     CheckInterpret -->|Yes| CheckQuota{Quota OK?}
-
     CheckQuota -->|No| QuotaError[Error: QUOTA_EXCEEDED]
     CheckQuota -->|Yes| CreateRun[Create interpretation_run]
     CreateRun --> Interpret[Run Interpretation]
-
     Interpret --> ExtractText[Extract Raw Text]
     ExtractText --> DetectSchema[Detect Schema Type]
     DetectSchema --> ExtractFields[Extract Fields]
     ExtractFields --> ValidateSchema[Validate Against Schema]
-
     ValidateSchema --> SplitFields{Field Valid?}
     SplitFields -->|Yes| CreateObs[Create Observation]
     SplitFields -->|No| StoreFragment[Store in raw_fragments]
-
     CreateObs --> ResolveEntity[Resolve Entity User-Scoped]
     ResolveEntity --> TriggerReducer[Trigger Reducer]
     TriggerReducer --> ComputeSnapshot[Compute Entity Snapshot]
-
     StoreFragment --> IncrementCount[Increment unknown_field_count]
     IncrementCount --> CreateObs
-
     ComputeSnapshot --> Done
-
     style Start fill:#e1f5ff
     style Done fill:#e6ffe6
     style StoreSource fill:#fff4e6
     style CreateRun fill:#ffe6f0
     style ValidateSchema fill:#f0f0ff
 ```
-
 ### 1.2 Key Differences from Legacy Pipeline
-
 | Aspect | Legacy | Sources-First |
 |--------|--------|-------------------------|
 | Storage | Direct to records | Sources → Interpretation Runs → Observations |
@@ -147,83 +89,61 @@ flowchart TD
 | Corrections | Not supported | Priority-1000 observations |
 | User Isolation | Limited | Full RLS on all tables |
 | Unknown Fields | extraction_metadata | raw_fragments with provenance |
-
 ### 1.3 Legacy Pipeline (Pre-Sources-First)
-
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
     Start[File Upload] --> Validate[Validate File]
     Validate -->|Valid| Store[Store File]
     Validate -->|Invalid| RejectFile[Reject: Invalid Format]
-
     Store --> Normalize[Normalize Format]
     Normalize --> ExtractText[Extract Raw Text]
     ExtractText -->|PDF/Image| OCR[OCR if Needed]
     ExtractText -->|Text| RawText[Raw Text]
     OCR --> RawText
-
     RawText --> DetectSchema[Detect Schema Type]
     DetectSchema --> ExtractFields[Extract Fields]
     ExtractFields --> CategorizeFields[Categorize Known vs Unknown]
     CategorizeFields --> StoreRawFragments[Store Raw Fragments]
-
     CategorizeFields --> ResolveEntities[Resolve Entities]
     ResolveEntities --> CreateObservations[Create Observations]
     CreateObservations --> TriggerReducer[Trigger Reducer]
     TriggerReducer --> ComputeSnapshots[Compute Entity Snapshots]
-
     ComputeSnapshots --> GenerateEvents[Generate Events]
     GenerateEvents --> InsertGraph[Insert into Graph]
     InsertGraph --> EmitEvents[Emit Observability Events]
     EmitEvents --> Done[Return Record]
-
     RejectFile --> Done
-
     style Start fill:#e1f5ff
     style Done fill:#e6ffe6
     style DetectSchema fill:#fff4e6
     style InsertGraph fill:#ffe6e6
 ```
-
----
-
 ## 2. Step 1: File Upload and Validation
-
 ### 2.1 Supported File Types
-
 **MVP:**
-
 - PDF (`.pdf`)
 - Images (`.jpg`, `.jpeg`, `.png`)
 - Text (`.txt`)
 - CSV/Spreadsheet (`.csv`, `.xlsx`) — row-level record creation
-
 **Future:**
-
 - Office docs (`.docx`)
 - Email (`.eml`, `.msg`)
 - HTML/Web content
-
 **Special Case: Chat Transcripts**
-
 Chat transcripts (e.g., logs exported from LLM apps like ChatGPT) require **non-deterministic interpretation** that violates the Truth Layer's determinism constraints. Per `docs/specs/GENERAL_REQUIREMENTS.md`:
-
 - MVP provides a **separate CLI tool** (outside the ingestion pipeline) that can:
   - Non-deterministically convert raw chat exports into well-structured JSON files (one record per JSON object with explicit schema types and properties)
   - Feed the resulting JSON files into the standard deterministic ingestion path
 - Neotoma's Truth Layer ingestion pipeline never performs non-deterministic interpretation of chat content
 - See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-JSON CLI feature unit details
-
 ### 2.2 Validation Rules
-
 ```typescript
 function validateFile(file: File): ValidationResult {
   // Check file size (max 50MB)
   if (file.size > 50 * 1024 * 1024) {
     return { valid: false, error: "FILE_TOO_LARGE" };
   }
-
   // Check MIME type
   const allowedTypes = [
     "application/pdf",
@@ -234,132 +154,82 @@ function validateFile(file: File): ValidationResult {
   if (!allowedTypes.includes(file.type)) {
     return { valid: false, error: "UNSUPPORTED_FILE_TYPE" };
   }
-
   return { valid: true };
 }
 ```
-
----
-
 ## 3. Step 2: File Storage and Normalization
-
 ### 3.1 File Storage
-
 **Pattern:** Generate deterministic filename, store to S3 or local filesystem.
-
 ```typescript
 function storeFile(file: File, userId: string): string {
   const fileHash = hashFile(file); // SHA-256
   const filename = `${userId}/${fileHash}.${file.extension}`;
-
   // Upload to storage
   await storage.upload(filename, file.buffer);
-
   return `https://storage.example.com/${filename}`;
 }
 ```
-
 **Determinism:** Same file content → same hash → same filename (deduplication).
-
----
-
 ### 3.2 Format Normalization
-
 **Goal:** Convert all inputs to a common format for text extraction.
-
 ```typescript
 function normalizeFile(file: File): Buffer {
   if (file.type === "application/pdf") {
     return file.buffer; // Already PDF
   }
-
   if (file.type.startsWith("image/")) {
     // Convert image to PDF page (preserves quality for OCR)
     return convertImageToPDF(file.buffer);
   }
-
   if (file.type === "text/plain") {
     return file.buffer; // Already text
   }
-
   throw new Error("UNSUPPORTED_FILE_TYPE");
 }
 ```
-
----
-
 ## 4. Step 3: Text Extraction
-
 ### 4.1 PDF Text Extraction
-
 ```typescript
 import pdfParse from "pdf-parse";
-
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   const data = await pdfParse(buffer);
   return data.text;
 }
 ```
-
 **Determinism:** Same PDF → same extracted text (pdf-parse is deterministic).
-
----
-
 ### 4.2 OCR for Images and Scanned PDFs
-
 **When to use OCR:**
-
 - Image files (`.jpg`, `.png`)
 - PDFs with no extractable text
-
 **OCR Provider (MVP):** Tesseract.js (local, deterministic)
-
 ```typescript
 import Tesseract from "tesseract.js";
-
 async function performOCR(imageBuffer: Buffer): Promise<string> {
   const {
     data: { text },
   } = await Tesseract.recognize(imageBuffer, "eng", {
     logger: () => {}, // Suppress logs
   });
-
   return text;
 }
 ```
-
 **Determinism:** Tesseract is deterministic for same image + same version.
-
 **Critical MVP Constraints (per `docs/specs/GENERAL_REQUIREMENTS.md`):**
-
 - **No randomness:** Given the same input image/PDF, OCR output text MUST be identical across runs
 - **No model drift:** OCR models/versions are pinned; updates require explicit testing and version bump
 - **Explicit failure handling:** OCR failures or low-confidence regions MUST be surfaced explicitly in metadata without fabricating or inferring missing content
-
 **Implementation Requirements:**
-
 - Pin Tesseract.js version in `package.json`
 - Include OCR confidence scores in extraction metadata
 - For low-confidence regions (confidence < 70%), mark as `ocr_low_confidence: true` in metadata rather than dropping text
-
----
-
 ## 5. Step 4: Schema Detection
-
 ### 5.1 MVP Extraction Approach: Rule-Based Only
-
 **Critical MVP Constraint:** Neotoma MVP uses **only** rule-based extraction (regex, parsing). No LLM extraction per `docs/NEOTOMA_MANIFEST.md` determinism requirements.
-
 **Post-MVP:** LLM-assisted extraction may be added with deterministic fallback for ambiguous cases.
-
 ### 5.2 Schema Detection Rules (Multi-Pattern Matching)
-
 **Pattern:** Apply **multi-pattern matching** — a document must match **2 or more patterns** for a given type to be classified as that type.
-
 **Fallback:** If no type matches 2+ patterns, classify as `document` (generic fallback).
-
 **Rationale:** Multi-pattern matching increases detection precision and reduces false positives.
-
 ```typescript
 // Multi-pattern detection for each application type
 const SCHEMA_DETECTION_PATTERNS = {
@@ -414,33 +284,26 @@ const SCHEMA_DETECTION_PATTERNS = {
   ],
   message: [/from:/i, /to:/i, /subject:/i, /sent:/i, /reply|forward/i],
 };
-
 function detectSchemaType(rawText: string): string {
   const matchCounts: Record<string, number> = {};
-
   // Count pattern matches for each type
   for (const [type, patterns] of Object.entries(SCHEMA_DETECTION_PATTERNS)) {
     matchCounts[type] = patterns.filter((pattern) =>
       pattern.test(rawText)
     ).length;
   }
-
   // Find types with 2+ matches
   const candidates = Object.entries(matchCounts)
     .filter(([_, count]) => count >= 2)
     .sort(([_, countA], [__, countB]) => countB - countA);
-
   // Return type with most matches, or fallback to 'document'
   if (candidates.length > 0) {
     return candidates[0][0];
   }
-
   return "document"; // Generic fallback
 }
 ```
-
 **Example: Invoice Detection**
-
 ```typescript
 // Raw text from invoice PDF
 const rawText = `
@@ -450,49 +313,33 @@ Amount Due: $1,500.00
 Invoice Date: 2024-01-15
 Payment Terms: Net 30
 `;
-
 // Pattern matches:
 // ✅ /invoice\s*#?\s*:?\s*([A-Z0-9-]+)/i → Matches "INVOICE #INV-2024-001"
 // ✅ /bill\s*to:/i → Matches "Bill To:"
 // ✅ /amount\s*due:/i → Matches "Amount Due:"
 // ✅ /invoice\s*date/i → Matches "Invoice Date:"
 // ✅ /payment\s*terms/i → Matches "Payment Terms:"
-
 // Result: 5 matches → type = 'invoice' ✅
 ```
-
 **Example: Generic Document Fallback**
-
 ```typescript
 // Raw text from generic document
 const rawText = `
 This is a research paper about machine learning techniques.
 The paper discusses various approaches to neural networks.
 `;
-
 // No type matches 2+ patterns
 // Result: type = 'document' (fallback) ✅
 ```
-
 **Determinism:** Same text → same schema type (rule-based, deterministic pattern matching).
-
 **Tier 1 ICP Alignment:** Schema detection supports AI-Native Operators (research, contracts, travel), Knowledge Workers (legal docs, research papers, client communications), and Founders (company docs, product docs, investor materials).
-
 **Complete Patterns:** See [`docs/subsystems/record_types.md`](../record_types.md) section 7 for all detection patterns.
-
----
-
 ### 5.3 Schema Registry
-
 **Location:** `src/config/record_types.ts`
-
 **Two-Tier System:**
-
 - **Application types** (this list): Used in code, database (`records.type`), MCP actions
 - **Schema families** (`Financial`, `Productivity`, etc.): Used for documentation only
-
 **Tier 1 ICP-aligned application types:**
-
 ```typescript
 export const RECORD_TYPES = {
   // Finance
@@ -501,7 +348,6 @@ export const RECORD_TYPES = {
   TRANSACTION: 'transaction',
   STATEMENT: 'statement',
   ACCOUNT: 'account',
-
   // Productivity
   NOTE: 'note',
   DOCUMENT: 'document',  // Generic fallback
@@ -509,27 +355,20 @@ export const RECORD_TYPES = {
   TASK: 'task',
   PROJECT: 'project',
   EVENT: 'event',
-
   // Knowledge
   "contact",
   "dataset",
-
   // Legal/Compliance
   "contract",
-
   // Travel
   "travel_document",
-
   // Identity
   "identity_document",
 ];
-
 // Fallback for unrecognized types
 const FALLBACK_TYPE = "document";
 ```
-
 **Schema-to-Fields Mapping:**
-
 ```typescript
 export const SCHEMA_FIELDS = {
   invoice: ["invoice_number", "amount_due", "due_date", "vendor", "status"],
@@ -564,15 +403,9 @@ export const SCHEMA_FIELDS = {
   ],
 };
 ```
-
----
-
 ## 6. Step 5: Field Extraction
-
 ### 6.1 Rule-Based Extraction
-
 **Pattern:** Use regex or parsing logic to extract fields deterministically.
-
 ```typescript
 function extractFieldsForInvoice(rawText: string): any {
   return {
@@ -585,7 +418,6 @@ function extractFieldsForInvoice(rawText: string): any {
     status: extractPaymentStatus(rawText),
   };
 }
-
 function extractFieldsForContract(rawText: string): any {
   return {
     schema_version: "1.0",
@@ -596,7 +428,6 @@ function extractFieldsForContract(rawText: string): any {
     status: extractContractStatus(rawText),
   };
 }
-
 function extractFieldsForDocument(rawText: string): any {
   return {
     schema_version: "1.0",
@@ -605,28 +436,19 @@ function extractFieldsForDocument(rawText: string): any {
     source: "upload",
   };
 }
-
 function extractInvoiceNumber(text: string): string | null {
   const match = text.match(/invoice\s*#?\s*:?\s*([A-Z0-9-]+)/i);
   return match ? match[1] : null;
 }
-
 function extractAmount(text: string): number | null {
   const match = text.match(/total|amount\s*:?\s*\$?([0-9,]+\.?\d{0,2})/i);
   return match ? parseFloat(match[1].replace(",", "")) : null;
 }
 ```
-
 **Determinism:** Same text + same rules → same extracted fields.
-
 **Implementation Note:** All extractors MUST use regex/parsing only. No LLM calls permitted in MVP.
-
----
-
 ### 6.2 Schema-Specific Extractors
-
 Each schema type has a dedicated extractor function:
-
 ```typescript
 const EXTRACTORS = {
   invoice: extractFieldsForInvoice,
@@ -638,41 +460,27 @@ const EXTRACTORS = {
   note: extractFieldsForNote,
   document: extractFieldsForDocument,
 };
-
 function extractFields(rawText: string, schemaType: string): any {
   const extractor = EXTRACTORS[schemaType];
   if (!extractor) {
     // Fallback to generic document extraction
     return extractFieldsForDocument(rawText);
   }
-
   return extractor(rawText);
 }
 ```
-
----
-
 ## 7. Step 6: Entity Resolution and Observation Creation
-
 **Four-Layer Truth Model Context:** This section implements the middle layers of Neotoma's four-layer truth model (Document → Entity → Observation → Snapshot). After field extraction from documents, we:
-
 1. **Resolve Entities** — Identify canonical entities (people, companies, locations)
 2. **Create Observations** — Store granular, source-specific facts about entities
 3. **Trigger Reducers** — Compute entity snapshots from observations using merge policies from schema registry
 4. **Link to Graph** — Connect documents, entities, observations, and snapshots
-
 See [`docs/architecture/architectural_decisions.md`](../../architecture/architectural_decisions.md) for the complete four-layer model rationale and [`docs/subsystems/observation_architecture.md`](../observation_architecture.md) for detailed observation patterns.
-
----
-
 ### 7.1 Entity Extraction
-
 **Entities:** People, companies, locations mentioned in extracted fields.
-
 ```typescript
 function extractEntities(properties: any, schemaType: string): Entity[] {
   const entities: Entity[] = [];
-
   // Use application types (invoice, receipt) not schema families (FinancialRecord)
   if (schemaType === "invoice" || schemaType === "receipt") {
     if (properties.vendor_name) {
@@ -682,7 +490,6 @@ function extractEntities(properties: any, schemaType: string): Entity[] {
       });
     }
   }
-
   if (schemaType === "identity_document") {
     if (properties.full_name) {
       entities.push({
@@ -691,47 +498,33 @@ function extractEntities(properties: any, schemaType: string): Entity[] {
       });
     }
   }
-
   return entities;
 }
 ```
-
----
-
 ### 7.2 Entity ID Generation (Deterministic)
-
 ```typescript
 import { createHash } from "crypto";
-
 function generateEntityId(entityType: string, canonicalName: string): string {
   const normalized = normalizeEntityValue(entityType, canonicalName);
   const hash = createHash("sha256")
     .update(`${entityType}:${normalized}`)
     .digest("hex");
-
   return `ent_${hash.substring(0, 24)}`;
 }
-
 function normalizeEntityValue(entityType: string, raw: string): string {
   let normalized = raw.trim().toLowerCase();
-
   if (entityType === "company") {
     normalized = normalized.replace(
       /\s+(inc|llc|ltd|corp|corporation)\.?$/i,
       ""
     );
   }
-
   return normalized;
 }
 ```
-
 **Determinism:** Same name → same ID (globally).
-
 ### 7.3 User-Scoped Entity Resolution
-
 Entity resolution is **user-scoped** to ensure user isolation:
-
 ```typescript
 async function resolveEntity(
   entityType: string,
@@ -747,7 +540,6 @@ async function resolveEntity(
     );
     if (existing) return existing.id;
   }
-
   // 2. Heuristic match on key fields (user-scoped)
   const matchKey = getMatchKey(entityType, extractedFields);
   if (matchKey) {
@@ -758,11 +550,9 @@ async function resolveEntity(
     );
     if (existing) return existing.id;
   }
-
   // 3. Create new entity (stamp user_id)
   return await createEntity(entityType, extractedFields, userId);
 }
-
 async function findEntityByExternalId(
   entityType: string,
   externalId: string,
@@ -779,19 +569,11 @@ async function findEntityByExternalId(
   return data;
 }
 ```
-
 **Important:** Entity resolution may create duplicates (heuristic matching). Use `merge_entities()` to repair duplicates.
-
 See [`docs/subsystems/entity_merge.md`](../entity_merge.md) for merge mechanism.
-
----
-
 ## 7.5 Observation Creation
-
 **Overview:** After entity resolution, create observations — granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots in the four-layer truth model.
-
 **Process:**
-
 1. **Load Schema from Registry:** Fetch active schema version and field definitions from schema registry
 2. **Categorize Fields:** Separate known fields (match schema) from unknown fields
 3. **Store Raw Fragments:** Unknown fields stored in `raw_fragments` table with typed envelopes
@@ -803,11 +585,8 @@ See [`docs/subsystems/entity_merge.md`](../entity_merge.md) for merge mechanism.
    - Link to source_record_id
 5. **Trigger Reducer:** Call reducer engine to compute entity snapshot using merge policies from schema registry
 6. **Store Snapshot:** Reducer produces entity snapshot with provenance tracking
-
 **Schema Registry Integration:** Observations reference the schema version from schema registry, enabling deterministic replay if schemas evolve. Reducers use merge policies configured in schema registry to resolve conflicts between multiple observations.
-
 **Example:**
-
 ```typescript
 async function createObservations(
   recordId: string,
@@ -822,7 +601,6 @@ async function createObservations(
     extractedFields,
     schema
   );
-
   // Store raw fragments for unknown fields
   for (const [key, value] of Object.entries(unknownFields)) {
     await rawFragmentRepo.create({
@@ -832,7 +610,6 @@ async function createObservations(
       fragment_envelope: { type: typeof value, confidence: "medium" },
     });
   }
-
   // Create observations for each entity
   for (const entity of entities) {
     const observation = await observationRepo.create({
@@ -845,28 +622,19 @@ async function createObservations(
       source_priority: calculatePriority(recordId),
       fields: extractEntityFields(knownFields, entity),
     });
-
     // Trigger reducer to compute snapshot
     await reducerEngine.computeSnapshot(entity.id);
   }
 }
 ```
-
 **Related Documents:**
-
 - [`docs/architecture/architectural_decisions.md`](../../architecture/architectural_decisions.md) — Four-layer truth model
 - [`docs/subsystems/observation_architecture.md`](../observation_architecture.md) — Complete observation architecture
 - [`docs/subsystems/reducer.md`](../reducer.md) — Reducer merge strategies
 - [`docs/subsystems/schema_registry.md`](../schema_registry.md) — Schema registry patterns and merge policies
-
----
-
 ## 8. Step 7: Event Generation
-
 ### 8.1 Event Extraction
-
 **Events:** Timeline events derived from date fields.
-
 ```typescript
 function generateEvents(
   recordId: string,
@@ -875,14 +643,11 @@ function generateEvents(
 ): Event[] {
   const events: Event[] = [];
   const dateFields = getDateFields(schemaType);
-
   for (const fieldName of dateFields.sort()) {
     const dateValue = properties[fieldName];
     if (!dateValue) continue;
-
     const eventType = mapFieldToEventType(fieldName, schemaType);
     const eventId = generateEventId(recordId, fieldName, dateValue);
-
     events.push({
       id: eventId,
       event_type: eventType,
@@ -891,32 +656,23 @@ function generateEvents(
       source_field: fieldName,
     });
   }
-
   return events;
 }
-
 function mapFieldToEventType(fieldName: string, schemaType: string): string {
   // Use application types (invoice, travel_document) not schema families
   if (schemaType === "invoice") {
     if (fieldName === "date_issued") return "InvoiceIssued";
     if (fieldName === "date_due") return "InvoiceDue";
   }
-
   if (schemaType === "travel_document") {
     if (fieldName === "departure_datetime") return "FlightDeparture";
     if (fieldName === "arrival_datetime") return "FlightArrival";
   }
-
   return "GenericEvent";
 }
 ```
-
----
-
 ## 9. Step 8: Graph Insertion
-
 ### 9.1 Transactional Insert
-
 ```typescript
 async function insertRecordAndGraph(
   record: Record,
@@ -926,7 +682,6 @@ async function insertRecordAndGraph(
   return await db.transaction(async (tx) => {
     // Insert record
     const recordId = await tx.insert("records", record);
-
     // Insert entities (if not exist)
     for (const entity of entities) {
       await tx.upsert("entities", entity);
@@ -935,7 +690,6 @@ async function insertRecordAndGraph(
         entity_id: entity.id,
       });
     }
-
     // Insert events
     for (const event of events) {
       await tx.insert("events", event);
@@ -944,20 +698,13 @@ async function insertRecordAndGraph(
         event_id: event.id,
       });
     }
-
     return recordId;
   });
 }
 ```
-
 **Determinism:** Same inputs → same graph structure.
-
----
-
 ## 10. Error Handling
-
 ### 10.1 Error Types
-
 | Error Code              | Meaning                 | Retry? |
 | ----------------------- | ----------------------- | ------ |
 | `FILE_TOO_LARGE`        | File exceeds size limit | No     |
@@ -965,14 +712,11 @@ async function insertRecordAndGraph(
 | `OCR_FAILED`            | OCR processing failed   | Yes    |
 | `EXTRACTION_FAILED`     | Field extraction failed | No     |
 | `DB_INSERT_FAILED`      | Database write failed   | Yes    |
-
 ### 10.2 Retry Logic
-
 ```typescript
 async function ingestFileWithRetry(file: File): Promise<Record> {
   const maxRetries = 3;
   let attempt = 0;
-
   while (attempt < maxRetries) {
     try {
       return await ingestFile(file);
@@ -987,47 +731,33 @@ async function ingestFileWithRetry(file: File): Promise<Record> {
   }
 }
 ```
-
----
-
 ## Agent Instructions
-
 ### When to Load This Document
-
 Load `docs/subsystems/ingestion/ingestion.md` when:
-
 - Implementing file upload or ingestion logic
 - Adding new schema types or field extractors
 - Modifying entity resolution or event generation
 - Debugging ingestion errors
 - Working with OCR or text extraction
-
 ### Required Co-Loaded Documents
-
 - `docs/NEOTOMA_MANIFEST.md` (determinism, immutability)
 - `docs/architecture/determinism.md` (deterministic extraction)
 - `docs/subsystems/schema.md` (schema structure)
 - `docs/subsystems/ingestion/state_machines.md` (ingestion states)
-
 ### Constraints Agents Must Enforce
-
 1. **Extraction MUST be deterministic** (rule-based, no LLM)
 2. **Entity IDs MUST be hash-based**
 3. **Event IDs MUST be hash-based**
 4. **All ingestion MUST be transactional**
 5. **Same file → same record_id** (via content hash)
 6. **All errors MUST use ErrorEnvelope**
-
 ### Forbidden Patterns
-
 - LLM-based extraction (MVP)
 - Nondeterministic entity IDs
 - Non-transactional graph inserts
 - Skipping error handling
 - Mutable extraction rules
-
 ### Validation Checklist
-
 - [ ] Extraction is rule-based and deterministic
 - [ ] Entity IDs are hash-based
 - [ ] Event IDs are hash-based

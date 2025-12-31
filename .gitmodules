@@ -1,3 +1,6 @@
 [submodule "foundation"]
 	path = foundation
 	url = git@github.com:markmhendrickson/foundation.git
+[submodule "docs/private"]
+	path = docs/private
+	url = https://github.com/markmhendrickson/neotoma-docs-private

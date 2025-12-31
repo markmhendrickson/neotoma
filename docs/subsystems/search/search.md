@@ -1,25 +1,11 @@
 # Neotoma Search — Query Models and Ranking
 *(Structured Search with Deterministic Ranking)*
-
----
-
-## Purpose
-
-Defines search query models, ranking algorithms, and filtering semantics for Neotoma's Truth Layer search.
-
----
-
 ## Scope
-
 MVP: Structured search only (no semantic/embedding search)
 - Full-text search over `raw_text` and `properties`
 - Structured filters (type, date range, entities)
 - Deterministic ranking with tiebreakers
-
----
-
 ## Query Model
-
 ```typescript
 interface SearchQuery {
   q?: string;                    // Full-text query
@@ -31,9 +17,7 @@ interface SearchQuery {
   offset?: number;               // Pagination
 }
 ```
-
 ## Ranking Algorithm
-
 ```typescript
 function rankResults(results: Record[], query: string): Record[] {
   return results
@@ -49,7 +33,6 @@ function rankResults(results: Record[], query: string): Record[] {
     })
     .map(({ record }) => record);
 }
-
 function calculateScore(record: Record, query: string): number {
   let score = 0;
   const regex = new RegExp(query, 'gi');
@@ -64,43 +47,14 @@ function calculateScore(record: Record, query: string): number {
   return score;
 }
 ```
-
 **Determinism:** Same query + same DB state → same order
-
 ## Consistency
-
 Search index is **bounded eventual** (max 5s delay after ingestion).
-
 See `docs/architecture/consistency.md` for UI handling.
-
----
-
 ## Agent Instructions
-
 Load when implementing search features, query logic, or ranking algorithms.
-
 Required co-loaded: `docs/architecture/determinism.md`, `docs/architecture/consistency.md`
-
 Constraints:
 - MUST use deterministic ranking with tiebreakers
 - MUST NOT use semantic search in MVP
 - MUST document ranking changes
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

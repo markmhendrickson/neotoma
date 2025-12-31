@@ -1,50 +1,22 @@
 # Neotoma Determinism Doctrine — Reproducibility and Predictability Guarantees
 *(Determinism Requirements Across All Subsystems)*
-
----
-
-## Purpose
-
-This document defines **determinism** as a foundational requirement for all Neotoma subsystems and specifies how to achieve and test deterministic behavior. It ensures:
-
-- Same input always produces same output
-- Reproducible behavior across runs, environments, and time
-- Predictable ordering and ID generation
-- Testable correctness guarantees
-- No hidden randomness or nondeterminism
-
-**Determinism is not optional.** It is a core architectural constraint derived from Neotoma's role as a **Truth Layer** — a system that must provide reliable, reproducible structured memory for AI systems.
-
----
-
 ## Scope
-
 This document covers:
 - Definition and requirements of determinism
 - Deterministic patterns for common operations
 - Sorting, ordering, and ID generation rules
 - Elimination of randomness and timing dependencies
 - Testing strategies for deterministic behavior
-
 This document does NOT cover:
 - Consistency models (see `docs/architecture/consistency.md`)
 - Specific extraction logic (see subsystem docs)
 - Database transaction isolation (implementation detail)
-
----
-
 ## 1. Determinism: Core Definition
-
 ### 1.1 What is Determinism?
-
 **Determinism:** Given the same inputs, a system MUST always produce the same outputs, in the same order, with the same internal state.
-
 ### 1.2 Determinism Doctrine
-
 **Explicit Classification:**
-
 Not all Neotoma components are deterministic. The following table explicitly classifies each component:
-
 | Component | Deterministic? | Notes |
 |-----------|----------------|-------|
 | Content hashing (SHA-256) | **Yes** | Same bytes = same hash |
@@ -56,110 +28,77 @@ Not all Neotoma components are deterministic. The following table explicitly cla
 | Rule-based extraction | **Yes** | Same text + same rules → same fields |
 | AI interpretation | **No** | Outputs vary; config logged for audit |
 | Entity resolution (heuristic) | **No** | May drift; duplicates expected |
-
 **Policy:** Neotoma never claims replay determinism for AI interpretation. Interpretation config is logged for audit, but outputs may vary across runs.
-
 ### 1.3 Interpretation Auditability vs Replay Determinism
-
 **Key Distinction:**
-
 - **Replay Determinism**: Same input always produces identical output
 - **Auditability**: Process is logged with enough detail to understand what happened
-
 AI interpretation is **auditable but not replay-deterministic**:
-
 - `interpretation_runs` table stores `interpretation_config` (model, version, parameters)
 - Multiple interpretations for the same source create NEW observations
 - Prior observations are never modified (immutability preserved)
 - Audit trail shows exactly how data was interpreted at each point in time
-
 **Implication:** Entity resolution may create duplicates. The `merge_entities()` capability exists to repair duplicates deterministically after the fact.
-
 ### 1.4 What is Determinism? (Continued)
-
 **Inputs include:**
 - Function arguments
 - File contents
 - Database state (at time of query)
 - Configuration values
-
 **Outputs include:**
 - Return values
 - Database writes
 - Generated IDs
 - Event emissions
 - Log messages (excluding timestamps)
-
 **Timing and Environment MUST NOT affect outputs:**
 - ❌ Current timestamp (unless explicitly part of input)
 - ❌ Random number generation
 - ❌ Nondeterministic sorting (e.g., Map iteration order in some languages)
 - ❌ Network latency
 - ❌ Filesystem ordering (e.g., `readdir()` without sorting)
-
 ### 1.2 Why Determinism Matters for Neotoma
-
 **Correctness:**
 - Users must trust Neotoma's extracted truth
 - Same document uploaded twice MUST produce same entities, events, graph
-
 **Testability:**
 - Tests must be reproducible (no flaky tests)
 - Property-based testing requires determinism
-
 **Debuggability:**
 - Bugs must be reproducible from inputs alone
 - No "works on my machine" issues from nondeterminism
-
 **AI Safety:**
 - AI agents depend on Neotoma for ground truth
 - Nondeterministic truth breaks AI reasoning
-
 **Auditing:**
 - Provenance requires deterministic extraction
 - "Why was this entity created?" must have reproducible answer
-
----
-
 ## 2. Sources of Nondeterminism (FORBIDDEN)
-
 ### 2.1 Random Number Generation
-
 ❌ **FORBIDDEN:**
 ```typescript
 // Nondeterministic: random UUID
 const recordId = `rec_${uuidv4()}`; // Different every time
 ```
-
 ✅ **REQUIRED:**
 ```typescript
 // Deterministic: hash-based ID
 const recordId = generateRecordId(fileHash, userId, uploadTimestamp);
 // Same inputs → same ID
 ```
-
----
-
 ### 2.2 Timestamps (When Not Part of Input)
-
 ❌ **FORBIDDEN:**
 ```typescript
 // Nondeterministic: current time affects output
 const recordId = `rec_${Date.now()}`;
 ```
-
 ✅ **REQUIRED:**
 ```typescript
 // Deterministic: use explicit timestamp from input
 const recordId = generateRecordId(fileHash, explicitTimestamp);
 ```
-
 **Exception:** `created_at` and `updated_at` timestamps for audit purposes are acceptable (but not used for ID generation or sorting when determinism required).
-
----
-
 ### 2.3 Unsorted Iteration
-
 ❌ **FORBIDDEN:**
 ```typescript
 // Nondeterministic: Map iteration order is not guaranteed in all JS engines
@@ -167,7 +106,6 @@ for (const [key, value] of myMap) {
   processField(key, value);
 }
 ```
-
 ✅ **REQUIRED:**
 ```typescript
 // Deterministic: sort keys first
@@ -177,11 +115,7 @@ for (const key of sortedKeys) {
   processField(key, value);
 }
 ```
-
----
-
 ### 2.4 Filesystem Ordering
-
 ❌ **FORBIDDEN:**
 ```typescript
 // Nondeterministic: readdir() order is filesystem-dependent
@@ -190,7 +124,6 @@ for (const file of files) {
   await processFile(file);
 }
 ```
-
 ✅ **REQUIRED:**
 ```typescript
 // Deterministic: sort before processing
@@ -199,18 +132,13 @@ for (const file of files) {
   await processFile(file);
 }
 ```
-
----
-
 ### 2.5 Concurrent Execution Without Ordering
-
 ❌ **FORBIDDEN:**
 ```typescript
 // Nondeterministic: Promise.all() doesn't guarantee order
 const results = await Promise.all(files.map(f => processFile(f)));
 // Order of results depends on which promise resolves first
 ```
-
 ✅ **REQUIRED (if order matters):**
 ```typescript
 // Deterministic: process sequentially or sort after
@@ -219,62 +147,42 @@ for (const file of files.sort()) {
   results.push(await processFile(file));
 }
 ```
-
----
-
 ### 2.6 LLM Outputs (Non-Deterministic by Nature)
-
 ❌ **NON-DETERMINISTIC (but allowed with audit trail):**
 ```typescript
 // Nondeterministic: LLM extraction varies
 const entities = await llm.extract(rawText);
 // Same text → different entities each run
 ```
-
 **Policy:** AI interpretation is **auditable but not replay-deterministic** (see Section 1.2-1.3).
-
 **Requirements for AI interpretation:**
 - Config logging: model, temperature, prompt_hash, code_version
 - Immutable interpretations: reinterpretation creates NEW observations
 - Never claim replay determinism
 - Entity resolution may create duplicates; `merge_entities()` repairs
-
 **Alternative (fully deterministic):**
 ```typescript
 // Deterministic: rule-based extraction
 const entities = extractEntitiesViaRegex(rawText, schemaRules);
 // Same text + rules → same entities
 ```
-
 Use rule-based extraction when determinism is critical; use AI interpretation when flexibility is needed.
-
----
-
 ### 2.7 Floating-Point Arithmetic (Edge Case)
-
 ❌ **POTENTIALLY NONDETERMINISTIC:**
 ```typescript
 // May vary across architectures or rounding modes
 const score = (a * b) / c;
 ```
-
 ✅ **SAFER:**
 - Use fixed-precision decimals for financial amounts (e.g., `Decimal.js`)
 - Document rounding modes
 - Test across architectures
-
----
-
 ## 3. Deterministic Patterns
-
 ### 3.1 Deterministic ID Generation
-
 **Pattern:** Use cryptographic hash of canonical inputs.
-
 **Example:**
 ```typescript
 import { createHash } from 'crypto';
-
 export function generateEntityId(
   entityType: string,
   canonicalName: string
@@ -290,22 +198,15 @@ export function generateEntityId(
   // Return stable ID
   return `ent_${hash.substring(0, 24)}`;
 }
-
 // Same inputs → same ID, always
 generateEntityId('company', 'Acme Corp') === generateEntityId('company', 'Acme Corp'); // true
 ```
-
 **Why this works:**
 - SHA-256 is deterministic
 - Same inputs → same hash
 - No timestamps, no randomness
-
----
-
 ### 3.2 Deterministic Sorting
-
 **Pattern:** Always sort by stable, deterministic fields.
-
 **Example:**
 ```typescript
 // Sort records by created_at (stable timestamp), then by ID (tiebreaker)
@@ -315,18 +216,12 @@ const sortedRecords = records.sort((a, b) => {
   return a.id.localeCompare(b.id); // Tiebreaker
 });
 ```
-
 **Tiebreaker Rules:**
 - Primary sort: business-meaningful field (e.g., `created_at`, `name`)
 - Secondary sort: unique stable field (e.g., `id`)
 - Never sort by mutable field without tiebreaker
-
----
-
 ### 3.3 Deterministic Deduplication
-
 **Pattern:** Use content hash to detect duplicates.
-
 **Example:**
 ```typescript
 export function deduplicateRecords(records: Record[]): Record[] {
@@ -343,7 +238,6 @@ export function deduplicateRecords(records: Record[]): Record[] {
   
   return unique;
 }
-
 function hashRecordContent(record: Record): string {
   // Hash only immutable fields
   const canonical = JSON.stringify({
@@ -355,18 +249,12 @@ function hashRecordContent(record: Record): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 ```
-
 **Why this works:**
 - Content hash is deterministic
 - Same content → same hash → detected as duplicate
 - No reliance on upload order or timing
-
----
-
 ### 3.4 Deterministic Entity Resolution
-
 **Pattern:** Normalize, then hash.
-
 **Example:**
 ```typescript
 export function resolveEntity(
@@ -381,7 +269,6 @@ export function resolveEntity(
   
   return { id, canonical_name: canonical };
 }
-
 function normalizeEntityValue(entityType: string, raw: string): string {
   let normalized = raw.trim().toLowerCase();
   
@@ -394,18 +281,12 @@ function normalizeEntityValue(entityType: string, raw: string): string {
   
   return normalized;
 }
-
 // Examples:
 resolveEntity('company', 'Acme Corp').id === resolveEntity('company', 'Acme Corp').id; // true
 resolveEntity('company', 'ACME CORP').id === resolveEntity('company', 'Acme Corp').id; // true (normalized)
 ```
-
----
-
 ### 3.5 Deterministic Event Generation
-
 **Pattern:** One event per date field, deterministic event ID.
-
 **Example:**
 ```typescript
 export function generateEvents(
@@ -435,7 +316,6 @@ export function generateEvents(
   
   return events;
 }
-
 function generateEventId(recordId: string, fieldName: string, date: string): string {
   const hash = createHash('sha256')
     .update(`${recordId}:${fieldName}:${date}`)
@@ -443,13 +323,8 @@ function generateEventId(recordId: string, fieldName: string, date: string): str
   return `evt_${hash.substring(0, 24)}`;
 }
 ```
-
----
-
 ### 3.6 Deterministic Search Ranking
-
 **Pattern:** Rule-based ranking with deterministic tiebreakers.
-
 **Example:**
 ```typescript
 export function rankSearchResults(results: Record[], query: string): Record[] {
@@ -471,7 +346,6 @@ export function rankSearchResults(results: Record[], query: string): Record[] {
     })
     .map(({ record }) => record);
 }
-
 function calculateScore(record: Record, query: string): number {
   let score = 0;
   
@@ -488,26 +362,17 @@ function calculateScore(record: Record, query: string): number {
   return score;
 }
 ```
-
 **Why this works:**
 - Score calculation is deterministic
 - Tiebreakers eliminate randomness
 - Same query + same DB state → same order
-
----
-
 ## 3.5 Reducer Determinism
-
 ### 3.5.1 Reducer Requirements
-
 **Reducers MUST be deterministic:**
-
 - Same observations → same snapshot
 - Same merge policies → same result
 - Order-independent (observations sorted deterministically)
-
 **Pattern:**
-
 ```typescript
 function computeSnapshot(
   observations: Observation[],
@@ -529,16 +394,11 @@ function computeSnapshot(
   return { snapshot, provenance };
 }
 ```
-
 ### 3.5.2 Observation Ordering
-
 Observations MUST be sorted deterministically before merging:
-
 1. **Primary sort:** `observed_at DESC` (most recent first)
 2. **Secondary sort:** `id ASC` (stable tie-breaker)
-
 **Sorting Function:**
-
 ```typescript
 function sortObservations(observations: Observation[]): Observation[] {
   return observations.sort((a, b) => {
@@ -548,11 +408,8 @@ function sortObservations(observations: Observation[]): Observation[] {
   });
 }
 ```
-
 ### 3.5.3 ID Generation for Observations
-
 Observation IDs MUST be deterministic:
-
 ```typescript
 function generateObservationId(
   entityId: string,
@@ -565,13 +422,9 @@ function generateObservationId(
   return `obs_${hash.substring(0, 24)}`;
 }
 ```
-
 **Determinism:** Same entity + same record + same fields → same observation ID.
-
 ### 3.5.4 Testing Reducer Determinism
-
 **Test Pattern:**
-
 ```typescript
 test('reducer is deterministic', async () => {
   const observations = [obs1, obs2, obs3];
@@ -583,7 +436,6 @@ test('reducer is deterministic', async () => {
   expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
   expect(snapshot1.provenance).toEqual(snapshot2.provenance);
 });
-
 test('reducer handles out-of-order observations', async () => {
   const observations1 = [obs1, obs2, obs3];
   const observations2 = [obs3, obs1, obs2]; // Different order
@@ -595,18 +447,11 @@ test('reducer handles out-of-order observations', async () => {
   expect(snapshot1.snapshot).toEqual(snapshot2.snapshot);
 });
 ```
-
 **Related Documents:**
-
 - [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer implementation patterns
 - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
-
----
-
 ## 4. Determinism and Timestamps
-
 ### 4.1 Audit Timestamps (Acceptable Nondeterminism)
-
 **Acceptable:**
 ```typescript
 const record = {
@@ -615,16 +460,12 @@ const record = {
   raw_text: text,
 };
 ```
-
 **Why acceptable:**
 - `created_at` is metadata for auditing, not used for ID generation or business logic
 - Does not affect deterministic operations (entity resolution, event generation)
 - Two uploads of same file will have different `created_at` (expected)
-
 ### 4.2 Ingestion Timestamp as Input (Deterministic)
-
 **Pattern:** If timestamp is part of input, use it deterministically.
-
 **Example:**
 ```typescript
 export function ingestFile(
@@ -643,19 +484,12 @@ export function ingestFile(
   };
 }
 ```
-
----
-
 ## 5. Determinism in Tests
-
 ### 5.1 Property-Based Testing
-
 **Pattern:** Generate test cases, verify determinism.
-
 **Example:**
 ```typescript
 import fc from 'fast-check';
-
 test('entity ID generation is deterministic', () => {
   fc.assert(
     fc.property(
@@ -670,11 +504,8 @@ test('entity ID generation is deterministic', () => {
   );
 });
 ```
-
 ### 5.2 Snapshot Testing
-
 **Pattern:** Capture output, verify it doesn't change.
-
 **Example:**
 ```typescript
 test('extraction output matches snapshot', () => {
@@ -684,11 +515,8 @@ test('extraction output matches snapshot', () => {
   expect(extracted).toMatchSnapshot(); // Fails if output changes
 });
 ```
-
 ### 5.3 Deterministic Test Fixtures
-
 **Pattern:** Use fixed timestamps, hashes, IDs in fixtures.
-
 **Example:**
 ```typescript
 export const TEST_FIXTURES = {
@@ -703,17 +531,10 @@ export const TEST_FIXTURES = {
   },
 };
 ```
-
----
-
 ## 6. Determinism and External APIs
-
 ### 6.1 Non-Deterministic External Calls
-
 **Problem:** External APIs (OpenAI, Gmail) are not deterministic.
-
 **Mitigation Strategies:**
-
 **Strategy 1: Cache + Replay (Testing)**
 ```typescript
 // In tests, use cached responses
@@ -721,7 +542,6 @@ const mockOpenAI = {
   createEmbedding: jest.fn().mockResolvedValue(FIXED_EMBEDDING),
 };
 ```
-
 **Strategy 2: Idempotency Keys (Production)**
 ```typescript
 // Use idempotency keys to ensure same input → same API call → same result
@@ -731,29 +551,17 @@ const embedding = await openai.createEmbedding({
   idempotency_key: hashText(text), // Deterministic key
 });
 ```
-
 **Strategy 3: Isolate Non-Determinism (Architecture)**
 - Embeddings are **bounded eventual**, not part of core truth (see `consistency.md`)
 - Core extraction (entities, events) MUST NOT depend on embeddings
-
----
-
 ### 6.2 Gmail Attachments (Deterministic Content, Non-Deterministic Timing)
-
 **Pattern:** Content is deterministic (same email → same attachment), but retrieval timing is not.
-
 **Solution:**
 - Treat Gmail as deterministic source (email ID + attachment ID → content)
 - Ingestion timestamp is nondeterministic (acceptable, metadata only)
-
----
-
 ## 7. Determinism Violations and Debugging
-
 ### 7.1 Detecting Nondeterminism
-
 **Symptom:** Flaky tests (pass sometimes, fail others).
-
 **Diagnosis Steps:**
 1. Run test 100 times: `for i in {1..100}; do npm test; done`
 2. If any failures, nondeterminism likely
@@ -762,7 +570,6 @@ const embedding = await openai.createEmbedding({
    - Unsorted iteration
    - Timestamp dependencies
    - Race conditions (concurrent execution)
-
 **Example Debugging:**
 ```typescript
 // Add determinism check to test
@@ -779,46 +586,32 @@ test('is deterministic', () => {
   }
 });
 ```
-
----
-
 ### 7.2 Common Nondeterminism Bugs
-
 **Bug 1: UUID in ID generation**
 ```typescript
 // ❌ Bug
 const id = uuidv4();
-
 // ✅ Fix
 const id = generateDeterministicId(input);
 ```
-
 **Bug 2: Date.now() in logic**
 ```typescript
 // ❌ Bug
 if (Date.now() % 2 === 0) { /* ... */ }
-
 // ✅ Fix
 if (explicitTimestamp % 2 === 0) { /* ... */ }
 ```
-
 **Bug 3: Unsorted Map iteration**
 ```typescript
 // ❌ Bug
 for (const [key, value] of map) { }
-
 // ✅ Fix
 for (const key of Array.from(map.keys()).sort()) {
   const value = map.get(key);
 }
 ```
-
----
-
 ## 8. Determinism Checklist for Code Review
-
 Use this checklist when reviewing code:
-
 - [ ] No `Math.random()`, `crypto.randomBytes()` without fixed seed
 - [ ] No `Date.now()` or `new Date()` in business logic (metadata only)
 - [ ] No UUIDs (`uuidv4()`) without deterministic generation
@@ -829,31 +622,21 @@ Use this checklist when reviewing code:
 - [ ] LLM extraction (if used) has config logging and immutable interpretations
 - [ ] Tests are reproducible (run 100 times, all pass)
 - [ ] External API calls are isolated from core truth
-
----
-
 ## 9. Determinism and Performance
-
 ### 9.1 Determinism Cost
-
 **Sorting overhead:**
 - Sorting adds O(n log n) cost
 - Acceptable for most operations (n < 10,000)
-
 **Hashing overhead:**
 - SHA-256 is fast (~1 microsecond per hash)
 - Negligible for ID generation
-
 **Sequential processing:**
 - May need to process files sequentially (not concurrently) for determinism
 - Use batching if performance critical
-
 ### 9.2 Optimization Strategies
-
 **Strategy 1: Cache deterministic results**
 ```typescript
 const cache = new Map<string, string>();
-
 function getCachedEntityId(type: string, name: string): string {
   const key = `${type}:${name}`;
   if (!cache.has(key)) {
@@ -862,7 +645,6 @@ function getCachedEntityId(type: string, name: string): string {
   return cache.get(key)!;
 }
 ```
-
 **Strategy 2: Batch deterministic operations**
 ```typescript
 // Process 100 files at a time (deterministic order within batch)
@@ -870,13 +652,8 @@ for (const batch of chunk(files.sort(), 100)) {
   await Promise.all(batch.map(f => processFile(f)));
 }
 ```
-
----
-
 ## 10. Determinism Invariants (MUST/MUST NOT)
-
 ### MUST
-
 1. **ID generation MUST be deterministic** (hash-based)
 2. **Entity resolution MUST be deterministic** (same name → same ID) — note: heuristic matching may create duplicates; merge is the repair mechanism
 3. **Event generation MUST be deterministic** (same fields → same events)
@@ -890,9 +667,7 @@ for (const batch of chunk(files.sort(), 100)) {
 11. **Reducer computation MUST be deterministic** (same observations → same snapshot)
 12. **Entity merge MUST be deterministic** (observations rewritten, snapshot recomputed)
 13. **Reinterpretation MUST create NEW observations** (never modify existing)
-
 ### MUST NOT
-
 1. **MUST NOT use random IDs** (UUIDs without seeds)
 2. **MUST NOT use Date.now() in business logic** (metadata only)
 3. **MUST NOT iterate unsorted** (Maps, Sets, Objects)
@@ -906,11 +681,7 @@ for (const batch of chunk(files.sort(), 100)) {
 11. **MUST NOT hide nondeterminism** (document if unavoidable)
 12. **MUST NOT modify existing observations** (immutability invariant)
 13. **MUST NOT merge entities across users** (user isolation)
-
----
-
 ## Agent Instructions
-
 ### When to Load This Document
 Load `docs/architecture/determinism.md` when:
 - Implementing any extraction, entity resolution, or event generation logic
@@ -920,14 +691,12 @@ Load `docs/architecture/determinism.md` when:
 - Reviewing code for nondeterminism bugs
 - Debugging flaky tests
 - Adding any operation that processes collections
-
 ### Required Co-Loaded Documents
 - `docs/NEOTOMA_MANIFEST.md` (determinism as core principle)
 - `docs/architecture/architecture.md` (layer boundaries)
 - `docs/architecture/consistency.md` (eventual vs strong consistency)
 - `docs/subsystems/schema.md` (schema-based extraction)
 - `docs/testing/testing_standard.md` (deterministic test patterns)
-
 ### Constraints Agents Must Enforce
 1. **All IDs MUST be hash-based** (no UUIDs without seeds)
 2. **All iteration MUST be sorted** (Maps, Sets, filesystem)
@@ -939,7 +708,6 @@ Load `docs/architecture/determinism.md` when:
 8. **Tests MUST be reproducible** (no flaky tests)
 9. **External API calls MUST be isolated** from core truth
 10. **All nondeterminism MUST be documented**
-
 ### Forbidden Patterns
 - Random UUID generation for IDs
 - Date.now() in business logic
@@ -949,7 +717,6 @@ Load `docs/architecture/determinism.md` when:
 - Flaky tests left unfixed
 - Race conditions in concurrent code
 - Undocumented nondeterminism
-
 ### Validation Checklist
 - [ ] All IDs are hash-based (not random)
 - [ ] All collections are sorted before iteration
@@ -961,4 +728,3 @@ Load `docs/architecture/determinism.md` when:
 - [ ] Tests pass 100 times in a row (no flakes)
 - [ ] External API nondeterminism is isolated
 - [ ] Code review checklist completed (Section 8)
-

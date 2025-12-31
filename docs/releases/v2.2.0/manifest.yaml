@@ -1,0 +1,165 @@
+release:
+  id: "v2.2.0"
+  name: "Vector Search Scalability"
+  type: "not_marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "TBD" # Set after v2.1.0 completion
+  priority: "P1" # Performance optimization, not blocking
+  owner: "Mark Hendrickson"
+  marketing_required: false
+
+# NOTE: This manifest contains metadata and summaries for workflow automation.
+# Detailed planning documents are in markdown (see release_plan.md for overview).
+
+# WIP and parallelization limits
+execution_limits:
+  max_parallel_fus: 2 # Database changes require careful sequencing
+  max_high_risk_in_parallel: 1 # Only one high-risk FU at a time (index migration)
+
+feature_units:
+  # Phase 1: PostgreSQL RPC Function
+  - id: "FU-930"
+    name: "Vector Search RPC Function"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: []
+    description: "PostgreSQL function using native vector operators (<=> distance operator) to leverage vector index for similarity search"
+
+  # Phase 2: HNSW Index Migration
+  - id: "FU-931"
+    name: "HNSW Index Migration"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Medium"
+    dependencies: ["FU-930"]
+    description: "Migrate from IVFFlat to HNSW index for better scalability (requires pgvector 0.5.0+)"
+
+  # Phase 3: Application Code Updates
+  - id: "FU-932"
+    name: "Application Code Update"
+    priority: "P0"
+    complexity: "Medium"
+    risk: "Low"
+    dependencies: ["FU-930"]
+    description: "Replace JavaScript similarity computation with RPC calls in src/actions.ts and src/server.ts"
+
+  # Phase 4: Documentation Updates
+  - id: "FU-933"
+    name: "Documentation Update"
+    priority: "P0"
+    complexity: "Low"
+    risk: "Low"
+    dependencies: ["FU-931", "FU-932"]
+    description: "Update docs/subsystems/vector_ops.md to reflect HNSW index and RPC function usage"
+
+execution_schedule:
+  detailed_plan: "execution_schedule.md"
+  batches:
+    # Batch 0: RPC function creation (no dependencies)
+    - batch_id: 0
+      feature_units: ["FU-930"]
+      dependencies: []
+
+    # Batch 1: HNSW index migration (depends on RPC function)
+    - batch_id: 1
+      feature_units: ["FU-931"]
+      dependencies: ["FU-930"]
+
+    # Batch 2: Application code updates (depends on RPC function)
+    - batch_id: 2
+      feature_units: ["FU-932"]
+      dependencies: ["FU-930"]
+
+    # Batch 3: Documentation updates (depends on all implementation)
+    - batch_id: 3
+      feature_units: ["FU-933"]
+      dependencies: ["FU-931", "FU-932"]
+
+checkpoints:
+  checkpoint_1_after_batch: 0 # Review after RPC function complete
+  checkpoint_2_after_batch: 1 # Review after HNSW migration complete
+  checkpoint_3_after_batch: 2 # Review after code updates complete
+
+acceptance_criteria:
+  product:
+    - criterion: "Vector search uses indexed queries instead of JavaScript similarity calculation"
+      test: "manual_verification"
+      metric: null
+    - criterion: "Query performance meets benchmarks at scale"
+      test: "tests/integration/vector_search_performance.spec.ts"
+      metric: "query_latency_p95_ms"
+      threshold: 50
+
+  technical:
+    - criterion: "RPC function uses native vector operators"
+      test: "tests/integration/vector_search_rpc.spec.ts"
+      metric: null
+    - criterion: "HNSW index successfully created"
+      test: "manual_verification"
+      metric: null
+    - criterion: "Index usage verified via EXPLAIN ANALYZE"
+      test: "manual_verification"
+      metric: null
+    - criterion: "Network transfer reduced to <100KB per query"
+      test: "tests/integration/vector_search_performance.spec.ts"
+      metric: "network_transfer_kb"
+      threshold: 100
+    - criterion: "Backward compatibility maintained"
+      test: "tests/integration/vector_search_compatibility.spec.ts"
+      metric: null
+
+  business:
+    - criterion: "10-100x query latency improvement at scale"
+      test: "analytics/vector_search_performance"
+      metric: "latency_improvement_factor"
+      threshold: 10
+
+risks:
+  - id: "index_build_time"
+    category: "performance"
+    probability: "medium"
+    impact: "low"
+    mitigation: "HNSW index build is one-time operation; run during low-traffic window"
+  - id: "pgvector_version"
+    category: "dependency"
+    probability: "low"
+    impact: "high"
+    mitigation: "Verify pgvector 0.5.0+ before migration; fallback to IVFFlat if needed"
+  - id: "memory_increase"
+    category: "infrastructure"
+    probability: "high"
+    impact: "medium"
+    mitigation: "HNSW uses ~4x more memory than IVFFlat; monitor and scale if needed"
+  - id: "backward_compatibility"
+    category: "integration"
+    probability: "low"
+    impact: "medium"
+    mitigation: "RPC function maintains same result structure as current code"
+
+notes: |
+  This release addresses vector search scalability issues identified in the current implementation.
+  
+  Key improvements:
+  - Replace JavaScript similarity computation with PostgreSQL native operators
+  - Migrate from IVFFlat to HNSW index for better scalability
+  - Reduce network transfer by computing similarity in database
+  - Enable scaling to 10M+ records without performance degradation
+  
+  Current issues:
+  - Index not used (full table scans)
+  - Network transfer of full records with embeddings (MB per query)
+  - O(n) similarity calculations in JavaScript
+  - IVFFlat degrades beyond 100k records
+  
+  Expected improvements:
+  - Query latency: <10ms vs current ~1000ms at 100k records
+  - Network transfer: <100KB vs current ~1.5MB per query
+  - Scalability: 10M+ records vs current 100k limit
+  
+  Success criteria:
+  - All vector searches use indexed queries
+  - 10-100x query latency improvement
+  - Network transfer < 100KB per query
+  - Backward compatibility maintained
+

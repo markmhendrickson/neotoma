@@ -93,3 +93,12 @@ CREATE POLICY "Service role full access - schema_registry" ON schema_registry
 DROP POLICY IF EXISTS "public read - schema_registry" ON schema_registry;
 CREATE POLICY "public read - schema_registry" ON schema_registry FOR SELECT USING (true);
 
+
+
+
+
+
+
+
+
+

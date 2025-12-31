@@ -1,71 +1,39 @@
 # Create New Release
 
-_(Orchestrate Multiple Feature Units into a Cohesive Release)_
-
----
-
-## Purpose
-
-Creates and orchestrates a new Release — a collection of Feature Units that ship together with integrated testing, acceptance criteria, and deployment planning.
-
-This command implements the Release workflow from `docs/feature_units/standards/release_workflow.md`.
-
----
+Orchestrates multiple Feature Units into a cohesive release. Implements the Release workflow from `docs/feature_units/standards/release_workflow.md`.
 
 ## When to Use
 
-**Explicit Command:** Use this command when you know exactly what you want:
-- Start a new release (MVP = v1.0.0, next minor = v1.1.0, etc.)
-- Plan multi-FU work with dependency resolution
-- Generate execution schedules with parallelization
-- Orchestrate FU creation/execution in dependency order
-- Run cross-FU integration tests
+**Explicit Command:** Use when you know exactly what you want: start a new release, plan multi-FU work with dependency resolution, generate execution schedules with parallelization, orchestrate FU creation/execution in dependency order, run cross-FU integration tests.
 
 **Automatic Detection:** This workflow can also be triggered automatically via `.cursor/rules/release_detection.md` when you mention release-related patterns in natural language (e.g., "new release", "release v1.1.0"). Both paths execute the same workflow.
 
----
-
 ## Prerequisites
 
-Before running this command:
-
-- [ ] Release ID chosen (format: `vX.Y.Z`, e.g., `v1.0.0`)
-- [ ] Release scope roughly defined (what's in, what's out)
-- [ ] FU IDs for included work identified (or to be created)
-
----
+- Release ID chosen (format: `vX.Y.Z`, e.g., `v1.0.0`)
+- Release scope roughly defined (what's in, what's out)
+- FU IDs for included work identified (or to be created)
 
 ## Command Execution
 
 ### Step 1: Load Documentation
 
-**Agent: Load required documents:**
-
-```
-- docs/feature_units/standards/release_workflow.md (primary workflow)
-- docs/feature_units/standards/creating_feature_units.md (FU creation)
-- docs/feature_units/standards/execution_instructions.md (FU execution)
-- docs/specs/MVP_FEATURE_UNITS.md (if working on MVP)
-```
-
----
+Load required documents:
+- `docs/feature_units/standards/release_workflow.md` (primary workflow)
+- `docs/feature_units/standards/creating_feature_units.md` (FU creation)
+- `docs/feature_units/standards/execution_instructions.md` (FU execution)
+- `docs/specs/MVP_FEATURE_UNITS.md` (if working on MVP)
 
 ### Step 2: Checkpoint 0 — Release Planning
 
-**Agent: Check if Release plan exists:**
+Check if Release plan exists:
 
 - Look for `docs/releases/in_progress/{release_id}/release_plan.md`
 - Look for `docs/releases/in_progress/{release_id}/manifest.yaml`
 
-**If Release plan exists:**
+**If Release plan exists:** Load and validate. If complete → proceed to Step 3. If incomplete → prompt user to complete.
 
-- Load and validate
-- If complete → proceed to Step 3
-- If incomplete → prompt user to complete
-
-**If Release plan does NOT exist:**
-
-**Agent: Prompt user interactively for Release details:**
+**If Release plan does NOT exist:** Prompt user interactively for Release details:
 
 1. **Release name and version** (e.g., "MVP", "v1.0.0")
 2. **Release goal** (1-2 sentence summary of what this ships)
@@ -82,32 +50,19 @@ Before running this command:
 10. **Rollback plan** (how to revert if issues found)
 11. **Post-release monitoring plan** (key metrics, alerts)
 
-**Agent: After user input:**
-
-- Generate complete Release plan (`release_plan.md`)
-- Create manifest YAML (`manifest.yaml`)
-- Create integration test spec (`integration_tests.md`)
-- Create status tracker (`status.md`)
-- Save all to `docs/releases/in_progress/{release_id}/`
-
----
+**After user input:** Generate complete Release plan (`release_plan.md`), create manifest YAML (`manifest.yaml`), create integration test spec (`integration_tests.md`), create status tracker (`status.md`), save all to `docs/releases/in_progress/{release_id}/`.
 
 ### Step 3: Dependency Analysis and Schedule Generation
 
-**Agent: Analyze dependencies:**
+Analyze dependencies:
 
 1. **Load all FU manifests** for FUs in Release
 2. **Extract dependencies** from each FU's `dependencies.requires` field
 3. **Build dependency graph**: FU → [list of required FUs]
-4. **Detect cycles**:
-   - If cycle found → **REJECT** with error message
-   - List cycle: "FU-A → FU-B → FU-C → FU-A"
-5. **Validate dependencies**:
-   - If any required FU is ⏳ Not Started and not in this Release → **REJECT**
-   - If any required FU is 🔨 Partial → **WARN** but allow with user confirmation
-   - If any required FU is ✅ Complete → proceed
+4. **Detect cycles:** If cycle found → REJECT with error message. List cycle: "FU-A → FU-B → FU-C → FU-A"
+5. **Validate dependencies:** If any required FU is ⏳ Not Started and not in this Release → REJECT. If any required FU is 🔨 Partial → WARN but allow with user confirmation. If any required FU is ✅ Complete → proceed.
 
-**Agent: Generate execution schedule:**
+Generate execution schedule:
 
 1. **Perform topological sort** of FU dependency graph
 2. **Group into batches**:
@@ -122,7 +77,7 @@ Before running this command:
    - Account for parallelization (divide by number of parallel agents if applicable)
 5. **Save execution schedule** to `execution_schedule.md`
 
-**Agent: Pre-Mortem Analysis:**
+Pre-Mortem Analysis:
 
 1. Identify top 3-5 most likely failure modes for this Release
 2. For each failure mode, specify:
@@ -134,14 +89,14 @@ Before running this command:
    - "What other failure modes should we plan for?"
 4. Incorporate feedback and add "Pre-Mortem" section to Release plan
 
-**Agent: WIP and Parallelization Limits:**
+WIP and Parallelization Limits:
 
 1. Encode limits in `manifest.yaml`:
    - `max_parallel_fus: <number>` (default: 3)
    - `max_high_risk_in_parallel: <number>` (default: 1)
 2. Present limits to user: "Proposed limits: max_parallel_fus=3, max_high_risk_in_parallel=1. Approve? (yes/modify)"
 
-**Agent: Machine-Checkable Exit Criteria:**
+Machine-Checkable Exit Criteria:
 
 1. For each Release acceptance criterion, define:
    - Concrete test suite or script that validates it
@@ -149,13 +104,7 @@ Before running this command:
 2. Add these to `integration_tests.md` with explicit pass/fail conditions
 3. Present to user: "Each acceptance criterion now has a machine-checkable test. Review? (yes/modify)"
 
-**Agent: Present schedule to user:**
-
-- Display batch breakdown
-- Show which FUs run in parallel
-- Show estimated timeline
-- Show WIP limits and pre-mortem failure modes
-- **STOP and prompt:** "Approve execution schedule? (yes/no/modify)"
+Present schedule to user: Display batch breakdown, show which FUs run in parallel, show estimated timeline, show WIP limits and pre-mortem failure modes. STOP and prompt: "Approve execution schedule? (yes/no/modify)"
 
 **If user approves:**
 
@@ -172,7 +121,13 @@ Before running this command:
 
 ### Step 4: Execute FU Batches (Autonomous)
 
-**Agent: For each batch in execution schedule (in order):**
+Before starting execution, prompt user for execution strategy:
+- Run `node scripts/release_orchestrator.js <release_id>`
+- Orchestrator will prompt: "How would you like to execute this release build? 1. Single-agent (sequential execution) 2. Multi-agent (parallel execution)"
+- If single-agent selected, orchestrator recommends model based on release complexity
+- Selected strategy saved to `manifest.yaml`
+
+For each batch in execution schedule (in order):
 
 **Batch Execution Loop:**
 
@@ -193,9 +148,7 @@ Before running this command:
 
    - Execute integration test suite from `integration_tests.md`
    - Test flows that span multiple FUs in this batch
-   - If tests fail:
-     - **STOP** and report failures to user
-     - User decides: fix and retry, skip FU, or abort Release
+   - If tests fail: STOP and report failures to user. User decides: fix and retry, skip FU, or abort Release
    - If tests pass, proceed
 
 4. **Update Release status:**
@@ -212,14 +165,9 @@ Before running this command:
 
 ### Step 5: Checkpoint 1 — Mid-Release Review (Optional)
 
-**Agent: Check if mid-release checkpoint is configured:**
+Check if mid-release checkpoint is configured: Look for `checkpoint_1_after_batch` in `manifest.yaml`. If not configured, skip to Step 6.
 
-- Look for `checkpoint_1_after_batch` in `manifest.yaml`
-- If not configured, skip to Step 6
-
-**If configured and batch threshold reached:**
-
-**Agent: Present mid-release status:**
+If configured and batch threshold reached, present mid-release status:
 
 - "Mid-release checkpoint reached"
 - "FUs completed: X/Y"
@@ -241,7 +189,7 @@ Before running this command:
 
 ### Step 6: Cross-Release Integration Testing
 
-**Agent: Run full integration test suite:**
+Run full integration test suite:
 
 1. **Execute all tests** from `integration_tests.md`
 2. **Run end-to-end user flows** that span multiple FUs
@@ -249,13 +197,13 @@ Before running this command:
 4. **Run performance benchmarks** (if specified in acceptance criteria)
 5. **Verify graph integrity** (0 orphans, 0 cycles if applicable)
 
-**Agent: Check Release-level acceptance criteria:**
+Check Release-level acceptance criteria:
 
 - Product acceptance: Core workflows functional?
 - Technical acceptance: Test coverage met? Performance targets hit?
 - Business acceptance: Metrics instrumented? Analytics ready?
 
-**Agent: Generate integration test report:**
+Generate integration test report:
 
 - Save to `integration_test_report.md`
 - Include:
@@ -264,20 +212,13 @@ Before running this command:
   - Regression test results
   - Issues found (if any)
 
-**If tests fail:**
+**If tests fail:** STOP and report failures to user. User decides: fix issues and re-test, or abort Release.
 
-- **STOP** and report failures to user
-- User decides: fix issues and re-test, or abort Release
-
-**If all tests pass:**
-
-- Proceed to Step 7
-
----
+**If all tests pass:** Proceed to Step 7.
 
 ### Step 7: Checkpoint 2 — Pre-Release Sign-Off
 
-**Agent: Present Release summary:**
+Present Release summary:
 
 - FUs completed: X/Y (with list)
 - Integration tests: [pass/fail summary with link to report]
@@ -310,7 +251,7 @@ Before running this command:
 
 ### Step 8: Deployment
 
-**Agent: Execute deployment plan:**
+Execute deployment plan:
 
 1. **Follow deployment strategy** from Release plan:
    - **staging_first**: Deploy to staging, run smoke tests, then production
@@ -328,23 +269,13 @@ Before running this command:
    - Smoke tests pass?
    - Key metrics normal?
 
-**If deployment fails:**
+**If deployment fails:** STOP and report failure, execute rollback plan, user investigates and fixes.
 
-- **STOP** and report failure
-- Execute rollback plan
-- User investigates and fixes
-
-**If deployment succeeds:**
-
-- Update Release status to `deployed`
-- Record deployment timestamp
-- Proceed to Step 9
-
----
+**If deployment succeeds:** Update Release status to `deployed`, record deployment timestamp, proceed to Step 9.
 
 ### Step 9: Post-Release Monitoring Setup
 
-**Agent: Setup monitoring:**
+Setup monitoring:
 
 1. **Verify metrics instrumentation:**
    - Check that key metrics from acceptance criteria are being collected
@@ -354,7 +285,7 @@ Before running this command:
 3. **Document monitoring links:**
    - Add links to dashboards, alerts to Release status doc
 
-**Agent: Mark Release as completed:**
+Mark Release as completed:
 
 - Update status to `completed`
 - Move Release files from `in_progress/` to `completed/`:
@@ -362,14 +293,12 @@ Before running this command:
   mv docs/releases/in_progress/{release_id} docs/releases/completed/{release_id}
   ```
 
-**Agent: Present completion summary:**
+Present completion summary:
 
 - "Release {release_id} deployed and complete!"
 - "Deployed at: {timestamp}"
 - "Monitoring: {dashboard_links}"
 - "FUs shipped: [list]"
-
----
 
 ## Example Interaction
 
@@ -464,8 +393,6 @@ Agent: Release v1.0.0 deployed and complete!
 Agent: Monitoring: [dashboard links]
 ```
 
----
-
 ## Agent Instructions
 
 ### Load Order
@@ -477,12 +404,12 @@ Agent: Monitoring: [dashboard links]
 
 ### Constraints
 
-- **NEVER proceed past Checkpoint 0 without complete Release plan**
-- **ALWAYS validate FU dependencies before generating schedule**
-- **REJECT if circular dependencies detected**
-- **ALWAYS run cross-FU integration tests after each batch**
-- **ALWAYS get user approval at Checkpoints 0, 1 (if configured), 2**
-- **NEVER deploy without passing integration tests and acceptance criteria**
+- Do NOT proceed past Checkpoint 0 without complete Release plan
+- Always validate FU dependencies before generating schedule
+- REJECT if circular dependencies detected
+- Always run cross-FU integration tests after each batch
+- Always get user approval at Checkpoints 0, 1 (if configured), 2
+- Do NOT deploy without passing integration tests and acceptance criteria
 
 ### Forbidden Patterns
 
@@ -490,12 +417,3 @@ Agent: Monitoring: [dashboard links]
 - Skipping integration tests
 - Proceeding without user approval at checkpoints
 - Deploying with failing tests or unmet acceptance criteria
-
----
-
-## References
-
-- **Primary workflow:** `docs/feature_units/standards/release_workflow.md`
-- **FU creation:** `docs/feature_units/standards/creating_feature_units.md`
-- **FU execution:** `docs/feature_units/standards/execution_instructions.md`
-- **MVP inventory:** `docs/specs/MVP_FEATURE_UNITS.md`

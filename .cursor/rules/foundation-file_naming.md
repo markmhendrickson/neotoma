@@ -1,0 +1,1 @@
+../../foundation/agent-instructions/cursor-rules/file_naming.md

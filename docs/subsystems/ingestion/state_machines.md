@@ -1,16 +1,6 @@
 # Neotoma Ingestion State Machine
 *(Canonical States, Transitions, and UI Mapping)*
-
----
-
-## Purpose
-
-Defines the state machine for ingestion processes, including all states, transitions, error handling, and UI representation.
-
----
-
 ## Ingestion State Machine
-
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 stateDiagram-v2
@@ -30,9 +20,7 @@ stateDiagram-v2
     Failed --> [*]: permanent_failure
     Completed --> [*]
 ```
-
 ## States
-
 | State | Description | Terminal | UI Display |
 |-------|-------------|----------|------------|
 | `Pending` | Queued for processing | No | "Queued..." |
@@ -42,11 +30,8 @@ stateDiagram-v2
 | `Indexing` | Search index update | No | "Indexing..." |
 | `Completed` | Successfully ingested | Yes | "Complete" |
 | `Failed` | Error occurred | Yes* | "Failed" + error message |
-
 *Failed state can transition to Pending on retry
-
 ## Testing
-
 ```typescript
 test('ingestion state transitions', async () => {
   const record = await createRecord({status: 'pending'});
@@ -59,30 +44,6 @@ test('ingestion state transitions', async () => {
   expect(await getStatus(record.id)).toBe('completed');
 });
 ```
-
----
-
 ## Agent Instructions
-
 Load when implementing ingestion status tracking or UI status displays.
-
 Required co-loaded: `docs/subsystems/ingestion/ingestion.md`, `docs/architecture/consistency.md`
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

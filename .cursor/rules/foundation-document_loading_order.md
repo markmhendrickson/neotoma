@@ -1,0 +1,1 @@
+../../foundation/agent-instructions/cursor-rules/document_loading_order.md

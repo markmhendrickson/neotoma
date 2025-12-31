@@ -1,0 +1,108 @@
+release:
+  id: "v0.2.2"
+  name: "list_capabilities MCP Action"
+  type: "not_marketed" # marketed | not_marketed
+  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  target_date: "when ready"
+  priority: "P0"
+  marketing_required: false
+
+# Execution strategy
+execution_strategy:
+  type: "single" # Single FU release
+  max_parallel_fus: 1
+  max_high_risk_in_parallel: 1
+  agent_spawning:
+    enabled: false # Single FU, no need for parallel execution
+    status_tracking: "file"
+    status_file: "docs/releases/v0.2.2/agent_status.json"
+
+feature_units:
+  # MCP Action — list_capabilities
+  - id: "FU-304"
+    priority: "P0"
+    dependencies: ["FU-200"] # MCP Server Core from v0.1.0
+    risk_level: "low"
+    notes: "New MCP action for dynamic capability discovery. Exposes existing capability registry via MCP."
+
+execution_schedule:
+  batches:
+    # Batch 0: list_capabilities MCP Action
+    - batch_id: 0
+      feature_units: ["FU-304"]
+      dependencies: ["FU-200"] # Assumes v0.1.0 FU-200 is complete
+
+checkpoints:
+  checkpoint_1_after_batch: 0 # Pre-release sign-off after implementation
+
+acceptance_criteria:
+  product:
+    - criterion: "list_capabilities MCP action returns all 5 capabilities with complete metadata"
+      test: "tests/integration/list_capabilities.test.ts"
+      metric: null
+    - criterion: "Filtering by intent and version works correctly"
+      test: "tests/integration/list_capabilities.test.ts"
+      metric: null
+    - criterion: "submit_payload tool description references list_capabilities"
+      test: "tests/integration/mcp_tool_descriptions.test.ts"
+      metric: null
+    - criterion: "All 5 existing capabilities discoverable"
+      test: "tests/integration/list_capabilities.test.ts"
+      metric: "capabilities_count == 5"
+  technical:
+    - criterion: "MCP action follows MCP protocol specification"
+      test: "tests/integration/mcp_protocol.test.ts"
+      metric: null
+    - criterion: "Response structure matches specification in docs/specs/MCP_SPEC.md"
+      test: "tests/integration/list_capabilities.test.ts"
+      metric: null
+    - criterion: "Example payloads generated for all 5 capabilities"
+      test: "tests/integration/list_capabilities.test.ts"
+      metric: "example_payloads_count == 5"
+    - criterion: "No breaking changes to existing MCP actions"
+      test: "tests/integration/backward_compatibility.test.ts"
+      metric: null
+    - criterion: "Response time < 100ms"
+      test: "tests/integration/list_capabilities_performance.test.ts"
+      metric: "response_time_p95 < 100"
+  business:
+    - criterion: "Integrations can discover available capabilities at runtime"
+      test: null
+      metric: "Manual validation via MCP client"
+    - criterion: "Self-documenting tool descriptions reduce support burden"
+      test: null
+      metric: "Manual validation of tool descriptions"
+
+pre_mortem:
+  failure_modes:
+    - mode: "MCP protocol compliance issues"
+      early_warning: "MCP integration tests fail, protocol compliance issues"
+      mitigation: "Follow existing MCP action patterns, comprehensive protocol tests"
+      rollback: "Revert MCP action changes, check protocol compliance"
+    - mode: "Response structure mismatch"
+      early_warning: "Integration tests fail, response structure doesn't match spec"
+      mitigation: "Comprehensive response schema validation, spec alignment checks"
+      rollback: "Fix response structure, re-validate against spec"
+    - mode: "Example payload generation failures"
+      early_warning: "Missing or invalid example payloads for capabilities"
+      mitigation: "Validate example payloads against capability schemas"
+      rollback: "Fix example payload generation, re-validate"
+    - mode: "Backward compatibility regressions"
+      early_warning: "Existing integration tests fail, breaking changes detected"
+      mitigation: "Comprehensive backward compatibility tests, no breaking changes"
+      rollback: "Revert changes, ensure backward compatibility maintained"
+
+deployment:
+  target: "production" # All releases deploy to production at neotoma.io
+  target_url: "neotoma.io"
+  marketing: false # Not marketed release - no marketing activities
+  rollback_plan: "Revert code changes and redeploy to neotoma.io; remove list_capabilities action from MCP server; existing integrations continue to work (backward compatible)"
+
+monitoring:
+  key_metrics:
+    - "list_capabilities_success_rate"
+    - "list_capabilities_response_time_p95"
+    - "list_capabilities_call_volume"
+    - "submit_payload_success_rate_post_release"
+    - "mcp_tool_description_access_count"
+
