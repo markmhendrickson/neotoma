@@ -4,7 +4,7 @@ Neotoma is a deterministic truth layer that transforms fragmented personal data 
 
 ### What It Does
 
-Neotoma builds persistent structured memory for AI agents through **dual-path ingestion**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation—creating an incremental knowledge base that grows more accurate and comprehensive over time.
+Neotoma builds persistent structured memory for AI agents through **dual-path ingestion**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation—creating an incremental knowledge base that grows more accurate and comprehensive over time. v0.2.3+ extends this to codebase metadata (Feature Units, Releases, decisions, sessions) enabling foundation agents to maintain unified memory across real-world and codebase entities.
 
 The system transforms fragmented personal data into a unified memory graph. The graph connects people, companies, events, and relationships across all your data. Every fact traces back to its source. Dates automatically create timelines. Entities are unified across all records, so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
 
@@ -29,8 +29,9 @@ Neotoma provides persistent, structured memory built on three architectural foun
 
 **3. Cross-Platform Access**
 
-- Works seamlessly with ChatGPT, Claude, and Cursor via MCP
+- Works seamlessly with ChatGPT, Claude, Cursor, and Claude Code via MCP
 - One memory system across all your AI tools. No platform lock-in.
+- **Localhost Agent Compatible:** Aligns with localhost agent architectures (Claude Code) that run on your computer with private environment, data, and context, as [Karpathy describes](https://x.com/karpathy/status/2002118205729562949). Neotoma serves as the private data substrate that localhost agents depend on.
 
 **These foundations enable:**
 
@@ -61,6 +62,7 @@ This enables agents to reason across all your data: documents, agent-created rec
 | **No temporal reasoning**                | Automatic timeline generation from date fields creates chronological event sequences across all personal data                                          |
 | **No provenance or trust**               | Every fact traces to its source (document or agent interaction). Full audit trail for all data                                                         |
 | **Platform lock-in**                     | Cross-platform via MCP. Works with ChatGPT, Claude, and Cursor. Not locked to single provider or OS.                                                   |
+| **LLM inconsistency ([jagged intelligence](https://x.com/karpathy/status/2002118205729562949))** | Deterministic substrate provides reliable truth layer agents can depend on. Creates verifiable domain for personal data with consistent, reproducible results despite LLM inconsistency |
 
 ### Who Neotoma Is For
 
@@ -170,9 +172,14 @@ See [`docs/subsystems/schema.md`](docs/subsystems/schema.md) for complete schema
 
 - **v0.1.0**: Internal MCP Release (`ready_for_deployment`). MCP-focused validation release with deterministic ingestion, extraction, entity resolution, and graph construction. See [`docs/releases/v0.1.0/`](docs/releases/v0.1.0/)
 - **v0.2.0**: Minimal Ingestion + Correction Loop (`ready_for_deployment`). Sources-first ingestion architecture with MCP ingestion tools (ingest, reinterpret, correct, merge_entities). See [`docs/releases/v0.2.0/`](docs/releases/v0.2.0/)
-- **v0.2.1**: Documentation & Support System (`planning`). Documentation improvements and support infrastructure. See [`docs/releases/v0.2.1/`](docs/releases/v0.2.1/)
-- **v0.3.0**: Operational Hardening (`planning`). Operational resilience and quota enforcement (async upload retry, stale interpretation cleanup, strict quota enforcement). See [`docs/releases/v0.3.0/`](docs/releases/v0.3.0/)
+- **v0.2.1**: Documentation Generation System (`planning`). Statically-generated documentation from AI analysis with one-page landing site. See [`docs/releases/v0.2.1/`](docs/releases/v0.2.1/)
+- **v0.2.2**: list_capabilities MCP Action (`planning`). Dynamic capability discovery for integrations. See [`docs/releases/v0.2.2/`](docs/releases/v0.2.2/)
+- **v0.2.3**: Codebase Metadata Schema Extensions (`planning`). Extends Neotoma schema to support foundation agent memory with 7 new entity types (feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision). Uses existing generic MCP actions (`submit_payload`, `retrieve_records`, `retrieve_entities`, `list_timeline_events`) with new capability IDs. Implements Agent Skills for Context Engineering principles for context compression, degradation management, and evaluation patterns. See [`docs/releases/v0.2.3/`](docs/releases/v0.2.3/)
+- **v0.3.0**: Operational Hardening (`planning`). Operational resilience and quota enforcement (async upload retry, stale interpretation cleanup, strict quota enforcement). Composed entirely of items deferred from v0.2.0. See [`docs/releases/v0.3.0/`](docs/releases/v0.3.0/)
 - **v0.4.0**: Intelligence + Housekeeping (`planning`). Intelligent features (duplicate detection, schema discovery) and housekeeping (archival) after operational stability. See [`docs/releases/v0.4.0/`](docs/releases/v0.4.0/)
+- **v0.5.0**: Agent Cryptographic Signing (`planning`). Cryptographic attribution and permissioning for agent interactions. See [`docs/releases/v0.5.0/`](docs/releases/v0.5.0/)
+- **v0.6.0**: Complete Architecture Migration (`planning`). Migrate entirely to sources-first/payload-based architecture, eliminating the legacy records table and record-based APIs. Breaking change requiring data migration. See [`docs/releases/v0.6.0/`](docs/releases/v0.6.0/)
+- **v0.9.0**: MCP Support System (`planning`). MCP-based support inquiry system with RAG agent using generated documentation. Deferred from v0.2.1 for better timing before v1.0.0. See [`docs/releases/v0.9.0/`](docs/releases/v0.9.0/)
 - **v1.0.0**: MVP (`planning`). First production-capable release with structured personal data memory, dual-path ingestion, entity resolution, timelines, cross-platform MCP access, and minimal UI. Target: 2026-01-23. See [`docs/releases/v1.0.0/`](docs/releases/v1.0.0/)
 - **v2.0.0**: End-to-End Encryption (`planning`). E2EE implementation for privacy-first architecture. See [`docs/releases/v2.0.0/`](docs/releases/v2.0.0/)
 - **v2.1.0**: GDPR & US State Privacy Compliance (`planning`). Compliance features for GDPR and US state privacy laws. See [`docs/releases/v2.1.0/`](docs/releases/v2.1.0/)
@@ -285,6 +292,7 @@ Neotoma provides MCP (Model Context Protocol) integration for AI tools, enabling
 **Setup Guides:**
 
 - **[Cursor MCP Setup](docs/developer/mcp_cursor_setup.md)**: Configure Neotoma MCP server for Cursor (stdio-based)
+- **[Claude Code MCP Setup](docs/developer/mcp_claude_code_setup.md)**: Configure Neotoma MCP server for Claude Code localhost agent (stdio-based)
 - **[ChatGPT Custom GPT Setup](docs/developer/mcp_chatgpt_setup.md)**: Configure Neotoma HTTP Actions for ChatGPT Custom GPTs (OpenAPI-based)
 
 **Available Actions:**
@@ -339,7 +347,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 
 ### Core Principles
 
-1. **Deterministic**: Same input → same output, always. No randomness, no LLM extraction in MVP.
+1. **Deterministic (Creates Verifiable Domain)**: Same input → same output, always. No randomness, no LLM extraction in MVP. By making extraction deterministic and verifiable, Neotoma creates a verifiable domain for personal data—objective (non-gameable) results that enable reliable, consistent outcomes LLMs can depend on.
 2. **Schema-first**: Type-driven extraction, not freeform notes or conversation-only memory
 3. **Explainable**: Every field traces to source (document or agent interaction)
 4. **Entity-unified**: Canonical IDs across all personal data (hash-based)

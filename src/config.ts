@@ -1,15 +1,32 @@
 import dotenv from "dotenv";
 import { getPlaidConfig } from "./config/plaid.js";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
-const env = process.env.NODE_ENV || "development";
+// Use NEOTOMA_ENV to avoid conflicts when running as MCP in other workspaces
+// Falls back to NODE_ENV for backward compatibility
+const env = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
+
+// Resolve .env file paths relative to this file's location (works when running as MCP)
+// When running as MCP, process.cwd() might be the workspace directory, not the Neotoma project
+// So we always resolve from the file location: dist/config.js -> project root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Always resolve project root from file location (dist/ -> project root)
+// This works regardless of process.cwd() when running as MCP
+const projectRoot = process.env.NEOTOMA_PROJECT_ROOT || 
+  (__dirname.endsWith('/dist') || __dirname.includes('/dist/') 
+    ? join(__dirname, '..') 
+    : __dirname);
 
 // Load environment-specific .env files
 if (env === "production") {
-  dotenv.config({ path: ".env.production" });
-  dotenv.config(); // Load .env as fallback
+  // Try .env.production first, then fallback to .env
+  dotenv.config({ path: join(projectRoot, ".env.production"), override: false });
+  dotenv.config({ path: join(projectRoot, ".env"), override: false }); // Load .env as fallback
 } else {
   // Development/test: load .env
-  dotenv.config(); // Load .env
+  dotenv.config({ path: join(projectRoot, ".env"), override: false });
 }
 
 function getSupabaseConfig() {
@@ -85,7 +102,10 @@ if (!config.supabaseUrl || !config.supabaseKey) {
   if (env === "production") {
     throw new Error(
       `Missing Supabase configuration for production environment. ` +
-        `Create ${envFile} with PROD_SUPABASE_PROJECT_ID (preferred) or PROD_SUPABASE_URL, and PROD_SUPABASE_SERVICE_KEY.`
+        `NEOTOMA_ENV is set to "production" but PROD_* variables are missing. ` +
+        `Options: 1) Set NEOTOMA_ENV=development to use DEV_* variables, or ` +
+        `2) Provide PROD_SUPABASE_PROJECT_ID (or PROD_SUPABASE_URL) and PROD_SUPABASE_SERVICE_KEY ` +
+        `in ${envFile} or in the MCP config's env section.`
     );
   } else {
     throw new Error(

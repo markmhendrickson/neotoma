@@ -1,7 +1,7 @@
 # Neotoma MCP Specification
 ## Scope
 This document covers:
-- Complete catalog of MCP actions (8 MVP actions + 4 post-MVP Plaid actions + 2 post-MVP Metrics actions)
+- Complete catalog of MCP actions (20 MVP actions + 4 post-MVP Plaid actions + 2 post-MVP Metrics actions + 3 deprecated actions = 29 total)
 - Request/response schemas for each action
 - Error envelopes and error codes
 - Consistency guarantees per action
@@ -38,18 +38,20 @@ flowchart LR
 - All responses structured and typed
 - All errors use ErrorEnvelope
 ## 2. Complete MCP Action Catalog
-### 2.1 Core Payload Operations
-| Action           | Purpose                 | Consistency | Deterministic          |
-| ---------------- | ----------------------- | ----------- | ---------------------- |
-| `submit_payload` | Submit payload envelope | Strong      | Yes (given same input) |
-**Note:** `submit_payload` is the primary ingestion action in v0.2.1+. It replaces `store_record` and provides capability-based processing with deterministic deduplication.
+### 2.1 Core Ingestion Operations
+| Action             | Purpose                                    | Consistency | Deterministic          |
+| ------------------ | ------------------------------------------ | ----------- | ---------------------- |
+| `ingest`           | Ingest raw file content with interpretation | Strong      | Yes (content-hash based) |
+| `submit_payload`   | Submit payload envelope with capability   | Strong      | Yes (given same input) |
+| `ingest_structured` | Ingest pre-structured entity data        | Strong      | Yes (given same input) |
+**Note:** See section 2.6 for decision guidance on which ingestion action to use. `ingest` is for raw files, `submit_payload` is for structured data with capabilities, and `ingest_structured` is for structured data without capabilities.
 ### 2.1.1 Legacy Record Operations (Deprecated)
 | Action             | Purpose                           | Consistency                                        | Deterministic |
 | ------------------ | --------------------------------- | -------------------------------------------------- | ------------- |
 | `update_record`    | Update record metadata/properties | Strong                                             | Yes           |
 | `retrieve_records` | Query records with filters        | Strong (metadata), Bounded Eventual (search index) | Yes (ranking) |
 | `delete_record`    | Remove record                     | Strong                                             | Yes           |
-**Note:** These operations are deprecated in v0.2.1+ and maintained for backward compatibility. New code should use `submit_payload` and entity-based operations (`get_entity_snapshot`, `list_observations`).
+**🚫 FORBIDDEN - DO NOT USE:** These operations are deprecated and **will be removed entirely in v0.6.0**. **Agents MUST NOT use these actions under any circumstances.** They are maintained only for backward compatibility with legacy code. **Using these actions in new code is forbidden.** Use the replacement actions listed below instead.
 ### 2.2 File Operations
 | Action         | Purpose                              | Consistency | Deterministic            |
 | -------------- | ------------------------------------ | ----------- | ------------------------ |
@@ -71,18 +73,126 @@ flowchart LR
 | `get_technical_metrics` | Query Prometheus technical metrics (latency, errors, system health) | Bounded Eventual (Prometheus scrape interval) | Yes (same query + time → same result) | ⏳ Post-MVP |
 | `get_product_analytics` | Query product analytics (activation, retention, usage)              | Bounded Eventual (analytics platform sync)    | Yes (same query + time → same result) | ⏳ Post-MVP |
 **Note:** Metrics actions are post-MVP. They enable AI-generated reports on system performance and user behavior. Requires Prometheus and PostHog/Mixpanel integration (Phase 8 observability).
-### 2.5 Observation and Snapshot Operations
+### 2.5 Entity Operations
+| Action                    | Purpose                                    | Consistency | Deterministic | MVP Status |
+| ------------------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
+| `get_entity_snapshot`     | Get entity snapshot with provenance        | Strong      | Yes           | ✅ MVP     |
+| `retrieve_entities`       | Query entities with filters                | Strong      | Yes           | ✅ MVP     |
+| `get_entity_by_identifier`| Find entity by identifier (name, email)    | Strong      | Yes           | ✅ MVP     |
+| `get_related_entities`     | Get entities via relationships (n-hop)    | Strong      | Yes           | ✅ MVP     |
+| `get_graph_neighborhood`  | Get complete graph context around node     | Strong      | Yes           | ✅ MVP     |
+| `merge_entities`          | Merge duplicate entities                   | Strong      | Yes           | ✅ MVP     |
+### 2.6 Observation and Relationship Operations
 | Action                 | Purpose                                    | Consistency | Deterministic | MVP Status |
 | ---------------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
-| `get_entity_snapshot`  | Get entity snapshot with provenance        | Strong      | Yes           | ✅ MVP     |
 | `list_observations`    | Query observations for entity              | Strong      | Yes           | ✅ MVP     |
 | `get_field_provenance` | Trace field to source documents            | Strong      | Yes           | ✅ MVP     |
 | `create_relationship`  | Create typed relationship between entities | Strong      | Yes           | ✅ MVP     |
 | `list_relationships`   | Query entity relationships                 | Strong      | Yes           | ✅ MVP     |
+| `list_timeline_events` | Query timeline events with filters         | Strong      | Yes           | ✅ MVP     |
 **Note:** These actions enable AI agents to work with entities, observations, and snapshots — the core of Neotoma's three-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
+### 2.7 Correction and Reinterpretation Operations
+| Action          | Purpose                                    | Consistency | Deterministic | MVP Status |
+| --------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
+| `correct`       | Create high-priority correction observation | Strong      | Yes           | ✅ MVP     |
+| `reinterpret`   | Re-run AI interpretation on existing source | Strong      | Yes           | ✅ MVP     |
+**Note:** `correct` creates priority-1000 observations that override AI extraction. `reinterpret` creates new observations without modifying existing ones.
+### 2.8 Choosing the Right Ingestion Action
+
+**Use `ingest` when:**
+- You have raw file content (PDFs, images, text files) that needs interpretation
+- You want AI to extract structured data from unstructured files
+- You need content-addressed storage with SHA-256 deduplication
+- Files are uploaded as base64-encoded content
+
+**Use `submit_payload` when:**
+- You have structured data matching a registered capability (invoice, transaction, receipt, contract, note)
+- You want capability-specific entity extraction rules
+- You need deterministic deduplication via capability normalization
+- Data is already structured and doesn't need AI interpretation
+
+**Available capabilities:** Check via `list_provider_catalog` or see capability registry:
+- `neotoma:store_invoice:v1`
+- `neotoma:store_transaction:v1`
+- `neotoma:store_receipt:v1`
+- `neotoma:store_contract:v1`
+- `neotoma:store_note:v1`
+- Plus codebase capabilities (v0.2.3+): `neotoma:store_feature_unit:v1`, `neotoma:store_release:v1`, `neotoma:store_agent_decision:v1`, `neotoma:store_agent_session:v1`, `neotoma:store_validation_result:v1`, `neotoma:store_codebase_entity:v1`, `neotoma:store_architectural_decision:v1`
+
+**Use `ingest_structured` when:**
+- You have structured data but NO matching capability (e.g., contacts, people, companies, custom entities)
+- You want to bypass capability-specific processing
+- You have pre-extracted entity data ready to store
+- Data doesn't need AI interpretation and doesn't match any capability
+
+**Decision Workflow:**
+1. **Is it raw file content?** → Use `ingest` (creates source → interpretation → observations)
+2. **Is it structured data with a capability?** → Check capabilities via `list_provider_catalog`
+3. **If capability exists** → Use `submit_payload` with `capability_id`
+4. **If no capability** → Use `ingest_structured` with `entities` array
+5. **Do not create new capability IDs** — use `ingest_structured` for unsupported data types
+
 ## 3. Action Specifications
-### 3.1 `submit_payload`
+### 3.1 `ingest`
+**Purpose:** Ingest raw file content with optional AI interpretation. Content-addressed storage with SHA-256 deduplication per user. Creates sources → interpretation runs → observations → entities.
+
+**Request Schema:**
+```typescript
+{
+  user_id: string;                    // Required: User ID (UUID)
+  file_content: string;               // Required: Base64-encoded file content
+  mime_type: string;                  // Required: MIME type (e.g., "application/pdf", "image/jpeg")
+  original_filename?: string;          // Optional: Original filename
+  interpret?: boolean;                 // Optional: Run AI interpretation (default: true)
+  interpretation_config?: {            // Optional: Interpretation configuration
+    provider?: string;
+    model_id?: string;
+    temperature?: number;
+    prompt_hash?: string;
+    code_version?: string;
+  };
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  source_id: string;                   // UUID of created source
+  content_hash: string;                // SHA-256 hash of content
+  file_size: number;                    // File size in bytes
+  deduplicated: boolean;                // Whether content was already stored
+  interpretation?: {                    // Present if interpret=true and quota allows
+    run_id: string;                    // UUID of interpretation run
+    entities_created: number;          // Number of entities created
+    observations_created: number;       // Number of observations created
+  } | null;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `VALIDATION_ERROR` | 400 | Invalid file content or MIME type | No |
+| `QUOTA_EXCEEDED` | 429 | Interpretation quota exceeded | No |
+| `FILE_TOO_LARGE` | 400 | File exceeds size limit | No |
+| `DB_INSERT_FAILED` | 500 | Database write failed | Yes |
+
+**When to Use:**
+- Uploading PDFs, images, or text files that need AI interpretation
+- Storing raw content with content-addressed deduplication
+- Files that need OCR, text extraction, or schema detection
+
+**Consistency:** Strong (source immediately queryable, observations created synchronously if interpret=true)
+**Determinism:** Yes (same file content → same content_hash → same source_id)
+
+### 3.2 `submit_payload`
 **Purpose:** Submit a payload envelope for compilation into payloads and observations. Agents submit `capability_id` + `body` + `provenance`; server handles schema reasoning, deduplication, and entity extraction.
+
+**Before Using This Action:**
+1. Check available capabilities via `list_provider_catalog` or review the capability list in section 2.8
+2. If your data type matches a capability → use `submit_payload` with that `capability_id`
+3. If no matching capability exists → use `ingest_structured` instead (do not create new capability IDs)
+
 **Request Schema:**
 ```typescript
 {
@@ -113,6 +223,8 @@ flowchart LR
 | `VALIDATION_ERROR` | 400 | Invalid payload envelope schema | No |
 | `UNKNOWN_CAPABILITY` | 400 | Capability ID not found | No |
 | `DB_INSERT_FAILED` | 500 | Database write failed | Yes |
+**Error Resolution:**
+- `UNKNOWN_CAPABILITY`: Check available capabilities via `list_provider_catalog`. If no matching capability exists, use `ingest_structured` instead of creating new capability IDs.
 **Capability Validation:**
 - `capability_id` MUST be a valid capability (e.g., `"neotoma:store_invoice:v1"`)
 - Available capabilities: `neotoma:store_invoice:v1`, `neotoma:store_transaction:v1`, `neotoma:store_receipt:v1`, `neotoma:store_contract:v1`, `neotoma:store_note:v1`
@@ -155,8 +267,84 @@ flowchart LR
 - Observations created automatically with `source_payload_id` reference
 **Consistency:** Strong (payload immediately queryable, observations created synchronously)
 **Determinism:** Yes (same payload content → same `payload_content_id`; deterministic entity extraction)
-### 3.2 `update_record` (Deprecated)
-**Status:** Deprecated in v0.2.1+. Use `submit_payload` with updated data instead.
+### 3.3 `ingest_structured`
+**Purpose:** Ingest pre-structured entity data with schema validation. Use this for data types that don't have a registered capability (e.g., contacts, people, companies, custom entities). For data with capabilities (invoices, transactions, receipts, contracts, notes), use `submit_payload` instead.
+
+**Request Schema:**
+```typescript
+{
+  user_id: string;                    // Required: User ID (UUID)
+  entities: Array<Record<string, unknown>>; // Required: Array of entity data objects
+  source_priority?: number;           // Optional: Source priority (default: 100)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  source_id: string;                   // UUID of created source
+  interpretation: {
+    run_id: string;                    // UUID of interpretation run
+    entities_created: number;          // Number of entities created
+    observations_created: number;       // Number of observations created
+  };
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `VALIDATION_ERROR` | 400 | Invalid entity schema or missing required fields | No |
+| `DB_INSERT_FAILED` | 500 | Database write failed | Yes |
+
+**Entity Data Format:**
+Each entity in the `entities` array should include:
+- `entity_type`: string (e.g., "person", "company", "contact")
+- Entity properties as key-value pairs
+- Optional metadata fields
+
+**Example:**
+```json
+// Request
+{
+  "user_id": "550e8400-e29b-41d4-a716-446655440000",
+  "entities": [
+    {
+      "entity_type": "person",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "phone": "+1-555-0123"
+    },
+    {
+      "entity_type": "company",
+      "name": "Acme Corp",
+      "domain": "acme.com"
+    }
+  ],
+  "source_priority": 100
+}
+// Response
+{
+  "source_id": "660e8400-e29b-41d4-a716-446655440001",
+  "interpretation": {
+    "run_id": "770e8400-e29b-41d4-a716-446655440002",
+    "entities_created": 2,
+    "observations_created": 2
+  }
+}
+```
+
+**When to Use:**
+- Storing contacts, people, companies, or other entities without registered capabilities
+- Importing structured data from external sources (e.g., Parquet, CSV, APIs)
+- Agent-created structured data that doesn't match existing capability schemas
+
+**Consistency:** Strong (entities immediately queryable, observations created synchronously)
+**Determinism:** Yes (same entity data → same entity IDs via entity resolution)
+### 3.4 `update_record` (FORBIDDEN - Will Be Removed in v0.6.0)
+**🚫 FORBIDDEN - DO NOT USE:** This action is deprecated and **will be removed entirely in v0.6.0**. **Agents MUST NOT use this action.** It is maintained only for backward compatibility with legacy code. **Using this action in new code is strictly forbidden.**
+
+**Replacement:** Use `submit_payload` with updated data instead, or use `correct` action for corrections.
 **Purpose:** Update existing record's properties or metadata.
 **Purpose:** Update existing record's properties or metadata.
 **Request Schema:**
@@ -188,8 +376,10 @@ flowchart LR
 | `DB_UPDATE_FAILED` | 500 | Database write failed | Yes |
 **Consistency:** Strong
 **Determinism:** Yes (same update → same result)
-### 3.3 `retrieve_records` (Deprecated)
-**Status:** Deprecated in v0.2.1+. Use entity-based operations (`get_entity_snapshot`, `list_observations`) instead.
+### 3.5 `retrieve_records` (FORBIDDEN - Will Be Removed in v0.6.0)
+**🚫 FORBIDDEN - DO NOT USE:** This action is deprecated and **will be removed entirely in v0.6.0**. **Agents MUST NOT use this action.** It is maintained only for backward compatibility with legacy code. **Using this action in new code is strictly forbidden.**
+
+**Replacement:** Use entity-based operations (`retrieve_entities`, `get_entity_snapshot`, `list_observations`) instead.
 **Purpose:** Query records with filters, search, and semantic matching.
 **Purpose:** Query records with filters, search, and semantic matching.
 **Request Schema:**
@@ -229,8 +419,10 @@ flowchart LR
 - Search index: Bounded Eventual (max 5s delay)
 - Embeddings: Bounded Eventual (max 10s delay)
 **Determinism:** Yes (same query + same DB state → same order)
-### 3.4 `delete_record` (Deprecated)
-**Status:** Deprecated in v0.2.1+. Payloads are immutable; use entity-based operations for data management.
+### 3.6 `delete_record` (FORBIDDEN - Will Be Removed in v0.6.0)
+**🚫 FORBIDDEN - DO NOT USE:** This action is deprecated and **will be removed entirely in v0.6.0**. **Agents MUST NOT use this action.** It is maintained only for backward compatibility with legacy code. **Using this action in new code is strictly forbidden.**
+
+**Replacement:** Payloads are immutable in the new architecture; use entity-based operations for data management. There is no direct equivalent for deletion - use entity merge or correction patterns instead.
 **Purpose:** Delete a record and its associated files.
 **Purpose:** Delete a record and its associated files.
 **Request Schema:**
@@ -253,7 +445,7 @@ flowchart LR
 | `DB_DELETE_FAILED` | 500 | Deletion failed | Yes |
 **Consistency:** Strong (record immediately gone)
 **Determinism:** Yes
-### 3.5 `upload_file`
+### 3.7 `upload_file`
 **Purpose:** Upload file from local path, optionally create analyzed record.
 **Request Schema:**
 ```typescript
@@ -289,7 +481,7 @@ flowchart LR
 | `ANALYSIS_FAILED` | 500 | File analysis failed | Partial (file uploaded, analysis failed) |
 **Consistency:** Strong (file + record)
 **Determinism:** Yes (content-hash prevents duplicates)
-### 3.6 `get_file_url`
+### 3.8 `get_file_url`
 **Purpose:** Get signed URL for accessing stored file.
 **Request Schema:**
 ```typescript
@@ -312,7 +504,7 @@ flowchart LR
 | `SIGNING_FAILED` | 500 | URL signing failed | Yes |
 **Consistency:** Strong
 **Determinism:** No (signed URL contains timestamp)
-### 3.7 `get_entity_snapshot`
+### 3.9 `get_entity_snapshot`
 **Purpose:** Get entity snapshot with provenance. Returns current truth for entity computed by reducer from observations.
 **Three-Layer Model Context:** This action returns the **Snapshot** layer — the deterministic output of the reducer engine that merges multiple **Observations** (extracted from **Payloads**) about an **Entity**. The snapshot represents the current truth, with every field traceable to its source observation and payload.
 **Use Cases:**
@@ -389,7 +581,7 @@ To get historical entity state:
 - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation architecture
 - [`docs/subsystems/reducer.md`](../subsystems/reducer.md) — Reducer patterns and merge strategies
 - [`docs/subsystems/schema_registry.md`](../subsystems/schema_registry.md) — Schema registry merge policies
-### 3.8 `list_observations`
+### 3.10 `list_observations`
 **Purpose:** Query observations for entity. Returns all observations that contributed to entity snapshot.
 **Four-Layer Model Context:** This action returns the **Observation** layer — granular, source-specific facts extracted from **Documents** about an **Entity**. Each observation represents what one document said about the entity at a specific point in time. The reducer merges these observations into a snapshot using merge policies from schema registry.
 **Use Cases:**
@@ -432,7 +624,7 @@ To get historical entity state:
 | `VALIDATION_ERROR` | 400  | Invalid entity_id format | No     |
 **Consistency:** Strong
 **Determinism:** Yes (same entity_id → same observations, sorted by observed_at DESC)
-### 3.9 `get_field_provenance`
+### 3.11 `get_field_provenance`
 **Purpose:** Trace field to source documents. Returns full provenance chain: snapshot field → observation → document → file.
 **Four-Layer Model Context:** This action traverses the complete four-layer truth model:
 1. **Snapshot** field (current truth) →
@@ -481,7 +673,303 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `VALIDATION_ERROR` | 400  | Invalid entity_id or field | No     |
 **Consistency:** Strong
 **Determinism:** Yes (same entity_id + field → same provenance)
-### 3.10 `create_relationship`
+### 3.12 `retrieve_entities`
+**Purpose:** Query entities with filters (type, pagination). Returns entities with their snapshots. This is the replacement for `retrieve_records` in the new architecture.
+
+**Request Schema:**
+```typescript
+{
+  entity_type?: string;              // Optional: Filter by entity type (e.g., 'company', 'person')
+  user_id?: string;                   // Optional: Filter by user ID (UUID)
+  limit?: number;                     // Optional: Max results (default: 100)
+  offset?: number;                    // Optional: Pagination offset (default: 0)
+  include_snapshots?: boolean;        // Optional: Include entity snapshots (default: true)
+  include_merged?: boolean;           // Optional: Include merged entities (default: false)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  entities: Array<{
+    id: string;
+    entity_type: string;
+    canonical_name: string;
+    snapshot?: Record<string, any>;   // Present if include_snapshots=true
+    observation_count: number;
+    last_observation_at: string;
+  }>;
+  total: number;
+  excluded_merged: boolean;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `VALIDATION_ERROR` | 400 | Invalid query parameters | No |
+| `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
+
+**Consistency:** Strong
+**Determinism:** Yes (same query + DB state → same results)
+### 3.13 `get_entity_by_identifier`
+**Purpose:** Find entity by identifier (name, email, tax_id, etc.) across entity types or specific type. Identifier is normalized before search.
+
+**Request Schema:**
+```typescript
+{
+  identifier: string;                 // Required: Identifier to search for (name, email, tax_id, etc.)
+  entity_type?: string;               // Optional: Limit search to specific entity type
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  entities: Array<{
+    id: string;
+    entity_type: string;
+    canonical_name: string;
+    snapshot?: Record<string, any>;
+  }>;
+  total: number;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `VALIDATION_ERROR` | 400 | Invalid identifier | No |
+| `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
+
+**Consistency:** Strong
+**Determinism:** Yes (same identifier → same results after normalization)
+### 3.14 `get_related_entities`
+**Purpose:** Get entities connected to a given entity via relationships. Supports n-hop traversal to find entities multiple relationship hops away.
+
+**Request Schema:**
+```typescript
+{
+  entity_id: string;                  // Required: Starting entity ID
+  relationship_types?: string[];      // Optional: Filter by relationship types
+  direction?: 'inbound' | 'outbound' | 'both'; // Optional: Direction (default: 'both')
+  max_hops?: number;                   // Optional: Maximum hops (default: 1)
+  include_entities?: boolean;         // Optional: Include full entity snapshots (default: true)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  entities: Array<{
+    id: string;
+    entity_type: string;
+    canonical_name: string;
+    snapshot?: Record<string, any>;
+  }>;
+  relationships: Array<{
+    id: string;
+    relationship_type: string;
+    source_entity_id: string;
+    target_entity_id: string;
+  }>;
+  total_entities: number;
+  total_relationships: number;
+  hops_traversed: number;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `ENTITY_NOT_FOUND` | 404 | Starting entity doesn't exist | No |
+| `VALIDATION_ERROR` | 400 | Invalid entity_id or parameters | No |
+
+**Consistency:** Strong
+**Determinism:** Yes (same entity_id + parameters → same results)
+### 3.15 `get_graph_neighborhood`
+**Purpose:** Get complete graph neighborhood around a node (entity or record): related entities, relationships, records, and events. Provides full context for a given node.
+
+**Request Schema:**
+```typescript
+{
+  node_id: string;                     // Required: Node ID (entity_id or record_id)
+  node_type?: 'entity' | 'record';    // Optional: Type of node (default: 'entity')
+  include_relationships?: boolean;      // Optional: Include relationships (default: true)
+  include_records?: boolean;           // Optional: Include related records (default: true)
+  include_events?: boolean;           // Optional: Include timeline events (default: true)
+  include_observations?: boolean;     // Optional: Include observations (default: false)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  node_id: string;
+  node_type: 'entity' | 'record';
+  entity?: Entity;                    // Present if node_type='entity'
+  entity_snapshot?: Record<string, any>; // Present if node_type='entity'
+  record?: Record;                    // Present if node_type='record'
+  relationships?: Array<Relationship>;
+  related_entities?: Array<Entity>;
+  related_records?: Array<Record>;
+  timeline_events?: Array<TimelineEvent>;
+  observations?: Array<Observation>;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `ENTITY_NOT_FOUND` | 404 | Entity doesn't exist | No |
+| `RECORD_NOT_FOUND` | 404 | Record doesn't exist | No |
+| `VALIDATION_ERROR` | 400 | Invalid node_id or node_type | No |
+
+**Consistency:** Strong
+**Determinism:** Yes (same node_id + parameters → same neighborhood)
+### 3.16 `list_timeline_events`
+**Purpose:** Query timeline events with filters (type, date range, source record). Returns chronological events.
+
+**Request Schema:**
+```typescript
+{
+  event_type?: string;                 // Optional: Filter by event type (e.g., 'InvoiceIssued')
+  after_date?: string;                 // Optional: Filter events after this date (ISO 8601)
+  before_date?: string;                 // Optional: Filter events before this date (ISO 8601)
+  source_record_id?: string;           // Optional: Filter by source record ID
+  limit?: number;                       // Optional: Max results (default: 100)
+  offset?: number;                     // Optional: Pagination offset (default: 0)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  events: Array<{
+    id: string;
+    event_type: string;
+    event_timestamp: string;          // ISO 8601
+    source_record_id: string;
+    entity_ids: string[];
+    properties: Record<string, any>;
+  }>;
+  total: number;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `VALIDATION_ERROR` | 400 | Invalid query parameters | No |
+| `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
+
+**Consistency:** Strong
+**Determinism:** Yes (same query + DB state → same events, sorted by timestamp DESC)
+### 3.17 `correct`
+**Purpose:** Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation (priority 1000).
+
+**Request Schema:**
+```typescript
+{
+  user_id: string;                     // Required: User ID (UUID)
+  entity_id: string;                  // Required: Entity ID to correct
+  entity_type: string;                 // Required: Entity type
+  field: string;                       // Required: Field name to correct
+  value: unknown;                       // Required: Corrected value
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  observation_id: string;
+  entity_id: string;
+  field: string;
+  value: unknown;
+  message: string;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `ENTITY_NOT_FOUND` | 404 | Entity doesn't exist or not owned by user | No |
+| `VALIDATION_ERROR` | 400 | Invalid field or value | No |
+| `DB_INSERT_FAILED` | 500 | Failed to create correction | Yes |
+
+**Consistency:** Strong (correction immediately affects snapshot)
+**Determinism:** Yes (same correction → same observation)
+### 3.18 `reinterpret`
+**Purpose:** Re-run AI interpretation on an existing source with new config. Creates new observations without modifying existing ones.
+
+**Request Schema:**
+```typescript
+{
+  source_id: string;                   // Required: Source ID (UUID) to reinterpret
+  interpretation_config: {            // Required: Interpretation configuration
+    provider?: string;
+    model_id?: string;
+    temperature?: number;
+    prompt_hash?: string;
+    code_version?: string;
+    feature_flags?: Record<string, boolean>;
+  };
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  run_id: string;                      // UUID of new interpretation run
+  entities_created: number;
+  observations_created: number;
+  source_id: string;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `SOURCE_NOT_FOUND` | 404 | Source doesn't exist | No |
+| `QUOTA_EXCEEDED` | 429 | Interpretation quota exceeded | No |
+| `DB_INSERT_FAILED` | 500 | Failed to create interpretation | Yes |
+
+**Consistency:** Strong (new observations immediately queryable)
+**Determinism:** Yes (same source + config → same interpretation result)
+### 3.19 `merge_entities`
+**Purpose:** Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.
+
+**Request Schema:**
+```typescript
+{
+  user_id: string;                     // Required: User ID (UUID)
+  from_entity_id: string;             // Required: Source entity ID to merge from
+  to_entity_id: string;               // Required: Target entity ID to merge into
+  merge_reason?: string;               // Optional: Reason for merge
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  from_entity_id: string;
+  to_entity_id: string;
+  observations_moved: number;
+  merged_at: string;                   // ISO 8601
+  merge_reason?: string;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+|------|------|---------|--------|
+| `ENTITY_NOT_FOUND` | 404 | One or both entities don't exist or not owned by user | No |
+| `ENTITY_ALREADY_MERGED` | 400 | Source entity is already merged | No |
+| `DB_UPDATE_FAILED` | 500 | Failed to merge entities | Yes |
+
+**Consistency:** Strong (merge immediately visible)
+**Determinism:** Yes (same merge → same result)
+### 3.20 `create_relationship`
 **Purpose:** Create typed relationship between entities.
 **Request Schema:**
 ```typescript
@@ -514,7 +1002,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Determinism:** Yes (same inputs → same relationship ID)
 **Related Documents:**
 - [`docs/subsystems/relationships.md`](../subsystems/relationships.md) — Relationship patterns
-### 3.11 `list_relationships`
+### 3.21 `list_relationships`
 **Purpose:** Query entity relationships. Returns all relationships for entity (inbound, outbound, or both).
 **Request Schema:**
 ```typescript
@@ -549,7 +1037,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `VALIDATION_ERROR` | 400  | Invalid entity_id or direction | No     |
 **Consistency:** Strong
 **Determinism:** Yes (same entity_id + filters → same relationships, sorted by created_at DESC)
-### 3.12 `plaid_create_link_token`
+### 3.22 `plaid_create_link_token`
 **Purpose:** Create Plaid Link token for OAuth flow.
 **Request Schema:**
 ```typescript
@@ -575,7 +1063,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `PLAID_API_ERROR` | 500 | Plaid API call failed | Yes |
 **Consistency:** Strong
 **Determinism:** No (Plaid generates token)
-### 3.8 `plaid_exchange_public_token`
+### 3.23 `plaid_exchange_public_token`
 **Purpose:** Exchange Plaid public token for permanent access token, store item.
 **Request Schema:**
 ```typescript
@@ -613,7 +1101,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `DB_INSERT_FAILED` | 500 | Failed to store item | Yes |
 **Consistency:** Strong
 **Determinism:** Yes (same public_token → same item_id)
-### 3.9 `plaid_sync`
+### 3.24 `plaid_sync`
 **Purpose:** Sync transactions from Plaid for stored item(s).
 **Request Schema:**
 ```typescript
@@ -650,7 +1138,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `SYNC_FAILED` | 500 | Sync operation failed | Yes |
 **Consistency:** Bounded Eventual (transactions indexed asynchronously)
 **Determinism:** Yes (same transaction data → same record)
-### 3.10 `plaid_list_items`
+### 3.25 `plaid_list_items`
 **Purpose:** List connected Plaid items (without access tokens).
 **Request Schema:**
 ```typescript
@@ -679,7 +1167,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
 **Consistency:** Strong
 **Determinism:** Yes
-### 3.11 `list_provider_catalog`
+### 3.26 `list_provider_catalog`
 **Purpose:** List available external data providers (X, Instagram, Gmail, etc.).
 **Request Schema:**
 ```typescript
@@ -706,7 +1194,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 None (static catalog)
 **Consistency:** Strong
 **Determinism:** Yes
-### 3.12 `sync_provider_imports`
+### 3.27 `sync_provider_imports`
 **Purpose:** Trigger import sync for external provider.
 **Request Schema:**
 ```typescript
@@ -737,7 +1225,7 @@ None (static catalog)
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `PROVIDER_NOT_FOUND` | 404 | Provider ID invalid | No |
-### 3.13 `get_technical_metrics`
+### 3.28 `get_technical_metrics`
 **Purpose:** Query technical/operational metrics from Prometheus for AI-generated performance reports.
 **Request Schema:**
 ```typescript
@@ -820,7 +1308,7 @@ None (static catalog)
 - `neotoma_graph_orphan_nodes_total` (gauge)
 - `neotoma_db_connection_pool_usage` (gauge)
 - See `docs/specs/METRICS_REQUIREMENTS.md` for complete list
-### 3.14 `get_product_analytics`
+### 3.29 `get_product_analytics`
 **Purpose:** Query product analytics from PostHog/Mixpanel for AI-generated user behavior reports.
 **Request Schema:**
 ```typescript
@@ -1144,13 +1632,14 @@ Load when:
 - `docs/architecture/consistency.md` (consistency guarantees)
 - `docs/architecture/determinism.md` (deterministic requirements)
 ### Constraints Agents Must Enforce
-1. All actions MUST validate inputs (Zod schemas)
-2. All responses MUST use structured types (no free-form text)
-3. All errors MUST use ErrorEnvelope
-4. All actions MUST document consistency tier
-5. All deterministic actions MUST be testable for determinism
-6. Backward compatibility MUST be maintained
-7. No PII in error messages or logs
+1. **🚫 FORBIDDEN: Agents MUST NOT use deprecated actions (`update_record`, `retrieve_records`, `delete_record`) - These will be removed in v0.6.0 and using them is strictly prohibited**
+2. All actions MUST validate inputs (Zod schemas)
+3. All responses MUST use structured types (no free-form text)
+4. All errors MUST use ErrorEnvelope
+5. All actions MUST document consistency tier
+6. All deterministic actions MUST be testable for determinism
+7. Backward compatibility MUST be maintained
+8. No PII in error messages or logs
 ### Forbidden Patterns
 - Returning unvalidated data
 - Bypassing error envelope
@@ -1158,8 +1647,32 @@ Load when:
 - Nondeterministic ranking without documentation
 - PII in error details
 - Unbounded queries (no limit parameter)
+- **🚫 FORBIDDEN: Using deprecated actions (`update_record`, `retrieve_records`, `delete_record`) - These actions are strictly prohibited and will be removed in v0.6.0** (see Deprecated Actions section below)
+
+### Deprecated Actions (FORBIDDEN - DO NOT USE)
+
+**🚫 FORBIDDEN - STRICTLY PROHIBITED:** The following actions are deprecated and **will be removed entirely in v0.6.0**. **Agents MUST NOT use these actions under any circumstances.** They are maintained only for backward compatibility with legacy code. **Using these actions in new code is strictly forbidden and will cause code to break in v0.6.0.**
+
+**Deprecated Actions:**
+- `update_record` → Use `submit_payload` with updated data, or `correct` for corrections
+- `retrieve_records` → Use `retrieve_entities`, `get_entity_snapshot`, or `list_observations`
+- `delete_record` → No direct equivalent (observations are immutable in new architecture)
+
+**Migration Guide:**
+- **Storing data:** Use `submit_payload` (for capability-based data) or `ingest_structured` (for non-capability data)
+- **Querying data:** Use `retrieve_entities` or `get_entity_snapshot` instead of `retrieve_records`
+- **Updating data:** Use `correct` action for corrections, or create new observations with higher priority
+- **Deleting data:** Observations are immutable; use entity merge or correction patterns instead
+
+**Why These Are Deprecated:**
+- Neotoma is migrating to a sources-first architecture (sources → interpretation → observations → entities)
+- The legacy `records` table and record-based APIs are being removed in v0.6.0
+- New architecture provides better provenance, multi-user support, and deterministic entity resolution
+
+**See:** [`docs/releases/v0.6.0/release_plan.md`](../releases/v0.6.0/release_plan.md) for complete migration details.
+
 ### Validation Checklist
-- [ ] All 14 actions documented with complete schemas (8 MVP + 4 Plaid + 2 Metrics)
+- [ ] All 29 actions documented with complete schemas (20 MVP + 4 Plaid + 2 Metrics + 3 deprecated)
 - [ ] All error codes enumerated (including METRIC_NOT_FOUND, PROMETHEUS_QUERY_FAILED, ANALYTICS_QUERY_FAILED)
 - [ ] Consistency tier specified per action
 - [ ] Determinism documented per action

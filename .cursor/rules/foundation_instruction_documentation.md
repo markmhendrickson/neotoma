@@ -1,0 +1,1 @@
+../../foundation/agent_instructions/cursor_rules/instruction_documentation.md

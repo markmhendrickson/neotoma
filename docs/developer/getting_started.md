@@ -55,12 +55,23 @@ This creates:
 - Graph edge tables
 - RLS policies
 - Extensions (pgvector, etc.)
-## Step 4: Create Storage Bucket
+## Step 4: Create Storage Buckets
+Create two storage buckets in Supabase:
+
+**Bucket 1: `files`**
 1. In Supabase dashboard, click **"Storage"** in left sidebar
 2. Click **"New bucket"**
 3. Name: `files`
-4. Make it **public**: YES
+4. Make it **public**: NO (private)
 5. Click **"Create bucket"**
+
+**Bucket 2: `sources`**
+1. Click **"New bucket"** again
+2. Name: `sources`
+3. Make it **public**: NO (private)
+4. Click **"Create bucket"**
+
+**Note:** Both buckets should be **private** for security. The system uses `service_role` for uploads/downloads and creates signed URLs for client access. The `sources` bucket is required for `ingest_structured()` and other source-based ingestion operations. The `files` bucket is used for general file uploads.
 ## Step 5: Configure Environment Variables
 Create `.env` in the project root:
 ```bash
@@ -195,7 +206,8 @@ Before starting development, verify:
 - [ ] Dependencies installed (`npm install` completed)
 - [ ] Supabase project created and active
 - [ ] Database schema applied (`supabase/schema.sql` run)
-- [ ] Storage bucket `files` created (public)
+- [ ] Storage bucket `files` created (private)
+- [ ] Storage bucket `sources` created (private)
 - [ ] `.env` configured with valid credentials
 - [ ] Tests pass (`npm test`)
 - [ ] Dev server starts (`npm run dev` or `npm run dev:http`)

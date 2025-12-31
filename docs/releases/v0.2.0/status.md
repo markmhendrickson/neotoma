@@ -131,9 +131,23 @@ v0.2.0 implements the minimal sources-first ingestion architecture with content-
 | 2025-12-31 | Implementation completed in single batch  | All 13 FUs implemented and tested in one development session                                                |
 
 ## Deployment Checklist
+
+### Pre-Deployment Validation
+- ✅ **Pre-release checklist completed** (see `docs/developer/pre_release_checklist.md`)
+  - ✅ TypeScript compilation passes
+  - ✅ Linting passes
+  - ✅ All migrations created for schema changes
+  - ✅ Migrations applied successfully
+  - ✅ Schema advisor checks pass
+  - ✅ MCP server starts without errors
+  - ✅ MCP configuration validated
+
+### Test Validation
 - ✅ Database migrations applied
-- ✅ All tests passing (11/11 integration tests)
+- ✅ All integration tests passing (11/11 integration tests)
 - ✅ Schema registry seeded with base types
+
+### Deployment Steps
 - ⏳ Manual validation via Cursor/ChatGPT MCP integration
 - ⏳ Deploy to production (neotoma.io)
 - ⏳ Mark status as `deployed`

@@ -29,7 +29,9 @@ function parseCommaSeparated(value: string | undefined, fallback: string[]): str
 }
 
 export function getPlaidConfig(): PlaidConfig {
-  const nodeEnv = process.env.NODE_ENV || "development";
+  // Use NEOTOMA_ENV to avoid conflicts when running as MCP in other workspaces
+  // Falls back to NODE_ENV for backward compatibility
+  const nodeEnv = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
   
   // Determine which Plaid environment to use
   const environment = plaidEnvSchema.parse(

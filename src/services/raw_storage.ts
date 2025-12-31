@@ -2,7 +2,7 @@
 // Content-addressed storage with SHA-256 hashing and Supabase Storage
 
 import crypto from "crypto";
-import { supabase } from "../db";
+import { supabase } from "../db.js";
 
 export interface RawStorageOptions {
   userId: string;

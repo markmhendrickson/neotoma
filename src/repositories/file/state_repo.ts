@@ -4,8 +4,8 @@
  * File-based state repository using JSON files for state snapshots.
  */
 
-import { promises as fs } from "fs';
-import path from "path';
+import { promises as fs } from "fs";
+import path from "path";
 import { getRecordAtTimestamp, replayEvents } from "../../events/replay.js";
 import type { StateRepository } from "../interfaces.js";
 import type { NeotomaRecord } from "../../db.js";

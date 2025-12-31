@@ -1,10 +1,10 @@
-## Release v0.2.1 — Documentation & Support System
+## Release v0.2.1 — Documentation Generation System
 ### 1. Release Overview
 - **Release ID**: `v0.2.1`
-- **Name**: Documentation & Support System
+- **Name**: Documentation Generation System
 - **Release Type**: Not Marketed (production deployment without marketing activities)
-- **Goal**: Deliver comprehensive, statically-generated documentation derived from AI analysis of the repository, served for web viewing, plus an MCP endpoint with an agent that responds to support inquiries using the static documentation as its knowledge base.
-- **Priority**: P0 (critical for user enablement and support)
+- **Goal**: Deliver comprehensive, statically-generated documentation derived from AI analysis of the repository, served for web viewing with one-page landing site. Creates the documentation foundation that enables future support systems and user onboarding.
+- **Priority**: P0 (critical for user enablement)
 - **Target Ship Date**: When ready (post v0.2.0 validation)
 - **Marketing Required**: No (not marketed release)
 #### 1.1 Canonical Specs (Authoritative Sources)
@@ -26,6 +26,7 @@ This release plan coordinates the documentation and support system scope into a 
   - Comprehensive documentation generation (API references, architecture diagrams, guides)
   - Static markdown/HTML output for web viewing
   - Documentation indexing and cross-referencing
+  
 - `FU-301`: Static Documentation Web Server
   - One-page landing website presenting key information from README.md
   - Design system compliance (follows `docs/ui/design_system.md`)
@@ -35,18 +36,13 @@ This release plan coordinates the documentation and support system scope into a 
   - Search functionality across documentation
   - Navigation and cross-linking
   - Versioned documentation support
-**MCP Support System:**
-- `FU-302`: MCP Support Inquiry Endpoint
-  - New MCP action: `query_support`
-  - Request/response schema for support queries
-  - Error handling and validation
-  - Integration with support agent
-- `FU-303`: Support Agent System
-  - RAG-based agent using static documentation as knowledge base
-  - Query understanding and intent classification
-  - Context retrieval from documentation index
-  - Response generation with citations and guidance
-  - Integration with MCP endpoint
+
+#### 2.1.1 Deferred to v0.9.0
+**MCP Support System (moved to pre-v1.0.0 release):**
+- `FU-302`: MCP Support Inquiry Endpoint → Moved to v0.9.0
+- `FU-303`: Support Agent System → Moved to v0.9.0
+
+**Rationale:** Documentation foundation is critical early; interactive support system better suited for pre-MVP launch when user base exists.
 #### 2.2 Explicitly Excluded
 - Dynamic documentation generation (all docs pre-generated)
 - Real-time code analysis (analysis runs during build/release)
@@ -85,20 +81,11 @@ This release plan coordinates the documentation and support system scope into a 
   - Developer guides (getting started, workflows, testing)
   - Integration guides (MCP setup, provider integrations)
   - Troubleshooting and FAQ
-- Support agent responds accurately to common inquiries:
-  - API usage questions
-  - Architecture questions
-  - Troubleshooting guidance
-  - Integration setup help
 - Documentation search functional (find relevant docs by keyword/topic)
-- MCP support endpoint operational and accessible via MCP clients
 #### 3.2 Technical
 - Documentation generation deterministic (same repo state → same docs)
 - Static documentation served efficiently (< 200ms page load)
 - Documentation index searchable (< 500ms query response)
-- Support agent responses cite source documentation
-- Support agent accuracy validated (80%+ correct responses on test queries)
-- MCP endpoint follows MCP protocol specification
 - All documentation validated for accuracy and completeness
 - Documentation generation runs as part of release/build process
 - Static files stored in versioned directory structure
@@ -110,11 +97,11 @@ This release plan coordinates the documentation and support system scope into a 
   - Brand alignment: Minimal, technical, trustworthy, deterministic
 #### 3.3 Business
 - Users can self-serve answers via documentation web interface
-- Users can query support via MCP without leaving their AI tool
-- Support burden reduced through automated guidance
 - Documentation serves as single source of truth for all Neotoma information
+- Documentation foundation enables future support systems (v0.9.0)
 ### 4. Cross-FU Integration Scenarios
 These scenarios must pass end-to-end before v0.2.1 is approved:
+
 1. **Documentation Generation → Web Viewing**
    - Run documentation generation process
    - Verify comprehensive docs generated (architecture, APIs, guides)
@@ -125,21 +112,14 @@ These scenarios must pass end-to-end before v0.2.1 is approved:
    - Access docs via web server
    - Verify search functionality works
    - Verify cross-links functional
-2. **Support Query → Agent Response**
-   - Query MCP `query_support` action with question
-   - Verify agent retrieves relevant documentation context
-   - Verify response includes accurate answer with citations
-   - Verify response format follows MCP response schema
-3. **Documentation Update → Support Agent Knowledge**
-   - Update source documentation
+
+2. **Documentation Update → Regeneration**
+   - Update source documentation or codebase
    - Regenerate static documentation
-   - Query support agent with question about updated content
-   - Verify agent uses updated documentation in response
-4. **Multi-Topic Support Query**
-   - Query support agent with complex multi-part question
-   - Verify agent retrieves context from multiple documentation sections
-   - Verify response addresses all parts of question
-   - Verify citations reference correct documentation sections
+   - Verify updated content reflected in generated docs
+   - Verify search index updated
+   - Verify cross-references maintained
+
 The detailed test specifications for these flows live in `docs/releases/v0.2.1/integration_tests.md`.
 ### 5. Deployment and Rollout Strategy
 - **Deployment Target**: Production (neotoma.io)
@@ -165,11 +145,10 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
   - All MCP actions documented
   - All feature units have documentation
   - Cross-references functional
-- Validate support agent:
-  - Test common support queries
-  - Verify response accuracy
-  - Verify citation quality
-  - Test edge cases (unclear queries, missing context)
+- Validate documentation quality:
+  - Verify accuracy of generated content
+  - Verify completeness of coverage
+  - Test documentation search accuracy
 - Validate web interface:
   - Page load performance
   - Search functionality
@@ -178,7 +157,6 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
 - Validate production deployment:
   - Landing page accessible at neotoma.io
   - Documentation accessible at neotoma.io/docs
-  - MCP support endpoint operational
   - All links and navigation functional
   - Performance metrics within targets
 ### 7. Success Criteria
@@ -189,14 +167,10 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
 4. ✅ MCP setup instructions available and clear
 5. ✅ Documentation web server operational and accessible
 6. ✅ Documentation search functional
-7. ✅ MCP `query_support` action implemented and tested
-8. ✅ Support agent system operational
-9. ✅ Support agent accuracy validated (80%+ on test queries)
-10. ✅ Support agent responses include citations
-11. ✅ Documentation generation integrated into build/release process
-12. ✅ Static documentation versioned and stored appropriately
-13. ✅ **Deployed to neotoma.io** (landing page at root, docs at /docs)
-14. ✅ All acceptance criteria met
+7. ✅ Documentation generation integrated into build/release process
+8. ✅ Static documentation versioned and stored appropriately
+9. ✅ **Deployed to neotoma.io** (landing page at root, docs at /docs)
+10. ✅ All acceptance criteria met
 ### 8. Status
 - **Current Status**: `planning`
 - **Release Type**: Not Marketed
@@ -205,10 +179,10 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
 - **Notes**:
   - Builds on v0.2.0 ingestion infrastructure
   - Documentation generation uses AI analysis of repository
-  - Support agent uses RAG pattern with static documentation as knowledge base
   - All documentation statically generated (no runtime generation)
   - **All UI work MUST follow design system** (`docs/ui/design_system.md`) - colors, typography, spacing, components, accessibility, dark mode
   - **All releases deploy to production** at neotoma.io, regardless of marketing status
+  - **Support system (FU-302, FU-303) moved to v0.9.0** - enables better timing for user-facing support before v1.0.0
 ### 9. Related Documentation
 - `integration_tests.md` — Cross-FU integration test specifications
 - `execution_schedule.md` — Detailed batch execution plan
@@ -218,10 +192,20 @@ The detailed test specifications for these flows live in `docs/releases/v0.2.1/i
 **New Feature Units:**
 - **FU-300**: AI-Powered Documentation Analysis & Generation
 - **FU-301**: Static Documentation Web Server
-- **FU-302**: MCP Support Inquiry Endpoint
-- **FU-303**: Support Agent System
+
 **Dependencies:**
 - FU-300: No dependencies (can run independently)
 - FU-301: Depends on FU-300 (needs generated docs)
-- FU-302: Depends on FU-200 (MCP Server Core)
-- FU-303: Depends on FU-300, FU-301, FU-302 (needs docs, web server, MCP endpoint)
+
+**Moved to v0.9.0:**
+- **FU-302**: MCP Support Inquiry Endpoint
+- **FU-303**: Support Agent System
+
+### 11. Release Spacing Context
+
+| Release | Focus | Status |
+|---------|-------|--------|
+| v0.2.0 | Minimal ingestion + correction loop | Prerequisite |
+| **v0.2.1** | **Documentation generation system** | **This release** |
+| v0.9.0 | MCP support system | Uses v0.2.1 docs |
+| v1.0.0 | MVP (public release) | Next major |

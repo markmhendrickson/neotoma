@@ -1,5 +1,10 @@
 # ChatGPT Custom GPT Setup Guide
+
 This guide explains how to configure Neotoma as a Custom GPT Action in ChatGPT using the HTTP Actions API (OpenAPI schema).
+
+For other integrations, see:
+- [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
+- [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) - Claude Code localhost agent setup
 ## Prerequisites
 1. **ChatGPT Plus/Pro/Team/Enterprise account** (required for Custom GPT creation)
 2. **Deployed Neotoma HTTP server** (local development or production)
@@ -126,7 +131,9 @@ The OpenAPI schema includes these actions:
 | Schema         | MCP tool definitions         | OpenAPI 3.1.0          |
 | Authentication | N/A (local process)          | Bearer token required  |
 | Deployment     | Local only                   | Local or production    |
-For Cursor setup, see [`mcp_cursor_setup.md`](mcp_cursor_setup.md).
+For other MCP integrations, see:
+- [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
+- [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) - Claude Code localhost agent setup
 ## Quick Reference
 ```bash
 # Build server
