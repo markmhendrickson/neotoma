@@ -8,15 +8,15 @@ import { logger } from "./utils/logger.js";
 
 async function main() {
   try {
-    logger.error("[Neotoma MCP] Initializing...");
+    // Suppress all logging in MCP stdio mode to avoid JSON-RPC protocol interference
+    // Logs are suppressed unless NEOTOMA_MCP_ENABLE_LOGGING=1 is set
     await initDatabase();
-    logger.error("[Neotoma MCP] Database initialized");
     await initServerKeys(); // Initialize server encryption keys
-    logger.error("[Neotoma MCP] Encryption keys initialized");
     const server = new NeotomaServer();
     await server.run();
-    logger.error("[Neotoma MCP] Server started successfully");
   } catch (error) {
+    // Only log fatal errors, and only if logging is enabled
+    // In MCP mode, errors should be communicated via JSON-RPC, not stderr
     logger.error("[Neotoma MCP] Failed to start server:", error);
     process.exit(1);
   }

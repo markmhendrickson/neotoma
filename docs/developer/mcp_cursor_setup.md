@@ -1,6 +1,10 @@
 # MCP Server Setup and Cursor Connection Guide
+
 This guide explains how to run the Neotoma MCP server and connect it to Cursor for testing and development.
-For ChatGPT Custom GPT setup, see [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md).
+
+For other integrations, see:
+- [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md) - ChatGPT Custom GPT setup
+- [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) - Claude Code localhost agent setup
 ## Prerequisites
 1. **Node.js** v18.x or v20.x installed
 2. **Supabase project** set up with schema applied (see `docs/developer/getting_started.md`)
@@ -212,6 +216,8 @@ To use the Neotoma MCP server from a different workspace/repository:
    npm run build
    ```
 3. **Create `.cursor/mcp.json` in your other workspace:**
+   
+   **For development environment:**
    ```json
    {
      "mcpServers": {
@@ -220,35 +226,40 @@ To use the Neotoma MCP server from a different workspace/repository:
          "args": ["/absolute/path/to/neotoma/dist/index.js"],
          "cwd": "/absolute/path/to/neotoma",
          "env": {
-           "NODE_ENV": "development"
+           "NEOTOMA_ENV": "development"
          }
        }
      }
    }
    ```
+   
+   **For production environment:**
+   ```json
+   {
+     "mcpServers": {
+       "neotoma": {
+         "command": "/path/to/node",
+         "args": ["/absolute/path/to/neotoma/dist/index.js"],
+         "cwd": "/absolute/path/to/neotoma",
+         "env": {
+           "NEOTOMA_ENV": "production",
+           "PROD_SUPABASE_PROJECT_ID": "your-prod-project-id",
+           "PROD_SUPABASE_SERVICE_KEY": "your-prod-service-role-key-here"
+         }
+       }
+     }
+   }
+   ```
+   
    **Important:**
+   - Use `NEOTOMA_ENV` (not `NODE_ENV`) to avoid conflicts with the host workspace
    - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
    - Set `cwd` to the Neotoma project root (required for `.env` loading)
-   - The server will load credentials from Neotoma's `.env` file automatically
+   - The server will load credentials from Neotoma's `.env` file automatically if not specified in the config
    - **For auto-rebuild:** Run `npm run dev:mcp` in the Neotoma repo to watch for changes
    - **After code changes:** Restart Cursor to reload the MCP server with the new build
-3. **Or use environment variables:**
-   If you want to override credentials from the other workspace:
-   ```json
-   {
-     "mcpServers": {
-       "neotoma": {
-         "command": "/path/to/node",
-         "args": ["/absolute/path/to/neotoma/dist/index.js"],
-         "cwd": "/absolute/path/to/neotoma",
-         "env": {
-           "DEV_SUPABASE_URL": "https://your-project-id.supabase.co",
-           "DEV_SUPABASE_SERVICE_KEY": "your-service-role-key-here"
-         }
-       }
-     }
-   }
-   ```
+   
+   **Note:** `NEOTOMA_ENV` takes precedence over `NODE_ENV`. This prevents conflicts when the host workspace has its own `NODE_ENV` setting.
 4. **Restart Cursor** to detect the new MCP server configuration.
 ## Additional Resources
 - **MCP Specification:** `docs/specs/MCP_SPEC.md`

@@ -165,13 +165,14 @@ WHERE schemaname = 'public';
 **Diagnosis:**
 ```bash
 # Check Supabase Storage bucket exists
-# In Supabase dashboard → Storage → Check "files" bucket exists
+# In Supabase dashboard → Storage → Check required buckets exist
 ```
 **Solution:**
-1. **Create storage bucket:**
+1. **Create required storage buckets:**
    - Go to Supabase → Storage
-   - Create bucket named `files`
-   - Set as **public** bucket
+   - Create bucket named `files` (for general file uploads)
+   - Create bucket named `sources` (for `ingest_structured()` and source-based ingestion)
+   - Set both as **private** buckets (for security; service_role handles access)
 2. **Verify bucket permissions:**
    - Check bucket policies allow uploads
    - Verify service_role key has storage access

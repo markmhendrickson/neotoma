@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { WebSocketServer, WebSocket } from "ws";
 
-const MCP_CMD = process.env.MCP_CMD || 'node";
-const MCP_ARGS = (process.env.MCP_ARGS ? JSON.parse(process.env.MCP_ARGS) : ['dist/index.js"]) as string[];
+const MCP_CMD = process.env.MCP_CMD || 'node';
+const MCP_ARGS = (process.env.MCP_ARGS ? JSON.parse(process.env.MCP_ARGS) : ['dist/index.js']) as string[];
 const PORT = parseInt(process.env.WS_PORT || '8081', 10);
 
 interface BridgeMessage {
-  type: 'client_request' | 'server_request' | 'client_response' | 'server_response' | 'event";
+  type: 'client_request' | 'server_request' | 'client_response' | 'server_response' | 'event';
   id?: string;
   encryptedPayload?: string;
 }
@@ -73,11 +73,11 @@ wss.on('connection', (ws: WebSocket) => {
   });
 
   // MCP → Client (encrypted envelopes)
-  let buffer = '";
+  let buffer = '';
   child.stdout.on('data', (chunk: Buffer) => {
     buffer += chunk.toString();
     const lines = buffer.split('\n');
-    buffer = lines.pop() || '"; // Keep incomplete line in buffer
+    buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
     for (const line of lines) {
       if (!line.trim()) continue;

@@ -1,0 +1,1 @@
+../../foundation/agent_instructions/cursor_rules/release_detection.md

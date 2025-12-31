@@ -1,9 +1,12 @@
 {
   "mcpServers": {
     "neotoma": {
-      "command": "/Users/markmhendrickson/.nvm/versions/node/v22.15.0/bin/node",
+      "command": "/Users/markmhendrickson/.nvm/versions/node/v20.19.1/bin/node",
       "args": ["dist/index.js"],
-      "cwd": "/Users/markmhendrickson/Projects/neotoma/neotoma"
+      "cwd": "/Users/markmhendrickson/Projects/neotoma",
+      "env": {
+        "NODE_ENV": "development"
+      }
     }
   }
 }

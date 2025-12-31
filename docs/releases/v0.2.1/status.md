@@ -1,48 +1,52 @@
 # Release v0.2.1 — Status
 **Release ID**: v0.2.1  
-**Release Name**: Documentation & Support System  
+**Release Name**: Documentation Generation System  
 **Status**: `planning`  
 **Owner**: Mark Hendrickson  
-**Last Updated**: 2025-12-10
+**Last Updated**: 2025-12-31
 ## 1. Release Metadata
 - **Release ID**: `v0.2.1`
-- **Name**: Documentation & Support System
+- **Name**: Documentation Generation System
 - **Status**: `planning`
 - **Release Type**: Not Marketed
 - **Deployment**: Production (neotoma.io)
 - **Priority**: P0
 - **Target Date**: When ready (post v0.2.0 validation)
 - **Marketing**: No (not marketed release)
+- **Scope Change**: Support system features (FU-302, FU-303) moved to v0.9.0
+
 ## 2. Batch Progress
 | Batch ID | Feature Units | Status     | Completion |
 | -------- | ------------- | ---------- | ---------- |
 | 0        | FU-300        | ⏳ pending | 0%         |
 | 1        | FU-301        | ⏳ pending | 0%         |
-| 2        | FU-302        | ⏳ pending | 0%         |
-| 3        | FU-303        | ⏳ pending | 0%         |
+
 **Summary:**
 - ✅ **Complete:** 0 batch(es)
 - ⚠️ **Partial:** 0 batch(es)
-- ❌ **Incomplete:** 4 batch(es)
+- ❌ **Incomplete:** 2 batch(es)
+
 ## 3. Feature Unit Status
 | FU ID  | Name                                           | Status     | Notes |
 | ------ | ---------------------------------------------- | ---------- | ----- |
 | FU-300 | AI-Powered Documentation Analysis & Generation | ⏳ pending | -     |
 | FU-301 | Static Documentation Web Server                | ⏳ pending | -     |
-| FU-302 | MCP Support Inquiry Endpoint                   | ⏳ pending | -     |
-| FU-303 | Support Agent System                           | ⏳ pending | -     |
+
+**Moved to v0.9.0:**
+| FU ID  | Name                         | Status     | Notes                  |
+| ------ | ---------------------------- | ---------- | ---------------------- |
+| FU-302 | MCP Support Inquiry Endpoint | → v0.9.0   | Pre-v1.0.0 positioning |
+| FU-303 | Support Agent System         | → v0.9.0   | Pre-v1.0.0 positioning |
+
 **Summary:**
 - ✅ **Complete:** 0
 - ⚠️ **Partial:** 0
-- ❌ **Not Started:** 4
+- ❌ **Not Started:** 2
 ## 4. Checkpoints
 - **Checkpoint 1 — Documentation Review**: `pending`
   - Trigger: After Batch 1 completion
   - Review documentation completeness and quality
-- **Checkpoint 2 — Pre-Release Sign-Off**: `pending`
-  - Trigger: After Batch 3 completion
-  - Final validation before deployment
-**Completion:** 0/2 checkpoints completed
+**Completion:** 0/1 checkpoints completed
 ## 5. Integration Test Status
 | Test ID | Name                                                | Status     |
 | ------- | --------------------------------------------------- | ---------- |

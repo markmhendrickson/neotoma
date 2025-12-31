@@ -4,6 +4,9 @@ The Release Orchestrator supports two execution modes:
 1. **Single-Agent Mode**: Executes Feature Units sequentially with model recommendations based on release complexity
 2. **Multi-Agent Mode**: Spawns and coordinates worker agents for parallel Feature Unit execution using Cursor's Cloud Agents API, reducing calendar time by 25-35% compared to sequential execution
 ## Prerequisites
+### For All Modes
+- **Pre-Release Validation**: Run `docs/developer/pre_release_checklist.md` before marking release as `ready_for_deployment`
+
 ### For Single-Agent Mode
 - No special prerequisites required
 - Model recommendation provided based on release analysis

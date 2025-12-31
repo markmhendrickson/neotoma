@@ -8,6 +8,9 @@ CREATE EXTENSION IF NOT EXISTS vector SCHEMA extensions;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Create records table
+-- NOTE: Records table is kept for backward compatibility with graph/timeline infrastructure
+-- (timeline_events, record_entity_edges, record_event_edges, record_relationships, raw_fragments)
+-- New ingestion uses sources/payloads architecture, but graph edges still reference records
 CREATE TABLE IF NOT EXISTS records (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   type TEXT NOT NULL,
@@ -16,31 +19,11 @@ CREATE TABLE IF NOT EXISTS records (
   external_source TEXT,
   external_id TEXT,
   external_hash TEXT,
+  embedding vector(1536),
+  summary TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
--- Add embedding column if it doesn't exist (for existing tables)
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'records' AND column_name = 'embedding'
-  ) THEN
-    ALTER TABLE records ADD COLUMN embedding vector(1536);
-  END IF;
-END $$;
-
--- Add summary column if it doesn't exist (for existing tables)
-DO $$ 
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'records' AND column_name = 'summary'
-  ) THEN
-    ALTER TABLE records ADD COLUMN summary TEXT;
-  END IF;
-END $$;
 
 -- Create GIN index on type for fast filtering
 CREATE INDEX IF NOT EXISTS idx_records_type ON records(type);
@@ -81,6 +64,28 @@ CREATE TRIGGER update_records_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+-- Row Level Security: Allow service role full access
+ALTER TABLE records ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Service role can do everything" ON records;
+CREATE POLICY "Service role can do everything" ON records
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Public read access
+DROP POLICY IF EXISTS "public read" ON records;
+CREATE POLICY "public read" ON records
+  FOR SELECT USING ( true );
+
+-- Authenticated users can insert/update/delete
+DROP POLICY IF EXISTS "public write" ON records;
+CREATE POLICY "public write" ON records
+  FOR ALL
+  USING      ( auth.role() = 'authenticated' )
+  WITH CHECK ( auth.role() = 'authenticated' );
+
 -- Relationships between records
 CREATE TABLE IF NOT EXISTS record_relationships (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -106,28 +111,6 @@ CREATE POLICY "Service role full access - record_relationships" ON record_relati
 DROP POLICY IF EXISTS "public read - record_relationships" ON record_relationships;
 CREATE POLICY "public read - record_relationships" ON record_relationships
   FOR SELECT USING ( true );
-
--- Row Level Security: Allow service role full access
-ALTER TABLE records ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Service role can do everything" ON records;
-CREATE POLICY "Service role can do everything" ON records
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
--- Public read access
-DROP POLICY IF EXISTS "public read" ON records;
-CREATE POLICY "public read" ON records
-  FOR SELECT USING ( true );
-
--- Authenticated users can insert/update/delete
-DROP POLICY IF EXISTS "public write" ON records;
-CREATE POLICY "public write" ON records
-  FOR ALL
-  USING      ( auth.role() = 'authenticated' )
-  WITH CHECK ( auth.role() = 'authenticated' );
 
 -- Plaid Items table to track linked Plaid items and sync cursors
 CREATE TABLE IF NOT EXISTS plaid_items (
@@ -310,6 +293,99 @@ DROP POLICY IF EXISTS "public read - state_events" ON state_events;
 CREATE POLICY "public read - state_events" ON state_events
   FOR SELECT USING ( true );
 
+-- Sources table (sources-first ingestion architecture)
+CREATE TABLE IF NOT EXISTS sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  content_hash TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  storage_url TEXT NOT NULL,
+  file_size BIGINT NOT NULL,
+  original_filename TEXT,
+  provenance JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  
+  -- Ensure content deduplication per user
+  UNIQUE(user_id, content_hash)
+);
+
+-- Indexes for sources
+CREATE INDEX IF NOT EXISTS idx_sources_user ON sources(user_id);
+CREATE INDEX IF NOT EXISTS idx_sources_hash ON sources(content_hash);
+CREATE INDEX IF NOT EXISTS idx_sources_created_at ON sources(created_at DESC);
+
+-- Enable RLS
+ALTER TABLE sources ENABLE ROW LEVEL SECURITY;
+
+-- Service role has full access
+DROP POLICY IF EXISTS "Service role full access - sources" ON sources;
+CREATE POLICY "Service role full access - sources" 
+  ON sources
+  FOR ALL 
+  TO service_role 
+  USING (true) 
+  WITH CHECK (true);
+
+-- Users can only read their own sources
+DROP POLICY IF EXISTS "Users read own sources" ON sources;
+CREATE POLICY "Users read own sources"
+  ON sources
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+COMMENT ON TABLE sources IS 'Content-addressed raw storage for sources-first ingestion. SHA-256 hash ensures deduplication per user.';
+COMMENT ON COLUMN sources.content_hash IS 'SHA-256 hash of file content for deduplication';
+COMMENT ON COLUMN sources.storage_url IS 'Supabase Storage URL path: sources/{user_id}/{content_hash}';
+COMMENT ON COLUMN sources.provenance IS 'Metadata: upload_method, client_info, original_source, etc.';
+
+-- Interpretation runs table
+CREATE TABLE IF NOT EXISTS interpretation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  source_id UUID NOT NULL REFERENCES sources(id),
+  interpretation_config JSONB NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  observations_created INTEGER DEFAULT 0,
+  unknown_fields_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for interpretation_runs
+CREATE INDEX IF NOT EXISTS idx_interpretation_runs_user ON interpretation_runs(user_id);
+CREATE INDEX IF NOT EXISTS idx_interpretation_runs_source ON interpretation_runs(source_id);
+CREATE INDEX IF NOT EXISTS idx_interpretation_runs_status ON interpretation_runs(status);
+CREATE INDEX IF NOT EXISTS idx_interpretation_runs_created_at ON interpretation_runs(created_at DESC);
+
+-- Enable RLS
+ALTER TABLE interpretation_runs ENABLE ROW LEVEL SECURITY;
+
+-- Service role has full access
+DROP POLICY IF EXISTS "Service role full access - interpretation_runs" ON interpretation_runs;
+CREATE POLICY "Service role full access - interpretation_runs"
+  ON interpretation_runs
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Users can only read their own interpretation runs
+DROP POLICY IF EXISTS "Users read own interpretation runs" ON interpretation_runs;
+CREATE POLICY "Users read own interpretation runs"
+  ON interpretation_runs
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+COMMENT ON TABLE interpretation_runs IS 'Versioned interpretation attempts with config logging for auditability';
+COMMENT ON COLUMN interpretation_runs.interpretation_config IS 'JSONB: provider, model_id, temperature, prompt_hash, code_version, feature_flags';
+COMMENT ON COLUMN interpretation_runs.status IS 'Current status: pending, running, completed, failed';
+COMMENT ON COLUMN interpretation_runs.observations_created IS 'Count of observations created from this run';
+COMMENT ON COLUMN interpretation_runs.unknown_fields_count IS 'Count of unknown fields routed to raw_fragments';
+
 -- Payload submissions table (unified ingestion primitive)
 CREATE TABLE IF NOT EXISTS payload_submissions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -344,7 +420,9 @@ CREATE TABLE IF NOT EXISTS observations (
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   schema_version TEXT NOT NULL,
-  source_payload_id UUID NOT NULL REFERENCES payload_submissions(id),
+  source_payload_id UUID REFERENCES payload_submissions(id),  -- Legacy: nullable for v0.2.0+
+  source_id UUID REFERENCES sources(id),  -- New: link to raw source content
+  interpretation_run_id UUID REFERENCES interpretation_runs(id),  -- Link to interpretation run
   observed_at TIMESTAMPTZ NOT NULL,
   specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
   source_priority INTEGER DEFAULT 0,
@@ -352,6 +430,10 @@ CREATE TABLE IF NOT EXISTS observations (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   user_id UUID NOT NULL
 );
+
+COMMENT ON COLUMN observations.source_payload_id IS 'Legacy payload submission reference (nullable for v0.2.0+)';
+COMMENT ON COLUMN observations.source_id IS 'Link to raw source content (provenance)';
+COMMENT ON COLUMN observations.interpretation_run_id IS 'Link to interpretation run that created this observation (provenance)';
 
 -- Entity snapshots table
 CREATE TABLE IF NOT EXISTS entity_snapshots (
@@ -370,6 +452,9 @@ CREATE TABLE IF NOT EXISTS entity_snapshots (
 CREATE TABLE IF NOT EXISTS raw_fragments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   record_id UUID NOT NULL REFERENCES records(id),
+  source_id UUID REFERENCES sources(id),  -- Link to raw source content
+  interpretation_run_id UUID REFERENCES interpretation_runs(id),  -- Link to interpretation run
+  user_id UUID,  -- User who owns this fragment
   fragment_type TEXT NOT NULL,
   fragment_key TEXT NOT NULL,
   fragment_value JSONB NOT NULL,
@@ -378,6 +463,10 @@ CREATE TABLE IF NOT EXISTS raw_fragments (
   first_seen TIMESTAMPTZ DEFAULT NOW(),
   last_seen TIMESTAMPTZ DEFAULT NOW()
 );
+
+COMMENT ON COLUMN raw_fragments.source_id IS 'Link to raw source content (provenance)';
+COMMENT ON COLUMN raw_fragments.interpretation_run_id IS 'Link to interpretation run that created this fragment (provenance)';
+COMMENT ON COLUMN raw_fragments.user_id IS 'User who owns this fragment (for RLS)';
 
 -- Schema registry table (FU-057)
 CREATE TABLE IF NOT EXISTS schema_registry (
@@ -394,6 +483,8 @@ CREATE TABLE IF NOT EXISTS schema_registry (
 -- Indexes for observations
 CREATE INDEX IF NOT EXISTS idx_observations_entity ON observations(entity_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_observations_payload ON observations(source_payload_id);
+CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_id);
+CREATE INDEX IF NOT EXISTS idx_observations_interpretation_run ON observations(interpretation_run_id);
 CREATE INDEX IF NOT EXISTS idx_observations_user ON observations(user_id);
 
 -- Indexes for entity_snapshots
@@ -403,6 +494,9 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_snapshot ON entity_snapshots USING GIN(
 
 -- Indexes for raw_fragments
 CREATE INDEX IF NOT EXISTS idx_fragments_record ON raw_fragments(record_id);
+CREATE INDEX IF NOT EXISTS idx_fragments_source ON raw_fragments(source_id);
+CREATE INDEX IF NOT EXISTS idx_fragments_interpretation_run ON raw_fragments(interpretation_run_id);
+CREATE INDEX IF NOT EXISTS idx_fragments_user ON raw_fragments(user_id);
 CREATE INDEX IF NOT EXISTS idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
 
 -- Index for schema_registry
@@ -416,31 +510,58 @@ ALTER TABLE schema_registry ENABLE ROW LEVEL SECURITY;
 
 -- Service role full access
 DROP POLICY IF EXISTS "Service role full access - observations" ON observations;
-CREATE POLICY "Service role full access - observations" ON observations
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access - observations"
+  ON observations
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role full access - entity_snapshots" ON entity_snapshots;
-CREATE POLICY "Service role full access - entity_snapshots" ON entity_snapshots
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access - entity_snapshots"
+  ON entity_snapshots
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role full access - raw_fragments" ON raw_fragments;
-CREATE POLICY "Service role full access - raw_fragments" ON raw_fragments
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access - raw_fragments"
+  ON raw_fragments
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Service role full access - schema_registry" ON schema_registry;
 CREATE POLICY "Service role full access - schema_registry" ON schema_registry
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- Public read access
-DROP POLICY IF EXISTS "public read - observations" ON observations;
-CREATE POLICY "public read - observations" ON observations FOR SELECT USING (true);
+-- Authenticated users can only read their own observations
+DROP POLICY IF EXISTS "Users read own observations" ON observations;
+CREATE POLICY "Users read own observations"
+  ON observations
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "public read - entity_snapshots" ON entity_snapshots;
-CREATE POLICY "public read - entity_snapshots" ON entity_snapshots FOR SELECT USING (true);
+-- Authenticated users can only read their own entity snapshots
+DROP POLICY IF EXISTS "Users read own entity snapshots" ON entity_snapshots;
+CREATE POLICY "Users read own entity snapshots"
+  ON entity_snapshots
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
 
-DROP POLICY IF EXISTS "public read - raw_fragments" ON raw_fragments;
-CREATE POLICY "public read - raw_fragments" ON raw_fragments FOR SELECT USING (true);
+-- Authenticated users can only read their own raw fragments
+DROP POLICY IF EXISTS "Users read own raw fragments" ON raw_fragments;
+CREATE POLICY "Users read own raw fragments"
+  ON raw_fragments
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
 
+-- Public read access for schema_registry
 DROP POLICY IF EXISTS "public read - schema_registry" ON schema_registry;
 CREATE POLICY "public read - schema_registry" ON schema_registry FOR SELECT USING (true);
 
@@ -477,24 +598,95 @@ CREATE TABLE IF NOT EXISTS entities (
   entity_type TEXT NOT NULL,
   canonical_name TEXT NOT NULL,
   aliases JSONB DEFAULT '[]',
+  user_id UUID,
+  merged_to_entity_id TEXT,
+  merged_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT fk_entities_merged_to FOREIGN KEY (merged_to_entity_id) REFERENCES entities(id)
 );
+
+COMMENT ON COLUMN entities.user_id IS 'User who owns this entity (for RLS)';
+COMMENT ON COLUMN entities.merged_to_entity_id IS 'If not NULL, this entity was merged into another entity';
+COMMENT ON COLUMN entities.merged_at IS 'Timestamp when entity was merged';
 
 -- Indexes for entities
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
 CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_user ON entities(user_id);
+CREATE INDEX IF NOT EXISTS idx_entities_merged_to ON entities(merged_to_entity_id) 
+  WHERE merged_to_entity_id IS NOT NULL;
 
 -- RLS policies for entities
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
-CREATE POLICY "Service role full access - entities" ON entities
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Service role full access - entities"
+  ON entities
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
 
-DROP POLICY IF EXISTS "public read - entities" ON entities;
-CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+-- Authenticated users can only read their own non-merged entities
+DROP POLICY IF EXISTS "Users read own entities" ON entities;
+CREATE POLICY "Users read own entities"
+  ON entities
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+-- Entity merges table (audit log for merge operations)
+CREATE TABLE IF NOT EXISTS entity_merges (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  from_entity_id TEXT NOT NULL,
+  to_entity_id TEXT NOT NULL,
+  observations_moved INTEGER NOT NULL DEFAULT 0,
+  merged_at TIMESTAMPTZ DEFAULT NOW(),
+  merged_by TEXT,
+  merge_reason TEXT,
+  
+  -- Ensure same merge doesn't happen twice
+  UNIQUE(user_id, from_entity_id, to_entity_id),
+  
+  CONSTRAINT fk_entity_merges_from FOREIGN KEY (from_entity_id) REFERENCES entities(id),
+  CONSTRAINT fk_entity_merges_to FOREIGN KEY (to_entity_id) REFERENCES entities(id)
+);
+
+-- Indexes for entity_merges
+CREATE INDEX IF NOT EXISTS idx_entity_merges_user ON entity_merges(user_id);
+CREATE INDEX IF NOT EXISTS idx_entity_merges_from ON entity_merges(from_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_merges_to ON entity_merges(to_entity_id);
+CREATE INDEX IF NOT EXISTS idx_entity_merges_merged_at ON entity_merges(merged_at DESC);
+
+-- Enable RLS
+ALTER TABLE entity_merges ENABLE ROW LEVEL SECURITY;
+
+-- Service role has full access
+DROP POLICY IF EXISTS "Service role full access - entity_merges" ON entity_merges;
+CREATE POLICY "Service role full access - entity_merges"
+  ON entity_merges
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+-- Users can only read their own merge history
+DROP POLICY IF EXISTS "Users read own entity merges" ON entity_merges;
+CREATE POLICY "Users read own entity merges"
+  ON entity_merges
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+COMMENT ON TABLE entity_merges IS 'Audit log for entity merge operations';
+COMMENT ON COLUMN entity_merges.from_entity_id IS 'Source entity (marked as merged)';
+COMMENT ON COLUMN entity_merges.to_entity_id IS 'Target entity (receives observations)';
+COMMENT ON COLUMN entity_merges.observations_moved IS 'Count of observations rewritten';
+COMMENT ON COLUMN entity_merges.merged_by IS 'User or agent that performed merge';
+COMMENT ON COLUMN entity_merges.merge_reason IS 'Optional reason for merge';
 
 -- Timeline events table (FU-102)
 CREATE TABLE IF NOT EXISTS timeline_events (
@@ -594,7 +786,3 @@ CREATE POLICY "Service role full access - entity_event_edges" ON entity_event_ed
 
 DROP POLICY IF EXISTS "public read - entity_event_edges" ON entity_event_edges;
 CREATE POLICY "public read - entity_event_edges" ON entity_event_edges FOR SELECT USING (true);
-
-
-
-

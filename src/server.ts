@@ -75,7 +75,7 @@ export class NeotomaServer {
         {
           name: "submit_payload",
           description:
-            "Submit a payload envelope for compilation into payloads and observations. Agents submit capability_id + body + provenance; server handles schema reasoning, deduplication, and entity extraction.",
+            "Submit a payload envelope for compilation into payloads and observations. REQUIRES a valid capability_id (e.g., 'neotoma:store_invoice:v1'). Check available capabilities via list_provider_catalog before using. For data without a matching capability, use ingest_structured instead.",
           inputSchema: {
             type: "object",
             properties: {
@@ -124,7 +124,7 @@ export class NeotomaServer {
         {
           name: "update_record",
           description:
-            "Update an existing record's properties, file URLs, or embedding",
+            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Use submit_payload with updated data, or correct action for corrections instead.",
           inputSchema: {
             type: "object",
             properties: {
@@ -147,7 +147,7 @@ export class NeotomaServer {
         {
           name: "retrieve_records",
           description:
-            "Query records by type and property filters. Supports semantic search using embeddings for fuzzy matching.",
+            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Use retrieve_entities, get_entity_snapshot, or list_observations instead.",
           inputSchema: {
             type: "object",
             properties: {
@@ -189,7 +189,8 @@ export class NeotomaServer {
         },
         {
           name: "delete_record",
-          description: "Delete a record and its associated files",
+          description:
+            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Observations are immutable in new architecture; use entity merge or correction patterns instead.",
           inputSchema: {
             type: "object",
             properties: {
@@ -703,7 +704,7 @@ export class NeotomaServer {
         {
           name: "ingest_structured",
           description:
-            "Ingest pre-structured data with schema validation. For data already extracted by agents.",
+            "Ingest pre-structured entity data with schema validation. Use this for data types that don't have a registered capability (e.g., contacts, people, companies, custom entities). For data with capabilities (invoices, transactions, receipts, contracts, notes), use submit_payload instead. Requires user_id and entities array.",
           inputSchema: {
             type: "object",
             properties: {
@@ -2592,16 +2593,31 @@ export class NeotomaServer {
         mimeType: parsed.mime_type,
       });
 
-      const extractedData = analysis.entities || [];
+      // Convert FileAnalysisResult to entity format for interpretation
+      const extractedData = [{
+        entity_type: analysis.type,
+        ...analysis.properties,
+      }];
 
       // Run interpretation
-      const config = parsed.interpretation_config || {
+      const defaultConfig = {
         provider: "rule_based",
         model_id: "neotoma_v1",
         temperature: 0,
         prompt_hash: "n/a",
         code_version: "v0.2.0",
       };
+      
+      const config = parsed.interpretation_config 
+        ? {
+            provider: (parsed.interpretation_config.provider as string) || defaultConfig.provider,
+            model_id: (parsed.interpretation_config.model_id as string) || defaultConfig.model_id,
+            temperature: (parsed.interpretation_config.temperature as number) ?? defaultConfig.temperature,
+            prompt_hash: (parsed.interpretation_config.prompt_hash as string) || defaultConfig.prompt_hash,
+            code_version: (parsed.interpretation_config.code_version as string) || defaultConfig.code_version,
+            feature_flags: parsed.interpretation_config.feature_flags as Record<string, boolean> | undefined,
+          }
+        : defaultConfig;
 
       const interpretationResult = await runInterpretation({
         userId: parsed.user_id,
@@ -2702,14 +2718,29 @@ export class NeotomaServer {
       mimeType: source.mime_type,
     });
 
-    const extractedData = analysis.entities || [];
+    // Convert FileAnalysisResult to entity format for interpretation
+    const extractedData = [{
+      entity_type: analysis.type,
+      ...analysis.properties,
+    }];
+
+    // Validate and convert interpretation_config to InterpretationConfig
+    const configValue = parsed.interpretation_config || {};
+    const config = {
+      provider: (configValue.provider as string) || "rule_based",
+      model_id: (configValue.model_id as string) || "neotoma_v1",
+      temperature: (configValue.temperature as number) ?? 0,
+      prompt_hash: (configValue.prompt_hash as string) || "n/a",
+      code_version: (configValue.code_version as string) || "v0.2.0",
+      feature_flags: configValue.feature_flags as Record<string, boolean> | undefined,
+    };
 
     // Run new interpretation
     const interpretationResult = await runInterpretation({
       userId: source.user_id,
       sourceId: parsed.source_id,
       extractedData,
-      config: parsed.interpretation_config,
+      config,
     });
 
     return this.buildTextResponse(interpretationResult);

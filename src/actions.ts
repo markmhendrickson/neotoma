@@ -908,13 +908,13 @@ app.post("/store_record", async (req, res) => {
     const resolvedEntities = [];
     
     for (const entity of entities) {
-      const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
-      resolvedEntities.push(resolved);
+      const entityId = await resolveEntity(entity.entity_type, entity.raw_value);
+      resolvedEntities.push(entityId);
       
       // Create record-entity edge
       await supabase.from("record_entity_edges").insert({
         record_id: data.id,
-        entity_id: resolved.id,
+        entity_id: entityId,
         edge_type: "EXTRACTED_FROM",
       });
     }
@@ -3639,18 +3639,28 @@ app.get("/plaid/link_demo", (req, res) => {
 });
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
-// Initialize encryption service
-initServerKeys().catch((err) => {
-  console.error("Failed to initialize encryption service:", err);
-});
 
-if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1") {
+// Export function to start HTTP server (called explicitly, not on import)
+export async function startHTTPServer() {
+  // Initialize encryption service
+  await initServerKeys();
+  
   const httpPort = process.env.HTTP_PORT
     ? parseInt(process.env.HTTP_PORT, 10)
     : config.port || 3000;
+  
   app.listen(httpPort, () => {
     // eslint-disable-next-line no-console
     console.log(`HTTP Actions listening on :${httpPort}`);
+  });
+}
+
+// Only auto-start if not disabled AND if this is the main module
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
+  startHTTPServer().catch((err) => {
+    console.error("Failed to start HTTP server:", err);
+    process.exit(1);
   });
 }
 

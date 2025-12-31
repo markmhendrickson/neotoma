@@ -9,7 +9,7 @@ It is:
 - The **foundation layer** beneath agent-driven layers (e.g., Strategy Layer with Agentic Portfolio as example instance, Execution Layer with Agentic Wallet as part)
 **Core Architectural Choices (Defensible Differentiators):**
 1. **Privacy-First:** User-controlled memory, no provider access, never used for training
-2. **Deterministic:** Same input → same output, always (reproducible, explainable, no hallucinations); hash-based entity IDs ensure deterministic, tamper-evident records
+2. **Deterministic (Creates Verifiable Domain for Personal Data):** Same input → same output, always (reproducible, explainable, no hallucinations); hash-based entity IDs ensure deterministic, tamper-evident records. By making extraction deterministic and verifiable, Neotoma creates objective (non-gameable) results—a verifiable domain for personal data that enables reliable, consistent results LLMs can depend on.
 3. **Cross-Platform:** Works with all AI tools via MCP (ChatGPT, Claude, Cursor), not platform-locked
 4. **Immutable Audit Trail:** Every change permanently recorded with full provenance; event-sourced architecture enables historical replay and time-travel queries
 5. **Cryptographic Integrity:** Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records

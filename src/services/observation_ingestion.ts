@@ -100,7 +100,7 @@ export async function createObservationsFromRecord(
 
   // Resolve entities and create observations
   for (const entity of entities) {
-    const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+    const entityId = await resolveEntity(entity.entity_type, entity.raw_value);
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 
@@ -145,8 +145,8 @@ export async function createObservationsFromRecord(
     const { data: observationData, error: obsError } = await supabase
       .from("observations")
       .insert({
-        entity_id: resolved.id,
-        entity_type: resolved.entity_type,
+        entity_id: entityId,
+        entity_type: entity.entity_type,
         schema_version: schemaVersion,
         source_payload_id: payloadId,
         observed_at: observedAt,
@@ -166,8 +166,8 @@ export async function createObservationsFromRecord(
     if (observationData) {
       observations.push({
         id: observationData.id,
-        entity_id: resolved.id,
-        entity_type: resolved.entity_type,
+        entity_id: entityId,
+        entity_type: entity.entity_type,
       });
     }
   }
@@ -304,7 +304,7 @@ export async function createObservationsFromPayload(
 
   // Resolve all entities and create observations
   for (const entity of allEntities) {
-    const resolved = await resolveEntity(entity.entity_type, entity.raw_value);
+    const entityId = await resolveEntity(entity.entity_type, entity.raw_value);
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 
@@ -331,8 +331,8 @@ export async function createObservationsFromPayload(
     const { data: observationData, error: obsError } = await supabase
       .from("observations")
       .insert({
-        entity_id: resolved.id,
-        entity_type: resolved.entity_type,
+        entity_id: entityId,
+        entity_type: entity.entity_type,
         schema_version: schemaVersion,
         source_payload_id: payload.id,
         observed_at: observedAt,
@@ -352,8 +352,8 @@ export async function createObservationsFromPayload(
     if (observationData) {
       observations.push({
         id: observationData.id,
-        entity_id: resolved.id,
-        entity_type: resolved.entity_type,
+        entity_id: entityId,
+        entity_type: entity.entity_type,
       });
     }
   }

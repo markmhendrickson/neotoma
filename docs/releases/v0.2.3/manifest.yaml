@@ -1,0 +1,212 @@
+release:
+  id: v0.2.3
+  name: Codebase Metadata Schema Extensions
+  type: "not_marketed" # marketed | not_marketed
+  priority: P1
+  status: planning
+  target_ship_date: null # After v0.2.0 completion (estimated 1-2 weeks)
+  owner: Mark Hendrickson
+  marketing_required: false
+  guiding_principle: "Extend Neotoma schema to support codebase metadata types that enable full foundation agent memory integration"
+
+# Documentation structure
+documentation:
+  spec: "docs/releases/v0.2.3/spec.md"
+  schema_extensions:
+    - "docs/releases/v0.2.3/schema_extensions/feature_unit.md"
+    - "docs/releases/v0.2.3/schema_extensions/release.md"
+    - "docs/releases/v0.2.3/schema_extensions/agent_decision.md"
+    - "docs/releases/v0.2.3/schema_extensions/agent_session.md"
+    - "docs/releases/v0.2.3/schema_extensions/validation_result.md"
+    - "docs/releases/v0.2.3/schema_extensions/codebase_entity.md"
+    - "docs/releases/v0.2.3/schema_extensions/architectural_decision.md"
+  mcp_actions: "docs/releases/v0.2.3/mcp_actions.md"
+  migration_guide: "docs/releases/v0.2.3/migration_guide.md"
+  integration_guide: "docs/releases/v0.2.3/integration_guide.md"
+
+schema_extensions:
+  - entity_type: feature_unit
+    version: v1
+    description: Feature Unit records (id, description, status, dependencies)
+    resolution_strategy: Match by id field
+    
+  - entity_type: release
+    version: v1
+    description: Release records (id, version, feature_units, status, acceptance_criteria)
+    resolution_strategy: Match by id field
+    
+  - entity_type: agent_decision
+    version: v1
+    description: Technical decisions (decision, rationale, context, timestamp)
+    resolution_strategy: Content hash of (decision + timestamp)
+    
+  - entity_type: agent_session
+    version: v1
+    description: Session history (session_id, actions, checkpoints, outcomes)
+    resolution_strategy: Match by session_id field
+    
+  - entity_type: validation_result
+    version: v1
+    description: Validation checkpoints (validation_type, status, details)
+    resolution_strategy: Content hash of (validation_type + target + timestamp)
+    
+  - entity_type: codebase_entity
+    version: v1
+    description: Codebase entities (subsystems, components, architectural patterns)
+    resolution_strategy: Match by (name + entity_type) combination
+    
+  - entity_type: architectural_decision
+    version: v1
+    description: Architectural decisions (decision, rationale, impact, alternatives)
+    resolution_strategy: Content hash of (decision + timestamp)
+
+mcp_actions:
+  - action: submit_feature_unit
+    capability_id: "neotoma:submit_feature_unit:v1"
+    description: Store Feature Unit records via MCP
+    
+  - action: submit_release
+    capability_id: "neotoma:submit_release:v1"
+    description: Store Release records via MCP
+    
+  - action: submit_agent_decision
+    capability_id: "neotoma:submit_agent_decision:v1"
+    description: Store agent decisions via MCP
+    
+  - action: submit_agent_session
+    capability_id: "neotoma:submit_agent_session:v1"
+    description: Store session history via MCP
+    
+  - action: query_codebase_entities
+    capability_id: "neotoma:query_codebase_entities:v1"
+    description: Query codebase metadata
+    
+  - action: query_agent_history
+    capability_id: "neotoma:query_agent_history:v1"
+    description: Query agent session history
+    
+  - action: query_entity_timeline
+    capability_id: "neotoma:query_entity_timeline:v1"
+    description: Query timeline for any entity (real-world or codebase)
+
+scope:
+  included:
+    - 7 new entity types (feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision)
+    - 7 new MCP actions for codebase metadata operations
+    - Graceful degradation (Neotoma available vs. fallback)
+    - Migration script for .cursor/memory/ to Neotoma
+    - Foundation agent integration patterns
+
+  deferred_v1x:
+    - Automated codebase entity suggestions
+    - Codebase search UI
+    - Multi-repo codebase tracking
+
+  excluded:
+    - Schema evolution UI (schemas managed via migrations)
+    - Automated cleanup of old session history
+
+acceptance_criteria:
+  product:
+    - Foundation agents can store Feature Units via MCP
+    - Foundation agents can store Releases via MCP
+    - Foundation agents can store technical decisions via MCP
+    - Foundation agents can store session history via MCP
+    - Foundation agents can query codebase entities via MCP
+    - Foundation agents can query agent session history via MCP
+    - Foundation agents can query development timelines via MCP
+    - Entity resolution works for codebase entities
+
+  technical:
+    - All 7 schema extensions added to schema registry
+    - All 7 MCP actions implemented
+    - Input/output schemas validated
+    - Error handling implemented
+    - User isolation enforced (user_id scoping)
+    - Graceful degradation pattern implemented
+    - Migration script functional
+    - Unit and integration tests passing
+
+  business:
+    - Enables foundation agents to use Neotoma for all memory
+    - Provides unified memory system for agent development
+    - Validates Neotoma extensibility for domain-specific metadata
+    - Creates foundation for agent memory capabilities
+
+success_criteria:
+  - All 7 schema extensions added to schema registry
+  - All 7 MCP actions implemented and functional
+  - Foundation agents can store Feature Units via MCP
+  - Foundation agents can store Releases via MCP
+  - Foundation agents can store decisions via MCP
+  - Foundation agents can query codebase entities
+  - Entity resolution works for codebase entities
+  - Timeline generation works for development history
+  - Graceful degradation pattern implemented
+  - Migration script functional
+  - All tests passing (unit + integration)
+  - All documentation complete
+
+phases:
+  phase_1:
+    name: "Schema Extensions"
+    duration: "3 days"
+    tasks:
+      - Add 7 new entity types to schema registry
+      - Define field schemas with validation rules
+      - Configure extraction rules (direct property assignment)
+      - Version schemas (e.g., feature_unit:v1)
+
+  phase_2:
+    name: "MCP Actions"
+    duration: "5 days"
+    tasks:
+      - Implement submit_feature_unit action
+      - Implement submit_release action
+      - Implement submit_agent_decision action
+      - Implement submit_agent_session action
+      - Implement query_codebase_entities action
+      - Implement query_agent_history action
+      - Implement query_entity_timeline action
+
+  phase_3:
+    name: "Foundation Integration"
+    duration: "3 days"
+    tasks:
+      - Implement graceful degradation pattern
+      - Add memory storage helpers
+      - Add memory retrieval helpers
+      - Create migration script
+
+  phase_4:
+    name: "Testing & Documentation"
+    duration: "2 days"
+    tasks:
+      - Unit tests for schema validation
+      - Integration tests for MCP actions
+      - Entity resolution tests
+      - Timeline generation tests
+      - Schema extension docs
+      - MCP action docs
+      - Migration guide
+      - Integration guide
+
+estimated_timeline: "13 days (approximately 2 weeks)"
+
+security_model:
+  - User isolation: All codebase metadata is user-scoped (user_id stamped into observations)
+  - RLS enforcement: Standard Neotoma RLS policies apply to codebase entities
+  - MCP server: All mutations via service_role; user identity validated
+  - Cross-user prevention: Agents cannot access other users' codebase metadata
+
+dependencies:
+  - v0.2.0 completion
+  - MCP server functional
+  - Schema registry extensible
+
+known_limitations:
+  - Single-repo focus (multi-repo tracking deferred to v1.x)
+  - Manual entity creation (no automated suggestions in v0.2.3)
+  - No codebase search UI (MCP interface only, UI deferred to v1.x)
+  - No schema evolution UI (schemas managed via migrations)
+  - No automated cleanup of old session history

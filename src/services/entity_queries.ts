@@ -1,7 +1,7 @@
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
-import { supabase } from "../db";
+import { supabase } from "../db.js";
 
 export interface EntityQueryOptions {
   userId?: string;

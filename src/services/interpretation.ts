@@ -1,9 +1,9 @@
 // FU-121: Interpretation Service
 // Schema validation, entity resolution, and unknown field routing
 
-import { supabase } from "../db";
-import { schemaRegistry, type SchemaDefinition } from "./schema_registry";
-import { resolveEntity } from "./entity_resolution";
+import { supabase } from "../db.js";
+import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
+import { resolveEntity } from "./entity_resolution.js";
 import { randomUUID } from "crypto";
 
 export interface InterpretationConfig {
