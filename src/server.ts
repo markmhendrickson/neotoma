@@ -664,6 +664,143 @@ export class NeotomaServer {
             required: ["node_id"],
           },
         },
+        {
+          name: "ingest",
+          description:
+            "Ingest raw file content with optional AI interpretation. Content-addressed storage with SHA-256 deduplication per user.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_id: {
+                type: "string",
+                description: "User ID (UUID)",
+              },
+              file_content: {
+                type: "string",
+                description: "Base64-encoded file content",
+              },
+              mime_type: {
+                type: "string",
+                description: "MIME type (e.g., 'application/pdf', 'text/csv')",
+              },
+              original_filename: {
+                type: "string",
+                description: "Original filename (optional)",
+              },
+              interpret: {
+                type: "boolean",
+                description: "Whether to run AI interpretation immediately",
+                default: true,
+              },
+              interpretation_config: {
+                type: "object",
+                description: "AI interpretation configuration (provider, model, etc.)",
+              },
+            },
+            required: ["user_id", "file_content", "mime_type"],
+          },
+        },
+        {
+          name: "ingest_structured",
+          description:
+            "Ingest pre-structured data with schema validation. For data already extracted by agents.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_id: {
+                type: "string",
+                description: "User ID (UUID)",
+              },
+              entities: {
+                type: "array",
+                description: "Array of entity data objects",
+                items: { type: "object" },
+              },
+              source_priority: {
+                type: "number",
+                description: "Source priority (100 for structured data)",
+                default: 100,
+              },
+            },
+            required: ["user_id", "entities"],
+          },
+        },
+        {
+          name: "reinterpret",
+          description:
+            "Re-run AI interpretation on an existing source with new config. Creates new observations without modifying existing ones.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              source_id: {
+                type: "string",
+                description: "Source ID (UUID) to reinterpret",
+              },
+              interpretation_config: {
+                type: "object",
+                description: "AI interpretation configuration",
+              },
+            },
+            required: ["source_id", "interpretation_config"],
+          },
+        },
+        {
+          name: "correct",
+          description:
+            "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_id: {
+                type: "string",
+                description: "User ID (UUID)",
+              },
+              entity_id: {
+                type: "string",
+                description: "Entity ID to correct",
+              },
+              entity_type: {
+                type: "string",
+                description: "Entity type",
+              },
+              field: {
+                type: "string",
+                description: "Field name to correct",
+              },
+              value: {
+                description: "Corrected value",
+              },
+            },
+            required: ["user_id", "entity_id", "entity_type", "field", "value"],
+          },
+        },
+        {
+          name: "merge_entities",
+          description:
+            "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              user_id: {
+                type: "string",
+                description: "User ID (UUID)",
+              },
+              from_entity_id: {
+                type: "string",
+                description: "Source entity ID to merge from",
+              },
+              to_entity_id: {
+                type: "string",
+                description: "Target entity ID to merge into",
+              },
+              merge_reason: {
+                type: "string",
+                description: "Optional reason for merge",
+              },
+            },
+            required: ["user_id", "from_entity_id", "to_entity_id"],
+          },
+        },
       ],
     }));
 
@@ -731,6 +868,16 @@ export class NeotomaServer {
             return await this.getRelatedEntities(args);
           case "get_graph_neighborhood":
             return await this.getGraphNeighborhood(args);
+          case "ingest":
+            return await this.ingest(args);
+          case "ingest_structured":
+            return await this.ingestStructured(args);
+          case "reinterpret":
+            return await this.reinterpret(args);
+          case "correct":
+            return await this.correct(args);
+          case "merge_entities":
+            return await this.mergeEntities(args);
           default:
             throw new McpError(
               ErrorCode.MethodNotFound,
@@ -1637,25 +1784,24 @@ export class NeotomaServer {
   private async getEntitySnapshot(
     args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+
     const schema = z.object({
       entity_id: z.string(),
     });
     const parsed = schema.parse(args ?? {});
 
-    const { data: snapshot, error } = await supabase
-      .from("entity_snapshots")
-      .select("*")
-      .eq("entity_id", parsed.entity_id)
-      .single();
+    // Use new query service that handles merged entity redirection
+    const entity = await getEntityWithProvenance(parsed.entity_id);
 
-    if (error || !snapshot) {
+    if (!entity) {
       throw new McpError(
         ErrorCode.InvalidParams,
-        `Entity snapshot not found for ID: ${parsed.entity_id}`,
+        `Entity not found: ${parsed.entity_id}`,
       );
     }
 
-    return this.buildTextResponse(snapshot);
+    return this.buildTextResponse(entity);
   }
 
   private async listObservations(
@@ -1847,21 +1993,42 @@ export class NeotomaServer {
   private async retrieveEntities(
     args: unknown,
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { queryEntities } = await import("./services/entity_queries.js");
+
     const schema = z.object({
+      user_id: z.string().uuid().optional(),
       entity_type: z.string().optional(),
       limit: z.number().int().positive().default(100),
       offset: z.number().int().nonnegative().default(0),
       include_snapshots: z.boolean().default(true),
+      include_merged: z.boolean().default(false),
     });
     const parsed = schema.parse(args ?? {});
 
-    // Get total count
+    // Use new query service that excludes merged entities by default
+    const entities = await queryEntities({
+      userId: parsed.user_id,
+      entityType: parsed.entity_type,
+      includeMerged: parsed.include_merged,
+      limit: parsed.limit,
+      offset: parsed.offset,
+    });
+
+    // Get total count (excluding merged entities unless requested)
     let countQuery = supabase
       .from("entities")
       .select("*", { count: "exact", head: true });
 
+    if (parsed.user_id) {
+      countQuery = countQuery.eq("user_id", parsed.user_id);
+    }
+
     if (parsed.entity_type) {
       countQuery = countQuery.eq("entity_type", parsed.entity_type);
+    }
+
+    if (!parsed.include_merged) {
+      countQuery = countQuery.is("merged_to_entity_id", null);
     }
 
     const { count, error: countError } = await countQuery;
@@ -1872,34 +2039,10 @@ export class NeotomaServer {
       );
     }
 
-    // Get entities
-    const entities = await listEntities({
-      entity_type: parsed.entity_type,
-      limit: parsed.limit,
-      offset: parsed.offset,
-    });
-
-    // Optionally include snapshots
-    let entitiesWithSnapshots = entities;
-    if (parsed.include_snapshots && entities.length > 0) {
-      const entityIds = entities.map((e) => e.id);
-      const { data: snapshots, error: snapError } = await supabase
-        .from("entity_snapshots")
-        .select("*")
-        .in("entity_id", entityIds);
-
-      if (!snapError && snapshots) {
-        const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
-        entitiesWithSnapshots = entities.map((entity) => ({
-          ...entity,
-          snapshot: snapshotMap.get(entity.id) || null,
-        }));
-      }
-    }
-
     return this.buildTextResponse({
-      entities: entitiesWithSnapshots,
+      entities,
       total: count || 0,
+      excluded_merged: !parsed.include_merged,
     });
   }
 
@@ -2386,6 +2529,368 @@ export class NeotomaServer {
     }
 
     return this.buildTextResponse(result);
+  }
+
+  // FU-122: MCP ingest() Tool
+  private async ingest(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { storeRawContent } = await import("./services/raw_storage.js");
+    const { runInterpretation, checkInterpretationQuota } = await import("./services/interpretation.js");
+    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
+
+    const schema = z.object({
+      user_id: z.string().uuid(),
+      file_content: z.string(),
+      mime_type: z.string(),
+      original_filename: z.string().optional(),
+      interpret: z.boolean().default(true),
+      interpretation_config: z.record(z.unknown()).optional(),
+    });
+
+    const parsed = schema.parse(args);
+    const fileBuffer = Buffer.from(parsed.file_content, "base64");
+
+    // Store raw content
+    const storageResult = await storeRawContent({
+      userId: parsed.user_id,
+      fileBuffer,
+      mimeType: parsed.mime_type,
+      originalFilename: parsed.original_filename,
+      provenance: {
+        upload_method: "mcp_ingest",
+        client: "mcp",
+      },
+    });
+
+    const result: any = {
+      source_id: storageResult.sourceId,
+      content_hash: storageResult.contentHash,
+      file_size: storageResult.fileSize,
+      deduplicated: storageResult.deduplicated,
+    };
+
+    // Run interpretation if requested
+    if (parsed.interpret && !storageResult.deduplicated) {
+      // Check quota
+      const quota = await checkInterpretationQuota(parsed.user_id);
+      if (!quota.allowed) {
+        return this.buildTextResponse({
+          ...result,
+          interpretation: {
+            skipped: true,
+            reason: "quota_exceeded",
+            quota: quota,
+          },
+        });
+      }
+
+      // Extract data from file
+      const analysis = await analyzeFileForRecord({
+        buffer: fileBuffer,
+        fileName: parsed.original_filename || "file",
+        mimeType: parsed.mime_type,
+      });
+
+      const extractedData = analysis.entities || [];
+
+      // Run interpretation
+      const config = parsed.interpretation_config || {
+        provider: "rule_based",
+        model_id: "neotoma_v1",
+        temperature: 0,
+        prompt_hash: "n/a",
+        code_version: "v0.2.0",
+      };
+
+      const interpretationResult = await runInterpretation({
+        userId: parsed.user_id,
+        sourceId: storageResult.sourceId,
+        extractedData,
+        config,
+      });
+
+      result.interpretation = interpretationResult;
+    }
+
+    return this.buildTextResponse(result);
+  }
+
+  // FU-123: MCP ingest_structured() Tool
+  private async ingestStructured(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { runInterpretation } = await import("./services/interpretation.js");
+    const { storeRawContent } = await import("./services/raw_storage.js");
+
+    const schema = z.object({
+      user_id: z.string().uuid(),
+      entities: z.array(z.record(z.unknown())),
+      source_priority: z.number().default(100),
+    });
+
+    const parsed = schema.parse(args);
+
+    // Store structured data as JSON source
+    const jsonContent = JSON.stringify(parsed.entities, null, 2);
+    const fileBuffer = Buffer.from(jsonContent, "utf-8");
+
+    const storageResult = await storeRawContent({
+      userId: parsed.user_id,
+      fileBuffer,
+      mimeType: "application/json",
+      originalFilename: "structured_data.json",
+      provenance: {
+        upload_method: "mcp_ingest_structured",
+        client: "mcp",
+        source_priority: parsed.source_priority,
+      },
+    });
+
+    // Run interpretation with structured data
+    const interpretationResult = await runInterpretation({
+      userId: parsed.user_id,
+      sourceId: storageResult.sourceId,
+      extractedData: parsed.entities,
+      config: {
+        provider: "structured",
+        model_id: "n/a",
+        temperature: 0,
+        prompt_hash: "n/a",
+        code_version: "v0.2.0",
+      },
+    });
+
+    return this.buildTextResponse({
+      source_id: storageResult.sourceId,
+      interpretation: interpretationResult,
+    });
+  }
+
+  // FU-124: MCP reinterpret() Tool
+  private async reinterpret(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
+    const { runInterpretation, checkInterpretationQuota } = await import("./services/interpretation.js");
+    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
+
+    const schema = z.object({
+      source_id: z.string().uuid(),
+      interpretation_config: z.record(z.unknown()),
+    });
+
+    const parsed = schema.parse(args);
+
+    // Get source metadata
+    const source = await getSourceMetadata(parsed.source_id);
+
+    // Check quota
+    const quota = await checkInterpretationQuota(source.user_id);
+    if (!quota.allowed) {
+      return this.buildTextResponse({
+        error: "quota_exceeded",
+        quota,
+      });
+    }
+
+    // Download and re-analyze
+    const fileBuffer = await downloadRawContent(source.storage_url);
+    const analysis = await analyzeFileForRecord({
+      buffer: fileBuffer,
+      fileName: source.original_filename || "file",
+      mimeType: source.mime_type,
+    });
+
+    const extractedData = analysis.entities || [];
+
+    // Run new interpretation
+    const interpretationResult = await runInterpretation({
+      userId: source.user_id,
+      sourceId: parsed.source_id,
+      extractedData,
+      config: parsed.interpretation_config,
+    });
+
+    return this.buildTextResponse(interpretationResult);
+  }
+
+  // FU-125: MCP correct() Tool
+  private async correct(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const { schemaRegistry } = await import("./services/schema_registry.js");
+
+    const schema = z.object({
+      user_id: z.string().uuid(),
+      entity_id: z.string(),
+      entity_type: z.string(),
+      field: z.string(),
+      value: z.unknown(),
+    });
+
+    const parsed = schema.parse(args);
+
+    // Validate entity ownership
+    const { data: entity, error: entityError } = await supabase
+      .from("entities")
+      .select("*")
+      .eq("id", parsed.entity_id)
+      .eq("user_id", parsed.user_id)
+      .single();
+
+    if (entityError || !entity) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Entity not found or not owned by user: ${parsed.entity_id}`,
+      );
+    }
+
+    // Load schema to validate field
+    const schemaEntry = await schemaRegistry.loadActiveSchema(parsed.entity_type);
+    if (!schemaEntry) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `No active schema for entity type: ${parsed.entity_type}`,
+      );
+    }
+
+    if (!schemaEntry.schema_definition.fields[parsed.field]) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Unknown field for entity type ${parsed.entity_type}: ${parsed.field}`,
+      );
+    }
+
+    // Create correction observation with priority 1000
+    const observationId = randomUUID();
+    const { error: obsError } = await supabase
+      .from("observations")
+      .insert({
+        id: observationId,
+        entity_id: parsed.entity_id,
+        entity_type: parsed.entity_type,
+        schema_version: schemaEntry.schema_version,
+        source_payload_id: null,
+        source_id: null, // Corrections don't have a source
+        interpretation_run_id: null,
+        observed_at: new Date().toISOString(),
+        specificity_score: 1.0,
+        source_priority: 1000, // Corrections have highest priority
+        fields: { [parsed.field]: parsed.value },
+        user_id: parsed.user_id,
+      });
+
+    if (obsError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to create correction: ${obsError.message}`,
+      );
+    }
+
+    return this.buildTextResponse({
+      observation_id: observationId,
+      entity_id: parsed.entity_id,
+      field: parsed.field,
+      value: parsed.value,
+      message: "Correction applied with priority 1000",
+    });
+  }
+
+  // FU-126: MCP merge_entities() Tool
+  private async mergeEntities(
+    args: unknown,
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      user_id: z.string().uuid(),
+      from_entity_id: z.string(),
+      to_entity_id: z.string(),
+      merge_reason: z.string().optional(),
+    });
+
+    const parsed = schema.parse(args);
+
+    // Validate both entities exist and are owned by user
+    const { data: entities, error: entitiesError } = await supabase
+      .from("entities")
+      .select("*")
+      .in("id", [parsed.from_entity_id, parsed.to_entity_id])
+      .eq("user_id", parsed.user_id);
+
+    if (entitiesError || !entities || entities.length !== 2) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "Both entities must exist and be owned by user",
+      );
+    }
+
+    // Check if source entity is already merged
+    const fromEntity = entities.find((e: any) => e.id === parsed.from_entity_id);
+    if (fromEntity.merged_to_entity_id) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Source entity ${parsed.from_entity_id} is already merged`,
+      );
+    }
+
+    // Count observations to move
+    const { count: obsCount } = await supabase
+      .from("observations")
+      .select("*", { count: "exact", head: true })
+      .eq("entity_id", parsed.from_entity_id);
+
+    // Rewrite observations to target entity
+    const { error: rewriteError } = await supabase
+      .from("observations")
+      .update({ entity_id: parsed.to_entity_id })
+      .eq("entity_id", parsed.from_entity_id);
+
+    if (rewriteError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to rewrite observations: ${rewriteError.message}`,
+      );
+    }
+
+    // Mark source entity as merged
+    const { error: mergeError } = await supabase
+      .from("entities")
+      .update({
+        merged_to_entity_id: parsed.to_entity_id,
+        merged_at: new Date().toISOString(),
+      })
+      .eq("id", parsed.from_entity_id);
+
+    if (mergeError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to mark entity as merged: ${mergeError.message}`,
+      );
+    }
+
+    // Create merge audit log
+    const { error: auditError } = await supabase
+      .from("entity_merges")
+      .insert({
+        user_id: parsed.user_id,
+        from_entity_id: parsed.from_entity_id,
+        to_entity_id: parsed.to_entity_id,
+        observations_moved: obsCount || 0,
+        merge_reason: parsed.merge_reason,
+        merged_by: "mcp",
+      });
+
+    if (auditError) {
+      // Log but don't fail - audit is not critical
+      console.warn("Failed to create merge audit log:", auditError);
+    }
+
+    return this.buildTextResponse({
+      from_entity_id: parsed.from_entity_id,
+      to_entity_id: parsed.to_entity_id,
+      observations_moved: obsCount || 0,
+      message: "Entities merged successfully",
+    });
   }
 
   private setupErrorHandler(): void {

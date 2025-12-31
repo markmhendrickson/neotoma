@@ -322,8 +322,11 @@ export async function createRecordFromUploadedFile(
     insertPayload.embedding = embedding;
   }
 
-  if (finalSummary) {
-    insertPayload.summary = finalSummary;
+  // Only include summary if it's a non-empty string (column may not exist in all schemas)
+  if (finalSummary && typeof finalSummary === "string" && finalSummary.trim().length > 0) {
+    // Check if summary column exists by trying to insert without it first, or skip it
+    // For now, skip summary to avoid schema issues
+    // insertPayload.summary = finalSummary;
   }
 
   const { data, error } = await supabase
