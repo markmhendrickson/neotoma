@@ -2,7 +2,7 @@ release:
   id: "v1.0.0"
   name: "MVP"
   type: "marketed" # marketed | not_marketed
-  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  status: "planning" # planning | in_progress | in_testing | ready_for_deployment | deployed | completed
   target_date: "2026-01-23"
   priority: "P0"
   owner: "Mark Hendrickson"

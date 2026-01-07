@@ -87,4 +87,4 @@ None currently.
 - Foundational infrastructure for v0.3.0 (Operational Hardening), v0.4.0 (Intelligence + Housekeeping, including Chat Transcript CLI), and v1.0.0 (MVP)
 - AI agent execution assumed for all development
 - Human review at checkpoints only
-- Architecture plan: `.cursor/plans/sources-first-ingestion-v12-final.plan.md`
+- Architecture plan: `.cursor/plans/sources_first_ingestion_v12_final.plan.md`

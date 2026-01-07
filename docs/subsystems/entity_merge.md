@@ -1,5 +1,9 @@
 # Neotoma Entity Merge Mechanism
+
+**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+
 ## Scope
+
 This document covers:
 - `entity_merges` table structure and semantics
 - `merge_entities()` MCP tool

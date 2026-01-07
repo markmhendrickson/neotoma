@@ -107,3 +107,7 @@ This release adds a new MCP action `list_capabilities` that enables integrations
 - Uses existing capability registry (`src/services/capability_registry.ts`)
 - No new external dependencies required
 - Backward compatible (existing integrations continue to work)
+
+
+
+

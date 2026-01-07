@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply documentation rules from foundation/agent-instructions/cursor-rules/documentation_rules.md
+# Apply documentation rules from foundation/agent_instructions/cursor_rules/documentation_rules.md
 # to all markdown files in docs/
 
 set -e

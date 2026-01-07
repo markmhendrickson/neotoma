@@ -49,7 +49,7 @@ const response = await mcp.call('query_support', {
   answer: "To submit a transaction payload...",
   citations: [
     { doc: "MCP_SPEC.md", section: "submit_payload" },
-    { doc: "payload_model.md", section: "Capability Registry" }
+    { doc: "source_material_model.md", section: "Capability Registry" }
   ],
   related: ["submit_payload", "capabilities"]
 }
@@ -72,4 +72,7 @@ const response = await mcp.call('query_support', {
 - Edge cases handled gracefully
 
 See `release_plan.md` for complete details.
+
+
+
 

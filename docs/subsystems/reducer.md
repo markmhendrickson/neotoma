@@ -22,15 +22,16 @@ Reducer(observations[], merge_policies) → EntitySnapshot
 - **Idempotent:** Can be run multiple times with same result
 - **Provenance-aware:** Tracks which observation contributed each field
 ### 1.2 Four-Layer Model Context
-Reducers operate in the four-layer truth model:
+[Reducers](../vocabulary/canonical_terms.md#reducer) operate in the four-layer truth model:
 ```
-Document → Observation → [Reducer] → Snapshot → Entity
+Source Material → Interpretation → Observation → [Reducer] → Snapshot → Entity
 ```
-- **Document:** Source file (PDF, email, CSV)
-- **Observation:** Granular facts extracted from document
-- **Reducer:** Computes snapshot from observations
-- **Snapshot:** Current truth for entity
-- **Entity:** Logical thing in the world
+- **[Source Material](../vocabulary/canonical_terms.md#source-material):** Raw content (files, structured JSON, URLs)
+- **[Interpretation](../vocabulary/canonical_terms.md#interpretation):** Versioned AI extraction attempt
+- **[Observation](../vocabulary/canonical_terms.md#observation):** Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material)
+- **[Reducer](../vocabulary/canonical_terms.md#reducer):** Computes [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) from [observations](../vocabulary/canonical_terms.md#observation)
+- **[Snapshot](../vocabulary/canonical_terms.md#snapshot):** Current truth for [entity](../vocabulary/canonical_terms.md#entity)
+- **[Entity](../vocabulary/canonical_terms.md#entity):** Logical thing in the world
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
 ## 2. Reducer Architecture
 ### 2.1 Reducer Execution Flow
@@ -254,9 +255,9 @@ interface Provenance {
 }
 ```
 ### 6.2 Provenance Chain
-Full provenance chain:
+Full [provenance](../vocabulary/canonical_terms.md#provenance) chain:
 ```
-Snapshot Field → Observation → Document → File
+Snapshot Field → Observation → Interpretation (if AI) → Source Material
 ```
 **Query Pattern:**
 ```typescript
@@ -267,14 +268,17 @@ async function getFieldProvenance(
   const snapshot = await snapshotRepo.findById(entityId);
   const observationId = snapshot.provenance[field];
   const observation = await observationRepo.findById(observationId);
-  const record = await recordRepo.findById(observation.source_record_id);
+  const sourceMaterial = await sourceRepo.findById(observation.source_material_id);
+  const interpretation = observation.interpretation_id
+    ? await interpretationRepo.findById(observation.interpretation_id)
+    : null;
   
   return {
     field,
     value: snapshot.snapshot[field],
     observation,
-    record,
-    file: record.file_urls[0]
+    interpretation,
+    sourceMaterial
   };
 }
 ```
@@ -312,7 +316,7 @@ describe('Merge strategies', () => {
 ```typescript
 describe('Observation → Snapshot flow', () => {
   it('creates snapshot from observations', async () => {
-    const record = await uploadFile(invoiceFile);
+    const sourceMaterial = await ingest({ file_content: invoiceFileBase64, mime_type: 'application/pdf' });
     const observations = await observationRepo.findByEntity(entityId);
     const snapshot = await reducer.computeSnapshot(entityId);
     
@@ -322,7 +326,7 @@ describe('Observation → Snapshot flow', () => {
 });
 ```
 ## 8. Performance Considerations
-### 8.1 Snapshot Caching
+### 8.1 Entity Snapshot Caching
 Snapshots are cached and recomputed only when:
 - New observations arrive
 - Schema version changes

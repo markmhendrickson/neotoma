@@ -36,7 +36,7 @@ This model enables:
 - `entity_type` (person, company, location, invoice, etc.)
 - `canonical_name` (normalized, lowercase, deduplicated)
 - `aliases` (array of alternate names)
-### Snapshot
+### Entity Snapshot
 - `entity_id` (references Entity)
 - `entity_type` (person, company, location, etc.)
 - `schema_version` (version of schema used for snapshot computation)

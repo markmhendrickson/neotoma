@@ -357,7 +357,7 @@ Neotoma uses the shared **foundation** submodule (`foundation/`) for development
 **Documentation:**
 - Doc structure: Follow `foundation/conventions/documentation-standards.md`
 - Writing style: Avoid AI-generated patterns, use RFC 2119 language
-- Agent Instructions: Use template from `foundation/agent-instructions/README.md`
+- Agent Instructions: Use template from `foundation/agent_instructions/README.md`
 
 **Security:**
 - Pre-commit audit: Run `foundation/security/pre-commit-audit.sh` before commits

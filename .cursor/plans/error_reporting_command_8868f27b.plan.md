@@ -253,5 +253,3 @@ Awaiting resolution by Cursor Cloud Agent.
 - `analyze` - Could analyze error patterns across reports
 
 ## Testing
-
-- Test error detection from various sources (MCP, build, runtime)

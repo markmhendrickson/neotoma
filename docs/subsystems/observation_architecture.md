@@ -1,5 +1,9 @@
 # Neotoma Observation Architecture — Three-Layer Truth Model
+
+**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+
 ## Scope
+
 This document covers:
 - Three-layer truth model overview
 - Observation lifecycle
@@ -12,31 +16,31 @@ This document does NOT cover:
 - Relationship patterns (see `docs/subsystems/relationships.md`)
 ## 1. Three-Layer Truth Model
 ### 1.1 Model Overview
-Neotoma implements a four-layer truth model:
+Neotoma implements a three-layer truth model:
 ```
-Source → InterpretationRun (with config) → Observation → EntitySnapshot
+Source Material → Interpretation (with config) → Observation → EntitySnapshot
 ```
 **Layers:**
-1. **Source** — content-addressed raw storage (files, external URLs)
-2. **InterpretationRun** — versioned interpretation attempt with config logging (provider, model, temperature, prompt_hash)
-3. **Observation** — granular, source-specific facts extracted via interpretation
-4. **EntitySnapshot** — deterministic reducer output representing current truth
-**Key Principle:** Each observation links to both its `source_id` (what raw content) and `interpretation_run_id` (how it was extracted), enabling full provenance and auditability without claiming replay determinism.
+1. **[Source Material](../vocabulary/canonical_terms.md#source-material)** — content-addressed raw storage (files, external URLs, structured JSON)
+2. **[Interpretation](../vocabulary/canonical_terms.md#interpretation)** — versioned interpretation attempt with config logging (provider, model, temperature, prompt_hash)
+3. **[Observation](../vocabulary/canonical_terms.md#observation)** — granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) via [interpretation](../vocabulary/canonical_terms.md#interpretation)
+4. **[Snapshot](../vocabulary/canonical_terms.md#snapshot)** — deterministic [reducer](../vocabulary/canonical_terms.md#reducer) output representing current truth
+**Key Principle:** Each [observation](../vocabulary/canonical_terms.md#observation) links to both its `source_id` (what raw content) and `interpretation_id` (how it was [extracted](../vocabulary/canonical_terms.md#extraction)), enabling full [provenance](../vocabulary/canonical_terms.md#provenance) and auditability without claiming replay determinism.
 **Model Diagram:**
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
-    Source[Source]
-    InterpRun[InterpretationRun]
+    SourceMaterial[Source Material]
+    Interpretation[Interpretation]
     Observation[Observation]
     Entity[Entity]
     Snapshot[EntitySnapshot]
-    Source -->|Versioned Interpretation| InterpRun
-    InterpRun -->|Extract| Observation
+    SourceMaterial -->|Versioned Interpretation| Interpretation
+    Interpretation -->|Extract| Observation
     Observation -->|Merge via Reducer| Snapshot
     Entity -.->|Target| Observation
     Entity -.->|Represents| Snapshot
-    InterpRun -.->|"Config: model, temp, prompt_hash"| InterpRun
+    Interpretation -.->|"Config: model, temp, prompt_hash"| Interpretation
 ```
 ### 1.2 Key Benefits
 - **Decouples ingestion order from truth:** Observations can arrive in any order
@@ -56,9 +60,8 @@ Observations are created during ingestion:
    - `entity_id` — target entity
    - `entity_type` — entity type
    - `schema_version` — schema version used
-   - `source_record_id` — source document (legacy)
-   - `source_id` — source that produced this observation
-   - `interpretation_run_id` — interpretation that created this
+   - `source_id` — [source material](../vocabulary/canonical_terms.md#source-material) that produced this [observation](../vocabulary/canonical_terms.md#observation)
+   - `interpretation_id` — [interpretation](../vocabulary/canonical_terms.md#interpretation) that created this
    - `observed_at` — observation timestamp
    - `specificity_score` — how specific this observation is
    - `source_priority` — priority of source
@@ -67,8 +70,8 @@ Observations are created during ingestion:
 **Source Priority Levels:**
 | Source | Priority | Use Case |
 |--------|----------|----------|
-| AI interpretation | 0 | Automated extraction |
-| `ingest_structured()` | 100 | Agent-provided facts |
+| AI [interpretation](../vocabulary/canonical_terms.md#interpretation) | 0 | Automated [extraction](../vocabulary/canonical_terms.md#extraction) |
+| Unified `ingest` (structured) | 100 | Agent-provided facts |
 | `correct()` | 1000 | User corrections (always wins) |
 **Example:**
 ```typescript
@@ -77,7 +80,7 @@ const observation = {
   entity_type: "company",
   schema_version: "1.0",
   source_id: "src_abc123",
-  interpretation_run_id: "run_xyz",
+  interpretation_id: "run_xyz",
   observed_at: new Date("2024-01-15"),
   specificity_score: 0.9,
   source_priority: 0,                // AI interpretation
@@ -97,7 +100,7 @@ const correctionObservation = {
   entity_type: "company",
   schema_version: "1.0",
   source_id: null,                   // No source for corrections
-  interpretation_run_id: null,       // No interpretation
+  interpretation_id: null,       // No interpretation
   observed_at: new Date(),
   specificity_score: 1.0,            // Maximum specificity
   source_priority: 1000,             // Corrections always win
@@ -113,7 +116,7 @@ Observations are stored in `observations` table:
 - Immutable once created
 - Multiple observations can exist for same entity
 - Indexed by `entity_id` and `observed_at`
-- Linked to source document via `source_record_id`
+- Linked to [source material](../vocabulary/canonical_terms.md#source-material) via `source_material_id`
 See [`docs/subsystems/schema.md`](./schema.md) for database schema details.
 ### 2.3 Observation Querying
 **Find Observations for Entity:**
@@ -122,15 +125,15 @@ async function getObservations(entityId: string): Promise<Observation[]> {
   return await observationRepo.findByEntity(entityId);
 }
 ```
-**Find Observations by Source:**
+**Find Observations by [Source Material](../vocabulary/canonical_terms.md#source-material):**
 ```typescript
-async function getObservationsBySource(
-  recordId: string
+async function getObservationsBySourceMaterial(
+  sourceMaterialId: string
 ): Promise<Observation[]> {
-  return await observationRepo.findByRecord(recordId);
+  return await observationRepo.findBySourceMaterial(sourceMaterialId);
 }
 ```
-## 3. Snapshot Computation Flow
+## 3. Entity Snapshot Computation Flow
 ### 3.1 Reducer Execution
 Snapshots are computed by reducers:
 1. **Load Observations:** Fetch all observations for entity
@@ -164,32 +167,32 @@ Reducers support multiple merge strategies:
 - **Most Specific:** Highest `specificity_score` wins
 - **Merge Array:** Combine all values into array
 See [`docs/subsystems/reducer.md`](./reducer.md) for complete merge strategy details.
-### 3.3 Snapshot Storage
+### 3.3 Entity Snapshot Storage
 Snapshots are stored in `entity_snapshots` table:
 - Computed deterministically from observations
 - Include provenance mapping (field → observation_id)
 - Cached and recomputed on new observations
 - Indexed by `entity_id` (primary key)
-## 4. Provenance Tracking
-### 4.1 Provenance Chain
-Every snapshot field traces through the full chain:
+## 4. [Provenance](../vocabulary/canonical_terms.md#provenance) Tracking
+### 4.1 [Provenance](../vocabulary/canonical_terms.md#provenance) Chain
+Every [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces through the full chain:
 ```
-Snapshot Field → Observation → InterpretationRun (with config) → Source
+Snapshot Field → Observation → Interpretation (with config) → Source Material
 ```
 **Example:**
 ```
 snapshot.vendor_name = "Acme Corp"
   → observation_123
-    → interpretation_run_456 (gpt-4o-mini, temp=0, prompt_v3)
+    → interpretation_456 (gpt-4o-mini, temp=0, prompt_v3)
       → source_789 (invoice.pdf, SHA-256: abc123...)
 ```
 **Key Fields:**
-- `observation.source_id` — links to source
-- `observation.interpretation_run_id` — links to interpretation
-- `interpretation_run.interpretation_config` — model, temperature, prompt_hash, code_version
+- `observation.source_id` — links to [source material](../vocabulary/canonical_terms.md#source-material)
+- `observation.interpretation_id` — links to [interpretation](../vocabulary/canonical_terms.md#interpretation)
+- `interpretation.interpretation_config` — model, temperature, prompt_hash, code_version
 This enables questions like:
 - "What raw content produced this observation?" → `source_id`
-- "How was this observation extracted?" → `interpretation_run_id` → `interpretation_config`
+- "How was this observation extracted?" → `interpretation_id` → `interpretation_config`
 - "Can I replay this extraction?" → No (AI is non-deterministic), but config is logged for audit
 ### 4.2 Provenance Query
 **Get Field Provenance:**
@@ -203,8 +206,8 @@ async function getFieldProvenance(
   const observation = await observationRepo.findById(observationId);
   
   // Get interpretation (if AI-derived)
-  const interpretationRun = observation.interpretation_run_id
-    ? await interpretationRunRepo.findById(observation.interpretation_run_id)
+  const interpretation = observation.interpretation_id
+    ? await interpretationRepo.findById(observation.interpretation_id)
     : null;
   
   // Get source
@@ -213,7 +216,7 @@ async function getFieldProvenance(
     field,
     value: snapshot.snapshot[field],
     observation,
-    interpretationRun,  // Includes config: model, temperature, prompt_hash
+    interpretation,  // Includes config: model, temperature, prompt_hash
     source,             // Includes content_hash, storage_url
   };
 }
@@ -366,11 +369,11 @@ Load `docs/subsystems/observation_architecture.md` when:
 - ❌ Missing provenance tracking
 - ❌ Schema version mismatches
 ### Validation Checklist
-- [ ] Observations are immutable (no updates after creation)
-- [ ] Snapshots computed via reducers only
-- [ ] Provenance tracked for all snapshot fields
-- [ ] Schema version referenced in observations
-- [ ] Four-layer model (Document → Entity → Observation → Snapshot) respected
-- [ ] Reducer determinism maintained
+- [ ] [Observations](../vocabulary/canonical_terms.md#observation) are immutable (no updates after creation)
+- [ ] [Snapshots](../vocabulary/canonical_terms.md#snapshot) computed via [reducers](../vocabulary/canonical_terms.md#reducer) only
+- [ ] [Provenance](../vocabulary/canonical_terms.md#provenance) tracked for all [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) fields
+- [ ] [Entity schema](../vocabulary/canonical_terms.md#entity-schema) version referenced in [observations](../vocabulary/canonical_terms.md#observation)
+- [ ] Three-layer model ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Snapshot](../vocabulary/canonical_terms.md#snapshot)) respected
+- [ ] [Reducer](../vocabulary/canonical_terms.md#reducer) determinism maintained
 - [ ] Integration with schema registry verified
-- [ ] Tests verify observation immutability and snapshot computation
+- [ ] Tests verify [observation](../vocabulary/canonical_terms.md#observation) immutability and [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) computation

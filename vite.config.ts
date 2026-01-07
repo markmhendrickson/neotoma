@@ -2,11 +2,74 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { fileURLToPath } from "url";
+import fs from "fs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Plugin to serve markdown files from docs directory and route /docs to docs.html
+function docsMarkdownPlugin() {
+  return {
+    name: "docs-markdown",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        // Check if this is a fetch/XHR request (from React app) vs browser navigation
+        const acceptHeader = req.headers.accept || '';
+        const isFetchRequest = acceptHeader.includes('text/markdown') || 
+                              acceptHeader.includes('application/json') ||
+                              req.headers['x-requested-with'] === 'XMLHttpRequest';
+        
+        // Handle markdown file requests - only serve directly if it's a fetch request
+        if (req.url && req.url.match(/^\/docs\/.*\.md$/)) {
+          if (isFetchRequest) {
+            // This is a fetch request from the React app - serve the markdown file
+            const filePath = path.join(__dirname, req.url);
+            const resolvedPath = path.resolve(filePath);
+            const docsResolved = path.resolve(path.join(__dirname, "docs"));
+            
+            // Security check: ensure file is within docs directory
+            if (!resolvedPath.startsWith(docsResolved)) {
+              res.statusCode = 403;
+              res.end("Forbidden");
+              return;
+            }
+
+            // Check if file exists
+            if (!fs.existsSync(resolvedPath)) {
+              res.statusCode = 404;
+              res.end("Documentation file not found");
+              return;
+            }
+
+            // Serve markdown as plain text
+            res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+            const content = fs.readFileSync(resolvedPath, "utf-8");
+            res.end(content);
+            return;
+          } else {
+            // This is a browser navigation - serve docs.html so React app can handle it
+            req.url = "/docs.html";
+          }
+        }
+        
+        // Route all other /docs requests to docs.html (but not static assets)
+        if (req.url && req.url.startsWith("/docs") && !req.url.match(/\.(js|css|json|png|jpg|svg|ico|woff|woff2|ttf|eot)$/)) {
+          // Check if it's a request for docs.html or should be routed to it
+          if (req.url === "/docs" || req.url === "/docs/") {
+            req.url = "/docs.html";
+          } else if (!req.url.includes(".") || req.url.endsWith("/")) {
+            // SPA route within docs - serve docs.html
+            req.url = "/docs.html";
+          }
+        }
+        
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), docsMarkdownPlugin()],
   root: "frontend",
   define: {
     "import.meta.env.VITE_WS_PORT": JSON.stringify(
@@ -24,6 +87,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, "frontend/index.html"),
+        docs: path.resolve(__dirname, "frontend/docs.html"),
       },
       output: {
         // Output configuration

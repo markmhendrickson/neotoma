@@ -2,7 +2,7 @@ release:
   id: "v0.9.0"
   name: "MCP Support System"
   type: "not_marketed" # marketed | not_marketed
-  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  status: "planning" # planning | in_progress | in_testing | ready_for_deployment | deployed | completed
   target_date: "before_v1.0.0"
   priority: "P1"
   marketing_required: false

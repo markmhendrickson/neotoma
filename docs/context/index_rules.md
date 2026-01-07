@@ -132,7 +132,7 @@ These documents are the **root of truth** for all Neotoma work:
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | [`schema.md`](../subsystems/schema.md)                                     | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
 | [`record_types.md`](../subsystems/record_types.md)                         | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
-| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model   | Understanding observation layer, snapshot computation, provenance        |
+| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model   | Understanding observation layer, entity snapshot computation, provenance        |
 | [`reducer.md`](../subsystems/reducer.md)                                   | Reducer engine patterns, merge strategies, determinism            | Implementing reducers, configuring merge policies, testing snapshots     |
 | [`relationships.md`](../subsystems/relationships.md)                       | Relationship types, graph patterns, query patterns                | Creating relationships, graph traversal, relationship metadata           |
 
@@ -531,15 +531,15 @@ graph TD
 4. `docs/subsystems/schema_registry.md` — Schema registry, merge policy configuration
 5. `docs/subsystems/observation_architecture.md` — Observation architecture overview
 
-### 4.8 Working with Observations and Snapshots
+### 4.8 Working with Observations and Entity Snapshots
 
 **Required Reading Order:**
 
 1. `docs/architecture/architectural_decisions.md` — Four-layer truth model
-2. `docs/subsystems/observation_architecture.md` — Observation lifecycle, snapshot computation
+2. `docs/subsystems/observation_architecture.md` — Observation lifecycle, entity snapshot computation
 3. `docs/subsystems/reducer.md` — Reducer execution, merge strategies
-4. `docs/subsystems/schema.md` — Observations and snapshots tables
-5. `docs/architecture/consistency.md` — Observation and snapshot consistency
+4. `docs/subsystems/schema.md` — Observations and entity snapshots tables
+5. `docs/architecture/consistency.md` — Observation and entity snapshot consistency
 
 ### 4.9 Implementing Schema Registry
 

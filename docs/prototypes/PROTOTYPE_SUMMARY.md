@@ -197,7 +197,7 @@ To convert prototype to production MVP:
 7. Connect MCP server
 See `docs/specs/MVP_EXECUTION_PLAN.md` for full production roadmap.
 ## Documentation
-- [Quick Start](PROTOTYPE_QUICKSTART.md) — One-page getting started
+- [Quick Start](prototype_quickstart.md) — One-page getting started
 - [Full README](PROTOTYPE_README.md) — Complete documentation
 - [MVP Overview](docs/specs/MVP_OVERVIEW.md) — Product specification
 - [MVP Execution Plan](docs/specs/MVP_EXECUTION_PLAN.md) — Implementation roadmap
@@ -223,9 +223,9 @@ See `docs/specs/MVP_EXECUTION_PLAN.md` for full production roadmap.
 - `scripts/run-prototype.sh` — Shell script to run prototype
 - `package.json` — Added `dev:prototype` script
 ### Documentation
-- `PROTOTYPE_QUICKSTART.md` — Quick start guide
+- `prototype_quickstart.md` — Quick start guide
 - `PROTOTYPE_README.md` — Complete documentation
-- `PROTOTYPE_SUMMARY.md` — This file
+- `prototype_summary.md` — This file
 ## Next Steps
 ### For Stakeholders
 - Review UI/UX and provide feedback

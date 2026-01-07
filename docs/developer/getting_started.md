@@ -71,7 +71,7 @@ Create two storage buckets in Supabase:
 3. Make it **public**: NO (private)
 4. Click **"Create bucket"**
 
-**Note:** Both buckets should be **private** for security. The system uses `service_role` for uploads/downloads and creates signed URLs for client access. The `sources` bucket is required for `ingest_structured()` and other source-based ingestion operations. The `files` bucket is used for general file uploads.
+**Note:** Both buckets should be **private** for security. The system uses `service_role` for uploads/downloads and creates signed URLs for client access. The `sources` bucket is required for `ingest()` and other source material-based ingestion operations. The `files` bucket is used for general file uploads.
 ## Step 5: Configure Environment Variables
 Create `.env` in the project root:
 ```bash

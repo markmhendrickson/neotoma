@@ -1,1 +1,0 @@
-../../foundation/agent-instructions/cursor-rules/readme_maintenance.md

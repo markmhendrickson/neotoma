@@ -24,6 +24,14 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
     --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
   .dark {
@@ -46,6 +54,49 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  /* Documentation-specific design system variables */
+  :root {
+    /* Personal website aesthetic - minimal, clean, high contrast */
+    --doc-background: 0 0% 100%;           /* #FFFFFF - Pure white */
+    --doc-foreground: 0 0% 0%;             /* #000000 - Black text */
+    --doc-secondary: 0 0% 40%;             /* #666666 - Gray for secondary text */
+    --doc-border: 0 0% 90%;                /* #E5E5E5 - Subtle borders */
+    --doc-code-bg: 0 0% 96%;               /* #F5F5F5 - Code block background */
+    
+    /* Primary action color - professional blue */
+    --doc-primary: 210 100% 40%;           /* #0066CC - Primary blue */
+    --doc-primary-hover: 210 100% 32%;     /* #0052A3 - Darker blue on hover */
+    --doc-primary-foreground: 0 0% 100%;   /* #FFFFFF - White text on primary */
+    
+    /* Minimal border radius */
+    --doc-radius-minimal: 2px;             /* Minimal rounding for code blocks */
+    --doc-radius-default: 4px;             /* Default rounding for containers */
+  }
+
+  .dark {
+    /* Dark mode - deep slate with high contrast */
+    --doc-background: 222 47% 11%;         /* #0F172A - Deep slate */
+    --doc-foreground: 210 40% 98%;         /* #F8FAFC - Near-white text */
+    --doc-secondary: 215 16% 47%;          /* #64748B - Gray for secondary text */
+    --doc-border: 217 33% 24%;             /* #1E293B - Subtle borders */
+    --doc-code-bg: 217 33% 17%;            /* #1E293B - Code block background */
+    
+    /* Primary action color - brighter blue for visibility */
+    --doc-primary: 217 91% 60%;            /* #3B82F6 - Brighter blue */
+    --doc-primary-hover: 217 91% 52%;      /* #2563EB - Darker blue on hover */
+    --doc-primary-foreground: 0 0% 100%;   /* #FFFFFF - White text on primary */
   }
 }
 

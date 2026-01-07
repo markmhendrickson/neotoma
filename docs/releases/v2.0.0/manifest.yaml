@@ -2,7 +2,7 @@ release:
   id: "v2.0.0"
   name: "End-to-End Encryption (E2EE)"
   type: "marketed" # marketed | not_marketed
-  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  status: "planning" # planning | in_progress | in_testing | ready_for_deployment | deployed | completed
   target_date: "TBD" # Set after v1.0.0 completion
   priority: "P1"
   owner: "Mark Hendrickson"

@@ -19,7 +19,7 @@ export function normalizeApiUrl(apiBase: string, endpoint: string): string {
 }
 
 export async function fetchRecords(apiBase: string, bearerToken: string): Promise<NeotomaRecord[]> {
-  const response = await fetch(normalizeApiUrl(apiBase, '/retrieve_records'), {
+  const response = await fetch(normalizeApiUrl(apiBase, '/entities/query'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -41,7 +41,8 @@ export async function fetchRecords(apiBase: string, bearerToken: string): Promis
     }
   }
 
-  return response.json();
+  const data = await response.json();
+  return data.entities || [];
 }
 
 export async function searchRecords(
@@ -49,7 +50,7 @@ export async function searchRecords(
   bearerToken: string,
   query: string
 ): Promise<NeotomaRecord[]> {
-  const response = await fetch(normalizeApiUrl(apiBase, '/retrieve_records'), {
+  const response = await fetch(normalizeApiUrl(apiBase, '/entities/query'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -57,8 +58,7 @@ export async function searchRecords(
     },
     body: JSON.stringify({
       limit: 500,
-      search: query.split(/\s+/),
-      search_mode: 'both',
+      search: query,
     }),
   });
 
@@ -73,7 +73,8 @@ export async function searchRecords(
     }
   }
 
-  return response.json();
+  const data = await response.json();
+  return data.entities || [];
 }
 
 export async function fetchTypes(apiBase: string, bearerToken: string): Promise<string[]> {

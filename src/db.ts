@@ -48,20 +48,43 @@ export async function initDatabase(): Promise<void> {
   }
 
   try {
-    const tablesToCheck = [
+    const tablesToCheck: Array<{
+      table: string;
+      columns: string;
+      required: boolean;
+      fallbackTable?: string;
+    }> = [
+      { table: "sources", columns: "id", required: true }, // Required - migration 20251231000001 creates it
+      { table: "interpretations", columns: "id", required: true, fallbackTable: "interpretation_runs" }, // Required - migration 20251231000003 creates it (v0.2.15 renamed from interpretation_runs)
       { table: "records", columns: "id", required: true }, // Required - migration 20251231000011 creates it
       { table: "record_relationships", columns: "id", required: true }, // Required - migration 20251231000010 creates it
       { table: "plaid_items", columns: "id", required: true }, // Required - migration 20251231000012 creates it
       { table: "plaid_sync_runs", columns: "id", required: true }, // Required - migration 20251231000012 creates it
       { table: "external_connectors", columns: "id", required: true }, // Required - migration 20251231000013 creates it
       { table: "external_sync_runs", columns: "id", required: true }, // Required - migration 20251231000013 creates it
-    ] as const;
+    ];
 
-    for (const { table, columns, required } of tablesToCheck) {
-      const { error } = await supabase.from(table).select(columns).limit(1);
+    for (const { table, columns, required, fallbackTable } of tablesToCheck) {
+      let { error } = await supabase.from(table).select(columns).limit(1);
+      
+      // If table not found and we have a fallback (migration compatibility), try fallback
+      if (error && (error.code === "PGRST116" || error.code === "PGRST205") && fallbackTable) {
+        logger.warn(
+          `Table '${table}' not found in schema cache, trying fallback '${fallbackTable}' (migration in progress?)`
+        );
+        const fallbackResult = await supabase.from(fallbackTable).select(columns).limit(1);
+        if (fallbackResult.error) {
+          // Fallback also failed - use original error
+          error = fallbackResult.error;
+        } else {
+          // Fallback succeeded - continue
+          continue;
+        }
+      }
+      
       if (error) {
-        // PGRST116 = table not found
-        if (error.code === "PGRST116") {
+        // PGRST116 = table not found, PGRST205 = table not in schema cache
+        if (error.code === "PGRST116" || error.code === "PGRST205") {
           if (!required) {
             // Table doesn't exist but it's optional - skip
             continue;

@@ -10,7 +10,7 @@
 #### 1.1 Canonical Specs (Authoritative Sources)
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
 - **MCP Specification**: `docs/specs/MCP_SPEC.md`
-- **Payload Model**: `docs/architecture/payload_model.md`
+- **Payload Model**: `docs/architecture/source_material_model.md`
 - **Capability Registry**: `src/services/capability_registry.ts`
 This release plan coordinates the addition of a single new MCP action that enhances integration discoverability.
 **Release Classification:**
@@ -241,3 +241,6 @@ This enables integrations to adapt to new capabilities automatically, supporting
 - v0.2.2: 16 actions (adds `list_capabilities`)
 **Status**: ✅ Included in v0.2.2
 See `docs/releases/v0.1.0/mcp_actions_status.md` for complete MCP action catalog.
+
+
+

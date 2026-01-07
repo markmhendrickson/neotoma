@@ -1,5 +1,9 @@
 # Neotoma Architecture — Canonical Platform Definition
+
+**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+
 ## Scope
+
 This document covers:
 - Platform-level architectural layers
 - Component boundaries and allowed dependencies
@@ -14,7 +18,7 @@ This document does NOT cover:
 ### Completed Releases
 **v0.1.0 (2025-12-11):** Internal MCP Release — Full architecture implementation complete.
 All foundational architectural components described in this document are now fully implemented:
-- ✅ Four-layer truth model (Document → Entity → Observation → Snapshot)
+- ✅ Three-layer truth model ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
 - ✅ Five-layer internal architecture (External → Infrastructure → Domain → Application → Presentation)
 - ✅ Event-sourced state management
 - ✅ Repository abstractions with DB and file implementations
@@ -24,14 +28,22 @@ All foundational architectural components described in this document are now ful
 - ✅ Deterministic entity resolution and event generation with database persistence
 See `docs/releases/v0.1.0/` for release details.
 ### Planned Releases
-**v0.2.0:** Sources-First Ingestion Architecture — Minimal Ingestion + Correction Loop
-- Sources table migration (content-addressed raw storage with RLS)
-- Interpretations table (`interpretation_runs`) for versioned interpretation tracking
-- Observation and raw fragments extensions with provenance (`source_id`, `interpretation_run_id` linkage)
-- Entity extensions with user_id and merge tracking
-- Minimal MCP tools: ingest(), ingest_structured(), reinterpret(), correct(), merge_entities()
-- Query updates with provenance chain support
+**v0.2.0:** Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture — Minimal [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Correction Loop
+- [Source material](../vocabulary/canonical_terms.md#source-material) table migration (content-addressed raw storage with RLS)
+- [Interpretations](../vocabulary/canonical_terms.md#interpretation) table for versioned [interpretation](../vocabulary/canonical_terms.md#interpretation) tracking
+- [Observation](../vocabulary/canonical_terms.md#observation) and raw fragments extensions with [provenance](../vocabulary/canonical_terms.md#provenance) (`source_id`, `interpretation_id` linkage)
+- [Entity](../vocabulary/canonical_terms.md#entity) extensions with user_id and merge tracking
+- MCP tools: `ingest()`, `reinterpret()`, `correct()`, `merge_entities()`
+- Query updates with [provenance](../vocabulary/canonical_terms.md#provenance) chain support
 See `docs/releases/v0.2.0/` for detailed release plan.
+
+**v0.2.15:** Complete Architecture Migration — Unified [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Terminology Alignment
+- Unified `ingest` MCP action for all [source material](../vocabulary/canonical_terms.md#source-material) (unstructured and structured)
+- Elimination of capabilities — [canonicalization rules](../vocabulary/canonical_terms.md#canonicalization-rules) and [entity extraction rules](../vocabulary/canonical_terms.md#entity-extraction-rule) moved to [entity schemas](../vocabulary/canonical_terms.md#entity-schema)
+- Vocabulary alignment per [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+- Deprecation of `submit_payload` and `ingest_structured` (merged into unified `ingest`)
+- Migration from records to [source material](../vocabulary/canonical_terms.md#source-material)-based architecture
+See `docs/releases/v0.2.15/` for detailed release plan.
 **v0.2.1:** Documentation & Support System
 - AI-powered repository analysis and comprehensive documentation generation
 - Static documentation web server
@@ -66,7 +78,7 @@ Major architectural transformation to local-first, end-to-end encrypted architec
 - Dual-mode operation (plaintext + encrypted) for backward compatibility
 - Migration tooling for existing Supabase records
 - Optional multi-device sync via encrypted deltas
-See `docs/releases/v2.0.0/` and `docs/architecture/local-first-e2ee-architecture.md` for detailed architecture and release plan.
+See `docs/releases/v2.0.0/` and `docs/architecture/local_first_e2ee_architecture.md` for detailed architecture and release plan.
 **v2.1.0:** GDPR & US State Privacy Compliance
 - Automated GDPR data export and account deletion
 - Request tracking and management system
@@ -192,7 +204,7 @@ Neotoma MUST:
 - Assign schemas based on field detection
 - Resolve entities (people, companies, locations)
 - Generate timeline events from extracted dates
-- Build and maintain the memory graph (records → entities → events)
+- Build and maintain the memory graph (source material → observations → entities → events)
 - Expose truth via MCP tools
 - Maintain provenance and immutability
 - Process Domain Events through reducers to update state
@@ -258,13 +270,13 @@ All strategy/execution code MUST follow these patterns:
 - Reducers MUST be deterministic and pure
 - Domain Events are the only source of truth changes
 - **Immutable audit trail:** Every change permanently recorded with full provenance
-- **Historical replay:** Complete event log enables time-travel queries (view record state at any point in time)
-- **Cryptographic integrity:** Hash chaining ensures deterministic, tamper-evident records
+- **Historical replay:** Complete event log enables time-travel queries (view entity state at any point in time)
+- **Cryptographic integrity:** Hash chaining ensures deterministic, tamper-evident data
 ### 1.7.4 Ports & Adapters Architecture
 Repositories:
 - EventRepository
 - StateRepository
-- CapabilityRepository
+- EntitySchemaRepository
 - CommandRepository
 Adapters for:
 - Flat files (now)
@@ -277,8 +289,8 @@ Adapters for:
 - Replace static whitelists
 ### 1.7.6 Hash-Chained Event Log (cryptographic integrity)
 - Events include `previous_event_hash` + `event_hash` for cryptographic integrity
-- Ensures deterministic, tamper-evident records with immutable audit trail
-- Enables historical replay and time-travel queries (view record state at any point in time)
+- Ensures deterministic, tamper-evident data with immutable audit trail
+- Enables historical replay and time-travel queries (view entity state at any point in time)
 - Hash-based entity IDs provide canonical, deterministic identification across all personal data
 - Foundation for future blockchain anchoring (optional)
 ## 2. Neotoma Internal Architecture: Five-Layer Model
@@ -361,12 +373,12 @@ flowchart TD
 **Components:**
 - **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, Supabase Storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
 - **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
-- **Observation Storage:** Store granular, source-specific facts extracted from documents/sources with provenance (source_id, interpretation_run_id)
+- **[Observation](../vocabulary/canonical_terms.md#observation) Storage:** Store granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material) with [provenance](../vocabulary/canonical_terms.md#provenance) (source_id, interpretation_id)
 - **Reducer Engine:** Compute entity snapshots from observations using deterministic merge strategies
 - **Schema Registry:** Manage config-driven schema definitions, versions, and merge policies
 - **Entity Resolution:** Canonical entity ID generation and deduplication
 - **Event Generation:** Extract dates → create timeline events
-- **Graph Builder:** Insert nodes (records, entities, events) and edges, manage relationships
+- **Graph Builder:** Insert nodes (source material, entities, events) and edges, manage relationships
 - **Search Service:** Query records, entities, events by structured filters
 **Constraints:**
 - MUST be deterministic (same input → same output)
@@ -378,8 +390,8 @@ flowchart TD
 #### Layer 4: Application Layer
 **Responsibility:** Orchestrate domain services, implement MCP actions, manage workflows.
 **Components:**
-- **MCP Actions (v0.1.0):** `upload_file`, `list_records`, `fetch_record`, `search`, `create_entity`, `link` (13/13 actions operational)
-- **MCP Actions (v0.2.0+):** `ingest()`, `ingest_structured()`, `reinterpret()`, `correct()`, `merge_entities()` (sources-first ingestion architecture)
+- **MCP Actions (v0.1.0):** `upload_file`, `retrieve_entities`, `get_entity_snapshot`, `search`, `list_observations`, `list_timeline_events` (operational)
+- **MCP Actions (v0.2.15+):** Unified `ingest()` for all [source material](../vocabulary/canonical_terms.md#source-material), `reinterpret()`, `correct()`, `merge_entities()` ([source material](../vocabulary/canonical_terms.md#source-material)-based architecture)
 - **Workflows:** Multi-step operations orchestrating domain services
 - **Orchestration:** Request routing, validation, error handling
 **Constraints:**
@@ -437,11 +449,11 @@ sequenceDiagram
     participant User
     participant UI
     participant API
-    participant MCP_Action as MCP Action<br/>(ingest / ingest_structured)
+    participant MCP_Action as MCP Action<br/>(unified ingest)
     participant Storage as Raw Storage<br/>Service
     participant Sources as Sources<br/>Table
     participant Interp as Interpretation<br/>Service
-    participant InterpRun as Interpretation<br/>(interpretation_runs table)
+    participant InterpRun as Interpretation<br/>(interpretations table)
     participant EntityRes as Entity<br/>Resolution
     participant Observations as Observations<br/>Storage
     participant Reducer as Reducer<br/>Engine
@@ -449,8 +461,8 @@ sequenceDiagram
     participant DB
     User->>UI: Upload file
     UI->>API: POST /api/upload
-    API->>MCP_Action: ingest(file) or ingest_structured(data)
-    alt Raw file ingestion (ingest)
+    API->>MCP_Action: ingest({file_content, mime_type} or {entities: [...]})
+    alt Unstructured source material (file)
         MCP_Action->>Storage: Store file (SHA-256 hash)
         Storage->>Storage: Compute content_hash
         Storage->>Sources: Check for existing (user_id, content_hash)
@@ -471,13 +483,13 @@ sequenceDiagram
         Interp->>EntityRes: resolve_entities(validated_fields)
         EntityRes->>EntityRes: Generate canonical entity IDs
         EntityRes-->>Interp: entity_ids
-        Interp->>Observations: CREATE observations (source_id, interpretation_run_id, entity_id)
+        Interp->>Observations: CREATE observations (source_id, interpretation_id, entity_id)
         Observations-->>Interp: observation_ids
         Interp->>Reducer: Trigger reducer computation
         Reducer->>Reducer: Compute snapshots from observations
         Reducer->>Snapshots: UPDATE entity_snapshots
         Interp->>InterpRun: UPDATE status = 'completed'
-    else Structured data (ingest_structured)
+    else Structured source material (entities array)
         MCP_Action->>Interp: Validate against schema_registry
         Interp->>EntityRes: resolve_entities(properties)
         EntityRes-->>Interp: entity_ids
@@ -485,20 +497,20 @@ sequenceDiagram
         Observations-->>Interp: observation_ids
         Interp->>Reducer: Compute snapshots
     end
-    MCP_Action-->>API: {source_id, interpretation_run_id?, entities, ...}
+    MCP_Action-->>API: {source_id, interpretation_id?, entities, ...}
     API-->>UI: 201 Created
     UI-->>User: Show entity details
 ```
 **Key Characteristics (v0.2.0+):**
 - **Content-addressed storage:** Same file content = same source (deduplication via SHA-256)
 - **Versioned interpretation:** Each interpretation creates new observations; prior observations immutable
-- **Provenance chain:** Observations link to `source_id` and `interpretation_run_id` (from `interpretation_runs` table) for full auditability
+- **[Provenance](../vocabulary/canonical_terms.md#provenance) chain:** [Observations](../vocabulary/canonical_terms.md#observation) link to `source_id` and `interpretation_id` (from `interpretations` table) for full auditability
 - **Schema validation:** Unknown fields stored in `raw_fragments`, schema-valid fields create observations
 - **Deterministic components:** Content hashing, entity resolution, reducer computation
 - **Non-deterministic boundary:** AI interpretation outputs vary; config logged for audit
 - **Correction support:** High-priority observations via `correct()` tool
 - **Entity merging:** `merge_entities()` tool for duplicate resolution
-**See also:** `docs/architecture/ingestion/sources-first_ingestion_v12_final.md` for detailed architecture.
+**See also:** `docs/architecture/ingestion/sources_first_ingestion_v12_final.md` for detailed architecture.
 ### 4.2 Search Flow (Query → Results)
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
@@ -661,7 +673,7 @@ Application layer MUST distinguish and signal retry eligibility.
 **PII Handling:**
 - MUST NOT log PII (see `docs/subsystems/privacy.md`)
 - Extraction preserves original text (no redaction)
-- User controls deletion via MCP `delete_record` action (future)
+- User controls deletion via MCP entity management actions (future)
 ### 7.3 Input Validation
 **All layers MUST validate inputs:**
 - **Presentation:** Client-side validation (UX, not security)
@@ -707,8 +719,8 @@ Application layer MUST distinguish and signal retry eligibility.
 8. **All timeline events MUST trace to source fields**
 9. **All entities MUST have canonical IDs**
 10. **All graph edges MUST be typed**
-11. **Reducers MUST be deterministic** (same observations + merge rules → same snapshot)
-12. **All snapshot fields MUST have provenance** (trace to specific observations and documents)
+11. **Reducers MUST be deterministic** (same observations + merge rules → same entity snapshot)
+12. **All entity snapshot fields MUST have provenance** (trace to specific observations and documents)
 13. **Observations MUST reference schema version** (for deterministic replay)
 14. **Schema evolution MUST be append-only and versioned** (no breaking changes)
 ### MUST NOT
@@ -723,7 +735,7 @@ Application layer MUST distinguish and signal retry eligibility.
 9. **Search MUST NOT use semantic embeddings for ranking** (MVP)
 10. **MCP MUST NOT expose strategy or execution logic** (Truth Layer only)
 11. **Reducers MUST NOT be nondeterministic** (must be pure functions)
-12. **Snapshots MUST NOT be computed without observations** (observations are source of truth)
+12. **Entity snapshots MUST NOT be computed without observations** (observations are source of truth)
 13. **Schema changes MUST NOT break existing data** (must be backward compatible)
 14. **Observations MUST NOT be modified after creation** (immutable)
 ## 10. Future Architectural Extensions
@@ -771,6 +783,7 @@ Load `docs/architecture/architecture.md` when:
 - Designing data flows for new features
 - Reviewing pull requests for architectural compliance
 ### Required Co-Loaded Documents
+- `docs/vocabulary/canonical_terms.md` (authoritative terminology)
 - `docs/foundation/core_identity.md` (always)
 - Foundation rules in `.cursor/rules/` (agent instructions and documentation loading order)
 - `docs/conventions/documentation_standards.md` (formatting)
@@ -790,9 +803,9 @@ Load `docs/architecture/architecture.md` when:
 9. **Event-sourced updates:** All state changes via Domain Events → Reducers
 10. **Pure Strategy:** Strategy Layer has no side effects
 11. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly
-12. **Four-layer model:** Document → Entity → Observation → Snapshot must be respected
-13. **Reducer determinism:** Same observations + merge rules → same snapshot
-14. **Provenance tracking:** All snapshot fields trace to observations and documents
+12. **Four-layer model:** [Source Material](../vocabulary/canonical_terms.md#source-material) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
+13. **Reducer determinism:** Same observations + merge rules → same entity snapshot
+14. **Provenance tracking:** All entity snapshot fields trace to observations and documents
 15. **Schema registry:** Domain schemas managed via registry, not code
 ### Forbidden Patterns
 - Domain service calling Application layer

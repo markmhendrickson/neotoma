@@ -1,1 +1,0 @@
-../../foundation/agent_instructions/cursor_rules/post_build_testing.md

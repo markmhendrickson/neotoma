@@ -10,8 +10,8 @@ This document does NOT cover:
 - Graph construction (see `docs/subsystems/ingestion/ingestion.md`)
 - Database schema (see `docs/subsystems/schema.md`)
 ## 1. Relationship Overview
-### 1.1 First-Class Relationships
-Relationships are **first-class records** in Neotoma, not hard-coded foreign keys:
+### 1.1 First-Class [Relationships](../vocabulary/canonical_terms.md#relationship)
+[Relationships](../vocabulary/canonical_terms.md#relationship) are **first-class typed edges** in Neotoma, not hard-coded foreign keys:
 - Stored in `relationships` table
 - Typed with relationship types (PART_OF, CORRECTS, etc.)
 - Carry metadata and provenance
@@ -30,7 +30,7 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 | `CORRECTS`     | Correction relationships   | Corrected invoice corrects original  |
 | `REFERS_TO`    | Reference relationships    | Invoice refers to contract           |
 | `SETTLES`      | Settlement relationships   | Payment settles invoice              |
-| `DUPLICATE_OF` | Duplicate detection        | Duplicate record                     |
+| `DUPLICATE_OF` | Duplicate detection        | Duplicate [entity](../vocabulary/canonical_terms.md#entity) |
 | `DEPENDS_ON`   | Dependency relationships   | Task depends on another task         |
 | `SUPERSEDES`   | Version relationships      | Updated contract supersedes original |
 ### 2.2 Relationship Semantics
@@ -53,7 +53,7 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 **DUPLICATE_OF:**
 - Represents duplicate detection
 - Source is duplicate of target
-- Example: `duplicate_record` DUPLICATE_OF `original_record`
+- Example: `duplicate_entity` DUPLICATE_OF `original_entity`
 **DEPENDS_ON:**
 - Represents dependencies
 - Source depends on target
@@ -123,7 +123,7 @@ interface Relationship {
   relationship_type: RelationshipType;
   source_entity_id: string;
   target_entity_id: string;
-  source_record_id?: string;
+  source_material_id?: string;
   metadata?: {
     confidence?: number;
     notes?: string;
@@ -211,10 +211,10 @@ async function getRelatedEntities(
 ```
 ## 6. Relationship Creation
 ### 6.1 Creating Relationships
-**During Ingestion:**
+**During [Ingestion](../vocabulary/canonical_terms.md#ingestion):**
 ```typescript
 async function createRelationships(
-  recordId: string,
+  sourceMaterialId: string,
   entities: Entity[],
   extractedFields: any
 ): Promise<void> {
@@ -227,7 +227,7 @@ async function createRelationships(
         relationship_type: "PART_OF",
         source_entity_id: lineItemEntity.id,
         target_entity_id: invoiceEntity.id,
-        source_record_id: recordId,
+        source_material_id: sourceMaterialId,
       });
     }
   }

@@ -2,10 +2,10 @@
 ## Quick Access
 - **Start Prototype**: `npm run dev:prototype`
 - **URL**: `http://localhost:5174`
-- **Quick Start**: [PROTOTYPE_QUICKSTART.md](./PROTOTYPE_QUICKSTART.md)
+- **Quick Start**: [prototype_quickstart.md](./prototype_quickstart.md)
 ## Documentation Files
 ### Primary Documentation
-1. **[PROTOTYPE_QUICKSTART.md](./PROTOTYPE_QUICKSTART.md)**
+1. **[prototype_quickstart.md](./prototype_quickstart.md)**
    - One-page getting started guide
    - How to run and navigate
    - Quick feature overview
@@ -13,7 +13,7 @@
    - Complete documentation (200+ lines)
    - Features, data fixtures, use cases
    - Conversion to production guide
-3. **[PROTOTYPE_SUMMARY.md](./PROTOTYPE_SUMMARY.md)**
+3. **[prototype_summary.md](./prototype_summary.md)**
    - Executive summary
    - Architecture overview
    - Key files and technical stack
@@ -200,8 +200,8 @@ Timeline → Expand/collapse years → Filter by event type → Click event → 
 - **Total new code**: ~1,650 lines
 ### Documentation (Approximate)
 - `PROTOTYPE_README.md`: ~400 lines
-- `PROTOTYPE_SUMMARY.md`: ~350 lines
-- `PROTOTYPE_QUICKSTART.md`: ~100 lines
+- `prototype_summary.md`: ~350 lines
+- `prototype_quickstart.md`: ~100 lines
 - `prototype_guide.md`: ~500 lines
 - **Total documentation**: ~1,350 lines
 ### Total Contribution
@@ -251,9 +251,9 @@ All prototype features implemented, documented, and tested.
 **Created**: December 2, 2024
 **Version**: 1.0.0
 ## How to Navigate This Index
-1. **Start here**: [PROTOTYPE_QUICKSTART.md](./PROTOTYPE_QUICKSTART.md)
+1. **Start here**: [prototype_quickstart.md](./prototype_quickstart.md)
 2. **For details**: [PROTOTYPE_README.md](./PROTOTYPE_README.md)
-3. **For technical overview**: [PROTOTYPE_SUMMARY.md](./PROTOTYPE_SUMMARY.md)
+3. **For technical overview**: [prototype_summary.md](./prototype_summary.md)
 4. **For user guide**: [docs/ui/prototype_guide.md](./docs/ui/prototype_guide.md)
 5. **To run**: `npm run dev:prototype`
 **End of Index**

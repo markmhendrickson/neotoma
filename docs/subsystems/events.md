@@ -1,5 +1,9 @@
 # Neotoma Events — Event Emission and Observability
+
+**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+
 *(Event Envelope Schema and Emission Rules)*
+
 ## Event Envelope
 ```typescript
 interface Event {
@@ -10,28 +14,31 @@ interface Event {
   user_id?: string;
 }
 ```
-## Event Types
+## [Event](../vocabulary/canonical_terms.md#event) Types
 | Event Type | When Emitted | Payload |
 |------------|--------------|---------|
-| `record.created` | Record inserted | `{ record_id, type }` |
-| `record.updated` | Record metadata changed | `{ record_id, fields_changed }` |
-| `ingestion.started` | Ingestion begins | `{ record_id }` |
-| `ingestion.completed` | Ingestion succeeds | `{ record_id, duration_ms }` |
-| `ingestion.failed` | Ingestion fails | `{ record_id, error_code, message }` |
+| `source.created` | [Source material](../vocabulary/canonical_terms.md#source-material) stored | `{ source_id, mime_type }` |
+| `observation.created` | [Observation](../vocabulary/canonical_terms.md#observation) created | `{ observation_id, entity_id }` |
+| `entity.created` | [Entity](../vocabulary/canonical_terms.md#entity) created | `{ entity_id, entity_type }` |
+| `snapshot.computed` | [Snapshot](../vocabulary/canonical_terms.md#snapshot) recomputed | `{ entity_id, observation_count }` |
+| `ingestion.started` | [Ingestion](../vocabulary/canonical_terms.md#ingestion) begins | `{ source_id }` |
+| `ingestion.completed` | [Ingestion](../vocabulary/canonical_terms.md#ingestion) succeeds | `{ source_id, entities_created, duration_ms }` |
+| `ingestion.failed` | [Ingestion](../vocabulary/canonical_terms.md#ingestion) fails | `{ source_id, error_code, message }` |
+| `interpretation.completed` | [Interpretation](../vocabulary/canonical_terms.md#interpretation) completes | `{ interpretation_id, source_id, observations_created }` |
 | `search.executed` | Search query run | `{ query, results_count, duration_ms }` |
 ## Emission Pattern
 ```typescript
-async function createRecord(data: RecordInput): Promise<Record> {
-  const record = await db.insert('records', data);
+async function createSourceMaterial(data: SourceMaterialInput): Promise<SourceMaterial> {
+  const source = await db.insert('sources', data);
   
   // Emit event
   await emitEvent({
-    event_type: 'record.created',
+    event_type: 'source.created',
     timestamp: new Date().toISOString(),
-    payload: { record_id: record.id, type: record.type },
+    payload: { source_id: source.id, mime_type: source.mime_type },
   });
   
-  return record;
+  return source;
 }
 ```
 ## Agent Instructions

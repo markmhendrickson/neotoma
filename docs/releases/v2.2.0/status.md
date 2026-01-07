@@ -277,6 +277,7 @@
 **Status Legend**:
 - `planning`: Release in planning phase
 - `in_progress`: Feature Units being implemented
-- `ready_for_deployment`: All FUs complete, tests passing, ready to deploy
+- `in_testing`: Build complete, manual test execution in progress
+- `ready_for_deployment`: All tests passed (automated + manual), ready to deploy
 - `deployed`: Deployed to production
 - `completed`: Post-deployment monitoring complete, release closed

@@ -911,7 +911,7 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 - [`docs/specs/MVP_FEATURE_UNITS.md`](./MVP_FEATURE_UNITS.md) — Complete FU inventory with strategic planning (use for planning/estimates)
 - [`docs/specs/METRICS_REQUIREMENTS.md`](./METRICS_REQUIREMENTS.md) — Success criteria
 - [`docs/specs/IMPLEMENTATION_OVERWRITE_GUIDE.md`](./IMPLEMENTATION_OVERWRITE_GUIDE.md) — **Required code changes to comply with manifest**
-- [`docs/private/strategy/IMPLEMENTATION_OVERLAP_ANALYSIS.md`](../private/strategy/IMPLEMENTATION_OVERLAP_ANALYSIS.md) — Detailed implementation analysis
+- [`docs/private/strategy/implementation_overlap_analysis.md`](../private/strategy/implementation_overlap_analysis.md) — Detailed implementation analysis
 **Cursor Commands:**
 - `.cursor/commands/create_feature_unit.md` — Scaffold new FU with spec + UX (Checkpoint 0, includes UX if UI changes)
 - `.cursor/commands/create_prototype.md` — Build interactive prototype (after Checkpoint 0, UI FUs only)

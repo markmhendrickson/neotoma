@@ -254,7 +254,7 @@ See `docs/specs/MVP_EXECUTION_PLAN.md` for roadmap to replace fixtures with real
 - [MVP Execution Plan](docs/specs/MVP_EXECUTION_PLAN.md) — Implementation roadmap
 - [Design System](docs/ui/design_system.md) — UI specifications
 - [Prototype README](PROTOTYPE_README.md) — Original prototype docs
-- [Prototype Quick Start](PROTOTYPE_QUICKSTART.md) — Getting started
+- [Prototype Quick Start](prototype_quickstart.md) — Getting started
 **Status**: ✅ **COMPLETE** — All MVP flows interactive with full feature coverage
 **Created**: December 2, 2024  
 **Version**: 2.0.0 (Comprehensive MVP Demo)
