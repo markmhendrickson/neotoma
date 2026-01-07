@@ -451,10 +451,16 @@ export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
 
   contact: {
     entity_type: "contact",
-    schema_version: "1.0",
+    schema_version: "1.1",
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
+        name: { type: "string", required: false },
+        email: { type: "string", required: false },
+        phone: { type: "string", required: false },
+        organization: { type: "string", required: false },
+        role: { type: "string", required: false },
+        type: { type: "string", required: false },
         contact_type: { type: "string", required: false },
         category: { type: "string", required: false },
         platform: { type: "string", required: false },
@@ -462,6 +468,8 @@ export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
         country: { type: "string", required: false },
         website: { type: "string", required: false },
         notes: { type: "string", required: false },
+        contact_id: { type: "string", required: false },
+        external_id: { type: "string", required: false },
         first_contact_date: { type: "date", required: false },
         last_contact_date: { type: "date", required: false },
         created_date: { type: "date", required: false },
@@ -470,6 +478,10 @@ export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
     },
     reducer_config: {
       merge_policies: {
+        name: { strategy: "highest_priority" },
+        email: { strategy: "highest_priority" },
+        phone: { strategy: "highest_priority" },
+        external_id: { strategy: "highest_priority" },
         last_contact_date: { strategy: "last_write" },
         updated_date: { strategy: "last_write" },
       },

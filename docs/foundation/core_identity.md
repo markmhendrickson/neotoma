@@ -17,7 +17,7 @@ These architectural choices are defensible because competitors (model providers,
 
 ### Core Responsibilities
 Neotoma focuses exclusively on:
-1. **Ingestion** — Dual-path ingestion: user-provided file uploads (explicit, never automatic) and agent interactions where users provide contextual data via MCP `submit_payload` action, enabling incremental memory growth as agent usage scales
+1. **Ingestion** — Dual-path ingestion: user-provided file uploads (explicit, never automatic) and agent interactions where users provide contextual data via MCP `ingest` action, enabling incremental memory growth as agent usage scales
 2. **Normalization** — Format conversion, text extraction, OCR (file uploads only)
 3. **Extraction** — Deterministic field extraction via rule-based parsing (file uploads) or direct property assignment (agent interactions)
 4. **Schema Assignment** — Type detection (FinancialRecord, IdentityDocument, etc.)

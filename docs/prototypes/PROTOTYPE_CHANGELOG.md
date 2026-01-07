@@ -79,10 +79,10 @@
 - File associations and exclusions
 #### 📚 Documentation
 **Primary Guides**
-- `PROTOTYPE_QUICKSTART.md` — One-page quick start
+- `prototype_quickstart.md` — One-page quick start
 - `PROTOTYPE_README.md` — Complete documentation (400+ lines)
-- `PROTOTYPE_SUMMARY.md` — Executive summary (350+ lines)
-- `PROTOTYPE_INDEX.md` — Complete index and inventory
+- `prototype_summary.md` — Executive summary (350+ lines)
+- `prototype_index.md` — Complete index and inventory
 - `PROTOTYPE_CHANGELOG.md` — This file
 **Detailed Guide**
 - `docs/ui/prototype_guide.md` — User guide with navigation maps and demo scenarios (500+ lines)

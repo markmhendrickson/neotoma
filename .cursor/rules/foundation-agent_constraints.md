@@ -1,1 +1,0 @@
-../../foundation/agent-instructions/cursor-rules/agent_constraints.md

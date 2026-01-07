@@ -30,6 +30,8 @@ import {
   isLocalFilePath,
 } from "@/utils/local_files";
 import { recordMatchesQuery } from "@/utils/record_search";
+import { SidebarProvider, SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 
 function App() {
   const { toast } = useToast();
@@ -619,75 +621,78 @@ function App() {
 
   return (
     <DatastoreContext.Provider value={datastore}>
-      <div
-        className="h-screen max-h-screen bg-background flex flex-col overflow-hidden relative"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        <div className="flex flex-1 min-h-0 max-h-full overflow-hidden">
-          <ChatPanel
-            datastore={datastore}
-            onFileUploaded={appendRecord}
-            onFileUploadRef={chatPanelFileUploadRef}
-            onErrorRef={chatPanelErrorRef}
-            activeSearchQuery={searchQuery}
-            activeTypeFilter={selectedType}
-            allRecords={allRecords}
-          />
-          <main className="flex-1 min-h-0 max-h-full overflow-hidden">
-            <RecordsTable
-              records={filteredRecords}
-              totalCount={totalRecords}
-              displayCount={displayCount}
-              types={types}
-              onRecordClick={setSelectedRecord}
-              onDeleteRecord={handleDeleteRecord}
-              onDeleteRecords={handleDeleteRecords}
-              onSearch={handleSearch}
-              onTypeFilter={handleTypeFilter}
-              isLoading={recordsLoading}
-              loadingMore={loadingMore}
-              hasMore={hasMore}
-              onLoadMore={() => loadRecords(false)}
+      <SidebarProvider defaultOpen={true}>
+        <AppSidebar currentPath={pathname} />
+        <SidebarInset className="flex flex-col h-screen max-h-screen overflow-hidden">
+          <div
+            className="flex flex-1 min-h-0 max-h-full overflow-hidden relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <ChatPanel
+              datastore={datastore}
+              onFileUploaded={appendRecord}
               onFileUploadRef={chatPanelFileUploadRef}
+              onErrorRef={chatPanelErrorRef}
+              activeSearchQuery={searchQuery}
+              activeTypeFilter={selectedType}
+              allRecords={allRecords}
             />
-          </main>
-        </div>
-        <RecordDetailsPanel
-          record={selectedRecord}
-          onClose={() => setSelectedRecord(null)}
-        />
-        <Toaster />
-        <SonnerToaster
-          duration={4000}
-          position="bottom-right"
-          visibleToasts={10}
-          toastOptions={{
-            classNames: {
-              toast: "bg-background border border-border shadow-lg",
-              title: "text-foreground font-medium",
-              description: "text-muted-foreground",
-            },
-          }}
-        />
-        <FloatingSettingsButton />
-        {/* Full-page drag overlay */}
-        {isDragging && (
-          <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
-            <div className="bg-background/95 backdrop-blur-sm rounded-lg px-8 py-6 border-2 border-primary shadow-lg">
-              <div className="text-center">
-                <div className="text-2xl font-semibold text-primary mb-2">
-                  Drop files to upload
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  Release to add files to your records
+            <main className="flex-1 min-h-0 max-h-full overflow-hidden">
+              <RecordsTable
+                records={filteredRecords}
+                totalCount={totalRecords}
+                displayCount={displayCount}
+                types={types}
+                onRecordClick={setSelectedRecord}
+                onDeleteRecord={handleDeleteRecord}
+                onDeleteRecords={handleDeleteRecords}
+                onSearch={handleSearch}
+                onTypeFilter={handleTypeFilter}
+                isLoading={recordsLoading}
+                loadingMore={loadingMore}
+                hasMore={hasMore}
+                onLoadMore={() => loadRecords(false)}
+                onFileUploadRef={chatPanelFileUploadRef}
+              />
+            </main>
+          </div>
+          <RecordDetailsPanel
+            record={selectedRecord}
+            onClose={() => setSelectedRecord(null)}
+          />
+          <Toaster />
+          <SonnerToaster
+            duration={4000}
+            position="bottom-right"
+            visibleToasts={10}
+            toastOptions={{
+              classNames: {
+                toast: "bg-background border border-border shadow-lg",
+                title: "text-foreground font-medium",
+                description: "text-muted-foreground",
+              },
+            }}
+          />
+          <FloatingSettingsButton />
+          {/* Full-page drag overlay */}
+          {isDragging && (
+            <div className="fixed inset-0 z-50 bg-primary/10 border-4 border-dashed border-primary flex items-center justify-center pointer-events-none">
+              <div className="bg-background/95 backdrop-blur-sm rounded-lg px-8 py-6 border-2 border-primary shadow-lg">
+                <div className="text-center">
+                  <div className="text-2xl font-semibold text-primary mb-2">
+                    Drop files to upload
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Release to add files to your records
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </SidebarInset>
+      </SidebarProvider>
     </DatastoreContext.Provider>
   );
 }

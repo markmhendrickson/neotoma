@@ -1,0 +1,1 @@
+../../foundation/agent_instructions/cursor_commands/report_error.md

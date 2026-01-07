@@ -2,9 +2,37 @@
 // Schema validation, entity resolution, and unknown field routing
 
 import { supabase } from "../db.js";
-import { schemaRegistry, type SchemaDefinition } from "./schema_registry.js";
+import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
 import { resolveEntity } from "./entity_resolution.js";
+import { getExpandedSchemaDefinition, getSchemaDefinition } from "./schema_definitions.js";
 import { randomUUID } from "crypto";
+
+// Migration compatibility: Resolve table name (interpretations vs interpretation_runs)
+let interpretationsTableName: string | null = null;
+
+async function getInterpretationsTableName(): Promise<string> {
+  if (interpretationsTableName) {
+    return interpretationsTableName;
+  }
+
+  // Try interpretations first (new table name)
+  const { error: newError } = await supabase.from("interpretations").select("id").limit(1);
+  if (!newError || (newError.code !== "PGRST116" && newError.code !== "PGRST205")) {
+    interpretationsTableName = "interpretations";
+    return interpretationsTableName;
+  }
+
+  // Fallback to interpretation_runs (legacy table name)
+  const { error: oldError } = await supabase.from("interpretation_runs").select("id").limit(1);
+  if (!oldError) {
+    interpretationsTableName = "interpretation_runs";
+    return interpretationsTableName;
+  }
+
+  // Neither exists - use new name (will fail with clearer error)
+  interpretationsTableName = "interpretations";
+  return interpretationsTableName;
+}
 
 export interface InterpretationConfig {
   provider: string;
@@ -112,9 +140,10 @@ export async function runInterpretation(
 ): Promise<InterpretationResult> {
   const { userId, sourceId, extractedData, config } = options;
 
-  // Create interpretation run
+  // Create interpretation
+  const tableName = await getInterpretationsTableName();
   const { data: run, error: runError } = await supabase
-    .from("interpretation_runs")
+    .from(tableName)
     .insert({
       user_id: userId,
       source_id: sourceId,
@@ -141,10 +170,34 @@ export async function runInterpretation(
   try {
     // Process each extracted entity
     for (const entityData of extractedData) {
-      const entityType = (entityData.entity_type as string) || "generic";
+      // Support both 'entity_type' and 'type' fields for entity type identification
+      const entityType = (entityData.entity_type as string) || 
+                         (entityData.type as string) || 
+                         "generic";
       
-      // Load active schema for entity type
-      const schema = await schemaRegistry.loadActiveSchema(entityType);
+      // Load active schema for entity type (try database first, then code definitions)
+      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType);
+      
+      // Fallback to code-defined schemas if database schema not found
+      if (!schema) {
+        // Try expanded schema first (includes newer fields), then base schema
+        const expandedSchema = getExpandedSchemaDefinition(entityType);
+        const baseSchema = getSchemaDefinition(entityType);
+        const codeSchema = expandedSchema || baseSchema;
+        
+        if (codeSchema && codeSchema.entity_type && codeSchema.schema_definition && codeSchema.reducer_config) {
+          // Convert code schema to SchemaRegistryEntry format
+          schema = {
+            id: "", // Not needed for validation
+            entity_type: codeSchema.entity_type,
+            schema_version: codeSchema.schema_version || "1.0",
+            schema_definition: codeSchema.schema_definition,
+            reducer_config: codeSchema.reducer_config,
+            active: true, // Code schemas are considered active
+            created_at: new Date().toISOString(),
+          };
+        }
+      }
       
       if (!schema) {
         // No schema found - route all fields to raw_fragments
@@ -153,7 +206,7 @@ export async function runInterpretation(
           id: fragmentId,
           record_id: null, // No record_id in sources-first architecture
           source_id: sourceId,
-          interpretation_run_id: interpretationRunId,
+          interpretation_id: interpretationRunId,
           user_id: userId,
           fragment_type: entityType,
           fragment_key: "full_entity",
@@ -167,9 +220,14 @@ export async function runInterpretation(
         continue;
       }
 
+      // Exclude entity_type and type from field validation (they're metadata, not schema fields)
+      const fieldsToValidate = { ...entityData };
+      delete fieldsToValidate.entity_type;
+      delete fieldsToValidate.type;
+
       // Validate fields against schema
       const { validFields, unknownFields } = validateAgainstSchema(
-        entityData,
+        fieldsToValidate,
         schema.schema_definition
       );
 
@@ -180,7 +238,7 @@ export async function runInterpretation(
           id: fragmentId,
           record_id: null,
           source_id: sourceId,
-          interpretation_run_id: interpretationRunId,
+          interpretation_id: interpretationRunId,
           user_id: userId,
           fragment_type: entityType,
           fragment_key: key,
@@ -212,7 +270,7 @@ export async function runInterpretation(
           schema_version: schema.schema_version,
           source_payload_id: null, // Not using payload_submissions in v0.2.0
           source_id: sourceId,
-          interpretation_run_id: interpretationRunId,
+          interpretation_id: interpretationRunId,
           observed_at: new Date().toISOString(),
           specificity_score: 0.5,
           source_priority: 0, // AI interpretation has priority 0
@@ -232,9 +290,10 @@ export async function runInterpretation(
       });
     }
 
-    // Mark interpretation run as completed
+    // Mark interpretation as completed
+    const tableNameCompleted = await getInterpretationsTableName();
     await supabase
-      .from("interpretation_runs")
+      .from(tableNameCompleted)
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
@@ -250,9 +309,10 @@ export async function runInterpretation(
       entities,
     };
   } catch (error) {
-    // Mark interpretation run as failed
+    // Mark interpretation as failed
+    const tableNameFailed = await getInterpretationsTableName();
     await supabase
-      .from("interpretation_runs")
+      .from(tableNameFailed)
       .update({
         status: "failed",
         completed_at: new Date().toISOString(),
@@ -275,8 +335,9 @@ export async function checkInterpretationQuota(
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+  const tableNameQuota = await getInterpretationsTableName();
   const { count, error } = await supabase
-    .from("interpretation_runs")
+    .from(tableNameQuota)
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
     .gte("created_at", thirtyDaysAgo.toISOString());

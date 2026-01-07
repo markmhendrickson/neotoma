@@ -31,7 +31,7 @@ This document covers:
 - **Entity merge**
 **Ingestion Paths:**
 1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are stored in `sources`, undergo interpretation, and observations are created.
-2. **Structured Data via `ingest_structured()`**: Agents provide pre-structured data with explicit schema types. Bypasses AI interpretation; creates observations directly with priority=100.
+2. **Structured Data via `ingest()`**: Agents provide pre-structured data with explicit entity types. Bypasses AI interpretation; creates observations directly with priority=100.
 3. **Corrections via `correct()`**: Users or agents correct extracted values. Creates priority-1000 observations that override AI extraction.
 All paths feed into the same truth model (Sources → Interpretation Runs → Observations → Entity Snapshots), ensuring unified memory regardless of ingestion source.
 This document does NOT cover:
@@ -470,7 +470,7 @@ function extractFields(rawText: string, schemaType: string): any {
 }
 ```
 ## 7. Step 6: Entity Resolution and Observation Creation
-**Four-Layer Truth Model Context:** This section implements the middle layers of Neotoma's four-layer truth model (Document → Entity → Observation → Snapshot). After field extraction from documents, we:
+**Four-Layer Truth Model Context:** This section implements the middle layers of Neotoma's four-layer truth model (Document → Entity → Observation → Entity Snapshot). After field extraction from documents, we:
 1. **Resolve Entities** — Identify canonical entities (people, companies, locations)
 2. **Create Observations** — Store granular, source-specific facts about entities
 3. **Trigger Reducers** — Compute entity snapshots from observations using merge policies from schema registry

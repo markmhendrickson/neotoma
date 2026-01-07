@@ -2,7 +2,7 @@ release:
   id: "v2.2.0"
   name: "Vector Search Scalability"
   type: "not_marketed" # marketed | not_marketed
-  status: "planning" # planning | in_progress | ready_for_deployment | deployed | completed
+  status: "planning" # planning | in_progress | in_testing | ready_for_deployment | deployed | completed
   target_date: "TBD" # Set after v2.1.0 completion
   priority: "P1" # Performance optimization, not blocking
   owner: "Mark Hendrickson"

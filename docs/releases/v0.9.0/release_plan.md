@@ -219,7 +219,7 @@ If issues are discovered:
 | Release | Focus | Status |
 |---------|-------|--------|
 | v0.2.1 | Documentation generation & web server | Prerequisite |
-| v0.6.0 | Complete architecture migration | Planned |
+| v0.2.15 | Complete architecture migration | Planned |
 | **v0.9.0** | **MCP support system** | **This release** |
 | v1.0.0 | MVP (public release) | Next major |
 
@@ -232,4 +232,7 @@ If issues are discovered:
   - Support capabilities moved closer to v1.0.0 MVP
   - Documentation foundation in v0.2.1 enables this release
   - Improves user experience for v1.0.0 launch
+
+
+
 

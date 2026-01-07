@@ -167,9 +167,9 @@ export async function getSourceMetadata(sourceId: string) {
 /**
  * Get interpretation run metadata for provenance chain
  */
-export async function getInterpretationRunMetadata(runId: string) {
+export async function getInterpretationMetadata(runId: string) {
   const { data, error } = await supabase
-    .from("interpretation_runs")
+    .from("interpretations")
     .select("id, interpretation_config, status, started_at, completed_at, observations_created")
     .eq("id", runId)
     .single();
@@ -213,10 +213,10 @@ export async function getObservationProvenance(observationId: string) {
   }
 
   // Get interpretation run if exists
-  if (observation.interpretation_run_id) {
+  if (observation.interpretation_id) {
     try {
-      provenance.interpretation_run = await getInterpretationRunMetadata(
-        observation.interpretation_run_id
+      provenance.interpretation = await getInterpretationMetadata(
+        observation.interpretation_id
       );
     } catch (error) {
       console.warn(`Failed to get interpretation run: ${error}`);

@@ -2,7 +2,7 @@
 ### 1. Summary
 - **Release ID**: `v1.0.0`
 - **Name**: MVP
-- **Status**: `planning` <!-- planning | in_progress | ready_for_deployment | deployed | completed -->
+- **Status**: `planning` <!-- planning | in_progress | in_testing | ready_for_deployment | deployed | completed -->
 - **Release Type**: Marketed
 - **Deployment**: Production (neotoma.io)
 - **Owner**: Mark Hendrickson

@@ -48,7 +48,7 @@ This is an interactive prototype of the Neotoma MVP built with static data fixtu
 npm run dev:prototype
 ```
 This runs the **comprehensive MVP prototype** on port 5174.
-**NEW**: Complete implementation with all 7 views, AI chat, bulk upload, and full interactivity. See [PROTOTYPE_COMPLETE.md](./PROTOTYPE_COMPLETE.md) for details.
+**NEW**: Complete implementation with all 7 views, AI chat, bulk upload, and full interactivity. See [prototype_complete.md](./prototype_complete.md) for details.
 ### Option 2: Development Server with Prototype Route
 ```bash
 npm run dev

@@ -13,34 +13,7 @@ import { generateEmbedding, getRecordText } from "./embeddings.js";
 import { generateRecordSummary } from "./services/summary.js";
 import { config } from "./config.js";
 import { normalizeRecordType } from "./config/record_types.js";
-import { createRecordFromUploadedFile } from "./services/file_analysis.js";
 import { randomUUID } from "node:crypto";
-import {
-  buildPlaidItemContext,
-  createLinkToken,
-  exchangePublicToken,
-  isPlaidConfigured,
-} from "./integrations/plaid/client.js";
-import {
-  getPlaidItemById,
-  getPlaidItemByItemId,
-  listPlaidItems as listPlaidItemsFromStore,
-  redactPlaidItem,
-  syncPlaidItem,
-  upsertPlaidItem as persistPlaidItem,
-  type PlaidItemRow,
-  type SanitizedPlaidItem,
-  type PlaidSyncSummary,
-} from "./services/plaid_sync.js";
-import type { AccountBase } from "plaid";
-import {
-  providerCatalog,
-  getProviderDefinition,
-} from "./integrations/providers/index.js";
-import {
-  runConnectorSync,
-  runAllConnectorSyncs,
-} from "./services/importers.js";
 import { recordMatchesKeywordSearch } from "./actions.js";
 import {
   listEntities,
@@ -73,162 +46,6 @@ export class NeotomaServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
         {
-          name: "submit_payload",
-          description:
-            "Submit a payload envelope for compilation into payloads and observations. REQUIRES a valid capability_id (e.g., 'neotoma:store_invoice:v1'). Check available capabilities via list_provider_catalog before using. For data without a matching capability, use ingest_structured instead.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              capability_id: {
-                type: "string",
-                description:
-                  "Versioned capability identifier (e.g., 'neotoma:store_invoice:v1', 'neotoma:store_note:v1')",
-              },
-              body: {
-                type: "object",
-                description: "Payload data as key-value pairs",
-              },
-              provenance: {
-                type: "object",
-                properties: {
-                  source_refs: {
-                    type: "array",
-                    items: { type: "string" },
-                    description:
-                      "Immediate source payload IDs (not full chain)",
-                  },
-                  extracted_at: {
-                    type: "string",
-                    description: "ISO 8601 timestamp",
-                  },
-                  extractor_version: {
-                    type: "string",
-                    description:
-                      "Extractor version (e.g., 'neotoma-mcp:v0.2.1')",
-                  },
-                  agent_id: {
-                    type: "string",
-                    description: "Optional agent identifier",
-                  },
-                },
-                required: ["source_refs", "extracted_at", "extractor_version"],
-              },
-              client_request_id: {
-                type: "string",
-                description: "Optional client request ID for retry correlation",
-              },
-            },
-            required: ["capability_id", "body", "provenance"],
-          },
-        },
-        {
-          name: "update_record",
-          description:
-            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Use submit_payload with updated data, or correct action for corrections instead.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              id: { type: "string", description: "Record ID to update" },
-              type: { type: "string", description: "Record type (optional)" },
-              properties: {
-                type: "object",
-                description: "Properties to update (merges with existing)",
-              },
-              file_urls: { type: "array", items: { type: "string" } },
-              embedding: {
-                type: "array",
-                items: { type: "number" },
-                description: "Optional 1536-dimensional embedding vector",
-              },
-            },
-            required: ["id"],
-          },
-        },
-        {
-          name: "retrieve_records",
-          description:
-            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Use retrieve_entities, get_entity_snapshot, or list_observations instead.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              type: { type: "string", description: "Filter by record type" },
-              properties: {
-                type: "object",
-                description: "Filter by property values (supports nested keys)",
-              },
-              limit: {
-                type: "number",
-                description: "Maximum number of results",
-              },
-              search: {
-                type: "array",
-                items: { type: "string" },
-                description: "Search terms for fuzzy/semantic matching",
-              },
-              search_mode: {
-                type: "string",
-                enum: ["semantic", "keyword", "both"],
-                description:
-                  "Search mode: semantic (vector), keyword (text), or both",
-                default: "both",
-              },
-              similarity_threshold: {
-                type: "number",
-                description:
-                  "Minimum similarity score for semantic search (0-1)",
-                default: 0.7,
-              },
-              query_embedding: {
-                type: "array",
-                items: { type: "number" },
-                description:
-                  "1536-dimensional embedding vector for semantic search query",
-              },
-            },
-          },
-        },
-        {
-          name: "delete_record",
-          description:
-            "🚫 FORBIDDEN - DO NOT USE. This action will be removed in v0.6.0. Agents MUST NOT use this action. Observations are immutable in new architecture; use entity merge or correction patterns instead.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              id: { type: "string", description: "Record ID to delete" },
-            },
-            required: ["id"],
-          },
-        },
-        {
-          name: "upload_file",
-          description:
-            "Upload a file and either attach it to an existing record or create a new analyzed record.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              record_id: {
-                type: "string",
-                description: "Existing record ID to attach file to (optional).",
-              },
-              file_path: {
-                type: "string",
-                description: "Local file path to upload.",
-              },
-              bucket: {
-                type: "string",
-                description:
-                  'Storage bucket name (optional, defaults to "files").',
-              },
-              properties: {
-                type: "string",
-                description:
-                  "Optional JSON object of properties to apply when creating a new record (skips automatic analysis).",
-              },
-            },
-            required: ["file_path"],
-          },
-        },
-        {
           name: "get_file_url",
           description: "Get a signed URL for accessing a file",
           inputSchema: {
@@ -244,148 +61,6 @@ export class NeotomaServer {
               },
             },
             required: ["file_path"],
-          },
-        },
-        {
-          name: "plaid_create_link_token",
-          description:
-            "Create a Plaid Link token for connecting a financial institution.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              user_id: {
-                type: "string",
-                description:
-                  "Unique identifier for the requesting user (optional; defaults from env if omitted)",
-              },
-              client_name: {
-                type: "string",
-                description: "Display name for Plaid Link (optional)",
-              },
-              access_token: {
-                type: "string",
-                description:
-                  "Existing Plaid access token for update mode (optional)",
-              },
-              products: {
-                type: "array",
-                items: { type: "string" },
-                description: "Override default Plaid products (optional)",
-              },
-              redirect_uri: {
-                type: "string",
-                description: "Redirect URI configured with Plaid (optional)",
-              },
-            },
-            required: [],
-          },
-        },
-        {
-          name: "plaid_exchange_public_token",
-          description:
-            "Exchange a Plaid public token for permanent access and store the Plaid item.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              public_token: {
-                type: "string",
-                description: "Public token generated by Plaid Link",
-              },
-              trigger_initial_sync: {
-                type: "boolean",
-                description:
-                  "Run an immediate full sync after storing the item",
-                default: false,
-              },
-            },
-            required: ["public_token"],
-          },
-        },
-        {
-          name: "plaid_sync",
-          description:
-            "Run a Plaid transactions sync for one or more stored Plaid items.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              plaid_item_id: {
-                type: "string",
-                description: "Internal Plaid item UUID to sync",
-              },
-              item_id: {
-                type: "string",
-                description: "Plaid item_id to sync (alternative identifier)",
-              },
-              sync_all: {
-                type: "boolean",
-                description: "Sync all stored Plaid items",
-                default: false,
-              },
-              force_full_sync: {
-                type: "boolean",
-                description: "Ignore stored cursor and fetch entire history",
-                default: false,
-              },
-            },
-          },
-        },
-        {
-          name: "plaid_list_items",
-          description:
-            "List stored Plaid items and their metadata (excluding access tokens).",
-          inputSchema: {
-            type: "object",
-            properties: {
-              plaid_item_id: {
-                type: "string",
-                description: "Filter by internal Plaid item UUID",
-              },
-              item_id: {
-                type: "string",
-                description: "Filter by Plaid item_id",
-              },
-            },
-          },
-        },
-        {
-          name: "list_provider_catalog",
-          description:
-            "List external provider metadata (capabilities, scopes, popularity).",
-          inputSchema: {
-            type: "object",
-            properties: {},
-          },
-        },
-        {
-          name: "sync_provider_imports",
-          description:
-            "Trigger an import sync for a provider (optionally a specific connector).",
-          inputSchema: {
-            type: "object",
-            properties: {
-              provider: {
-                type: "string",
-                description: "Provider identifier (e.g., x, instagram, gmail)",
-              },
-              connector_id: {
-                type: "string",
-                description: "Specific connector UUID",
-              },
-              sync_type: {
-                type: "string",
-                enum: ["initial", "incremental"],
-                description: "Sync strategy override",
-              },
-              limit: {
-                type: "number",
-                description: "Max records per fetch page",
-              },
-              max_pages: {
-                type: "number",
-                description: "Maximum pages per sync run",
-              },
-            },
-            required: ["provider"],
           },
         },
         {
@@ -528,7 +203,7 @@ export class NeotomaServer {
         {
           name: "list_timeline_events",
           description:
-            "Query timeline events with filters (type, date range, source record). Returns chronological events.",
+            "Query timeline events with filters (type, date range, source material). Returns chronological events derived from date fields in source material.",
           inputSchema: {
             type: "object",
             properties: {
@@ -547,7 +222,11 @@ export class NeotomaServer {
               },
               source_record_id: {
                 type: "string",
-                description: "Filter by source record ID",
+                description: "Legacy: Filter by source record ID (deprecated - use source_id instead)",
+              },
+              source_id: {
+                type: "string",
+                description: "Filter by source material ID (references sources table)",
               },
               limit: {
                 type: "number",
@@ -626,19 +305,19 @@ export class NeotomaServer {
         {
           name: "get_graph_neighborhood",
           description:
-            "Get complete graph neighborhood around a node (entity or record): related entities, relationships, records, and events.",
+            "Get complete graph neighborhood around a node (entity or source material): related entities, relationships, source material, and events.",
           inputSchema: {
             type: "object",
             properties: {
               node_id: {
                 type: "string",
                 description:
-                  "Node ID (entity_id or record_id) to get neighborhood for",
+                  "Node ID (entity_id or source_id) to get neighborhood for",
               },
               node_type: {
                 type: "string",
                 enum: ["entity", "record"],
-                description: "Type of node",
+                description: "Type of node ('entity' for entities, 'record' is legacy alias for source material)",
                 default: "entity",
               },
               include_relationships: {
@@ -648,7 +327,12 @@ export class NeotomaServer {
               },
               include_records: {
                 type: "boolean",
-                description: "Include related records in response",
+                description: "Legacy: Include related records in response (deprecated - use include_source_material instead, maps to source material)",
+                default: true,
+              },
+              include_source_material: {
+                type: "boolean",
+                description: "Include related source material in response",
                 default: true,
               },
               include_events: {
@@ -668,7 +352,7 @@ export class NeotomaServer {
         {
           name: "ingest",
           description:
-            "Ingest raw file content with optional AI interpretation. Content-addressed storage with SHA-256 deduplication per user.",
+            "Unified ingestion for both unstructured and structured source material. For unstructured (files): provide file_content + mime_type. For structured (entities): provide entities array. Content-addressed storage with SHA-256 deduplication per user.",
           inputSchema: {
             type: "object",
             properties: {
@@ -676,13 +360,14 @@ export class NeotomaServer {
                 type: "string",
                 description: "User ID (UUID)",
               },
+              // Unstructured source material
               file_content: {
                 type: "string",
-                description: "Base64-encoded file content",
+                description: "Base64-encoded file content (for unstructured ingestion)",
               },
               mime_type: {
                 type: "string",
-                description: "MIME type (e.g., 'application/pdf', 'text/csv')",
+                description: "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content",
               },
               original_filename: {
                 type: "string",
@@ -690,40 +375,26 @@ export class NeotomaServer {
               },
               interpret: {
                 type: "boolean",
-                description: "Whether to run AI interpretation immediately",
+                description: "Whether to run AI interpretation immediately (for unstructured)",
                 default: true,
               },
               interpretation_config: {
                 type: "object",
                 description: "AI interpretation configuration (provider, model, etc.)",
               },
-            },
-            required: ["user_id", "file_content", "mime_type"],
-          },
-        },
-        {
-          name: "ingest_structured",
-          description:
-            "Ingest pre-structured entity data with schema validation. Use this for data types that don't have a registered capability (e.g., contacts, people, companies, custom entities). For data with capabilities (invoices, transactions, receipts, contracts, notes), use submit_payload instead. Requires user_id and entities array.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              user_id: {
-                type: "string",
-                description: "User ID (UUID)",
-              },
+              // Structured source material
               entities: {
                 type: "array",
-                description: "Array of entity data objects",
+                description: "Array of entity data objects (for structured ingestion)",
                 items: { type: "object" },
               },
               source_priority: {
                 type: "number",
-                description: "Source priority (100 for structured data)",
+                description: "Source priority for structured data (default: 100)",
                 default: 100,
               },
             },
-            required: ["user_id", "entities"],
+            required: ["user_id"],
           },
         },
         {
@@ -825,30 +496,10 @@ export class NeotomaServer {
         }
 
         switch (name) {
-          case "submit_payload":
-            return await this.submitPayload(args);
-          case "update_record":
-            return await this.updateRecord(args);
-          case "retrieve_records":
-            return await this.retrieveRecords(args);
-          case "delete_record":
-            return await this.deleteRecord(args);
-          case "upload_file":
-            return await this.uploadFile(args);
+          // Removed deprecated actions: submit_payload, update_record, retrieve_records, delete_record, ingest_structured
+          // Use unified ingest() action instead
           case "get_file_url":
             return await this.getFileUrl(args);
-          case "plaid_create_link_token":
-            return await this.plaidCreateLinkToken(args);
-          case "plaid_exchange_public_token":
-            return await this.plaidExchangePublicToken(args);
-          case "plaid_sync":
-            return await this.plaidSync(args);
-          case "plaid_list_items":
-            return await this.plaidListItems(args);
-          case "list_provider_catalog":
-            return await this.listProviderCatalog();
-          case "sync_provider_imports":
-            return await this.syncProviderImports(args);
           case "get_entity_snapshot":
             return await this.getEntitySnapshot(args);
           case "list_observations":
@@ -871,8 +522,6 @@ export class NeotomaServer {
             return await this.getGraphNeighborhood(args);
           case "ingest":
             return await this.ingest(args);
-          case "ingest_structured":
-            return await this.ingestStructured(args);
           case "reinterpret":
             return await this.reinterpret(args);
           case "correct":
@@ -897,582 +546,8 @@ export class NeotomaServer {
     });
   }
 
-  private async submitPayload(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    // Import payload services dynamically
-    const { validatePayloadEnvelope } =
-      await import("./services/payload_schema.js");
-    const { compilePayload } = await import("./services/payload_compiler.js");
-
-    // Validate payload envelope
-    const envelope = validatePayloadEnvelope(args);
-
-    // Compile payload (handles deduplication, normalization, observation extraction)
-    const result = await compilePayload(envelope);
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            {
-              payload_id: result.payload_id,
-              payload_content_id: result.payload_content_id,
-              payload_submission_id: result.payload_submission_id,
-              created: result.created,
-              message: result.created
-                ? "Payload created and observations extracted"
-                : "Duplicate payload found, returning existing",
-            },
-            null,
-            2,
-          ),
-        },
-      ],
-    };
-  }
-
-  // DEPRECATED: store_record replaced by submit_payload in v0.2.1
-  // Kept for reference only - not exposed in MCP tool list
-  private async storeRecord(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    throw new Error(
-      "store_record has been replaced by submit_payload in v0.2.1. Please use submit_payload instead.",
-    );
-  }
-
-  private async updateRecord(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      id: z.string(),
-      type: z.string().optional(),
-      properties: z.record(z.unknown()).optional(),
-      file_urls: z.array(z.string()).optional(),
-      embedding: z.array(z.number()).optional(),
-    });
-
-    const parsed = schema.parse(args);
-
-    // Fetch existing record to determine if we need to regenerate embedding and summary
-    const { data: existing } = await supabase
-      .from("records")
-      .select("type, properties, embedding, file_urls")
-      .eq("id", parsed.id)
-      .single();
-
-    const updateData: Partial<NeotomaRecord> = {
-      updated_at: new Date().toISOString(),
-    };
-
-    let normalizedUpdateType: string | undefined;
-    if (parsed.type !== undefined) {
-      normalizedUpdateType = normalizeRecordType(parsed.type).type;
-      updateData.type = normalizedUpdateType;
-    }
-
-    // Generate new embedding if:
-    // 1. Embedding is explicitly provided (non-empty array), OR
-    // 2. Properties or type changed and no embedding was provided, OR
-    // 3. Existing record has no embedding and OpenAI is configured
-    if (parsed.embedding !== undefined) {
-      // Filter out empty arrays - they're invalid for PostgreSQL vector type
-      if (Array.isArray(parsed.embedding) && parsed.embedding.length > 0) {
-        updateData.embedding = parsed.embedding;
-      } else {
-        // Explicitly set to null to clear embedding
-        updateData.embedding = null;
-      }
-    } else if (
-      (parsed.properties !== undefined || parsed.type !== undefined) &&
-      config.openaiApiKey
-    ) {
-      const newType =
-        parsed.type !== undefined
-          ? normalizedUpdateType || normalizeRecordType(parsed.type).type
-          : existing?.type || "";
-      const baseProperties =
-        (existing?.properties as Record<string, unknown>) || {};
-      const newProperties =
-        parsed.properties !== undefined
-          ? { ...baseProperties, ...parsed.properties }
-          : baseProperties;
-      const recordText = getRecordText(newType, newProperties);
-      const generatedEmbedding = await generateEmbedding(recordText);
-      if (generatedEmbedding) {
-        updateData.embedding = generatedEmbedding;
-      }
-    }
-
-    if (parsed.properties !== undefined) {
-      if (existing) {
-        updateData.properties = {
-          ...(existing.properties as object),
-          ...parsed.properties,
-        };
-      } else {
-        updateData.properties = parsed.properties;
-      }
-    }
-
-    if (parsed.file_urls !== undefined) {
-      updateData.file_urls = parsed.file_urls;
-    }
-
-    // Regenerate summary when type, properties, or file_urls change (similar to embedding logic)
-    if (
-      (parsed.type !== undefined ||
-        parsed.properties !== undefined ||
-        parsed.file_urls !== undefined) &&
-      config.openaiApiKey
-    ) {
-      const newType =
-        parsed.type !== undefined
-          ? normalizedUpdateType || normalizeRecordType(parsed.type).type
-          : existing?.type || "";
-      // Use merged properties if properties were updated, otherwise use existing
-      const newProperties =
-        parsed.properties !== undefined
-          ? (updateData.properties as Record<string, unknown>) ||
-            (existing?.properties as Record<string, unknown>) ||
-            {}
-          : (existing?.properties as Record<string, unknown>) || {};
-      const newFileUrls =
-        parsed.file_urls !== undefined
-          ? parsed.file_urls
-          : (existing?.file_urls as string[]) || [];
-      const generatedSummary = await generateRecordSummary(
-        newType,
-        newProperties,
-        newFileUrls,
-      );
-      if (generatedSummary) {
-        updateData.summary = generatedSummary;
-      }
-    }
-
-    const { data, error } = await supabase
-      .from("records")
-      .update(updateData)
-      .eq("id", parsed.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    if (!data) throw new Error("Record not found");
-
-    return {
-      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-    };
-  }
-
-  private async retrieveRecords(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      type: z.string().optional(),
-      properties: z.record(z.unknown()).optional(),
-      limit: z.number().optional(),
-      search: z.array(z.string()).optional(),
-      search_mode: z
-        .enum(["semantic", "keyword", "both"])
-        .optional()
-        .default("both"),
-      similarity_threshold: z.number().min(0).max(1).optional().default(0.7),
-      query_embedding: z.array(z.number()).optional(),
-    });
-
-    const {
-      type,
-      properties,
-      limit,
-      search,
-      search_mode,
-      similarity_threshold,
-      query_embedding: providedQueryEmbedding,
-    } = schema.parse(args);
-    const normalizedType = type ? normalizeRecordType(type).type : undefined;
-
-    let results: NeotomaRecord[] = [];
-    let totalCount = 0;
-    const finalLimit = limit || 100;
-
-    // Semantic search (vector similarity)
-    if (search && (search_mode === "semantic" || search_mode === "both")) {
-      // Generate query_embedding from search terms if not provided
-      let query_embedding: number[] | undefined = providedQueryEmbedding;
-      if (!query_embedding && config.openaiApiKey) {
-        const searchText = search.join(" ");
-        const generated = await generateEmbedding(searchText);
-        query_embedding = generated || undefined;
-        if (!query_embedding && search_mode === "semantic") {
-          throw new Error(
-            "Failed to generate query embedding. Ensure DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) is configured or provide query_embedding.",
-          );
-        }
-      }
-
-      if (!query_embedding) {
-        if (search_mode === "semantic") {
-          throw new Error(
-            "query_embedding required for semantic search, or configure DEV_OPENAI_API_KEY (or PROD_OPENAI_API_KEY in production) for automatic generation",
-          );
-        }
-        // If both mode, just skip semantic and do keyword only
-      } else if (query_embedding.length !== 1536) {
-        throw new Error(
-          "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)",
-        );
-      }
-
-      if (query_embedding) {
-        let embeddingQuery = supabase
-          .from("records")
-          .select("*")
-          .not("embedding", "is", null);
-
-        if (normalizedType) {
-          embeddingQuery = embeddingQuery.eq("type", normalizedType);
-        }
-
-        const { data: candidates, error: fetchError } =
-          await embeddingQuery.limit(finalLimit * 10);
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        if (candidates) {
-          const queryNorm = Math.sqrt(
-            query_embedding.reduce((sum, val) => sum + val * val, 0),
-          );
-
-          const semanticMatches = candidates
-            .map((rec: any) => {
-              const recEmbedding = rec.embedding;
-              if (
-                !recEmbedding ||
-                !Array.isArray(recEmbedding) ||
-                recEmbedding.length !== 1536
-              ) {
-                return null;
-              }
-
-              const dotProduct = query_embedding.reduce(
-                (sum, val, i) => sum + val * recEmbedding[i],
-                0,
-              );
-              const recNorm = Math.sqrt(
-                recEmbedding.reduce(
-                  (sum: number, val: number) => sum + val * val,
-                  0,
-                ),
-              );
-              const similarity = dotProduct / (queryNorm * recNorm);
-
-              return { ...rec, similarity };
-            })
-            .filter((rec: any) => rec && rec.similarity >= similarity_threshold)
-            .sort((a: any, b: any) => b.similarity - a.similarity);
-
-          // Track total count before limiting
-          totalCount = semanticMatches.length;
-
-          const limitedMatches = semanticMatches.slice(0, finalLimit);
-
-          if (search_mode === "semantic") {
-            results = limitedMatches;
-          } else {
-            results = limitedMatches;
-          }
-        }
-      }
-    }
-
-    // Keyword search (text matching)
-    if (search && search_mode !== "semantic") {
-      let keywordQuery = supabase.from("records").select("*");
-
-      if (normalizedType) {
-        keywordQuery = keywordQuery.eq("type", normalizedType);
-      }
-
-      const { data: keywordCandidates, error: keywordError } =
-        await keywordQuery.limit(finalLimit * 2);
-
-      if (keywordError) {
-        throw keywordError;
-      }
-
-      if (keywordCandidates) {
-        const searchTerms = search.map((term) => term.toLowerCase());
-        const keywordMatches = keywordCandidates.filter((rec: NeotomaRecord) =>
-          recordMatchesKeywordSearch(rec, searchTerms),
-        );
-
-        // Track total count before limiting
-        if (results.length === 0) {
-          totalCount = keywordMatches.length;
-          results = keywordMatches.slice(0, finalLimit);
-        } else {
-          // Merge keyword results with semantic results (both mode)
-          const resultMap = new Map();
-          results.forEach((r) => resultMap.set(r.id, r));
-          keywordMatches.forEach((r) => {
-            if (!resultMap.has(r.id)) {
-              resultMap.set(r.id, r);
-            }
-          });
-          const mergedResults = Array.from(resultMap.values());
-          totalCount = mergedResults.length;
-          results = mergedResults.slice(0, finalLimit);
-        }
-      }
-    }
-
-    // No search: use existing logic
-    if (!search) {
-      // If properties are specified, fetch all records to count accurately
-      // Otherwise, use count query for efficiency
-      if (properties) {
-        let allQuery = supabase.from("records").select("*");
-
-        if (normalizedType) {
-          allQuery = allQuery.eq("type", normalizedType);
-        }
-
-        // Fetch up to 10000 records for property filtering
-        const { data: allData, error: allError } = await allQuery
-          .limit(10000)
-          .order("created_at", { ascending: false });
-
-        if (allError) throw allError;
-
-        // Filter by properties and count
-        const propertyMatches = (allData || []).filter((rec: NeotomaRecord) => {
-          return Object.entries(properties).every(([key, value]) => {
-            const recValue = (rec.properties as Record<string, unknown>)[key];
-            return recValue === value;
-          });
-        });
-
-        totalCount = propertyMatches.length;
-        results = propertyMatches.slice(0, finalLimit);
-      } else {
-        let countQuery = supabase
-          .from("records")
-          .select("*", { count: "exact", head: true });
-
-        if (normalizedType) {
-          countQuery = countQuery.eq("type", normalizedType);
-        }
-
-        const { count, error: countError } = await countQuery;
-
-        if (countError) {
-          throw countError;
-        }
-
-        totalCount = count || 0;
-
-        let query = supabase.from("records").select("*");
-
-        if (normalizedType) {
-          query = query.eq("type", normalizedType);
-        }
-
-        if (limit) {
-          query = query.limit(limit);
-        } else {
-          query = query.limit(100);
-        }
-
-        const { data, error } = await query.order("created_at", {
-          ascending: false,
-        });
-
-        if (error) throw error;
-
-        results = data || [];
-      }
-    }
-
-    // Filter by exact property matches (for search results)
-    if (properties && search) {
-      const beforeFilterCount = results.length;
-      results = results.filter((rec: NeotomaRecord) => {
-        return Object.entries(properties).every(([key, value]) => {
-          const recValue = (rec.properties as Record<string, unknown>)[key];
-          return recValue === value;
-        });
-      });
-      // Adjust total count based on property filtering for search results
-      if (beforeFilterCount > 0) {
-        const filterRatio = results.length / beforeFilterCount;
-        totalCount = Math.round(totalCount * filterRatio);
-      } else {
-        totalCount = results.length;
-      }
-    }
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify(
-            { records: results, total: totalCount },
-            null,
-            2,
-          ),
-        },
-      ],
-    };
-  }
-
-  private async deleteRecord(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({ id: z.string() });
-    const { id } = schema.parse(args);
-
-    const { error } = await supabase.from("records").delete().eq("id", id);
-
-    if (error) throw error;
-
-    return {
-      content: [
-        {
-          type: "text",
-          text: JSON.stringify({ success: true, deleted_id: id }),
-        },
-      ],
-    };
-  }
-
-  private async uploadFile(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      record_id: z.string().uuid().optional(),
-      file_path: z.string(),
-      bucket: z.string().optional(),
-      properties: z.union([z.string(), z.record(z.unknown())]).optional(),
-    });
-
-    const { record_id, file_path, bucket, properties } = schema.parse(args);
-
-    let overrideProperties: Record<string, unknown> | undefined;
-    if (typeof properties === "string") {
-      const trimmed = properties.trim();
-      if (trimmed) {
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(trimmed);
-        } catch (error) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            `properties must be valid JSON: ${
-              error instanceof Error ? error.message : "parse error"
-            }`,
-          );
-        }
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new McpError(
-            ErrorCode.InvalidParams,
-            "properties must be a JSON object",
-          );
-        }
-        overrideProperties = parsed as Record<string, unknown>;
-      }
-    } else if (
-      properties &&
-      typeof properties === "object" &&
-      !Array.isArray(properties)
-    ) {
-      overrideProperties = properties as Record<string, unknown>;
-    }
-
-    let existingFileUrls: string[] = [];
-
-    const fs = await import("fs/promises");
-    const path = await import("path");
-
-    const fileBuffer = await fs.readFile(file_path);
-    const stats = await fs.stat(file_path);
-
-    const originalName = path.basename(file_path) || "upload.bin";
-    const bucketName = bucket || "files";
-    const recordId = record_id ?? randomUUID();
-
-    if (record_id) {
-      const { data: existing, error: fetchError } = await supabase
-        .from("records")
-        .select("file_urls")
-        .eq("id", record_id)
-        .single();
-
-      if (fetchError || !existing) {
-        throw new McpError(
-          ErrorCode.InvalidParams,
-          `Record ${record_id} not found`,
-        );
-      }
-
-      existingFileUrls = Array.isArray(existing.file_urls)
-        ? (existing.file_urls as string[])
-        : [];
-    }
-
-    const safeBase =
-      originalName.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 100) || "file";
-    const ext = path.extname(safeBase) || ".bin";
-    const baseName = safeBase.endsWith(ext)
-      ? safeBase.slice(0, safeBase.length - ext.length)
-      : safeBase;
-    const fileName = `${recordId}/${Date.now()}-${baseName.replace(
-      /\.+/g,
-      "-",
-    )}${ext}`;
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, fileBuffer, {
-        upsert: false,
-      });
-
-    if (uploadError) throw uploadError;
-
-    const fileUrl = uploadData.path;
-
-    if (record_id) {
-      const updatedFileUrls = [...existingFileUrls, fileUrl];
-
-      const { data: updatedData, error: updateError } = await supabase
-        .from("records")
-        .update({ file_urls: updatedFileUrls })
-        .eq("id", record_id)
-        .select()
-        .single();
-
-      if (updateError) throw updateError;
-
-      return this.buildTextResponse(updatedData);
-    }
-
-    const created = await createRecordFromUploadedFile({
-      recordId,
-      buffer: fileBuffer,
-      fileName: originalName,
-      mimeType: "application/octet-stream",
-      fileSize: stats.size,
-      fileUrl,
-      overrideProperties,
-    });
-
-    return this.buildTextResponse(created);
-  }
+  // Removed deprecated methods: submitPayload, storeRecord, updateRecord, retrieveRecords, deleteRecord, ingestStructured, uploadFile
+  // Use unified ingest() action and entity-based operations instead
 
   private async getFileUrl(
     args: unknown,
@@ -1501,15 +576,6 @@ export class NeotomaServer {
     };
   }
 
-  private ensurePlaidConfigured(): void {
-    if (!isPlaidConfigured()) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        "Plaid integration is not configured. Set PLAID_CLIENT_ID and PLAID_SECRET.",
-      );
-    }
-  }
-
   private buildTextResponse(data: unknown): {
     content: Array<{ type: string; text: string }>;
   } {
@@ -1518,269 +584,6 @@ export class NeotomaServer {
     };
   }
 
-  private sanitizePlaidItem(item: PlaidItemRow): SanitizedPlaidItem {
-    return redactPlaidItem(item);
-  }
-
-  private summarizePlaidAccount(account: AccountBase) {
-    const balances = account.balances || {};
-    return {
-      account_id: account.account_id,
-      name: account.name,
-      official_name: account.official_name,
-      mask: account.mask,
-      type: account.type,
-      subtype: account.subtype,
-      balances: {
-        available: balances.available ?? null,
-        current: balances.current ?? null,
-        iso_currency_code: balances.iso_currency_code ?? null,
-        unofficial_currency_code: balances.unofficial_currency_code ?? null,
-      },
-    };
-  }
-
-  private requirePlaidItem(
-    item: PlaidItemRow | null,
-    identifier: string | undefined,
-  ): PlaidItemRow {
-    if (!item) {
-      throw new McpError(
-        ErrorCode.InvalidRequest,
-        `Plaid item ${identifier ?? "(unknown)"} not found`,
-      );
-    }
-    return item;
-  }
-
-  private async plaidCreateLinkToken(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.ensurePlaidConfigured();
-    const schema = z.object({
-      user_id: z.string().min(1).optional(),
-      client_name: z.string().min(1).optional(),
-      access_token: z.string().optional(),
-      products: z.array(z.string()).min(1).optional(),
-      redirect_uri: z.string().url().optional(),
-    });
-
-    const parsed = schema.parse(args ?? {});
-    const response = await createLinkToken({
-      userId: parsed.user_id || config.plaid.linkDefaults?.userId || "",
-      clientName: parsed.client_name || config.plaid.linkDefaults?.clientName,
-      accessToken: parsed.access_token,
-      products: parsed.products,
-      redirectUri: parsed.redirect_uri,
-    });
-
-    return this.buildTextResponse(response);
-  }
-
-  private async plaidExchangePublicToken(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.ensurePlaidConfigured();
-    const schema = z.object({
-      public_token: z.string().min(1),
-      trigger_initial_sync: z.boolean().optional(),
-    });
-
-    const parsed = schema.parse(args ?? {});
-    const exchangeResult = await exchangePublicToken(parsed.public_token);
-    const context = await buildPlaidItemContext(exchangeResult.accessToken);
-
-    const storedItem = await persistPlaidItem({
-      itemId: exchangeResult.itemId,
-      accessToken: exchangeResult.accessToken,
-      environment: config.plaid.environment,
-      products: config.plaid.products,
-      countryCodes: config.plaid.countryCodes,
-      institutionId: context.item.institution_id ?? null,
-      institutionName: context.institution?.name ?? null,
-      webhookStatus: context.item.webhook ?? null,
-    });
-
-    let syncSummary: PlaidSyncSummary | null = null;
-    if (parsed.trigger_initial_sync) {
-      syncSummary = await syncPlaidItem({
-        plaidItemId: storedItem.id,
-        forceFullSync: true,
-      });
-    }
-
-    const response = {
-      item: this.sanitizePlaidItem(storedItem),
-      institution: context.institution
-        ? {
-            id: context.institution.institution_id,
-            name: context.institution.name,
-            url: context.institution.url,
-            primary_color: context.institution.primary_color,
-          }
-        : context.item.institution_id
-          ? {
-              id: context.item.institution_id,
-              name: storedItem.institution_name,
-            }
-          : null,
-      accounts: context.accounts.map((account) =>
-        this.summarizePlaidAccount(account),
-      ),
-      request_id: exchangeResult.requestId,
-      initial_sync: syncSummary,
-    };
-
-    return this.buildTextResponse(response);
-  }
-
-  private async plaidSync(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.ensurePlaidConfigured();
-    const schema = z.object({
-      plaid_item_id: z.string().uuid().optional(),
-      item_id: z.string().optional(),
-      sync_all: z.boolean().optional().default(false),
-      force_full_sync: z.boolean().optional().default(false),
-    });
-
-    const parsed = schema.parse(args ?? {});
-
-    if (parsed.sync_all && (parsed.plaid_item_id || parsed.item_id)) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        "sync_all cannot be combined with plaid_item_id or item_id.",
-      );
-    }
-
-    const targets: PlaidItemRow[] = [];
-
-    if (parsed.sync_all) {
-      const items = await listPlaidItemsFromStore();
-      if (items.length === 0) {
-        throw new McpError(
-          ErrorCode.InvalidRequest,
-          "No Plaid items available to sync.",
-        );
-      }
-      targets.push(...items);
-    } else if (parsed.plaid_item_id) {
-      const item = this.requirePlaidItem(
-        await getPlaidItemById(parsed.plaid_item_id),
-        parsed.plaid_item_id,
-      );
-      targets.push(item);
-    } else if (parsed.item_id) {
-      const item = this.requirePlaidItem(
-        await getPlaidItemByItemId(parsed.item_id),
-        parsed.item_id,
-      );
-      targets.push(item);
-    } else {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        "Provide plaid_item_id, item_id, or set sync_all to true.",
-      );
-    }
-
-    const summaries: Array<{
-      item: SanitizedPlaidItem;
-      summary: PlaidSyncSummary;
-    }> = [];
-
-    for (const item of targets) {
-      const summary = await syncPlaidItem({
-        plaidItemId: item.id,
-        forceFullSync: parsed.force_full_sync,
-      });
-      const refreshed = (await getPlaidItemById(item.id)) ?? item;
-      summaries.push({
-        item: this.sanitizePlaidItem(refreshed),
-        summary,
-      });
-    }
-
-    return this.buildTextResponse(summaries);
-  }
-
-  private async plaidListItems(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    this.ensurePlaidConfigured();
-    const schema = z.object({
-      plaid_item_id: z.string().uuid().optional(),
-      item_id: z.string().optional(),
-    });
-
-    const parsed = schema.parse(args ?? {});
-    let items: PlaidItemRow[] = [];
-
-    if (parsed.plaid_item_id) {
-      const item = this.requirePlaidItem(
-        await getPlaidItemById(parsed.plaid_item_id),
-        parsed.plaid_item_id,
-      );
-      items = [item];
-    } else if (parsed.item_id) {
-      const item = this.requirePlaidItem(
-        await getPlaidItemByItemId(parsed.item_id),
-        parsed.item_id,
-      );
-      items = [item];
-    } else {
-      items = await listPlaidItemsFromStore();
-    }
-
-    const sanitized = items.map((item) => this.sanitizePlaidItem(item));
-    return this.buildTextResponse(sanitized);
-  }
-
-  private async listProviderCatalog(): Promise<{
-    content: Array<{ type: string; text: string }>;
-  }> {
-    return this.buildTextResponse(providerCatalog);
-  }
-
-  private async syncProviderImports(
-    args: unknown,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      provider: z.string(),
-      connector_id: z.string().uuid().optional(),
-      sync_type: z.enum(["initial", "incremental"]).optional(),
-      limit: z.number().int().positive().optional(),
-      max_pages: z.number().int().positive().optional(),
-    });
-    const parsed = schema.parse(args ?? {});
-    const definition = getProviderDefinition(parsed.provider);
-    if (!definition) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Unknown provider: ${parsed.provider}`,
-      );
-    }
-
-    if (parsed.connector_id) {
-      const result = await runConnectorSync({
-        connectorId: parsed.connector_id,
-        syncType: parsed.sync_type,
-        limit: parsed.limit,
-        maxPages: parsed.max_pages,
-      });
-      return this.buildTextResponse({
-        provider: definition,
-        results: [result],
-      });
-    }
-
-    const results = await runAllConnectorSyncs({
-      provider: parsed.provider,
-      limitPerConnector: parsed.limit,
-      maxPages: parsed.max_pages,
-    });
-    return this.buildTextResponse({ provider: definition, results });
-  }
 
   private async getEntitySnapshot(
     args: unknown,
@@ -2054,7 +857,8 @@ export class NeotomaServer {
       event_type: z.string().optional(),
       after_date: z.string().optional(),
       before_date: z.string().optional(),
-      source_record_id: z.string().optional(),
+      source_record_id: z.string().optional(), // Legacy - for backward compatibility
+      source_id: z.string().optional(), // Canonical - references sources table
       limit: z.number().int().positive().default(100),
       offset: z.number().int().nonnegative().default(0),
     });
@@ -2074,7 +878,10 @@ export class NeotomaServer {
       query = query.lte("event_timestamp", parsed.before_date);
     }
 
-    if (parsed.source_record_id) {
+    // Prefer source_id (canonical) over source_record_id (legacy)
+    if (parsed.source_id) {
+      query = query.eq("source_id", parsed.source_id);
+    } else if (parsed.source_record_id) {
       query = query.eq("source_record_id", parsed.source_record_id);
     }
 
@@ -2096,7 +903,10 @@ export class NeotomaServer {
       countQuery = countQuery.lte("event_timestamp", parsed.before_date);
     }
 
-    if (parsed.source_record_id) {
+    // Prefer source_id (canonical) over source_record_id (legacy)
+    if (parsed.source_id) {
+      countQuery = countQuery.eq("source_id", parsed.source_id);
+    } else if (parsed.source_record_id) {
       countQuery = countQuery.eq("source_record_id", parsed.source_record_id);
     }
 
@@ -2339,11 +1149,15 @@ export class NeotomaServer {
       node_id: z.string(),
       node_type: z.enum(["entity", "record"]).default("entity"),
       include_relationships: z.boolean().default(true),
-      include_records: z.boolean().default(true),
+      include_records: z.boolean().default(true), // Legacy - maps to source material
+      include_source_material: z.boolean().default(true), // Canonical - include related source material
       include_events: z.boolean().default(true),
       include_observations: z.boolean().default(false),
     });
     const parsed = schema.parse(args ?? {});
+
+    // Use include_source_material if provided, otherwise fall back to include_records for backward compatibility
+    const includeSourceMaterial = parsed.include_source_material ?? parsed.include_records;
 
     const result: any = {
       node_id: parsed.node_id,
@@ -2425,8 +1239,8 @@ export class NeotomaServer {
         if (!obsError && observations) {
           result.observations = observations;
 
-          // Get source records for observations
-          if (parsed.include_records && observations.length > 0) {
+          // Get source material for observations (legacy: still uses records table for backward compatibility)
+          if (includeSourceMaterial && observations.length > 0) {
             const recordIds = observations
               .map((obs: any) => obs.source_record_id)
               .filter((id: string) => id);
@@ -2540,16 +1354,34 @@ export class NeotomaServer {
     const { runInterpretation, checkInterpretationQuota } = await import("./services/interpretation.js");
     const { analyzeFileForRecord } = await import("./services/file_analysis.js");
 
+    // Unified schema: accepts EITHER file_content (unstructured) OR entities (structured)
     const schema = z.object({
       user_id: z.string().uuid(),
-      file_content: z.string(),
-      mime_type: z.string(),
+      // Unstructured source material
+      file_content: z.string().optional(),
+      mime_type: z.string().optional(),
       original_filename: z.string().optional(),
       interpret: z.boolean().default(true),
       interpretation_config: z.record(z.unknown()).optional(),
-    });
+      // Structured source material
+      entities: z.array(z.record(z.unknown())).optional(),
+      source_priority: z.number().default(100),
+    }).refine(
+      (data) => (data.file_content && data.mime_type) || data.entities,
+      { message: "Must provide either file_content+mime_type OR entities array" }
+    );
 
     const parsed = schema.parse(args);
+    
+    // Handle structured source material (entities array)
+    if (parsed.entities) {
+      return await this.ingestStructuredInternal(parsed.user_id, parsed.entities, parsed.source_priority);
+    }
+    
+    // Handle unstructured source material (file content)
+    if (!parsed.file_content || !parsed.mime_type) {
+      throw new Error("file_content and mime_type required for unstructured ingestion");
+    }
     const fileBuffer = Buffer.from(parsed.file_content, "base64");
 
     // Store raw content
@@ -2632,42 +1464,36 @@ export class NeotomaServer {
     return this.buildTextResponse(result);
   }
 
-  // FU-123: MCP ingest_structured() Tool
-  private async ingestStructured(
-    args: unknown,
+  // Internal helper for structured source material ingestion
+  private async ingestStructuredInternal(
+    userId: string,
+    entities: Record<string, unknown>[],
+    sourcePriority: number = 100
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { runInterpretation } = await import("./services/interpretation.js");
     const { storeRawContent } = await import("./services/raw_storage.js");
 
-    const schema = z.object({
-      user_id: z.string().uuid(),
-      entities: z.array(z.record(z.unknown())),
-      source_priority: z.number().default(100),
-    });
-
-    const parsed = schema.parse(args);
-
     // Store structured data as JSON source
-    const jsonContent = JSON.stringify(parsed.entities, null, 2);
+    const jsonContent = JSON.stringify(entities, null, 2);
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
 
     const storageResult = await storeRawContent({
-      userId: parsed.user_id,
+      userId,
       fileBuffer,
       mimeType: "application/json",
       originalFilename: "structured_data.json",
       provenance: {
-        upload_method: "mcp_ingest_structured",
+        upload_method: "mcp_ingest",
         client: "mcp",
-        source_priority: parsed.source_priority,
+        source_priority: sourcePriority,
       },
     });
 
     // Run interpretation with structured data
     const interpretationResult = await runInterpretation({
-      userId: parsed.user_id,
+      userId,
       sourceId: storageResult.sourceId,
-      extractedData: parsed.entities,
+      extractedData: entities,
       config: {
         provider: "structured",
         model_id: "n/a",
@@ -2804,7 +1630,7 @@ export class NeotomaServer {
         schema_version: schemaEntry.schema_version,
         source_payload_id: null,
         source_id: null, // Corrections don't have a source
-        interpretation_run_id: null,
+        interpretation_id: null,
         observed_at: new Date().toISOString(),
         specificity_score: 1.0,
         source_priority: 1000, // Corrections have highest priority

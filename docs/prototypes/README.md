@@ -1,11 +1,11 @@
 # Neotoma MVP Interactive Prototype
 ## Quick Links
-- **[Quick Start](./PROTOTYPE_QUICKSTART.md)** — One-page getting started guide
+- **[Quick Start](./prototype_quickstart.md)** — One-page getting started guide
 - **[Complete Guide](./PROTOTYPE_README.md)** — Full documentation
-- **[Summary](./PROTOTYPE_SUMMARY.md)** — Executive summary
-- **[Completion Status](./PROTOTYPE_COMPLETE.md)** — What was built
+- **[Summary](./prototype_summary.md)** — Executive summary
+- **[Completion Status](./prototype_complete.md)** — What was built
 - **[Changelog](./PROTOTYPE_CHANGELOG.md)** — Version history
-- **[Index](./PROTOTYPE_INDEX.md)** — Complete file inventory
+- **[Index](./prototype_index.md)** — Complete file inventory
 ## Overview
 Interactive demonstration of the Neotoma MVP covering **all feature units** from:
 - [`docs/specs/MVP_OVERVIEW.md`](../specs/MVP_OVERVIEW.md)

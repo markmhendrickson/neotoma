@@ -12,7 +12,7 @@
 #### 1.1 Canonical Specs (Authoritative Sources)
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
 - **MCP Specification**: `docs/specs/MCP_SPEC.md`
-- **Payload Model**: `docs/architecture/payload_model.md`
+- **Payload Model**: `docs/architecture/source_material_model.md`
 - **Crypto Infrastructure**: `src/crypto/` (existing Ed25519 signing)
 This release plan coordinates agent signing scope into a concrete release plan.
 **Release Classification:**
@@ -47,7 +47,7 @@ This release plan coordinates agent signing scope into a concrete release plan.
     - `signer_public_key?: string` (base64url-encoded Ed25519 public key)
     - `signature?: string` (base64url-encoded Ed25519 signature)
   - Update `ProvenanceSchema` in `src/services/payload_schema.ts`
-  - Update `docs/architecture/payload_model.md`
+  - Update `docs/architecture/source_material_model.md`
 - **FU-202**: Agent Identity Service Implementation
   - Implement `getAgentPublicKey()` in `src/crypto/agent_identity.ts`
   - Extract public key from request context (MCP request or HTTP header)
@@ -172,7 +172,7 @@ export const ProvenanceSchema = z.object({
 - ✅ Agent public key registry table (if FU-205 included)
 - ✅ Permission checking framework (if FU-206 included)
 - ✅ Integration tests passing
-- ✅ Documentation updated (`MCP_SPEC.md`, `payload_model.md`)
+- ✅ Documentation updated (`MCP_SPEC.md`, `source_material_model.md`)
 #### 5.3 Business Acceptance Criteria
 - ✅ Enables multi-agent coordination with attribution
 - ✅ Foundation for permission system
@@ -187,7 +187,7 @@ export const ProvenanceSchema = z.object({
 - Signature verification middleware functional
 - Integration tests passing
 - Backward compatibility maintained (unsigned payloads still work)
-- Documentation updated (`MCP_SPEC.md`, `payload_model.md`, `docs/specs/AGENT_SIGNING.md`)
+- Documentation updated (`MCP_SPEC.md`, `source_material_model.md`, `docs/specs/AGENT_SIGNING.md`)
 - No breaking changes to existing MCP clients
 ### 7. Implementation Notes
 #### 7.1 Backward Compatibility
@@ -224,7 +224,7 @@ export const ProvenanceSchema = z.object({
 - **Mitigation**: Document best practices, provide encryption helpers
 ### 10. Related Documents
 - `docs/specs/MCP_SPEC.md` — MCP action specification
-- `docs/architecture/payload_model.md` — Payload model architecture
+- `docs/architecture/source_material_model.md` — Payload model architecture
 - `src/crypto/agent_identity.ts` — Agent identity abstraction (stub)
 - `src/crypto/signature.ts` — Ed25519 signature utilities
 - `src/crypto/keys.ts` — Key generation utilities

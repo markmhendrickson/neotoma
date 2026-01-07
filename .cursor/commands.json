@@ -74,6 +74,27 @@
       "user": {
         "documentation": ".cursor/commands/ui_workflow.md"
       }
+    },
+    {
+      "name": "Report Error",
+      "description": "Report errors for automated resolution. Supports cross-repo reporting to sibling repositories.",
+      "user": {
+        "documentation": ".cursor/commands/report_error.md"
+      }
+    },
+    {
+      "name": "Debug Pending Errors",
+      "description": "Check pending error reports and debug/resolve them. Supports cross-repo error queue checking.",
+      "user": {
+        "documentation": ".cursor/commands/debug_pending_errors.md"
+      }
+    },
+    {
+      "name": "Manage Error Debugging",
+      "description": "Manage the error debugging automation watcher: start, stop, check status, or view logs.",
+      "user": {
+        "documentation": ".cursor/commands/manage_error_debugging.md"
+      }
     }
   ]
 }

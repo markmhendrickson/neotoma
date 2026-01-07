@@ -664,7 +664,7 @@ Use CSS custom properties for theming:
 - Accessible by default
 - Customizable
 - Dark mode support
-**Available Components:** See `docs/ui/SHADCN_COMPONENTS.md` for complete inventory.
+**Available Components:** See `docs/ui/shadcn_components.md` for complete inventory.
 **Key Components:**
 - **Select:** Use for dropdown selects (type filters, locale selectors). Do NOT use native `<select>` elements.
 - **DropdownMenu:** Use for context menus, column visibility toggles, row actions.

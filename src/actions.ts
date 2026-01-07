@@ -77,6 +77,7 @@ import {
   sortRecordsDeterministically,
 } from "./services/search.js";
 import { createObservationsFromRecord } from "./services/observation_ingestion.js";
+// import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 export const app = express();
 // Configure CSP to allow CDN scripts for the uploader and API connects
@@ -826,6 +827,331 @@ app.post("/import/plaid/preview_sync", async (req, res) => {
     return res.status(502).json({ error: normalized });
   }
 });
+
+// ============================================================================
+// v0.2.15 Entity-Based HTTP API Endpoints
+// ============================================================================
+
+// POST /api/entities/query - Query entities with filters
+app.post("/api/entities/query", async (req, res) => {
+  const schema = z.object({
+    entity_type: z.string().optional(),
+    search: z.string().optional(),
+    limit: z.number().optional().default(100),
+    offset: z.number().optional().default(0),
+    user_id: z.string().uuid().optional(), // Optional for authenticated requests
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:entities_query", req, {
+      issues: parsed.error.issues,
+    });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const { entity_type, search, limit, offset, user_id } = parsed.data;
+
+    // Build query
+    let query = supabase
+      .from("entities")
+      .select("*", { count: "exact" });
+
+    if (entity_type) {
+      query = query.eq("entity_type", entity_type);
+    }
+
+    if (user_id) {
+      query = query.eq("user_id", user_id);
+    }
+
+    // Exclude merged entities
+    query = query.is("merged_to_entity_id", null);
+
+    // Apply search if provided
+    if (search) {
+      query = query.ilike("canonical_name", `%${search}%`);
+    }
+
+    // Apply pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return res.json({
+      entities: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logError("APIError:entities_query", req, error);
+    const message =
+      error instanceof Error ? error.message : "Failed to query entities";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/observations/create - Create observation for entity
+app.post("/api/observations/create", async (req, res) => {
+  const schema = z.object({
+    entity_type: z.string(),
+    entity_identifier: z.string(),
+    fields: z.record(z.unknown()),
+    source_priority: z.number().optional().default(100),
+    user_id: z.string().uuid(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:observations_create", req, {
+      issues: parsed.error.issues,
+    });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const { entity_type, entity_identifier, fields, source_priority, user_id } = parsed.data;
+
+    // Use the ingestStructuredInternal helper from the MCP server
+    // For HTTP, we'll implement directly here
+    const { createObservationsFromRecord } = await import("./services/observation_ingestion.js");
+    const { generateEntityId, normalizeEntityValue } = await import("./services/entity_resolution.js");
+
+    // Generate entity ID
+    const normalizedValue = normalizeEntityValue(entity_type, entity_identifier);
+    const entity_id = generateEntityId(entity_type, normalizedValue);
+
+    // Ensure entity exists
+    const { data: existingEntity } = await supabase
+      .from("entities")
+      .select("id")
+      .eq("id", entity_id)
+      .eq("user_id", user_id)
+      .single();
+
+    if (!existingEntity) {
+      // Create entity
+      await supabase.from("entities").insert({
+        id: entity_id,
+        entity_type,
+        canonical_name: normalizedValue,
+        user_id,
+      });
+    }
+
+    // Create observation
+    const observation = {
+      id: randomUUID(),
+      entity_id,
+      entity_type,
+      schema_version: "1.0",
+      source_material_id: null, // No source for direct API creation
+      interpretation_id: null,
+      observed_at: new Date().toISOString(),
+      specificity_score: 1.0,
+      source_priority,
+      fields,
+      user_id,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data: obsData, error: obsError } = await supabase
+      .from("observations")
+      .insert(observation)
+      .select()
+      .single();
+
+    if (obsError) throw obsError;
+
+    // Get updated snapshot
+    const { data: snapshot } = await supabase
+      .from("entity_snapshots")
+      .select("*")
+      .eq("entity_id", entity_id)
+      .eq("user_id", user_id)
+      .single();
+
+    return res.json({
+      observation_id: obsData.id,
+      entity_id,
+      snapshot: snapshot?.snapshot || {},
+    });
+  } catch (error) {
+    logError("APIError:observations_create", req, error);
+    const message =
+      error instanceof Error ? error.message : "Failed to create observation";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/observations/query - Query observations
+app.post("/api/observations/query", async (req, res) => {
+  const schema = z.object({
+    entity_id: z.string().optional(),
+    entity_type: z.string().optional(),
+    limit: z.number().optional().default(100),
+    offset: z.number().optional().default(0),
+    user_id: z.string().uuid().optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:observations_query", req, {
+      issues: parsed.error.issues,
+    });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const { entity_id, entity_type, limit, offset, user_id } = parsed.data;
+
+    let query = supabase
+      .from("observations")
+      .select("*", { count: "exact" });
+
+    if (entity_id) {
+      query = query.eq("entity_id", entity_id);
+    }
+
+    if (entity_type) {
+      query = query.eq("entity_type", entity_type);
+    }
+
+    if (user_id) {
+      query = query.eq("user_id", user_id);
+    }
+
+    query = query
+      .order("observed_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return res.json({
+      observations: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logError("APIError:observations_query", req, error);
+    const message =
+      error instanceof Error ? error.message : "Failed to query observations";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/entities/merge - Merge duplicate entities
+app.post("/api/entities/merge", async (req, res) => {
+  const schema = z.object({
+    from_entity_id: z.string(),
+    to_entity_id: z.string(),
+    merge_reason: z.string().optional(),
+    user_id: z.string().uuid(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:entities_merge", req, {
+      issues: parsed.error.issues,
+    });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    const { from_entity_id, to_entity_id, merge_reason, user_id } = parsed.data;
+
+    // Validate both entities exist and belong to user
+    const { data: fromEntity } = await supabase
+      .from("entities")
+      .select("id, merged_to_entity_id")
+      .eq("id", from_entity_id)
+      .eq("user_id", user_id)
+      .single();
+
+    const { data: toEntity } = await supabase
+      .from("entities")
+      .select("id, merged_to_entity_id")
+      .eq("id", to_entity_id)
+      .eq("user_id", user_id)
+      .single();
+
+    if (!fromEntity || !toEntity) {
+      return res.status(404).json({ error: "Entity not found" });
+    }
+
+    if (fromEntity.merged_to_entity_id) {
+      return res.status(400).json({ error: "Source entity already merged" });
+    }
+
+    if (toEntity.merged_to_entity_id) {
+      return res.status(400).json({ error: "Target entity already merged" });
+    }
+
+    // Rewrite observations
+    const { data: rewriteData, error: rewriteError } = await supabase
+      .from("observations")
+      .update({ entity_id: to_entity_id })
+      .eq("entity_id", from_entity_id)
+      .eq("user_id", user_id)
+      .select("id");
+
+    if (rewriteError) throw rewriteError;
+
+    const observations_moved = rewriteData?.length || 0;
+
+    // Mark source entity as merged
+    const { error: mergeError } = await supabase
+      .from("entities")
+      .update({
+        merged_to_entity_id: to_entity_id,
+        merged_at: new Date().toISOString(),
+      })
+      .eq("id", from_entity_id)
+      .eq("user_id", user_id);
+
+    if (mergeError) throw mergeError;
+
+    // Record merge in entity_merges table
+    await supabase.from("entity_merges").insert({
+      user_id,
+      from_entity_id,
+      to_entity_id,
+      reason: merge_reason,
+      merged_by: "http_api",
+      observations_rewritten: observations_moved,
+    });
+
+    // Delete snapshot for merged entity
+    await supabase
+      .from("entity_snapshots")
+      .delete()
+      .eq("entity_id", from_entity_id)
+      .eq("user_id", user_id);
+
+    // TODO: Trigger snapshot recomputation for to_entity
+
+    return res.json({
+      observations_moved,
+      merged_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    logError("APIError:entities_merge", req, error);
+    const message =
+      error instanceof Error ? error.message : "Failed to merge entities";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// ============================================================================
+// Legacy Record-Based HTTP API Endpoints (Deprecated in v0.2.15)
+// ============================================================================
 
 app.post("/store_record", async (req, res) => {
   const parsed = StoreSchema.safeParse(req.body);
@@ -3637,6 +3963,9 @@ app.get("/plaid/link_demo", (req, res) => {
       : "";
   return res.redirect(302, `/import/plaid/link_demo${token}`);
 });
+
+// Documentation routes (FU-301) - must be before SPA fallback
+// setupDocumentationRoutes(app); // TODO: Re-enable after implementing routes/documentation.ts
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 

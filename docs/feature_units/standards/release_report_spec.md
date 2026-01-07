@@ -4,7 +4,11 @@
 - [`release_workflow.md`](./release_workflow.md) — Release workflow integration
 - [`discovery_process.md`](./discovery_process.md) — Discovery report formats
 - [`../../.cursor/rules/post_build_testing.md`](../../.cursor/rules/post_build_testing.md) — Post-build testing requirements
-**CRITICAL REQUIREMENT:** Section 9 (Testing Guidance) is REQUIRED and MUST include all manual test cases from `integration_tests.md`. Agents MUST always describe these test cases after completing a release build.
+**CRITICAL REQUIREMENT:** 
+- **Release reports MUST be generated immediately after all batches complete** (per `foundation/development/release_workflow.md` Step 1.4)
+- **Section 9 (Testing Guidance) is REQUIRED** and MUST include all manual test cases from `integration_tests.md`
+- **Agents MUST always generate the complete release report** after completing a release build
+- **Report generation is a blocker** - release cannot transition to `in_testing` status until report exists with Section 9 populated
 - [`release_report_generation.md`](./release_report_generation.md) — Step-by-step generation guide
 - [`release_report_template.md`](./release_report_template.md) — Report template with placeholders
 ## 1. Report Structure

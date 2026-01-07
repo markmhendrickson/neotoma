@@ -1,1 +1,0 @@
-../../foundation/agent_instructions/cursor_rules/configuration_management.md

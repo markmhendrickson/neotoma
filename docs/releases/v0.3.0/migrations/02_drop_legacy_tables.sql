@@ -125,3 +125,7 @@ COMMENT ON COLUMN raw_fragments.source_id IS 'Source that contained this fragmen
 --    WHERE table_name IN ('records', 'record_relationships', 'record_entity_edges', 'record_event_edges');
 --    -- Should return 0 rows
 
+
+
+
+

@@ -139,7 +139,7 @@ success_criteria:
   - Signature verification middleware functional
   - Integration tests passing
   - Backward compatibility maintained (unsigned payloads still work)
-  - Documentation updated (MCP_SPEC.md, payload_model.md)
+  - Documentation updated (MCP_SPEC.md, source_material_model.md)
 
 release_spacing:
   v030: "Operational hardening (prerequisite)"

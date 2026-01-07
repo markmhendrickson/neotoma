@@ -12,7 +12,7 @@
 > Ship the **minimal ingestion + correction loop** that proves real usage before adding "safety nets" and "nice-to-have infra."
 This release validates: **"Users/agents can ingest, re-interpret, correct, and merge on real data."**
 #### 1.1 Canonical Specs (Authoritative Sources)
-- **Architecture Plan**: `.cursor/plans/sources-first-ingestion-v12-final.plan.md`
+- **Architecture Plan**: `.cursor/plans/sources_first_ingestion_v12_final.plan.md`
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
 - **Schema Registry**: `docs/subsystems/schema_registry.md`
 - **Database Schema**: `docs/subsystems/schema.md`

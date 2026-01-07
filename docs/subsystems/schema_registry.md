@@ -1,25 +1,33 @@
 # Neotoma Schema Registry — Config-Driven Schema Evolution
+
+**Authoritative Vocabulary:** [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
+
 ## Scope
+
 This document covers:
 - Schema registry table structure
-- Schema definition format
-- Reducer configuration patterns
-- Schema versioning and migration
-- Active schema lookup
+- [Entity schema](../vocabulary/canonical_terms.md#entity-schema) definition format
+- [Reducer](../vocabulary/canonical_terms.md#reducer) configuration patterns
+- [Entity schema](../vocabulary/canonical_terms.md#entity-schema) versioning and migration
+- Active [entity schema](../vocabulary/canonical_terms.md#entity-schema) lookup
+
 This document does NOT cover:
 - Database schema details (see `docs/subsystems/schema.md`)
 - Automated schema promotion (see `docs/architecture/schema_expansion.md`)
-- Reducer implementation (see `docs/subsystems/reducer.md`)
+- [Reducer](../vocabulary/canonical_terms.md#reducer) implementation (see `docs/subsystems/reducer.md`)
 ## 1. Schema Registry Overview
+
 ### 1.1 Purpose
+
 The schema registry enables:
-- **Runtime schema evolution** without code deployments
-- **Config-driven schemas** (not hard-coded in code)
-- **Schema versioning** for backward compatibility
+- **Runtime [entity schema](../vocabulary/canonical_terms.md#entity-schema) evolution** without code deployments
+- **Config-driven [entity schemas](../vocabulary/canonical_terms.md#entity-schema)** (not hard-coded in code)
+- **[Entity schema](../vocabulary/canonical_terms.md#entity-schema) versioning** for backward compatibility
 - **Merge policy configuration** per field
 - **Deterministic migrations** via manifests
 ### 1.2 Core Principle
-**Core physical DB schema is stable and minimal. All domain-specific schema lives in a versioned schema_registry.**
+
+**Core physical DB schema is stable and minimal. All domain-specific [entity schemas](../vocabulary/canonical_terms.md#entity-schema) live in a versioned schema_registry.**
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
 ## 2. Schema Registry Structure
 ### 2.1 Database Table

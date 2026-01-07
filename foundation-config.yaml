@@ -47,6 +47,34 @@ development:
     merge_strategy: "squash"  # or "merge", "rebase"
     delete_branch_on_merge: true
     require_linear_history: false
+  
+  # Publish command configuration
+  publish:
+    enabled: true
+    integration_branch: "dev"  # Branch to merge from
+    main_branch: "main"  # Branch to merge to
+    create_release_doc: true  # Create release documents
+    release_type: "not_marketed"  # Default release type for incremental releases
+    deployment:
+      enabled: true
+      provider: "fly"  # Deployment provider (fly, custom, etc.)
+      run_migrations: true  # Run database migrations on deploy
+      smoke_tests: true  # Run smoke tests after deploy
+      health_check_url: "https://app.neotoma.app/health"  # Health check endpoint
+    versioning:
+      planned_release_pattern: "v*.*.0"  # Pattern for planned releases (vX.Y.0)
+      incremental_release_patch_only: true  # Incremental releases only increment patch
+      initial_version: "v0.1.0"  # Initial version if no planned release exists
+      detection:
+        check_status_changes: true  # Detect planned releases via status.md changes
+        check_new_directories: true  # Detect planned releases via new release directories
+        check_commit_messages: true  # Detect planned releases via commit messages
+    submodules:
+      # Per-submodule configuration (optional)
+      foundation:
+        deployment:
+          enabled: false  # Submodules may not need deployment
+        version_file: "package.json"  # Version file to update (null for git tags only)
 
 # Code conventions
 conventions:
@@ -156,7 +184,7 @@ security:
       - "docs/private/"  # Neotoma private docs
       - "data/"          # Neotoma data directory
     protected_patterns:
-      - "\.env"
+      - "\\.env"
       - "secrets"
       - "credentials"
     check_env_files: true
@@ -207,6 +235,42 @@ tooling:
       # - name: "database_cli"
       #   verify_command: "npx supabase --version"
   
+  # Error reporting configuration
+  error_reporting:
+    enabled: true
+    auto_detect: true
+    auto_classify_bugs: true
+    severity_threshold: "medium"
+    max_stack_trace_length: 5000
+    retention_days: 30
+    output_directory: ".cursor/error_reports"
+    
+    # Wait mode configuration
+    wait_mode:
+      enabled: true
+      default_timeout: 300  # seconds (5 minutes)
+      default_poll_interval: 5  # seconds
+      max_timeout: 3600  # 1 hour maximum
+      min_poll_interval: 1  # minimum poll interval
+  
+  # Error debugging automation (repo-specific scripts)
+  error_debugging:
+    enabled: true
+    automation:
+      type: "cursor_cli"  # "cursor_cli" | "cloud_agents" | "disabled"
+      trigger_on_error: true  # Auto-trigger debugging when error reported
+      watch_mode: false  # Continuous monitoring (optional)
+      cursor_cli:
+        command: "cursor"  # Cursor CLI command (cursor agent)
+        working_dir: "."  # Workspace directory for agent
+        force: true  # Force allow commands (--force flag)
+        approve_mcps: true  # Auto-approve MCP servers (--approve-mcps flag)
+        # Legacy keyboard automation settings (not used in headless mode)
+        platform: "darwin"  # Deprecated: kept for backwards compatibility
+        clipboard_command: "pbcopy"  # Deprecated: not used in headless mode
+        keyboard_shortcut: "cmd+l"  # Deprecated: not used in headless mode
+        delay_before_shortcut_ms: 2000  # Deprecated: not used in headless mode
+  
   readme_generation:
     enabled: false
     source_documents: []
@@ -236,6 +300,7 @@ agent_instructions:
     location: ".cursor/commands/"
     generic_commands:
       - commit
+      - publish
     custom_commands:
       - create_feature_unit
       - create_release
