@@ -2,9 +2,11 @@
  * Relationships Service for Relationship Types (FU-059)
  *
  * Manages first-class typed relationships between entities.
+ * Updated to use relationship observations and snapshots.
  */
 
 import { supabase } from "../db.js";
+import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
 
 export type RelationshipType =
   | "PART_OF"
@@ -38,7 +40,7 @@ export class RelationshipsService {
   ]);
 
   /**
-   * Create relationship
+   * Create relationship (creates observation and snapshot)
    */
   async createRelationship(params: {
     relationship_type: RelationshipType;
@@ -47,58 +49,81 @@ export class RelationshipsService {
     source_record_id?: string | null;
     metadata?: Record<string, unknown>;
     user_id: string;
-  }): Promise<Relationship> {
+  }): Promise<RelationshipSnapshot> {
     if (!this.validTypes.has(params.relationship_type)) {
       throw new Error(`Invalid relationship type: ${params.relationship_type}`);
     }
 
-    const { data, error } = await supabase
-      .from("relationships")
-      .insert({
-        relationship_type: params.relationship_type,
-        source_entity_id: params.source_entity_id,
-        target_entity_id: params.target_entity_id,
-        source_record_id: params.source_record_id || null,
-        metadata: params.metadata || {},
-        user_id: params.user_id,
-      })
-      .select()
-      .single();
+    // Create relationship observation
+    const { createRelationshipObservations } = await import("./interpretation.js");
+    
+    await createRelationshipObservations(
+      [
+        {
+          relationship_type: params.relationship_type,
+          source_entity_id: params.source_entity_id,
+          target_entity_id: params.target_entity_id,
+          metadata: params.metadata || {},
+        },
+      ],
+      params.source_record_id || "00000000-0000-0000-0000-000000000000",
+      null, // No interpretation_id for direct creation
+      params.user_id,
+      100, // High priority for direct creation
+    );
 
-    if (error) {
-      throw new Error(`Failed to create relationship: ${error.message}`);
+    // Get the computed snapshot
+    const snapshot = await this.getRelationshipSnapshot(
+      params.relationship_type,
+      params.source_entity_id,
+      params.target_entity_id,
+      params.user_id,
+    );
+
+    if (!snapshot) {
+      throw new Error("Failed to retrieve relationship snapshot after creation");
     }
 
-    return data as Relationship;
+    // Also create in relationships table for backward compatibility (deprecated)
+    await supabase.from("relationships").insert({
+      relationship_type: params.relationship_type,
+      source_entity_id: params.source_entity_id,
+      target_entity_id: params.target_entity_id,
+      source_record_id: params.source_record_id || null,
+      metadata: params.metadata || {},
+      user_id: params.user_id,
+    });
+
+    return snapshot;
   }
 
   /**
-   * Get relationships for entity
+   * Get relationship snapshots for entity (replaces getRelationshipsForEntity)
    */
   async getRelationshipsForEntity(
     entityId: string,
     direction: "outgoing" | "incoming" | "both" = "both",
-  ): Promise<Relationship[]> {
+  ): Promise<RelationshipSnapshot[]> {
     let query;
 
     if (direction === "outgoing") {
       query = supabase
-        .from("relationships")
+        .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityId);
     } else if (direction === "incoming") {
       query = supabase
-        .from("relationships")
+        .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entityId);
     } else {
       query = supabase
-        .from("relationships")
+        .from("relationship_snapshots")
         .select("*")
         .or(`source_entity_id.eq.${entityId},target_entity_id.eq.${entityId}`);
     }
 
-    const { data, error } = await query.order("created_at", {
+    const { data, error } = await query.order("last_observation_at", {
       ascending: false,
     });
 
@@ -106,26 +131,115 @@ export class RelationshipsService {
       throw new Error(`Failed to get relationships: ${error.message}`);
     }
 
-    return (data || []) as Relationship[];
+    return (data || []) as RelationshipSnapshot[];
   }
 
   /**
-   * Get relationships by type
+   * Get relationship snapshots by type
    */
   async getRelationshipsByType(
     type: RelationshipType,
-  ): Promise<Relationship[]> {
+  ): Promise<RelationshipSnapshot[]> {
     const { data, error } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("*")
       .eq("relationship_type", type)
-      .order("created_at", { ascending: false });
+      .order("last_observation_at", { ascending: false });
 
     if (error) {
       throw new Error(`Failed to get relationships by type: ${error.message}`);
     }
 
-    return (data || []) as Relationship[];
+    return (data || []) as RelationshipSnapshot[];
+  }
+
+  /**
+   * Get a specific relationship snapshot
+   */
+  async getRelationshipSnapshot(
+    relationshipType: RelationshipType,
+    sourceEntityId: string,
+    targetEntityId: string,
+    userId: string,
+  ): Promise<RelationshipSnapshot | null> {
+    const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
+
+    const { data, error } = await supabase
+      .from("relationship_snapshots")
+      .select("*")
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`Failed to get relationship snapshot: ${error.message}`);
+    }
+
+    return data as RelationshipSnapshot | null;
+  }
+
+  /**
+   * Compute or recompute snapshot for a relationship
+   */
+  async computeRelationshipSnapshot(
+    relationshipType: RelationshipType,
+    sourceEntityId: string,
+    targetEntityId: string,
+    userId: string,
+  ): Promise<RelationshipSnapshot> {
+    const { relationshipReducer } = await import("../reducers/relationship_reducer.js");
+    
+    const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
+
+    // Get all observations for this relationship
+    const { data: observations, error: fetchError } = await supabase
+      .from("relationship_observations")
+      .select("*")
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId)
+      .order("observed_at", { ascending: false });
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch observations: ${fetchError.message}`);
+    }
+
+    if (!observations || observations.length === 0) {
+      throw new Error(`No observations found for relationship ${relationshipKey}`);
+    }
+
+    // Compute snapshot
+    const snapshot = await relationshipReducer.computeSnapshot(
+      relationshipKey,
+      observations as any,
+    );
+
+    // Save snapshot
+    const { error: saveError } = await supabase
+      .from("relationship_snapshots")
+      .upsert(
+        {
+          relationship_key: snapshot.relationship_key,
+          relationship_type: snapshot.relationship_type,
+          source_entity_id: snapshot.source_entity_id,
+          target_entity_id: snapshot.target_entity_id,
+          schema_version: snapshot.schema_version,
+          snapshot: snapshot.snapshot,
+          computed_at: snapshot.computed_at,
+          observation_count: snapshot.observation_count,
+          last_observation_at: snapshot.last_observation_at,
+          provenance: snapshot.provenance,
+          user_id: snapshot.user_id,
+        },
+        {
+          onConflict: "relationship_key",
+        },
+      );
+
+    if (saveError) {
+      throw new Error(`Failed to save snapshot: ${saveError.message}`);
+    }
+
+    return snapshot;
   }
 }
 

@@ -1,13 +1,19 @@
 # Neotoma Core Philosophy and Principles
 
-## 5.1 Determinism Above All
-A given input MUST always produce identical output:
-- Same raw_text → same extracted_fields
-- Same entity name → same entity_id
-- Same date field → same event_id
+## 5.1 Idempotence Above All (System-Level Determinism)
+
+A given operation MUST always produce the same final state:
+- Same file uploaded twice → same record (deduplicated via content_hash)
+- Same source + same interpretation config → same observations (idempotent, no duplicates)
+- Same entity name → same entity_id (hash-based, deterministic)
+- Same observations + same merge rules → same snapshot (deterministic reducer)
 - Same query + same DB state → same search order
-- Same file uploaded twice → same record (deduplicated)
-**No randomness. No nondeterminism. No LLM extraction (MVP).**
+
+**System-Level Guarantees:**
+- **Deterministic components**: Content hashing, deduplication, reducer computation, entity ID generation (must be byte-for-byte deterministic)
+- **Idempotent operations**: LLM interpretation (model is stochastic, but system enforces idempotence through canonicalization, hashing, and deduplication)
+
+**No randomness in deterministic components. No duplicate observations from idempotent operations.**
 
 ## 5.2 Explicit User Control
 - Neotoma ingests **only what the user explicitly provides**

@@ -5,7 +5,7 @@
  *
  * Flow:
  * 1. Lookup capability → entity_type + schema_version
- * 2. Normalize body per capability rules
+ * 2. Normalize body per entity schema rules
  * 3. Check for existing payload by payload_content_id
  * 4. If duplicate: return existing payload ID
  * 5. If new: create payload in payload_submissions table

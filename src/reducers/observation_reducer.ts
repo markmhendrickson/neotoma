@@ -65,7 +65,7 @@ export class ObservationReducer {
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
       console.warn(
-        `No active schema found for entity type ${entityType}, using defaults`,
+        `No active entity schema found for entity type ${entityType}, using defaults`,
       );
       return this.computeSnapshotWithDefaults(entityId, observations);
     }

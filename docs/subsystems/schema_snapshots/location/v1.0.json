@@ -1,0 +1,79 @@
+{
+  "entity_type": "location",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:01:59.150009+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "address": {
+        "type": "string",
+        "required": false
+      },
+      "city": {
+        "type": "string",
+        "required": false
+      },
+      "state": {
+        "type": "string",
+        "required": false
+      },
+      "country": {
+        "type": "string",
+        "required": false
+      },
+      "postal_code": {
+        "type": "string",
+        "required": false
+      },
+      "latitude": {
+        "type": "number",
+        "required": false
+      },
+      "longitude": {
+        "type": "number",
+        "required": false
+      },
+      "type": {
+        "type": "string",
+        "required": false
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "name": {
+        "strategy": "highest_priority"
+      },
+      "latitude": {
+        "strategy": "last_write"
+      },
+      "longitude": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

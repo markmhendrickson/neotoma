@@ -21,6 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_interpretations_created_at ON interpretations(cre
 
 -- Update RLS policy names
 DROP POLICY IF EXISTS "Service role full access - interpretation_runs" ON interpretations;
+DROP POLICY IF EXISTS "Service role full access - interpretations" ON interpretations;
 CREATE POLICY "Service role full access - interpretations"
   ON interpretations
   FOR ALL
@@ -29,6 +30,7 @@ CREATE POLICY "Service role full access - interpretations"
   WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Users read own interpretation runs" ON interpretations;
+DROP POLICY IF EXISTS "Users read own interpretations" ON interpretations;
 CREATE POLICY "Users read own interpretations"
   ON interpretations
   FOR SELECT

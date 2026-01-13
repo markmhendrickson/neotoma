@@ -1,0 +1,75 @@
+{
+  "entity_type": "project",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:00.170951+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": true
+      },
+      "owner": {
+        "type": "string",
+        "required": false
+      },
+      "start_date": {
+        "type": "date",
+        "required": false
+      },
+      "end_date": {
+        "type": "date",
+        "required": false
+      },
+      "created_date": {
+        "type": "date",
+        "required": false
+      },
+      "updated_date": {
+        "type": "date",
+        "required": false
+      },
+      "tags": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "status": {
+        "strategy": "last_write"
+      },
+      "end_date": {
+        "strategy": "last_write"
+      },
+      "updated_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

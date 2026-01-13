@@ -61,7 +61,7 @@ CREATE TABLE records (
 | `type`            | TEXT         | Schema type (e.g., `FinancialRecord`)      | No      | Yes (GIN)       |
 | `properties`      | JSONB        | Extracted fields per schema                | No\*    | Yes (GIN)       |
 | `file_urls`       | JSONB        | Array of file URLs                         | No      | No              |
-| `external_source` | TEXT         | Source system (`gmail`, `upload`, `plaid`) | No      | Yes (composite) |
+| `external_source` | TEXT         | Source system (`gmail`, `upload`) | No      | Yes (composite) |
 | `external_id`     | TEXT         | ID in external system                      | No      | Yes (composite) |
 | `external_hash`   | TEXT         | SHA-256 of file content                    | No      | Yes             |
 | `summary`         | TEXT         | Optional summary text                      | Yes\*\* | No              |
@@ -115,113 +115,7 @@ CREATE INDEX idx_record_relationships_target ON record_relationships(target_id);
 - `source → mentions → target`: Source record mentions entity in target record
 - `source → derives_from → target`: Source was extracted from target (e.g., transaction from bank statement)
 - `source → supersedes → target`: Source replaces target (e.g., updated contract)
-### 2.3 `plaid_items` Table
-**Purpose:** Track Plaid-linked financial institutions and sync state.
-**Schema:**
-```sql
-CREATE TABLE plaid_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  item_id TEXT UNIQUE NOT NULL,                    -- Plaid item_id
-  institution_id TEXT,                             -- Plaid institution_id
-  institution_name TEXT,
-  access_token TEXT NOT NULL,                      -- Encrypted access token
-  environment TEXT NOT NULL,                       -- 'sandbox', 'development', 'production'
-  products JSONB NOT NULL DEFAULT '[]',            -- Array of enabled products
-  country_codes JSONB NOT NULL DEFAULT '[]',
-  cursor TEXT,                                     -- Sync cursor for incremental pulls
-  webhook_status TEXT,
-  last_successful_sync TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Indexes:**
-```sql
-CREATE INDEX idx_plaid_items_item_id ON plaid_items(item_id);
-CREATE INDEX idx_plaid_items_environment ON plaid_items(environment);
-```
-### 2.4 `plaid_sync_runs` Table
-**Purpose:** History of Plaid sync operations.
-**Schema:**
-```sql
-CREATE TABLE plaid_sync_runs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  plaid_item_id UUID NOT NULL REFERENCES plaid_items(id) ON DELETE CASCADE,
-  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  completed_at TIMESTAMP WITH TIME ZONE,
-  status TEXT NOT NULL DEFAULT 'pending',          -- 'pending', 'running', 'completed', 'failed'
-  added_transactions INTEGER NOT NULL DEFAULT 0,
-  modified_transactions INTEGER NOT NULL DEFAULT 0,
-  removed_transactions INTEGER NOT NULL DEFAULT 0,
-  error JSONB,
-  next_cursor TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Indexes:**
-```sql
-CREATE INDEX idx_plaid_sync_runs_item_id ON plaid_sync_runs(plaid_item_id);
-CREATE INDEX idx_plaid_sync_runs_started_at ON plaid_sync_runs(started_at DESC);
-```
-### 2.5 `external_connectors` Table
-**Purpose:** Generic external data connectors (Gmail, Dropbox, etc.).
-**Schema:**
-```sql
-CREATE TABLE external_connectors (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  provider TEXT NOT NULL,                          -- 'gmail', 'dropbox', 'notion'
-  provider_type TEXT NOT NULL,                     -- 'oauth', 'api_key', 'manual'
-  account_identifier TEXT,                         -- e.g., email address
-  account_label TEXT,                              -- User-friendly name
-  status TEXT NOT NULL DEFAULT 'active',           -- 'active', 'paused', 'error', 'revoked'
-  capabilities JSONB NOT NULL DEFAULT '[]',        -- Array of enabled features
-  oauth_scopes JSONB NOT NULL DEFAULT '[]',
-  secrets_envelope TEXT,                           -- Encrypted credentials
-  metadata JSONB NOT NULL DEFAULT '{}',
-  sync_cursor JSONB,                               -- Provider-specific cursor
-  last_successful_sync TIMESTAMP WITH TIME ZONE,
-  last_error JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Indexes:**
-```sql
-CREATE INDEX idx_external_connectors_provider ON external_connectors(provider);
-CREATE INDEX idx_external_connectors_status ON external_connectors(status);
-CREATE INDEX idx_external_connectors_account_identifier ON external_connectors(account_identifier)
-  WHERE account_identifier IS NOT NULL;
-CREATE UNIQUE INDEX idx_external_connectors_provider_account
-  ON external_connectors(provider, account_identifier)
-  WHERE account_identifier IS NOT NULL;
-```
-### 2.6 `external_sync_runs` Table
-**Purpose:** History of generic connector syncs.
-**Schema:**
-```sql
-CREATE TABLE external_sync_runs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  connector_id UUID NOT NULL REFERENCES external_connectors(id) ON DELETE CASCADE,
-  sync_type TEXT NOT NULL DEFAULT 'incremental',   -- 'full', 'incremental'
-  status TEXT NOT NULL DEFAULT 'pending',
-  started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  completed_at TIMESTAMP WITH TIME ZONE,
-  stats JSONB NOT NULL DEFAULT '{}',               -- {'records_added': 10, 'errors': 0}
-  cursor JSONB,                                    -- Next cursor for incremental sync
-  error JSONB,
-  trace_id TEXT,                                   -- Distributed tracing ID
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Indexes:**
-```sql
-CREATE INDEX idx_external_sync_runs_connector ON external_sync_runs(connector_id);
-CREATE INDEX idx_external_sync_runs_started_at ON external_sync_runs(started_at DESC);
-CREATE INDEX idx_external_sync_runs_status ON external_sync_runs(status);
-```
-### 2.7 `observations` Table
+### 2.3 `observations` Table
 **Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots. Links to sources and interpretations for full provenance.
 **Schema:**
 ```sql
@@ -232,7 +126,7 @@ CREATE TABLE observations (
   schema_version TEXT NOT NULL,
   source_record_id UUID REFERENCES records(id),
   source_id UUID REFERENCES sources(id),
-  interpretation_run_id UUID REFERENCES interpretation_runs(id),
+  interpretation_run UUID REFERENCES interpretations(id),
   observed_at TIMESTAMPTZ NOT NULL,
   specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
   source_priority INTEGER DEFAULT 0,
@@ -250,7 +144,7 @@ CREATE TABLE observations (
 | `schema_version`        | TEXT        | Schema version used for extraction                | No      | No          |
 | `source_record_id`      | UUID        | Source document/record (legacy)                   | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this observation             | No      | Yes         |
-| `interpretation_run_id` | UUID        | Interpretation that created this                  | No      | Yes         |
+| `interpretation_run` | UUID        | Interpretation that created this                  | No      | Yes         |
 | `observed_at`           | TIMESTAMPTZ | Timestamp when observation was made               | No      | Yes         |
 | `specificity_score`     | NUMERIC     | How specific this observation is (0-1)            | No      | No          |
 | `source_priority`       | INTEGER     | Priority of source (higher = more trusted)        | No      | No          |
@@ -268,7 +162,7 @@ CREATE TABLE observations (
 CREATE INDEX idx_observations_entity ON observations(entity_id, observed_at DESC);
 CREATE INDEX idx_observations_record ON observations(source_record_id);
 CREATE INDEX idx_observations_source ON observations(source_id) WHERE source_id IS NOT NULL;
-CREATE INDEX idx_observations_run ON observations(interpretation_run_id) WHERE interpretation_run_id IS NOT NULL;
+CREATE INDEX idx_observations_run ON observations(interpretation_run) WHERE interpretation_run IS NOT NULL;
 CREATE INDEX idx_observations_user ON observations(user_id);
 ```
 **RLS Policies:**
@@ -283,7 +177,7 @@ CREATE POLICY "Service role full access" ON observations
 - Observations are immutable once created
 - Multiple observations can exist for the same entity from different sources
 - Reducers merge observations into entity snapshots deterministically
-- `source_id` and `interpretation_run_id` provide full provenance chain
+- `source_id` and `interpretation_run` provide full provenance chain
 - Corrections use `source_priority = 1000` to override AI extraction
 - See [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) for details
 - See [`docs/subsystems/sources.md`](./sources.md) for sources-first architecture
@@ -369,7 +263,7 @@ CREATE TABLE raw_fragments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   record_id UUID REFERENCES records(id),
   source_id UUID REFERENCES sources(id),
-  interpretation_run_id UUID REFERENCES interpretation_runs(id),
+  interpretation_run UUID REFERENCES interpretations(id),
   fragment_type TEXT NOT NULL,
   fragment_key TEXT NOT NULL,
   fragment_value JSONB NOT NULL,
@@ -386,7 +280,7 @@ CREATE TABLE raw_fragments (
 | `id`                    | UUID        | Unique fragment ID                                     | No      | Primary key |
 | `record_id`             | UUID        | Source record (legacy, nullable)                       | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this fragment                     | No      | Yes         |
-| `interpretation_run_id` | UUID        | Interpretation that produced this fragment             | No      | Yes         |
+| `interpretation_run` | UUID        | Interpretation that produced this fragment             | No      | Yes         |
 | `fragment_type`         | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
 | `fragment_key`          | TEXT        | Field name/key                                         | No      | Yes         |
 | `fragment_value`        | JSONB       | Field value                                            | No      | No          |
@@ -399,7 +293,7 @@ CREATE TABLE raw_fragments (
 ```sql
 CREATE INDEX idx_fragments_record ON raw_fragments(record_id);
 CREATE INDEX idx_fragments_source ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
-CREATE INDEX idx_fragments_run ON raw_fragments(interpretation_run_id) WHERE interpretation_run_id IS NOT NULL;
+CREATE INDEX idx_fragments_run ON raw_fragments(interpretation_run) WHERE interpretation_run IS NOT NULL;
 CREATE INDEX idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
 CREATE INDEX idx_fragments_user ON raw_fragments(user_id);
 ```
@@ -692,12 +586,128 @@ CREATE INDEX idx_relationships_type ON relationships(relationship_type);
 - Relationships are first-class records, not hard-coded foreign keys
 - Multiple relationship types can exist between same entities
 - Graph queries traverse relationships dynamically
+- **DEPRECATED**: This table is being phased out in favor of `relationship_observations` and `relationship_snapshots`
 - See [`docs/subsystems/relationships.md`](./relationships.md) for details
-## 3. JSONB `properties` Schema
+
+### 2.17 `relationship_observations` Table
+**Purpose:** Store observations about relationships from multiple sources. Enables deterministic merging and provenance tracking for relationships.
+
+**Schema:**
+```sql
+CREATE TABLE relationship_observations (
+  id UUID PRIMARY KEY,
+  relationship_key TEXT NOT NULL,
+  relationship_type TEXT NOT NULL,
+  source_entity_id TEXT NOT NULL,
+  target_entity_id TEXT NOT NULL,
+  source_id UUID REFERENCES sources(id),
+  interpretation_id UUID REFERENCES interpretations(id),
+  observed_at TIMESTAMPTZ NOT NULL,
+  specificity_score NUMERIC(3,2),
+  source_priority INTEGER NOT NULL DEFAULT 0,
+  metadata JSONB NOT NULL DEFAULT '{}',
+  canonical_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  user_id UUID NOT NULL,
+  UNIQUE(source_id, interpretation_id, relationship_key, canonical_hash, user_id)
+);
+```
+
+**Field Definitions:**
+
+| Field                 | Type        | Purpose                                                       | Mutable | Indexed     |
+| --------------------- | ----------- | ------------------------------------------------------------- | ------- | ----------- |
+| `id`                  | UUID        | Deterministic observation ID (hash-based)                     | No      | Primary key |
+| `relationship_key`    | TEXT        | Composite key: `{type}:{source_entity_id}:{target_entity_id}` | No      | Yes         |
+| `relationship_type`   | TEXT        | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.)       | No      | Yes         |
+| `source_entity_id`    | TEXT        | Source entity ID                                              | No      | Yes         |
+| `target_entity_id`    | TEXT        | Target entity ID                                              | No      | Yes         |
+| `source_id`           | UUID        | Source material that created this observation                 | No      | Yes         |
+| `interpretation_id`   | UUID        | Interpretation run that created this observation (nullable)   | No      | Yes         |
+| `observed_at`         | TIMESTAMPTZ | When observation was made                                     | No      | Yes         |
+| `specificity_score`   | NUMERIC     | How specific this observation is (0-1)                        | No      | No          |
+| `source_priority`     | INTEGER     | Priority of source (higher = more trusted)                    | No      | No          |
+| `metadata`            | JSONB       | Relationship metadata fields                                  | No      | No          |
+| `canonical_hash`      | TEXT        | Hash of canonicalized metadata for idempotence               | No      | No          |
+| `created_at`          | TIMESTAMPTZ | When observation was created                                  | No      | No          |
+| `user_id`             | UUID        | User who owns this observation                                | No      | Yes         |
+
+**Indexes:**
+```sql
+CREATE INDEX idx_relationship_observations_key ON relationship_observations(relationship_key);
+CREATE INDEX idx_relationship_observations_type ON relationship_observations(relationship_type);
+CREATE INDEX idx_relationship_observations_source_entity ON relationship_observations(source_entity_id);
+CREATE INDEX idx_relationship_observations_target_entity ON relationship_observations(target_entity_id);
+CREATE INDEX idx_relationship_observations_source ON relationship_observations(source_id);
+CREATE INDEX idx_relationship_observations_interpretation ON relationship_observations(interpretation_id);
+CREATE INDEX idx_relationship_observations_user ON relationship_observations(user_id);
+```
+
+**Notes:**
+- Multiple sources can create observations about the same relationship
+- Observations are immutable; corrections create new observations with higher priority
+- Unique constraint prevents duplicate observations from same source
+- See [`docs/subsystems/relationships.md`](./relationships.md) for observation patterns
+
+### 2.18 `relationship_snapshots` Table
+**Purpose:** Store computed snapshots of relationships, representing current truth merged from observations.
+
+**Schema:**
+```sql
+CREATE TABLE relationship_snapshots (
+  relationship_key TEXT PRIMARY KEY,
+  relationship_type TEXT NOT NULL,
+  source_entity_id TEXT NOT NULL,
+  target_entity_id TEXT NOT NULL,
+  schema_version TEXT NOT NULL DEFAULT '1.0',
+  snapshot JSONB NOT NULL DEFAULT '{}',
+  computed_at TIMESTAMPTZ NOT NULL,
+  observation_count INTEGER NOT NULL DEFAULT 0,
+  last_observation_at TIMESTAMPTZ NOT NULL,
+  provenance JSONB NOT NULL DEFAULT '{}',
+  user_id UUID NOT NULL
+);
+```
+
+**Field Definitions:**
+
+| Field                 | Type        | Purpose                                                    | Mutable | Indexed     |
+| --------------------- | ----------- | ---------------------------------------------------------- | ------- | ----------- |
+| `relationship_key`    | TEXT        | Composite primary key                                      | No      | Primary key |
+| `relationship_type`   | TEXT        | Relationship type                                          | No      | Yes         |
+| `source_entity_id`    | TEXT        | Source entity ID                                           | No      | Yes         |
+| `target_entity_id`    | TEXT        | Target entity ID                                           | No      | Yes         |
+| `schema_version`      | TEXT        | Schema version used for snapshot computation               | No      | No          |
+| `snapshot`            | JSONB       | Current truth (merged metadata), computed by reducer       | Yes     | Yes (GIN)   |
+| `computed_at`         | TIMESTAMPTZ | When snapshot was computed                                 | Yes     | No          |
+| `observation_count`   | INTEGER     | Number of observations merged                              | Yes     | No          |
+| `last_observation_at` | TIMESTAMPTZ | Timestamp of most recent observation                       | Yes     | No          |
+| `provenance`          | JSONB       | Maps metadata field → observation_id for traceability      | Yes     | No          |
+| `user_id`             | UUID        | User who owns this relationship                            | No      | Yes         |
+
+**Indexes:**
+```sql
+CREATE INDEX idx_relationship_snapshots_type ON relationship_snapshots(relationship_type);
+CREATE INDEX idx_relationship_snapshots_source_entity ON relationship_snapshots(source_entity_id);
+CREATE INDEX idx_relationship_snapshots_target_entity ON relationship_snapshots(target_entity_id);
+CREATE INDEX idx_relationship_snapshots_user ON relationship_snapshots(user_id);
+CREATE INDEX idx_relationship_snapshots_snapshot ON relationship_snapshots USING GIN(snapshot);
+```
+
+**Notes:**
+- Snapshots are recomputed when new relationship observations arrive
+- Provenance enables full traceability: metadata field → observation → source
+- Reducers are deterministic: same observations + merge rules → same snapshot
+- See [`docs/subsystems/reducer.md`](./reducer.md) for reducer patterns
+
+## 3. JSONB `fields` Schema (Observations)
 ### 3.1 Overview
-The `properties` JSONB field in `records` stores schema-specific extracted fields. Each `type` (e.g., `FinancialRecord`) has a well-defined `properties` structure.
+The `fields` JSONB field in `observations` stores [entity schema](#entity-schema)-specific [extracted](#extraction) fields. Each [entity type](#entity-type) (e.g., `invoice`) has a well-defined `fields` structure based on its [entity schema](#entity-schema).
+
+**Note:** This section documents the current observations-based architecture. For legacy `records` table documentation, see historical release notes.
+
 **Design Principles:**
-- **Schema-driven:** Structure defined by `type` field
+- **[Entity schema](#entity-schema)-driven:** Structure defined by [entity type](#entity-type) and [entity schema](#entity-schema)
 - **Flat where possible:** Avoid deep nesting
 - **Null-safe:** Missing keys = absent data (not errors)
 - **Versioned:** Include `schema_version` if structure evolves
@@ -886,34 +896,37 @@ For unrecognized document types:
   "language": "en"
 }
 ```
-### 3.10 Querying JSONB Properties
+### 3.10 Querying JSONB Fields (Observations)
 **Example Queries:**
 **Find all invoices over $1000:**
 ```sql
-SELECT * FROM records
-WHERE type = 'FinancialRecord'
-  AND (properties->>'document_type') = 'invoice'
-  AND (properties->>'amount')::numeric > 1000;
+SELECT * FROM observations
+WHERE entity_type = 'invoice'
+  AND (fields->>'amount')::numeric > 1000;
 ```
 **Find passports expiring soon:**
 ```sql
-SELECT * FROM records
-WHERE type = 'IdentityDocument'
-  AND (properties->>'document_type') = 'passport'
-  AND (properties->>'date_expiry')::date < NOW() + INTERVAL '6 months';
+SELECT * FROM observations
+WHERE entity_type = 'passport'
+  AND (fields->>'date_expiry')::date < NOW() + INTERVAL '6 months';
 ```
 **Find flights departing next week:**
 ```sql
-SELECT * FROM records
-WHERE type = 'TravelDocument'
-  AND (properties->>'departure_datetime')::timestamptz BETWEEN NOW() AND NOW() + INTERVAL '7 days';
+SELECT * FROM observations
+WHERE entity_type = 'flight'
+  AND (fields->>'departure_datetime')::timestamptz BETWEEN NOW() AND NOW() + INTERVAL '7 days';
 ```
-### 3.11 Extraction Metadata Structure
-The `extraction_metadata` JSONB field in `records` stores non-schema fields, validation warnings, and extraction quality indicators. This is part of the **three-layer storage model** that preserves all extracted data while maintaining schema compliance in `properties`.
+
+**Note:** Legacy queries using `records` table are documented for historical reference. Current architecture uses `observations` table with `fields` JSONB column.
+### 3.11 [Extraction](#extraction) Metadata Structure
+Unknown fields and validation warnings are stored in the `raw_fragments` table. This is part of the **three-layer storage model** that preserves all [extracted](#extraction) data while maintaining [entity schema](#entity-schema) compliance in observation `fields`.
+
 **Three-Layer Storage Model:**
-- `raw_text`: Immutable original extracted text (stored separately)
-- `properties`: Schema-compliant fields only (deterministic, queryable)
-- `extraction_metadata`: Unknown fields, warnings, quality indicators (preservation layer)
+- `raw_text`: Immutable original [extracted](#extraction) text ([stored](#storing) with [source material](#source-material))
+- `fields`: [Entity schema](#entity-schema)-compliant fields only (deterministic, queryable) in [observations](#observation)
+- `raw_fragments`: Unknown fields, warnings, quality indicators (preservation layer)
+
+**Note:** Legacy `extraction_metadata` in `records` table is documented for historical reference. Current architecture uses `raw_fragments` table for unknown fields.
 **Purpose:**
 - Preserve all extracted data (zero data loss)
 - Maintain schema compliance in `properties` for deterministic queries
@@ -968,38 +981,47 @@ interface ExtractionMetadata {
 - `extraction_metadata->'warnings'` — Query records with extraction issues
 - `extraction_metadata->'extraction_quality'->'fields_extracted_count'` — Quality metrics
 **Usage Patterns:**
-**Find records with extraction warnings:**
+**Find [observations](#observation) with [extraction](#extraction) warnings:**
 ```sql
-SELECT * FROM records
-WHERE extraction_metadata->'warnings' IS NOT NULL
-  AND jsonb_array_length(extraction_metadata->'warnings') > 0;
+SELECT * FROM raw_fragments
+WHERE fragment_type = 'unknown_field';
 ```
 **Access unknown fields when needed:**
 ```sql
 SELECT
   id,
-  properties,
-  extraction_metadata->'unknown_fields' as unknown_data
-FROM records
-WHERE extraction_metadata->'unknown_fields' IS NOT NULL;
+  fragment_key,
+  fragment_value,
+  source_id
+FROM raw_fragments
+WHERE fragment_type = 'unknown_field';
 ```
-**Find records with high field filtering (potential schema expansion candidates):**
+**Find [observations](#observation) with high field filtering (potential [entity schema](#entity-schema) expansion candidates):**
 ```sql
-SELECT * FROM records
-WHERE (extraction_metadata->'extraction_quality'->>'fields_filtered_count')::int > 3;
+SELECT 
+  fragment_key,
+  COUNT(*) as frequency_count
+FROM raw_fragments
+WHERE fragment_type = 'unknown_field'
+GROUP BY fragment_key
+HAVING COUNT(*) > 3;
 ```
+
+**Note:** Legacy queries using `records.extraction_metadata` are documented for historical reference. Current architecture uses `raw_fragments` table.
 **Indexes:**
 ```sql
--- Index for querying records with warnings
-CREATE INDEX idx_records_extraction_warnings
-  ON records USING GIN ((extraction_metadata->'warnings'));
--- Index for unknown fields analysis
-CREATE INDEX idx_records_unknown_fields
-  ON records USING GIN ((extraction_metadata->'unknown_fields'));
+-- Index for querying raw_fragments (unknown fields)
+CREATE INDEX idx_raw_fragments_frequency 
+  ON raw_fragments(fragment_key, frequency_count DESC);
+-- Index for unknown fields analysis by source
+CREATE INDEX idx_raw_fragments_source 
+  ON raw_fragments(source_id) WHERE fragment_type = 'unknown_field';
 ```
+
+**Note:** Legacy indexes on `records.extraction_metadata` are documented for historical reference. Current architecture uses `raw_fragments` table indexes.
 **Related Documentation:**
 - Layered storage model: `docs/architecture/schema_handling.md`
-- Field validation patterns: `docs/subsystems/record_types.md` Section 10
+- Field validation patterns: See [entity schema](#entity-schema) definitions in `docs/subsystems/schema_registry.md`
 - Automatic schema expansion: `docs/architecture/schema_expansion.md` (post-MVP)
 ## 4. Entity and Event Schema
 ### 4.1 `entities` Table
@@ -1166,7 +1188,7 @@ ALTER TABLE records ADD COLUMN IF NOT EXISTS summary TEXT;
 - [ ] RLS policies still enforce correctly
 ## 7. Schema Versioning
 ### 7.1 JSONB Schema Versions
-Each record type SHOULD include `schema_version` in `properties`:
+Each [entity type](#entity-type) SHOULD include `schema_version` in observation `fields`:
 ```json
 {
   "schema_version": "1.0",
@@ -1212,19 +1234,19 @@ function migrateFinancialRecordProperties(properties: any): any {
 ### 8.2 Query Optimization Tips
 **Use Indexed Columns First:**
 ```sql
--- Good: Uses idx_records_type
-SELECT * FROM records WHERE type = 'FinancialRecord';
--- Bad: Full table scan
-SELECT * FROM records WHERE properties->>'amount' = '1000';
+-- Good: Uses idx_observations_entity
+SELECT * FROM observations WHERE entity_type = 'invoice';
+-- Bad: Full table scan (if no index on JSONB path)
+SELECT * FROM observations WHERE fields->>'amount' = '1000';
 ```
 **Add Expression Indexes for Common JSONB Queries:**
 ```sql
-CREATE INDEX idx_records_amount ON records ((properties->>'amount')::numeric)
-  WHERE type = 'FinancialRecord';
+CREATE INDEX idx_observations_amount ON observations ((fields->>'amount')::numeric)
+  WHERE entity_type = 'invoice';
 ```
 **Use `EXPLAIN ANALYZE`:**
 ```sql
-EXPLAIN ANALYZE SELECT * FROM records WHERE type = 'FinancialRecord';
+EXPLAIN ANALYZE SELECT * FROM observations WHERE entity_type = 'invoice';
 ```
 ## 9. Schema Testing Requirements
 ### 9.1 Unit Tests

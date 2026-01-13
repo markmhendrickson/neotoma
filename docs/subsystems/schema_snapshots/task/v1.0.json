@@ -1,0 +1,83 @@
+{
+  "entity_type": "task",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:01:59.839+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": true
+      },
+      "priority": {
+        "type": "string",
+        "required": false
+      },
+      "assignee": {
+        "type": "string",
+        "required": false
+      },
+      "project_id": {
+        "type": "string",
+        "required": false
+      },
+      "due_date": {
+        "type": "date",
+        "required": false
+      },
+      "completed_date": {
+        "type": "date",
+        "required": false
+      },
+      "created_date": {
+        "type": "date",
+        "required": false
+      },
+      "updated_date": {
+        "type": "date",
+        "required": false
+      },
+      "tags": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "status": {
+        "strategy": "last_write"
+      },
+      "completed_date": {
+        "strategy": "last_write"
+      },
+      "updated_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

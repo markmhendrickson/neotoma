@@ -1,0 +1,68 @@
+{
+  "entity_type": "meal",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:02.528559+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "meal_type": {
+        "type": "string",
+        "required": false
+      },
+      "date": {
+        "type": "date",
+        "required": true
+      },
+      "calories": {
+        "type": "number",
+        "required": false
+      },
+      "protein": {
+        "type": "number",
+        "required": false
+      },
+      "carbs": {
+        "type": "number",
+        "required": false
+      },
+      "fat": {
+        "type": "number",
+        "required": false
+      },
+      "foods": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "date": {
+        "strategy": "last_write"
+      },
+      "calories": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

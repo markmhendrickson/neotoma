@@ -39,7 +39,39 @@ AI interpretation is **auditable but not replay-deterministic**:
 - Prior observations are never modified (immutability preserved)
 - Audit trail shows exactly how data was interpreted at each point in time
 **Implication:** Entity resolution may create duplicates. The `merge_entities()` capability exists to repair duplicates deterministically after the fact.
-### 1.4 What is Determinism? (Continued)
+### 1.4 Idempotence vs Determinism: Key Distinction
+
+**Determinism (Model-Level):**
+- Same input → same output (byte-for-byte identical)
+- For LLMs: same prompt → same token sequence
+- **Not achievable with stochastic LLMs** (category error to expect this)
+
+**Idempotence (System-Level):**
+- Same operation → same final state (no duplicates, no side effects)
+- For interpretation: same source + same config → same observations (no duplicates created)
+- **Achievable even with stochastic LLMs** through post-processing
+
+**How Idempotence Works Without Determinism:**
+
+1. **LLM produces stochastic output** (not deterministic):
+   - Run 1: `{"amount": 1200.00, "currency": "EUR"}`
+   - Run 2: `{"currency": "EUR", "amount": 1200}`
+
+2. **System canonicalizes** (makes deterministic):
+   - Both become: `{"amount": 1200, "currency": "EUR"}` (sorted keys, normalized numbers)
+
+3. **System hashes** (creates identity):
+   - Both produce: `hash = sha256(canonical)` → same hash
+
+4. **System checks for existing** (enforces idempotence):
+   - If observation with this hash exists → no duplicate created
+   - Final state is the same regardless of LLM variance
+
+**Key Insight:** Idempotence is enforced post-generation, not during generation.
+
+**Policy:** Neotoma prioritizes system-level idempotence over model-level determinism. The LLM is stochastic (not deterministic). The system enforces idempotence through canonicalization, hashing, and deduplication.
+
+### 1.5 What is Determinism? (Continued)
 **Inputs include:**
 - Function arguments
 - File contents

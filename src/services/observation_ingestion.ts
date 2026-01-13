@@ -87,7 +87,7 @@ export async function createObservationsFromRecord(
     }
   }
 
-  // Load active schema for entity types
+  // Load active entity schemas for entity types
   const entityTypes = new Set(entities.map((e) => e.entity_type));
   const schemaMap = new Map<string, any>();
 
@@ -291,7 +291,7 @@ export async function createObservationsFromPayload(
 
   const observations = [];
 
-  // Load active schema for entity types
+  // Load active entity schemas for entity types
   const entityTypes = new Set(allEntities.map((e) => e.entity_type));
   const schemaMap = new Map<string, any>();
 

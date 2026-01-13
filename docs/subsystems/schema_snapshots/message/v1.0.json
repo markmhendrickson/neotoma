@@ -1,0 +1,72 @@
+{
+  "entity_type": "message",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:01.186866+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "subject": {
+        "type": "string",
+        "required": false
+      },
+      "sender": {
+        "type": "string",
+        "required": true
+      },
+      "recipient": {
+        "type": "string",
+        "required": false
+      },
+      "body": {
+        "type": "string",
+        "required": false
+      },
+      "sent_at": {
+        "type": "date",
+        "required": true
+      },
+      "thread_id": {
+        "type": "string",
+        "required": false
+      },
+      "message_type": {
+        "type": "string",
+        "required": false
+      },
+      "platform": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "sent_at": {
+        "strategy": "last_write"
+      },
+      "body": {
+        "strategy": "highest_priority"
+      }
+    }
+  }
+}

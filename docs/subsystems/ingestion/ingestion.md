@@ -1,46 +1,46 @@
-# Neotoma Ingestion Pipeline — File Processing and Truth Extraction
+# Neotoma [Storing](#storing) Pipeline — [Source Material](#source-material) Processing and Truth [Extraction](#extraction)
 ## Sources-First Architecture
-Neotoma uses a **sources-first architecture** that decouples raw content storage from interpretation:
+Neotoma uses a **sources-first architecture** that decouples raw content storage from [interpretation](#interpretation):
 ```
-Raw Content → Sources → Interpretation Runs → Observations → Entity Snapshots
+Raw Content → Sources → [Interpretations](#interpretation) → [Observations](#observation) → [Entity Snapshots](#entity-snapshot)
 ```
 **Key Principles:**
-1. **Content-Addressed Storage**: Raw content stored with SHA-256 hash for deduplication
-2. **Versioned Interpretation**: Each interpretation creates a new `interpretation_run` record
-3. **Immutable Observations**: Reinterpretation creates NEW observations; never modifies existing
+1. **Content-Addressed Storage**: Raw content [stored](#storing) with SHA-256 hash for deduplication
+2. **Versioned [Interpretation](#interpretation)**: Each [interpretation](#interpretation) creates a new [interpretation](#interpretation) record
+3. **Immutable [Observations](#observation)**: Reinterpretation creates NEW [observations](#observation); never modifies existing
 4. **User Isolation**: All tables user-scoped with RLS
-5. **Correction via Priority**: User corrections create priority-1000 observations that override AI
+5. **Correction via Priority**: User corrections create priority-1000 [observations](#observation) that override AI
 **Benefits:**
-- **Provenance**: Every observation traces to source and interpretation
-- **Auditability**: Interpretation config logged; can understand how data was extracted
+- **[Provenance](#provenance)**: Every [observation](#observation) traces to [source material](#source-material) and [interpretation](#interpretation)
+- **Auditability**: [Interpretation](#interpretation) config logged; can understand how data was [extracted](#extraction)
 - **Flexibility**: Can reinterpret with new models without losing history
-- **Cost Control**: Interpretation quotas prevent runaway AI costs
+- **Cost Control**: [Interpretation](#interpretation) quotas prevent runaway AI costs
 See [`docs/subsystems/sources.md`](../sources.md) for complete sources-first architecture details.
 ## Scope
 This document covers:
 - File upload and normalization
-- **Sources storage and deduplication**
-- **Interpretation runs**
-- OCR and text extraction (file uploads only)
-- Schema detection
-- Field extraction (rule-based, deterministic)
-- Entity resolution (user-scoped)
-- Event generation
+- **[Source material](#source-material) storage and deduplication**
+- **[Interpretations](#interpretation)**
+- OCR and text [extraction](#extraction) (file uploads only)
+- [Entity schema](#entity-schema) detection
+- Field [extraction](#extraction) (rule-based, deterministic)
+- [Entity](#entity) resolution (user-scoped)
+- [Event](#event) generation
 - Graph insertion
 - **Correction mechanism**
-- **Entity merge**
-**Ingestion Paths:**
-1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are stored in `sources`, undergo interpretation, and observations are created.
-2. **Structured Data via `ingest()`**: Agents provide pre-structured data with explicit entity types. Bypasses AI interpretation; creates observations directly with priority=100.
-3. **Corrections via `correct()`**: Users or agents correct extracted values. Creates priority-1000 observations that override AI extraction.
-All paths feed into the same truth model (Sources → Interpretation Runs → Observations → Entity Snapshots), ensuring unified memory regardless of ingestion source.
+- **[Entity](#entity) merge**
+**[Storing](#storing) Paths:**
+1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are [stored](#storing) in `sources`, undergo [interpretation](#interpretation), and [observations](#observation) are created.
+2. **Structured [Source Material](#source-material) via `ingest()`**: Agents provide pre-structured data with explicit [entity types](#entity-type). Bypasses AI [interpretation](#interpretation); creates [observations](#observation) directly with priority=100.
+3. **Corrections via `correct()`**: Users or agents correct [extracted](#extraction) values. Creates priority-1000 [observations](#observation) that override AI [extraction](#extraction).
+All paths feed into the same truth model (Sources → [Interpretations](#interpretation) → [Observations](#observation) → [Entity Snapshots](#entity-snapshot)), ensuring unified memory regardless of [storing](#storing) source.
 This document does NOT cover:
 - UI implementation (see `docs/ui/`)
 - Database schema (see `docs/subsystems/schema.md`)
 - Search indexing (see `docs/subsystems/search/search.md`)
 - MCP action specifications (see `docs/specs/MCP_SPEC.md`)
 - Sources-first architecture details (see `docs/subsystems/sources.md`)
-## 1. Ingestion Pipeline Overview
+## 1. [Storing](#storing) Pipeline Overview
 ### 1.1 Sources-First Pipeline
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
@@ -58,7 +58,7 @@ flowchart TD
     CheckInterpret -->|No| Done[Return source_id]
     CheckInterpret -->|Yes| CheckQuota{Quota OK?}
     CheckQuota -->|No| QuotaError[Error: QUOTA_EXCEEDED]
-    CheckQuota -->|Yes| CreateRun[Create interpretation_run]
+    CheckQuota -->|Yes| CreateRun[Create interpretation]
     CreateRun --> Interpret[Run Interpretation]
     Interpret --> ExtractText[Extract Raw Text]
     ExtractText --> DetectSchema[Detect Schema Type]

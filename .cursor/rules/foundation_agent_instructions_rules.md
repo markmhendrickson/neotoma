@@ -1,1 +1,0 @@
-../../docs/foundation/agent_instructions_rules.md

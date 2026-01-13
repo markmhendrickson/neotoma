@@ -44,7 +44,7 @@ The existing table at lines 46-59 is correct; the issue is stale text in later s
   Source → InterpretationRun (with config) → Observation → EntitySnapshot
   ```
 - Update mermaid diagram to include InterpretationRun node
-- Update Section 4.1 Provenance Chain to explicitly include interpretation_run_id
+- Update Section 4.1 Provenance Chain to explicitly include interpretation_run
 - Add reference to `sources.md` for interpretation config requirements
 ## 4. Add Ingestion Validation Contract Section
 **File:** [`docs/subsystems/sources.md`](docs/subsystems/sources.md) (new Section 10)
@@ -53,7 +53,7 @@ The existing table at lines 46-59 is correct; the issue is stale text in later s
 - Failure paths: reject with error code (not quarantine)
 - Schema registry is single source of truth
 - Unknown fields route to `raw_fragments` (not silently dropped)
-- Provenance mandatory: `source_id` and `interpretation_run_id` enforced via FK + NOT NULL
+- Provenance mandatory: `source_id` and `interpretation_run` enforced via FK + NOT NULL
 This consolidates scattered validation requirements into one authoritative section.
 ## Files Changed
 | File | Changes |

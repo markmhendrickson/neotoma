@@ -1,1 +1,0 @@
-../../docs/developer/pre_release_validation_rules.md

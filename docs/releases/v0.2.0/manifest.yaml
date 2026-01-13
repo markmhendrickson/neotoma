@@ -51,7 +51,7 @@ feature_units:
     status: not_started
     dependencies: [FU-110, FU-111]
     phase: 1
-    description: source_id, interpretation_run_id linkage
+    description: source_id, interpretation_run linkage
 
   - id: FU-115
     name: Raw Fragments Extensions
@@ -235,4 +235,4 @@ determinism_doctrine:
   validation:
     - Strict JSON schema validation at ingestion boundary
     - Reject/quarantine records with invalid shapes
-    - Provenance mandatory: source_id and interpretation_run_id enforced
+    - Provenance mandatory: source_id and interpretation_run enforced

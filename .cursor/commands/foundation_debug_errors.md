@@ -1,1 +1,0 @@
-../../foundation/agent_instructions/cursor_commands/debug_errors.md

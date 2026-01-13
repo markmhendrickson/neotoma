@@ -57,7 +57,7 @@ If automatic detection doesn't work:
    - **Name:** `neotoma`
    - **Command:** `node`
    - **Args:** `["dist/index.js"]` (use absolute path if needed)
-   - **Working Directory:** `/Users/markmhendrickson/Projects/neotoma/neotoma` (your project root)
+   - **Working Directory:** (leave empty or use `${workspaceFolder}` - defaults to project root)
    - **Environment Variables:**
      - `SUPABASE_URL`: `https://your-project-id.supabase.co`
      - `SUPABASE_SERVICE_KEY`: `your-service-role-key-here`
