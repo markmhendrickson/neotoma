@@ -11,12 +11,15 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 
 **Total Actions Implemented:** 15
 
-### ✅ Core Ingestion (1/1)
-- `ingest` - Unified ingestion for structured and unstructured source material
+**Note:** `upload_file` was intentionally removed from the MCP spec. File uploads are handled via the unified `store` action. Agents can read files from the local filesystem, base64-encode the content, and use `store` with `file_content` and `mime_type` parameters.
 
-### ⚠️ File Operations (1/2)
+### ✅ Core Ingestion (1/1)
+- `store` - Unified ingestion for structured and unstructured source material (replaces `ingest` terminology in implementation)
+
+### ✅ File Operations (1/1)
 - `get_file_url` - Get signed URL for file access
-- ❌ `upload_file` - **MISSING** (spec requires for MVP)
+
+**Note:** `upload_file` is intentionally not implemented as an MCP action. File uploads are handled via the unified `store` action. Agents can read files from the local filesystem, base64-encode the content, and use `store` with `file_content` and `mime_type` parameters. The REST endpoint `/upload_file` exists for UI/frontend use but is not part of the MCP protocol.
 
 ### ✅ Entity Operations (6/6)
 - `get_entity_snapshot` - Get entity snapshot with provenance
@@ -46,13 +49,6 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 ### 1. Missing MVP Actions
 
 **Critical:** Two MVP-required actions are missing:
-
-#### `upload_file`
-- **Status:** Missing
-- **Spec Requirement:** MVP required (`docs/specs/MCP_SPEC.md` section 2.2)
-- **Purpose:** Upload file from local path, create source material
-- **Impact:** Agents cannot upload files via MCP without using `ingest` with base64 content
-- **Recommendation:** Implement `upload_file` action per spec
 
 #### `list_provider_catalog`
 - **Status:** Missing
@@ -140,7 +136,7 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 
 | Category | Status | Issues |
 |----------|--------|--------|
-| **Action Completeness** | ⚠️ Partial | Missing 3 MVP actions |
+| **Action Completeness** | ⚠️ Partial | Missing 2 MVP actions |
 | **Terminology** | ❌ Non-compliant | Legacy "record" terminology in 3 actions |
 | **Database Schema** | ❌ Misaligned | References `records` table instead of `sources` |
 | **Field Naming** | ❌ Inconsistent | Mixed `source_record_id` / `source_material_id` |
@@ -149,9 +145,8 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 ## Recommendations
 
 ### Priority 1: Critical (MVP Blockers)
-1. **Implement `upload_file` action** - Required for MVP per spec
-2. **Implement `list_provider_catalog` action** - Required for MVP per spec
-3. **Implement `sync_provider_imports` action** - Required for MVP per spec
+1. **Implement `list_provider_catalog` action** - Required for MVP per spec
+2. **Implement `sync_provider_imports` action** - Required for MVP per spec
 
 ### Priority 2: Architecture Alignment
 4. **Update `get_field_provenance`** - Use `sources` table, `source_material_id` field, canonical terminology

@@ -1,0 +1,63 @@
+{
+  "entity_type": "relationship",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:01:59.480379+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "source_entity_id": {
+        "type": "string",
+        "required": true
+      },
+      "target_entity_id": {
+        "type": "string",
+        "required": true
+      },
+      "relationship_type": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "started_date": {
+        "type": "date",
+        "required": false
+      },
+      "ended_date": {
+        "type": "date",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "relationship_type": {
+        "strategy": "highest_priority"
+      },
+      "started_date": {
+        "strategy": "last_write"
+      },
+      "ended_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

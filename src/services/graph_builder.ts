@@ -29,34 +29,20 @@ export async function detectOrphanNodes(): Promise<{
     orphanEvents: 0,
   };
 
-  // Check for orphan records (records with no edges)
+  // Check for orphan records (records with no relationships)
+  // Note: record_entity_edges and record_event_edges are deprecated and removed
+  // Only checking record_relationships now
   const { data: allRecords } = await supabase.from("records").select("id");
 
   if (allRecords && allRecords.length > 0) {
     const recordIds = allRecords.map((r) => r.id);
 
-    // Get all records that have at least one edge
-    const { data: recordEntityEdges } = await supabase
-      .from("record_entity_edges")
-      .select("record_id");
-
-    const { data: recordEventEdges } = await supabase
-      .from("record_event_edges")
-      .select("record_id");
-
+    // Get all records that have at least one relationship
     const { data: recordRelationships } = await supabase
       .from("record_relationships")
       .select("source_id, target_id");
 
     const recordsWithEdges = new Set<string>();
-
-    if (recordEntityEdges) {
-      recordEntityEdges.forEach((edge) => recordsWithEdges.add(edge.record_id));
-    }
-
-    if (recordEventEdges) {
-      recordEventEdges.forEach((edge) => recordsWithEdges.add(edge.record_id));
-    }
 
     if (recordRelationships) {
       recordRelationships.forEach((rel) => {
@@ -70,14 +56,14 @@ export async function detectOrphanNodes(): Promise<{
     ).length;
   }
 
-  // Check for orphan entities (entities with no record_entity_edges)
+  // Check for orphan entities (entities with no source_entity_edges)
   const { data: allEntities } = await supabase.from("entities").select("id");
 
   if (allEntities && allEntities.length > 0) {
     const entityIds = allEntities.map((e) => e.id);
 
     const { data: entityEdges } = await supabase
-      .from("record_entity_edges")
+      .from("source_entity_edges")
       .select("entity_id");
 
     const entitiesWithEdges = new Set<string>();
@@ -90,7 +76,7 @@ export async function detectOrphanNodes(): Promise<{
     ).length;
   }
 
-  // Check for orphan events (events with no record_event_edges)
+  // Check for orphan events (events with no source_event_edges)
   const { data: allEvents } = await supabase
     .from("timeline_events")
     .select("id");
@@ -99,7 +85,7 @@ export async function detectOrphanNodes(): Promise<{
     const eventIds = allEvents.map((e) => e.id);
 
     const { data: eventEdges } = await supabase
-      .from("record_event_edges")
+      .from("source_event_edges")
       .select("event_id");
 
     const eventsWithEdges = new Set<string>();
@@ -237,13 +223,13 @@ export async function validateGraphIntegrity(): Promise<{
   // But orphan entities and events should not exist - they should always have edges
   if (orphans.orphanEntities > 0) {
     errors.push(
-      `Found ${orphans.orphanEntities} orphan entities (entities with no record_entity_edges)`,
+      `Found ${orphans.orphanEntities} orphan entities (entities with no source_entity_edges)`,
     );
   }
 
   if (orphans.orphanEvents > 0) {
     errors.push(
-      `Found ${orphans.orphanEvents} orphan events (events with no record_event_edges)`,
+      `Found ${orphans.orphanEvents} orphan events (events with no source_event_edges)`,
     );
   }
 
@@ -262,6 +248,10 @@ export async function validateGraphIntegrity(): Promise<{
 
 /**
  * Insert record with graph edges transactionally
+ * 
+ * @deprecated This function is deprecated and will be removed in v0.3.0.
+ *            Use source-based ingestion instead (sources → entities/events via source_entity_edges/source_event_edges).
+ *            This function still uses deprecated record_entity_edges and record_event_edges tables.
  */
 export async function insertRecordWithGraph(
   record: {

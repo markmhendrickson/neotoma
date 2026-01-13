@@ -1,0 +1,86 @@
+{
+  "entity_type": "person",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:01:58.767991+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "first_name": {
+        "type": "string",
+        "required": false
+      },
+      "last_name": {
+        "type": "string",
+        "required": false
+      },
+      "email": {
+        "type": "string",
+        "required": false
+      },
+      "phone": {
+        "type": "string",
+        "required": false
+      },
+      "organization": {
+        "type": "string",
+        "required": false
+      },
+      "role": {
+        "type": "string",
+        "required": false
+      },
+      "address": {
+        "type": "string",
+        "required": false
+      },
+      "country": {
+        "type": "string",
+        "required": false
+      },
+      "website": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "external_id": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "name": {
+        "strategy": "highest_priority"
+      },
+      "email": {
+        "strategy": "highest_priority"
+      },
+      "phone": {
+        "strategy": "highest_priority"
+      },
+      "external_id": {
+        "strategy": "highest_priority"
+      }
+    }
+  }
+}

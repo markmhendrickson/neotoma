@@ -68,14 +68,14 @@ async function validateInterpretationOutput(
 ```typescript
 // Store unknown fields in raw_fragments with interpretation_run_id
 async function storeUnknownFields(
-  interpretationRunId: string,
+  interpretationId: string,
   sourceId: string,
   unknownFields: Record<string, unknown>,
   userId: string
 ): Promise<void> {
   for (const [key, value] of Object.entries(unknownFields)) {
     await supabase.from('raw_fragments').insert({
-      interpretation_run_id: interpretationRunId,  // NEW: link to run
+      interpretation_run_id: interpretationId,  // NEW: link to run
       source_id: sourceId,                          // NEW: link to source
       fragment_type: 'unknown_field',
       fragment_key: key,

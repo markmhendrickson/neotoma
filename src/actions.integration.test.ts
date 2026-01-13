@@ -157,7 +157,8 @@ describe("HTTP actions endpoints", () => {
     }
   });
 
-  it("omits records_queried when assistant never calls retrieve_records", async () => {
+  // Chat endpoint removed - violates Application Layer constraint
+  it.skip("omits records_queried when assistant never calls retrieve_records", async () => {
     const { data: created } = await supabase
       .from("records")
       .insert({

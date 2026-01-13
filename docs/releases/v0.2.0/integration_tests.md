@@ -42,7 +42,7 @@ Define the **integration test suite** for Release `v0.2.0` (Sources-First Ingest
 - `source.content_hash` matches SHA-256 of input
 - `source.storage_status` = 'uploaded'
 - `interpretation_run.status` = 'completed'
-- Observations link to `source_id` and `interpretation_run_id`
+- Observations link to `source_id` and `interpretation_run`
 - Entity snapshot reflects extracted properties
 **Acceptance Criteria:**
 - ✅ Source record created with correct hash
@@ -209,7 +209,7 @@ Define the **integration test suite** for Release `v0.2.0` (Sources-First Ingest
 2. Verify observation created with valid fields only
 3. Verify raw_fragments created with unknown fields
 4. Verify interpretation_run.unknown_field_count incremented
-5. Verify raw_fragments links to source_id and interpretation_run_id
+5. Verify raw_fragments links to source_id and interpretation_run
 **Expected Results:**
 - Valid fields in observation
 - Unknown fields in raw_fragments

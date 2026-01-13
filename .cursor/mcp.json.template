@@ -1,12 +1,16 @@
 {
   "mcpServers": {
     "neotoma": {
-      "command": "/Users/markmhendrickson/.nvm/versions/node/v20.19.1/bin/node",
+      "command": "node",
       "args": ["dist/index.js"],
-      "cwd": "/Users/markmhendrickson/Projects/neotoma",
+      "cwd": "${workspaceFolder}",
       "env": {
         "NODE_ENV": "development"
       }
+    },
+    "web-scraper": {
+      "command": "/absolute/path/to/mcp/web-scraper/run-web-scraper-mcp.sh",
+      "cwd": "/absolute/path/to/mcp/web-scraper"
     }
   }
 }

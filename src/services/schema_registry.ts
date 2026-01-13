@@ -1,7 +1,7 @@
 /**
  * Schema Registry Service for Schema Registry Service (FU-057)
  *
- * Manages config-driven schema definitions, versions, and merge policies.
+ * Manages config-driven entity schemas, versions, and merge policies.
  */
 
 import { supabase } from "../db.js";
@@ -85,7 +85,7 @@ export class SchemaRegistryService {
   }
 
   /**
-   * Load active schema for entity type
+   * Load active entity schema for entity type
    */
   async loadActiveSchema(
     entityType: string,
@@ -153,7 +153,7 @@ export class SchemaRegistryService {
   }
 
   /**
-   * Get all schema versions for entity type
+   * Get all entity schema versions for entity type
    */
   async getSchemaVersions(entityType: string): Promise<SchemaRegistryEntry[]> {
     const { data, error } = await supabase
@@ -167,6 +167,278 @@ export class SchemaRegistryService {
     }
 
     return (data || []) as SchemaRegistryEntry[];
+  }
+
+  /**
+   * Generate searchable text for an entity schema (for embedding generation)
+   */
+  private generateSearchableText(schema: SchemaRegistryEntry): string {
+    const parts: string[] = [schema.entity_type];
+    
+    // Add field names
+    const fieldNames = Object.keys(schema.schema_definition.fields || {});
+    parts.push(...fieldNames);
+    
+    // Add field types for context (e.g., "date", "amount", "name")
+    for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+      if (fieldDef.type === "date" && fieldName.includes("date")) {
+        parts.push("date", "time", "timestamp");
+      }
+      if (fieldDef.type === "number" && (fieldName.includes("amount") || fieldName.includes("price") || fieldName.includes("cost"))) {
+        parts.push("amount", "price", "cost", "money", "financial");
+      }
+      if (fieldName.includes("name") || fieldName.includes("title")) {
+        parts.push("name", "title", "label");
+      }
+    }
+    
+    return parts.join(" ");
+  }
+
+  /**
+   * Calculate cosine similarity between two vectors
+   */
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    
+    let dotProduct = 0;
+    let normA = 0;
+    let normB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      normA += a[i] * a[i];
+      normB += b[i] * b[i];
+    }
+    
+    if (normA === 0 || normB === 0) return 0;
+    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  /**
+   * List all active entity types, optionally filtered by keyword with vector search fallback
+   */
+  async listEntityTypes(keyword?: string): Promise<Array<{
+    entity_type: string;
+    schema_version: string;
+    field_names: string[];
+    field_summary: Record<string, { type: string; required: boolean }>;
+    similarity_score?: number;
+    match_type?: "keyword" | "vector";
+  }>> {
+    // Get all active schemas from database
+    let query = supabase
+      .from("schema_registry")
+      .select("entity_type, schema_version, schema_definition")
+      .eq("active", true);
+
+    const { data: dbSchemas, error: dbError } = await query;
+
+    // Fallback to code-defined schemas if database is empty or error
+    const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
+    const allSchemas = new Map<string, SchemaRegistryEntry>();
+
+    if (dbSchemas && dbSchemas.length > 0) {
+      for (const schema of dbSchemas) {
+        allSchemas.set(schema.entity_type, schema as SchemaRegistryEntry);
+      }
+    } else {
+      // Use code-defined schemas as fallback
+      for (const [entityType, schema] of Object.entries(ENTITY_SCHEMAS)) {
+        allSchemas.set(entityType, {
+          id: "",
+          entity_type: schema.entity_type,
+          schema_version: schema.schema_version,
+          schema_definition: schema.schema_definition,
+          reducer_config: schema.reducer_config,
+          active: true,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    const allSchemasArray = Array.from(allSchemas.values());
+
+    // If no keyword, return all
+    if (!keyword) {
+      return allSchemasArray.map((schema) => {
+        const fieldNames = Object.keys(schema.schema_definition.fields || {});
+        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+          fieldSummary[fieldName] = {
+            type: fieldDef.type,
+            required: fieldDef.required || false,
+          };
+        }
+
+        return {
+          entity_type: schema.entity_type,
+          schema_version: schema.schema_version,
+          field_names: fieldNames,
+          field_summary: fieldSummary,
+        };
+      });
+    }
+
+    const keywordLower = keyword.toLowerCase();
+    
+    // Step 1: Try keyword matching first (deterministic, strong consistency)
+    const keywordMatches: Array<{
+      schema: SchemaRegistryEntry;
+      score: number;
+    }> = [];
+
+    for (const schema of allSchemasArray) {
+      let score = 0;
+      
+      // Exact entity type match (highest score)
+      if (schema.entity_type.toLowerCase() === keywordLower) {
+        score = 10;
+      }
+      // Entity type contains keyword
+      else if (schema.entity_type.toLowerCase().includes(keywordLower)) {
+        score = 5;
+      }
+      
+      // Field name matches
+      const fieldNames = Object.keys(schema.schema_definition.fields || {});
+      for (const fieldName of fieldNames) {
+        if (fieldName.toLowerCase() === keywordLower) {
+          score += 3;
+        } else if (fieldName.toLowerCase().includes(keywordLower)) {
+          score += 1;
+        }
+      }
+      
+      if (score > 0) {
+        keywordMatches.push({ schema, score });
+      }
+    }
+
+    // If we have good keyword matches (score >= 3), return those
+    const goodKeywordMatches = keywordMatches.filter(m => m.score >= 3);
+    if (goodKeywordMatches.length > 0) {
+      return goodKeywordMatches
+        .sort((a, b) => b.score - a.score)
+        .map(({ schema, score }) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
+
+          return {
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+            similarity_score: score / 10, // Normalize to 0-1 range
+            match_type: "keyword" as const,
+          };
+        });
+    }
+
+    // Step 2: Fallback to vector search (semantic matching, bounded eventual consistency)
+    const { generateEmbedding } = await import("../embeddings.js");
+    const queryEmbedding = await generateEmbedding(keyword);
+    
+    if (!queryEmbedding) {
+      // If embeddings not available, return keyword matches even if low score
+      return keywordMatches
+        .sort((a, b) => b.score - a.score)
+        .map(({ schema, score }) => {
+          const fieldNames = Object.keys(schema.schema_definition.fields || {});
+          const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+          for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+            fieldSummary[fieldName] = {
+              type: fieldDef.type,
+              required: fieldDef.required || false,
+            };
+          }
+
+          return {
+            entity_type: schema.entity_type,
+            schema_version: schema.schema_version,
+            field_names: fieldNames,
+            field_summary: fieldSummary,
+            similarity_score: score / 10,
+            match_type: "keyword" as const,
+          };
+        });
+    }
+
+    // Generate embeddings for all schemas and calculate similarity
+    const schemaEmbeddings: Array<{
+      schema: SchemaRegistryEntry;
+      embedding: number[];
+      similarity: number;
+    }> = [];
+
+    for (const schema of allSchemasArray) {
+      const searchableText = this.generateSearchableText(schema);
+      const schemaEmbedding = await generateEmbedding(searchableText);
+      
+      if (schemaEmbedding) {
+        const similarity = this.cosineSimilarity(queryEmbedding, schemaEmbedding);
+        schemaEmbeddings.push({ schema, embedding: schemaEmbedding, similarity });
+      }
+    }
+
+    // Sort by similarity and return top matches
+    const vectorMatches = schemaEmbeddings
+      .filter(item => item.similarity > 0.3) // Threshold for relevance
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 20) // Limit results
+      .map(({ schema, similarity }) => {
+        const fieldNames = Object.keys(schema.schema_definition.fields || {});
+        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+          fieldSummary[fieldName] = {
+            type: fieldDef.type,
+            required: fieldDef.required || false,
+          };
+        }
+
+        return {
+          entity_type: schema.entity_type,
+          schema_version: schema.schema_version,
+          field_names: fieldNames,
+          field_summary: fieldSummary,
+          similarity_score: similarity,
+          match_type: "vector" as const,
+        };
+      });
+
+    // If vector search found results, return them
+    if (vectorMatches.length > 0) {
+      return vectorMatches;
+    }
+
+    // Final fallback: return keyword matches even if low score
+    return keywordMatches
+      .sort((a, b) => b.score - a.score)
+      .map(({ schema, score }) => {
+        const fieldNames = Object.keys(schema.schema_definition.fields || {});
+        const fieldSummary: Record<string, { type: string; required: boolean }> = {};
+        for (const [fieldName, fieldDef] of Object.entries(schema.schema_definition.fields || {})) {
+          fieldSummary[fieldName] = {
+            type: fieldDef.type,
+            required: fieldDef.required || false,
+          };
+        }
+
+        return {
+          entity_type: schema.entity_type,
+          schema_version: schema.schema_version,
+          field_names: fieldNames,
+          field_summary: fieldSummary,
+          similarity_score: score / 10,
+          match_type: "keyword" as const,
+        };
+      });
   }
 
   /**

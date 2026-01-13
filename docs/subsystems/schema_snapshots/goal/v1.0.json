@@ -1,0 +1,71 @@
+{
+  "entity_type": "goal",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:00.502178+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": true
+      },
+      "target_date": {
+        "type": "date",
+        "required": false
+      },
+      "completed_date": {
+        "type": "date",
+        "required": false
+      },
+      "created_date": {
+        "type": "date",
+        "required": false
+      },
+      "updated_date": {
+        "type": "date",
+        "required": false
+      },
+      "metrics": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "status": {
+        "strategy": "last_write"
+      },
+      "completed_date": {
+        "strategy": "last_write"
+      },
+      "updated_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

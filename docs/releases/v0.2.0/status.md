@@ -146,7 +146,6 @@ v0.2.0 implements the minimal sources-first ingestion architecture with content-
 - ✅ Database migrations applied
 - ✅ All integration tests passing (11/11 integration tests)
 - ✅ Schema registry seeded with base types
-<<<<<<< Current (Your changes)
 - ❌ **Manual test execution pending** (BLOCKER - required before `ready_for_deployment`)
 
 ### Deployment Steps
@@ -154,12 +153,6 @@ v0.2.0 implements the minimal sources-first ingestion architecture with content-
 - ⏳ Generate release report with Section 9 (Testing Guidance) containing manual test cases
 - ⏳ Execute all manual test cases and document results
 - ⏳ Deploy to production (neotoma.io) (only after manual tests pass)
-=======
-
-### Deployment Steps
-- ⏳ Manual validation via Cursor/ChatGPT MCP integration
-- ⏳ Deploy to production (neotoma.io)
->>>>>>> Incoming (Background Agent changes)
 - ⏳ Mark status as `deployed`
 
 **Note:** Per `foundation/development/release_workflow.md`, release is now in `in_testing` status. Build complete, automated tests passed. Status will be updated to `ready_for_deployment` only after all manual test cases are executed and pass.
@@ -169,6 +162,6 @@ v0.2.0 implements the minimal sources-first ingestion architecture with content-
 - Foundational infrastructure for v0.3.0 (Operational Hardening), v0.4.0 (Intelligence + Housekeeping), and v1.0.0 (MVP)
 - AI agent execution assumed for all development
 - Human review at checkpoints only
-- Architecture plan: `.cursor/plans/sources_first_ingestion_v12_final.plan.md`
+- Architecture plan: `docs/architecture/sources_first_ingestion_final.md`
 - **Development Time**: ~4 hours (single session, 2025-12-31)
 - **Velocity**: 13 FUs in 4 hours = 3.25 FUs/hour

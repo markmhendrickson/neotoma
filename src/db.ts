@@ -58,10 +58,6 @@ export async function initDatabase(): Promise<void> {
       { table: "interpretations", columns: "id", required: true, fallbackTable: "interpretation_runs" }, // Required - migration 20251231000003 creates it (v0.2.15 renamed from interpretation_runs)
       { table: "records", columns: "id", required: true }, // Required - migration 20251231000011 creates it
       { table: "record_relationships", columns: "id", required: true }, // Required - migration 20251231000010 creates it
-      { table: "plaid_items", columns: "id", required: true }, // Required - migration 20251231000012 creates it
-      { table: "plaid_sync_runs", columns: "id", required: true }, // Required - migration 20251231000012 creates it
-      { table: "external_connectors", columns: "id", required: true }, // Required - migration 20251231000013 creates it
-      { table: "external_sync_runs", columns: "id", required: true }, // Required - migration 20251231000013 creates it
     ];
 
     for (const { table, columns, required, fallbackTable } of tablesToCheck) {

@@ -1,0 +1,207 @@
+---
+description: "Ensures agents interact exclusively with the Neotoma MCP server when user requests MCP-only interaction, avoiding ALL file operations"
+alwaysApply: true
+---
+# MCP Interaction Rules
+
+## Purpose
+
+Ensures agents interact exclusively with the Neotoma MCP server when the user explicitly requests MCP-only interaction, avoiding ALL file operations (read, write, create, modify). Also ensures agents always summarize entities and relationships in responses after calling MCP actions.
+
+## Trigger Patterns
+
+When a user ends their prompt with "via mcp", agents MUST:
+
+1. **Interact only with Neotoma MCP server** - Use MCP actions exclusively
+2. **MUST NOT perform ANY file operations** - Do not read, write, create, or modify ANY files (repository files, temporary files, or any other files)
+3. **Use MCP actions for all operations** - All data operations must go through MCP protocol
+
+## Agent Actions
+
+### When "via mcp" is detected:
+
+1. **Identify MCP-only intent:**
+   - User prompt ends with "via mcp"
+   - All operations must use Neotoma MCP server actions
+
+2. **Use MCP actions exclusively:**
+   - Read data: `mcp_neotoma-neotoma_*` actions (e.g., `retrieve_entities`, `get_entity_snapshot`)
+   - Write data: `mcp_neotoma-neotoma_*` actions (e.g., `ingest`, `correct`, `create_relationship`)
+   - Query data: `mcp_neotoma-neotoma_*` actions (e.g., `list_observations`, `get_related_entities`)
+
+3. **MUST NOT (absolute prohibition):**
+   - Read ANY files (e.g., `read_file`, `grep`, `codebase_search`, `glob_file_search`, `list_dir`)
+   - Create ANY files (e.g., `write`, `edit_notebook`)
+   - Write or modify ANY files (e.g., `search_replace`, `delete_file`)
+   - Access database directly
+   - Use any non-MCP tools for data operations
+   - Perform any file system operations whatsoever
+
+4. **Allowed non-MCP operations (if needed):**
+   - Terminal commands for MCP server status/health checks only
+   - No file system operations of any kind
+
+### When storing structured entities (always applies):
+
+**CRITICAL: Include ALL fields from source data when storing structured entities:**
+
+When using `mcp_neotoma-neotoma_store` with structured entities, agents MUST:
+
+1. **Include ALL fields from source data**, not just fields that match the entity schema:
+   - Schema fields → Stored in observations (validated)
+   - Non-schema fields → Automatically stored in `raw_fragments` (preserved for future schema expansion)
+   
+2. **Never filter or exclude fields** based on schema compatibility:
+   - The system automatically validates and routes fields
+   - Unknown fields are preserved in `raw_fragments` for future use
+   - This ensures zero data loss during migration
+
+3. **Example:**
+   ```typescript
+   // Source has 40 fields, schema defines 15 fields
+   // ✅ CORRECT: Include all 40 fields
+   store({
+     entities: [{
+       entity_type: "task",
+       // All 15 schema fields
+       title: "...",
+       status: "...",
+       // ... other schema fields
+       
+       // All 25 non-schema fields (MUST include)
+       task_id: "...",        // → raw_fragments
+       domain: "...",         // → raw_fragments
+       urgency: "...",        // → raw_fragments
+       // ... all other fields
+     }]
+   })
+   ```
+
+4. **Response includes `unknown_fields_count`** - this is expected and indicates successful preservation of all data
+
+### After calling ANY MCP action (always applies):
+
+**ALWAYS summarize entities and relationships in the response after calling MCP actions:**
+
+This applies to ALL MCP calls, not just when "via mcp" is specified.
+
+1. **Extract summary information from MCP response:**
+   - Count of entities returned (if `related_entities` or `entities` field present)
+   - Count of relationships returned (if `relationships` field present)
+   - Entity types found (list unique `entity_type` values with counts)
+   - Relationship types found (list unique `relationship_type` values with counts, if any)
+   - **For each entity: Include ALL snapshot fields** (complete snapshot data from `snapshot.snapshot` field)
+   - Entity IDs, canonical names, and all snapshot field values
+
+2. **Present summary to user:**
+   - Format: "MCP action completed. Found {N} entities ({entity_types}) and {M} relationships ({relationship_types})."
+   - **For each entity, include:**
+     - Entity ID and canonical name
+     - **All snapshot fields** (complete snapshot data)
+   - For relationships, include relationship type, source, and target entity IDs
+   - If empty: "MCP action completed. No entities or relationships found."
+
+3. **Summary format examples:**
+   - "MCP action completed. Found 1 entity (invoice: 'INV-001') and 0 relationships.
+     
+     Entity: ent_example123 (invoice: 'INV-001')
+     Snapshot fields:
+     - invoice_number: 'INV-001'
+     - vendor_name: 'Acme Corporation'
+     - customer_name: 'John Doe'
+     - invoice_date: '2025-01-15'
+     - currency: 'USD'
+     - tax_rate: '8.50'
+     - items: [array of items with amounts and descriptions]
+     - schema_version: '1.0'"
+   
+   - "MCP action completed. Found 3 entities (2 invoices, 1 company) and 2 relationships (PART_OF, REFERS_TO).
+     
+     [Include all snapshot fields for each entity]"
+   
+   - "MCP action completed. No entities or relationships found."
+
+## Constraints
+
+- MUST use Neotoma MCP server actions when "via mcp" is specified
+- MUST NOT read, create, write, or modify ANY files when "via mcp" is specified (absolute prohibition)
+- MUST NOT use ANY file operation tools (read_file, write, grep, codebase_search, glob_file_search, list_dir, search_replace, delete_file, edit_notebook, etc.)
+- All data operations MUST go through MCP protocol exclusively
+- Exception: Terminal commands for MCP server diagnostics only (not for data operations, not for file operations)
+- **ALWAYS summarize entities and relationships** in the response after calling MCP actions (count, types, key details)
+- **ALWAYS include ALL fields from source data** when storing structured entities via `store` action - include both schema fields and non-schema fields (non-schema fields are automatically stored in `raw_fragments` for future schema expansion)
+
+## Examples
+
+### ✅ Correct: MCP-only interaction with summary
+
+```
+User: "List all entities of type 'invoice' via mcp"
+Agent: 
+1. Uses mcp_neotoma-neotoma_retrieve_entities with entity_type="invoice"
+2. Summarizes: "MCP action completed. Found 3 entities (invoices: 'INV-001', 'INV-002', 'INV-003') and 0 relationships."
+```
+
+### ✅ Correct: MCP ingestion with summary
+
+```
+User: "Store this invoice data via mcp"
+Agent: 
+1. Uses mcp_neotoma-neotoma_store with file_path
+2. Summarizes: "MCP action completed. Found 1 entity (invoice: 'INV-001') and 0 relationships."
+```
+
+### ✅ Correct: MCP structured storage with ALL fields
+
+```
+User: "Store these tasks from parquet via mcp"
+Agent: 
+1. Retrieves tasks from parquet MCP (all fields)
+2. Uses mcp_neotoma-neotoma_store with entities array containing:
+   - ALL fields from parquet (schema fields + non-schema fields)
+   - Schema fields → stored in observations
+   - Non-schema fields → automatically stored in raw_fragments
+3. Summarizes: "MCP action completed. Found 5 entities (tasks) and 0 relationships. 
+   Unknown fields stored in raw_fragments: 164 fields."
+```
+
+### ✅ Correct: MCP action with relationships summary
+
+```
+User: "Get related entities via mcp"
+Agent: 
+1. Uses mcp_neotoma-neotoma_retrieve_related_entities
+2. Summarizes: "MCP action completed. Found 5 entities (2 companies, 3 invoices) and 3 relationships (PART_OF, REFERS_TO, SETTLES)."
+```
+
+### ❌ Incorrect: File operations when "via mcp" specified
+
+```
+User: "Get invoice data via mcp"
+Agent: Reads src/__fixtures__/invoice_fixtures.json  # WRONG - should use MCP
+```
+
+### ❌ Incorrect: File creation when "via mcp" specified
+
+```
+User: "Store this data via mcp"
+Agent: Creates tmp/data.json, then uses MCP  # WRONG - no file operations allowed
+```
+
+### ❌ Incorrect: Mixed operations
+
+```
+User: "Update entity via mcp"
+Agent: Reads file, then uses MCP  # WRONG - should use MCP exclusively
+```
+
+### ❌ Incorrect: Any file operation
+
+```
+User: "List entities via mcp"
+Agent: Uses list_dir to check files, then uses MCP  # WRONG - no file operations at all
+```
+
+## Related Documents
+
+- [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) - Complete MCP action specification

@@ -69,19 +69,11 @@ function ensureBranchPortsFile(
 
 function buildBackendEnv(port: string): NodeJS.ProcessEnv {
   const supabaseUrl =
-    process.env.DEV_SUPABASE_URL ||
     process.env.SUPABASE_URL ||
     "https://example.supabase.co";
   const supabaseKey =
-    process.env.DEV_SUPABASE_SERVICE_KEY ||
     process.env.SUPABASE_SERVICE_KEY ||
     "test-service-role-key";
-  const connectorSecret =
-    process.env.DEV_CONNECTOR_SECRET_KEY ||
-    // Backward compatibility: support generic name during transition
-    process.env.CONNECTOR_SECRET_KEY ||
-    process.env.CONNECTOR_SECRETS_KEY ||
-    "test-connector-secret-test-connector-secret";
 
   const wsPort = String(Number(port) + 1);
 
@@ -92,15 +84,11 @@ function buildBackendEnv(port: string): NodeJS.ProcessEnv {
     WS_PORT: process.env.WS_PORT || wsPort,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: "0",
     BRANCH_PORTS_FILE: process.env.BRANCH_PORTS_FILE || BRANCH_PORTS_SENTINEL,
-    DEV_SUPABASE_URL: process.env.DEV_SUPABASE_URL || supabaseUrl,
-    DEV_SUPABASE_SERVICE_KEY:
-      process.env.DEV_SUPABASE_SERVICE_KEY || supabaseKey,
     SUPABASE_URL: process.env.SUPABASE_URL || supabaseUrl,
-    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY || supabaseKey,
+    SUPABASE_SERVICE_KEY:
+      process.env.SUPABASE_SERVICE_KEY || supabaseKey,
     ACTIONS_BEARER_TOKEN:
       process.env.ACTIONS_BEARER_TOKEN || "test-bearer-token",
-    CONNECTOR_SECRET_KEY: connectorSecret,
-    CONNECTOR_SECRETS_KEY: connectorSecret,
   };
 }
 
@@ -632,7 +620,8 @@ describe("UI Integration Tests", () => {
         }
       });
 
-      it("should handle chat message API endpoint", async () => {
+      // Chat endpoint removed - violates Application Layer constraint
+      it.skip("should handle chat message API endpoint", async () => {
         try {
           const response = await globalThis.fetch(
             `http://localhost:${backendPort}/api/chat`,

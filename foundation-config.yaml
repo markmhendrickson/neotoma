@@ -222,6 +222,56 @@ tooling:
       dev_prefix: "DEV_"
       prod_prefix: "PROD_"
       require_explicit_env: false  # whether to prevent generic variables
+    onepassword_sync:
+      enabled: true
+      # Inclusion list (whitelist) - if specified, ONLY these variables will be synced
+      # If not specified, all variables with mappings in parquet will be synced
+      # Supports two formats:
+      #   1. Flat list: inclusions: [VAR1, VAR2, ...]
+      #   2. Nested from expected_variables (automatically flattened)
+      expected_variables:
+        # Required for Neotoma to function (environment-based, set by 1Password sync)
+        required:
+          - SUPABASE_PROJECT_ID  # Environment-based (dev/prod selected automatically)
+          - SUPABASE_SERVICE_KEY  # Environment-based (dev/prod selected automatically)
+          # Run: npm run generate:connector-key
+        # Recommended for full functionality
+        recommended:
+          - OPENAI_API_KEY  # Environment-based (dev/prod selected automatically)
+          - SUPABASE_ACCESS_TOKEN  # Optional, for Supabase CLI
+          - ACTIONS_BEARER_TOKEN  # Environment-based (dev/prod selected automatically) - HTTP Actions API auth
+          # Note: MCP_AUTH_TOKEN removed - MCP uses Supabase session tokens, not a separate env var
+          - CURSOR_CLOUD_API_KEY  # For multi-agent orchestration
+        # Optional, feature-specific
+        optional: []
+        # Backward compatibility: DEV_*/PROD_* prefixed variables still supported
+        # but deprecated in favor of environment-based single variable names
+      # Alternative: Use flat list format instead of expected_variables
+      # inclusions:
+      #   - DEV_SUPABASE_PROJECT_ID
+      #   - DEV_SUPABASE_SERVICE_KEY
+      #   - OPENAI_API_KEY
+      #   - SUPABASE_ACCESS_TOKEN
+      # Variables to exclude from 1Password sync (preserved from existing .env)
+      # These are local development values that shouldn't be synced
+      default_exclusions:
+        # Local development variables (not secrets, should remain local)
+        - PORT
+        - HTTP_PORT
+        - WS_PORT
+        # Note: ACTIONS_BEARER_TOKEN is now managed by 1Password sync (removed from exclusions)
+        - VITE_WS_PORT
+        - VITE_LOCAL_MCP_URL
+        - VITE_MCP_URL
+        - VITE_API_BASE_URL
+        - VITE_AUTO_SEED_RECORDS
+        - NEOTOMA_ENV
+        - NODE_ENV
+        - MCP_CMD
+        - MCP_ARGS
+        - NEOTOMA_ACTIONS_DISABLE_AUTOSTART
+        - BRANCH_PORTS_FILE
+      # Instance-specific exclusions go in foundation-config.local.yaml (gitignored)
   
   agent_setup:
     enabled: false

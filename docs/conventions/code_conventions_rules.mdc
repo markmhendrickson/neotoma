@@ -1,0 +1,735 @@
+---
+description: "Code style, naming, and organization patterns for TypeScript/TSX, SQL, YAML, and Shell scripts"
+alwaysApply: true
+---
+# Neotoma Code Conventions
+## Scope
+This document covers:
+- **TypeScript/TSX** — Primary application language (backend and frontend)
+- **SQL** — Database migrations and schema definitions
+- **YAML** — Configuration files, manifests, and feature unit definitions
+- **Shell scripts** — Automation and setup scripts
+This document does NOT cover:
+- Documentation conventions (see `docs/conventions/documentation_standards.md`)
+- Testing patterns (see `docs/testing/testing_standard.md`)
+- Architectural decisions (see `docs/architecture/`)
+- Error handling patterns (see `docs/subsystems/errors.md`)
+## Foundational References
+All code MUST align with these foundational standards:
+- **`docs/architecture/determinism.md`** — Deterministic patterns, no randomness, hash-based IDs
+- **`docs/subsystems/errors.md`** — ErrorEnvelope structure, error propagation rules
+- **`docs/testing/testing_standard.md`** — Test structure, fixtures, coverage requirements
+- **`docs/architecture/architecture.md`** — Layer boundaries, error propagation model
+- **`docs/reference/error_codes.md`** — Canonical error codes
+- **`.eslintrc.json`** — ESLint rules and TypeScript linting
+- **`tsconfig.json`** — TypeScript compiler configuration (strict mode)
+## 1. TypeScript/TSX Conventions
+### 1.1 Naming Conventions
+#### Files
+- **Format:** `snake_case.ts` or `snake_case.tsx` for non-component files
+- **React components:** `PascalCase.tsx` (e.g., `MockChatPanel.tsx`, `SettingsView.tsx`)
+- **Backend modules:** `snake_case.ts` (e.g., `entity_resolution.ts`, `record_reducer.ts`)
+- **Rationale:** React components follow React convention (PascalCase), other files use snake_case for consistency with database naming
+#### Functions
+- **Format:** `camelCase`
+- **Examples:** `generateEntityId()`, `normalizeEntityValue()`, `resolveEntity()`
+- **Public functions:** No prefix
+- **Private functions:** No underscore prefix (use module scope or class private)
+```typescript
+// Public function
+export function generateEntityId(
+  entityType: string,
+  canonicalName: string
+): string {
+  // ...
+}
+// Private helper (not exported)
+function normalizeEntityValue(entityType: string, raw: string): string {
+  // ...
+}
+```
+#### Types and Interfaces
+- **Format:** `PascalCase`
+- **Examples:** `Entity`, `ErrorEnvelope`, `Record`, `TimelineEvent`
+- **Prefer `interface` for object shapes, `type` for unions/intersections:**
+```typescript
+// Use interface for object shapes
+export interface Entity {
+  id: string;
+  entity_type: string;
+  canonical_name: string;
+  created_at: string;
+}
+// Use type for unions/intersections
+export type RecordType = "invoice" | "receipt" | "contract" | "document";
+export type Result<T, E> = { data: T } | { error: E };
+```
+#### Variables
+- **Format:** `camelCase`
+- **Examples:** `entityId`, `canonicalName`, `recordType`
+- **Constants:** `UPPER_SNAKE_CASE` for module-level constants
+```typescript
+// Regular variable
+const entityId = generateEntityId("company", "Acme Corp");
+// Module-level constant
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+export const DEFAULT_PAGE_SIZE = 50;
+```
+#### Classes
+- **Format:** `PascalCase`
+- **Examples:** `EventRepository`, `StateRepository`
+- **Rare in Neotoma** (prefer functional patterns)
+### 1.2 Code Organization
+#### String Quotes
+- **Use double quotes (`"`)** for all strings in TypeScript/TSX
+- **Rationale:** Consistency with JSON and modern JavaScript conventions
+```typescript
+// ✅ Use double quotes
+const name = "Acme Corp";
+const type = "company";
+import { supabase } from "../db.js";
+// ❌ Avoid single quotes
+const name = "Acme Corp";
+import { supabase } from "../db.js";
+```
+#### Import Order
+1. **External dependencies** (node_modules)
+2. **Internal modules** (from `src/`)
+3. **Relative imports** (same directory or parent)
+```typescript
+// External dependencies
+import { createHash } from "node:crypto";
+import { describe, it, expect } from "vitest";
+// Internal modules
+import { supabase } from "../db.js";
+import { Entity } from "../types.js";
+// Relative imports
+import { normalizeValue } from "./normalize.js";
+```
+#### Export Patterns
+- **Prefer named exports** over default exports
+- **Use `index.ts` barrel files** for public APIs
+```typescript
+// ✅ Named export
+export function generateEntityId(...) { ... }
+// ❌ Avoid default exports (except for React components)
+// export default function generateEntityId(...) { ... }
+```
+#### File Structure
+- **One main export per file** (or related exports)
+- **Barrel files** (`index.ts`) for grouping related exports
+- **File header comment** with Feature Unit reference if applicable
+```typescript
+/**
+ * Entity Resolution Service (FU-101)
+ *
+ * Deterministic entity ID generation and canonical name normalization.
+ */
+import { createHash } from "node:crypto";
+import { supabase } from "../db.js";
+export interface Entity {
+  // ...
+}
+export function generateEntityId(...) {
+  // ...
+}
+```
+### 1.3 Type Definitions
+#### Interfaces vs Types
+- **Use `interface`** for object shapes (extendable, mergeable)
+- **Use `type`** for unions, intersections, computed types
+```typescript
+// ✅ Interface for object shape
+export interface Entity {
+  id: string;
+  entity_type: string;
+}
+// ✅ Type for union
+export type RecordStatus = "pending" | "processing" | "completed" | "failed";
+// ✅ Type for intersection
+export type EntityWithMetadata = Entity & {
+  metadata: Record<string, unknown>;
+};
+```
+#### Generics
+- **Use generics** for reusable, type-safe patterns
+- **Single-letter names:** `T`, `E`, `K`, `V`
+```typescript
+export function mapEntities<T extends Entity>(
+  entities: T[],
+  mapper: (entity: T) => unknown
+): unknown[] {
+  return entities.map(mapper);
+}
+```
+#### Avoid `any`
+- **Never use `any`** (ESLint warns)
+- **Use `unknown`** for truly unknown types, then narrow
+```typescript
+// ❌ Never use any
+function processData(data: any) { ... }
+// ✅ Use unknown and narrow
+function processData(data: unknown) {
+  if (typeof data === "string") {
+    // TypeScript knows data is string here
+  }
+}
+```
+### 1.4 Error Handling
+#### Error Propagation
+Follow the error propagation model from `docs/subsystems/errors.md`:
+- **Domain layer:** Throws typed errors
+- **Application layer:** Catches and converts to ErrorEnvelope
+- **Presentation layer:** Displays user-friendly messages
+```typescript
+// Domain layer throws typed error
+export class ExtractionError extends Error {
+  constructor(public code: string, message: string) {
+    super(message);
+    this.name = "ExtractionError";
+  }
+}
+export function extractFields(text: string): Fields {
+  if (!text) {
+    throw new ExtractionError("EXTRACTION_FAILED", "Empty text");
+  }
+  // ...
+}
+// Application layer converts to ErrorEnvelope
+import type { ErrorEnvelope } from "../types.js";
+export async function ingestFile(
+  file: File
+): Promise<Result<Record, ErrorEnvelope>> {
+  try {
+    const fields = extractFields(text);
+    // ...
+  } catch (error) {
+    if (error instanceof ExtractionError) {
+      return {
+        error: {
+          error_code: error.code,
+          message: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+    throw error; // Unexpected error
+  }
+}
+```
+#### Error Codes
+- **Use canonical error codes** from `docs/reference/error_codes.md`
+- **Format:** `<CATEGORY>_<SPECIFIC_ERROR>` (e.g., `INGESTION_INVALID_FILE`)
+### 1.5 Async/Await Patterns
+- **Prefer `async/await`** over Promise chains
+- **Handle errors** with try/catch
+- **Return `Promise<T>`** explicitly in function signatures
+```typescript
+// ✅ Prefer async/await
+export async function resolveEntity(
+  entityType: string,
+  rawValue: string
+): Promise<Entity> {
+  const canonicalName = normalizeEntityValue(entityType, rawValue);
+  const entityId = generateEntityId(entityType, canonicalName);
+  const { data: existing } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("id", entityId)
+    .single();
+  if (existing) {
+    return existing as Entity;
+  }
+  // Create new entity
+  const { data: newEntity, error } = await supabase
+    .from("entities")
+    .insert({ ... })
+    .select()
+    .single();
+  if (error) {
+    throw new Error(`Failed to insert entity: ${error.message}`);
+  }
+  return newEntity as Entity;
+}
+```
+### 1.6 Determinism Requirements
+**Reference:** `docs/architecture/determinism.md`
+#### Forbidden Patterns
+- **No `Math.random()`** — Use deterministic hash-based IDs
+- **No `Date.now()`** or `new Date()`\*\* — Accept timestamps as input
+- **No nondeterministic sorting** — Always specify sort order
+```typescript
+// ❌ FORBIDDEN: Random UUID
+const recordId = `rec_${uuidv4()}`;
+// ✅ REQUIRED: Hash-based deterministic ID
+const recordId = generateRecordId(fileHash, userId, uploadTimestamp);
+// ❌ FORBIDDEN: Current timestamp
+const createdAt = new Date().toISOString();
+// ✅ REQUIRED: Accept timestamp as input
+function createRecord(data: RecordData, timestamp: string): Record {
+  return {
+    ...data,
+    created_at: timestamp, // Explicit input
+  };
+}
+// ❌ FORBIDDEN: Nondeterministic sort
+const sorted = entities.sort(); // Relies on default comparison
+// ✅ REQUIRED: Explicit sort order
+const sorted = entities.sort((a, b) =>
+  a.canonical_name.localeCompare(b.canonical_name)
+);
+```
+#### Hash-Based IDs
+- **Use SHA-256** for deterministic entity/record IDs
+- **Format:** `{prefix}_{hash}` (e.g., `ent_abc123...`, `rec_def456...`)
+```typescript
+import { createHash } from "node:crypto";
+export function generateEntityId(
+  entityType: string,
+  canonicalName: string
+): string {
+  const normalized = normalizeEntityValue(entityType, canonicalName);
+  const hash = createHash("sha256")
+    .update(`${entityType}:${normalized}`)
+    .digest("hex");
+  return `ent_${hash.substring(0, 24)}`;
+}
+```
+### 1.7 Testing Patterns
+**Reference:** `docs/testing/testing_standard.md`
+#### Test File Naming
+- **Format:** `{source_file}.test.ts` alongside source
+- **Examples:** `entity_resolution.test.ts`, `property_keys.test.ts`
+#### Test Structure
+- **Use `describe`** for grouping related tests
+- **Use `it`** for individual test cases
+- **Descriptive test names:** "should do X when Y"
+```typescript
+import { describe, it, expect } from "vitest";
+import { generateEntityId, normalizeEntityValue } from "./entity_resolution.js";
+describe("generateEntityId", () => {
+  it("generates deterministic IDs for same input", () => {
+    const id1 = generateEntityId("company", "Acme Corp");
+    const id2 = generateEntityId("company", "Acme Corp");
+    expect(id1).toBe(id2);
+  });
+  it("generates different IDs for different inputs", () => {
+    const id1 = generateEntityId("company", "Acme Corp");
+    const id2 = generateEntityId("company", "Acme Inc");
+    expect(id1).not.toBe(id2);
+  });
+});
+describe("normalizeEntityValue", () => {
+  it("normalizes company names by removing suffixes", () => {
+    expect(normalizeEntityValue("company", "Acme Corp")).toBe("acme");
+    expect(normalizeEntityValue("company", "Acme LLC")).toBe("acme");
+  });
+});
+```
+#### Fixtures
+- **Reference:** `docs/testing/fixtures_standard.md`
+- **Use deterministic fixtures** for reproducible tests
+- **Store fixtures** in `tests/fixtures/` or alongside test files
+### 1.8 Comments and Documentation
+#### Function Comments
+- **JSDoc-style comments** for exported functions
+- **Describe purpose, parameters, return value**
+```typescript
+/**
+ * Generate deterministic entity ID from entity type and name
+ *
+ * @param entityType - Type of entity (e.g., "company", "person")
+ * @param canonicalName - Normalized canonical name
+ * @returns Deterministic entity ID (format: ent_{hash})
+ */
+export function generateEntityId(
+  entityType: string,
+  canonicalName: string
+): string {
+  // ...
+}
+```
+#### Inline Comments
+- **Explain "why"** not "what"
+- **Avoid obvious comments**
+```typescript
+// ❌ Obvious comment
+const id = generateEntityId(type, name); // Generate entity ID
+// ✅ Explain why
+// Remove common suffixes to normalize "Acme Corp" and "Acme Inc" to same entity
+const normalized = name.replace(/\s+(inc|llc|ltd)\.?$/i, "");
+```
+## 2. SQL Conventions
+### 2.1 Naming Conventions
+#### Tables
+- **Format:** `snake_case`, plural
+- **Examples:** `entities`, `timeline_events`, `graph_edges`, `records`
+```sql
+CREATE TABLE IF NOT EXISTS entities (
+  -- ...
+);
+```
+#### Columns
+- **Format:** `snake_case`
+- **Examples:** `entity_type`, `canonical_name`, `created_at`, `updated_at`
+```sql
+CREATE TABLE entities (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  canonical_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+#### Indexes
+- **Format:** `idx_{table}_{columns}`
+- **Examples:** `idx_entities_type`, `idx_entities_type_name`, `idx_timeline_events_record_id`
+```sql
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+```
+#### Constraints
+- **Format:** Descriptive names
+- **Examples:** `entities_pkey`, `records_type_check`
+```sql
+ALTER TABLE entities ADD CONSTRAINT entities_pkey PRIMARY KEY (id);
+```
+#### RLS Policies
+- **Format:** Descriptive policy names with operation
+- **Examples:** `"Service role full access - entities"`, `"public read - entities"`
+```sql
+CREATE POLICY "Service role full access - entities" ON entities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "public read - entities" ON entities
+  FOR SELECT USING (true);
+```
+### 2.2 Migration Structure
+#### Header Comment
+Every migration MUST include:
+- Migration name
+- Creation date
+- Description
+- Feature Unit reference (if applicable)
+```sql
+-- Migration: Add entities table (FU-101)
+-- Created: 2025-12-11
+-- Description: Creates entities table for storing resolved entities with canonical names and aliases
+```
+#### Table Creation
+- **Use `IF NOT EXISTS`** for idempotency
+- **Add table comments** explaining purpose and key constraints
+```sql
+-- Entities table (FU-101)
+CREATE TABLE IF NOT EXISTS entities (
+  id TEXT PRIMARY KEY,
+  entity_type TEXT NOT NULL,
+  canonical_name TEXT NOT NULL,
+  aliases JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+-- Add comment to table
+COMMENT ON TABLE entities IS 'Stores resolved entities with canonical names. Entity IDs are deterministic hash-based (ent_{sha256(type:normalized_name)}).';
+```
+#### Indexes
+- **Create indexes** after table creation
+- **Use `IF NOT EXISTS`** for idempotency
+- **Document index purpose** in comments if non-obvious
+```sql
+-- Indexes for entities
+CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
+CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_name);
+CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
+```
+#### RLS Policies
+- **Enable RLS** on all tables
+- **Create policies** with descriptive names
+- **Use `DROP POLICY IF EXISTS`** before creating
+```sql
+-- RLS policies
+ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
+-- Service role full access
+DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
+CREATE POLICY "Service role full access - entities" ON entities
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Public read access (for v0.1.0 single-user)
+DROP POLICY IF EXISTS "public read - entities" ON entities;
+CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+```
+### 2.3 Determinism Requirements
+**Reference:** `docs/architecture/determinism.md`
+#### Forbidden Patterns
+- **No `gen_random_uuid()`** for entity or record IDs
+- **No `NOW()`** in deterministic ID generation (use explicit timestamps)
+- **No random defaults** for deterministic fields
+```sql
+-- ❌ FORBIDDEN: Random UUID
+CREATE TABLE entities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+);
+-- ✅ REQUIRED: Text ID (set by application layer with hash-based ID)
+CREATE TABLE entities (
+  id TEXT PRIMARY KEY
+);
+```
+#### Deterministic Defaults
+- **Use deterministic defaults** where possible
+- **Accept timestamps** from application layer for `created_at`/`updated_at`
+```sql
+-- ✅ Deterministic default
+CREATE TABLE records (
+  status TEXT DEFAULT 'pending' -- Deterministic default
+);
+-- ✅ Accept timestamp from application (more deterministic)
+CREATE TABLE records (
+  created_at TIMESTAMPTZ NOT NULL -- Set by application layer
+);
+```
+## 3. YAML Conventions
+### 3.1 Structure
+#### Indentation
+- **Use 2 spaces** (never tabs)
+- **Consistent indentation** throughout file
+#### Keys
+- **Format:** `snake_case`
+- **Examples:** `feature_id`, `schema_changes`, `mcp_actions`, `observability`
+```yaml
+feature_id: "fu_051"
+version: "1.0.0"
+status: "draft"
+priority: "p0"
+```
+#### Values
+- **Strings:** Use quotes for strings with special characters or when clarity needed
+- **Booleans:** `true`/`false` (lowercase)
+- **Numbers:** Unquoted integers/floats
+- **Lists:** Use `-` for items
+```yaml
+feature_id: "fu_051"
+version: "1.0.0"
+enabled: true
+count: 42
+tags:
+  - "architecture"
+  - "repositories"
+```
+### 3.2 Manifest Patterns
+#### Feature Unit Manifests
+**Reference:** `docs/feature_units/completed/FU-051/manifest.yaml`
+Required structure:
+```yaml
+feature_id: "fu_xxx"
+version: "1.0.0"
+status: "draft" | "in_progress" | "completed"
+priority: "p0" | "p1" | "p2"
+risk_level: "low" | "medium" | "high"
+tags:
+  - "tag1"
+  - "tag2"
+metadata:
+  title: "Feature Title"
+  description: "Feature description"
+  owner: "owner@neotoma.com"
+  reviewers:
+    - "reviewer@neotoma.com"
+  created_at: "2025-01-XX"
+  target_release: "v0.1.0"
+subsystems:
+  - name: "subsystem_name"
+    changes: "Description of changes"
+schema_changes: []
+mcp_actions:
+  - action: "action_name"
+    change_type: "new" | "modified" | "removed"
+    changes: "Description"
+observability:
+  metrics:
+    - name: "metric_name"
+      type: "counter" | "histogram" | "gauge"
+      # ...
+  logs:
+    - level: "info" | "error" | "warn"
+      event: "event_name"
+      # ...
+  events:
+    - event_type: "event.type"
+      # ...
+testing:
+  unit_tests:
+    - file: "path/to/test.ts"
+      tests:
+        - "Test description"
+  integration_tests:
+    - file: "path/to/integration.test.ts"
+      tests:
+        - "Test description"
+  coverage:
+    lines: 85
+    branches: 80
+    critical_paths: 100
+dependencies:
+  requires:
+    - feature_id: "fu_xxx"
+      reason: "Reason"
+  blocks:
+    - feature_id: "fu_yyy"
+      reason: "Reason"
+```
+### 3.3 Comments
+- **Use `#`** for comments
+- **Place comments** above the relevant section or inline
+```yaml
+# Feature Unit Manifest Example
+feature_id: "fu_051"
+version: "1.0.0"
+# Metadata section
+metadata:
+  title: "Repository Abstractions"
+  # Owner is responsible for implementation
+  owner: "engineering@neotoma.com"
+```
+## 4. Shell Script Conventions
+### 4.1 Structure
+#### Shebang
+- **Use `#!/bin/bash`** or `#!/usr/bin/env bash`
+- **Use `#!/usr/bin/env node`** for Node.js scripts
+```bash
+#!/bin/bash
+# Script description
+```
+#### Error Handling
+- **Use `set -euo pipefail`** for strict error handling:
+  - `-e`: Exit on error
+  - `-u`: Exit on undefined variable
+  - `-o pipefail`: Exit on pipe failure
+```bash
+#!/bin/bash
+set -euo pipefail
+# Script continues...
+```
+### 4.2 Naming
+#### Variables
+- **Format:** `UPPER_SNAKE_CASE` for constants, `lowercase` for local variables
+- **Examples:** `REPO_ROOT`, `SCRIPT_DIR`, `targetDir`
+```bash
+#!/bin/bash
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$SCRIPT_DIR/..")"
+targetDir="/path/to/target"
+```
+#### Functions
+- **Format:** `snake_case` or `camelCase` (be consistent within script)
+- **Examples:** `setup_worktree()`, `copyEnvFile()`
+```bash
+function setup_worktree() {
+  echo "Setting up worktree..."
+  # ...
+}
+function copyEnvFile() {
+  if [ -f "$SCRIPT_DIR/copy-env-to-worktree.js" ]; then
+    node "$SCRIPT_DIR/copy-env-to-worktree.js"
+  fi
+}
+```
+### 4.3 Exit Codes
+- **0:** Success
+- **Non-zero:** Failure (use specific codes if needed)
+```bash
+if [ ! -f "$REQUIRED_FILE" ]; then
+  echo "Error: Required file not found: $REQUIRED_FILE"
+  exit 1
+fi
+# Success
+exit 0
+```
+### 4.4 Comments
+- **Use `#`** for comments
+- **Describe purpose** at top of script
+- **Explain complex logic** inline
+```bash
+#!/bin/bash
+# Cursor worktree initialization script
+# This can be run automatically when Cursor creates a new worktree
+# or manually via: npm run setup:worktree
+set -euo pipefail
+# Copy env file if script exists
+if [ -f "$SCRIPT_DIR/copy-env-to-worktree.js" ]; then
+  echo "Copying environment file..."
+  node "$SCRIPT_DIR/copy-env-to-worktree.js" || {
+    echo "Warning: Failed to copy env file. You may need to run 'npm run copy:env' manually."
+  }
+fi
+```
+## 5. Cross-Language Patterns
+### 5.1 Determinism
+**Reference:** `docs/architecture/determinism.md`
+All code MUST be deterministic:
+- **No randomness** (`Math.random()`, `gen_random_uuid()`)
+- **No current timestamps** (accept as input)
+- **Deterministic sorting** (explicit order)
+- **Hash-based IDs** (SHA-256)
+### 5.2 Error Codes
+**Reference:** `docs/reference/error_codes.md`
+- **Use canonical error codes** across all languages
+- **Format:** `<CATEGORY>_<SPECIFIC_ERROR>`
+- **Examples:** `INGESTION_INVALID_FILE`, `AUTH_REQUIRED`, `DB_CONNECTION_FAILED`
+### 5.3 Testing Integration
+**Reference:** `docs/testing/testing_standard.md`
+- **Unit tests:** Pure functions, deterministic logic
+- **Integration tests:** Service interactions, database operations
+- **E2E tests:** Full user flows (Playwright)
+- **Coverage requirements:** Domain logic >85%, Application >80%
+### 5.4 Privacy and Security
+**Reference:** `docs/subsystems/privacy.md`
+- **Never log PII** (personally identifiable information)
+- **Never include PII** in error messages
+- **Use structured logging** with sanitized data
+## Agent Instructions
+### When to Load This Document
+Load this document whenever:
+- Writing new code in TypeScript, SQL, YAML, or Shell
+- Reviewing code for style consistency
+- Onboarding new contributors
+- Refactoring existing code
+- Creating new files or modules
+### Required Co-Loaded Documents
+- `docs/architecture/determinism.md` — Determinism requirements
+- `docs/subsystems/errors.md` — Error handling patterns
+- `docs/testing/testing_standard.md` — Testing requirements
+- `.eslintrc.json` — ESLint rules
+- `tsconfig.json` — TypeScript configuration
+### Constraints Agents Must Enforce
+1. **Naming conventions** — Files (React components: PascalCase, others: snake_case), functions (camelCase), types (PascalCase)
+2. **String quotes** — Use double quotes for all TypeScript strings
+3. **Determinism** — No randomness, hash-based IDs, deterministic sorting
+4. **Error handling** — Use ErrorEnvelope, canonical error codes
+5. **Type safety** — Avoid `any`, use `unknown` with narrowing
+6. **Code organization** — Import order, export patterns, file structure
+7. **Testing** — Test file naming, structure, fixtures
+8. **Comments** — JSDoc for exported functions, explain "why" not "what"
+### Forbidden Patterns
+- **Single quotes in TypeScript** — Use double quotes for all strings
+- **Random UUIDs** — Use hash-based deterministic IDs
+- **Current timestamps** — Accept timestamps as input
+- **`any` type** — Use `unknown` and narrow
+- **Nondeterministic sorting** — Always specify sort order
+- **PII in logs/errors** — Sanitize all user data
+- **Default exports** — Prefer named exports (except React components)
+- **Obvious comments** — Explain "why" not "what"
+### Validation Checklist
+- [ ] File naming follows conventions (React components: PascalCase, other files: snake_case)
+- [ ] Function naming follows `camelCase` convention
+- [ ] Type/interface naming follows `PascalCase` convention
+- [ ] String literals use double quotes (`"`)
+- [ ] No `Math.random()` or `gen_random_uuid()`
+- [ ] No `Date.now()` or `new Date()` (accept as input)
+- [ ] Error handling uses ErrorEnvelope structure
+- [ ] Error codes are canonical (from `docs/reference/error_codes.md`)
+- [ ] No `any` type (use `unknown` with narrowing)
+- [ ] Import order: external → internal → relative
+- [ ] Tests follow naming and structure conventions
+- [ ] Comments explain "why" not "what"
+- [ ] SQL migrations include header comments and Feature Unit references
+- [ ] YAML files use 2-space indentation and `snake_case` keys
+- [ ] Shell scripts use `set -euo pipefail` and proper exit codes

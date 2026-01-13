@@ -50,7 +50,7 @@ describe("Graph Builder Service", () => {
       expect(orphans.orphanRecords).toBeGreaterThan(0);
     });
 
-    it("should detect orphan entities (entities with no record_entity_edges)", async () => {
+    it("should detect orphan entities (entities with no source_entity_edges)", async () => {
       // Create an entity with no edges
       const { data: entity } = await supabase
         .from("entities")
@@ -71,18 +71,17 @@ describe("Graph Builder Service", () => {
       expect(orphans.orphanEntities).toBeGreaterThan(0);
     });
 
-    it("should detect orphan events (events with no record_event_edges)", async () => {
-      // Create a record first (events need a valid record reference)
-      const { data: record } = await supabase
-        .from("records")
+    it("should detect orphan events (events with no source_event_edges)", async () => {
+      // Create a source first (events need a valid source reference)
+      const { data: source } = await supabase
+        .from("sources")
         .insert({
-          type: "test",
-          properties: {},
+          content_hash: "test_hash_orphan_event",
+          mime_type: "text/plain",
+          user_id: "00000000-0000-0000-0000-000000000000",
         })
         .select()
         .single();
-
-      testRecordIds.push(record!.id);
 
       // Create an event with no edges
       const { data: event } = await supabase
@@ -91,7 +90,7 @@ describe("Graph Builder Service", () => {
           id: "evt_orphan_test_123456789012",
           event_type: "TestEvent",
           event_timestamp: new Date().toISOString(),
-          source_record_id: record!.id,
+          source_id: source!.id,
           source_field: "test_date",
         })
         .select()
@@ -106,17 +105,16 @@ describe("Graph Builder Service", () => {
     });
 
     it("should not count entities with edges as orphans", async () => {
-      // Create a record
-      const { data: record } = await supabase
-        .from("records")
+      // Create a source
+      const { data: source } = await supabase
+        .from("sources")
         .insert({
-          type: "test",
-          properties: {},
+          content_hash: "test_hash_with_edge",
+          mime_type: "text/plain",
+          user_id: "00000000-0000-0000-0000-000000000000",
         })
         .select()
         .single();
-
-      testRecordIds.push(record!.id);
 
       // Create an entity
       const { data: entity } = await supabase
@@ -133,10 +131,11 @@ describe("Graph Builder Service", () => {
       testEntityIds.push(entity!.id);
 
       // Create an edge
-      await supabase.from("record_entity_edges").insert({
-        record_id: record!.id,
+      await supabase.from("source_entity_edges").insert({
+        source_id: source!.id,
         entity_id: entity!.id,
         edge_type: "EXTRACTED_FROM",
+        user_id: "00000000-0000-0000-0000-000000000000",
       });
 
       const orphansBefore = await detectOrphanNodes();
@@ -147,7 +146,7 @@ describe("Graph Builder Service", () => {
         .from("entities")
         .select("id");
       const { data: entityEdges } = await supabase
-        .from("record_entity_edges")
+        .from("source_entity_edges")
         .select("entity_id")
         .eq("entity_id", entity!.id);
 
@@ -291,26 +290,25 @@ describe("Graph Builder Service", () => {
     });
 
     it("should report invalid graph when orphan events exist", async () => {
-      // Create a record first
-      const { data: record } = await supabase
-        .from("records")
+      // Create a source first
+      const { data: source } = await supabase
+        .from("sources")
         .insert({
-          type: "test",
-          properties: {},
+          content_hash: "test_hash_orphan_validation",
+          mime_type: "text/plain",
+          user_id: "00000000-0000-0000-0000-000000000000",
         })
         .select()
         .single();
 
-      testRecordIds.push(record!.id);
-
-      // Create an orphan event (event with no record_event_edges)
+      // Create an orphan event (event with no source_event_edges)
       const { data: event } = await supabase
         .from("timeline_events")
         .insert({
           id: "evt_orphan_validation_test",
           event_type: "TestEvent",
           event_timestamp: new Date().toISOString(),
-          source_record_id: record!.id,
+          source_id: source!.id,
           source_field: "test_date",
         })
         .select()
@@ -318,8 +316,8 @@ describe("Graph Builder Service", () => {
 
       testEventIds.push(event!.id);
 
-      // Don't create record_event_edges - this makes it an orphan event
-      // (events should always have edges connecting them to records)
+      // Don't create source_event_edges - this makes it an orphan event
+      // (events should always have edges connecting them to sources)
 
       const result = await validateGraphIntegrity();
 

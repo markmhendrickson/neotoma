@@ -113,7 +113,7 @@ These test cases validate end-to-end functionality via MCP client integration (C
 - Source record created with correct SHA-256 content hash
 - File accessible in storage at expected path
 - Interpretation run shows status 'completed'
-- Observations link to source_id and interpretation_run_id
+- Observations link to source_id and interpretation_run
 - Entity queryable with extracted properties
 - Provenance chain intact (source → interpretation_run → observation)
 
@@ -280,7 +280,7 @@ These test cases validate end-to-end functionality via MCP client integration (C
 2. Query interpretation runs for the source_id
 3. Verify interpretation_run has source_id link
 4. Query observations for entities from the interpretation
-5. Verify observations have source_id and interpretation_run_id
+5. Verify observations have source_id and interpretation_run
 6. Query entity snapshot via `get_entity_snapshot` MCP tool
 7. Verify provenance maps fields to observation_ids
 8. Query field provenance via `get_field_provenance` MCP tool

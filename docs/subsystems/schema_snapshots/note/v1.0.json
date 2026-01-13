@@ -1,0 +1,64 @@
+{
+  "entity_type": "note",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:01.492618+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string",
+        "required": false
+      },
+      "content": {
+        "type": "string",
+        "required": true
+      },
+      "tags": {
+        "type": "string",
+        "required": false
+      },
+      "source": {
+        "type": "string",
+        "required": false
+      },
+      "created_date": {
+        "type": "date",
+        "required": false
+      },
+      "updated_date": {
+        "type": "date",
+        "required": false
+      },
+      "summary": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "content": {
+        "strategy": "highest_priority"
+      },
+      "updated_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

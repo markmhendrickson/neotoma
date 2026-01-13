@@ -23,8 +23,7 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import {
-  RECORD_TYPE_SCHEMAS,
-  EXPANDED_RECORD_TYPE_SCHEMAS,
+  ENTITY_TYPE_SCHEMAS,
 } from "../src/services/schema_definitions.js";
 import { supabase } from "../src/db.js";
 
@@ -73,7 +72,8 @@ async function getAllSchemas(): Promise<SchemaSnapshot[]> {
   const schemaMap = new Map<string, SchemaSnapshot>();
 
   // 1. Get latest schemas from code definitions (source of truth for current)
-  for (const schema of Object.values(RECORD_TYPE_SCHEMAS)) {
+  // All schemas are now unified in ENTITY_TYPE_SCHEMAS
+  for (const schema of Object.values(ENTITY_TYPE_SCHEMAS)) {
     const snapshot: SchemaSnapshot = {
       entity_type: schema.entity_type,
       schema_version: schema.schema_version,
@@ -85,28 +85,6 @@ async function getAllSchemas(): Promise<SchemaSnapshot[]> {
     schemas.push(snapshot);
     // Use composite key for lookup: entity_type + schema_version
     schemaMap.set(`${schema.entity_type}:${schema.schema_version}`, snapshot);
-  }
-
-  // Add expanded schemas (partial schemas that extend existing types)
-  for (const schema of Object.values(EXPANDED_RECORD_TYPE_SCHEMAS)) {
-    if (schema.entity_type && schema.schema_definition && schema.reducer_config) {
-      const version = schema.schema_version || "1.0";
-      const key = `${schema.entity_type}:${version}`;
-      
-      // Only add if not already present
-      if (!schemaMap.has(key)) {
-        const snapshot: SchemaSnapshot = {
-          entity_type: schema.entity_type,
-          schema_version: version,
-          active: false,
-          created_at: new Date().toISOString(),
-          schema_definition: schema.schema_definition,
-          reducer_config: schema.reducer_config,
-        };
-        schemas.push(snapshot);
-        schemaMap.set(key, snapshot);
-      }
-    }
   }
 
   // 2. Get ALL versions from database (including historic)

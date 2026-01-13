@@ -4,3 +4,6 @@
 [submodule "docs/private"]
 	path = docs/private
 	url = https://github.com/markmhendrickson/neotoma-docs-private
+[submodule "mcp/web-scraper"]
+	path = mcp/web-scraper
+	url = https://github.com/markmhendrickson/mcp-server-web-scraper.git

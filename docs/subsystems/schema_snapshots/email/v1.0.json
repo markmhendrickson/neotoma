@@ -1,0 +1,87 @@
+{
+  "entity_type": "email",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:00.834638+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "subject": {
+        "type": "string",
+        "required": false
+      },
+      "from": {
+        "type": "string",
+        "required": true
+      },
+      "to": {
+        "type": "string",
+        "required": false
+      },
+      "cc": {
+        "type": "string",
+        "required": false
+      },
+      "bcc": {
+        "type": "string",
+        "required": false
+      },
+      "body": {
+        "type": "string",
+        "required": false
+      },
+      "sent_at": {
+        "type": "date",
+        "required": true
+      },
+      "received_at": {
+        "type": "date",
+        "required": false
+      },
+      "thread_id": {
+        "type": "string",
+        "required": false
+      },
+      "message_id": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": false
+      },
+      "tags": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "sent_at": {
+        "strategy": "last_write"
+      },
+      "received_at": {
+        "strategy": "last_write"
+      },
+      "body": {
+        "strategy": "highest_priority"
+      }
+    }
+  }
+}

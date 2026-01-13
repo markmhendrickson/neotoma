@@ -18,7 +18,7 @@ Applying file naming convention from `foundation/agent_instructions/cursor_rules
 - ✅ `docs/architecture/ingestion/sources-first-ingestion-v9.md` → `docs/architecture/ingestion/sources_first_ingestion_v9.md`
 - ✅ `docs/architecture/ingestion/sources-first-ingestion-v11.md` → `docs/architecture/ingestion/sources_first_ingestion_v11.md`
 - ✅ `docs/architecture/ingestion/sources-first_ingestion_v10.md` → `docs/architecture/ingestion/sources_first_ingestion_v10.md`
-- ✅ `docs/architecture/ingestion/sources-first_ingestion_v12_final.md` → `docs/architecture/ingestion/sources_first_ingestion_v12_final.md`
+- ✅ `docs/architecture/ingestion/sources-first_ingestion_v12_final.md` → `docs/architecture/ingestion/sources_first_ingestion_v12_final.md` → `docs/architecture/sources_first_ingestion_final.md` (moved and version removed)
 
 **Note:** FU-XXX files (e.g., `FU-100_implementation_log.md`) use dashes as part of feature unit IDs and are acceptable.
 

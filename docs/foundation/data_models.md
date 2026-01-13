@@ -51,19 +51,49 @@ This model enables:
 - `event_timestamp` (ISO 8601 from source field)
 - `source_record_id` (which record?)
 - `source_field` (which field? e.g., 'date_issued')
-### Relationship
+### Relationship Observation
+- `id` (UUID, deterministic)
+- `relationship_key` (composite: `{type}:{source_entity_id}:{target_entity_id}`)
+- `relationship_type` (PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, etc.)
+- `source_entity_id` (source entity)
+- `target_entity_id` (target entity)
+- `source_id` (which source material created this observation)
+- `interpretation_id` (which interpretation run, nullable)
+- `observed_at` (timestamp when observation was made)
+- `specificity_score` (0-1, how specific this observation is)
+- `source_priority` (integer, priority of source)
+- `metadata` (JSONB: relationship metadata fields from this source)
+- `canonical_hash` (hash for idempotence checking)
+
+### Relationship Snapshot
+- `relationship_key` (composite primary key)
+- `relationship_type` (PART_OF, CORRECTS, etc.)
+- `source_entity_id` (source entity)
+- `target_entity_id` (target entity)
+- `schema_version` (version used for snapshot computation)
+- `snapshot` (JSONB: merged metadata, current truth)
+- `computed_at` (timestamp when snapshot was computed)
+- `observation_count` (number of observations merged)
+- `last_observation_at` (timestamp of most recent observation)
+- `provenance` (JSONB: maps metadata field → observation_id for traceability)
+
+### Relationship (Legacy)
+**Note:** Direct relationship records are deprecated in favor of relationship observations and snapshots.
 - `id` (UUID)
 - `relationship_type` (PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, etc.)
 - `source_entity_id` (source entity)
 - `target_entity_id` (target entity)
 - `source_record_id` (which document created this relationship)
 - `metadata` (JSONB: relationship-specific metadata)
+
 ### Graph Edges
 - Document → Observation (which observations extracted from document)
 - Observation → Entity (which entity this observation describes)
 - Observation → Snapshot (via reducer computation)
 - Entity → Snapshot (entity has current snapshot)
-- Entity → Relationship → Entity (typed relationships between entities)
+- Document → Relationship Observation (which relationship observations extracted from document)
+- Relationship Observation → Relationship Snapshot (via relationship reducer computation)
+- Entity → Relationship Snapshot → Entity (typed relationships between entities)
 - Document → Event (which events derived from document)
 - Event → Entity (which entities involved in event)
 ## 12.2 Schema Expectations

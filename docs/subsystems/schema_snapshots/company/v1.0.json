@@ -1,0 +1,86 @@
+{
+  "entity_type": "company",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:01:58.439462+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "name": {
+        "type": "string",
+        "required": true
+      },
+      "legal_name": {
+        "type": "string",
+        "required": false
+      },
+      "website": {
+        "type": "string",
+        "required": false
+      },
+      "email": {
+        "type": "string",
+        "required": false
+      },
+      "phone": {
+        "type": "string",
+        "required": false
+      },
+      "address": {
+        "type": "string",
+        "required": false
+      },
+      "country": {
+        "type": "string",
+        "required": false
+      },
+      "industry": {
+        "type": "string",
+        "required": false
+      },
+      "type": {
+        "type": "string",
+        "required": false
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "external_id": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "name": {
+        "strategy": "highest_priority"
+      },
+      "legal_name": {
+        "strategy": "highest_priority"
+      },
+      "website": {
+        "strategy": "highest_priority"
+      },
+      "email": {
+        "strategy": "highest_priority"
+      }
+    }
+  }
+}

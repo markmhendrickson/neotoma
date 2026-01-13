@@ -79,7 +79,6 @@ const navigationSections: NavSection[] = [
   {
     title: 'Integration Guides',
     items: [
-      { label: 'Plaid Setup', href: '/docs/integrations/plaid_setup.md', icon: Plug },
       { label: 'Gmail Setup', href: '/docs/integrations/gmail_setup.md', icon: Plug },
       { label: 'External Providers', href: '/docs/integrations/external_providers.md', icon: Plug },
     ],

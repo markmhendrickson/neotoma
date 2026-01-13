@@ -97,7 +97,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### 2. Chat Instructions Template
 
-**File:** `scripts/error_debug_instructions.md`Instructions to paste into the new Cursor chat session:
+**File:** `docs/operations/debugging/error_debug_instructions.md`Instructions to paste into the new Cursor chat session:
 
 - Read `.cursor/error_reports/pending.json`
 - Select highest priority error
@@ -387,7 +387,7 @@ node scripts/trigger_error_debug_cli.js
 
 ## Chat Instructions Template
 
-**File:** `scripts/error_debug_instructions.md`Full instructions that will be pasted into the new Cursor chat:
+**File:** `docs/operations/debugging/error_debug_instructions.md`Full instructions that will be pasted into the new Cursor chat:
 
 ```markdown
 # Error Debug Instructions
@@ -527,7 +527,7 @@ exec(`cursor "${PROJECT_ROOT}"`, () => {});
 ### Repository-Specific Files
 
 2. **Create:** `scripts/trigger_error_debug_cli.js` - Main trigger script (platform-aware)
-3. **Create:** `scripts/error_debug_instructions.md` - Instructions template for chat sessions (optional)
+3. **Create:** `docs/operations/debugging/error_debug_instructions.md` - Instructions template for chat sessions (optional)
 4. **Update:** `foundation-config.yaml` (in repository root) - Add error reporting and debugging configuration
 5. **Update:** `package.json` - Add npm scripts for error debugging automation (if needed)
 

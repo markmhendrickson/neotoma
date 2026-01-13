@@ -1,0 +1,79 @@
+{
+  "entity_type": "event",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-08T15:02:01.858023+00:00",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "title": {
+        "type": "string",
+        "required": true
+      },
+      "description": {
+        "type": "string",
+        "required": false
+      },
+      "start_time": {
+        "type": "date",
+        "required": true
+      },
+      "end_time": {
+        "type": "date",
+        "required": false
+      },
+      "location": {
+        "type": "string",
+        "required": false
+      },
+      "attendees": {
+        "type": "string",
+        "required": false
+      },
+      "event_type": {
+        "type": "string",
+        "required": false
+      },
+      "status": {
+        "type": "string",
+        "required": false
+      },
+      "created_date": {
+        "type": "date",
+        "required": false
+      },
+      "updated_date": {
+        "type": "date",
+        "required": false
+      },
+      "notes": {
+        "type": "string",
+        "required": false
+      },
+      "import_date": {
+        "type": "date",
+        "required": false
+      },
+      "import_source_file": {
+        "type": "string",
+        "required": false
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "start_time": {
+        "strategy": "last_write"
+      },
+      "end_time": {
+        "strategy": "last_write"
+      },
+      "updated_date": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

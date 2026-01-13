@@ -12,7 +12,7 @@
 > Ship the **minimal ingestion + correction loop** that proves real usage before adding "safety nets" and "nice-to-have infra."
 This release validates: **"Users/agents can ingest, re-interpret, correct, and merge on real data."**
 #### 1.1 Canonical Specs (Authoritative Sources)
-- **Architecture Plan**: `.cursor/plans/sources_first_ingestion_v12_final.plan.md`
+- **Architecture Plan**: `docs/architecture/sources_first_ingestion_final.md`
 - **Manifest**: `docs/NEOTOMA_MANIFEST.md`
 - **Schema Registry**: `docs/subsystems/schema_registry.md`
 - **Database Schema**: `docs/subsystems/schema.md`
@@ -23,7 +23,7 @@ This release plan coordinates the sources-first ingestion architecture into a co
 - `FU-110`: Sources Table Migration (content-addressed raw storage with RLS)
 - `FU-111`: Interpretation Runs Table (versioned interpretation tracking)
 - `FU-113`: Entity Extensions (user_id, merged_to tracking, RLS)
-- `FU-114`: Observation Extensions (source_id, interpretation_run_id linkage)
+- `FU-114`: Observation Extensions (source_id, interpretation_run linkage)
 - `FU-115`: Raw Fragments Extensions (unknown field storage with provenance)
 - `FU-116`: Entity Merges Table (merge audit log)
 **Phase 2: Minimal MCP Tools + Services**
@@ -65,7 +65,7 @@ This release plan coordinates the sources-first ingestion architecture into a co
 - `sources` table with `(user_id, content_hash)` uniqueness
 - `interpretation_runs` table (no timeout/heartbeat columns in v0.2.0)
 - `entities` extended with `user_id`, `merged_to_entity_id`
-- `observations` linked to `source_id`, `interpretation_run_id`
+- `observations` linked to `source_id`, `interpretation_run`
 - `raw_fragments` stores unknown fields with provenance
 - `entity_merges` audit log with TEXT IDs (matching `entities.id`)
 - MCP tools: `ingest()`, `ingest_structured()`, `reinterpret()`, `correct()`, `merge_entities()`
@@ -81,7 +81,7 @@ This release plan coordinates the sources-first ingestion architecture into a co
 **Validation Requirements:**
 - **Schema Validation**: Strict JSON schema validation at ingestion boundary using schema registry as single source of truth
 - **Rejection Policy**: Records with invalid shapes/types are rejected (not silently accepted); errors logged and surfaced
-- **Provenance Validation**: Every observation/raw_fragment MUST have valid `source_id` and `interpretation_run_id` (enforced via FK + NOT NULL where applicable)
+- **Provenance Validation**: Every observation/raw_fragment MUST have valid `source_id` and `interpretation_run` (enforced via FK + NOT NULL where applicable)
 - **Integration Tests**: Verify that prompt/model changes cannot silently alter record shapes without corresponding schema version bumps
 #### 3.3 Business
 - Foundation enables all subsequent ingestion-dependent features
@@ -143,7 +143,7 @@ Source → InterpretationRun (with config) → Observation → EntitySnapshot
 ```
 Every `observation` and `raw_fragment` MUST have:
 - `source_id` (mandatory, validated)
-- `interpretation_run_id` (mandatory for AI-derived, validated)
+- `interpretation_run` (mandatory for AI-derived, validated)
 **Policy**: LLM extraction is versioned and auditable outside the deterministic core. The system never claims replay determinism for interpretation.
 ### 6. Data Model Summary
 #### 6.1 New Tables
@@ -156,8 +156,8 @@ Every `observation` and `raw_fragment` MUST have:
 | Table | Extensions |
 |-------|------------|
 | `entities` | `user_id`, `merged_to_entity_id`, `merged_at` + RLS |
-| `observations` | `source_id`, `interpretation_run_id` |
-| `raw_fragments` | `source_id`, `interpretation_run_id`, `user_id` |
+| `observations` | `source_id`, `interpretation_run` |
+| `raw_fragments` | `source_id`, `interpretation_run`, `user_id` |
 | `entity_snapshots` | RLS policies only |
 #### 6.3 Deferred Tables (v0.3.0)
 | Table | Purpose | Why Deferred |
@@ -184,7 +184,7 @@ The MCP surface is **minimal and opinionated**. These five tools cover common fl
 #### 7.2 Agent Guardrails
 Agents **cannot bypass** the intended flows:
 - **No direct writes** to `sources`, `interpretation_runs`, `observations` (service_role only via MCP)
-- **Provenance enforced**: Observations without valid `source_id`/`interpretation_run_id` are rejected
+- **Provenance enforced**: Observations without valid `source_id`/`interpretation_run` are rejected
 - **Schema validated**: Fields not matching active schema version are routed to `raw_fragments` or rejected
 - **User isolation enforced**: All operations validate `user_id` match; cross-user operations fail
 ### 8. Cross-FU Integration Scenarios
@@ -199,7 +199,7 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 7. Entity snapshots recomputed
 **Acceptance Criteria:**
 - ✅ Same file re-ingested → `deduplicated: true`
-- ✅ Observations link to source_id and interpretation_run_id
+- ✅ Observations link to source_id and interpretation_run
 - ✅ Unknown fields stored in raw_fragments only (not duplicated)
 #### 8.2 Reinterpretation Flow
 1. Agent calls `reinterpret()` on existing source
@@ -208,7 +208,7 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 4. Snapshots recomputed including new observations
 **Acceptance Criteria:**
 - ✅ Prior observations remain unchanged
-- ✅ New run has different interpretation_run_id
+- ✅ New run has different interpretation_run
 - ✅ Quota decremented
 #### 8.3 Correction Flow
 1. Agent calls `correct()` with entity_id, field, value
@@ -246,8 +246,8 @@ These scenarios must pass end-to-end before v0.2.0 is approved:
 - `interpretation_runs` table (no timeout/heartbeat — deferred to v0.3.0)
 - `entity_merges` table (TEXT IDs, user-scoped unique index)
 - Extend `entities` with user_id, merged_to_entity_id, merged_at + RLS
-- Extend `observations` with source_id, interpretation_run_id
-- Extend `raw_fragments` with source_id, interpretation_run_id, user_id
+- Extend `observations` with source_id, interpretation_run
+- Extend `raw_fragments` with source_id, interpretation_run, user_id
 - Update RLS on `observations`, `entity_snapshots`, `raw_fragments`
 **Schema Seeding:**
 - Base types: transaction, merchant, invoice, receipt

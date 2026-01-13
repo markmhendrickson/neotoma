@@ -1,1 +1,0 @@
-../../foundation/agent-instructions/cursor-commands/create-rule.md

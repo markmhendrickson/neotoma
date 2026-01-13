@@ -1,13 +1,26 @@
 /**
- * Schema Definitions for All Record Types
+ * Entity Schema Definitions for All Entity Types
  *
- * Defines schema definitions for all record types including new financial types
- * from the finances repository. These can be registered with the schema registry.
+ * Defines entity schemas for all entity types including new financial types
+ * from the finances repository.
+ *
+ * **Primary Usage:** Initialize schemas in the database via `npm run schema:init`
+ * This makes schemas transparent and queryable in the database, and is the recommended
+ * approach for production environments.
+ *
+ * **Fallback Usage:** These schemas are also used as runtime fallbacks when no schema
+ * is registered in the database. This provides convenience during development but should
+ * not be relied upon in production. See src/services/interpretation.ts for fallback logic.
+ *
+ * **Schema Initialization:**
+ * Run `npm run schema:init` to register all schemas from this file into the
+ * schema_registry database table. This ensures schemas are available in the database
+ * and eliminates the need for runtime fallbacks.
  */
 
 import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 
-export interface RecordTypeSchema {
+export interface EntitySchema {
   entity_type: string;
   schema_version: string;
   schema_definition: SchemaDefinition;
@@ -15,9 +28,10 @@ export interface RecordTypeSchema {
 }
 
 /**
- * Schema definitions for all record types
+ * Default entity schemas for all entity types
+ * These are used as fallbacks when no schema is registered in the database.
  */
-export const RECORD_TYPE_SCHEMAS: Record<string, RecordTypeSchema> = {
+export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   holding: {
     entity_type: "holding",
     schema_version: "1.0",
@@ -183,6 +197,66 @@ export const RECORD_TYPE_SCHEMAS: Record<string, RecordTypeSchema> = {
       merge_policies: {
         amount_usd: { strategy: "last_write" },
         flow_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  invoice: {
+    entity_type: "invoice",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        invoice_number: { type: "string", required: true },
+        invoice_date: { type: "date", required: true },
+        amount_due: { type: "number", required: true },
+        currency: { type: "string", required: true },
+        date_due: { type: "date", required: false },
+        vendor_name: { type: "string", required: false },
+        customer_name: { type: "string", required: false },
+        tax_amount: { type: "number", required: false },
+        tax_rate: { type: "string", required: false },
+        subtotal: { type: "number", required: false },
+        items: { type: "array", required: false },
+        description: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        amount_due: { strategy: "last_write" },
+        invoice_date: { strategy: "last_write" },
+        date_due: { strategy: "last_write" },
+      },
+    },
+  },
+
+  receipt: {
+    entity_type: "receipt",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        merchant_name: { type: "string", required: true },
+        amount_total: { type: "number", required: true },
+        currency: { type: "string", required: true },
+        date_purchased: { type: "date", required: true },
+        receipt_number: { type: "string", required: false },
+        payment_method: { type: "string", required: false },
+        items: { type: "array", required: false },
+        tax_amount: { type: "number", required: false },
+        description: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        amount_total: { strategy: "last_write" },
+        date_purchased: { strategy: "last_write" },
       },
     },
   },
@@ -420,15 +494,416 @@ export const RECORD_TYPE_SCHEMAS: Record<string, RecordTypeSchema> = {
       },
     },
   },
-};
 
-/**
- * Expanded schema definitions for existing types
- */
-export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
-  string,
-  Partial<RecordTypeSchema>
-> = {
+  address: {
+    entity_type: "address",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        street: { type: "string", required: false },
+        city: { type: "string", required: false },
+        state: { type: "string", required: false },
+        postal_code: { type: "string", required: false },
+        country: { type: "string", required: false },
+        address_line_1: { type: "string", required: false },
+        address_line_2: { type: "string", required: false },
+        formatted_address: { type: "string", required: false },
+        latitude: { type: "number", required: false },
+        longitude: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        formatted_address: { strategy: "highest_priority" },
+        latitude: { strategy: "last_write" },
+        longitude: { strategy: "last_write" },
+      },
+    },
+  },
+
+  company: {
+    entity_type: "company",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        legal_name: { type: "string", required: false },
+        website: { type: "string", required: false },
+        email: { type: "string", required: false },
+        phone: { type: "string", required: false },
+        address: { type: "string", required: false },
+        country: { type: "string", required: false },
+        industry: { type: "string", required: false },
+        type: { type: "string", required: false },
+        description: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        external_id: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "highest_priority" },
+        legal_name: { strategy: "highest_priority" },
+        website: { strategy: "highest_priority" },
+        email: { strategy: "highest_priority" },
+      },
+    },
+  },
+
+  person: {
+    entity_type: "person",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        first_name: { type: "string", required: false },
+        last_name: { type: "string", required: false },
+        email: { type: "string", required: false },
+        phone: { type: "string", required: false },
+        organization: { type: "string", required: false },
+        role: { type: "string", required: false },
+        address: { type: "string", required: false },
+        country: { type: "string", required: false },
+        website: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        external_id: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "highest_priority" },
+        email: { strategy: "highest_priority" },
+        phone: { strategy: "highest_priority" },
+        external_id: { strategy: "highest_priority" },
+      },
+    },
+  },
+
+  location: {
+    entity_type: "location",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        address: { type: "string", required: false },
+        city: { type: "string", required: false },
+        state: { type: "string", required: false },
+        country: { type: "string", required: false },
+        postal_code: { type: "string", required: false },
+        latitude: { type: "number", required: false },
+        longitude: { type: "number", required: false },
+        type: { type: "string", required: false },
+        description: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "highest_priority" },
+        latitude: { strategy: "last_write" },
+        longitude: { strategy: "last_write" },
+      },
+    },
+  },
+
+  relationship: {
+    entity_type: "relationship",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        source_entity_id: { type: "string", required: true },
+        target_entity_id: { type: "string", required: true },
+        relationship_type: { type: "string", required: true },
+        description: { type: "string", required: false },
+        started_date: { type: "date", required: false },
+        ended_date: { type: "date", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        relationship_type: { strategy: "highest_priority" },
+        started_date: { strategy: "last_write" },
+        ended_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  task: {
+    entity_type: "task",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        title: { type: "string", required: true },
+        description: { type: "string", required: false },
+        status: { type: "string", required: true },
+        priority: { type: "string", required: false },
+        assignee: { type: "string", required: false },
+        project_id: { type: "string", required: false },
+        due_date: { type: "date", required: false },
+        completed_date: { type: "date", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+        tags: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        completed_date: { strategy: "last_write" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  project: {
+    entity_type: "project",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        description: { type: "string", required: false },
+        status: { type: "string", required: true },
+        owner: { type: "string", required: false },
+        start_date: { type: "date", required: false },
+        end_date: { type: "date", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+        tags: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        end_date: { strategy: "last_write" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  goal: {
+    entity_type: "goal",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        title: { type: "string", required: true },
+        description: { type: "string", required: false },
+        status: { type: "string", required: true },
+        target_date: { type: "date", required: false },
+        completed_date: { type: "date", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+        metrics: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        completed_date: { strategy: "last_write" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  email: {
+    entity_type: "email",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        subject: { type: "string", required: false },
+        from: { type: "string", required: true },
+        to: { type: "string", required: false },
+        cc: { type: "string", required: false },
+        bcc: { type: "string", required: false },
+        body: { type: "string", required: false },
+        sent_at: { type: "date", required: true },
+        received_at: { type: "date", required: false },
+        thread_id: { type: "string", required: false },
+        message_id: { type: "string", required: false },
+        status: { type: "string", required: false },
+        tags: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        sent_at: { strategy: "last_write" },
+        received_at: { strategy: "last_write" },
+        body: { strategy: "highest_priority" },
+      },
+    },
+  },
+
+  message: {
+    entity_type: "message",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        subject: { type: "string", required: false },
+        sender: { type: "string", required: true },
+        recipient: { type: "string", required: false },
+        body: { type: "string", required: false },
+        sent_at: { type: "date", required: true },
+        thread_id: { type: "string", required: false },
+        message_type: { type: "string", required: false },
+        platform: { type: "string", required: false },
+        status: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        sent_at: { strategy: "last_write" },
+        body: { strategy: "highest_priority" },
+      },
+    },
+  },
+
+  note: {
+    entity_type: "note",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        title: { type: "string", required: false },
+        content: { type: "string", required: true },
+        tags: { type: "string", required: false },
+        source: { type: "string", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+        summary: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        content: { strategy: "highest_priority" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  event: {
+    entity_type: "event",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        title: { type: "string", required: true },
+        description: { type: "string", required: false },
+        start_time: { type: "date", required: true },
+        end_time: { type: "date", required: false },
+        location: { type: "string", required: false },
+        attendees: { type: "string", required: false },
+        event_type: { type: "string", required: false },
+        status: { type: "string", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        start_time: { strategy: "last_write" },
+        end_time: { strategy: "last_write" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  exercise: {
+    entity_type: "exercise",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        exercise_type: { type: "string", required: false },
+        date: { type: "date", required: true },
+        duration_minutes: { type: "number", required: false },
+        sets: { type: "number", required: false },
+        repetitions: { type: "number", required: false },
+        weight: { type: "number", required: false },
+        distance: { type: "number", required: false },
+        calories: { type: "number", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        date: { strategy: "last_write" },
+        duration_minutes: { strategy: "last_write" },
+      },
+    },
+  },
+
+  meal: {
+    entity_type: "meal",
+    schema_version: "1.0",
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        name: { type: "string", required: true },
+        meal_type: { type: "string", required: false },
+        date: { type: "date", required: true },
+        calories: { type: "number", required: false },
+        protein: { type: "number", required: false },
+        carbs: { type: "number", required: false },
+        fat: { type: "number", required: false },
+        foods: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        date: { strategy: "last_write" },
+        calories: { strategy: "last_write" },
+      },
+    },
+  },
+
   transaction: {
     entity_type: "transaction",
     schema_version: "1.0",
@@ -451,7 +926,7 @@ export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
 
   contact: {
     entity_type: "contact",
-    schema_version: "1.1",
+    schema_version: "1.0",
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -535,19 +1010,24 @@ export const EXPANDED_RECORD_TYPE_SCHEMAS: Record<
 };
 
 /**
- * Get schema definition for a record type
+ * @deprecated EXPANDED_ENTITY_SCHEMAS has been merged into ENTITY_SCHEMAS.
+ * All schemas are now in a single unified structure.
+ * This export is kept for backward compatibility but will be removed in a future version.
  */
-export function getSchemaDefinition(
-  recordType: string,
-): RecordTypeSchema | null {
-  return RECORD_TYPE_SCHEMAS[recordType] || null;
+export const EXPANDED_ENTITY_SCHEMAS: Record<string, Partial<EntitySchema>> = {};
+
+/**
+ * Get entity schema for an entity type
+ */
+export function getSchemaDefinition(entityType: string): EntitySchema | null {
+  return ENTITY_SCHEMAS[entityType] || null;
 }
 
 /**
- * Get expanded schema additions for existing record types
+ * @deprecated Use getSchemaDefinition() instead. All schemas are now unified.
+ * This function is kept for backward compatibility but will be removed in a future version.
  */
-export function getExpandedSchemaDefinition(
-  recordType: string,
-): Partial<RecordTypeSchema> | null {
-  return EXPANDED_RECORD_TYPE_SCHEMAS[recordType] || null;
+export function getExpandedSchemaDefinition(entityType: string): Partial<EntitySchema> | null {
+  // All schemas are now in ENTITY_SCHEMAS, so just use that
+  return getSchemaDefinition(entityType);
 }

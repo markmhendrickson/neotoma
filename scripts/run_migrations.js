@@ -38,20 +38,14 @@ function getSupabaseConfig() {
     return fallbackUrl || "";
   };
 
-  if (env === "production") {
-    // Production: ONLY use PROD_* variables, never generic SUPABASE_* to prevent accidental dev/prod mixups
-    const prodId = process.env.PROD_SUPABASE_PROJECT_ID;
-    return {
-      url: buildUrl(prodId, process.env.PROD_SUPABASE_URL),
-      key: process.env.PROD_SUPABASE_SERVICE_KEY || "",
-    };
-  }
+  // Use single variable names (set by 1Password sync based on ENVIRONMENT variable)
+  const projectId = process.env.SUPABASE_PROJECT_ID;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  const url = process.env.SUPABASE_URL;
 
-  // Development/test: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
-  const devId = process.env.DEV_SUPABASE_PROJECT_ID;
   return {
-    url: buildUrl(devId, process.env.DEV_SUPABASE_URL),
-    key: process.env.DEV_SUPABASE_SERVICE_KEY || "",
+    url: buildUrl(projectId, url),
+    key: serviceKey || "",
   };
 }
 
@@ -59,15 +53,9 @@ const supabaseConfig = getSupabaseConfig();
 
 if (!supabaseConfig.url || !supabaseConfig.key) {
   console.error("[ERROR] Missing Supabase URL or service key");
-  if (env === "production") {
-    console.error(
-      "[ERROR] Set PROD_SUPABASE_PROJECT_ID (or PROD_SUPABASE_URL) and PROD_SUPABASE_SERVICE_KEY"
-    );
-  } else {
-    console.error(
-      "[ERROR] Set DEV_SUPABASE_PROJECT_ID (or DEV_SUPABASE_URL) and DEV_SUPABASE_SERVICE_KEY"
-    );
-  }
+  console.error(
+    "[ERROR] Set SUPABASE_PROJECT_ID (or SUPABASE_URL) and SUPABASE_SERVICE_KEY"
+  );
   process.exit(1);
 }
 

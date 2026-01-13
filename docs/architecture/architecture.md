@@ -510,7 +510,7 @@ sequenceDiagram
 - **Non-deterministic boundary:** AI interpretation outputs vary; config logged for audit
 - **Correction support:** High-priority observations via `correct()` tool
 - **Entity merging:** `merge_entities()` tool for duplicate resolution
-**See also:** `docs/architecture/ingestion/sources_first_ingestion_v12_final.md` for detailed architecture.
+**See also:** `docs/architecture/sources_first_ingestion_final.md` for detailed architecture.
 ### 4.2 Search Flow (Query → Results)
 ```mermaid
 %%{init: {'theme':'neutral'}}%%

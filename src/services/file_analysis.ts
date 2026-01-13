@@ -9,6 +9,11 @@ import {
   extractFields,
   generateSummary,
 } from "./extraction/rules.js";
+import {
+  extractWithLLM,
+  extractWithLLMWithRetry,
+  isLLMExtractionAvailable,
+} from "./llm_extraction.js";
 
 const MAX_PREVIEW_CHARS = 8000;
 const PDF_SIGNATURE = Buffer.from("%PDF-");
@@ -17,6 +22,7 @@ export interface FileAnalysisResult {
   type: string;
   properties: Record<string, unknown>;
   summary?: string;
+  attempts?: number; // Number of LLM extraction attempts (if using retry)
 }
 
 interface AnalyzeFileOptions {
@@ -24,6 +30,8 @@ interface AnalyzeFileOptions {
   fileName?: string;
   mimeType?: string;
   fileSize?: number;
+  modelId?: string; // Optional: Override default model for LLM extraction
+  useRetry?: boolean; // Optional: Enable retry loop with schema validation (default: true)
 }
 
 interface CreateRecordFromFileOptions extends AnalyzeFileOptions {
@@ -204,10 +212,13 @@ function mergeMetadata(
 }
 
 /**
- * Analyze file using rule-based extraction (FU-100)
+ * Analyze file using LLM extraction (v0.2.0 design)
+ * Falls back to rule-based extraction if OpenAI is not configured
  *
- * Deterministic schema detection and field extraction using regex patterns.
- * No LLM calls - pure rule-based extraction.
+ * Per v0.2.0 release plan:
+ * - AI interpretation is non-deterministic but versioned and auditable
+ * - Supports multiple languages (Spanish, French, German, etc.)
+ * - Config logged for provenance
  */
 export async function analyzeFileForRecord(
   options: AnalyzeFileOptions,
@@ -227,6 +238,81 @@ export async function analyzeFileForRecord(
     };
   }
 
+  // Use LLM extraction if available (with idempotence pattern)
+  if (isLLMExtractionAvailable()) {
+    try {
+      const modelIdToUse = options.modelId || "gpt-4o";
+      const useRetryLoop = options.useRetry ?? true;
+      
+      let result;
+      
+      if (useRetryLoop) {
+        // First, detect entity type to get schema
+        const initialResult = await extractWithLLM(preview, fileName, mimeType, modelIdToUse);
+        const normalized = normalizeRecordType(initialResult.entity_type);
+        const schemaType = normalized.type;
+        
+        // Load schema for validation
+        const { schemaRegistry } = await import("./schema_registry.js");
+        const { getSchemaDefinition } = await import("./schema_definitions.js");
+        
+        let schema = await schemaRegistry.loadActiveSchema(schemaType);
+        if (!schema) {
+          const codeSchema = getSchemaDefinition(schemaType);
+          if (codeSchema?.schema_definition) {
+            schema = {
+              id: "",
+              entity_type: schemaType,
+              schema_version: "1.0",
+              schema_definition: codeSchema.schema_definition,
+              reducer_config: codeSchema.reducer_config,
+              active: true,
+              created_at: new Date().toISOString(),
+            };
+          }
+        }
+        
+        // Use retry loop with schema validation if schema available
+        if (schema) {
+          result = await extractWithLLMWithRetry(
+            preview, 
+            schema.schema_definition, 
+            fileName, 
+            mimeType, 
+            modelIdToUse
+          );
+        } else {
+          // No schema - use initial result
+          result = initialResult;
+        }
+      } else {
+        // No retry - use single extraction
+        result = await extractWithLLM(preview, fileName, mimeType, modelIdToUse);
+      }
+      
+      // Normalize entity type
+      const normalized = normalizeRecordType(result.entity_type);
+      const schemaType = normalized.type;
+      
+      // Generate summary from LLM result
+      const summary = generateSummary(schemaType, result.fields, fileName);
+      
+      return {
+        type: schemaType,
+        properties: result.fields,
+        summary,
+        attempts: result.attempts,
+      };
+    } catch (error) {
+      console.warn(
+        "LLM extraction failed, falling back to rule-based:",
+        error instanceof Error ? error.message : String(error)
+      );
+      // Fall through to rule-based extraction
+    }
+  }
+
+  // Fallback: Rule-based extraction (for development without OpenAI key)
   // Detect schema type using multi-pattern matching
   const detectedType = detectSchemaType(preview, fileName);
 

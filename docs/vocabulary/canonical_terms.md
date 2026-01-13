@@ -82,9 +82,9 @@
 
 **Definition:** The process of querying and retrieving [entities](#entity), [observations](#observation), [entity snapshots](#entity-snapshot), and related data from the [memory graph](#memory-graph). [Retrieving](#retrieving) operations include querying [entities](#entity) by type or identifier, getting [entity snapshots](#entity-snapshot) with [provenance](#provenance), listing [observations](#observation) for an [entity](#entity), and traversing [relationships](#relationship).
 
-**Use:** "[Retrieving](#retrieving) operations query the Truth Layer to access stored [entities](#entity) and [observations](#observation). Use `retrieve_entities` to query [entities](#entity) by type, or `get_entity_snapshot` to get current truth for an [entity](#entity)."
+**Use:** "[Retrieving](#retrieving) operations query the Truth Layer to access stored [entities](#entity) and [observations](#observation). Use `retrieve_entities` to query [entities](#entity) by type, or `retrieve_entity_snapshot` to retrieve current truth for an [entity](#entity)."
 
-**Example:** "The `retrieve_entities` action queries [entities](#entity) with filters like `entity_type: 'invoice'` and returns [entities](#entity) with their [entity snapshots](#entity-snapshot). The `get_entity_snapshot` action retrieves the current truth for a specific [entity](#entity), computed by merging all [observations](#observation) about that [entity](#entity)."
+**Example:** "The `retrieve_entities` action queries [entities](#entity) with filters like `entity_type: 'invoice'` and returns [entities](#entity) with their [entity snapshots](#entity-snapshot). The `retrieve_entity_snapshot` action retrieves the current truth for a specific [entity](#entity), computed by merging all [observations](#observation) about that [entity](#entity)."
 
 **Forbidden Synonyms:**
 - ❌ "fetch" (too generic)

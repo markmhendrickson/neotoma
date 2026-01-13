@@ -85,7 +85,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       expect(interpretationResult.observationsCreated).toBeGreaterThan(0);
-      expect(interpretationResult.interpretationRunId).toBeDefined();
+      expect(interpretationResult.interpretationId).toBeDefined();
 
       // Verify observation has provenance links
       const { data: observations } = await supabase
@@ -96,8 +96,8 @@ describe("v0.2.0 Integration Tests", () => {
       expect(observations).toBeDefined();
       expect(observations!.length).toBeGreaterThan(0);
       expect(observations![0].source_id).toBe(storageResult.sourceId);
-      expect(observations![0].interpretation_run_id).toBe(
-        interpretationResult.interpretationRunId
+      expect(observations![0].interpretation_run).toBe(
+        interpretationResult.interpretationId
       );
     });
   });
@@ -159,7 +159,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs1 } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run_id", run1.interpretationRunId);
+        .eq("interpretation_run", run1.interpretationId);
 
       const obs1Count = obs1?.length || 0;
 
@@ -181,7 +181,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs1After } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run_id", run1.interpretationRunId);
+        .eq("interpretation_run", run1.interpretationId);
 
       expect(obs1After?.length).toBe(obs1Count);
 
@@ -189,11 +189,11 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs2 } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run_id", run2.interpretationRunId);
+        .eq("interpretation_run", run2.interpretationId);
 
       expect(obs2).toBeDefined();
       expect(obs2!.length).toBeGreaterThan(0);
-      expect(run2.interpretationRunId).not.toBe(run1.interpretationRunId);
+      expect(run2.interpretationId).not.toBe(run1.interpretationId);
     });
   });
 
@@ -455,14 +455,14 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: observations } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run_id", interpretationResult.interpretationRunId);
+        .eq("interpretation_run", interpretationResult.interpretationId);
 
       expect(observations).toBeDefined();
       expect(observations!.length).toBeGreaterThan(0);
 
       const obs = observations![0];
       expect(obs.source_id).toBe(storageResult.sourceId);
-      expect(obs.interpretation_run_id).toBe(interpretationResult.interpretationRunId);
+      expect(obs.interpretation_run).toBe(interpretationResult.interpretationId);
 
       // Verify source metadata
       const { data: source } = await supabase
@@ -478,7 +478,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: run } = await supabase
         .from("interpretation_runs")
         .select("*")
-        .eq("id", interpretationResult.interpretationRunId)
+        .eq("id", interpretationResult.interpretationId)
         .single();
 
       expect(run).toBeDefined();

@@ -236,7 +236,7 @@ async function migrateRecord(
   }
 
   // 2. Create interpretation run
-  let interpretationRunId: string;
+  let interpretationId: string;
 
   if (!dryRun) {
     const { data: interpretationRun, error: runError } = await supabase
@@ -261,9 +261,9 @@ async function migrateRecord(
       throw new Error(`Failed to create interpretation run: ${runError.message}`);
     }
 
-    interpretationRunId = interpretationRun.id;
+    interpretationId = interpretationRun.id;
   } else {
-    interpretationRunId = 'dry-run-interpretation-id';
+    interpretationId = 'dry-run-interpretation-id';
   }
 
   // 3. Resolve entity for this record
@@ -310,7 +310,7 @@ async function migrateRecord(
         entity_type: entityType,
         schema_version: '1.0',
         source_id: sourceId,
-        interpretation_run_id: interpretationRunId,
+        interpretation_run: interpretationId,
         observed_at: record.created_at,
         specificity_score: 0.8,
         source_priority: 0,
@@ -361,7 +361,7 @@ async function migrateGraphEdges(
             source_id: sourceId,
             entity_id: edge.entity_id,
             edge_type: edge.edge_type,
-            interpretation_run_id: null, // Unknown for migrated data
+            interpretation_run: null, // Unknown for migrated data
             created_at: edge.created_at,
           });
 

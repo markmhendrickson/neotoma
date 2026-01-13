@@ -1,1 +1,0 @@
-../../docs/conventions/documentation_standards_rules.md
