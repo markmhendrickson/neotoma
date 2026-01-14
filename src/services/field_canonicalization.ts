@@ -14,10 +14,33 @@ export interface CanonicalizationOptions {
 }
 
 /**
- * Fields that should preserve case (text-heavy content fields)
- * These fields contain prose, documents, or other content where capitalization matters
+ * Heuristic patterns for fields that should preserve case
+ * Used as fallback when field definition doesn't specify preserveCase
+ */
+const PRESERVE_CASE_PATTERNS = [
+  /_name$/,           // Fields ending in _name (e.g., vendor_name, company_name)
+  /_title$/,          // Fields ending in _title
+  /^title$/,         // Exact match: title
+  /^name$/,          // Exact match: name
+  /^subject$/,       // Exact match: subject
+  /^address$/,       // Exact match: address
+  /^city$/,          // Exact match: city
+  /^state$/,         // Exact match: state
+  /^country$/,       // Exact match: country
+  /^location$/,      // Exact match: location
+  /^venue$/,         // Exact match: venue
+  /^brand$/,         // Exact match: brand
+  /^tagline$/,       // Exact match: tagline
+  /^slogan$/,        // Exact match: slogan
+];
+
+/**
+ * Fields that should preserve case (text-heavy content fields and fields where capitalization matters)
+ * These fields contain prose, documents, names, titles, addresses, or other content where capitalization is meaningful
+ * Used as fallback when field definition doesn't specify preserveCase and heuristics don't match
  */
 const PRESERVE_CASE_FIELDS = new Set([
+  // Content fields (prose, documents)
   "content",
   "body",
   "notes",
@@ -33,11 +56,64 @@ const PRESERVE_CASE_FIELDS = new Set([
   "essay",
   "paper",
   "document",
+  
+  // Titles and subjects
+  "title",
+  "subject",
+  "headline",
+  
+  // Names (people, companies, products)
+  "name",
+  "first_name",
+  "last_name",
+  "full_name",
+  "display_name",
+  "company_name",
+  "vendor_name",
+  "customer_name",
+  "merchant_name",
+  "counterparty",
+  "legal_name",
+  "product_name",
+  "item_name",
+  "brand",
+  "manufacturer",
+  "organization",
+  "institution",
+  
+  // Addresses and locations
+  "address",
+  "street",
+  "street_address",
+  "city",
+  "state",
+  "province",
+  "country",
+  "location",
+  "place",
+  "venue",
+  
+  // Other fields where capitalization matters
+  "tagline",
+  "slogan",
+  "website",
+  "domain",
 ]);
 
 /**
  * Canonicalize fields based on schema definition
  * Ensures same semantic content produces same canonical form
+ * 
+ * Case Preservation Priority (for string fields):
+ * 1. Global preserveCase option (explicit override)
+ * 2. Field definition metadata (preserveCase: true in schema) - RECOMMENDED for new fields
+ * 3. Hardcoded PRESERVE_CASE_FIELDS list (backward compatibility)
+ * 4. Heuristic patterns (automatic detection for common naming patterns)
+ * 
+ * To preserve case for new fields in schemas:
+ * - Add preserveCase: true to the field definition in schema_registry
+ * - Or rely on heuristics (fields ending in _name, _title, etc. are auto-detected)
+ * - Or add to PRESERVE_CASE_FIELDS list for exact matches
  */
 export function canonicalizeFields(
   fields: Record<string, unknown>,
@@ -59,8 +135,28 @@ export function canonicalizeFields(
     }
     
     // Determine if this field should preserve case
-    // Preserve case for text-heavy content fields, or if explicitly requested
-    const shouldPreserveCase = options.preserveCase || PRESERVE_CASE_FIELDS.has(key);
+    // Priority order:
+    // 1. Explicit preserveCase option (global override)
+    // 2. Field definition metadata (preserveCase in schema) - highest priority for schema-driven decisions
+    // 3. Hardcoded list (known fields) - backward compatibility
+    // 4. Heuristic patterns (common naming patterns) - automatic detection for new fields
+    let shouldPreserveCase = options.preserveCase;
+    
+    if (!shouldPreserveCase) {
+      // Check field definition metadata first (schema-driven, most explicit)
+      if (fieldDef.preserveCase !== undefined) {
+        shouldPreserveCase = fieldDef.preserveCase;
+      }
+      // Then check hardcoded list (backward compatibility)
+      else if (PRESERVE_CASE_FIELDS.has(key)) {
+        shouldPreserveCase = true;
+      }
+      // Finally check heuristic patterns (automatic detection for new fields)
+      else {
+        shouldPreserveCase = PRESERVE_CASE_PATTERNS.some(pattern => pattern.test(key));
+      }
+    }
+    
     const fieldOptions = { ...options, preserveCase: shouldPreserveCase };
     
     // Canonicalize based on field type

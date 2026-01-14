@@ -4,6 +4,8 @@ import {
   CallToolRequestSchema,
   ErrorCode,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { supabase } from "./db.js";
@@ -42,12 +44,14 @@ function getMimeTypeFromExtension(ext: string): string | null {
     ".zip": "application/zip",
     ".tar": "application/x-tar",
     ".gz": "application/gzip",
+    ".parquet": "application/x-parquet",
   };
   return mimeTypes[ext] || null;
 }
 
 export class NeotomaServer {
   private server: Server;
+  private autoEnhancementCleanup?: () => void;
 
   constructor() {
     this.server = new Server(
@@ -58,11 +62,13 @@ export class NeotomaServer {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       }
     );
 
     this.setupToolHandlers();
+    this.setupResourceHandlers();
     this.setupErrorHandler();
   }
 
@@ -562,6 +568,145 @@ export class NeotomaServer {
             required: [],
           },
         },
+        {
+          name: "analyze_schema_candidates",
+          description: "Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_type: {
+                type: "string",
+                description: "Entity type to analyze (optional, analyzes all if not provided)"
+              },
+              user_id: {
+                type: "string",
+                description: "User ID for user-specific analysis (optional)"
+              },
+              min_frequency: {
+                type: "number",
+                description: "Minimum frequency threshold (default: 5)",
+                default: 5
+              },
+              min_confidence: {
+                type: "number",
+                description: "Minimum confidence score 0-1 (default: 0.8)",
+                default: 0.8
+              }
+            },
+            required: []
+          }
+        },
+        {
+          name: "get_schema_recommendations",
+          description: "Get schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or inference.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_type: {
+                type: "string",
+                description: "Entity type to get recommendations for"
+              },
+              user_id: {
+                type: "string",
+                description: "User ID for user-specific recommendations (optional)"
+              },
+              source: {
+                type: "string",
+                enum: ["raw_fragments", "agent", "inference", "all"],
+                description: "Recommendation source (default: all)"
+              },
+              status: {
+                type: "string",
+                enum: ["pending", "approved", "rejected"],
+                description: "Filter by recommendation status (default: pending)"
+              }
+            },
+            required: ["entity_type"]
+          }
+        },
+        {
+          name: "update_schema_incremental",
+          description: "Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_type: {
+                type: "string",
+                description: "Entity type to update"
+              },
+              fields_to_add: {
+                type: "array",
+                description: "Fields to add to schema",
+                items: {
+                  type: "object",
+                  properties: {
+                    field_name: { type: "string" },
+                    field_type: { 
+                      type: "string",
+                      enum: ["string", "number", "date", "boolean", "array", "object"]
+                    },
+                    required: { type: "boolean", default: false },
+                    reducer_strategy: {
+                      type: "string",
+                      enum: ["last_write", "highest_priority", "most_specific", "merge_array"]
+                    }
+                  },
+                  required: ["field_name", "field_type"]
+                }
+              },
+              schema_version: {
+                type: "string",
+                description: "New schema version (auto-increments if not provided)"
+              },
+              user_specific: {
+                type: "boolean",
+                description: "Create user-specific schema variant (default: false)",
+                default: false
+              },
+              user_id: {
+                type: "string",
+                description: "User ID for user-specific schema (required if user_specific=true)"
+              },
+              activate: {
+                type: "boolean",
+                description: "Activate schema immediately so it applies to new data (default: true). If false, schema is registered but not active.",
+                default: true
+              },
+              migrate_existing: {
+                type: "boolean",
+                description: "Migrate existing raw_fragments to observations for historical data backfill (default: false). Note: New data automatically uses updated schema after activation, migration is only for old data.",
+                default: false
+              }
+            },
+            required: ["entity_type", "fields_to_add"]
+          }
+        },
+        {
+          name: "register_schema",
+          description: "Register a new schema or schema version. Supports both global and user-specific schemas.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              entity_type: { type: "string" },
+              schema_definition: { 
+                type: "object",
+                description: "Schema definition with fields object"
+              },
+              reducer_config: { 
+                type: "object",
+                description: "Reducer configuration with merge policies"
+              },
+              schema_version: { type: "string", default: "1.0" },
+              user_specific: { type: "boolean", default: false },
+              user_id: {
+                type: "string",
+                description: "User ID for user-specific schema (required if user_specific=true)"
+              },
+              activate: { type: "boolean", default: false }
+            },
+            required: ["entity_type", "schema_definition", "reducer_config"]
+          }
+        },
       ],
     }));
 
@@ -611,6 +756,14 @@ export class NeotomaServer {
             return await this.retrieveGraphNeighborhood(args);
           case "list_entity_types":
             return await this.listEntityTypes(args);
+          case "analyze_schema_candidates":
+            return await this.analyzeSchemaCandidates(args);
+          case "get_schema_recommendations":
+            return await this.getSchemaRecommendations(args);
+          case "update_schema_incremental":
+            return await this.updateSchemaIncremental(args);
+          case "register_schema":
+            return await this.registerSchema(args);
           case "store":
             return await this.store(args);
           case "reinterpret":
@@ -626,9 +779,162 @@ export class NeotomaServer {
         if (error instanceof McpError) {
           throw error;
         }
+        // Safely extract error message, handling BigInt values
+        let errorMessage = "Unknown error";
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        } else {
+          try {
+            // Try to stringify, but catch BigInt serialization errors
+            errorMessage = JSON.stringify(error, (key, value) => {
+              if (typeof value === 'bigint') {
+                return Number(value);
+              }
+              return value;
+            });
+          } catch (stringifyError) {
+            errorMessage = String(error);
+          }
+        }
+        throw new McpError(ErrorCode.InternalError, errorMessage);
+      }
+    });
+  }
+
+  /**
+   * Setup resource handlers for MCP resources capability
+   */
+  private setupResourceHandlers(): void {
+    // List all available resources
+    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+      try {
+        const resources: Array<{
+          uri: string;
+          name: string;
+          description: string;
+          mimeType: string;
+        }> = [];
+
+        // Get available entity types
+        const { data: entityTypes, error: etError } = await supabase
+          .from("entity_types")
+          .select("entity_type")
+          .order("entity_type");
+
+        if (!etError && entityTypes) {
+          for (const et of entityTypes) {
+            const typeName = et.entity_type;
+            const capitalizedType = typeName.charAt(0).toUpperCase() + typeName.slice(1);
+            resources.push({
+              uri: `neotoma://entities/${typeName}`,
+              name: `${capitalizedType} Entities`,
+              description: `All ${typeName} entities`,
+              mimeType: "application/json",
+            });
+          }
+        }
+
+        // Get available timeline years
+        const { data: years, error: yearsError } = await supabase
+          .from("timeline_events")
+          .select("event_timestamp")
+          .order("event_timestamp", { ascending: false });
+
+        if (!yearsError && years && years.length > 0) {
+          // Extract unique years
+          const uniqueYears = new Set<string>();
+          for (const event of years) {
+            if (event.event_timestamp) {
+              const year = new Date(event.event_timestamp).getFullYear().toString();
+              uniqueYears.add(year);
+            }
+          }
+
+          for (const year of Array.from(uniqueYears).sort().reverse()) {
+            resources.push({
+              uri: `neotoma://timeline/${year}`,
+              name: `Timeline ${year}`,
+              description: `All timeline events in ${year}`,
+              mimeType: "application/json",
+            });
+          }
+        }
+
+        // Add sources collection resource
+        resources.push({
+          uri: "neotoma://sources",
+          name: "Source Materials",
+          description: "All source materials",
+          mimeType: "application/json",
+        });
+
+        return { resources };
+      } catch (error) {
         throw new McpError(
           ErrorCode.InternalError,
-          error instanceof Error ? error.message : "Unknown error"
+          error instanceof Error ? error.message : "Failed to list resources"
+        );
+      }
+    });
+
+    // Read a specific resource
+    this.server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+      try {
+        const { uri } = request.params;
+        const parsed = this.parseResourceUri(uri);
+
+        let data: any;
+
+        switch (parsed.type) {
+          case "entity_collection":
+            data = await this.handleEntityCollection(parsed.entityType!);
+            break;
+          case "entity":
+            data = await this.handleIndividualEntity(parsed.entityId!);
+            break;
+          case "entity_observations":
+            data = await this.handleEntityObservations(parsed.entityId!);
+            break;
+          case "entity_relationships":
+            data = await this.handleEntityRelationships(parsed.entityId!);
+            break;
+          case "timeline_year":
+            data = await this.handleTimelineYear(parsed.year!);
+            break;
+          case "timeline_month":
+            data = await this.handleTimelineMonth(parsed.year!, parsed.month!);
+            break;
+          case "source":
+            data = await this.handleSourceMaterial(parsed.sourceId!);
+            break;
+          case "source_collection":
+            data = await this.handleSourceCollection();
+            break;
+          default:
+            throw new McpError(
+              ErrorCode.InvalidRequest,
+              `Unsupported resource type: ${parsed.type}`
+            );
+        }
+
+        return {
+          contents: [
+            {
+              uri,
+              mimeType: "application/json",
+              text: JSON.stringify(data, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        if (error instanceof McpError) {
+          throw error;
+        }
+        throw new McpError(
+          ErrorCode.InternalError,
+          error instanceof Error ? error.message : "Failed to read resource"
         );
       }
     });
@@ -672,8 +978,15 @@ export class NeotomaServer {
   private buildTextResponse(data: unknown): {
     content: Array<{ type: string; text: string }>;
   } {
+    // Use replacer to handle BigInt values (convert to number)
+    const replacer = (key: string, value: unknown) => {
+      if (typeof value === 'bigint') {
+        return Number(value);
+      }
+      return value;
+    };
     return {
-      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify(data, replacer, 2) }],
     };
   }
 
@@ -1701,6 +2014,186 @@ export class NeotomaServer {
     }
   }
 
+  /**
+   * Analyze raw_fragments to identify schema candidates
+   */
+  private async analyzeSchemaCandidates(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_type: z.string().optional(),
+      user_id: z.string().uuid().optional(),
+      min_frequency: z.number().default(5),
+      min_confidence: z.number().default(0.8),
+    });
+    const parsed = schema.parse(args ?? {});
+
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+
+    try {
+      const recommendations = await schemaRecommendationService.analyzeRawFragments({
+        entity_type: parsed.entity_type,
+        user_id: parsed.user_id,
+        min_frequency: parsed.min_frequency,
+        min_confidence: parsed.min_confidence,
+      });
+
+      return this.buildTextResponse({
+        recommendations,
+        total_entity_types: recommendations.length,
+        total_fields: recommendations.reduce((sum, r) => sum + r.fields.length, 0),
+        min_frequency: parsed.min_frequency,
+        min_confidence: parsed.min_confidence,
+      });
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to analyze schema candidates: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get schema recommendations
+   */
+  private async getSchemaRecommendations(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_type: z.string(),
+      user_id: z.string().uuid().optional(),
+      source: z.enum(["raw_fragments", "agent", "inference", "all"]).optional(),
+      status: z.enum(["pending", "approved", "rejected"]).optional(),
+    });
+    const parsed = schema.parse(args);
+
+    const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+
+    try {
+      const recommendations = await schemaRecommendationService.getRecommendations({
+        entity_type: parsed.entity_type,
+        user_id: parsed.user_id,
+        source: parsed.source === "all" ? undefined : parsed.source,
+        status: parsed.status,
+      });
+
+      return this.buildTextResponse({
+        recommendations,
+        total: recommendations.length,
+        entity_type: parsed.entity_type,
+        source: parsed.source || "all",
+        status: parsed.status || "any",
+      });
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to get schema recommendations: ${error.message}`);
+    }
+  }
+
+  /**
+   * Incrementally update schema by adding fields
+   */
+  private async updateSchemaIncremental(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_type: z.string(),
+      fields_to_add: z.array(
+        z.object({
+          field_name: z.string(),
+          field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
+          required: z.boolean().default(false),
+          reducer_strategy: z
+            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
+            .optional(),
+        })
+      ),
+      schema_version: z.string().optional(),
+      user_specific: z.boolean().default(false),
+      user_id: z.string().uuid().optional(),
+      activate: z.boolean().default(true),
+      migrate_existing: z.boolean().default(false),
+    });
+    const parsed = schema.parse(args);
+
+    // Validate user_id if user_specific
+    if (parsed.user_specific && !parsed.user_id) {
+      throw new McpError(ErrorCode.InvalidParams, "user_id is required when user_specific=true");
+    }
+
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+
+    try {
+      const updatedSchema = await schemaRegistry.updateSchemaIncremental({
+        entity_type: parsed.entity_type,
+        fields_to_add: parsed.fields_to_add,
+        schema_version: parsed.schema_version,
+        user_specific: parsed.user_specific,
+        user_id: parsed.user_id,
+        activate: parsed.activate,
+        migrate_existing: parsed.migrate_existing,
+      });
+
+      return this.buildTextResponse({
+        success: true,
+        entity_type: parsed.entity_type,
+        schema_version: updatedSchema.schema_version,
+        fields_added: parsed.fields_to_add.map((f) => f.field_name),
+        activated: parsed.activate,
+        migrated_existing: parsed.migrate_existing,
+        scope: parsed.user_specific ? "user" : "global",
+      });
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to update schema incrementally: ${error.message}`);
+    }
+  }
+
+  /**
+   * Register a new schema
+   */
+  private async registerSchema(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      entity_type: z.string(),
+      schema_definition: z.record(z.unknown()),
+      reducer_config: z.record(z.unknown()),
+      schema_version: z.string().default("1.0"),
+      user_specific: z.boolean().default(false),
+      user_id: z.string().uuid().optional(),
+      activate: z.boolean().default(false),
+    });
+    const parsed = schema.parse(args);
+
+    // Validate user_id if user_specific
+    if (parsed.user_specific && !parsed.user_id) {
+      throw new McpError(ErrorCode.InvalidParams, "user_id is required when user_specific=true");
+    }
+
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+
+    try {
+      const registeredSchema = await schemaRegistry.register({
+        entity_type: parsed.entity_type,
+        schema_version: parsed.schema_version,
+        schema_definition: parsed.schema_definition as any,
+        reducer_config: parsed.reducer_config as any,
+        user_id: parsed.user_id,
+        user_specific: parsed.user_specific,
+        activate: parsed.activate,
+      });
+
+      return this.buildTextResponse({
+        success: true,
+        entity_type: parsed.entity_type,
+        schema_version: registeredSchema.schema_version,
+        activated: parsed.activate,
+        scope: parsed.user_specific ? "user" : "global",
+        schema_id: registeredSchema.id,
+      });
+    } catch (error: any) {
+      throw new McpError(ErrorCode.InternalError, `Failed to register schema: ${error.message}`);
+    }
+  }
+
   // FU-122: MCP store() Tool
   // Implements idempotence pattern: retry loop, fixed-point guarantee, deduplication
   private async store(args: unknown): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -1759,6 +2252,79 @@ export class NeotomaServer {
       // Validate file exists
       if (!fs.existsSync(parsed.file_path)) {
         throw new Error(`File not found: ${parsed.file_path}`);
+      }
+
+      // Check if this is a parquet file - handle specially via structured path
+      const { isParquetFile, readParquetFile } = await import("./services/parquet_reader.js");
+      if (isParquetFile(parsed.file_path)) {
+        logger.error(`[STORE] Detected parquet file: ${parsed.file_path}`);
+        
+        try {
+          // Configure timeout for large parquet files (5 minutes default)
+          const PARQUET_READ_TIMEOUT = 300000; // 5 minutes
+          
+          // Wrap readParquetFile with timeout and BigInt error handling
+          let parquetResult;
+          try {
+            parquetResult = await Promise.race([
+              readParquetFile(parsed.file_path),
+              new Promise<never>((_, reject) => 
+                setTimeout(
+                  () => reject(new Error(`Parquet read timeout after ${PARQUET_READ_TIMEOUT / 1000}s. File may be too large or on slow network storage.`)),
+                  PARQUET_READ_TIMEOUT
+                )
+              )
+            ]);
+          } catch (parquetError: any) {
+            // If error contains BigInt serialization, provide clearer message
+            if (parquetError?.message?.includes('BigInt') || parquetError?.message?.includes('serialize')) {
+              throw new Error(
+                `Parquet file contains INT64 fields that need BigInt conversion. ` +
+                `This should be handled automatically. If this error persists, ` +
+                `there may be a BigInt value in an unexpected location. ` +
+                `Original: ${parquetError.message}`
+              );
+            }
+            throw parquetError;
+          }
+          
+          // Safely log metadata (ensure no BigInt values)
+          const safeRowCount = typeof parquetResult.metadata.row_count === 'bigint' 
+            ? Number(parquetResult.metadata.row_count) 
+            : parquetResult.metadata.row_count;
+          logger.error(
+            `[STORE] Read ${safeRowCount} rows from parquet file (entity_type: ${parquetResult.metadata.entity_type})`
+          );
+          
+          // Process as structured entities
+          return await this.storeStructuredInternal(
+            parsed.user_id,
+            parquetResult.entities,
+            parsed.source_priority
+          );
+        } catch (error: any) {
+          // Safely extract error message, handling potential BigInt values
+          let errorMessage = "Unknown error";
+          try {
+            if (error?.message) {
+              errorMessage = String(error.message);
+            } else if (typeof error === 'string') {
+              errorMessage = error;
+            } else {
+              // Try to stringify with BigInt replacer
+              errorMessage = JSON.stringify(error, (key, value) => {
+                if (typeof value === 'bigint') {
+                  return Number(value);
+                }
+                return value;
+              });
+            }
+          } catch (stringifyError) {
+            // If stringification fails, use fallback
+            errorMessage = String(error);
+          }
+          throw new Error(`Failed to process parquet file: ${errorMessage}`);
+        }
       }
 
       // Read file
@@ -1929,7 +2495,7 @@ export class NeotomaServer {
         }
       } catch (error) {
         // Log error but don't fail the store operation
-        console.error("Interpretation error:", error);
+        logger.error("Interpretation error:", error);
         result.interpretation = {
           error: error instanceof Error ? error.message : String(error),
           skipped: true,
@@ -2029,7 +2595,7 @@ export class NeotomaServer {
     }
 
     // Debug: log observation details
-    console.log(
+    logger.error(
       `Found ${observations.length} observation(s) for source ${sourceId}:`,
       observations.map((obs: any) => ({ obs_id: obs.id, entity_id: obs.entity_id }))
     );
@@ -2039,7 +2605,7 @@ export class NeotomaServer {
       new Set(observations.map((obs: any) => obs.entity_id).filter((id: any) => id != null))
     );
 
-    console.log(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
+    logger.error(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
     return entityIds;
   }
 
@@ -2123,7 +2689,13 @@ export class NeotomaServer {
     const { supabase } = await import("./db.js");
 
     // Store structured data as JSON source
-    const jsonContent = JSON.stringify(entities, null, 2);
+    // Use replacer to handle BigInt values (convert to number)
+    const jsonContent = JSON.stringify(entities, (key, value) => {
+      if (typeof value === 'bigint') {
+        return Number(value);
+      }
+      return value;
+    }, 2);
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
 
     const storageResult = await storeRawContent({
@@ -2229,10 +2801,14 @@ export class NeotomaServer {
       }
 
       // Store unknown fields in raw_fragments (no interpretation_id for structured data)
-      if (Object.keys(unknownFields).length > 0) {
-        console.log(`[raw_fragments] Storing ${Object.keys(unknownFields).length} unknown fields for ${entityType} (source_id: ${storageResult.sourceId}, user_id: ${userId})`);
+      // Filter out null/undefined values before storing
+      const nonNullUnknownFields = Object.entries(unknownFields).filter(([_, value]) => value !== null && value !== undefined);
+      
+      if (nonNullUnknownFields.length > 0) {
+        logger.error(`[raw_fragments] Storing ${nonNullUnknownFields.length} unknown fields for ${entityType} (source_id: ${storageResult.sourceId}, user_id: ${userId})`);
       }
-      for (const [key, value] of Object.entries(unknownFields)) {
+      
+      for (const [key, value] of nonNullUnknownFields) {
         // Check if fragment already exists (for idempotence)
         const { data: existing } = await supabase
           .from("raw_fragments")
@@ -2259,14 +2835,28 @@ export class NeotomaServer {
             .eq("id", existing.id);
           
           if (updateError) {
-            console.error(`[raw_fragments] FAILED to update fragment for ${entityType}.${key}:`, {
+            logger.error(`[raw_fragments] FAILED to update fragment for ${entityType}.${key}:`, {
               error: updateError,
               code: updateError.code,
               message: updateError.message,
             });
           } else {
-            console.log(`[raw_fragments] Updated existing fragment for ${entityType}.${key} (frequency: ${(existing.frequency_count || 1) + 1})`);
+            logger.error(`[raw_fragments] Updated existing fragment for ${entityType}.${key} (frequency: ${(existing.frequency_count || 1) + 1})`);
             unknownFieldsCount++;
+            
+            // Queue auto-enhancement check for this field
+            try {
+              const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+              await schemaRecommendationService.queueAutoEnhancementCheck({
+                entity_type: entityType,
+                fragment_key: key,
+                user_id: userId,
+                frequency_count: (existing.frequency_count || 1) + 1,
+              });
+            } catch (queueError: any) {
+              // Don't fail storage if queuing fails - it's best-effort
+              logger.warn(`[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`, queueError.message);
+            }
           }
         } else {
           // Insert new fragment
@@ -2295,7 +2885,7 @@ export class NeotomaServer {
           if (insertError) {
             // Handle unique constraint violation from race condition
             if (insertError.code === "23505") {
-              console.warn(`[raw_fragments] Race condition detected for ${entityType}.${key}, retrying as update...`);
+              logger.warn(`[raw_fragments] Race condition detected for ${entityType}.${key}, retrying as update...`);
               // Retry as update
               const { data: retryExisting } = await supabase
                 .from("raw_fragments")
@@ -2320,9 +2910,23 @@ export class NeotomaServer {
                   })
                   .eq("id", retryExisting.id);
                 unknownFieldsCount++;
+                
+                // Queue auto-enhancement check for this field
+                try {
+                  const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+                  await schemaRecommendationService.queueAutoEnhancementCheck({
+                    entity_type: entityType,
+                    fragment_key: key,
+                    user_id: userId,
+                    frequency_count: (retryExisting.frequency_count || 1) + 1,
+                  });
+                } catch (queueError: any) {
+                  // Don't fail storage if queuing fails - it's best-effort
+                  logger.warn(`[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`, queueError.message);
+                }
               }
             } else {
-              console.error(`[raw_fragments] FAILED to insert fragment for ${entityType}.${key}:`, {
+              logger.error(`[raw_fragments] FAILED to insert fragment for ${entityType}.${key}:`, {
                 error: insertError,
                 code: insertError.code,
                 message: insertError.message,
@@ -2330,9 +2934,23 @@ export class NeotomaServer {
             }
           } else {
             if (insertResult && insertResult.length > 0) {
-              console.log(`[raw_fragments] Inserted new fragment for ${entityType}.${key} (id: ${fragmentId})`);
+              logger.error(`[raw_fragments] Inserted new fragment for ${entityType}.${key} (id: ${fragmentId})`);
             }
             unknownFieldsCount++;
+            
+            // Queue auto-enhancement check for this field
+            try {
+              const { schemaRecommendationService } = await import("./services/schema_recommendation.js");
+              await schemaRecommendationService.queueAutoEnhancementCheck({
+                entity_type: entityType,
+                fragment_key: key,
+                user_id: userId,
+                frequency_count: 1,
+              });
+            } catch (queueError: any) {
+              // Don't fail storage if queuing fails - it's best-effort
+              logger.warn(`[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`, queueError.message);
+            }
           }
         }
       }
@@ -2384,7 +3002,7 @@ export class NeotomaServer {
           .order("observed_at", { ascending: false });
 
         if (obsError) {
-          console.error(
+          logger.error(
             `Failed to get observations for entity ${createdEntity.entityId}:`,
             obsError.message
           );
@@ -2432,7 +3050,7 @@ export class NeotomaServer {
           );
         }
       } catch (error) {
-        console.error(
+        logger.error(
           `Failed to compute snapshot for entity ${createdEntity.entityId}:`,
           error instanceof Error ? error.message : "Unknown error"
         );
@@ -2683,7 +3301,7 @@ export class NeotomaServer {
 
     if (auditError) {
       // Log but don't fail - audit is not critical
-      console.warn("Failed to create merge audit log:", auditError);
+      logger.warn("Failed to create merge audit log:", auditError);
     }
 
     const mergedAt = new Date().toISOString();
@@ -2694,6 +3312,426 @@ export class NeotomaServer {
       merged_at: mergedAt,
       merge_reason: parsed.merge_reason,
     });
+  }
+
+  /**
+   * Parse resource URI into structured resource identifier
+   */
+  private parseResourceUri(uri: string): {
+    type: string;
+    entityType?: string;
+    entityId?: string;
+    year?: string;
+    month?: string;
+    sourceId?: string;
+  } {
+    // Validate scheme
+    if (!uri.startsWith("neotoma://")) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        `Invalid resource URI scheme. Expected 'neotoma://', got: ${uri}`
+      );
+    }
+
+    // Extract path after scheme
+    const path = uri.substring("neotoma://".length);
+    const segments = path.split("/").filter(Boolean);
+
+    if (segments.length === 0) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        "Invalid resource URI: no path specified"
+      );
+    }
+
+    // Parse based on first segment
+    const [first, second, third] = segments;
+
+    // entities/{entity_type}
+    if (first === "entities" && second) {
+      return { type: "entity_collection", entityType: second };
+    }
+
+    // entity/{entity_id}
+    if (first === "entity" && second && !third) {
+      return { type: "entity", entityId: second };
+    }
+
+    // entity/{entity_id}/observations
+    if (first === "entity" && second && third === "observations") {
+      return { type: "entity_observations", entityId: second };
+    }
+
+    // entity/{entity_id}/relationships
+    if (first === "entity" && second && third === "relationships") {
+      return { type: "entity_relationships", entityId: second };
+    }
+
+    // timeline/{year} or timeline/{year-month}
+    if (first === "timeline" && second) {
+      const timeMatch = second.match(/^(\d{4})(?:-(\d{2}))?$/);
+      if (timeMatch) {
+        const [, year, month] = timeMatch;
+        if (month) {
+          return { type: "timeline_month", year, month };
+        }
+        return { type: "timeline_year", year };
+      }
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        `Invalid timeline format. Expected YYYY or YYYY-MM, got: ${second}`
+      );
+    }
+
+    // source/{source_id}
+    if (first === "source" && second) {
+      return { type: "source", sourceId: second };
+    }
+
+    // sources
+    if (first === "sources" && !second) {
+      return { type: "source_collection" };
+    }
+
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      `Unrecognized resource URI format: ${uri}`
+    );
+  }
+
+  /**
+   * Resource handler: Get entity collection by type
+   */
+  private async handleEntityCollection(entityType: string): Promise<any> {
+    const { queryEntities } = await import("./services/entity_queries.js");
+
+    const entities = await queryEntities({
+      entityType,
+      includeMerged: false,
+      limit: 100,
+      offset: 0,
+    });
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from("entities")
+      .select("*", { count: "exact", head: true })
+      .eq("entity_type", entityType)
+      .is("merged_to_entity_id", null);
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count entities: ${countError.message}`
+      );
+    }
+
+    return {
+      type: "entity_collection",
+      entity_type: entityType,
+      entities,
+      total: count || 0,
+      uri: `neotoma://entities/${entityType}`,
+    };
+  }
+
+  /**
+   * Resource handler: Get individual entity
+   */
+  private async handleIndividualEntity(entityId: string): Promise<any> {
+    // Get entity
+    const { data: entity, error: entityError } = await supabase
+      .from("entities")
+      .select("*")
+      .eq("id", entityId)
+      .single();
+
+    if (entityError || !entity) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        `Entity not found: ${entityId}`
+      );
+    }
+
+    // Get snapshot
+    const { data: snapshot, error: snapshotError } = await supabase
+      .from("entity_snapshots")
+      .select("*")
+      .eq("entity_id", entityId)
+      .single();
+
+    if (snapshotError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get entity snapshot: ${snapshotError.message}`
+      );
+    }
+
+    return {
+      type: "entity",
+      entity_id: entityId,
+      entity_type: entity.entity_type,
+      canonical_name: entity.canonical_name,
+      snapshot: snapshot?.snapshot || {},
+      provenance: snapshot?.provenance || {},
+      observation_count: snapshot?.observation_count || 0,
+      last_observation_at: snapshot?.last_observation_at,
+    };
+  }
+
+  /**
+   * Resource handler: Get entity observations
+   */
+  private async handleEntityObservations(entityId: string): Promise<any> {
+    const { data: observations, error } = await supabase
+      .from("observations")
+      .select("*")
+      .eq("entity_id", entityId)
+      .order("observed_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get observations: ${error.message}`
+      );
+    }
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from("observations")
+      .select("*", { count: "exact", head: true })
+      .eq("entity_id", entityId);
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count observations: ${countError.message}`
+      );
+    }
+
+    return {
+      type: "entity_observations",
+      entity_id: entityId,
+      observations: observations || [],
+      total: count || 0,
+      uri: `neotoma://entity/${entityId}/observations`,
+    };
+  }
+
+  /**
+   * Resource handler: Get entity relationships
+   */
+  private async handleEntityRelationships(entityId: string): Promise<any> {
+    // Get outbound relationships
+    const { data: outbound, error: outError } = await supabase
+      .from("relationships")
+      .select("*")
+      .eq("source_entity_id", entityId);
+
+    if (outError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get outbound relationships: ${outError.message}`
+      );
+    }
+
+    // Get inbound relationships
+    const { data: inbound, error: inError } = await supabase
+      .from("relationships")
+      .select("*")
+      .eq("target_entity_id", entityId);
+
+    if (inError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get inbound relationships: ${inError.message}`
+      );
+    }
+
+    return {
+      type: "entity_relationships",
+      entity_id: entityId,
+      outbound_relationships: outbound || [],
+      inbound_relationships: inbound || [],
+      total_outbound: outbound?.length || 0,
+      total_inbound: inbound?.length || 0,
+      uri: `neotoma://entity/${entityId}/relationships`,
+    };
+  }
+
+  /**
+   * Resource handler: Get timeline events for a year
+   */
+  private async handleTimelineYear(year: string): Promise<any> {
+    const startDate = `${year}-01-01T00:00:00Z`;
+    const endDate = `${parseInt(year) + 1}-01-01T00:00:00Z`;
+
+    const { data: events, error } = await supabase
+      .from("timeline_events")
+      .select("*")
+      .gte("event_timestamp", startDate)
+      .lt("event_timestamp", endDate)
+      .order("event_timestamp", { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get timeline events: ${error.message}`
+      );
+    }
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from("timeline_events")
+      .select("*", { count: "exact", head: true })
+      .gte("event_timestamp", startDate)
+      .lt("event_timestamp", endDate);
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count timeline events: ${countError.message}`
+      );
+    }
+
+    return {
+      type: "timeline",
+      year,
+      events: events || [],
+      total: count || 0,
+      uri: `neotoma://timeline/${year}`,
+    };
+  }
+
+  /**
+   * Resource handler: Get timeline events for a specific month
+   */
+  private async handleTimelineMonth(year: string, month: string): Promise<any> {
+    const startDate = `${year}-${month}-01T00:00:00Z`;
+    const nextMonth = parseInt(month) === 12 ? "01" : String(parseInt(month) + 1).padStart(2, "0");
+    const nextYear = parseInt(month) === 12 ? String(parseInt(year) + 1) : year;
+    const endDate = `${nextYear}-${nextMonth}-01T00:00:00Z`;
+
+    const { data: events, error } = await supabase
+      .from("timeline_events")
+      .select("*")
+      .gte("event_timestamp", startDate)
+      .lt("event_timestamp", endDate)
+      .order("event_timestamp", { ascending: false })
+      .limit(1000);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get timeline events: ${error.message}`
+      );
+    }
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from("timeline_events")
+      .select("*", { count: "exact", head: true })
+      .gte("event_timestamp", startDate)
+      .lt("event_timestamp", endDate);
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count timeline events: ${countError.message}`
+      );
+    }
+
+    return {
+      type: "timeline",
+      year,
+      month,
+      events: events || [],
+      total: count || 0,
+      uri: `neotoma://timeline/${year}-${month}`,
+    };
+  }
+
+  /**
+   * Resource handler: Get source material
+   */
+  private async handleSourceMaterial(sourceId: string): Promise<any> {
+    const { data: source, error } = await supabase
+      .from("sources")
+      .select("*")
+      .eq("id", sourceId)
+      .single();
+
+    if (error || !source) {
+      throw new McpError(
+        ErrorCode.InvalidRequest,
+        `Source material not found: ${sourceId}`
+      );
+    }
+
+    // Get observations created from this source
+    const { data: observations, error: obsError } = await supabase
+      .from("observations")
+      .select("id, entity_id, entity_type")
+      .eq("source_id", sourceId)
+      .limit(100);
+
+    if (obsError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get observations: ${obsError.message}`
+      );
+    }
+
+    return {
+      type: "source",
+      source_id: sourceId,
+      mime_type: source.mime_type,
+      file_size: source.file_size,
+      content_hash: source.content_hash,
+      created_at: source.created_at,
+      observations: observations || [],
+      observation_count: observations?.length || 0,
+      uri: `neotoma://source/${sourceId}`,
+    };
+  }
+
+  /**
+   * Resource handler: Get all source materials
+   */
+  private async handleSourceCollection(): Promise<any> {
+    const { data: sources, error } = await supabase
+      .from("sources")
+      .select("id, mime_type, file_size, content_hash, created_at, user_id")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get sources: ${error.message}`
+      );
+    }
+
+    // Get total count
+    const { count, error: countError } = await supabase
+      .from("sources")
+      .select("*", { count: "exact", head: true });
+
+    if (countError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to count sources: ${countError.message}`
+      );
+    }
+
+    return {
+      type: "source_collection",
+      sources: sources || [],
+      total: count || 0,
+      uri: "neotoma://sources",
+    };
   }
 
   private setupErrorHandler(): void {
@@ -2711,5 +3749,15 @@ export class NeotomaServer {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     logger.error("[Neotoma MCP] Server running on stdio");
+    
+    // Start auto-enhancement processor (runs every 30 seconds)
+    try {
+      const { startAutoEnhancementProcessor } = await import("./services/auto_enhancement_processor.js");
+      this.autoEnhancementCleanup = startAutoEnhancementProcessor(30000);
+      logger.error("[Neotoma MCP] Auto-enhancement processor started");
+    } catch (error: any) {
+      // Don't fail server startup if processor fails - log and continue
+      logger.error(`[Neotoma MCP] Failed to start auto-enhancement processor: ${error.message}`);
+    }
   }
 }

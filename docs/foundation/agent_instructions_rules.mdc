@@ -1,5 +1,6 @@
 ---
 description: "Repository-wide instructions for AI assistants (Cursor, ChatGPT, Claude) working on Neotoma"
+globs: ["**/*"]
 alwaysApply: true
 ---
 

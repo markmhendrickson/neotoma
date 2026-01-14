@@ -125,6 +125,11 @@ export async function createObservationsFromRecord(
     // Store raw fragments for unknown fields
     if (Object.keys(unknownFields).length > 0) {
       for (const [key, value] of Object.entries(unknownFields)) {
+        // Skip null or undefined values (database constraint)
+        if (value === null || value === undefined) {
+          continue;
+        }
+        
         await supabase.from("raw_fragments").insert({
           record_id: record.id,
           fragment_type: "unknown_field",

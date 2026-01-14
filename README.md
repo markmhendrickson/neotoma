@@ -4,7 +4,7 @@ Neotoma is a deterministic truth layer that transforms fragmented personal data 
 
 ## What It Does
 
-Neotoma builds persistent structured memory for AI agents through **dual-path storing**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation—creating an incremental knowledge base that grows more accurate and comprehensive over time.
+Neotoma builds persistent structured memory for AI agents through **dual-path storing**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation. This creates an incremental knowledge base that grows more accurate and comprehensive over time.
 
 The system transforms fragmented personal data into a unified memory graph. The graph connects people, companies, events, and relationships across all your data. Every fact traces back to its source material. Dates automatically create timelines. Entities are unified across all source material, so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
 
@@ -79,7 +79,7 @@ Neotoma serves **AI-native individuals and small teams** who rely heavily on AI 
 - Require cross-data reasoning and entity unification across contracts, invoices, research papers, and agent-created data
 - Need structured extraction from PDFs, images, and agent interactions with full provenance
 
-**AI-Native Founders & Small Teams (2–20 people)**
+**AI-Native Founders & Small Teams (2-20 people)**
 
 - Teams where individual members adopt first, then expand to shared team memory
 - Need multi-user support with row-level security for collaborative truth layer
@@ -116,7 +116,7 @@ ChatGPT, Claude, and Gemini offer conversation-only memory. Neotoma provides str
 ## Current Status
 
 **Version:** v0.2.15  
-**Status:** Implementation complete, pending database migration application
+**Status:** Implemented (pending database migration application)
 
 Neotoma is in active development with a clear roadmap toward v1.0.0 MVP. The system currently supports:
 
@@ -318,7 +318,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 
 ## Core Principles
 
-1. **Deterministic (Creates Verifiable Domain)**: Same input → same output, always. No randomness, no LLM extraction in MVP. By making extraction deterministic and verifiable, Neotoma creates a verifiable domain for personal data—objective (non-gameable) results that enable reliable, consistent outcomes LLMs can depend on.
+1. **Deterministic (Creates Verifiable Domain)**: Same input → same output, always. No randomness, no LLM extraction in MVP. By making extraction deterministic and verifiable, Neotoma creates a verifiable domain for personal data. This provides objective, non-gameable results that enable reliable, consistent outcomes LLMs can depend on.
 2. **Schema-first**: Type-driven extraction, not freeform notes or conversation-only memory
 3. **Explainable**: Every field traces to source material (document or agent interaction)
 4. **Entity-unified**: Canonical IDs across all personal data (hash-based)
@@ -330,7 +330,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 10. **Event-sourced**: Domain Events → Reducers → State updates. Complete event log enables historical replay and time-travel queries.
 11. **Cryptographic integrity**: Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 12. **Dual-path storing**: File uploads + agent interactions via MCP
-13. **Three-layer model**: Source Material → Observation → Entity → Entity Snapshot
+13. **Four-layer model**: Source Material → Observation → Entity → Entity Snapshot
 
 ## Testing
 

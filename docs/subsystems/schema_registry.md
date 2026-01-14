@@ -182,6 +182,125 @@ Schemas MUST be validated before registration:
 - Field definitions must be valid
 - Merge policies must reference valid fields
 - Schema version must be unique per entity_type
+
+### 4.3 Incremental Schema Updates
+
+The schema registry supports incremental schema updates without full schema replacement:
+
+```typescript
+class SchemaRegistry {
+  async updateSchemaIncremental(options: {
+    entity_type: string;
+    fields_to_add: Array<{
+      field_name: string;
+      field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
+      required?: boolean;
+      reducer_strategy?: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array';
+    }>;
+    schema_version?: string; // Auto-increments if not provided
+    user_specific?: boolean; // Create user-specific schema variant
+    user_id?: string; // Required if user_specific=true
+    activate?: boolean; // Default: true - activate immediately
+    migrate_existing?: boolean; // Default: false - only for historical data backfill
+  }): Promise<SchemaRegistryEntry>;
+}
+```
+
+**Key Features:**
+- **Add fields without full replacement**: Merge new fields with existing schema
+- **Immediate application**: New schema applies to all new data immediately after activation
+- **Optional migration**: Backfill historical data only if needed (not required for new data)
+- **Version auto-increment**: Automatically increment version (1.0 → 1.1, 1.9 → 2.0)
+
+**Example Workflow:**
+1. Store data with unknown fields → fields go to `raw_fragments`
+2. Analyze `raw_fragments` to identify candidates
+3. Call `updateSchemaIncremental` to add approved fields
+4. New data automatically uses updated schema (no migration needed)
+5. Optionally backfill historical data via `migrate_existing=true`
+
+### 4.4 User-Specific Schemas
+
+The schema registry supports both global and user-specific schemas:
+
+**Database Schema Extension:**
+```sql
+ALTER TABLE schema_registry 
+ADD COLUMN user_id UUID REFERENCES auth.users(id),
+ADD COLUMN scope TEXT DEFAULT 'global' CHECK (scope IN ('global', 'user'));
+```
+
+**Schema Resolution:**
+```typescript
+class SchemaRegistry {
+  async loadActiveSchema(
+    entityType: string,
+    userId?: string
+  ): Promise<SchemaRegistryEntry | null> {
+    // 1. Try user-specific schema first (if userId provided)
+    if (userId) {
+      const userSchema = await this.loadUserSpecificSchema(entityType, userId);
+      if (userSchema) return userSchema;
+    }
+    
+    // 2. Fall back to global schema
+    return await this.loadGlobalSchema(entityType);
+  }
+}
+```
+
+**Use Cases:**
+- **User customizations**: Users can extend schemas with custom fields for their data
+- **Experimentation**: Test new schemas without affecting other users
+- **Schema reconciliation**: Successful user-specific fields can be promoted to global schemas
+- **Multi-tenancy**: Different users can have different schema requirements
+
+**Schema Reconciliation:**
+
+User-specific schemas can be promoted to global schemas when patterns emerge:
+
+```typescript
+interface ReconciliationCriteria {
+  min_users_with_field: number;     // e.g., 3+ users
+  min_usage_frequency: number;       // e.g., 50+ entities per user
+  type_consistency: number;          // e.g., 90%+ same type across users
+  confidence_threshold: number;      // e.g., 0.8
+}
+```
+
+When a field appears in multiple user-specific schemas with consistent types and high usage, it can be promoted to the global schema, making it available to all users.
+
+### 4.5 Auto-Enhancement
+
+The schema registry supports automatic schema enhancement based on `raw_fragments` analysis:
+
+**Auto-Enhancement Workflow:**
+1. Unknown fields are stored in `raw_fragments` (preservation layer)
+2. System analyzes frequency, type consistency, source diversity
+3. High-confidence fields (95%+ type consistency, 2+ sources, 3+ occurrences) are automatically promoted
+4. Schema is updated and activated immediately
+5. New data automatically uses updated schema
+
+**Configuration:**
+```typescript
+interface AutoEnhancementConfig {
+  enabled: boolean;                 // Master switch
+  threshold: 1 | 2 | 3 | 'pattern'; // Occurrences before auto-enhance
+  min_confidence: number;           // 0-1, minimum confidence
+  auto_enhance_high_confidence: boolean;
+  user_specific_aggressive: boolean; // More aggressive for user data
+  global_conservative: boolean;      // More conservative for global schemas
+}
+```
+
+**Risk Mitigation:**
+- **Field blacklist**: Prevent noise fields (_test*, *_debug, etc.)
+- **Field name validation**: Reject suspicious patterns
+- **Type validation**: Multi-pass type detection with conservative fallbacks
+- **Source diversity**: Require 2+ different sources
+- **Idempotency**: Prevent duplicate enhancements
+- **Database locking**: Prevent race conditions
+
 ## 5. Integration with Observations
 ### 5.1 Observation Schema Reference
 Observations reference schema version:
