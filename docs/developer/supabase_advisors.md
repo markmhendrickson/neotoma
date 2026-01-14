@@ -21,18 +21,43 @@ Generate a migration to fix issues:
 npm run check:advisors:fix
 ```
 ## Common Issues and Fixes
-### 1. RLS Disabled with Policies
-**Issue**: Table has RLS policies but RLS is not enabled.
+### 1. RLS Not Enabled on Table
+**Issue**: Table was created but RLS is not enabled. **ALL tables must have RLS enabled for security**, even if no policies exist yet.
+
+**Fix**:
+```sql
+ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
+-- Then add appropriate RLS policies
+CREATE POLICY "Service role full access" ON table_name
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Add user-specific policies as needed
+```
+
+**Prevention**: 
+1. **Always enable RLS immediately after creating a table** (before creating policies)
+2. **Use the migration template** (`supabase/migrations/_template_new_table.sql`) which includes RLS by default
+3. **Follow the standard pattern**:
+```sql
+CREATE TABLE IF NOT EXISTS my_table (...);
+
+-- Enable RLS FIRST
+ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;
+
+-- Then create policies
+CREATE POLICY "Service role full access" ON my_table
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY "Users read own records" ON my_table
+  FOR SELECT USING (user_id = auth.uid());
+```
+
+### 2. RLS Disabled with Policies
+**Issue**: Table has RLS policies but RLS is not enabled (legacy issue).
 **Fix**:
 ```sql
 ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
 ```
-**Prevention**: Always enable RLS when creating policies:
-```sql
-ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "policy_name" ON table_name FOR SELECT USING (...);
-```
-### 2. Function Search Path Mutable
+**Prevention**: Always enable RLS when creating policies (see above).
+### 3. Function Search Path Mutable
 **Issue**: Function doesn't set `search_path`, making it vulnerable to search_path injection.
 **Fix**:
 ```sql
@@ -48,7 +73,7 @@ END;
 $$;
 ```
 **Prevention**: Always include `SET search_path` in function definitions.
-### 3. Extension in Public Schema
+### 4. Extension in Public Schema
 **Issue**: Extension installed in `public` schema instead of dedicated schema.
 **Fix**:
 ```sql
@@ -57,7 +82,7 @@ GRANT USAGE ON SCHEMA extensions TO public;
 CREATE EXTENSION extension_name SCHEMA extensions;
 ```
 **Prevention**: Install extensions in `extensions` schema by default.
-### 4. Overly Permissive RLS Policies
+### 5. Overly Permissive RLS Policies
 **Issue**: Policy uses `USING (true)` allowing public access.
 **Fix**:
 ```sql
@@ -96,20 +121,32 @@ While automated checks catch most issues, you should also:
 3. **After Schema Changes**: Verify no new issues were introduced
 ## Migration Best Practices
 When creating migrations, follow these patterns:
-### Tables with RLS
+
+**⚠️ IMPORTANT: Use the migration template** (`supabase/migrations/_template_new_table.sql`) which includes RLS by default.
+
+### Tables with RLS (REQUIRED FOR ALL TABLES)
 ```sql
 CREATE TABLE IF NOT EXISTS my_table (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
   -- columns
 );
--- Enable RLS BEFORE creating policies
+
+-- ⚠️ REQUIRED: Enable RLS immediately after table creation
 ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;
+
 -- Create policies
 CREATE POLICY "Service role access" ON my_table
   FOR ALL TO service_role USING (true) WITH CHECK (true);
-CREATE POLICY "Authenticated read" ON my_table
-  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Users read own records" ON my_table
+  FOR SELECT USING (user_id = auth.uid());
 ```
+
+**Key Points:**
+- **RLS is mandatory** for all tables, not optional
+- Enable RLS **immediately after** `CREATE TABLE`, before creating policies
+- The pre-commit hook will **block commits** if RLS is missing
+- CI will **fail** if RLS is not enabled on any table
 ### Functions
 ```sql
 CREATE OR REPLACE FUNCTION my_function()

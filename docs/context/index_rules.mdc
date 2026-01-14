@@ -1,5 +1,6 @@
 ---
 description: "Primary entrypoint for all AI assistants and developers, providing complete map of documentation system and reading-order rules"
+globs: ["**/*"]
 alwaysApply: true
 ---
 # Neotoma Documentation System — Index and Navigation Guide

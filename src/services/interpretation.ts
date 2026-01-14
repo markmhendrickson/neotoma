@@ -252,7 +252,12 @@ export async function runInterpretation(
       );
 
       // Store unknown fields in raw_fragments (with idempotence)
+      // Filter out null/undefined values before storing
       for (const [key, value] of Object.entries(unknownFields)) {
+        // Skip null or undefined values (database constraint)
+        if (value === null || value === undefined) {
+          continue;
+        }
         // Check if fragment already exists (for idempotence)
         const { data: existing } = await supabase
           .from("raw_fragments")

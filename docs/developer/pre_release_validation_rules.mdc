@@ -1,5 +1,6 @@
 ---
 description: "Systematic validation checklist to catch critical issues before release deployment, based on past release issues and near-misses"
+globs: ["**/*"]
 alwaysApply: true
 ---
 # Pre-Release Validation Checklist

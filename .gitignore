@@ -21,3 +21,4 @@ public/assets/
 docs/developer/mcp.json.example
 .secrets/
 tmp/
+.creds/

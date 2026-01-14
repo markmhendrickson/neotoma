@@ -1,5 +1,6 @@
 ---
 description: "Code style, naming, and organization patterns for TypeScript/TSX, SQL, YAML, and Shell scripts"
+globs: ["**/*"]
 alwaysApply: true
 ---
 # Neotoma Code Conventions
@@ -442,20 +443,32 @@ CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_nam
 CREATE INDEX IF NOT EXISTS idx_entities_type_name ON entities(entity_type, canonical_name);
 ```
 #### RLS Policies
-- **Enable RLS** on all tables
+- **⚠️ REQUIRED: Enable RLS on ALL tables** - This is mandatory for security
+- **Enable RLS immediately after CREATE TABLE**, before creating policies
 - **Create policies** with descriptive names
 - **Use `DROP POLICY IF EXISTS`** before creating
+- **Use the migration template** (`supabase/migrations/_template_new_table.sql`) which includes RLS by default
+- **Auto-apply migrations:** After creating/modifying migrations, run `npm run migrate` automatically (see `.cursor/rules/database_migration_automation.mdc`)
+
 ```sql
--- RLS policies
+-- ⚠️ REQUIRED: Enable RLS immediately after table creation
 ALTER TABLE entities ENABLE ROW LEVEL SECURITY;
+
 -- Service role full access
 DROP POLICY IF EXISTS "Service role full access - entities" ON entities;
 CREATE POLICY "Service role full access - entities" ON entities
   FOR ALL TO service_role USING (true) WITH CHECK (true);
--- Public read access (for v0.1.0 single-user)
-DROP POLICY IF EXISTS "public read - entities" ON entities;
-CREATE POLICY "public read - entities" ON entities FOR SELECT USING (true);
+
+-- Users read own records (for user-scoped tables)
+DROP POLICY IF EXISTS "Users read own entities" ON entities;
+CREATE POLICY "Users read own entities" ON entities
+  FOR SELECT USING (user_id = auth.uid());
 ```
+
+**Enforcement:**
+- Pre-commit hook will **block commits** if RLS is missing
+- CI will **fail** if any table lacks RLS
+- The check script detects tables without RLS even if no policies exist yet
 ### 2.3 Determinism Requirements
 **Reference:** `docs/architecture/determinism.md`
 #### Forbidden Patterns

@@ -41,40 +41,51 @@ const issues: AdvisorIssue[] = [];
  * Check if RLS is enabled on all tables that have policies
  */
 async function checkRLSEnabled(supabase: any): Promise<void> {
-  const { data, error } = await supabase.rpc("exec_sql", {
-    query: `
-      SELECT 
-        t.tablename,
-        CASE WHEN t.rowsecurity THEN 'enabled' ELSE 'disabled' END as rls_status,
-        COUNT(p.policyname) as policy_count
-      FROM pg_tables t
-      LEFT JOIN pg_policies p ON p.tablename = t.tablename AND p.schemaname = t.schemaname
-      WHERE t.schemaname = 'public'
-        AND t.tablename NOT LIKE 'pg_%'
-        AND t.tablename NOT LIKE '_%'
-      GROUP BY t.tablename, t.rowsecurity
-      HAVING COUNT(p.policyname) > 0 AND t.rowsecurity = false
-      ORDER BY t.tablename;
-    `,
-  });
-
-  if (error) {
-    // Fallback: check via direct SQL inspection of migration files
+  // If no Supabase client, check migration files only
+  if (!supabase) {
     await checkRLSInMigrations();
     return;
   }
 
-  if (data && data.length > 0) {
-    for (const row of data) {
-      issues.push({
-        severity: "error",
-        type: "RLS Disabled with Policies",
-        entity: `public.${row.tablename}`,
-        description: `Table ${row.tablename} has ${row.policy_count} policies but RLS is disabled`,
-        fixable: true,
-        fix: `ALTER TABLE ${row.tablename} ENABLE ROW LEVEL SECURITY;`,
-      });
+  try {
+    const { data, error } = await supabase.rpc("exec_sql", {
+      query: `
+        SELECT 
+          t.tablename,
+          CASE WHEN t.rowsecurity THEN 'enabled' ELSE 'disabled' END as rls_status,
+          COUNT(p.policyname) as policy_count
+        FROM pg_tables t
+        LEFT JOIN pg_policies p ON p.tablename = t.tablename AND p.schemaname = t.schemaname
+        WHERE t.schemaname = 'public'
+          AND t.tablename NOT LIKE 'pg_%'
+          AND t.tablename NOT LIKE '_%'
+        GROUP BY t.tablename, t.rowsecurity
+        HAVING COUNT(p.policyname) > 0 AND t.rowsecurity = false
+        ORDER BY t.tablename;
+      `,
+    });
+
+    if (error) {
+      // Fallback: check via direct SQL inspection of migration files
+      await checkRLSInMigrations();
+      return;
     }
+
+    if (data && data.length > 0) {
+      for (const row of data) {
+        issues.push({
+          severity: "error",
+          type: "RLS Disabled with Policies",
+          entity: `public.${row.tablename}`,
+          description: `Table ${row.tablename} has ${row.policy_count} policies but RLS is disabled`,
+          fixable: true,
+          fix: `ALTER TABLE ${row.tablename} ENABLE ROW LEVEL SECURITY;`,
+        });
+      }
+    }
+  } catch (err) {
+    // Fallback: check via direct SQL inspection of migration files
+    await checkRLSInMigrations();
   }
 }
 
@@ -86,11 +97,23 @@ async function checkRLSInMigrations(): Promise<void> {
   const files = await readdir(migrationsDir);
   const migrationFiles = files.filter((f) => f.endsWith(".sql")).sort();
 
+  const tablesCreated = new Set<string>();
   const tablesWithPolicies = new Set<string>();
   const tablesWithRLS = new Set<string>();
 
   for (const file of migrationFiles) {
     const content = await readFile(join(migrationsDir, file), "utf-8");
+    
+    // Find tables created (match table name after CREATE TABLE, including IF NOT EXISTS)
+    // Use a more precise regex that captures the actual table name, not "IF" from "IF NOT EXISTS"
+    const createTableMatches = content.matchAll(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(/gi);
+    for (const match of createTableMatches) {
+      const tableName = match[1];
+      // Skip false positives like "IF" from "IF NOT EXISTS"
+      if (tableName && tableName !== 'IF' && tableName !== 'NOT' && tableName !== 'EXISTS') {
+        tablesCreated.add(tableName);
+      }
+    }
     
     // Find tables with policies (match table name after ON, including underscores)
     const policyMatches = content.matchAll(/CREATE POLICY[^;]*ON\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi);
@@ -119,6 +142,10 @@ async function checkRLSInMigrations(): Promise<void> {
   const schemaPath = join(__dirname, "../supabase/schema.sql");
   try {
     const schemaContent = await readFile(schemaPath, "utf-8");
+    const schemaCreateTableMatches = schemaContent.matchAll(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)/gi);
+    for (const match of schemaCreateTableMatches) {
+      tablesCreated.add(match[1]);
+    }
     const schemaPolicyMatches = schemaContent.matchAll(/CREATE POLICY[^;]*ON\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi);
     for (const match of schemaPolicyMatches) {
       tablesWithPolicies.add(match[1]);
@@ -147,6 +174,32 @@ async function checkRLSInMigrations(): Promise<void> {
         description: `Table ${table} has policies but RLS is not enabled in migrations`,
         fixable: true,
         fix: `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`,
+      });
+    }
+  }
+
+  // Find tables created without RLS (all user-facing tables should have RLS)
+  // Exclude system tables and edge tables that might be created conditionally
+  const excludedTables = new Set([
+    'pg_', '_', // System tables
+    'schema_migrations', // Migration tracking table
+  ]);
+  
+  for (const table of tablesCreated) {
+    // Skip excluded tables
+    if (Array.from(excludedTables).some(prefix => table.startsWith(prefix))) {
+      continue;
+    }
+    
+    // Check if RLS is enabled for this table
+    if (!tablesWithRLS.has(table)) {
+      issues.push({
+        severity: "error",
+        type: "RLS Not Enabled on Table",
+        entity: `public.${table}`,
+        description: `Table ${table} was created but RLS is not enabled. All tables must have RLS enabled for security.`,
+        fixable: true,
+        fix: `ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;\n-- Then add appropriate RLS policies`,
       });
     }
   }

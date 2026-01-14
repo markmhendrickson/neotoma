@@ -165,6 +165,117 @@ This minimizes reliance on [interpretation](../vocabulary/canonical_terms.md#int
 - `person`, `company`, `contact`, `task`
 - Plus codebase types (v0.2.3+): `feature_unit`, `release`, `agent_decision`, `agent_session`, `validation_result`, `codebase_entity`, `architectural_decision`
 
+### 2.7 Schema Management Operations
+
+| Action | Purpose | Consistency | Deterministic | Status |
+| ------ | ------- | ----------- | ------------- | ------ |
+| `analyze_schema_candidates` | Analyze raw_fragments to identify fields for schema promotion | Strong | Yes | Available |
+| `get_schema_recommendations` | Retrieve stored schema update recommendations | Strong | Yes | Available |
+| `update_schema_incremental` | Incrementally update schema by adding fields | Strong | Yes | Available |
+| `register_schema` | Register new schema or schema version | Strong | Yes | Available |
+
+**Note:** These actions enable automatic schema evolution based on actual data usage patterns. Fields in `raw_fragments` can be analyzed and promoted to schema fields either automatically (via auto-enhancement) or manually (via recommendations). Schema updates apply immediately to new data without requiring migration (migration is only needed for backfilling historical data).
+
+**Auto-Enhancement Workflow:**
+1. Store structured data with unknown fields → fields go to `raw_fragments`
+2. System analyzes `raw_fragments` frequency and confidence
+3. High-confidence fields (95%+ type consistency, 2+ sources, 3+ occurrences) are automatically promoted to schema
+4. New data automatically uses updated schema (no migration needed)
+5. Optionally backfill historical data via migration
+
+**Manual Enhancement Workflow:**
+1. Call `analyze_schema_candidates` to get recommendations
+2. Review recommendations (confidence scores, type consistency, sample values)
+3. Call `update_schema_incremental` to add approved fields to schema
+4. New data automatically uses updated schema
+
+**User-Specific vs Global Schemas:**
+- **Global schemas:** Shared across all users (default)
+- **User-specific schemas:** Custom schema extensions for individual users
+- Schema resolution: User-specific schema first, then fallback to global
+- Reconciliation: User-specific fields can be promoted to global schemas based on usage patterns
+
+### 2.8 MCP Resources
+
+**Overview:** Neotoma MCP server exposes resources for browseable, read-only access to entities, timelines, and source materials. Resources complement actions by enabling discovery and exploration patterns.
+
+**Resource vs. Action:**
+- **Resources**: Read-only, browseable data accessible via URIs (for discovery and exploration)
+- **Actions**: Function calls for queries and mutations (for operations and complex queries)
+
+**URI Scheme:** All resources use the `neotoma://` URI scheme.
+
+**Available Resources:**
+
+| Resource Type | URI Pattern | Description |
+| ------------- | ----------- | ----------- |
+| Entity Collections | `neotoma://entities/{entity_type}` | All entities of a specific type (e.g., `neotoma://entities/invoice`) |
+| Individual Entity | `neotoma://entity/{entity_id}` | Specific entity with snapshot and provenance |
+| Entity Observations | `neotoma://entity/{entity_id}/observations` | All observations for an entity |
+| Entity Relationships | `neotoma://entity/{entity_id}/relationships` | All relationships for an entity (inbound and outbound) |
+| Timeline (Year) | `neotoma://timeline/{year}` | All timeline events in a specific year (e.g., `neotoma://timeline/2024`) |
+| Timeline (Month) | `neotoma://timeline/{year}-{month}` | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`) |
+| Source Material | `neotoma://source/{source_id}` | Specific source material with metadata |
+| Source Collection | `neotoma://sources` | All source materials |
+
+**Resource Discovery:**
+- Use MCP `list_resources` to discover available resources dynamically
+- Resources are generated based on actual data (entity types, timeline years available)
+- User context is respected where applicable
+
+**Resource Response Format:**
+
+All resources return JSON with consistent structure:
+
+**Entity Collection:**
+```json
+{
+  "type": "entity_collection",
+  "entity_type": "invoice",
+  "entities": [...],
+  "total": 42,
+  "uri": "neotoma://entities/invoice"
+}
+```
+
+**Individual Entity:**
+```json
+{
+  "type": "entity",
+  "entity_id": "ent_abc123",
+  "entity_type": "invoice",
+  "canonical_name": "Invoice #001",
+  "snapshot": {...},
+  "provenance": {...},
+  "observation_count": 3
+}
+```
+
+**Timeline:**
+```json
+{
+  "type": "timeline",
+  "year": "2024",
+  "events": [...],
+  "total": 150,
+  "uri": "neotoma://timeline/2024"
+}
+```
+
+**When to Use Resources vs. Actions:**
+
+| Use Case | Recommended Approach |
+| -------- | -------------------- |
+| Discover available entity types | Resource: `neotoma://` (list resources) |
+| Browse all invoices | Resource: `neotoma://entities/invoice` |
+| Get specific entity | Resource: `neotoma://entity/{id}` OR Action: `retrieve_entity_snapshot` |
+| Query entities with filters | Action: `retrieve_entities` (supports pagination, user filtering) |
+| Store new data | Action: `store` (resources are read-only) |
+| Create relationships | Action: `create_relationship` (resources are read-only) |
+| Correct entity fields | Action: `correct` (resources are read-only) |
+
+**Note:** Resources are read-only complements to actions. For mutations (store, correct, create relationships), use actions. For discovery and simple browsing, resources provide a more intuitive interface.
+
 ## 3. Action Specifications
 
 ### 3.1 `store` (Unified)
@@ -1049,6 +1160,208 @@ This enables full explainability: for any fact in the system, you can trace it b
 - View current truth for a [relationship](../vocabulary/canonical_terms.md#relationship) with full [provenance](../vocabulary/canonical_terms.md#provenance)
 - Understand which sources contributed which metadata fields
 - Debug [relationship](../vocabulary/canonical_terms.md#relationship) merging behavior
+
+### 3.18 `analyze_schema_candidates`
+
+**Purpose:** Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.
+
+**Request Schema:**
+```typescript
+{
+  entity_type?: string; // Optional: Entity type to analyze (analyzes all if not provided)
+  user_id?: string;     // Optional: User ID for user-specific analysis
+  min_frequency?: number; // Optional: Minimum frequency threshold (default: 5)
+  min_confidence?: number; // Optional: Minimum confidence score 0-1 (default: 0.8)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  recommendations: Array<{
+    entity_type: string;
+    fields: Array<{
+      field_name: string;
+      field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
+      frequency: number; // Total occurrences
+      confidence: number; // 0-1, confidence score
+      type_consistency: number; // 0-1, type consistency score
+      sample_values: unknown[]; // Sample values (limited to 10)
+      naming_pattern_match?: boolean;
+      format_consistency?: number;
+    }>;
+    source: 'raw_fragments';
+    confidence_score: number; // Overall confidence for this entity type
+    reasoning?: string;
+  }>;
+  total_entity_types: number;
+  total_fields: number;
+  min_frequency: number;
+  min_confidence: number;
+}
+```
+
+**Consistency:** Strong (deterministic analysis of committed raw_fragments)
+**Determinism:** Yes (same raw_fragments → same recommendations)
+
+**When to Use:**
+- Discover fields that should be added to schemas
+- Review auto-enhancement candidates before approval
+- Understand data usage patterns across entity types
+
+### 3.19 `get_schema_recommendations`
+
+**Purpose:** Get stored schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or LLM inference.
+
+**Request Schema:**
+```typescript
+{
+  entity_type: string; // Required: Entity type to get recommendations for
+  user_id?: string;    // Optional: User ID for user-specific recommendations
+  source?: 'raw_fragments' | 'agent' | 'inference' | 'all'; // Optional: Filter by source (default: all)
+  status?: 'pending' | 'approved' | 'rejected'; // Optional: Filter by status (default: pending)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  recommendations: Array<{
+    id: string;
+    entity_type: string;
+    fields: Array<{
+      field_name: string;
+      field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
+      required?: boolean;
+    }>;
+    source: 'raw_fragments' | 'agent' | 'inference';
+    confidence_score: number;
+    reasoning?: string;
+    status: 'pending' | 'approved' | 'rejected' | 'applied' | 'auto_applied';
+  }>;
+  total: number;
+  entity_type: string;
+}
+```
+
+**Consistency:** Strong (reflects all committed recommendations)
+**Determinism:** Yes (same recommendations → same result)
+
+**When to Use:**
+- Review pending schema update recommendations
+- Track approved/rejected recommendations
+- Monitor auto-applied schema enhancements
+
+### 3.20 `update_schema_incremental`
+
+**Purpose:** Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.
+
+**Request Schema:**
+```typescript
+{
+  entity_type: string; // Required: Entity type to update
+  fields_to_add: Array<{ // Required: Fields to add to schema
+    field_name: string; // Required
+    field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object'; // Required
+    required?: boolean; // Optional (default: false)
+    reducer_strategy?: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array'; // Optional
+  }>;
+  schema_version?: string; // Optional: New schema version (auto-increments if not provided)
+  user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
+  user_id?: string; // Required if user_specific=true
+  activate?: boolean; // Optional: Activate schema immediately (default: true)
+  migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  success: true;
+  entity_type: string;
+  schema_version: string; // New schema version
+  fields_added: string[]; // List of field names added
+  activated: boolean; // Whether schema was activated
+  migrated_existing: boolean; // Whether historical data was migrated
+  scope: 'global' | 'user';
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+| ---- | ---- | ------- | ------ |
+| `VALIDATION_ERROR` | 400 | Invalid field definition | No |
+| `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
+| `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
+
+**Consistency:** Strong (schema updates are atomic)
+**Determinism:** Yes (same fields → same schema version)
+
+**IMPORTANT:** Schema updates apply **immediately** to new data. When you call this action with `activate=true` (default), all subsequent `store` calls will automatically use the updated schema. The `migrate_existing` option is only for backfilling historical data that was stored before the schema update.
+
+**When to Use:**
+- Add new fields discovered from raw_fragments analysis
+- Extend schemas based on actual data usage
+- Create user-specific schema customizations
+- Apply approved recommendations
+
+### 3.21 `register_schema`
+
+**Purpose:** Register a new schema or schema version. Supports both global and user-specific schemas.
+
+**Request Schema:**
+```typescript
+{
+  entity_type: string; // Required
+  schema_definition: { // Required: Schema definition
+    fields: Record<string, {
+      type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
+      required?: boolean;
+      validator?: string;
+      preserveCase?: boolean;
+      description?: string;
+    }>;
+  };
+  reducer_config: { // Required: Reducer configuration
+    merge_policies: Record<string, {
+      strategy: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array';
+      tie_breaker?: 'observed_at' | 'source_priority';
+    }>;
+  };
+  schema_version?: string; // Optional (default: "1.0")
+  user_specific?: boolean; // Optional (default: false)
+  user_id?: string; // Required if user_specific=true
+  activate?: boolean; // Optional: Activate schema immediately (default: false)
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  success: true;
+  entity_type: string;
+  schema_version: string;
+  activated: boolean;
+  scope: 'global' | 'user';
+  schema_id: string;
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+| ---- | ---- | ------- | ------ |
+| `VALIDATION_ERROR` | 400 | Invalid schema definition or reducer config | No |
+| `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
+| `SCHEMA_EXISTS` | 409 | Schema version already exists | No |
+
+**Consistency:** Strong (schema registration is atomic)
+**Determinism:** Yes (same schema → same result)
+
+**When to Use:**
+- Register completely new entity types
+- Register new schema versions with breaking changes
+- Create user-specific schema variants
+- Explicitly control schema versioning
 
 ## 4. Error Envelope Standard
 

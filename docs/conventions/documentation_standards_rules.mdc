@@ -1,5 +1,6 @@
 ---
 description: "Neotoma-specific documentation standards extending foundation standards with required structure, formatting, and agent instruction requirements"
+globs: ["**/*"]
 alwaysApply: true
 ---
 # Neotoma Documentation Standards and Conventions
