@@ -17,6 +17,7 @@ data.vite/
 data
 public/assets/
 .cursor/mcp.json
+.cursor/error_reports/
 docs/developer/mcp.json.example
 .secrets/
 tmp/
