@@ -63,6 +63,8 @@ export async function processAutoEnhancementQueue(): Promise<{
           .eq("id", item.id);
 
         // Check eligibility
+        // Pass user_id as-is (could be UUID string or null)
+        // The eligibility check will handle default UUID conversion
         const eligibility =
           await schemaRecommendationService.checkAutoEnhancementEligibility({
             entity_type: item.entity_type,

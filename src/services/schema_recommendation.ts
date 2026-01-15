@@ -103,12 +103,30 @@ export class SchemaRecommendationService {
     }
 
     // 3. Query raw_fragments for this field
-    const { data: fragments, error } = await supabase
+    // Include both record_id (for CSV/record-based) and source_id for diversity checks
+    // Note: fragment_type stores entity_type for structured data (parquet files)
+    let fragmentsQuery = supabase
       .from("raw_fragments")
-      .select("fragment_value, frequency_count, source_id, record_id")
-      .eq("entity_type", options.entity_type)
-      .eq("fragment_key", options.fragment_key)
-      .eq("user_id", options.user_id || null);
+      .select("fragment_value, frequency_count, source_id, record_id, fragment_type")
+      .eq("fragment_type", options.entity_type) // fragment_type stores entity_type for structured data
+      .eq("fragment_key", options.fragment_key);
+    
+    // Handle user_id properly: check both the provided user_id and the default UUID
+    // Also handle null (for global schemas)
+    const defaultUserId = "00000000-0000-0000-0000-000000000000";
+    if (options.user_id) {
+      if (options.user_id === defaultUserId) {
+        // Check both default UUID and null (legacy data might use null)
+        fragmentsQuery = fragmentsQuery.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+      } else {
+        fragmentsQuery = fragmentsQuery.eq("user_id", options.user_id);
+      }
+    } else {
+      // No user_id provided - check both null and default UUID
+      fragmentsQuery = fragmentsQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+    }
+    
+    const { data: fragments, error } = await fragmentsQuery;
 
     if (error || !fragments || fragments.length === 0) {
       return {
@@ -152,22 +170,70 @@ export class SchemaRecommendationService {
       };
     }
 
-    // 6. Check source diversity (2+ different sources)
+    // 6. Check source diversity (2+ different sources) OR row diversity (2+ different rows/observations)
+    // This allows structured files (parquet, CSV, JSON arrays) with multiple rows to trigger enhancement
+    // while still requiring multiple sources for single-row file types
+    
     const uniqueSources = new Set(fragments.map((f) => f.source_id)).size;
-    if (uniqueSources < 2) {
+    
+    // For row diversity: check record_id (CSV/records) OR count observations per source (parquet/structured)
+    // Parquet files have record_id = null, so we need to count observations instead
+    const uniqueRows = new Set(fragments.map((f) => f.record_id).filter(id => id != null)).size;
+    
+    // For sources with record_id = null (parquet/structured), count unique observations
+    // Each observation represents a row in the structured file
+    let uniqueObservations = 0;
+    if (uniqueRows === 0 && uniqueSources === 1) {
+      // This is likely a parquet/structured file - count observations for this field
+      const sourceId = fragments[0]?.source_id;
+      if (sourceId) {
+        // Build query with proper null handling for user_id
+        let obsQuery = supabase
+          .from("observations")
+          .select("id", { count: "exact", head: true })
+          .eq("source_id", sourceId)
+          .eq("entity_type", options.entity_type);
+        
+        // Handle user_id properly: use .is() for null, .eq() for UUID
+        if (options.user_id) {
+          obsQuery = obsQuery.eq("user_id", options.user_id);
+        } else {
+          obsQuery = obsQuery.is("user_id", null);
+        }
+        
+        const { count } = await obsQuery;
+        uniqueObservations = count || 0;
+      }
+    }
+    
+    // Require EITHER 2+ sources OR 2+ rows/observations
+    // This enables auto-enhancement for structured files (parquet, CSV) while preserving
+    // source diversity requirement for single-row file types
+    const hasDiversity = uniqueSources >= 2 || uniqueRows >= 2 || uniqueObservations >= 2;
+    
+    if (!hasDiversity) {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: "Field appears in only one source (no diversity)",
+        reasoning: uniqueSources < 2 && uniqueRows < 2 && uniqueObservations < 2
+          ? "Field appears in only one source and one row/observation (no diversity)"
+          : uniqueSources < 2
+          ? "Field appears in only one source (no diversity)"
+          : "Field appears in only one row/observation (no diversity)",
       };
     }
 
     // Eligible for auto-enhancement!
+    const diversityInfo = uniqueSources >= 2 
+      ? `${uniqueSources} sources`
+      : uniqueRows >= 2
+      ? `${uniqueRows} rows`
+      : `${uniqueObservations} observations`;
     return {
       eligible: true,
       confidence: confidenceResult.confidence,
       inferred_type: confidenceResult.inferred_type,
-      reasoning: `High confidence (${confidenceResult.confidence.toFixed(2)}) with ${uniqueSources} sources`,
+      reasoning: `High confidence (${confidenceResult.confidence.toFixed(2)}) with ${diversityInfo}`,
     };
   }
 
@@ -289,12 +355,29 @@ export class SchemaRecommendationService {
       | "object";
   }> {
     // Get all samples for this field
-    const { data: fragments } = await supabase
+    // Note: For structured data (parquet), fragment_type stores entity_type
+    // The raw_fragments table only has fragment_type, not entity_type
+    let confidenceQuery = supabase
       .from("raw_fragments")
       .select("fragment_value, frequency_count")
-      .eq("entity_type", options.entity_type)
-      .eq("fragment_key", options.fragment_key)
-      .eq("user_id", options.user_id || null);
+      .eq("fragment_type", options.entity_type) // fragment_type stores entity_type for structured data
+      .eq("fragment_key", options.fragment_key);
+    
+    // Handle user_id properly: check both the provided user_id and the default UUID
+    const defaultUserId = "00000000-0000-0000-0000-000000000000";
+    if (options.user_id) {
+      if (options.user_id === defaultUserId) {
+        // Check both default UUID and null (legacy data might use null)
+        confidenceQuery = confidenceQuery.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+      } else {
+        confidenceQuery = confidenceQuery.eq("user_id", options.user_id);
+      }
+    } else {
+      // No user_id provided - check both null and default UUID
+      confidenceQuery = confidenceQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
+    }
+    
+    const { data: fragments } = await confidenceQuery;
 
     if (!fragments || fragments.length === 0) {
       return {
@@ -350,14 +433,16 @@ export class SchemaRecommendationService {
     const minConfidence = options.min_confidence || 0.8;
 
     // Query raw_fragments grouped by entity_type and fragment_key
+    // Note: For structured data, fragment_type stores entity_type
     let query = supabase
       .from("raw_fragments")
       .select(
-        "entity_type, fragment_key, fragment_value, frequency_count, user_id",
+        "entity_type, fragment_type, fragment_key, fragment_value, frequency_count, user_id",
       );
 
     if (options.entity_type) {
-      query = query.eq("entity_type", options.entity_type);
+      // Check both fragment_type (structured data) and entity_type (unstructured data)
+      query = query.or(`fragment_type.eq.${options.entity_type},entity_type.eq.${options.entity_type}`);
     }
     if (options.user_id) {
       query = query.eq("user_id", options.user_id);
@@ -675,19 +760,63 @@ Return your recommendations in JSON format:
     frequency_count?: number;
   }): Promise<void> {
     try {
-      await supabase.from("auto_enhancement_queue").upsert(
-        {
-          entity_type: options.entity_type,
-          fragment_key: options.fragment_key,
-          user_id: options.user_id || null,
-          status: "pending",
-          frequency_count: options.frequency_count,
-        },
-        {
-          onConflict: "entity_type,fragment_key,user_id",
-          ignoreDuplicates: false, // Update if already exists
-        },
-      );
+      // Handle default user ID: convert to null for foreign key constraint
+      // The default UUID '00000000-0000-0000-0000-000000000000' doesn't exist in auth.users
+      // So we use NULL instead, which the unique index handles via COALESCE
+      const defaultUserId = "00000000-0000-0000-0000-000000000000";
+      const userId = options.user_id && options.user_id !== defaultUserId 
+        ? options.user_id 
+        : null;
+      
+      // Check if entry already exists
+      let query = supabase
+        .from("auto_enhancement_queue")
+        .select("id, status, frequency_count")
+        .eq("entity_type", options.entity_type)
+        .eq("fragment_key", options.fragment_key);
+      
+      if (userId) {
+        query = query.eq("user_id", userId);
+      } else {
+        query = query.is("user_id", null);
+      }
+      
+      const { data: existing, error: checkError } = await query.maybeSingle();
+      
+      if (checkError && checkError.code !== "PGRST116") {
+        // PGRST116 is "no rows" which is fine
+        throw checkError;
+      }
+      
+      if (existing) {
+        // Update existing entry
+        const { error: updateError } = await supabase
+          .from("auto_enhancement_queue")
+          .update({
+            status: "pending", // Reset to pending if it was skipped/failed
+            frequency_count: options.frequency_count || existing.frequency_count,
+          })
+          .eq("id", existing.id);
+        
+        if (updateError) {
+          throw updateError;
+        }
+      } else {
+        // Insert new entry
+        const { error: insertError } = await supabase
+          .from("auto_enhancement_queue")
+          .insert({
+            entity_type: options.entity_type,
+            fragment_key: options.fragment_key,
+            user_id: userId,
+            status: "pending",
+            frequency_count: options.frequency_count,
+          });
+        
+        if (insertError) {
+          throw insertError;
+        }
+      }
     } catch (error: any) {
       // Don't throw - queuing is best-effort
       logger.error(

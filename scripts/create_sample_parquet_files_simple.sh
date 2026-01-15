@@ -1,9 +1,36 @@
 #!/bin/bash
 # Create sample versions of parquet files with 50 records each
+# Stores samples in $DATA_DIR/samples/[entity_type].parquet to preserve entity type names
 # Processes main parquet files (excluding snapshots and samples)
 
 DATA_DIR="${DATA_DIR:-/Users/markmhendrickson/Documents/data}"
+SAMPLES_DIR="$DATA_DIR/samples"
 SAMPLE_SIZE=50
+
+# Function to infer entity type from filename (matches parquet_reader.ts logic)
+infer_entity_type() {
+  local basename="$1"
+  local name=$(echo "$basename" | tr '[:upper:]' '[:lower:]')
+  
+  # Remove common suffixes
+  if [[ "$name" == *_missing_gid ]]; then
+    name="${name%_missing_gid}"
+  fi
+  
+  # Handle pluralization patterns (matches parquet_reader.ts)
+  if [[ "$name" == *ies ]]; then
+    # companies -> company, properties -> property
+    echo "${name%ies}y"
+  elif [[ "$name" == *sses ]] || [[ "$name" == *xes ]] || [[ "$name" == *ches ]] || [[ "$name" == *shes ]]; then
+    # addresses -> address, taxes -> tax
+    echo "${name%es}"
+  elif [[ "$name" == *s ]]; then
+    # transactions -> transaction, tasks -> task
+    echo "${name%s}"
+  else
+    echo "$name"
+  fi
+}
 
 # List of main parquet files to process
 FILES=(
@@ -22,7 +49,11 @@ FILES=(
   "recurring_events/recurring_events.parquet"
 )
 
+# Create samples directory if it doesn't exist
+mkdir -p "$SAMPLES_DIR"
+
 echo "Creating sample parquet files with $SAMPLE_SIZE records each..."
+echo "Samples will be stored in: $SAMPLES_DIR"
 echo ""
 
 success=0
@@ -31,7 +62,11 @@ error=0
 
 for file in "${FILES[@]}"; do
   source_path="$DATA_DIR/$file"
-  sample_path="$DATA_DIR/${file%.parquet}_sample.parquet"
+  
+  # Extract basename and infer entity type
+  basename=$(basename "$file" .parquet)
+  entity_type=$(infer_entity_type "$basename")
+  sample_path="$SAMPLES_DIR/${entity_type}.parquet"
   
   if [ ! -f "$source_path" ]; then
     echo "⚠️  File not found: $file"
@@ -74,7 +109,9 @@ try:
     
     # Write sample
     df_sample.to_parquet(sample, index=False, engine='pyarrow')
-    print(f'  ✅ Created: $(basename \"$sample_path\") ({len(df_sample)} rows)')
+    entity_type = os.path.basename(sample).replace('.parquet', '')
+    print(f'  ✅ Created: {os.path.basename(sample)} ({len(df_sample)} rows)')
+    print(f'     Entity type: {entity_type}')
     sys.exit(0)
 except Exception as e:
     print(f'  ❌ Error: {str(e)}')

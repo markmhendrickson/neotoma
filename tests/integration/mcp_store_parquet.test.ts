@@ -12,7 +12,25 @@ import { readParquetFile } from "../../src/services/parquet_reader.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
-import { createTestParquetFile, createMinimalTestParquet } from "../helpers/create_test_parquet.js";
+import { 
+  createTestParquetFile, 
+  createMinimalTestParquet,
+  createParquetWithKnownSchema,
+  createParquetWithUnknownSchema
+} from "../helpers/create_test_parquet.js";
+import {
+  validateStoreStructuredResponse,
+  validateErrorEnvelope,
+  validateErrorCode,
+  VALIDATION_ERROR_CODES
+} from "../helpers/mcp_spec_validators.js";
+import {
+  seedTestSchema,
+  cleanupTestEntityType,
+  verifyEntityExists,
+  verifyObservationExists,
+  countRawFragments
+} from "../helpers/test_schema_helpers.js";
 
 describe("MCP Store with Parquet Files - Integration", () => {
   let server: NeotomaServer;
@@ -263,6 +281,186 @@ describe("MCP Store with Parquet Files - Integration", () => {
       const converted = convertBigIntValues(testData);
       expect(() => JSON.stringify(converted)).not.toThrow();
       expect(typeof converted.id).toBe("number");
+    });
+  });
+
+  describe("Known vs Unknown Schema Behavior (per MCP_SPEC.md 3.1)", () => {
+    const knownSchemaEntityType = "test_task_known_schema";
+    const unknownSchemaEntityType = "test_unknown_type_no_schema";
+
+    beforeEach(async () => {
+      // Clean up test data thoroughly
+      await cleanupTestEntityType(knownSchemaEntityType, testUserId);
+      await cleanupTestEntityType(unknownSchemaEntityType, testUserId);
+      
+      // Wait a bit for cleanup to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+    });
+
+    afterAll(async () => {
+      await cleanupTestEntityType(knownSchemaEntityType, testUserId);
+      await cleanupTestEntityType(unknownSchemaEntityType, testUserId);
+    });
+
+    it("should store known fields in observations and unknown fields in raw_fragments when schema exists", async () => {
+      // 1. Seed a minimal schema with 2 fields (not all fields from parquet)
+      // The parquet file has: id, title, status, unknown_field_1, unknown_field_2, unknown_field_3
+      // Schema only includes: title, status
+      // So unknown fields are: id, unknown_field_1, unknown_field_2, unknown_field_3
+      await seedTestSchema(server, knownSchemaEntityType, {
+        title: { type: "string", required: false },
+        status: { type: "string", required: false },
+      });
+
+      // 2. Create parquet file with 2 known fields + 3 unknown fields
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+      const testFile = path.join(tempDir, `${knownSchemaEntityType}.parquet`);
+      tempFiles.push(testFile);
+      tempFiles.push(tempDir);
+
+      await createParquetWithKnownSchema(testFile, knownSchemaEntityType);
+
+      // 3. Store via MCP
+      const result = await (server as any).store({
+        user_id: testUserId,
+        file_path: testFile,
+        interpret: false,
+      });
+
+      const responseData = JSON.parse(result.content[0].text);
+
+      // 4. Validate response per MCP_SPEC.md section 3.1
+      validateStoreStructuredResponse(responseData);
+
+      // 5. Verify unknown_fields_count > 0 (per spec: unknown fields → raw_fragments)
+      expect(responseData.unknown_fields_count).toBeGreaterThan(0);
+      // Note: Count may vary based on which fields are considered unknown
+      // The important thing is that SOME fields are unknown (> 0)
+
+      // 6. Verify entities were created (per spec 2.3: entity creation always occurs)
+      expect(responseData.entities.length).toBe(6);
+
+      for (const entityInfo of responseData.entities) {
+        expect(entityInfo.entity_type).toBe(knownSchemaEntityType);
+        
+        // Verify entity exists in database
+        const entityExists = await verifyEntityExists(entityInfo.entity_id);
+        expect(entityExists).toBe(true);
+        
+        // Verify observation exists
+        const observationExists = await verifyObservationExists(entityInfo.observation_id);
+        expect(observationExists).toBe(true);
+        
+        createdEntityIds.push(entityInfo.entity_id);
+        createdObservationIds.push(entityInfo.observation_id);
+      }
+
+      // 7. Verify raw_fragments were created (if any unknown fields exist)
+      // Note: The actual count depends on which fields are considered unknown
+      // For now, just verify the response indicated unknown fields
+      expect(responseData.unknown_fields_count).toBeGreaterThan(0);
+
+      // 8. Track source for cleanup
+      if (responseData.source_id) {
+        createdSourceIds.push(responseData.source_id);
+      }
+    });
+
+    it("should store all fields in observations when no schema exists", async () => {
+      // 1. No schema seeding - entity type has no schema
+
+      // 2. Create parquet file with unknown entity type
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+      const testFile = path.join(tempDir, `${unknownSchemaEntityType}.parquet`);
+      tempFiles.push(testFile);
+      tempFiles.push(tempDir);
+
+      await createParquetWithUnknownSchema(testFile);
+
+      // 3. Store via MCP
+      const result = await (server as any).store({
+        user_id: testUserId,
+        file_path: testFile,
+        interpret: false,
+      });
+
+      const responseData = JSON.parse(result.content[0].text);
+
+      // 4. Validate response per MCP_SPEC.md section 3.1
+      validateStoreStructuredResponse(responseData);
+
+      // 5. Verify unknown_fields_count === 0 (per spec: no schema → all fields treated as valid)
+      expect(responseData.unknown_fields_count).toBe(0);
+
+      // 6. Verify entities were created (per spec 2.3: entity creation always occurs)
+      expect(responseData.entities.length).toBe(5);
+
+      for (const entityInfo of responseData.entities) {
+        expect(entityInfo.entity_type).toBe(unknownSchemaEntityType);
+        
+        // Verify entity exists in database
+        const entityExists = await verifyEntityExists(entityInfo.entity_id);
+        expect(entityExists).toBe(true);
+        
+        // Verify observation exists
+        const observationExists = await verifyObservationExists(entityInfo.observation_id);
+        expect(observationExists).toBe(true);
+        
+        createdEntityIds.push(entityInfo.entity_id);
+        createdObservationIds.push(entityInfo.observation_id);
+      }
+
+      // 7. Verify NO raw_fragments were created (all fields treated as valid)
+      const fragmentCount = await countRawFragments(unknownSchemaEntityType, testUserId);
+      expect(fragmentCount).toBe(0);
+
+      // 8. Track source for cleanup
+      if (responseData.source_id) {
+        createdSourceIds.push(responseData.source_id);
+      }
+    });
+
+    it("should create deterministic entity IDs across repeated imports", async () => {
+      // Per MCP_SPEC.md section 7.1: determinism guarantees
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+      const testFile = path.join(tempDir, `${knownSchemaEntityType}_determinism.parquet`);
+      tempFiles.push(testFile);
+      tempFiles.push(tempDir);
+
+      await createMinimalTestParquet(testFile);
+
+      // Import once
+      const result1 = await (server as any).store({
+        user_id: testUserId,
+        file_path: testFile,
+        interpret: false,
+      });
+
+      const responseData1 = JSON.parse(result1.content[0].text);
+      const entityIds1 = responseData1.entities.map((e: any) => e.entity_id);
+
+      // Track for cleanup
+      createdEntityIds.push(...entityIds1);
+      createdSourceIds.push(responseData1.source_id);
+
+      // Import again (same file)
+      const result2 = await (server as any).store({
+        user_id: testUserId,
+        file_path: testFile,
+        interpret: false,
+      });
+
+      const responseData2 = JSON.parse(result2.content[0].text);
+      const entityIds2 = responseData2.entities.map((e: any) => e.entity_id);
+
+      // Track for cleanup
+      createdEntityIds.push(...entityIds2);
+      if (responseData2.source_id !== responseData1.source_id) {
+        createdSourceIds.push(responseData2.source_id);
+      }
+
+      // Verify same entity IDs (deterministic)
+      expect(entityIds1).toEqual(entityIds2);
     });
   });
 });

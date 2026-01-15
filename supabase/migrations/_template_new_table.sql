@@ -33,8 +33,9 @@ ON [table_name](user_id) WHERE user_id IS NOT NULL;
 ALTER TABLE [table_name] ENABLE ROW LEVEL SECURITY;
 
 -- Users can read their own records (if user-scoped)
+-- Note: Use auth_uid() instead of auth.uid() for better performance (cached per query)
 CREATE POLICY "Users read own [table_name]" ON [table_name]
-  FOR SELECT USING (user_id = auth.uid());
+  FOR SELECT USING (user_id = auth_uid());
 
 -- Service role has full access for mutations
 CREATE POLICY "Service role full access to [table_name]" ON [table_name]
