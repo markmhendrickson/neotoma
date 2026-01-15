@@ -34,13 +34,8 @@ jobs:
 
       - name: Check Supabase advisors
         run: npm run check:advisors
-        env:
-          # Optional: Provide credentials to check actual database state
-          # If not provided, script will check migration files only
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-          DEV_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
-          DEV_SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+        # Note: Not providing database credentials - CI validates migration files only
+        # Database state validation should be done separately after migrations are applied
 
       - name: Comment PR with issues
         if: failure() && github.event_name == 'pull_request'
