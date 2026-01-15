@@ -1123,6 +1123,8 @@ export class NeotomaServer {
     return this.buildTextResponse({
       observations: observations || [],
       total: observations?.length || 0,
+      limit: parsed.limit,
+      offset: parsed.offset,
     });
   }
 
@@ -1282,6 +1284,26 @@ export class NeotomaServer {
     const { createRelationshipObservations } = await import("./services/interpretation.js");
     
     try {
+      // Create a source for this relationship
+      const { data: source, error: sourceError } = await supabase
+        .from("sources")
+        .insert({
+          content_hash: `relationship_${Date.now()}`,
+          mime_type: "application/json",
+          storage_url: `internal://relationship/${parsed.relationship_type}`,
+          file_size: 0, // No file for direct relationship creation
+          user_id: userId,
+        })
+        .select()
+        .single();
+      
+      if (sourceError || !source) {
+        throw new McpError(
+          ErrorCode.InternalError,
+          `Failed to create source: ${sourceError?.message || "Unknown error"}`
+        );
+      }
+      
       await createRelationshipObservations(
         [
           {
@@ -1291,20 +1313,37 @@ export class NeotomaServer {
             metadata: parsed.metadata || {},
           },
         ],
-        "00000000-0000-0000-0000-000000000000", // No source_id for direct creation
+        source.id, // Use the created source_id
         null, // No interpretation_id for direct creation
         userId,
         100, // High priority for user-created relationships
       );
 
-      // Get the relationship snapshot
+      // Get the relationship snapshot (with retry for async snapshot creation)
       const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
-      const { data: snapshot, error: snapshotError } = await supabase
-        .from("relationship_snapshots")
-        .select("*")
-        .eq("relationship_key", relationshipKey)
-        .eq("user_id", userId)
-        .single();
+      let snapshot = null;
+      let snapshotError = null;
+      
+      // Retry up to 5 times with increasing delays (snapshot creation is async)
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, 200 * attempt)); // 200ms, 400ms, 600ms, 800ms
+        }
+        
+        const result = await supabase
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("relationship_key", relationshipKey)
+          .eq("user_id", userId)
+          .maybeSingle();
+        
+        snapshot = result.data;
+        snapshotError = result.error;
+        
+        if (snapshot) {
+          break; // Found it, exit retry loop
+        }
+      }
 
       if (snapshotError || !snapshot) {
         throw new McpError(
@@ -1324,7 +1363,11 @@ export class NeotomaServer {
           user_id: userId,
         });
 
-      return this.buildTextResponse(snapshot);
+      // Add id field for backward compatibility (using relationship_key as id)
+      return this.buildTextResponse({
+        ...snapshot,
+        id: snapshot.relationship_key,
+      });
     } catch (error) {
       // Check for specific error types
       if (error instanceof McpError) {
@@ -1366,7 +1409,8 @@ export class NeotomaServer {
 
       if (!outboundError && outbound) {
         relationships.push(...outbound.map((r) => ({ 
-          ...r, 
+          ...r,
+          id: r.relationship_key,  // Add id field for backward compatibility 
           direction: "outbound",
           // Include snapshot metadata as top-level for backward compatibility
           metadata: r.snapshot,
@@ -1388,7 +1432,8 @@ export class NeotomaServer {
 
       if (!inboundError && inbound) {
         relationships.push(...inbound.map((r) => ({ 
-          ...r, 
+          ...r,
+          id: r.relationship_key,  // Add id field for backward compatibility 
           direction: "inbound",
           // Include snapshot metadata as top-level for backward compatibility
           metadata: r.snapshot,
@@ -2808,14 +2853,19 @@ export class NeotomaServer {
         logger.error(`[raw_fragments] Storing ${nonNullUnknownFields.length} unknown fields for ${entityType} (source_id: ${storageResult.sourceId}, user_id: ${userId})`);
       }
       
+      // Store raw_fragments per entity (each entity represents a row in parquet/CSV)
+      // We'll create observations first to get observation IDs, then store fragments with observation context
+      // For now, we'll use entity_id as a proxy for row diversity (each row creates unique entity/observation)
+      
       for (const [key, value] of nonNullUnknownFields) {
         // Check if fragment already exists (for idempotence)
         const { data: existing } = await supabase
           .from("raw_fragments")
-          .select("id, frequency_count")
+          .select("id, frequency_count, entity_id")
           .eq("source_id", storageResult.sourceId)
           .eq("fragment_key", key)
           .eq("user_id", userId)
+          .eq("entity_type", entityType)
           .maybeSingle();
 
         if (existing) {
@@ -2963,6 +3013,7 @@ export class NeotomaServer {
       });
 
       // Create observation directly (no interpretation_id)
+      // Generate observation ID early so we can use it for raw_fragments row tracking
       const observationId = randomUUID();
       const { error: obsError } = await supabase.from("observations").insert({
         id: observationId,

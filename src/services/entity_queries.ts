@@ -138,10 +138,12 @@ export async function getEntityWithProvenance(
     entity_id: entity.id,
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,
+    schema_version: snapshot?.schema_version || "1.0",
     snapshot: snapshot?.snapshot || {},
     observation_count: snapshot?.observation_count || 0,
     last_observation_at: snapshot?.last_observation_at || entity.created_at,
     provenance: snapshot?.provenance || {},
+    computed_at: snapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,
     merged_at: entity.merged_at,
   };

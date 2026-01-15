@@ -281,6 +281,138 @@ async function checkExtensionsInPublic(): Promise<void> {
 }
 
 /**
+ * Query Supabase Management API for Performance Advisor issues
+ */
+async function checkPerformanceAdvisorAPI(projectRef: string, accessToken: string): Promise<void> {
+  try {
+    const response = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/advisors/performance`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 403) {
+        console.log("[INFO] Performance Advisor API not available (may be deprecated or require different permissions)\n");
+        return;
+      }
+      throw new Error(`API returned ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const lints = data.lints || [];
+
+    for (const lint of lints) {
+      const severity = lint.level === "ERROR" ? "error" : lint.level === "WARNING" ? "warning" : "info";
+      
+      // Extract entity name from metadata
+      let entity = "unknown";
+      if (lint.metadata) {
+        const schema = lint.metadata.schema || "public";
+        const table = lint.metadata.table;
+        const functionName = lint.metadata.function;
+        const extension = lint.metadata.extension;
+        const index = lint.metadata.index;
+        const column = lint.metadata.column;
+        
+        if (table) {
+          entity = `${schema}.${table}${column ? `.${column}` : ""}`;
+        } else if (functionName) {
+          entity = `${schema}.${functionName}`;
+        } else if (extension) {
+          entity = `${schema}.${extension}`;
+        } else if (index) {
+          entity = `${schema}.${index}`;
+        } else {
+          entity = schema;
+        }
+      }
+
+      issues.push({
+        severity,
+        type: lint.name || lint.title || "Performance Issue",
+        entity,
+        description: lint.description || lint.detail || lint.title || "Performance issue detected",
+        fixable: !!lint.remediation,
+        fix: lint.remediation || undefined,
+      });
+    }
+  } catch (err) {
+    console.log(`[WARN] Could not fetch Performance Advisor from API: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+/**
+ * Query Supabase Management API for Security Advisor issues
+ */
+async function checkSecurityAdvisorAPI(projectRef: string, accessToken: string): Promise<void> {
+  try {
+    const response = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/advisors/security`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 403) {
+        console.log("[INFO] Security Advisor API not available (may be deprecated or require different permissions)\n");
+        return;
+      }
+      throw new Error(`API returned ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const lints = data.lints || [];
+
+    for (const lint of lints) {
+      const severity = lint.level === "ERROR" ? "error" : lint.level === "WARNING" ? "warning" : "info";
+      
+      // Extract entity name from metadata
+      let entity = "unknown";
+      if (lint.metadata) {
+        const schema = lint.metadata.schema || "public";
+        const table = lint.metadata.table;
+        const functionName = lint.metadata.function;
+        const extension = lint.metadata.extension;
+        const index = lint.metadata.index;
+        const column = lint.metadata.column;
+        
+        if (table) {
+          entity = `${schema}.${table}${column ? `.${column}` : ""}`;
+        } else if (functionName) {
+          entity = `${schema}.${functionName}`;
+        } else if (extension) {
+          entity = `${schema}.${extension}`;
+        } else if (index) {
+          entity = `${schema}.${index}`;
+        } else {
+          entity = schema;
+        }
+      }
+
+      issues.push({
+        severity,
+        type: lint.name || lint.title || "Security Issue",
+        entity,
+        description: lint.description || lint.detail || lint.title || "Security issue detected",
+        fixable: !!lint.remediation,
+        fix: lint.remediation || undefined,
+      });
+    }
+  } catch (err) {
+    console.log(`[WARN] Could not fetch Security Advisor from API: ${err instanceof Error ? err.message : String(err)}\n`);
+  }
+}
+
+/**
  * Check for public read policies that are too permissive
  */
 async function checkPublicReadPolicies(): Promise<void> {
@@ -356,14 +488,26 @@ async function main() {
 
   console.log("[INFO] Checking Supabase Advisor issues...\n");
 
-  // Get Supabase config - use environment-specific variables only
-  const env = process.env.NODE_ENV || "development";
-  const supabaseUrl = env === "production" 
+  // Get Supabase config - use single variable names (set by 1Password sync based on ENVIRONMENT)
+  // With backward compatibility fallback to DEV_/PROD_ prefixes
+  const buildUrl = (projectId: string | undefined, fallbackUrl: string | undefined) => {
+    if (projectId) return `https://${projectId}.supabase.co`;
+    return fallbackUrl || "";
+  };
+
+  // Primary: Use single variable names (environment-based selection via 1Password sync)
+  const projectId = process.env.SUPABASE_PROJECT_ID;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  const url = process.env.SUPABASE_URL;
+
+  // Fallback: Use DEV_/PROD_ prefixes for backward compatibility
+  const env = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
+  const supabaseUrl = buildUrl(projectId, url) || (env === "production" 
     ? (process.env.PROD_SUPABASE_PROJECT_ID ? `https://${process.env.PROD_SUPABASE_PROJECT_ID}.supabase.co` : process.env.PROD_SUPABASE_URL)
-    : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL);
-  const supabaseKey = env === "production"
+    : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL));
+  const supabaseKey = serviceKey || (env === "production"
     ? process.env.PROD_SUPABASE_SERVICE_KEY
-    : process.env.DEV_SUPABASE_SERVICE_KEY;
+    : process.env.DEV_SUPABASE_SERVICE_KEY);
 
   let supabase: any = null;
   if (supabaseUrl && supabaseKey) {
@@ -376,7 +520,20 @@ async function main() {
     console.log("[INFO] No Supabase credentials found, checking migration files only\n");
   }
 
-  // Run all checks
+  // Extract project ref for Management API
+  const projectRef = projectId || (url ? url.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1] : null);
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+
+  // Query Supabase Management API for full advisor results (if access token available)
+  if (projectRef && accessToken) {
+    console.log("[INFO] Querying Supabase Management API for advisor issues...\n");
+    await checkPerformanceAdvisorAPI(projectRef, accessToken);
+    await checkSecurityAdvisorAPI(projectRef, accessToken);
+  } else if (projectRef && !accessToken) {
+    console.log("[INFO] SUPABASE_ACCESS_TOKEN not set - skipping Management API checks (dashboard may show more issues)\n");
+  }
+
+  // Run local checks (migration file analysis)
   await checkRLSEnabled(supabase);
   await checkFunctionSearchPath();
   await checkExtensionsInPublic();
@@ -408,11 +565,14 @@ async function main() {
 
   for (const [type, typeIssues] of byType.entries()) {
     console.log(`${type} (${typeIssues.length}):`);
-    for (const issue of typeIssues.slice(0, 5)) {
+    for (const issue of typeIssues.slice(0, 10)) {
       console.log(`  - ${issue.entity}: ${issue.description}`);
+      if (issue.fix) {
+        console.log(`    Fix: ${issue.fix.substring(0, 100)}${issue.fix.length > 100 ? "..." : ""}`);
+      }
     }
-    if (typeIssues.length > 5) {
-      console.log(`  ... and ${typeIssues.length - 5} more`);
+    if (typeIssues.length > 10) {
+      console.log(`  ... and ${typeIssues.length - 10} more`);
     }
     console.log();
   }

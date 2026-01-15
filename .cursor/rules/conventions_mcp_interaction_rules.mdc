@@ -92,28 +92,30 @@ Agents MUST use Neotoma MCP in the following scenarios:
 
 ### 3a. Using MCP Resources for Discovery and Browsing
 
-**Overview:** Neotoma MCP exposes resources (via MCP `list_resources` and `read_resource` protocol) for browseable, read-only access to data. Resources complement actions by enabling discovery and exploration patterns.
+**Overview:** Neotoma MCP and Parquet MCP expose resources (via MCP `list_resources` and `read_resource` protocol) for browseable, read-only access to data. Resources complement actions by enabling discovery and exploration patterns.
 
 **When to Use Resources:**
 
 1. **Discovery:**
-   - List all available entity types
+   - List all available entity types (Neotoma MCP)
+   - List all available data types (Parquet MCP)
    - Discover what data exists without knowing specific IDs
    - Browse collections without complex query parameters
 
 2. **Simple Browsing:**
-   - Get all invoices: `neotoma://entities/invoice`
-   - Get all events in 2024: `neotoma://timeline/2024`
-   - Get specific entity: `neotoma://entity/{entity_id}`
+   - Get all invoices: `neotoma://entities/invoice` (Neotoma MCP)
+   - Get all task data: `parquet://data_types/task` (Parquet MCP)
+   - Get all events in 2024: `neotoma://timeline/2024` (Neotoma MCP)
+   - Get specific entity: `neotoma://entity/{entity_id}` (Neotoma MCP)
 
 3. **Quick Access:**
    - Resources provide direct URI access without constructing complex queries
-   - Useful for exploratory queries like "show me all my entities"
+   - Useful for exploratory queries like "show me all my entities" or "what data types are available"
 
 **When to Use Actions Instead:**
 
 1. **Filtering and Pagination:**
-   - Complex queries with filters (use `retrieve_entities` action)
+   - Complex queries with filters (use `retrieve_entities` or `read_parquet` actions)
    - User-specific filtering (use actions with `user_id` parameter)
    - Pagination beyond 100 items (use actions with `limit` and `offset`)
 
@@ -130,6 +132,8 @@ Agents MUST use Neotoma MCP in the following scenarios:
 
 **Available Resource URIs:**
 
+**Neotoma MCP Resources:**
+
 | Resource | URI Pattern | Example |
 | -------- | ----------- | ------- |
 | Entity Collection | `neotoma://entities/{type}` | `neotoma://entities/invoice` |
@@ -141,22 +145,40 @@ Agents MUST use Neotoma MCP in the following scenarios:
 | Source Material | `neotoma://source/{id}` | `neotoma://source/src_abc123` |
 | All Sources | `neotoma://sources` | `neotoma://sources` |
 
+**Parquet MCP Resources** (see [`docs/specs/PARQUET_MCP_RESOURCES_SPEC.md`](../specs/PARQUET_MCP_RESOURCES_SPEC.md) for specification):
+
+| Resource | URI Pattern | Example |
+| -------- | ----------- | ------- |
+| Data Types List | `parquet://data_types` | `parquet://data_types` |
+| Data Type Collection | `parquet://data_types/{type}` | `parquet://data_types/task` |
+| Schema | `parquet://schemas/{type}` | `parquet://schemas/task` |
+| File | `parquet://files/{filename}` | `parquet://files/task.parquet` |
+
 **Usage Pattern:**
 
 ```typescript
 // Discovery: List available resources
-list_resources() → Returns available entity types, timeline years, etc.
+list_resources() → Returns available entity types, timeline years, data types, etc.
 
 // Browse: Read a resource
 read_resource({ uri: "neotoma://entities/invoice" })
-  → Returns all invoices (up to 100)
+ → Returns all invoices (up to 100)
+
+read_resource({ uri: "parquet://data_types/task" })
+ → Returns task data (up to 100 rows)
 
 // For complex queries, use actions:
 retrieve_entities({ 
-  entity_type: "invoice", 
-  user_id: "...", 
-  limit: 50,
-  offset: 100 
+ entity_type: "invoice", 
+ user_id: "...", 
+ limit: 50,
+ offset: 100 
+})
+
+read_parquet({ 
+ data_type: "task", 
+ limit: 1000,
+ offset: 0 
 })
 ```
 

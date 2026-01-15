@@ -25,9 +25,15 @@ test('entity ID generation is deterministic', () => {
 - Search service with fixtures
 - Graph insertion with transactions
 **Requirements:**
-- Use test database
+- Use test database (real operations, not mocked)
 - Clean up after each test
 - Deterministic ordering
+- Strong assertions that verify correct outcomes
+- Test edge cases (null, default UUID, invalid values)
+- Verify database state after operations
+
+**See `integration_test_quality_rules.mdc` for detailed quality standards**
+
 ```typescript
 test('record insert creates entities', async () => {
   const record = await insertRecord({
@@ -38,6 +44,15 @@ test('record insert creates entities', async () => {
   const entities = await getRecordEntities(record.id);
   expect(entities).toHaveLength(1);
   expect(entities[0].canonical_name).toBe('acme corp');
+  
+  // Verify database state
+  const { data: stored, error } = await supabase
+    .from("entities")
+    .select("*")
+    .eq("id", entities[0].id)
+    .single();
+  expect(error).toBeNull();
+  expect(stored).toBeDefined();
 });
 ```
 ### E2E Tests (Playwright)
@@ -100,13 +115,34 @@ test('entity ID is always same length', () => {
 - Property: Determinism, collision resistance
 ## Test Fixtures
 See `docs/testing/fixtures_standard.md`.
+
+## Integration Test Quality
+
+**See `foundation/conventions/testing_conventions.md` for generic principles.**
+
+**See `docs/testing/integration_test_quality_rules.mdc` for Neotoma-specific applications:**
+- Applying foundation principles to Supabase/PostgreSQL
+- Testing Neotoma's default UUID and null handling
+- Testing Neotoma-specific tables (raw_fragments, auto_enhancement_queue, etc.)
+- Testing Neotoma-specific workflows (auto-enhancement, queue processing, etc.)
+- Examples from actual Neotoma bugs
+
 ## Agent Instructions
 Load when writing tests or planning test strategy for Feature Units.
 Required co-loaded:
+- `foundation/conventions/testing_conventions.md` (generic testing principles)
 - `docs/architecture/determinism.md` (deterministic test requirements)
 - `docs/testing/fixtures_standard.md` (fixture guidelines)
+- `docs/testing/integration_test_quality_rules.mdc` (Neotoma-specific quality standards)
+- `docs/testing/test_quality_enforcement_rules.mdc` (enforceable patterns from actual bugs)
 Constraints:
 - All tests MUST be deterministic
 - Unit tests MUST be fast (<10ms)
+- Integration tests MUST follow foundation conventions (see `foundation/conventions/testing_conventions.md`)
+- Integration tests MUST use real database operations (no mocked Supabase queries)
+- Integration tests MUST use strong assertions that verify correct outcomes
+- Integration tests MUST test edge cases (null, default UUID, invalid values)
+- Integration tests MUST test foreign key constraints explicitly
+- Integration tests MUST verify database state after operations
 - E2E tests MUST clean state
 - Coverage MUST meet minimums

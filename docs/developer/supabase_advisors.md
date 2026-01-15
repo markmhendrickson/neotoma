@@ -91,6 +91,81 @@ CREATE POLICY "policy_name" ON table_name
   FOR SELECT USING (auth.role() = 'authenticated');
 ```
 **Prevention**: Always require authentication or specific user checks in policies.
+
+### 6. RLS Policy Performance (auth_rls_initplan)
+**Issue**: RLS policies calling `auth.uid()` are re-evaluated for each row, causing performance issues.
+
+**Fix**: Use a SECURITY DEFINER function that caches the auth value:
+```sql
+-- Create cached auth_uid() function
+CREATE OR REPLACE FUNCTION auth_uid() RETURNS UUID
+LANGUAGE SQL SECURITY DEFINER STABLE
+SET search_path = public, pg_catalog
+AS $$ SELECT auth.uid() $$;
+
+-- Update policies to use auth_uid() instead of auth.uid()
+DROP POLICY IF EXISTS "Users read own table_name" ON table_name;
+CREATE POLICY "Users read own table_name" ON table_name
+  FOR SELECT USING (user_id = auth_uid());
+```
+
+**Prevention**: Always use `auth_uid()` instead of `auth.uid()` in RLS policies. The migration template has been updated to use `auth_uid()`.
+
+**Reference**: Migration `20260115130254_optimize_rls_policies.sql` implements this fix.
+
+### 7. Multiple Permissive Policies
+**Issue**: Multiple permissive policies on the same table/role/action are inefficient.
+
+**Fix**: Consolidate policies using OR conditions:
+```sql
+-- Instead of multiple policies:
+-- CREATE POLICY "policy1" ON table_name FOR SELECT USING (condition1);
+-- CREATE POLICY "policy2" ON table_name FOR SELECT USING (condition2);
+
+-- Create one consolidated policy:
+DROP POLICY IF EXISTS "policy1" ON table_name;
+DROP POLICY IF EXISTS "policy2" ON table_name;
+CREATE POLICY "Consolidated policy" ON table_name
+  FOR SELECT USING (condition1 OR condition2);
+```
+
+**Prevention**: Review policies before creating new ones. Combine related policies using OR/AND conditions.
+
+**Reference**: Migration `20260115130300_consolidate_records_policies.sql` consolidates policies on the records table.
+
+### 8. Duplicate Indexes
+**Issue**: Two or more identical indexes exist with different names.
+
+**Fix**: Drop duplicate indexes, keeping the one with standard naming:
+```sql
+-- Keep: idx_table_column (standard naming)
+-- Drop: idx_table_column_name (duplicate)
+DROP INDEX IF EXISTS idx_table_column_name;
+```
+
+**Prevention**: Check existing indexes before creating new ones. Use consistent naming convention: `idx_tablename_columnname`.
+
+**Reference**: Migration `20260115130305_remove_duplicate_indexes.sql` removes duplicate indexes.
+
+### 9. Unused Indexes
+**Issue**: Indexes that have never been used may be candidates for removal.
+
+**Strategy**: 
+1. Monitor indexes for at least 30-90 days before removing
+2. Remove indexes only on deprecated tables
+3. Keep indexes on new tables (they haven't been queried yet)
+4. Document remaining unused indexes for future review
+
+**Fix** (only for clearly safe-to-remove indexes):
+```sql
+DROP INDEX IF EXISTS idx_deprecated_table_column;
+```
+
+**Prevention**: Regularly review unused indexes and remove those that are no longer needed.
+
+**Reference**: 
+- Migration `20260115130310_remove_deprecated_table_indexes.sql` removes indexes on deprecated tables
+- Document [`unused_indexes_review.md`](./unused_indexes_review.md) tracks remaining unused indexes
 ## CI/CD Integration
 ### GitHub Actions Example
 ```yaml
@@ -138,8 +213,9 @@ ALTER TABLE my_table ENABLE ROW LEVEL SECURITY;
 -- Create policies
 CREATE POLICY "Service role access" ON my_table
   FOR ALL TO service_role USING (true) WITH CHECK (true);
+-- Note: Use auth_uid() instead of auth.uid() for better performance
 CREATE POLICY "Users read own records" ON my_table
-  FOR SELECT USING (user_id = auth.uid());
+  FOR SELECT USING (user_id = auth_uid());
 ```
 
 **Key Points:**
