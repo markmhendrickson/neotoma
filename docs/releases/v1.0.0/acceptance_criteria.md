@@ -17,7 +17,7 @@ This document defines the release-level acceptance criteria that must be met bef
    - **Why Defensible:** Providers/startups won't pursue due to business model conflicts
 2. **Deterministic Extraction:**
    - Same file uploaded 3x → identical extraction (reproducible)
-   - No LLM extraction in Truth Layer (deterministic only)
+   - AI interpretation via interpretation service (auditable, idempotent); no bypass of interpretation service for unstructured files
    - Full provenance for all extracted fields
    - **Why Defensible:** Providers/startups won't pursue due to ML-first architecture/constraints
 3. **Cross-Platform Access:**
@@ -41,7 +41,7 @@ This document defines the release-level acceptance criteria that must be met bef
 | -------------------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- |
 | Deterministic ingestion for all supported file types                             | `tests/integration/ingestion_determinism.test.ts` | Upload same file 3x → identical `properties` JSON                                 |
 | Deterministic OCR (same image → same text)                                       | `tests/integration/ocr_determinism.test.ts`       | OCR same image 100x → 100% identical output                                       |
-| No LLM extraction in Truth Layer                                                 | Code review + `tests/unit/file_analysis.test.ts`  | No OpenAI/Anthropic API calls in ingestion path                                   |
+| AI interpretation uses interpretation service with audit trail                    | Code review + `tests/unit/interpretation.test.ts` | Interpretation config (model, temperature, prompt_hash) logged; idempotence enforced |
 | Graph integrity: 0 orphans                                                       | `tests/integration/graph_integrity.test.ts`       | `SELECT COUNT(*) FROM events WHERE record_id NOT IN (SELECT id FROM records)` = 0 |
 | Graph integrity: 0 cycles                                                        | `tests/integration/graph_integrity.test.ts`       | Cycle detection query returns 0                                                   |
 | Deterministic search ranking                                                     | `tests/integration/search_determinism.test.ts`    | Same query + same DB state → identical result order                               |

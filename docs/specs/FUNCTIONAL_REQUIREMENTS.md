@@ -139,7 +139,7 @@ Load `docs/specs/FUNCTIONAL_REQUIREMENTS.md` when:
 - Detailed subsystem docs for implementation (ingestion.md, schema.md, search.md, etc.)
 ### Constraints Agents Must Enforce
 1. **Use application types:** Code must use granular types (`invoice`, `receipt`) from `record_types.md`, NOT schema families
-2. **Rule-based extraction only:** No LLM extraction in MVP (section 1)
+2. **AI interpretation for unstructured files:** Via interpretation service with auditability and idempotence (section 1)
 3. **Multi-pattern matching:** Schema detection must use 2+ patterns (section 2)
 4. **Deterministic ranking:** Search must use tiebreakers (section 5)
 5. **MCP action catalog:** Only 8 MVP actions allowed (section 7)
@@ -153,7 +153,7 @@ Load `docs/specs/FUNCTIONAL_REQUIREMENTS.md` when:
 ### Validation Checklist
 - [ ] Feature requirements match detailed subsystem docs
 - [ ] Uses application types (not schema families)
-- [ ] No LLM extraction in MVP
+- [ ] AI interpretation uses interpretation service with audit trail
 - [ ] Schema detection uses multi-pattern matching
 - [ ] Search ranking is deterministic
 - [ ] Only MVP MCP actions used

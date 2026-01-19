@@ -188,17 +188,26 @@ export class SchemaRecommendationService {
       const sourceId = fragments[0]?.source_id;
       if (sourceId) {
         // Build query with proper null handling for user_id
+        // Note: Queue items convert default UUID to null, but observations may have default UUID
+        // So we need to check both null and default UUID
         let obsQuery = supabase
           .from("observations")
           .select("id", { count: "exact", head: true })
           .eq("source_id", sourceId)
           .eq("entity_type", options.entity_type);
         
-        // Handle user_id properly: use .is() for null, .eq() for UUID
+        // Handle user_id properly: check both default UUID and null
+        const defaultUserId = "00000000-0000-0000-0000-000000000000";
         if (options.user_id) {
-          obsQuery = obsQuery.eq("user_id", options.user_id);
+          if (options.user_id === defaultUserId) {
+            // Check both default UUID and null (observations might have either)
+            obsQuery = obsQuery.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+          } else {
+            obsQuery = obsQuery.eq("user_id", options.user_id);
+          }
         } else {
-          obsQuery = obsQuery.is("user_id", null);
+          // No user_id provided - check both null and default UUID
+          obsQuery = obsQuery.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
         
         const { count } = await obsQuery;
@@ -280,12 +289,20 @@ export class SchemaRecommendationService {
     }
 
     try {
+      // Handle default user ID: convert to null for foreign key constraint
+      // The default UUID '00000000-0000-0000-0000-000000000000' doesn't exist in auth.users
+      // So we use NULL instead, which the unique index handles via COALESCE
+      const defaultUserId = "00000000-0000-0000-0000-000000000000";
+      const userId = options.user_id && options.user_id !== defaultUserId 
+        ? options.user_id 
+        : null;
+
       // Create recommendation record
       const { data: recommendation, error: recError } = await supabase
         .from("schema_recommendations")
         .insert({
           entity_type: options.entity_type,
-          user_id: options.user_id || null,
+          user_id: userId,
           source: "raw_fragments",
           recommendation_type: "add_fields",
           fields_to_add: [
@@ -444,8 +461,20 @@ export class SchemaRecommendationService {
       // Check both fragment_type (structured data) and entity_type (unstructured data)
       query = query.or(`fragment_type.eq.${options.entity_type},entity_type.eq.${options.entity_type}`);
     }
+    
+    // Handle user_id properly: check both the provided user_id and the default UUID
+    // Also handle null (for global schemas)
+    const defaultUserId = "00000000-0000-0000-0000-000000000000";
     if (options.user_id) {
-      query = query.eq("user_id", options.user_id);
+      if (options.user_id === defaultUserId) {
+        // Check both default UUID and null (legacy data might use null)
+        query = query.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+      } else {
+        query = query.eq("user_id", options.user_id);
+      }
+    } else {
+      // No user_id provided - check both null and default UUID
+      query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
     }
 
     const { data: fragments, error } = await query;
@@ -455,12 +484,19 @@ export class SchemaRecommendationService {
     }
 
     // Group by entity_type and fragment_key
+    // Note: For structured data, use fragment_type; for unstructured, use entity_type
     const grouped = new Map<
       string,
       Array<{ fragment_value: unknown; frequency_count: number }>
     >();
     for (const fragment of fragments) {
-      const key = `${fragment.entity_type}::${fragment.fragment_key}::${fragment.user_id || "global"}`;
+      // Use fragment_type for structured data (parquet), entity_type for unstructured
+      const effectiveEntityType = fragment.fragment_type || fragment.entity_type;
+      if (!effectiveEntityType) {
+        // Skip fragments without entity type (shouldn't happen, but defensive)
+        continue;
+      }
+      const key = `${effectiveEntityType}::${fragment.fragment_key}::${fragment.user_id || "global"}`;
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
@@ -885,6 +921,7 @@ Return your recommendations in JSON format:
 
   /**
    * Analyze types across samples (multi-pass type detection)
+   * Null values are excluded from consistency calculation since they're expected for optional fields
    */
   private analyzeTypes(samples: unknown[]): {
     dominant_type:
@@ -897,23 +934,32 @@ Return your recommendations in JSON format:
     consistency: number;
   } {
     const typeCounts = new Map<string, number>();
+    let nonNullCount = 0;
 
     for (const sample of samples) {
       const type = this.inferType(sample);
       typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+      // Count non-null samples for consistency calculation
+      if (type !== "null") {
+        nonNullCount++;
+      }
     }
 
-    // Find dominant type
+    // Find dominant type (excluding null)
     let dominantType = "string";
     let maxCount = 0;
     for (const [type, count] of typeCounts.entries()) {
+      if (type === "null") continue; // Skip null when finding dominant type
       if (count > maxCount) {
         maxCount = count;
         dominantType = type;
       }
     }
 
-    const consistency = maxCount / samples.length;
+    // Calculate consistency based on non-null samples only
+    // If all samples are null, consistency is 0
+    // Otherwise, consistency = (dominant type count) / (non-null sample count)
+    const consistency = nonNullCount === 0 ? 0 : maxCount / nonNullCount;
 
     return {
       dominant_type: dominantType as any,
@@ -938,9 +984,36 @@ Return your recommendations in JSON format:
 
     // Pass 1: Detect obvious types
     if (typeof value === "boolean") return "boolean";
-    if (typeof value === "number") return "number";
     if (Array.isArray(value)) return "array";
     if (typeof value === "object") return "object";
+    
+    // Pass 1.5: Number analysis - detect timestamps (BigInt or large numbers that are likely dates)
+    if (typeof value === "number") {
+      // Check if it's a timestamp (reasonable date range)
+      // Timestamps are typically:
+      // - Unix timestamp in seconds: 1000000000 to 9999999999 (1970-2099)
+      // - Unix timestamp in milliseconds: 1000000000000 to 9999999999999 (1970-2099)
+      // - BigInt timestamps (nanoseconds): 1000000000000000 to 9999999999999999999
+      if (value > 1000000000 && value < 9999999999999999999) {
+        // Check if it's in a reasonable timestamp range
+        // Convert to milliseconds if needed and check if it's a valid date
+        let timestampMs = value;
+        if (value < 1000000000000) {
+          // Likely seconds, convert to milliseconds
+          timestampMs = value * 1000;
+        } else if (value > 9999999999999) {
+          // Likely nanoseconds, convert to milliseconds
+          timestampMs = value / 1000000;
+        }
+        
+        // Check if it's a reasonable date (between 1970 and 2100)
+        const date = new Date(timestampMs);
+        if (!isNaN(date.getTime()) && date.getFullYear() >= 1970 && date.getFullYear() <= 2100) {
+          return "date";
+        }
+      }
+      return "number";
+    }
 
     // Pass 2: String analysis - detect dates, emails, UUIDs
     if (typeof value === "string") {
@@ -955,11 +1028,20 @@ Return your recommendations in JSON format:
       // UUID detection
       if (this.isUUID(str)) return "string"; // Keep as string for UUIDs
 
-      // Numeric string detection
-      if (this.isNumericString(str)) return "number";
-
       // Boolean string detection
       if (this.isBooleanString(str)) return "boolean";
+
+      // Numeric string detection - but keep as string for IDs and long numeric strings
+      // Only convert to number if it's a short numeric string that's likely a numeric value
+      // Long numeric strings (like IDs) should remain as strings
+      if (this.isNumericString(str)) {
+        // Keep as string if it's longer than 10 digits (likely an ID)
+        // or if it starts with leading zeros (definitely an ID)
+        if (str.length > 10 || /^0+/.test(str)) {
+          return "string";
+        }
+        return "number";
+      }
     }
 
     return "string";
@@ -1019,19 +1101,28 @@ Return your recommendations in JSON format:
    */
   private checkNamingPattern(fieldName: string): boolean {
     const patterns = [
-      /_id$/i,
+      /_id$/i,           // singular ID
+      /_ids$/i,          // plural IDs (e.g., project_ids, section_ids)
+      /_gid$/i,          // global ID (e.g., assignee_gid, asana_source_gid)
+      /_gids$/i,         // plural global IDs (e.g., followers_gids)
       /_date$/i,
       /_time$/i,
       /_at$/i,
       /_amount$/i,
       /_price$/i,
       /_cost$/i,
-      /_name$/i,
+      /_name$/i,         // singular name
+      /_names$/i,        // plural names (e.g., follower_names, project_names)
       /_email$/i,
       /_url$/i,
       /_link$/i,
       /_address$/i,
       /_phone$/i,
+      /_path$/i,         // file paths (e.g., execution_plan_path)
+      /_html$/i,         // HTML content (e.g., description_html)
+      /_workspace$/i,    // workspace fields (e.g., asana_workspace)
+      /^urgency$/i,      // urgency/enum fields (exact match)
+      /^recurrence$/i,   // recurrence/enum fields (exact match)
       /^is_/i,
       /^has_/i,
       /^can_/i,
@@ -1043,15 +1134,24 @@ Return your recommendations in JSON format:
 
   /**
    * Check format consistency for specific types
+   * Null values are excluded from format consistency calculation since they're expected for optional fields
    */
   private checkFormatConsistency(
     samples: unknown[],
     type: string,
   ): number {
+    // Filter out null values - they don't affect format consistency
+    const nonNullSamples = samples.filter(s => s !== null && s !== undefined);
+    
+    if (nonNullSamples.length === 0) {
+      // All samples are null - can't assess format consistency
+      return 0.9; // Default to high consistency for optional fields
+    }
+
     if (type === "date") {
       // Check if all dates follow same format
       const formats = new Set<string>();
-      for (const sample of samples) {
+      for (const sample of nonNullSamples) {
         if (typeof sample === "string") {
           if (this.isISODate(sample)) formats.add("iso");
         }
@@ -1061,10 +1161,19 @@ Return your recommendations in JSON format:
 
     if (type === "number") {
       // Check if all numbers have similar precision
-      const integers = samples.filter(
-        (s) => typeof s === "number" && Number.isInteger(s),
-      );
-      const consistency = integers.length / samples.length;
+      // Handle both actual numbers and numeric strings
+      const integers = nonNullSamples.filter((s) => {
+        if (typeof s === "number") {
+          return Number.isInteger(s);
+        }
+        if (typeof s === "string") {
+          // Check if it's a numeric string that represents an integer
+          const num = parseFloat(s);
+          return !isNaN(num) && isFinite(num) && Number.isInteger(num);
+        }
+        return false;
+      });
+      const consistency = integers.length / nonNullSamples.length;
       return consistency;
     }
 

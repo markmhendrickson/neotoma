@@ -594,13 +594,21 @@ list_entity_types({ keyword: "date" })
   entity_id: string;
   entity_type: string;
   schema_version: string;
-  snapshot: Record<string, any>; // Current truth
+  snapshot: Record<string, any>; // Current truth (validated, merged fields from observations)
+  raw_fragments?: Record<string, any>; // Unvalidated fields not yet in schema (merged by last_write)
   provenance: Record<string, string>; // Maps field → observation_id
   computed_at: string; // ISO 8601
   observation_count: number;
   last_observation_at: string; // ISO 8601
 }
 ```
+
+**Note on `raw_fragments`:**
+- Contains fields that were stored but don't match the current entity schema
+- Fields are merged by `last_write` strategy (most recent `last_seen` wins)
+- These fields are preserved for schema discovery and future promotion
+- Once fields are auto-enhanced and migrated, they appear in `snapshot` instead
+- `raw_fragments` is only included if there are unvalidated fields for this entity
 
 **Errors:**
 | Code               | HTTP | Meaning                  | Retry? |

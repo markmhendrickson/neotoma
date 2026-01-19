@@ -1,7 +1,9 @@
 # LLM Extraction Removal — Migration to Rule-Based Extraction
+
+**⚠️ OUTDATED DOCUMENT:** This document describes a historical migration and is no longer accurate. The architecture has evolved (v0.2.0+) to allow AI interpretation for unstructured files via the interpretation service with full auditability and system-level idempotence. See `docs/architecture/determinism.md` for current extraction approach.
+
 ## Purpose
-Documents the **removal of LLM-based extraction** from Neotoma MVP and replacement with **rule-based extraction** (regex, parsing) to comply with `docs/NEOTOMA_MANIFEST.md` determinism requirements.
-This migration is **required for MVP launch** — LLM extraction violates core architectural invariants.
+Documents the **historical removal of LLM-based extraction** from early prototypes and replacement with the interpretation service pattern that provides AI interpretation with auditability and idempotence guarantees.
 ## Why LLM Extraction Was Initially Implemented
 ### Original Rationale
 LLM extraction was initially implemented for:
@@ -42,7 +44,7 @@ LLM extraction **may** be added post-MVP with:
 - Caching to ensure same input → same output within session
 - Explicit user opt-in ("Use AI-assisted extraction?")
 - A/B testing to measure accuracy vs determinism tradeoffs
-But for MVP: **rule-based only**.
+**Current Approach (v0.2.0+):** AI interpretation for unstructured files via interpretation service (auditable, idempotent).
 ## Migration Path
 ### Phase 1: Remove LLM Code (FU-100)
 **Target Files:**

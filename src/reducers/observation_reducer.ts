@@ -55,9 +55,8 @@ export class ObservationReducer {
       throw new Error(`No observations found for entity ${entityId}`);
     }
 
-    // Get entity type from first observation
+    // Get entity type and user from first observation
     const entityType = observations[0].entity_type;
-    const schemaVersion = observations[0].schema_version;
     const userId = observations[0].user_id;
 
     // Load schema and merge policies
@@ -70,6 +69,8 @@ export class ObservationReducer {
       return this.computeSnapshotWithDefaults(entityId, observations);
     }
 
+    // Use the active schema version (the one used for computation), not the observation's schema_version
+    const schemaVersion = schemaEntry.schema_version;
     const schemaDef = schemaEntry.schema_definition;
     const reducerConfig = schemaEntry.reducer_config;
 

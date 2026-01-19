@@ -1073,12 +1073,17 @@ export class NeotomaServer {
           mappedObservations
         );
 
+        // Get raw_fragments for historical snapshot (same logic as current snapshot)
+        const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+        const currentEntity = await getEntityWithProvenance(entity.entity_id);
+        
         // Format response to match EntityWithProvenance structure
         return this.buildTextResponse({
           entity_id: historicalSnapshot.entity_id,
           entity_type: historicalSnapshot.entity_type,
           schema_version: historicalSnapshot.schema_version,
           snapshot: historicalSnapshot.snapshot,
+          raw_fragments: currentEntity?.raw_fragments, // Use current raw_fragments (they don't change with historical snapshots)
           provenance: historicalSnapshot.provenance,
           computed_at: historicalSnapshot.computed_at,
           observation_count: historicalSnapshot.observation_count,
@@ -1364,9 +1369,11 @@ export class NeotomaServer {
         });
 
       // Add id field for backward compatibility (using relationship_key as id)
+      // Add created_at field per MCP_SPEC.md 3.15 (use last_observation_at as created_at)
       return this.buildTextResponse({
         ...snapshot,
         id: snapshot.relationship_key,
+        created_at: snapshot.last_observation_at,
       });
     } catch (error) {
       // Check for specific error types
@@ -1414,6 +1421,8 @@ export class NeotomaServer {
           direction: "outbound",
           // Include snapshot metadata as top-level for backward compatibility
           metadata: r.snapshot,
+          // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
+          created_at: r.last_observation_at,
         })));
       }
     }
@@ -1437,6 +1446,8 @@ export class NeotomaServer {
           direction: "inbound",
           // Include snapshot metadata as top-level for backward compatibility
           metadata: r.snapshot,
+          // Add created_at field per MCP_SPEC.md 3.16 (use last_observation_at as created_at)
+          created_at: r.last_observation_at,
         })));
       }
     }

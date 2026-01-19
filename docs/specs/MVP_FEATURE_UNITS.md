@@ -218,18 +218,18 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - PDF text extraction (pdf-parse)
   - OCR for images (Tesseract)
   - Schema type detection (rule-based, deterministic regex patterns)
-  - Field extraction per schema type (rule-based regex parsing, no LLM)
+  - Field extraction per schema type (AI interpretation for unstructured files via interpretation service; rule-based for structured data)
   - Content hash for deduplication
   - PDFDocument fallback for unrecognized document types
 - **Constraints (per NEOTOMA_MANIFEST.md):**
-  - **MUST NOT use LLM extraction** (MVP constraint; rule-based only)
+  - **MUST use interpretation service for unstructured files** (auditable, idempotent via canonicalization + hashing)
   - **MUST use deterministic extraction** (same input → same output)
   - **MUST fallback to PDFDocument** for unrecognized types (not custom types)
   - **MUST be schema-first** (type-driven extraction rules)
 - **Tests:**
   - Unit: Schema detection rules, field extraction regex determinism
   - Property: Same file → same type + same fields (100 runs)
-  - Integration: Full analysis pipeline (no LLM calls)
+  - Integration: Full analysis pipeline via interpretation service (AI interpretation with audit trail)
   - E2E: Upload PDF → verify fields extracted deterministically
 - **Acceptance:** >85% schema detection accuracy, >80% field extraction success rate, 100% deterministic (same input → same output)
 - **Status:** 🔨 Needs Update (existing implementation uses OpenAI LLM; must be replaced with rule-based extraction)
@@ -571,44 +571,51 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - E2E: Design system preview accessible at `/design-system`
 - **Acceptance:** All components match design system specifications, style guide displays all components correctly
 - **Status:** 🔨 Partial (foundation exists, design system implementation in progress)
-#### FU-301: Records List View
+#### FU-301: Source Material List View
 - **Priority:** P0
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-300 (UI foundation), FU-202 (retrieve_records)
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material
 - **Deliverables:**
-  - Table view with sortable columns
-  - Type filter dropdown
-  - Search input (full-text)
+  - Table view with sortable columns (source material, not deprecated records)
+  - Type filter dropdown (file types, structured data types)
+  - Search input (full-text across source material)
   - Pagination (load more)
-  - Click row → show detail
+  - Click row → show source material detail
+  - Uses `sources` table (NOT deprecated `records` table)
 - **UI Pattern:** List (see `docs/ui/patterns/list.md`)
 - **Tests:**
-  - Component: RecordsTable rendering
+  - Component: SourceMaterialTable rendering
   - Accessibility: Keyboard nav, ARIA labels
   - E2E: Filter, search, sort, click
-- **Acceptance:** Displays all records, filters work, <2s load time
-- **Status:** ✅ Complete (existing `RecordsTable.tsx`)
-#### FU-302: Record Detail View
+  - Database: Queries use `sources` table, NOT `records`
+- **Acceptance:** Displays all source material, filters work, <2s load time, uses current architecture (no deprecated tables)
+- **Status:** 🔨 Partial (existing RecordsTable.tsx needs refactoring to use `sources` table)
+- **Migration Note:** Rename from "Records List View" to align with canonical vocabulary; refactor to query `sources` table instead of deprecated `records` table
+#### FU-302: Source Material Detail View
 - **Priority:** P0
 - **Risk:** Low
-- **Complexity:** Low
-- **Dependencies:** FU-300 (UI foundation), FU-202 (retrieve_records)
+- **Complexity:** Medium
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material, interpretations, observations
 - **Deliverables:**
   - Slide-out panel or modal
-  - Display metadata (id, type, created_at)
-  - Display extracted fields (properties JSONB)
-  - Display linked entities
-  - Display linked events
+  - Display source material metadata (id, content_hash, mime_type, file_name, created_at)
+  - Display interpretations (AI interpretation runs with config: model, temperature, prompt_hash)
+  - Display observations (extracted facts with provenance)
+  - Display linked entities (from observations)
+  - Display linked events (timeline events)
   - File preview (if applicable)
-  - Actions: Edit, Delete
+  - Uses `sources`, `interpretations`, `observations` tables (NOT deprecated `records`)
+  - Actions: Reinterpret, Delete
 - **UI Pattern:** Detail (see `docs/ui/patterns/detail.md`)
 - **Tests:**
-  - Component: RecordDetailsPanel
+  - Component: SourceMaterialDetailsPanel
   - Accessibility: Focus management, ESC to close
-  - E2E: Click record → see details
-- **Acceptance:** All fields visible, entities/events linked
-- **Status:** ✅ Complete (existing `RecordDetailsPanel.tsx`)
+  - E2E: Click source material → see details with interpretations and observations
+  - Database: Queries use `sources`, `interpretations`, `observations` tables, NOT `records`
+- **Acceptance:** All source material metadata visible, interpretations shown with config, observations shown with provenance, entities/events linked
+- **Status:** 🔨 Partial (existing RecordDetailsPanel.tsx needs refactoring to use `sources` + `interpretations` + `observations`)
+- **Migration Note:** Rename from "Record Detail View" to align with canonical vocabulary; refactor to show source material, interpretations, and observations (four-layer truth model)
 #### FU-303: Timeline View
 - **Priority:** P0
 - **Risk:** Medium
@@ -641,7 +648,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - **Progress tracking** (per-file and overall progress)
   - **Resume on failure** (retry failed uploads)
   - Upload progress indicator
-  - Success notification → navigate to record detail
+  - Success notification → navigate to source material detail
   - Error handling with retry
 - **Tests:**
   - Component: Upload zone states (idle, dragging, uploading, error)
@@ -655,17 +662,21 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Low
-- **Dependencies:** FU-300 (UI foundation), FU-202 (retrieve_records)
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material, entities, events
 - **Deliverables:**
-  - Stats widgets (total records, entities, events)
-  - Recent records list (last 5)
+  - Stats widgets (total source material, entities by type, events, observations, interpretations)
+  - Recent source material list (last 5)
+  - Entity count by type (companies, people, invoices, etc.)
   - Quick actions (Upload, Search)
+  - Uses main objects from `docs/vocabulary/canonical_terms.md` (NOT deprecated records)
 - **UI Pattern:** Dashboard (see `docs/ui/patterns/dashboard.md`)
 - **Tests:**
   - Component: Dashboard widgets
-  - E2E: Dashboard loads, stats accurate
-- **Acceptance:** Dashboard displays in <2s
+  - E2E: Dashboard loads, stats accurate, uses correct tables
+  - Database: Queries use `sources`, `entities`, `observations` tables, NOT `records`
+- **Acceptance:** Dashboard displays in <2s, shows stats for main objects (source material, entities, observations, events)
 - **Status:** ⏳ Not Started
+- **Migration Note:** Dashboard stats should reflect main objects (source material, entities, observations, events), not deprecated records
 #### FU-306: Settings UI
 - **Priority:** P2
 - **Risk:** Low
@@ -737,7 +748,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P0
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-302 (record detail), FU-401 (processing)
+- **Dependencies:** FU-302 (source material detail), FU-401 (processing)
 - **Deliverables:**
   - Show extracted fields with labels
   - Highlight entities (visual distinction)
@@ -809,7 +820,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-105 (search service), FU-301 (records list)
+- **Dependencies:** FU-105 (search service), FU-301 (source material list)
 - **Deliverables:**
   - Search input with auto-complete
   - Filter panel (type, date range, properties)
@@ -828,19 +839,32 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - Remove any semantic/hybrid search mode toggles from UI
   - Structured filters only (type, properties, date range, full-text keyword)
 #### FU-601: Entity Explorer UI
-- **Priority:** P2
+- **Priority:** **P0** (Promoted from P2 — MVP-critical for validating entity resolution differentiator)
 - **Risk:** Low
 - **Complexity:** Medium
 - **Dependencies:** FU-101 (entity resolution), FU-300 (UI foundation)
 - **Deliverables:**
-  - Entity list view
-  - Entity detail view (shows all linked records)
-  - Entity graph visualization (optional)
+  - Entity list view (browse entities by type: company, person, location, invoice, etc.)
+  - Entity detail view (shows entity snapshot + observations + provenance)
+  - Entity detail shows all linked source material (via observations)
+  - Entity detail shows all relationships (PART_OF, REFERS_TO, SETTLES, etc.)
+  - Entity graph visualization (basic, can defer advanced viz to post-MVP)
+  - Filter by entity type
+  - Search entities by canonical name
+- **UI Pattern:** List + Detail (see `docs/ui/patterns/list.md`, `docs/ui/patterns/detail.md`)
 - **Tests:**
-  - Component: EntityList, EntityDetail
-  - E2E: Click entity → see all related records
-- **Acceptance:** Users can explore entities, see all linked records
-- **Status:** ⏳ Not Started
+  - Component: EntityList, EntityDetail, EntitySnapshot display
+  - Accessibility: Keyboard nav, ARIA labels
+  - E2E: Browse entities → click entity → see entity snapshot with observations
+  - E2E: Entity detail shows provenance (which source material contributed which fields)
+  - E2E: Entity detail shows relationships to other entities
+- **Acceptance:** Users can browse all entities, see entity snapshots with provenance, see relationships, navigate to source material
+- **Status:** ⏳ Not Started (prototype exists in `EntityExplorerView.tsx`)
+- **Promotion Rationale:** 
+  - Entity resolution (FU-101) is MVP-critical competitive differentiator
+  - Without Entity Explorer, users cannot see the output of entity resolution
+  - Entity-centric UX is "Primary UX" per `docs/architecture/architectural_decisions.md` Section 8
+  - Validates competitive differentiation (entity resolution across personal data)
 ### Phase 7: Auth and Multi-User
 **Goal:** User authentication and data isolation for team support.
 #### FU-700: Authentication Flow
@@ -1102,11 +1126,11 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 | FU-207   | Plaid Integration              | 2     | Post-MVP      | Medium | High       | ✅ Complete                          | FU-200                         |
 | FU-208   | Provider Integrations          | 2     | P1            | Medium | High       | ✅ Complete                          | FU-200                         |
 | FU-300   | UI Foundation                  | 3     | P0            | Medium | Medium     | 🔨 Partial                           | None                           |
-| FU-301   | Records List                   | 3     | P0            | Low    | Medium     | ✅ Complete                          | FU-300, FU-202                 |
-| FU-302   | Record Detail                  | 3     | P0            | Low    | Low        | ✅ Complete                          | FU-300, FU-202                 |
+| FU-301   | Source Material List           | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
+| FU-302   | Source Material Detail         | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
 | FU-303   | Timeline View                  | 3     | P0            | Medium | Medium     | ⏳ Not Started                       | FU-102, FU-300                 |
 | FU-304   | File Upload UI                 | 3     | P0            | Medium | Medium     | 🔨 Partial                           | FU-205, FU-300                 |
-| FU-305   | Dashboard                      | 3     | P1            | Low    | Low        | ⏳ Not Started                       | FU-300, FU-202                 |
+| FU-305   | Dashboard                      | 3     | P1            | Low    | Low        | ⏳ Not Started                       | FU-300, MCP retrieve actions   |
 | FU-306   | Settings UI                    | 3     | P2            | Low    | Low        | 🔨 Partial                           | FU-300                         |
 | FU-307   | Chat/AI Panel                  | 3     | P0 → EXCLUDED | Medium | High       | ❌ EXCLUDED (Architectural Decision) | FU-202, FU-300                 |
 | FU-400   | Onboarding Welcome             | 4     | P0            | Low    | Low        | ⏳ Not Started                       | FU-300                         |
@@ -1116,7 +1140,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 | FU-500   | Plaid Link UI                  | 5     | Post-MVP      | Medium | Medium     | 🔨 Partial                           | FU-207, FU-300                 |
 | FU-501   | Provider Connectors UI         | 5     | P1            | Medium | High       | 🔨 Partial                           | FU-208, FU-300                 |
 | FU-600   | Advanced Search UI             | 6     | P1            | Low    | Medium     | 🔨 Partial                           | FU-105, FU-301                 |
-| FU-601   | Entity Explorer                | 6     | P2            | Low    | Medium     | ⏳ Not Started                       | FU-101, FU-300                 |
+| FU-601   | Entity Explorer                | 6     | **P0** (from P2) | Low    | Medium     | ⏳ Not Started (prototype exists)    | FU-101, FU-300                 |
 | FU-700   | Authentication UI              | 7     | P0            | High   | Medium     | 🔨 Partial                           | None                           |
 | FU-701   | RLS Implementation             | 7     | P0            | High   | Medium     | ⏳ Not Started                       | FU-700, FU-000                 |
 | FU-703   | Local Storage / Offline Mode   | 7     | P0            | Medium | High       | ✅ Complete                          | FU-001                         |
@@ -1165,10 +1189,14 @@ graph TD
     FU103 --> FU105[FU-105: Deterministic Search]
     FU105 --> FU303[FU-303: Timeline View]
     FU205[FU-205: upload_file MCP<br/>✅ Complete] --> FU304[FU-304: Upload UI]
-    FU300[FU-300: UI Foundation<br/>🔨 Partial] --> FU400[FU-400: Welcome Screen]
+    FU300[FU-300: UI Foundation<br/>🔨 Partial] --> FU301[FU-301: Source Material List<br/>🔨 Partial]
+    FU300 --> FU302[FU-302: Source Material Detail<br/>🔨 Partial]
+    FU300 --> FU400[FU-400: Welcome Screen]
+    FU101[FU-101: Entity Resolution<br/>🔨 Partial] --> FU601[FU-601: Entity Explorer<br/>⏳ Not Started<br/>P0]
+    FU300 --> FU601
     FU304 --> FU401[FU-401: Processing Indicator]
     FU401 --> FU402[FU-402: Extraction Results]
-    FU302[FU-302: Record Detail<br/>✅ Complete] --> FU402
+    FU302 --> FU402
     FU303 --> FU402
     FU400 --> FU403[FU-403: Onboarding State]
     FU401 --> FU403
@@ -1176,13 +1204,22 @@ graph TD
     FU403 --> FU700[FU-700: Authentication UI]
     FU700 --> FU701[FU-701: RLS Implementation]
     FU701 --> Launch[MVP Launch Ready]
+    FU301 --> Launch
+    FU302 --> Launch
     FU303 --> Launch
     FU304 --> Launch
+    FU601 --> Launch
     style FU101 fill:#fff4e6
     style FU102 fill:#fff4e6
     style FU103 fill:#fff4e6
     style FU105 fill:#fff4e6
+    style FU301 fill:#ffe6e6
+    style FU302 fill:#ffe6e6
+    style FU601 fill:#ffcccc
+    style FU301 fill:#ffe6e6
+    style FU302 fill:#ffe6e6
     style FU303 fill:#ffe6e6
+    style FU601 fill:#ffcccc
     style FU304 fill:#ffe6e6
     style FU400 fill:#ffe6e6
     style FU401 fill:#ffe6e6
