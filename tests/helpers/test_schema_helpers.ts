@@ -206,8 +206,11 @@ export async function verifyObservationExists(observationId: string): Promise<bo
 
 /**
  * Count raw_fragments for entity type
+ * Note: raw_fragments uses fragment_type to store entity_type for structured data
  */
 export async function countRawFragments(entityType: string, userId?: string): Promise<number> {
+  // Query by fragment_type (structured data stores entity_type here)
+  // Also check entity_type column if it exists (for unstructured data)
   let query = supabase
     .from("raw_fragments")
     .select("id", { count: "exact", head: true })
@@ -219,4 +222,45 @@ export async function countRawFragments(entityType: string, userId?: string): Pr
   
   const { count } = await query;
   return count || 0;
+}
+
+/**
+ * Create a test user in auth.users for testing user-specific schemas
+ * Uses Supabase Admin API (requires service role key)
+ */
+export async function createTestUser(userId?: string): Promise<string> {
+  const email = `test-user-${Date.now()}-${Math.random().toString(36).substring(7)}@test.neotoma.local`;
+  
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password: "test-password-123456",
+    email_confirm: true,
+    user_metadata: {
+      test_user: true,
+    },
+  });
+
+  if (error) {
+    throw new Error(`Failed to create test user: ${error.message}`);
+  }
+
+  // If a specific userId was requested, verify it matches (or use the created one)
+  if (userId && data.user.id !== userId) {
+    // Clean up the created user and throw error
+    await supabase.auth.admin.deleteUser(data.user.id);
+    throw new Error(`Created user ID ${data.user.id} does not match requested ${userId}`);
+  }
+
+  return data.user.id;
+}
+
+/**
+ * Delete a test user from auth.users
+ */
+export async function deleteTestUser(userId: string): Promise<void> {
+  const { error } = await supabase.auth.admin.deleteUser(userId);
+  if (error) {
+    // Don't throw - user might already be deleted
+    console.warn(`Failed to delete test user ${userId}: ${error.message}`);
+  }
 }

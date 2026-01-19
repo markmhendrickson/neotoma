@@ -37,16 +37,34 @@ This release plan **does not duplicate** those documents. It coordinates them in
 ### 2. Scope
 #### 2.1 Included Feature Units (P0 Critical Path)
 As of this plan, the following FUs are in scope for v1.0.0 (MVP), derived from `MVP_FEATURE_UNITS.md` and `MVP_EXECUTION_PLAN.md`:
-- `FU-100`: File Analysis Service Update (remove LLM, add rule-based extraction)
+
+**Backend Services:**
+- `FU-100`: File Analysis Service Update (AI interpretation with auditability)
 - `FU-101`: Entity Resolution Service (MVP-critical competitive differentiator)
 - `FU-102`: Event Generation Service (MVP-critical competitive differentiator: timelines)
 - `FU-103`: Graph Builder Service
 - `FU-105`: Search Service (deterministic ranking)
+
+**UI Layer (Main Objects per `docs/vocabulary/canonical_terms.md`):**
 - `FU-300`: Design System Implementation (core UI foundation)
+- `FU-301`: Source Material List View (browse/search source material using `sources` table)
+- `FU-302`: Source Material Detail View (show source material + interpretations + observations)
+- `FU-303`: Timeline View (chronological events)
+- `FU-304`: File Upload UI (upload source material)
+- `FU-601`: Entity Explorer (entity list + detail, MVP-critical for validating entity resolution differentiator)
+
+**Auth & Security:**
 - `FU-700`: Authentication UI (Supabase Auth integration)
 - `FU-701`: RLS Implementation (row-level security; MVP-critical for privacy/control positioning)
+
+**Quality Assurance:**
 - `FU-710`: Spec Compliance Automation (multi-agent, multi-model spec-compliance checks and reports for marketed/high-risk releases)
-**Note:** FU-101 (Entity Resolution) and FU-102 (Timelines) are MVP-critical competitive differentiators. Provider memory (ChatGPT, Claude, Gemini) doesn't offer entity resolution or timelines across personal data. These features validate Neotoma's defensible positioning.
+
+**Critical Notes:**
+- **FU-301/302 renamed** from "Records List/Detail" to "Source Material List/Detail" to align with current architecture (deprecated `records` table will be removed in v0.3.0)
+- **FU-601 promoted from P2 to P0** — Entity resolution (FU-101) is MVP-critical differentiator; users must see entities to validate value
+- **FU-101, FU-102, FU-601 together validate competitive differentiators** — Entity resolution + timelines + entity-centric UX differentiate from provider memory
+
 These may be extended with additional P1/P2 FUs if explicitly added later.
 #### 2.2 Explicitly Excluded (Post-MVP)
 - LLM extraction (any Truth Layer extraction using LLMs)
@@ -62,7 +80,7 @@ These are documented as post-MVP features and **MUST NOT** block v1.0.0.
 **See `acceptance_criteria.md` for complete acceptance criteria.**
 **Summary:**
 - **Product**: Core workflow functional, UI surfaces usable, empty/error states present
-- **Technical**: Deterministic ingestion/OCR, no LLM extraction, graph integrity (0 orphans/cycles), deterministic search, 100% test coverage on critical path
+- **Technical**: Content-addressed ingestion, AI interpretation with auditability (config logged) and idempotence (canonicalization + hashing), graph integrity (0 orphans/cycles), deterministic search, 100% test coverage on critical path
 - **Business**: DAU ≥ 10 at launch, ≥ 100 records ingested in first week, metrics instrumentation in place
 ### 4. Cross-FU Integration Scenarios
 **See `integration_tests.md` for complete integration test specifications.**

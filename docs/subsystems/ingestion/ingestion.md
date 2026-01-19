@@ -222,10 +222,15 @@ async function performOCR(imageBuffer: Buffer): Promise<string> {
 - Pin Tesseract.js version in `package.json`
 - Include OCR confidence scores in extraction metadata
 - For low-confidence regions (confidence < 70%), mark as `ocr_low_confidence: true` in metadata rather than dropping text
-## 5. Step 4: Schema Detection
-### 5.1 MVP Extraction Approach: Rule-Based Only
-**Critical MVP Constraint:** Neotoma MVP uses **only** rule-based extraction (regex, parsing). No LLM extraction per `docs/NEOTOMA_MANIFEST.md` determinism requirements.
-**Post-MVP:** LLM-assisted extraction may be added with deterministic fallback for ambiguous cases.
+## 5. Step 4: Schema Detection and Field Extraction
+### 5.1 Extraction Approach: AI Interpretation with Idempotence
+**Current Architecture (v0.2.0+):** Neotoma uses **AI interpretation for unstructured files** (PDFs, images) with full auditability and system-level idempotence. Rule-based extraction available for structured data from agents.
+
+**Key Points:**
+- **AI interpretation** (via `interpretation.ts` service): Non-deterministic but auditable; interpretation config (model, temperature, prompt_hash) logged
+- **System-level idempotence**: Canonicalization + hashing ensures same source + same config → same final state (no duplicates)
+- **Rule-based extraction**: Available for structured data; deterministic regex/parsing patterns
+- See `docs/architecture/determinism.md` Section 1.4 for idempotence vs. replay determinism distinction
 ### 5.2 Schema Detection Rules (Multi-Pattern Matching)
 **Pattern:** Apply **multi-pattern matching** — a document must match **2 or more patterns** for a given type to be classified as that type.
 **Fallback:** If no type matches 2+ patterns, classify as `document` (generic fallback).
@@ -331,7 +336,7 @@ The paper discusses various approaches to neural networks.
 // No type matches 2+ patterns
 // Result: type = 'document' (fallback) ✅
 ```
-**Determinism:** Same text → same schema type (rule-based, deterministic pattern matching).
+**Note:** Schema detection patterns shown here are for rule-based fallback. In production, AI interpretation handles schema detection for unstructured files (with audit trail).
 **Tier 1 ICP Alignment:** Schema detection supports AI-Native Operators (research, contracts, travel), Knowledge Workers (legal docs, research papers, client communications), and Founders (company docs, product docs, investor materials).
 **Complete Patterns:** See [`docs/subsystems/record_types.md`](../record_types.md) section 7 for all detection patterns.
 ### 5.3 Schema Registry
@@ -445,8 +450,7 @@ function extractAmount(text: string): number | null {
   return match ? parseFloat(match[1].replace(",", "")) : null;
 }
 ```
-**Determinism:** Same text + same rules → same extracted fields.
-**Implementation Note:** All extractors MUST use regex/parsing only. No LLM calls permitted in MVP.
+**Note:** Rule-based extractors shown here are for structured data from agents. For unstructured files (PDFs, images), the `interpretation.ts` service uses AI interpretation with full auditability (config logged) and system-level idempotence (canonicalization + hashing).
 ### 6.2 Schema-Specific Extractors
 Each schema type has a dedicated extractor function:
 ```typescript
@@ -745,22 +749,25 @@ Load `docs/subsystems/ingestion/ingestion.md` when:
 - `docs/subsystems/schema.md` (schema structure)
 - `docs/subsystems/ingestion/state_machines.md` (ingestion states)
 ### Constraints Agents Must Enforce
-1. **Extraction MUST be deterministic** (rule-based, no LLM)
-2. **Entity IDs MUST be hash-based**
-3. **Event IDs MUST be hash-based**
-4. **All ingestion MUST be transactional**
-5. **Same file → same record_id** (via content hash)
-6. **All errors MUST use ErrorEnvelope**
+1. **AI interpretation for unstructured files** with audit trail (interpretation config logged)
+2. **System-level idempotence** enforced (canonicalization + hashing)
+3. **Entity IDs MUST be hash-based**
+4. **Event IDs MUST be hash-based**
+5. **All ingestion MUST be transactional**
+6. **Same file → same source_id** (via content hash; deduplication)
+7. **All errors MUST use ErrorEnvelope**
 ### Forbidden Patterns
-- LLM-based extraction (MVP)
+- Bypassing interpretation service for unstructured files
 - Nondeterministic entity IDs
 - Non-transactional graph inserts
 - Skipping error handling
-- Mutable extraction rules
+- Not logging interpretation config
 ### Validation Checklist
-- [ ] Extraction is rule-based and deterministic
+- [ ] AI interpretation uses interpretation service (with config logging)
+- [ ] Idempotence enforced (canonicalization + hashing)
 - [ ] Entity IDs are hash-based
 - [ ] Event IDs are hash-based
 - [ ] Graph insertion is transactional
 - [ ] Error handling covers all failure modes
 - [ ] Tests cover all schema types
+- [ ] Interpretation config logged for audit trail

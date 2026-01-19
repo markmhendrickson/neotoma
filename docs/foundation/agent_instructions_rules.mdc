@@ -36,13 +36,14 @@ Every AI assistant (Cursor, ChatGPT, Claude) working on Neotoma MUST follow:
 ### 23.2 Absolute Constraints
 
 1. **Never violate Truth Layer boundaries** (no strategy/execution logic)
-2. **Never introduce nondeterminism** (no random IDs, no LLM extraction in MVP)
+2. **Never introduce nondeterminism in core components** (no random IDs for entities/events, no unstable logic)
 3. **Never generate features outside MVP scope** (no semantic search, no agents)
 4. **Always follow schema-first principles** (type-driven, not inference-driven)
-5. **Enforce immutability** (raw_text, schema_type, extracted_fields)
+5. **Enforce immutability** (observations, source material; reinterpretation creates NEW observations)
 6. **Enforce safety and explicit control** (user approves all ingestion)
 7. **Always output deterministic, validated artifacts** (code, specs, docs)
-8. **Lead with defensible differentiators** (privacy-first, deterministic, cross-platform) when positioning features or creating marketing content
+8. **Lead with defensible differentiators** (privacy-first, idempotent extraction with auditability, cross-platform) when positioning features or creating marketing content
+9. **Use AI interpretation for unstructured files** with full auditability (interpretation config logged) and system-level idempotence (canonicalization + hashing)
 
 ### 23.2.1 Defensible Differentiation Constraints
 
@@ -99,7 +100,9 @@ When writing code:
    - String quotes: double quotes (`"`)
    - Import order: external → internal → relative
    - See `foundation-config.yaml` for Neotoma-specific overrides
-2. **Extraction MUST be rule-based** (regex, parsing; no LLM)
+2. **Extraction approach:**
+   - **AI interpretation for unstructured files** (PDFs, images) via interpretation service (auditable, idempotent)
+   - **Rule-based extraction for structured data** (regex, parsing; deterministic)
 3. **IDs MUST be hash-based** (entities, events, records)
 4. **All collections MUST be sorted** (deterministic iteration)
 5. **Graph writes MUST be transactional** (all-or-nothing)
@@ -303,29 +306,34 @@ Any layer built on Neotoma must respect the read-only boundary: it can consume t
 ### Forbidden Patterns
 
 - Violating Truth Layer boundaries (implementing strategy, execution, or autonomous agent behavior in Neotoma)
-- Introducing nondeterminism (random IDs, LLM extraction in MVP, unstable sorting, `Date.now()` in logic)
+- Introducing nondeterminism in core components (random entity/event IDs, unstable sorting, `Date.now()` in entity ID generation)
+- Bypassing interpretation service for unstructured files (must use interpretation service with audit trail)
+- Claiming replay determinism for AI interpretation (auditable but not replay-deterministic)
 - Generating features outside MVP scope (semantic search, real-time collaboration, predictive analytics)
-- Breaking immutability (modifying raw_text, schema_type, extracted_fields after initial storage)
-- Inferring beyond extraction (creating entities not present in fields, inferring relationships)
+- Breaking immutability (modifying observations or source material after creation; reinterpretation creates NEW observations)
+- Inferring beyond extraction (creating entities not present in fields, inferring relationships without source material)
 - Using schema families as database types (code must use application types: `invoice` not `Financial`)
 - Schema mutations (changing assigned schema_type after creation)
-- Synthetic data (guessing missing information, hallucinating fields)
+- Synthetic data beyond interpretation (guessing missing information, hallucinating fields)
 - Upward dependencies (Domain layer calling Application or Presentation layers)
-- Non-transactional graph writes (all record+entity+event inserts must be atomic)
+- Non-transactional graph writes (all source+observation+entity inserts must be atomic)
+- Not logging interpretation config (model, temperature, prompt_hash must be logged for audit trail)
 - Including credentials in agent instructions (no API keys, tokens, or service keys in prompt text, conversation messages, or code comments; use secure injection mechanisms like Cursor Secrets)
 - Storing documentation files in repo root (all documentation MUST be in appropriate `docs/` subdirectories)
 
 ### Validation Checklist
 
 - [ ] Change respects Truth Layer boundaries (no strategy/execution logic)
-- [ ] No nondeterministic logic introduced (no randomness, no LLM in MVP, no unstable sorts)
-- [ ] Immutability preserved (raw_text, schema_type, extracted_fields immutable)
+- [ ] No nondeterminism in core components (no random entity/event IDs, no unstable sorts)
+- [ ] AI interpretation uses interpretation service with audit trail (config logged)
+- [ ] System-level idempotence enforced (canonicalization + hashing)
+- [ ] Immutability preserved (observations, source material; reinterpretation creates NEW observations)
 - [ ] Schema changes are additive only (no breaking changes, no column removal)
 - [ ] Uses application types from `record_types.md` (not schema families)
 - [ ] Multi-pattern matching for schema detection (2+ patterns required)
 - [ ] Graph integrity maintained (no orphans, no cycles, transactional writes)
 - [ ] Privacy preserved (no PII in logs, only record IDs)
-- [ ] Provenance maintained (all outputs trace to source + rule)
+- [ ] Provenance maintained (all outputs trace to source + interpretation run)
 - [ ] Consistency model correct (strong vs bounded eventual per subsystem)
 - [ ] Security: No credentials included in agent instructions, conversation text, or code (use secure injection mechanisms)
 - [ ] Documentation location: No documentation files stored in repo root (all docs in `docs/` subdirectories)

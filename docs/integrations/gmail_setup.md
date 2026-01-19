@@ -1,10 +1,13 @@
 # Gmail Integration Setup Guide
 *(OAuth Configuration and Attachment Import)*
+
+⚠️ **ARCHITECTURAL COMPLIANCE ISSUE:** The current design described in this document **violates explicit control principles**. See "Architectural Compliance" section below for required changes.
+
 ## Scope
 This document covers:
 - Gmail OAuth app creation and configuration
 - Environment variable setup
-- Attachment import workflow
+- Attachment import workflow (⚠️ **NON-COMPLIANT** — see Architectural Compliance section)
 - Error handling and troubleshooting
 This document does NOT cover:
 - Gmail API implementation details (see `src/integrations/providers/gmail/`)
@@ -239,3 +242,63 @@ Load when:
 - Automatic background syncing without user trigger
 - Logging OAuth tokens or credentials
 - Requesting write permissions (send, modify)
+- **Bulk ingesting attachments without per-attachment approval** (❌ **VIOLATES explicit control**)
+
+## Architectural Compliance
+
+⚠️ **CRITICAL:** The current workflow described in this document (Step 7: Trigger Initial Sync) **violates Neotoma's explicit control principle**.
+
+### Current (Non-Compliant) Design
+
+**Workflow:**
+1. User selects label filters (e.g., "Receipts")
+2. User triggers sync (single action)
+3. System automatically ingests ALL attachments matching labels
+
+**Problem:**
+- **VIOLATES** "user approves all ingestion" (`docs/foundation/philosophy.md` Section 5.2)
+- **VIOLATES** "explicit, never automatic" (`docs/foundation/core_identity.md` Section 1)
+- Single approval triggers bulk ingestion of potentially many attachments
+- User cannot review or approve individual attachments
+
+### Required (Compliant) Design
+
+**Workflow:**
+1. User selects label filters (e.g., "Receipts")
+2. System queries Gmail API and shows list of matching attachments
+3. User reviews attachment list (filename, size, date, sender)
+4. User selects which attachments to ingest (checkboxes or individual approval)
+5. User explicitly approves selected attachments
+6. Only approved attachments are ingested
+
+**Compliance Requirements:**
+- Each attachment requires explicit user approval before ingestion
+- Cannot bulk ingest based on label filter alone
+- Must show attachment list and require per-item selection/approval
+- User must take explicit action for each attachment to be ingested
+
+### Implementation Notes
+
+When implementing Gmail integration:
+1. **Query phase:** Fetch attachment list (metadata only, no download)
+2. **Review phase:** Show attachment list in UI with checkboxes/selection
+3. **Approval phase:** User selects which attachments to ingest
+4. **Ingestion phase:** Only approved attachments are downloaded and ingested
+
+**Example UI Flow:**
+```
+1. User: "Import attachments from Gmail label 'Receipts'"
+2. System: Shows list of 15 attachments
+   - [ ] receipt_001.pdf (2.3 MB, 2025-01-15, from: noreply@store.com)
+   - [ ] receipt_002.pdf (1.8 MB, 2025-01-14, from: orders@shop.com)
+   - [ ] receipt_003.pdf (3.1 MB, 2025-01-13, from: billing@service.com)
+   ...
+3. User: Selects 5 attachments, clicks "Import Selected"
+4. System: Ingests only the 5 selected attachments
+```
+
+**This ensures:**
+- User explicitly approves each ingestion
+- No automatic bulk processing
+- Full user control over what enters Truth Layer
+- Compliance with explicit control principle

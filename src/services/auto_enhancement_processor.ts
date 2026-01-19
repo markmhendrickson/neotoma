@@ -7,6 +7,7 @@
 
 import { supabase } from "../db.js";
 import { schemaRecommendationService } from "./schema_recommendation.js";
+import { schemaRegistry } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
 export interface QueueItem {
@@ -87,12 +88,28 @@ export async function processAutoEnhancementQueue(): Promise<{
           continue;
         }
 
-        // Auto-enhance the schema
+        // Create recommendation record
         await schemaRecommendationService.autoEnhanceSchema({
           entity_type: item.entity_type,
           field_name: item.fragment_key,
           field_type: eligibility.inferred_type || "string",
           user_id: item.user_id || undefined,
+        });
+
+        // Actually update the schema (this was missing - the bug!)
+        await schemaRegistry.updateSchemaIncremental({
+          entity_type: item.entity_type,
+          fields_to_add: [
+            {
+              field_name: item.fragment_key,
+              field_type: eligibility.inferred_type || "string",
+              required: false,
+            },
+          ],
+          user_id: item.user_id || undefined,
+          user_specific: !!item.user_id,
+          activate: true, // Activate immediately so new data uses updated schema
+          migrate_existing: true, // Migrate raw_fragments to observations for existing data
         });
 
         // Mark as completed
@@ -107,7 +124,7 @@ export async function processAutoEnhancementQueue(): Promise<{
 
         succeeded++;
         logger.error(
-          `[AUTO_ENHANCE_QUEUE] Successfully enhanced ${item.entity_type}.${item.fragment_key}`,
+          `[AUTO_ENHANCE_QUEUE] Successfully enhanced ${item.entity_type}.${item.fragment_key} and updated schema`,
         );
       } catch (error: any) {
         failed++;

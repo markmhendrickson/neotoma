@@ -689,7 +689,7 @@ interface DocumentProperties {
 **MUST:**
 - Extract only fields defined for assigned type into `properties`
 - Store unknown fields (not defined in schema) in `extraction_metadata.unknown_fields`
-- Use deterministic extraction (regex, parsing; no LLM in MVP)
+- Use AI interpretation for unstructured files (auditable, idempotent) or rule-based extraction for structured data (deterministic)
 - Validate extracted values (e.g., dates must be parseable)
 - Include `schema_version: "1.0"` in all JSONB properties
 - Always create record (never reject entire record due to unknown or missing fields)
@@ -729,7 +729,7 @@ Load `docs/subsystems/record_types.md` when:
 3. **Multi-pattern matching required** — Type detection MUST match 2+ patterns for non-fallback types
 4. **No custom types** — Only types defined in this document are valid
 5. **Immutable type assignment** — Once assigned, `records.type` never changes
-6. **Deterministic extraction** — Same raw_text → same extracted fields (no LLM in MVP)
+6. **Idempotent extraction** — AI interpretation for unstructured files with system-level idempotence (same source + config → same final state); rule-based extraction for structured data (deterministic)
 7. **Schema versioning required** — All JSONB properties MUST include `schema_version`
 ### Forbidden Patterns
 - Using schema family names (`Financial`, `Productivity`) as database types

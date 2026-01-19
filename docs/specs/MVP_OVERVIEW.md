@@ -54,7 +54,9 @@ Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no stra
 - Gmail attachment import (user-triggered)
 ### 3.2 Extraction
 - Schema detection (invoice, receipt, contract, document, note, message, travel_document, identity_document, etc.)
-- Deterministic field extraction (regex-based from documents, direct property assignment from agent interactions; no LLM)
+- **Field extraction:**
+  - **AI interpretation for unstructured files** (PDF, images): Non-deterministic but auditable; config logged; system-level idempotence enforced via canonicalization and hashing
+  - **Rule-based extraction for structured data** (agent-provided entities): Deterministic regex/parsing patterns
 - Entity resolution (canonical IDs for companies, people, locations across all personal data)
 - Event generation (timeline from date fields across all personal data)
 - **Tier 1 ICP-aligned:** Schema types support AI-Native Operators (research, contracts, travel), Knowledge Workers (legal docs, research papers, client communications), and Founders (company docs, product docs, investor materials)
@@ -74,20 +76,22 @@ Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no stra
 ## 4. What's In MVP vs Future
 ### MVP (v1.0)
 ✅ File upload (PDF, JPG, PNG) — single and bulk
-✅ **Rule-based extraction only** (regex, parsing; deterministic per manifest)
+✅ **Field extraction:**
+  - **AI interpretation for unstructured files** (auditable, idempotent)
+  - **Rule-based extraction for structured data** (deterministic)
 ✅ Entity resolution (hash-based IDs)
 ✅ Timeline events
 ✅ Structured search (no semantic search in MVP)
-✅ MCP actions (8 MVP actions)
-✅ Basic UI (list, detail, timeline)
+✅ MCP actions (unified `ingest()` for all source material)
+✅ Basic UI (source material list/detail, entity list/detail, timeline)
 ✅ External providers (Gmail only)
 ✅ Multi-user authentication and workspaces
 ✅ Row-level security (data isolation)
 ✅ Billing and subscription management (Stripe integration)
 ✅ Local storage / offline mode
-**Critical MVP Constraint:** Extraction uses **only** rule-based methods (regex patterns, deterministic parsing). No LLM extraction per `docs/NEOTOMA_MANIFEST.md` determinism requirements. Same file uploaded 100 times → 100 identical extractions.
+
+**Extraction Approach:** Neotoma uses **AI interpretation for unstructured files** (PDFs, images) with full auditability (interpretation config logged) and system-level idempotence (canonicalization + hashing ensures same source + same config → same final state, no duplicates). Rule-based extraction available for structured data from agents. See `docs/architecture/determinism.md` for details on idempotence vs. replay determinism.
 ### Post-MVP
-⏳ LLM-assisted extraction (with deterministic fallback for ambiguous cases)
 ⏳ Semantic search (hybrid structured + embeddings)
 ⏳ Real-time collaboration
 ⏳ Advanced analytics
@@ -100,9 +104,10 @@ These differentiators are defensible because competitors find them structurally 
 1. **Privacy-First Architecture (User-Controlled Memory)**
    - User-controlled memory with no provider access, never used for training
    - **Why Defensible:** Providers cannot pursue due to data collection/training business models. Startups cannot pursue due to provider-controlled revenue models.
-2. **Deterministic Extraction (vs. ML-Based Probabilistic)**
-   - Same input → same output, always (reproducible, explainable)
-   - **Why Defensible:** Providers cannot pursue due to ML-first organizational identity. Startups cannot pursue due to speed-to-market constraints.
+2. **Idempotent Extraction with Full Auditability**
+   - AI interpretation for flexibility; system-level idempotence for reliability (same source + config → same final state, no duplicates)
+   - Full audit trail: interpretation config (model, temperature, prompt) logged for every observation
+   - **Why Defensible:** Providers cannot pursue due to black-box extraction practices. Startups cannot pursue due to engineering complexity of idempotence enforcement.
 3. **Cross-Platform Access (MCP Integration)**
    - Works with ChatGPT, Claude, Cursor via MCP (not platform-locked)
    - **Why Defensible:** Providers cannot pursue due to platform lock-in business models. Startups cannot pursue due to separate consumer app positioning.

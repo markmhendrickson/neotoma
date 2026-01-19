@@ -141,6 +141,7 @@ export interface RetrieveEntitySnapshotResponse {
   entity_type: string;
   schema_version: string;
   snapshot: Record<string, any>;
+  raw_fragments?: Record<string, any>; // Optional: Unvalidated fields not yet in schema (per MCP_SPEC.md 3.4)
   provenance: Record<string, string>;
   computed_at: string;
   observation_count: number;

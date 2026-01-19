@@ -248,13 +248,19 @@ export class SchemaRegistryService {
       }
     }
 
+    // Handle default user ID: convert to undefined for optional parameter
+    const defaultUserId = "00000000-0000-0000-0000-000000000000";
+    const userId = options.user_id && options.user_id !== defaultUserId 
+      ? options.user_id 
+      : undefined;
+
     // 5. Register new version (start inactive, we'll activate separately if needed)
     const newSchema = await this.register({
       entity_type: options.entity_type,
       schema_version: newVersion,
       schema_definition: { fields: mergedFields },
       reducer_config: { merge_policies: mergedReducerPolicies },
-      user_id: options.user_id,
+      user_id: userId,
       user_specific: options.user_specific,
       activate: false, // Register as inactive first
     });
@@ -305,15 +311,25 @@ export class SchemaRegistryService {
 
       while (true) {
         // Get batch of raw_fragments
+        // For structured data (parquet), entity type is in fragment_type
+        // Note: raw_fragments table only has fragment_type, not entity_type
         let query = supabase
           .from("raw_fragments")
           .select("*")
-          .eq("entity_type", options.entity_type)
+          .eq("fragment_type", options.entity_type)
           .eq("fragment_key", fieldName)
           .range(offset, offset + BATCH_SIZE - 1);
 
+        // Handle user_id properly: check both default UUID and null
+        const defaultUserId = "00000000-0000-0000-0000-000000000000";
         if (options.user_id) {
-          query = query.eq("user_id", options.user_id);
+          if (options.user_id === defaultUserId) {
+            query = query.or(`user_id.eq.${defaultUserId},user_id.is.null`);
+          } else {
+            query = query.eq("user_id", options.user_id);
+          }
+        } else {
+          query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
         const { data: fragments, error: fetchError } = await query;
@@ -326,27 +342,164 @@ export class SchemaRegistryService {
           `[SCHEMA_REGISTRY] Processing batch of ${fragments.length} fragments for field ${fieldName}`,
         );
 
-        // Process each fragment
+        // Group fragments by (source_id, interpretation_id) to find entities
+        // Fragments from the same source+interpretation belong to the same entity
+        const fragmentGroups = new Map<string, typeof fragments>();
         for (const fragment of fragments) {
-          try {
-            // Note: Actual migration would involve:
-            // 1. Loading the entity
-            // 2. Creating a new observation with the promoted field
-            // 3. Updating the entity snapshot
-            // 4. Marking the raw_fragment as migrated (don't delete for audit)
-            
-            // For now, we'll just log the migration
-            console.log(
-              `[SCHEMA_REGISTRY] Would migrate fragment: ${fragment.id} for entity ${fragment.record_id}`,
-            );
+          const groupKey = `${fragment.source_id || 'null'}:${fragment.interpretation_id || 'null'}`;
+          if (!fragmentGroups.has(groupKey)) {
+            fragmentGroups.set(groupKey, []);
+          }
+          fragmentGroups.get(groupKey)!.push(fragment);
+        }
 
-            totalMigrated++;
+        // Process each group (represents one entity)
+        for (const [groupKey, groupFragments] of fragmentGroups.entries()) {
+          if (groupFragments.length === 0) continue;
+
+          const firstFragment = groupFragments[0];
+          const sourceId = firstFragment.source_id;
+          const interpretationId = firstFragment.interpretation_id;
+
+          // Find entity_id from existing observations with same source_id
+          // For structured data (parquet), interpretation_id may be null, so match on source_id only
+          let entityId: string | null = null;
+          if (sourceId) {
+            let obsQuery = supabase
+              .from("observations")
+              .select("entity_id")
+              .eq("source_id", sourceId)
+              .eq("entity_type", options.entity_type)
+              .limit(1);
+
+            // If interpretation_id exists, also match on it; otherwise match any interpretation_id
+            if (interpretationId) {
+              obsQuery = obsQuery.eq("interpretation_id", interpretationId);
+            } else {
+              // For null interpretation_id, match observations with null interpretation_id
+              obsQuery = obsQuery.is("interpretation_id", null);
+            }
+
+            const { data: existingObs } = await obsQuery.maybeSingle();
+
+            if (existingObs) {
+              entityId = existingObs.entity_id;
+            }
+          }
+
+          if (!entityId) {
+            // No existing observation found - skip this group
+            // This can happen if fragments were created but observations weren't
+            console.warn(
+              `[SCHEMA_REGISTRY] No entity found for source ${sourceId}, interpretation ${interpretationId}, skipping migration`,
+            );
+            continue;
+          }
+
+          // Load current schema to get version
+          const currentSchema = await this.loadActiveSchema(
+            options.entity_type,
+            options.user_id,
+          );
+          if (!currentSchema) {
+            console.error(
+              `[SCHEMA_REGISTRY] No active schema found for ${options.entity_type}`,
+            );
+            continue;
+          }
+
+          // Collect all promoted fields for this entity from this group
+          const promotedFields: Record<string, unknown> = {};
+          for (const fragment of groupFragments) {
+            if (options.field_names.includes(fragment.fragment_key)) {
+              promotedFields[fragment.fragment_key] = fragment.fragment_value;
+            }
+          }
+
+          if (Object.keys(promotedFields).length === 0) {
+            continue; // No fields to migrate for this entity
+          }
+
+          try {
+            // Create new observation with promoted fields
+            // Use the same source_id and interpretation_id for provenance
+            const observedAt = new Date().toISOString();
+            const { error: obsError } = await supabase
+              .from("observations")
+              .insert({
+                entity_id: entityId,
+                entity_type: options.entity_type,
+                schema_version: currentSchema.schema_version,
+                source_id: sourceId,
+                interpretation_id: interpretationId,
+                observed_at: observedAt,
+                specificity_score: 0.8, // Medium specificity for migrated fields
+                source_priority: 0, // Same priority as original interpretation
+                fields: promotedFields,
+                user_id: firstFragment.user_id,
+              });
+
+            if (obsError) {
+              // Check if it's a duplicate (idempotence) - that's okay
+              if (obsError.code !== "23505") {
+                console.error(
+                  `[SCHEMA_REGISTRY] Failed to create observation for entity ${entityId}:`,
+                  obsError.message,
+                );
+                continue;
+              }
+            } else {
+              totalMigrated += Object.keys(promotedFields).length;
+              console.log(
+                `[SCHEMA_REGISTRY] Migrated ${Object.keys(promotedFields).length} fields for entity ${entityId}`,
+              );
+
+              // Recompute snapshot to include migrated fields
+              try {
+                const { observationReducer } = await import("../reducers/observation_reducer.js");
+                const { data: allObservations } = await supabase
+                  .from("observations")
+                  .select("*")
+                  .eq("entity_id", entityId)
+                  .order("observed_at", { ascending: false });
+
+                if (allObservations && allObservations.length > 0) {
+                  const snapshot = await observationReducer.computeSnapshot(
+                    entityId,
+                    allObservations as any,
+                  );
+
+                  await supabase.from("entity_snapshots").upsert(
+                    {
+                      entity_id: snapshot.entity_id,
+                      entity_type: snapshot.entity_type,
+                      schema_version: snapshot.schema_version,
+                      snapshot: snapshot.snapshot,
+                      computed_at: snapshot.computed_at,
+                      observation_count: snapshot.observation_count,
+                      last_observation_at: snapshot.last_observation_at,
+                      provenance: snapshot.provenance,
+                      user_id: snapshot.user_id,
+                    },
+                    {
+                      onConflict: "entity_id",
+                    },
+                  );
+                }
+              } catch (snapshotError: any) {
+                console.warn(
+                  `[SCHEMA_REGISTRY] Failed to recompute snapshot for entity ${entityId}:`,
+                  snapshotError.message,
+                );
+                // Continue - snapshot will be recomputed on next observation creation
+              }
+            }
           } catch (error: any) {
             console.error(
-              `[SCHEMA_REGISTRY] Failed to migrate fragment ${fragment.id}:`,
+              `[SCHEMA_REGISTRY] Failed to migrate fields for entity ${entityId}:`,
               error.message,
             );
-            // Continue with next fragment - don't fail entire migration
+            // Continue with next group - don't fail entire migration
           }
         }
 
