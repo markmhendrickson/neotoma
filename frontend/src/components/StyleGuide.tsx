@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +28,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Moon,
   Sun,
@@ -55,6 +55,9 @@ import {
   ArrowUp,
   ArrowDown,
   MoreHorizontal,
+  ChevronDown,
+  Info,
+  HelpCircle,
 } from "lucide-react";
 
 interface ColorSwatch {
@@ -154,25 +157,19 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
   };
 
   return (
-    <div className="h-screen overflow-y-auto bg-background p-6">
+    <div className="bg-background px-6 pb-6">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight">
-              Neotoma Design System
-            </h1>
+            <h1 className="text-4xl font-bold tracking-tight">Neotoma Design System</h1>
             <p className="text-muted-foreground mt-2">
               Interactive preview of all design system components and styles
             </p>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={toggleTheme}>
-              {isDark ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
+              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             {onClose && (
               <Button variant="ghost" size="icon" onClick={onClose}>
@@ -192,12 +189,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           <div className="grid gap-6">
             <Card>
               <CardHeader>
-                <CardTitle>
-                  Base Colors ({isDark ? "Dark" : "Light"} Mode)
-                </CardTitle>
+                <CardTitle>Base Colors ({isDark ? "Dark" : "Light"} Mode)</CardTitle>
                 <CardDescription>
-                  Primary color palette for backgrounds, foregrounds, and
-                  borders
+                  Primary color palette for backgrounds, foregrounds, and borders
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -210,9 +204,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       />
                       <div>
                         <div className="font-medium text-sm">{color.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {color.value}
-                        </div>
+                        <div className="text-xs text-muted-foreground font-mono">{color.value}</div>
                         {color.description && (
                           <div className="text-xs text-muted-foreground mt-1">
                             {color.description}
@@ -242,9 +234,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       />
                       <div>
                         <div className="font-medium text-sm">{color.name}</div>
-                        <div className="text-xs text-muted-foreground font-mono">
-                          {color.value}
-                        </div>
+                        <div className="text-xs text-muted-foreground font-mono">{color.value}</div>
                         {color.description && (
                           <div className="text-xs text-muted-foreground mt-1">
                             {color.description}
@@ -281,66 +271,109 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <CardContent className="space-y-6">
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  H1 - 2rem (32px), 700 weight, -0.02em letter-spacing
+                  H1 - 1.5rem (24px), 700 weight, -0.02em letter-spacing
                 </div>
                 <h1>Heading 1 - Bold, 700 weight</h1>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  H2 - 1.5rem (24px), 600 weight, -0.01em letter-spacing
+                  H2 - 1.25rem (20px), 600 weight, -0.01em letter-spacing
                 </div>
                 <h2>Heading 2 - Semibold, 600 weight</h2>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  H3 - 1.25rem (20px), 600 weight
+                  H3 - 1rem (16px), 600 weight
                 </div>
                 <h3>Heading 3 - Semibold, 600 weight</h3>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  H4 - 1rem (16px), 600 weight
+                  H4 - 0.875rem (14px), 600 weight
                 </div>
                 <h4>Heading 4 - Semibold, 600 weight</h4>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  Body - 0.9375rem (15px), 400 weight, 1.6 line-height
+                  Body - 0.8125rem (13px), 400 weight, 1.6 line-height
                 </div>
                 <p>
-                  Body text - Regular, 400 weight. This is the default text size
-                  for UI elements. It provides comfortable reading while
-                  maintaining information density.
+                  Body text - Regular, 400 weight. This is the default text size for UI elements. It
+                  provides comfortable reading while maintaining information density.
                 </p>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  Body Large - 1rem (16px), 400 weight, 1.6 line-height
+                  Body Large - 0.875rem (14px), 400 weight, 1.6 line-height
                 </div>
-                <p className="text-base">
-                  Body large text - Regular, 400 weight. Used for slightly more
-                  prominent content.
+                <p className="text-sm">
+                  Body large text - Regular, 400 weight. Used for slightly more prominent content.
                 </p>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  Small - 0.8125rem (13px), 400 weight, 1.5 line-height
+                  Small - 0.625rem (10px), 400 weight, 1.5 line-height
                 </div>
-                <p className="text-[0.8125rem]">
-                  Small text - Regular, 400 weight. Used for metadata,
-                  timestamps, labels, and secondary information.
+                <p className="text-[0.625rem]">
+                  Small text - Regular, 400 weight. Used for metadata, timestamps, labels, and
+                  secondary information.
                 </p>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-2 font-mono">
-                  Monospace - 0.875rem (14px), 400 weight, 1.5 line-height
+                  Monospace - 0.8125rem (13px), 400 weight, 1.5 line-height
                 </div>
-                <p className="font-mono text-sm">
-                  Monospace text - Used for record IDs, entity IDs, timestamps,
-                  code snippets, and extracted field values. Example:
-                  ent_a1b2c3d4e5f6
+                <p className="font-mono text-[0.8125rem]">
+                  Monospace text - Used for source IDs, entity IDs, observation IDs, timestamps,
+                  code snippets, and extracted field values. Example: src_a1b2c3d4e5f6
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="mt-4">
+            <CardHeader>
+              <CardTitle>Text Style Guide</CardTitle>
+              <CardDescription>
+                UI copy rules (inspired by{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  docs/conventions/writing_style_guide.md
+                </code>
+                ). Direct, active voice; no em dashes, soft questions, or motivational fluff.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Prefer</div>
+                  <ul className="space-y-1.5 text-sm">
+                    <li>
+                      <strong>Buttons:</strong> "Save", "Upload document", "Retry"
+                    </li>
+                    <li>
+                      <strong>Errors:</strong> "File too large. Maximum size 10 MB."
+                    </li>
+                    <li>
+                      <strong>Empty:</strong> "No sources yet."
+                    </li>
+                    <li>
+                      <strong>Success:</strong> "Upload complete."
+                    </li>
+                  </ul>
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">Avoid</div>
+                  <ul className="space-y-1.5 text-sm text-muted-foreground">
+                    <li>"Would you like to save?"</li>
+                    <li>"Oops! Something went wrong. Please try again!"</li>
+                    <li>"Get started! Upload your first file!"</li>
+                    <li>"You're all set! Great job!"</li>
+                  </ul>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                No em dashes; use commas, periods, colons. One idea per phrase. Keep messages short.
+              </p>
             </CardContent>
           </Card>
         </section>
@@ -365,14 +398,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               <div className="space-y-4">
                 {spacingScale.map((spacing) => (
                   <div key={spacing.name} className="flex items-center gap-4">
-                    <div className="w-20 text-sm font-medium">
-                      {spacing.name}
-                    </div>
+                    <div className="w-20 text-sm font-medium">{spacing.name}</div>
                     <div className="flex-1">
-                      <div
-                        className="bg-primary/20 h-8 rounded"
-                        style={{ width: spacing.value }}
-                      />
+                      <div className="bg-primary/20 h-8 rounded" style={{ width: spacing.value }} />
                     </div>
                     <div className="w-24 text-xs text-muted-foreground font-mono text-right">
                       {spacing.value}
@@ -479,19 +507,11 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="input-error">Error Input</Label>
-                <Input
-                  id="input-error"
-                  placeholder="Error state"
-                  className="border-destructive"
-                />
-                <p className="text-xs text-destructive">
-                  This field has an error
-                </p>
+                <Input id="input-error" placeholder="Error state" className="border-destructive" />
+                <p className="text-xs text-destructive">This field has an error</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="input-monospace">
-                  Monospace Input (for IDs)
-                </Label>
+                <Label htmlFor="input-monospace">Monospace Input (for IDs)</Label>
                 <Input
                   id="input-monospace"
                   placeholder="ent_a1b2c3d4e5f6"
@@ -515,15 +535,15 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <CardHeader>
               <CardTitle>Table Component</CardTitle>
               <CardDescription>
-                High-density table layout for record lists. Includes sorting,
-                filtering, search, column management, and row interactions.
+                High-density table layout for source lists, entity lists, and observation lists.
+                Includes sorting, filtering, search, column management, and row interactions.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Table Controls */}
               <div className="flex items-center gap-4 flex-wrap">
                 <div className="flex-1 min-w-[200px]">
-                  <Input placeholder="Search records..." className="w-full" />
+                  <Input placeholder="Search sources..." className="w-full" />
                 </div>
                 <Select defaultValue="all">
                   <SelectTrigger className="w-[180px]">
@@ -531,15 +551,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="FinancialRecord">
-                      FinancialRecord
-                    </SelectItem>
-                    <SelectItem value="IdentityDocument">
-                      IdentityDocument
-                    </SelectItem>
-                    <SelectItem value="TravelDocument">
-                      TravelDocument
-                    </SelectItem>
+                    <SelectItem value="invoice">invoice</SelectItem>
+                    <SelectItem value="document">document</SelectItem>
+                    <SelectItem value="travel">travel</SelectItem>
                   </SelectContent>
                 </Select>
                 <DropdownMenu>
@@ -551,18 +565,10 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   <DropdownMenuContent align="end" className="w-48">
                     <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuCheckboxItem checked>
-                      ID
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem checked>
-                      Type
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem checked>
-                      Summary
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem checked>
-                      Created
-                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked>ID</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked>Type</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked>Summary</DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem checked>Created</DropdownMenuCheckboxItem>
                     <DropdownMenuCheckboxItem>Status</DropdownMenuCheckboxItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -607,11 +613,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     <TableCell>
                       <input type="checkbox" className="rounded border-input" />
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      rec_abc123
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">src_abc123</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">FinancialRecord</Badge>
+                      <Badge variant="secondary">invoice</Badge>
                     </TableCell>
                     <TableCell>Invoice #INV-2024-001</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
@@ -627,9 +631,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     <TableCell>
                       <input type="checkbox" className="rounded border-input" />
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      rec_def456
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">src_def456</TableCell>
                     <TableCell>
                       <Badge variant="secondary">IdentityDocument</Badge>
                     </TableCell>
@@ -647,11 +649,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     <TableCell>
                       <input type="checkbox" className="rounded border-input" />
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      rec_ghi789
-                    </TableCell>
+                    <TableCell className="font-mono text-xs">src_ghi789</TableCell>
                     <TableCell>
-                      <Badge variant="secondary">TravelDocument</Badge>
+                      <Badge variant="secondary">travel</Badge>
                     </TableCell>
                     <TableCell>Flight LAX → JFK</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
@@ -673,32 +673,29 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 </p>
                 <ul className="list-disc list-inside space-y-1 ml-2">
                   <li>
-                    <strong>Sorting:</strong> Click column headers to sort
-                    (ascending/descending). Sort indicators show current state.
+                    <strong>Sorting:</strong> Click column headers to sort (ascending/descending).
+                    Sort indicators show current state.
                   </li>
                   <li>
-                    <strong>Search:</strong> Global search input filters records
-                    across all visible columns.
+                    <strong>Search:</strong> Global search input filters sources or entities across
+                    all visible columns.
                   </li>
                   <li>
-                    <strong>Type Filter:</strong> Dropdown to filter by record
-                    type.
+                    <strong>Type Filter:</strong> Dropdown to filter by entity type.
                   </li>
                   <li>
-                    <strong>Column Management:</strong> Show/hide columns,
-                    reorder via drag-and-drop, resize column widths.
+                    <strong>Column Management:</strong> Show/hide columns, reorder via
+                    drag-and-drop, resize column widths.
                   </li>
                   <li>
-                    <strong>Row Selection:</strong> Checkbox column for bulk
-                    actions.
+                    <strong>Row Selection:</strong> Checkbox column for bulk actions.
                   </li>
                   <li>
-                    <strong>Row Actions:</strong> Dropdown menu per row (view,
-                    delete, etc.).
+                    <strong>Row Actions:</strong> Dropdown menu per row (view, delete, etc.).
                   </li>
                   <li>
-                    <strong>Keyboard Navigation:</strong> Arrow keys, Enter to
-                    select, Space to toggle selection.
+                    <strong>Keyboard Navigation:</strong> Arrow keys, Enter to select, Space to
+                    toggle selection.
                   </li>
                 </ul>
               </div>
@@ -730,14 +727,10 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Card with Footer</CardTitle>
-                <CardDescription>
-                  Example card with footer section
-                </CardDescription>
+                <CardDescription>Example card with footer section</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm">
-                  Card content with additional information.
-                </p>
+                <p className="text-sm">Card content with additional information.</p>
               </CardContent>
             </Card>
           </div>
@@ -755,9 +748,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           <Card>
             <CardHeader>
               <CardTitle>Badge Variants</CardTitle>
-              <CardDescription>
-                Tags and labels for entity types and status
-              </CardDescription>
+              <CardDescription>Tags and labels for entity types and status</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -770,9 +761,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 </div>
               </div>
               <div>
-                <div className="text-sm font-medium mb-3">
-                  Entity Type Badges
-                </div>
+                <div className="text-sm font-medium mb-3">Entity Type Badges</div>
                 <div className="flex flex-wrap gap-2">
                   <Badge className="bg-indigo-500/10 text-indigo-500 border-indigo-500/20">
                     Person
@@ -812,7 +801,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardHeader>
               <CardContent className="text-center py-8">
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-sm font-medium mb-2">No records yet</p>
+                <p className="text-sm font-medium mb-2">No sources yet</p>
                 <p className="text-xs text-muted-foreground mb-4">
                   Upload your first document to get started
                 </p>
@@ -827,7 +816,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardHeader>
               <CardContent className="text-center py-8">
                 <Loader2 className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
-                <p className="text-sm font-medium mb-2">Loading records</p>
+                <p className="text-sm font-medium mb-2">Loading sources</p>
                 <p className="text-xs text-muted-foreground">
                   Please wait while we fetch your data
                 </p>
@@ -841,9 +830,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardHeader>
               <CardContent className="text-center py-8">
                 <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
-                <p className="text-sm font-medium mb-2">
-                  Failed to load records
-                </p>
+                <p className="text-sm font-medium mb-2">Failed to load sources</p>
                 <p className="text-xs text-muted-foreground mb-4">
                   An error occurred while fetching data
                 </p>
@@ -879,13 +866,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <div className="w-0.5 h-full bg-border mt-2" />
                     </div>
                     <div className="flex-1 pb-4">
-                      <div className="text-xs font-mono text-muted-foreground mb-1">
-                        2024-01-15
-                      </div>
+                      <div className="text-xs font-mono text-muted-foreground mb-1">2024-01-15</div>
                       <div className="text-sm font-medium">Invoice Issued</div>
-                      <div className="text-xs text-muted-foreground">
-                        Invoice #INV-2024-001
-                      </div>
+                      <div className="text-xs text-muted-foreground">Invoice #INV-2024-001</div>
                     </div>
                   </div>
                   <div className="flex gap-4">
@@ -894,15 +877,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <div className="w-0.5 h-full bg-border mt-2" />
                     </div>
                     <div className="flex-1 pb-4">
-                      <div className="text-xs font-mono text-muted-foreground mb-1">
-                        2024-01-14
-                      </div>
-                      <div className="text-sm font-medium">
-                        Flight Departure
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        LAX → JFK
-                      </div>
+                      <div className="text-xs font-mono text-muted-foreground mb-1">2024-01-14</div>
+                      <div className="text-sm font-medium">Flight Departure</div>
+                      <div className="text-xs text-muted-foreground">LAX → JFK</div>
                     </div>
                   </div>
                   <div className="flex gap-4">
@@ -910,15 +887,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <div className="w-3 h-3 rounded-full bg-green-500 border-2 border-background" />
                     </div>
                     <div className="flex-1">
-                      <div className="text-xs font-mono text-muted-foreground mb-1">
-                        2024-01-13
-                      </div>
-                      <div className="text-sm font-medium">
-                        Document Uploaded
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Passport - John Doe
-                      </div>
+                      <div className="text-xs font-mono text-muted-foreground mb-1">2024-01-13</div>
+                      <div className="text-sm font-medium">Document Uploaded</div>
+                      <div className="text-xs text-muted-foreground">Passport - John Doe</div>
                     </div>
                   </div>
                 </div>
@@ -929,9 +900,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Entity Graph</CardTitle>
-                <CardDescription>
-                  Entity relationships visualization
-                </CardDescription>
+                <CardDescription>Entity relationships visualization</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -941,9 +910,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     </div>
                     <div className="flex-1">
                       <div className="text-sm font-medium">John Doe</div>
-                      <div className="text-xs text-muted-foreground">
-                        Person
-                      </div>
+                      <div className="text-xs text-muted-foreground">Person</div>
                     </div>
                   </div>
                   <div className="ml-4 pl-4 border-l-2 border-border">
@@ -953,9 +920,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       </div>
                       <div className="flex-1">
                         <div className="text-sm font-medium">Acme Corp</div>
-                        <div className="text-xs text-muted-foreground">
-                          Company
-                        </div>
+                        <div className="text-xs text-muted-foreground">Company</div>
                       </div>
                     </div>
                   </div>
@@ -966,9 +931,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       </div>
                       <div className="flex-1">
                         <div className="text-sm font-medium">New York</div>
-                        <div className="text-xs text-muted-foreground">
-                          Location
-                        </div>
+                        <div className="text-xs text-muted-foreground">Location</div>
                       </div>
                     </div>
                   </div>
@@ -997,13 +960,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               <CardContent className="space-y-4">
                 <div>
                   <h1 className="text-2xl font-bold mb-2">Neotoma</h1>
-                  <p className="text-muted-foreground mb-4">
-                    Your structured AI memory
-                  </p>
+                  <p className="text-muted-foreground mb-4">Your structured AI memory</p>
                 </div>
-                <p className="text-sm mb-4">
-                  Transform fragmented documents into AI-ready truth.
-                </p>
+                <p className="text-sm mb-4">Transform fragmented documents into AI-ready truth.</p>
                 <Button className="w-full" size="lg">
                   Upload Your First Document
                 </Button>
@@ -1039,19 +998,13 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Identifying entities...
-                    </span>
+                    <span className="text-sm text-muted-foreground">Identifying entities...</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-5 h-5 rounded-full border-2 border-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Building timeline...
-                    </span>
+                    <span className="text-sm text-muted-foreground">Building timeline...</span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-2">
-                    Step 3 of 5
-                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">Step 3 of 5</div>
                 </div>
               </CardContent>
             </Card>
@@ -1076,17 +1029,13 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
-                  <p className="text-sm mb-2">
-                    Drag and drop a file or click to browse
-                  </p>
+                  <p className="text-sm mb-2">Drag and drop a file or click to browse</p>
                   <p className="text-xs text-muted-foreground">
                     Supported: PDF, JPG, PNG (max 50MB)
                   </p>
                 </div>
                 <div className="border-2 border-primary bg-primary/10 rounded-lg p-8 text-center">
-                  <p className="text-sm font-medium text-primary">
-                    Drop to upload
-                  </p>
+                  <p className="text-sm font-medium text-primary">Drop to upload</p>
                 </div>
               </CardContent>
             </Card>
@@ -1095,26 +1044,18 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <Card>
               <CardHeader>
                 <CardTitle>Upload Queue</CardTitle>
-                <CardDescription>
-                  Bulk upload with progress tracking
-                </CardDescription>
+                <CardDescription>Bulk upload with progress tracking</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span>invoice-001.pdf</span>
-                    <Badge
-                      variant="outline"
-                      className="bg-success/10 text-success"
-                    >
+                    <Badge variant="outline" className="bg-success/10 text-success">
                       Complete
                     </Badge>
                   </div>
                   <div className="w-full bg-muted rounded-full h-1">
-                    <div
-                      className="bg-success h-1 rounded-full"
-                      style={{ width: "100%" }}
-                    />
+                    <div className="bg-success h-1 rounded-full" style={{ width: "100%" }} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1123,10 +1064,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     <span className="text-xs text-muted-foreground">45%</span>
                   </div>
                   <div className="w-full bg-muted rounded-full h-1">
-                    <div
-                      className="bg-primary h-1 rounded-full"
-                      style={{ width: "45%" }}
-                    />
+                    <div className="bg-primary h-1 rounded-full" style={{ width: "45%" }} />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -1162,17 +1100,13 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <Card>
                   <CardContent className="pt-6">
                     <div className="text-3xl font-bold mb-1">1,234</div>
-                    <div className="text-sm text-muted-foreground">
-                      Total Records
-                    </div>
+                    <div className="text-sm text-muted-foreground">Total Sources</div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardContent className="pt-6">
                     <div className="text-3xl font-bold mb-1">567</div>
-                    <div className="text-sm text-muted-foreground">
-                      Entities
-                    </div>
+                    <div className="text-sm text-muted-foreground">Entities</div>
                   </CardContent>
                 </Card>
                 <Card>
@@ -1197,9 +1131,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <section>
           <div className="flex items-center gap-2 mb-4">
             <Edit className="h-5 w-5" />
-            <h2 className="text-2xl font-semibold">
-              Authentication Components
-            </h2>
+            <h2 className="text-2xl font-semibold">Authentication Components</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1212,11 +1144,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="email-signin">Email</Label>
-                  <Input
-                    id="email-signin"
-                    type="email"
-                    placeholder="you@example.com"
-                  />
+                  <Input id="email-signin" type="email" placeholder="you@example.com" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password-signin">Password</Label>
@@ -1256,16 +1184,11 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  Enter your email address and we'll send you a link to reset
-                  your password.
+                  Enter your email address and we'll send you a link to reset your password.
                 </p>
                 <div className="space-y-2">
                   <Label htmlFor="email-reset">Email</Label>
-                  <Input
-                    id="email-reset"
-                    type="email"
-                    placeholder="you@example.com"
-                  />
+                  <Input id="email-reset" type="email" placeholder="you@example.com" />
                 </div>
                 <Button className="w-full">Send Reset Link</Button>
                 <Button variant="ghost" className="w-full" size="sm">
@@ -1354,9 +1277,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <TableCell className="text-sm">2024-01-15</TableCell>
                       <TableCell className="text-sm">€50.00</TableCell>
                       <TableCell>
-                        <Badge className="bg-success/10 text-success">
-                          Paid
-                        </Badge>
+                        <Badge className="bg-success/10 text-success">Paid</Badge>
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm">
@@ -1368,9 +1289,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <TableCell className="text-sm">2023-12-15</TableCell>
                       <TableCell className="text-sm">€50.00</TableCell>
                       <TableCell>
-                        <Badge className="bg-success/10 text-success">
-                          Paid
-                        </Badge>
+                        <Badge className="bg-success/10 text-success">Paid</Badge>
                       </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="sm">
@@ -1397,9 +1316,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           <Card>
             <CardHeader>
               <CardTitle>Settings Form</CardTitle>
-              <CardDescription>
-                User preferences and integrations
-              </CardDescription>
+              <CardDescription>User preferences and integrations</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -1418,16 +1335,10 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Theme</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Light or dark mode
-                  </p>
+                  <p className="text-xs text-muted-foreground">Light or dark mode</p>
                 </div>
                 <Button variant="outline" size="icon" onClick={toggleTheme}>
-                  {isDark ? (
-                    <Sun className="h-4 w-4" />
-                  ) : (
-                    <Moon className="h-4 w-4" />
-                  )}
+                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
               </div>
               <Separator />
@@ -1437,20 +1348,14 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   <div className="flex items-center justify-between p-3 border rounded-md">
                     <div>
                       <div className="font-medium text-sm">Gmail</div>
-                      <div className="text-xs text-muted-foreground">
-                        Last synced: 2 hours ago
-                      </div>
+                      <div className="text-xs text-muted-foreground">Last synced: 2 hours ago</div>
                     </div>
-                    <Badge className="bg-success/10 text-success">
-                      Connected
-                    </Badge>
+                    <Badge className="bg-success/10 text-success">Connected</Badge>
                   </div>
                   <div className="flex items-center justify-between p-3 border rounded-md">
                     <div>
                       <div className="font-medium text-sm">Plaid</div>
-                      <div className="text-xs text-muted-foreground">
-                        Not connected
-                      </div>
+                      <div className="text-xs text-muted-foreground">Not connected</div>
                     </div>
                     <Button variant="outline" size="sm">
                       Connect
@@ -1474,17 +1379,13 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           <Card>
             <CardHeader>
               <CardTitle>Search with Filters</CardTitle>
-              <CardDescription>
-                Multi-dimensional search interface
-              </CardDescription>
+              <CardDescription>Multi-dimensional search interface</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Search Query</Label>
-                <Input placeholder="Search records..." />
-                <p className="text-xs text-muted-foreground">
-                  Press "/" to focus search
-                </p>
+                <Input placeholder="Search sources and entities..." />
+                <p className="text-xs text-muted-foreground">Press "/" to focus search</p>
               </div>
               <div className="flex gap-2">
                 <Button variant={isDark ? "secondary" : "outline"} size="sm">
@@ -1508,12 +1409,8 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="FinancialRecord">
-                        FinancialRecord
-                      </SelectItem>
-                      <SelectItem value="IdentityDocument">
-                        IdentityDocument
-                      </SelectItem>
+                      <SelectItem value="invoice">invoice</SelectItem>
+                      <SelectItem value="document">document</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1545,7 +1442,8 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <CardHeader>
               <CardTitle>Information Density</CardTitle>
               <CardDescription>
-                High information density without clutter - clear visual grouping, consistent alignment, typography hierarchy
+                High information density without clutter - clear visual grouping, consistent
+                alignment, typography hierarchy
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1553,18 +1451,36 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <h3 className="text-lg font-semibold mb-3">Content Structure Examples</h3>
                 <div className="space-y-4">
                   <div className="border rounded-lg p-4 bg-muted/30">
-                    <h4 className="font-semibold mb-2">Record List Structure</h4>
-                    <p className="text-sm text-muted-foreground mb-2">Table layout with sortable columns, row hover states, clear headers</p>
-                    <div className="text-xs font-mono text-muted-foreground">• High density table</div>
-                    <div className="text-xs font-mono text-muted-foreground">• Sortable columns</div>
-                    <div className="text-xs font-mono text-muted-foreground">• Row hover feedback</div>
+                    <h4 className="font-semibold mb-2">Source/Entity List Structure</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Table layout with sortable columns, row hover states, clear headers
+                      (SourceTable, EntityList)
+                    </p>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • High density table
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • Sortable columns
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • Row hover feedback
+                    </div>
                   </div>
                   <div className="border rounded-lg p-4 bg-muted/30">
-                    <h4 className="font-semibold mb-2">Record Detail Structure</h4>
-                    <p className="text-sm text-muted-foreground mb-2">Card-based sections with clear headers, monospace metadata</p>
-                    <div className="text-xs font-mono text-muted-foreground">• Card sections</div>
-                    <div className="text-xs font-mono text-muted-foreground">• H3 section headers</div>
-                    <div className="text-xs font-mono text-muted-foreground">• Monospace for IDs</div>
+                    <h4 className="font-semibold mb-2">Source/Entity Detail Structure</h4>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Card-based sections with tabs, clear headers, monospace metadata
+                      (SourceDetail, EntityDetail)
+                    </p>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • Card sections with tabs
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • H3 section headers
+                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">
+                      • Monospace for IDs
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1600,7 +1516,8 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             <CardHeader>
               <CardTitle>Dark Mode Strategy</CardTitle>
               <CardDescription>
-                System preference detection with manual override. Brighter colors for readability, softer backgrounds.
+                System preference detection with manual override. Brighter colors for readability,
+                softer backgrounds.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1608,11 +1525,11 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <div className="space-y-2">
                   <Label>Current Theme</Label>
                   <div className="p-4 border rounded-lg bg-background">
-                    <p className="text-sm font-medium mb-2">Theme: {isDark ? 'Dark' : 'Light'}</p>
+                    <p className="text-sm font-medium mb-2">Theme: {isDark ? "Dark" : "Light"}</p>
                     <p className="text-xs text-muted-foreground">
-                      {isDark 
-                        ? 'Brighter foregrounds, softer backgrounds, adjusted borders'
-                        : 'High contrast, neutral grays, professional appearance'}
+                      {isDark
+                        ? "Brighter foregrounds, softer backgrounds, adjusted borders"
+                        : "High contrast, neutral grays, professional appearance"}
                     </p>
                   </div>
                 </div>
@@ -1621,23 +1538,30 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span>Foreground:</span>
-                      <span className="font-mono text-xs">{isDark ? 'Brighter' : 'High contrast'}</span>
+                      <span className="font-mono text-xs">
+                        {isDark ? "Brighter" : "High contrast"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Background:</span>
-                      <span className="font-mono text-xs">{isDark ? 'Soft slate' : 'Pure white'}</span>
+                      <span className="font-mono text-xs">
+                        {isDark ? "Soft slate" : "Pure white"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Borders:</span>
-                      <span className="font-mono text-xs">{isDark ? 'Adjusted visibility' : 'Subtle gray'}</span>
+                      <span className="font-mono text-xs">
+                        {isDark ? "Adjusted visibility" : "Subtle gray"}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Rationale:</strong> Tier 1 ICPs (especially developers, AI-native users) strongly prefer dark mode. 
-                  All components maintain WCAG AA contrast ratios in both themes.
+                  <strong>Rationale:</strong> Tier 1 ICPs (especially developers, AI-native users)
+                  strongly prefer dark mode. All components maintain WCAG AA contrast ratios in both
+                  themes.
                 </p>
               </div>
             </CardContent>
@@ -1666,7 +1590,9 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                   <div className="border rounded-lg p-4">
                     <div className="font-medium mb-2">Fast (150ms)</div>
-                    <div className="text-xs text-muted-foreground">Hover states, button feedback</div>
+                    <div className="text-xs text-muted-foreground">
+                      Hover states, button feedback
+                    </div>
                     <Button className="mt-3 w-full">Hover me</Button>
                   </div>
                   <div className="border rounded-lg p-4">
@@ -1676,8 +1602,12 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </div>
                   <div className="border rounded-lg p-4">
                     <div className="font-medium mb-2">Slow (300ms)</div>
-                    <div className="text-xs text-muted-foreground">Layout changes, page transitions</div>
-                    <div className="mt-3 text-xs text-muted-foreground">Modal/dialog enter/exit</div>
+                    <div className="text-xs text-muted-foreground">
+                      Layout changes, page transitions
+                    </div>
+                    <div className="mt-3 text-xs text-muted-foreground">
+                      Modal/dialog enter/exit
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1694,7 +1624,8 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </div>
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Forbidden:</strong> Decorative animations, playful transitions, excessive motion, auto-playing animations
+                  <strong>Forbidden:</strong> Decorative animations, playful transitions, excessive
+                  motion, auto-playing animations
                 </p>
               </div>
             </CardContent>
@@ -1730,7 +1661,10 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                       <Button className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
                         Focus me (Tab)
                       </Button>
-                      <Input placeholder="Focus me (Tab)" className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" />
+                      <Input
+                        placeholder="Focus me (Tab)"
+                        className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      />
                     </div>
                   </div>
                 </div>
@@ -1845,70 +1779,10 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
               </div>
               <div className="pt-2 border-t">
                 <p className="text-xs text-muted-foreground">
-                  <strong>Guidelines:</strong> Use icons sparingly, match icon color to text hierarchy, 
-                  provide ARIA labels for icon-only buttons, consistent stroke width (1.5-2px)
+                  <strong>Guidelines:</strong> Use icons sparingly, match icon color to text
+                  hierarchy, provide ARIA labels for icon-only buttons, consistent stroke width
+                  (1.5-2px)
                 </p>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <Separator />
-
-        {/* Provider Connectors Section */}
-        <section>
-          <div className="flex items-center gap-2 mb-4">
-            <Settings className="h-5 w-5" />
-            <h2 className="text-2xl font-semibold">Provider Connectors</h2>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Provider Catalog</CardTitle>
-              <CardDescription>
-                Integration provider cards with connect/disconnect actions
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg">Gmail</CardTitle>
-                        <CardDescription className="text-xs">
-                          Import emails and attachments
-                        </CardDescription>
-                      </div>
-                      <Badge className="bg-success/10 text-success">Connected</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="text-xs text-muted-foreground">
-                      Last synced: 2 hours ago
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm">Sync Now</Button>
-                      <Button variant="ghost" size="sm">Disconnect</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle className="text-lg">Plaid</CardTitle>
-                        <CardDescription className="text-xs">
-                          Import financial transactions
-                        </CardDescription>
-                      </div>
-                      <Badge variant="outline">Available</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <Button className="w-full" size="sm">Connect</Button>
-                  </CardContent>
-                </Card>
               </div>
             </CardContent>
           </Card>
@@ -1926,9 +1800,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           <Card>
             <CardHeader>
               <CardTitle>Breakpoints and Mobile Considerations</CardTitle>
-              <CardDescription>
-                Desktop-first approach with mobile adaptations
-              </CardDescription>
+              <CardDescription>Desktop-first approach with mobile adaptations</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
@@ -1982,12 +1854,450 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           </Card>
         </section>
 
+        <Separator />
+
+        {/* Tabs Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Layout className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Tabs</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Tabbed Content</CardTitle>
+              <CardDescription>
+                Organize content into sections. Used in EntityDetail and SourceDetail for
+                multi-section views.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="snapshot" className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="snapshot">Snapshot</TabsTrigger>
+                  <TabsTrigger value="observations">Observations</TabsTrigger>
+                  <TabsTrigger value="relationships">Relationships</TabsTrigger>
+                  <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                </TabsList>
+                <TabsContent value="snapshot" className="space-y-4 mt-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Entity Snapshot</CardTitle>
+                      <CardDescription>
+                        Current truth computed from all observations
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Entity Type:</span>
+                          <Badge variant="secondary">company</Badge>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Canonical Name:</span>
+                          <span className="font-medium">Acme Corp</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Observations:</span>
+                          <span className="font-mono text-xs">12</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="observations" className="mt-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-sm text-muted-foreground text-center">
+                        12 observations from 5 sources
+                      </p>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="relationships" className="mt-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-sm text-muted-foreground text-center">
+                        3 relationships (PART_OF, REFERS_TO)
+                      </p>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                <TabsContent value="timeline" className="mt-4">
+                  <Card>
+                    <CardContent className="pt-6">
+                      <p className="text-sm text-muted-foreground text-center">8 timeline events</p>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Usage:</strong> Tabs are actively used in EntityDetail and SourceDetail
+                  components to organize multi-section content. Muted background for tab list,
+                  active tab uses primary background.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
+        {/* Progress Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Loader2 className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Progress</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Progress Indicators</CardTitle>
+              <CardDescription>
+                Visual feedback for upload progress, processing states, and loading operations
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="text-sm mb-3 block">File Upload Progress</Label>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>invoice-001.pdf</span>
+                      <span className="text-xs text-muted-foreground">100%</span>
+                    </div>
+                    <Progress value={100} />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>contract-002.pdf</span>
+                      <span className="text-xs text-muted-foreground">65%</span>
+                    </div>
+                    <Progress value={65} />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>receipt-003.pdf</span>
+                      <span className="text-xs text-muted-foreground">30%</span>
+                    </div>
+                    <Progress value={30} />
+                  </div>
+                </div>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Recommended for:</strong> FileUploadView upload queue, ingestion
+                  processing states, bulk operations. Uses primary color for progress bar, smooth
+                  transitions.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
+        {/* Skeleton Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Loader2 className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Skeleton Loading States</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Skeleton Placeholders</CardTitle>
+              <CardDescription>
+                Content placeholders for loading states. Better UX than spinners.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <Label className="text-sm mb-3 block">Table Loading State</Label>
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-4">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-4 w-[100px]" />
+                    <Skeleton className="h-4 w-[120px]" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-[80px]" />
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-4 w-[100px]" />
+                    <Skeleton className="h-4 w-[120px]" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-[80px]" />
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-4 w-[100px]" />
+                    <Skeleton className="h-4 w-[120px]" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-4 w-[80px]" />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm mb-3 block">Card Loading State</Label>
+                <Card>
+                  <CardHeader>
+                    <Skeleton className="h-6 w-[200px]" />
+                    <Skeleton className="h-4 w-[300px]" />
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                  </CardContent>
+                </Card>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Recommended for:</strong> SourceTable, EntityList, ObservationList loading
+                  states; EntityDetail and SourceDetail content loading; Dashboard widget loading.
+                  Reduces perceived load time.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
+        {/* Switch Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Settings className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Switch</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Toggle Switches</CardTitle>
+              <CardDescription>
+                For boolean preferences, feature flags, and settings toggles
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Dark Mode</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Toggle between light and dark theme
+                    </p>
+                  </div>
+                  <Switch defaultChecked={isDark} onCheckedChange={toggleTheme} />
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Email Notifications</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Receive email updates for new sources
+                    </p>
+                  </div>
+                  <Switch />
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Auto-Enhancement</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Automatically enhance entities with additional data
+                    </p>
+                  </div>
+                  <Switch defaultChecked />
+                </div>
+              </div>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Recommended for:</strong> Settings view (theme, features, integrations),
+                  integration enable/disable, user preferences. Better UX than checkboxes for on/off
+                  states.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
+        {/* Tooltip Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <HelpCircle className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Tooltips</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Hover Tooltips</CardTitle>
+              <CardDescription>
+                Helpful hints, icon button explanations, and contextual information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <TooltipProvider>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <Label>Icon Button with Tooltip:</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon">
+                          <Info className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>View additional information</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="entity-id">Entity ID</Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button className="text-muted-foreground hover:text-foreground">
+                            <HelpCircle className="h-3 w-3" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="max-w-xs">
+                            Deterministic hash-based ID (format: ent_abc123)
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <Input
+                      id="entity-id"
+                      placeholder="ent_abc123def456"
+                      className="font-mono text-xs"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline">
+                          <Upload className="h-4 w-4 mr-2" />
+                          Upload
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Upload a source file (PDF, image, or structured JSON)</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline">
+                          <Search className="h-4 w-4 mr-2" />
+                          Search
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Search entities, sources, and observations</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+              </TooltipProvider>
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Recommended for:</strong> Form field help text, icon-only buttons (ARIA
+                  labels + tooltips), table column headers (sorting hints), settings option
+                  descriptions. Subtle fade-in animation.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <Separator />
+
+        {/* Collapsible Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <ChevronDown className="h-5 w-5" />
+            <h2 className="text-2xl font-semibold">Collapsible</h2>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Collapsible Sections</CardTitle>
+              <CardDescription>
+                Expandable sections for advanced options and detailed information
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between">
+                    <span>Advanced Options</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-3">
+                  <Card className="bg-muted/30">
+                    <CardContent className="pt-4">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <Label>Enable debug logging</Label>
+                          <Switch />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <Label>Show raw fragments</Label>
+                          <Switch />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <Collapsible>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full justify-between">
+                    <span>Provenance Details</span>
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <Card className="bg-muted/30">
+                    <CardContent className="pt-4">
+                      <div className="space-y-2 text-xs font-mono">
+                        <div>
+                          <span className="text-muted-foreground">Source ID:</span> src_abc123def456
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Observation ID:</span>{" "}
+                          obs_xyz789abc123
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Observed at:</span>{" "}
+                          2025-01-15T10:30:00Z
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </CollapsibleContent>
+              </Collapsible>
+
+              <div className="pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  <strong>Recommended for:</strong> SourceDetail advanced sections (raw text,
+                  metadata), EntityDetail provenance and raw fragments, filter panels (show/hide
+                  advanced filters), settings advanced options. Smooth expand/collapse animations.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         {/* Footer */}
         <div className="py-8 text-center text-sm text-muted-foreground">
-          <p>
-            Neotoma Design System - Based on specifications from
-            design_system.md
-          </p>
+          <p>Neotoma Design System - Based on specifications from design_system.md</p>
         </div>
       </div>
     </div>

@@ -11,17 +11,24 @@ import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+export interface ConverterDefinition {
+  from: "number" | "string" | "boolean" | "array" | "object";
+  to: "string" | "number" | "date" | "boolean" | "array" | "object";
+  function: string; // Converter function name
+  deterministic: boolean; // Must be true for MVP
+}
+
+export interface FieldDefinition {
+  type: "string" | "number" | "date" | "boolean" | "array" | "object";
+  required?: boolean;
+  validator?: string;
+  preserveCase?: boolean; // Preserve case for this field during canonicalization
+  description?: string; // Field description
+  converters?: ConverterDefinition[]; // Field type converters
+}
+
 export interface SchemaDefinition {
-  fields: Record<
-    string,
-    {
-      type: "string" | "number" | "date" | "boolean" | "array" | "object";
-      required?: boolean;
-      validator?: string;
-      preserveCase?: boolean; // Preserve case for this field during canonicalization
-      description?: string; // Field description
-    }
-  >;
+  fields: Record<string, FieldDefinition>;
 }
 
 export interface ReducerConfig {
@@ -179,7 +186,7 @@ export class SchemaRegistryService {
    */
   async updateSchemaIncremental(options: {
     entity_type: string;
-    fields_to_add: Array<{
+    fields_to_add?: Array<{
       field_name: string;
       field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
       required?: boolean;
@@ -189,6 +196,15 @@ export class SchemaRegistryService {
         | "most_specific"
         | "merge_array";
     }>;
+    converters_to_add?: Array<{
+      field_name: string;
+      converter: {
+        from: "number" | "string" | "boolean" | "array" | "object";
+        to: "string" | "number" | "date" | "boolean" | "array" | "object";
+        function: string;
+        deterministic: boolean;
+      };
+    }>;
     schema_version?: string;
     user_specific?: boolean;
     user_id?: string;
@@ -196,7 +212,6 @@ export class SchemaRegistryService {
     activate?: boolean; // Default: true - activate immediately so new data uses updated schema
   }): Promise<SchemaRegistryEntry> {
     const activateSchema = options.activate !== false; // Default to true
-    const scope = options.user_specific ? "user" : "global";
 
     // 1. Load current active schema (user-specific or global)
     const currentSchema = await this.loadActiveSchema(
@@ -210,16 +225,22 @@ export class SchemaRegistryService {
       );
     }
 
-    // 2. Increment version
+    // 2. Determine change type and increment version
+    const changeType = this.determineChangeType({
+      fields_to_add: options.fields_to_add,
+      converters_to_add: options.converters_to_add,
+    });
     const newVersion =
-      options.schema_version || this.incrementVersion(currentSchema.schema_version);
+      options.schema_version ||
+      this.incrementVersion(currentSchema.schema_version, changeType);
 
     // 3. Merge fields (add new fields to existing schema)
     const mergedFields = {
       ...currentSchema.schema_definition.fields,
     };
 
-    for (const field of options.fields_to_add) {
+    // Add new fields
+    for (const field of options.fields_to_add || []) {
       // Skip if field already exists
       if (mergedFields[field.field_name]) {
         console.log(
@@ -239,7 +260,8 @@ export class SchemaRegistryService {
       ...currentSchema.reducer_config.merge_policies,
     };
 
-    for (const field of options.fields_to_add) {
+    // Add reducer policies for new fields
+    for (const field of options.fields_to_add || []) {
       if (!mergedReducerPolicies[field.field_name]) {
         mergedReducerPolicies[field.field_name] = {
           strategy: field.reducer_strategy || "last_write",
@@ -279,11 +301,18 @@ export class SchemaRegistryService {
       console.log(
         `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`,
       );
-      await this.migrateRawFragmentsToObservations({
-        entity_type: options.entity_type,
-        field_names: options.fields_to_add.map((f) => f.field_name),
-        user_id: options.user_id,
-      });
+      const fieldNamesToMigrate = [
+        ...(options.fields_to_add?.map((f) => f.field_name) || []),
+        ...(options.converters_to_add?.map((c) => c.field_name) || []),
+      ];
+      
+      if (fieldNamesToMigrate.length > 0) {
+        await this.migrateRawFragmentsToObservations({
+          entity_type: options.entity_type,
+          field_names: fieldNamesToMigrate,
+          user_id: options.user_id,
+        });
+      }
     }
 
     return newSchema;
@@ -308,19 +337,18 @@ export class SchemaRegistryService {
     // For each field, get raw_fragments and create observations
     for (const fieldName of options.field_names) {
       let offset = 0;
+      let hasMore = true;
 
-      while (true) {
+      while (hasMore) {
         // Get batch of raw_fragments
-        // For structured data (parquet), entity type is in fragment_type
-        // Note: raw_fragments table only has fragment_type, not entity_type
         let query = supabase
           .from("raw_fragments")
           .select("*")
-          .eq("fragment_type", options.entity_type)
-          .eq("fragment_key", fieldName)
-          .range(offset, offset + BATCH_SIZE - 1);
+          .eq("entity_type", options.entity_type)
+          .eq("fragment_key", fieldName);
 
         // Handle user_id properly: check both default UUID and null
+        // NOTE: .or() must be called before .range()
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
         if (options.user_id) {
           if (options.user_id === defaultUserId) {
@@ -332,10 +360,14 @@ export class SchemaRegistryService {
           query = query.or(`user_id.is.null,user_id.eq.${defaultUserId}`);
         }
 
+        // Apply range after or() filter
+        query = query.range(offset, offset + BATCH_SIZE - 1);
+
         const { data: fragments, error: fetchError } = await query;
 
         if (fetchError || !fragments || fragments.length === 0) {
-          break; // No more fragments to migrate
+          hasMore = false;
+          continue; // No more fragments to migrate
         }
 
         console.log(
@@ -346,7 +378,7 @@ export class SchemaRegistryService {
         // Fragments from the same source+interpretation belong to the same entity
         const fragmentGroups = new Map<string, typeof fragments>();
         for (const fragment of fragments) {
-          const groupKey = `${fragment.source_id || 'null'}:${fragment.interpretation_id || 'null'}`;
+          const groupKey = `${fragment.source_id || "null"}:${fragment.interpretation_id || "null"}`;
           if (!fragmentGroups.has(groupKey)) {
             fragmentGroups.set(groupKey, []);
           }
@@ -354,7 +386,7 @@ export class SchemaRegistryService {
         }
 
         // Process each group (represents one entity)
-        for (const [groupKey, groupFragments] of fragmentGroups.entries()) {
+        for (const [_groupKey, groupFragments] of fragmentGroups.entries()) {
           if (groupFragments.length === 0) continue;
 
           const firstFragment = groupFragments[0];
@@ -523,29 +555,121 @@ export class SchemaRegistryService {
   }
 
   /**
-   * Increment schema version (1.0 -> 1.1, 1.9 -> 2.0)
+   * Determine change type for schema update
+   * 
+   * Breaking changes (major):
+   * - Removing fields
+   * - Changing field types (not just adding converters)
+   * - Changing field from optional to required
+   * - Removing converters
+   * 
+   * Minor changes (minor):
+   * - Adding new optional fields
+   * - Adding converters to existing fields
+   * - Changing reducer strategies
+   * 
+   * Patch changes (patch):
+   * - Documentation updates
+   * - Non-functional changes
    */
-  private incrementVersion(currentVersion: string): string {
+  private determineChangeType(options: {
+    fields_to_add?: Array<{
+      field_name: string;
+      field_type: string;
+      required?: boolean;
+    }>;
+    converters_to_add?: Array<{
+      field_name: string;
+      converter: any;
+    }>;
+    fields_to_remove?: string[];
+    fields_to_modify?: Array<{
+      field_name: string;
+      old_type?: string;
+      new_type?: string;
+      old_required?: boolean;
+      new_required?: boolean;
+    }>;
+  }): "major" | "minor" | "patch" {
+    // Breaking changes (major version)
+    if (
+      options.fields_to_remove &&
+      options.fields_to_remove.length > 0
+    ) {
+      return "major";
+    }
+
+    if (options.fields_to_modify && options.fields_to_modify.length > 0) {
+      for (const mod of options.fields_to_modify) {
+        // Changing field type is breaking
+        if (mod.old_type && mod.new_type && mod.old_type !== mod.new_type) {
+          return "major";
+        }
+        // Changing from optional to required is breaking
+        if (
+          mod.old_required === false &&
+          mod.new_required === true
+        ) {
+          return "major";
+        }
+      }
+    }
+
+    // Minor changes (additive, backward compatible)
+    if (
+      (options.fields_to_add && options.fields_to_add.length > 0) ||
+      (options.converters_to_add && options.converters_to_add.length > 0)
+    ) {
+      return "minor";
+    }
+
+    // Patch changes (no functional changes)
+    return "patch";
+  }
+
+  /**
+   * Increment schema version using semantic versioning (major.minor.patch)
+   * 
+   * - Major: Breaking changes (removing fields, changing types, making fields required)
+   * - Minor: Additive changes (new fields, new converters) - backward compatible
+   * - Patch: Non-functional changes (documentation, formatting)
+   * 
+   * Examples:
+   * - 1.0.0 -> 1.1.0 (add new optional field)
+   * - 1.1.0 -> 1.1.1 (patch change)
+   * - 1.1.1 -> 2.0.0 (breaking change - remove field)
+   */
+  private incrementVersion(
+    currentVersion: string,
+    changeType: "major" | "minor" | "patch" = "minor"
+  ): string {
+    // Parse version (support both "1.0" and "1.0.0" formats)
     const parts = currentVersion.split(".");
     const major = parseInt(parts[0] || "1", 10);
     const minor = parseInt(parts[1] || "0", 10);
+    const patch = parseInt(parts[2] || "0", 10);
 
-    // Increment minor version
-    const newMinor = minor + 1;
-
-    // If minor version reaches 10, increment major and reset minor
-    if (newMinor >= 10) {
-      return `${major + 1}.0`;
+    switch (changeType) {
+      case "major":
+        // Breaking change: increment major, reset minor and patch
+        return `${major + 1}.0.0`;
+      case "minor":
+        // Additive change: increment minor, reset patch
+        return `${major}.${minor + 1}.0`;
+      case "patch":
+        // Non-functional change: increment patch
+        return `${major}.${minor}.${patch + 1}`;
+      default:
+        // Default to minor for backward compatibility
+        return `${major}.${minor + 1}.0`;
     }
-
-    return `${major}.${newMinor}`;
   }
 
   /**
    * Activate schema version
    * Supports user-specific schemas: deactivates other versions for same entity_type and user_id/scope
    */
-  async activate(entityType: string, version: string, userId?: string): Promise<void> {
+  async activate(entityType: string, version: string, _userId?: string): Promise<void> {
     // Load the schema to get its scope and user_id
     const { data: schema } = await supabase
       .from("schema_registry")
@@ -684,12 +808,12 @@ export class SchemaRegistryService {
     match_type?: "keyword" | "vector";
   }>> {
     // Get all active schemas from database
-    let query = supabase
+    const query = supabase
       .from("schema_registry")
       .select("entity_type, schema_version, schema_definition")
       .eq("active", true);
 
-    const { data: dbSchemas, error: dbError } = await query;
+    const { data: dbSchemas } = await query;
 
     // Fallback to code-defined schemas if database is empty or error
     const { ENTITY_SCHEMAS } = await import("./schema_definitions.js");
@@ -919,6 +1043,57 @@ export class SchemaRegistryService {
         throw new Error(
           `Invalid field type for ${fieldName}: ${fieldDef.type}`,
         );
+      }
+
+      // Validate converters if defined
+      if (fieldDef.converters) {
+        if (!Array.isArray(fieldDef.converters)) {
+          throw new Error(
+            `Converters for ${fieldName} must be an array`,
+          );
+        }
+
+        for (const converter of fieldDef.converters) {
+          // Validate required properties
+          if (!converter.from || !converter.to || !converter.function) {
+            throw new Error(
+              `Converter for ${fieldName} must have from, to, and function properties`,
+            );
+          }
+
+          // Validate deterministic property
+          if (converter.deterministic !== true) {
+            throw new Error(
+              `Converter for ${fieldName} must be deterministic (deterministic: true)`,
+            );
+          }
+
+          // Validate from/to types
+          if (!validTypes.includes(converter.from)) {
+            throw new Error(
+              `Invalid converter from type for ${fieldName}: ${converter.from}`,
+            );
+          }
+          if (!validTypes.includes(converter.to)) {
+            throw new Error(
+              `Invalid converter to type for ${fieldName}: ${converter.to}`,
+            );
+          }
+
+          // Validate that converter 'to' type matches field type
+          if (converter.to !== fieldDef.type) {
+            throw new Error(
+              `Converter for ${fieldName} must convert to field type ${fieldDef.type}, not ${converter.to}`,
+            );
+          }
+
+          // Validate converter function name format (basic check)
+          if (typeof converter.function !== "string" || converter.function.length === 0) {
+            throw new Error(
+              `Converter function name for ${fieldName} must be a non-empty string`,
+            );
+          }
+        }
       }
     }
   }

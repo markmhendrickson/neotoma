@@ -56,7 +56,38 @@ DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 
 **Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
 
-## Step 3: Configure Claude Code MCP Settings
+## Step 3: Set Up OAuth Connection
+
+**IMPORTANT: Authentication is required.** MCP connections must authenticate using OAuth (recommended) or session tokens (deprecated).
+
+### OAuth Setup (Recommended)
+
+1. **Sign in** to the Neotoma web UI (http://localhost:5195)
+2. **Navigate** to MCP Setup page
+3. **Go to** "OAuth Connection" tab
+4. **Enter a connection ID** (or click "Generate"):
+   - Example: `claude-2025-01-21-abc123`
+5. **Click** "Start OAuth Flow"
+6. **Click** "Open Authorization Page" to open browser
+7. **Approve** the connection in your browser
+8. **Wait** for confirmation that connection is active
+9. **Copy** your `connection_id` for use in MCP configuration
+
+**Benefits:**
+- Tokens automatically refresh (no manual updates)
+- More secure than session tokens
+- Connections persist until revoked
+
+### Session Token Setup (Deprecated)
+
+**Will be removed in a future version. Use OAuth instead.**
+
+1. Sign in to the Neotoma web UI (http://localhost:5195)
+2. Click "MCP Setup" button
+3. Go to "Session Token (Deprecated)" tab
+4. Copy your session token
+
+## Step 4: Configure Claude Code MCP Settings
 
 Claude Code uses a configuration file to connect to MCP servers.
 
@@ -83,6 +114,8 @@ The configuration file location depends on your OS:
 
 Edit the config file and add the Neotoma server:
 
+**With OAuth (Recommended):**
+
 ```json
 {
   "mcpServers": {
@@ -91,20 +124,38 @@ Edit the config file and add the Neotoma server:
       "args": ["/absolute/path/to/neotoma/dist/index.js"],
       "cwd": "/absolute/path/to/neotoma",
       "env": {
-        "NODE_ENV": "development"
+        "NEOTOMA_CONNECTION_ID": "claude-2025-01-21-abc123"
       }
     }
   }
 }
 ```
 
-**Important:**
-- Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
-- Set `cwd` to the Neotoma project root (required for `.env` loading)
-- The server loads credentials from `.env` automatically
-- To get your node path: `which node` (macOS/Linux) or `where node` (Windows)
+**With Session Token (Deprecated):**
 
-**Example configuration:**
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/neotoma/dist/index.js"],
+      "cwd": "/absolute/path/to/neotoma",
+      "env": {
+        "NEOTOMA_SESSION_TOKEN": "your-session-token-here"
+      }
+    }
+  }
+}
+```
+
+**Configuration fields:**
+- `command`: Absolute path to node executable (get via `which node`)
+- `args`: Absolute path to built MCP server (dist/index.js)
+- `cwd`: Absolute path to Neotoma project root
+- `env.NEOTOMA_CONNECTION_ID`: Your OAuth connection ID (recommended)
+- `env.NEOTOMA_SESSION_TOKEN`: Your Supabase session token (deprecated)
+
+**Example OAuth configuration:**
 
 ```json
 {
@@ -112,11 +163,16 @@ Edit the config file and add the Neotoma server:
     "neotoma": {
       "command": "/Users/username/.nvm/versions/node/v20.10.0/bin/node",
       "args": ["/Users/username/Projects/neotoma/dist/index.js"],
-      "cwd": "/Users/username/Projects/neotoma"
+      "cwd": "/Users/username/Projects/neotoma",
+      "env": {
+        "NEOTOMA_CONNECTION_ID": "claude-2025-01-21-abc123"
+      }
     }
   }
 }
 ```
+
+**Note:** OAuth connections automatically refresh tokens and persist until revoked.
 
 ## Step 4: Restart Claude Code
 
@@ -187,6 +243,84 @@ Claude Code's localhost architecture aligns perfectly with Neotoma's privacy-fir
 This represents a new paradigm: localhost agents with private data substrates, not cloud deployments with platform-locked memory.
 
 ## Troubleshooting
+
+### Issue: "Not authenticated" or "Authentication required"
+
+This error means the MCP server didn't receive valid authentication during initialization.
+
+**Solutions (OAuth - Recommended):**
+
+1. **Verify connection is active:**
+   - Sign in to Neotoma web UI (http://localhost:5195)
+   - Go to MCP Setup → OAuth Connection tab
+   - Check that your connection ID shows "active" status
+   - If not active, create a new connection (see Step 3 above)
+
+2. **Check environment variable in config:**
+   ```bash
+   # macOS
+   cat ~/Library/Application\ Support/Claude/claude_desktop_config.json | grep NEOTOMA_CONNECTION_ID
+   # Linux
+   cat ~/.config/Claude/claude_desktop_config.json | grep NEOTOMA_CONNECTION_ID
+   ```
+   Should show: `"NEOTOMA_CONNECTION_ID": "your-connection-id"`
+
+3. **Verify connection ID matches:**
+   - Connection ID in config must match the active connection in web UI
+   - Connection IDs are case-sensitive
+
+4. **Create new connection if needed:**
+   - If connection was revoked or expired, create a new one via web UI
+   - Update config file with the new connection ID
+
+5. **Restart Claude Code** completely (quit and reopen, not just reload)
+
+**If using Session Token (Deprecated - Not Recommended):**
+1. **Switch to OAuth** (strongly recommended) - more reliable and secure
+2. Or **get a fresh session token:**
+   - Sign in to the Neotoma web UI
+   - Click "MCP Setup" → "Session Token (Deprecated)" tab
+   - Copy your session token
+   - Update `NEOTOMA_SESSION_TOKEN` in config file
+   - Restart Claude Code
+
+### Issue: "OAuth connection failed" or "Connection not found"
+
+The OAuth connection doesn't exist, was revoked, or the connection ID is incorrect.
+
+**Solutions:**
+1. **Verify connection exists:**
+   - Sign in to Neotoma web UI (http://localhost:5195)
+   - Go to MCP Setup → OAuth Connection tab
+   - Check if your connection ID appears in the list
+   - Status should be "active" (not "pending" or "expired")
+
+2. **If connection doesn't exist or was revoked:**
+   - Create a new connection via web UI (MCP Setup → OAuth Connection tab)
+   - Follow OAuth flow: enter connection ID → Start OAuth Flow → Approve in browser
+   - Wait for "active" status confirmation
+
+3. **Update config file** with the correct connection ID
+
+4. **Restart Claude Code** completely
+
+### Issue: "Invalid session token" or "Token validation failed" (Deprecated)
+
+The session token is invalid or expired. **OAuth is recommended** to avoid this issue.
+
+**Solutions:**
+1. **Switch to OAuth** (strongly recommended):
+   - Follow Step 3 above to create an OAuth connection
+   - Update config to use `NEOTOMA_CONNECTION_ID` instead of `NEOTOMA_SESSION_TOKEN`
+   - OAuth tokens automatically refresh and don't expire
+   - Restart Claude Code
+
+2. **If you must use session token** (deprecated):
+   - Sign out and sign back in to the Neotoma web UI to get a fresh token
+   - Copy the new token from the MCP Setup → "Session Token (Deprecated)" tab
+   - Update config file with the new token
+   - Restart Claude Code
+   - **Note:** Session tokens expire when you sign out or after inactivity
 
 ### Issue: "MCP server not found" or "Command failed"
 

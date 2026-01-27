@@ -86,6 +86,10 @@ These documents are the **root of truth** for all Neotoma work:
    - Testing patterns and code organization
    - **Load when writing or reviewing code**
 
+6. **[`docs/conventions/native_browser_debugging_rules.mdc`](../conventions/native_browser_debugging_rules.mdc)**
+   - Native browser requirement for UI debugging and verification
+   - **Load when debugging or verifying UI flows**
+
 ---
 
 ## 2. Documentation Categories and Structure
@@ -197,6 +201,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`dashboard.md`](../ui/patterns/dashboard.md) | Dashboard pattern (widgets, metrics, summaries)       | Building dashboard or overview pages   |
 | [`wizard.md`](../ui/patterns/wizard.md)       | Wizard/multi-step pattern (onboarding, complex forms) | Building multi-step flows              |
 | [`settings.md`](../ui/patterns/settings.md)   | Settings pattern (preferences, configuration)         | Building settings or configuration UIs |
+| [`navigation.md`](../ui/patterns/navigation.md) | Navigation pattern (sidebar, entity types, search) | Building navigation sidebars and menus |
 
 ### 2.6 Testing and Quality
 

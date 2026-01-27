@@ -1,0 +1,54 @@
+[
+  {
+    "schema_version": "1.0",
+    "text": "This looks good, let's proceed with implementation",
+    "task_id": "task-001",
+    "asana_task_gid": "1234567890",
+    "asana_story_gid": "story-001",
+    "asana_workspace": "workspace-001",
+    "author_name": "John Doe",
+    "author_gid": "user-001",
+    "comment_html": "<p>This looks good, let's proceed with implementation</p>",
+    "created_at": "2024-05-15T15:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "text": "Can we add error handling for edge cases?",
+    "task_id": "task-002",
+    "asana_task_gid": "1234567891",
+    "asana_story_gid": "story-002",
+    "asana_workspace": "workspace-001",
+    "author_name": "Jane Smith",
+    "author_gid": "user-002",
+    "comment_html": "<p>Can we add error handling for edge cases?</p>",
+    "comment_html_remote": "<p>Can we add error handling for edge cases?</p>",
+    "created_at": "2024-05-16T10:30:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "text": "Done! Ready for review",
+    "task_id": "task-001",
+    "asana_task_gid": "1234567890",
+    "asana_story_gid": "story-003",
+    "asana_workspace": "workspace-001",
+    "author_name": "John Doe",
+    "author_gid": "user-001",
+    "created_at": "2024-05-20T16:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "text": "Minimal comment"
+  },
+  {
+    "schema_version": "1.0",
+    "text": "This is blocked by task-005. Let me know when that's complete.",
+    "task_id": "task-003",
+    "asana_task_gid": "1234567892",
+    "asana_story_gid": "story-004",
+    "asana_workspace": "workspace-001",
+    "author_name": "Jane Smith",
+    "author_gid": "user-002",
+    "comment_html": "<p>This is blocked by <a href='#'>task-005</a>. Let me know when that's complete.</p>",
+    "created_at": "2024-05-17T14:15:00Z"
+  }
+]

@@ -100,7 +100,12 @@ export async function createObservationsFromRecord(
 
   // Resolve entities and create observations
   for (const entity of entities) {
-    const entityId = await resolveEntity(entity.entity_type, entity.raw_value);
+    // Use new signature with userId to ensure correct user_id on entity
+    const entityId = await resolveEntity({
+      entityType: entity.entity_type,
+      fields: { name: entity.raw_value }, // Use raw_value as name field
+      userId,
+    });
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 
@@ -131,8 +136,10 @@ export async function createObservationsFromRecord(
         }
         
         await supabase.from("raw_fragments").insert({
-          record_id: record.id,
-          fragment_type: "unknown_field",
+          source_id: null, // Legacy records-based ingestion - no source_id
+          interpretation_id: null, // Legacy records-based ingestion - no interpretation_id
+          user_id: userId,
+          entity_type: entity.entity_type, // Use the entity type from the entity being processed
           fragment_key: key,
           fragment_value: value,
           fragment_envelope: {
@@ -309,7 +316,12 @@ export async function createObservationsFromPayload(
 
   // Resolve all entities and create observations
   for (const entity of allEntities) {
-    const entityId = await resolveEntity(entity.entity_type, entity.raw_value);
+    // Use new signature with userId to ensure correct user_id on entity
+    const entityId = await resolveEntity({
+      entityType: entity.entity_type,
+      fields: { name: entity.raw_value }, // Use raw_value as name field
+      userId,
+    });
     const schema = schemaMap.get(entity.entity_type);
     const schemaVersion = schema?.schema_version || "1.0";
 

@@ -14,7 +14,7 @@ import {
 
 const uploadFixturePath = path.join(
   repoRoot,
-  'playwright/tests/fixtures/sample-upload.txt',
+  'tests/fixtures/pdf/sample-upload.txt',
 );
 
 test.describe('chatPanel coverage', () => {

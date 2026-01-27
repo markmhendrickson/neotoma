@@ -1,0 +1,41 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "example.com",
+    "companies": "Example Corp",
+    "registrar": "Namecheap",
+    "expiry_date": "2025-06-15",
+    "status": "active",
+    "notes": "Primary company domain"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "testproject.io",
+    "registrar": "Google Domains",
+    "expiry_date": "2025-12-01",
+    "status": "active",
+    "notes": "Side project domain"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "myapp.dev",
+    "companies": "Test Startup Inc",
+    "registrar": "Cloudflare",
+    "expiry_date": "2026-03-20",
+    "status": "active",
+    "notes": "Development domain with auto-renew enabled"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "expired-domain.net",
+    "registrar": "GoDaddy",
+    "expiry_date": "2023-12-31",
+    "status": "expired",
+    "notes": "Let this expire, no longer needed"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "minimal.com",
+    "status": "active"
+  }
+]

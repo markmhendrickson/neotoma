@@ -9,7 +9,9 @@ import {
   schemaRegistry,
   type SchemaDefinition,
   type ReducerConfig,
+  type FieldDefinition,
 } from "../services/schema_registry.js";
+import { validateFieldWithConverters } from "../services/field_validation.js";
 
 export interface Observation {
   id: string;
@@ -59,8 +61,8 @@ export class ObservationReducer {
     const entityType = observations[0].entity_type;
     const userId = observations[0].user_id;
 
-    // Load schema and merge policies
-    const schemaEntry = await schemaRegistry.loadActiveSchema(entityType);
+    // Load schema and merge policies (pass userId to support user-specific schemas)
+    const schemaEntry = await schemaRegistry.loadActiveSchema(entityType, userId);
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
       console.warn(
@@ -92,15 +94,17 @@ export class ObservationReducer {
       const policy = reducerConfig.merge_policies[field];
       const strategy = policy?.strategy || "last_write";
       const tieBreaker = policy?.tie_breaker || "observed_at";
+      const fieldDef = schemaDef.fields[field];
 
       const result = this.applyMergeStrategy(
         field,
         sortedObservations,
         strategy,
         tieBreaker,
+        fieldDef,
       );
 
-      if (result.value !== undefined && result.value !== null) {
+      if (result && result.value !== undefined && result.value !== null) {
         snapshot[field] = result.value;
         provenance[field] = result.source_observation_id;
       }
@@ -141,38 +145,73 @@ export class ObservationReducer {
 
   /**
    * Apply merge strategy to field
+   * 
+   * Applies converters from the active schema to ensure snapshot values
+   * conform to the schema type, even if observations have old types.
    */
   private applyMergeStrategy(
     field: string,
     observations: Observation[],
     strategy: MergeStrategy,
     tieBreaker: "observed_at" | "source_priority",
-  ): { value: unknown; source_observation_id: string } {
+    fieldDef?: FieldDefinition,
+  ): { value: unknown; source_observation_id: string } | null {
     // Filter observations that have this field
     const relevantObservations = observations.filter(
       (obs) => obs.fields[field] !== undefined && obs.fields[field] !== null,
     );
 
     if (relevantObservations.length === 0) {
-      throw new Error(`No observations found with field ${field}`);
+      // Field exists in schema but not in any observations - skip it
+      return null;
     }
 
+    // Get merged value using strategy
+    let mergedResult: { value: unknown; source_observation_id: string };
     switch (strategy) {
       case "last_write":
-        return this.lastWriteWins(field, relevantObservations);
+        mergedResult = this.lastWriteWins(field, relevantObservations);
+        break;
 
       case "highest_priority":
-        return this.highestPriority(field, relevantObservations, tieBreaker);
+        mergedResult = this.highestPriority(field, relevantObservations, tieBreaker);
+        break;
 
       case "most_specific":
-        return this.mostSpecific(field, relevantObservations, tieBreaker);
+        mergedResult = this.mostSpecific(field, relevantObservations, tieBreaker);
+        break;
 
       case "merge_array":
-        return this.mergeArray(field, relevantObservations);
+        mergedResult = this.mergeArray(field, relevantObservations, fieldDef);
+        break;
 
       default:
         throw new Error(`Unknown merge strategy: ${strategy}`);
     }
+
+    // Apply converters if field definition exists and value doesn't match type
+    if (fieldDef) {
+      const validationResult = validateFieldWithConverters(
+        field,
+        mergedResult.value,
+        fieldDef,
+      );
+
+      // If conversion was applied, use converted value
+      // If value already matches type, use as-is
+      // If conversion failed and should route to raw_fragments, still use the value
+      // (we're in snapshot computation, not observation creation)
+      if (!validationResult.shouldRouteToRawFragments) {
+        return {
+          value: validationResult.value,
+          source_observation_id: mergedResult.source_observation_id,
+        };
+      }
+      // If conversion failed, still return the original value
+      // (better than losing data, even if type doesn't match)
+    }
+
+    return mergedResult;
   }
 
   /**
@@ -252,22 +291,52 @@ export class ObservationReducer {
 
   /**
    * Merge Array strategy
+   * 
+   * Note: For merge_array strategy, converters are applied to individual
+   * array elements if fieldDef is provided. However, since merge_array
+   * combines values from multiple observations, we apply converters to
+   * each value before adding to the set.
    */
   private mergeArray(
     field: string,
     observations: Observation[],
+    fieldDef?: FieldDefinition,
   ): { value: unknown; source_observation_id: string } {
     const values = new Set<unknown>();
     const observationIds: string[] = [];
 
     for (const obs of observations) {
-      const value = obs.fields[field];
-      if (value !== undefined && value !== null) {
+      const rawValue = obs.fields[field];
+      if (rawValue !== undefined && rawValue !== null) {
         // Handle array values
-        if (Array.isArray(value)) {
-          value.forEach((v) => values.add(v));
+        if (Array.isArray(rawValue)) {
+          for (const item of rawValue) {
+            // Apply converters to each array element if fieldDef exists
+            if (fieldDef && fieldDef.type === "array" && fieldDef.converters) {
+              // For array types, we'd need to know the element type
+              // For now, just add the value as-is
+              // TODO: Support element type conversion for arrays
+              values.add(item);
+            } else {
+              values.add(item);
+            }
+          }
         } else {
-          values.add(value);
+          // Single value - apply converters if fieldDef exists
+          if (fieldDef) {
+            const validationResult = validateFieldWithConverters(
+              field,
+              rawValue,
+              fieldDef,
+            );
+            if (!validationResult.shouldRouteToRawFragments) {
+              values.add(validationResult.value);
+            } else {
+              values.add(rawValue);
+            }
+          } else {
+            values.add(rawValue);
+          }
         }
         observationIds.push(obs.id);
       }

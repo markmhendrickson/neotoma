@@ -9,7 +9,7 @@ import PDFDocument from "pdfkit";
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 
-const FIXTURES_DIR = join(process.cwd(), "playwright/tests/fixtures");
+const FIXTURES_DIR = join(process.cwd(), "tests/fixtures/pdf");
 
 function createPdfBuffer(content: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -156,6 +156,142 @@ This is a test document for fixture generation.`;
   writeFileSync(join(FIXTURES_DIR, "sample_contract.pdf"), buffer);
 }
 
+async function generateReceipt(): Promise<void> {
+  const content = `PURCHASE RECEIPT
+
+Store: Target
+Date: 2024-12-18
+Receipt Number: RCP-2024-12-18-001
+
+Items:
+- Groceries: $45.50
+- Household supplies: $28.30
+- Tax: $5.91
+
+Total: $79.71 USD
+Payment Method: Credit Card (****1234)
+
+Thank you for shopping with us!`;
+
+  const buffer = await createPdfBuffer(content);
+  writeFileSync(join(FIXTURES_DIR, "sample_receipt.pdf"), buffer);
+}
+
+async function generateNote(): Promise<void> {
+  const content = `MEETING NOTES
+
+Date: 2024-12-15
+Title: Q1 Planning Meeting
+
+Attendees: John Doe, Jane Smith, Bob Johnson
+
+Agenda:
+1. Review Q4 results
+2. Set Q1 objectives
+3. Budget allocation
+
+Key Points:
+- Q4 exceeded targets by 15%
+- Q1 focus: customer acquisition
+- Budget approved: $50,000
+
+Action Items:
+- John: Prepare customer survey (Due: 12/20)
+- Jane: Draft marketing plan (Due: 12/22)
+- Bob: Setup tracking dashboard (Due: 12/25)
+
+Next Meeting: January 5, 2025`;
+
+  const buffer = await createPdfBuffer(content);
+  writeFileSync(join(FIXTURES_DIR, "sample_note.pdf"), buffer);
+}
+
+async function generateResearchPaper(): Promise<void> {
+  const content = `RESEARCH SUMMARY
+
+Title: Event-Sourced Architecture Patterns
+Author: Dr. John Smith
+Publication: Software Engineering Journal
+Date: March 2024
+
+Abstract:
+This paper explores event sourcing patterns in modern distributed systems.
+Event sourcing provides audit trails, temporal queries, and replay capabilities.
+
+Key Findings:
+1. Event sourcing enables complete audit history
+2. CQRS complements event sourcing well
+3. Snapshots optimize read performance
+4. Schema evolution requires careful planning
+
+Conclusion:
+Event sourcing is valuable for systems requiring strong auditability
+and temporal reasoning capabilities.
+
+Topics: architecture, event-sourcing, CQRS, distributed-systems`;
+
+  const buffer = await createPdfBuffer(content);
+  writeFileSync(join(FIXTURES_DIR, "sample_research.pdf"), buffer);
+}
+
+async function generateMealLog(): Promise<void> {
+  const content = `MEAL LOG
+
+Date: 2024-12-18
+
+Breakfast (8:00 AM):
+- Oatmeal with berries: 350 calories
+- Coffee: 5 calories
+- Protein: 12g, Carbs: 65g, Fat: 8g
+
+Lunch (1:00 PM):
+- Grilled chicken salad: 450 calories
+- Whole grain bread: 150 calories
+- Protein: 45g, Carbs: 35g, Fat: 15g
+
+Dinner (7:00 PM):
+- Salmon with vegetables: 550 calories
+- Brown rice: 200 calories
+- Protein: 50g, Carbs: 45g, Fat: 20g
+
+Total Daily:
+- Calories: 1705
+- Protein: 107g
+- Carbs: 145g
+- Fat: 43g
+
+Notes: Felt energized throughout the day`;
+
+  const buffer = await createPdfBuffer(content);
+  writeFileSync(join(FIXTURES_DIR, "sample_meal.pdf"), buffer);
+}
+
+async function generateExerciseLog(): Promise<void> {
+  const content = `EXERCISE LOG
+
+Date: 2024-12-18
+Workout: Full Body Circuit
+
+Exercises:
+1. Squats: 3 sets x 15 reps
+2. Push-ups: 3 sets x 20 reps
+3. Pull-ups: 3 sets x 10 reps
+4. Planks: 3 sets x 60 seconds
+
+Duration: 45 minutes
+Intensity: High
+Primary Muscles: legs, chest, back, core
+Secondary Muscles: shoulders, arms
+
+Notes:
+- Felt strong today
+- Increased squat weight by 5 lbs
+- Heart rate avg: 145 bpm`;
+
+  const buffer = await createPdfBuffer(content);
+  writeFileSync(join(FIXTURES_DIR, "sample_exercise.pdf"), buffer);
+}
+
 async function main(): Promise<void> {
   mkdirSync(FIXTURES_DIR, { recursive: true });
 
@@ -172,6 +308,16 @@ async function main(): Promise<void> {
   console.log("✓ sample_holding_statement.pdf");
   await generateContract();
   console.log("✓ sample_contract.pdf");
+  await generateReceipt();
+  console.log("✓ sample_receipt.pdf");
+  await generateNote();
+  console.log("✓ sample_note.pdf");
+  await generateResearchPaper();
+  console.log("✓ sample_research.pdf");
+  await generateMealLog();
+  console.log("✓ sample_meal.pdf");
+  await generateExerciseLog();
+  console.log("✓ sample_exercise.pdf");
   console.log("\nAll PDF fixtures generated successfully!");
 }
 

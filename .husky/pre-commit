@@ -1,6 +1,30 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+# Type check (MANDATORY - catches type errors before tests)
+echo "Running type check..."
+npm run type-check || exit 1
+
+# Lint check (MANDATORY - catches code style issues)
+echo "Running linter..."
+npm run lint || exit 1
+
+# Unit tests (MANDATORY - catches logic errors)
+echo "Running unit tests..."
+npm test || exit 1
+
+# Integration tests (if backend/DB files changed)
+if git diff --cached --name-only | grep -E "(src/|tests/integration|supabase/migrations)" > /dev/null; then
+  echo "Running integration tests..."
+  npm run test:integration || exit 1
+fi
+
+# E2E tests (if frontend/UI files changed)
+if git diff --cached --name-only | grep -E "(frontend/|playwright/)" > /dev/null; then
+  echo "Running E2E tests..."
+  npm run test:e2e || exit 1
+fi
+
 # Validate Playwright coverage map
 npm run validate:coverage
 

@@ -1,0 +1,44 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Market efficiency is limited",
+    "categories": "finance,economics",
+    "confidence_level": "high",
+    "asset_types": "stocks,bonds",
+    "date": "2024-01-15",
+    "notes": "Behavioral factors create consistent inefficiencies"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Long-term value investing works",
+    "categories": "finance,investing",
+    "confidence_level": "medium",
+    "asset_types": "stocks",
+    "date": "2024-06-20",
+    "events": "market_research_2024",
+    "notes": "Historical evidence supports this approach"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Diversification reduces risk",
+    "categories": "finance,risk-management",
+    "confidence_level": "high",
+    "asset_types": "stocks,bonds,real-estate",
+    "date": "2024-03-10",
+    "notes": "Empirically validated principle"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal belief",
+    "confidence_level": "low"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Privacy is a fundamental right",
+    "categories": "privacy,ethics,technology",
+    "confidence_level": "high",
+    "date": "2024-02-01",
+    "events": "gdpr_implementation,privacy_research",
+    "notes": "Core principle for product design"
+  }
+]

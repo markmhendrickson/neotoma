@@ -3,14 +3,12 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import multer from "multer";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { supabase } from "./db.js";
 import { config } from "./config.js";
-import {
-  listCanonicalRecordTypes,
-  normalizeRecordType,
-} from "./config/record_types.js";
+import { listCanonicalRecordTypes, normalizeRecordType } from "./config/record_types.js";
 import { generateEmbedding, getRecordText } from "./embeddings.js";
 import fs from "fs";
 import path from "path";
@@ -27,22 +25,17 @@ import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
 import { initServerKeys } from "./services/encryption_service.js";
 import { isCsvLike, parseCsvRows } from "./utils/csv.js";
-import {
-  emitRecordCreated,
-  emitRecordUpdated,
-  emitRecordDeleted,
-} from "./events/event_emitter.js";
+import { emitRecordCreated, emitRecordUpdated, emitRecordDeleted } from "./events/event_emitter.js";
 import { getEventsByRecordId } from "./events/event_log.js";
 import { getRecordAtTimestamp } from "./events/replay.js";
-import {
-  rankSearchResults,
-  sortRecordsDeterministically,
-} from "./services/search.js";
+import { rankSearchResults, sortRecordsDeterministically } from "./services/search.js";
 import { createObservationsFromRecord } from "./services/observation_ingestion.js";
-import {
-  serializeChatMessagesForOpenAI,
-  type ChatMessage,
-} from "./utils/chat.js";
+import { serializeChatMessagesForOpenAI, type ChatMessage } from "./utils/chat.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { NeotomaServer } from "./server.js";
+import { logger } from "./utils/logger.js";
+import { OAuthError } from "./services/mcp_oauth_errors.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 export const app = express();
@@ -53,12 +46,7 @@ app.use(
       useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: [
-          "'self'",
-          "'unsafe-inline'",
-          "https://cdn.jsdelivr.net",
-          "https://unpkg.com",
-        ],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://unpkg.com"],
         connectSrc: ["'self'", "http:", "https:"],
         imgSrc: ["'self'", "data:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com"],
@@ -68,12 +56,197 @@ app.use(
     },
   })
 );
-app.use(cors());
+// Configure CORS to allow frontend origin
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || "http://localhost:5195",
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  exposedHeaders: ["Content-Type"],
+  optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
+};
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
+// Rate limiters for OAuth endpoints
+const oauthInitiateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5, // 5 requests per minute
+  message: "Too many OAuth initiation requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const oauthCallbackLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 requests per minute
+  message: "Too many OAuth callback requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const oauthTokenLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // 20 requests per minute
+  message: "Too many token requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
+
+// ============================================================================
+// OAuth discovery (RFC 8414 / MCP Authorization) for Cursor and other clients
+// ============================================================================
+
+app.get("/.well-known/oauth-authorization-server", (req, res) => {
+  const base = config.apiBase;
+  res.setHeader("Content-Type", "application/json");
+  res.json({
+    issuer: base,
+    authorization_endpoint: `${base}/api/mcp/oauth/authorize`,
+    token_endpoint: `${base}/api/mcp/oauth/token`,
+    scopes_supported: ["openid", "email"],
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    grant_types_supported: ["authorization_code"],
+  });
+});
+
+app.get("/.well-known/oauth-protected-resource", (req, res) => {
+  // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
+  // This may be required for Cursor to show Connect button
+  const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined;
+  if (!authHeader?.startsWith("Bearer ")) {
+    res.setHeader(
+      "WWW-Authenticate",
+      `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`
+    );
+    return res.status(401).json({
+      error: "Unauthorized: Authentication required",
+    });
+  }
+
+  res.setHeader("Content-Type", "application/json");
+  res.json({
+    authorization_servers: [config.apiBase],
+  });
+});
+
+// Server info endpoint (no-auth) - exposes server port for MCP configuration
+app.get("/api/server-info", (_req, res) => {
+  const httpPort = process.env.HTTP_PORT
+    ? parseInt(process.env.HTTP_PORT, 10)
+    : config.httpPort || 8080;
+  res.json({
+    httpPort,
+    apiBase: config.apiBase,
+    mcpUrl: `${config.apiBase}/mcp`,
+  });
+});
+
+// ============================================================================
+// MCP StreamableHTTP Endpoint (OAuth-enabled MCP transport)
+// ============================================================================
+
+// Store MCP transports by session ID
+const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
+let mcpServerInstance: NeotomaServer | null = null;
+
+// MCP StreamableHTTP endpoint (GET, POST, DELETE)
+// This endpoint enables Cursor's "Connect" button for OAuth authentication
+app.all("/mcp", async (req, res) => {
+  try {
+    const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+    // Check for authentication BEFORE processing MCP requests
+    // Return 401 with WWW-Authenticate header to trigger Cursor's Connect button
+    // This matches oauth-repro pattern: 401 at HTTP layer before MCP handler
+    // Return 401 on ALL unauthenticated requests (GET, POST, DELETE), not just initialize
+    // Cursor may check auth on the initial GET request (SSE connection) first
+    // CRITICAL: Return 401 whenever auth is missing, even if session exists
+    // This ensures 401 is returned "on first protected call" as required by troubleshooting guide
+    const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined;
+    const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+    const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader);
+
+    // Return 401 if: no auth (regardless of session existence)
+    // This matches oauth-repro's app.all("/mcp*", ...) pattern
+    // After OAuth, Cursor will send Bearer token or connection_id, so we allow through
+    // Fix: Changed from (!sessionId && !hasAuth) to (!hasAuth) to ensure 401 on first protected call
+    // even if Cursor establishes a session first (via GET for SSE)
+    if (!hasAuth) {
+      const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`;
+      res.setHeader("WWW-Authenticate", wwwAuthHeader);
+
+      // For POST requests with JSON-RPC body, return JSON-RPC error format
+      if (req.method === "POST" && req.body && typeof req.body === "object") {
+        return res.status(401).json({
+          jsonrpc: "2.0",
+          error: {
+            code: -32001,
+            message: "Unauthorized: Authentication required",
+          },
+          id: req.body?.id ?? null,
+        });
+      }
+      // For GET/DELETE requests, return simple 401
+      return res.status(401).json({
+        error: "Unauthorized: Authentication required",
+      });
+    }
+
+    // Get or create transport
+    let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
+
+    if (!transport && req.method === "POST" && isInitializeRequest(req.body)) {
+      // Create new transport for initialization
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sid) => {
+          if (transport) {
+            mcpTransports.set(sid, transport);
+            logger.error(`[MCP HTTP] Session initialized: ${sid}`);
+          }
+        },
+      });
+
+      transport.onclose = () => {
+        if (transport?.sessionId) {
+          mcpTransports.delete(transport.sessionId);
+          logger.error(`[MCP HTTP] Session closed: ${transport.sessionId}`);
+        }
+      };
+
+      // Create new server instance for each session to ensure clean auth state
+      // This ensures OAuth flow is required for each new connection
+      mcpServerInstance = new NeotomaServer();
+
+      // Connect transport to server
+      await mcpServerInstance.runHTTP(transport);
+    } else if (!transport) {
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Bad Request: No valid session ID provided" },
+        id: null,
+      });
+    }
+
+    // Handle request with the transport
+    await transport.handleRequest(req, res, req.body);
+  } catch (error: any) {
+    logger.error("[MCP HTTP] Request error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error" },
+        id: null,
+      });
+    }
+  }
+});
 
 // Basic redaction helpers for safer debug logs
 const SENSITIVE_FIELDS = new Set([
@@ -97,9 +270,7 @@ const SENSITIVE_FIELDS = new Set([
 const CANONICAL_RECORD_TYPES = listCanonicalRecordTypes();
 const CANONICAL_RECORD_TYPE_IDS = CANONICAL_RECORD_TYPES.map((def) => def.id);
 
-function redactHeaders(
-  headers: Record<string, unknown>
-): Record<string, unknown> {
+function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...headers } as Record<string, unknown>;
   if (clone.authorization) clone.authorization = "[REDACTED]";
   if (clone.Authorization) clone.Authorization = "[REDACTED]";
@@ -127,11 +298,7 @@ function redactSensitiveFields(obj: unknown): unknown {
   return redacted;
 }
 
-function logDebug(
-  event: string,
-  req: express.Request,
-  extra?: Record<string, unknown>
-): void {
+function logDebug(event: string, req: express.Request, extra?: Record<string, unknown>): void {
   const safe = {
     method: req.method,
     path: req.path,
@@ -144,11 +311,7 @@ function logDebug(
   console.debug(`[DEBUG] ${event}`, safe);
 }
 
-function logWarn(
-  event: string,
-  req: express.Request,
-  extra?: Record<string, unknown>
-): void {
+function logWarn(event: string, req: express.Request, extra?: Record<string, unknown>): void {
   const safe = {
     method: req.method,
     path: req.path,
@@ -183,24 +346,401 @@ function logError(
   console.error(`[ERROR] ${event}`, payload);
 }
 
-
-
 // Public health endpoint (no auth)
 app.get("/health", (_req, res) => {
   return res.json({ ok: true });
 });
 
+// ============================================================================
+// MCP OAuth Endpoints
+// ============================================================================
+
+// Initiate MCP OAuth flow
+app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
+  try {
+    const { connection_id, client_name } = req.body;
+
+    if (!connection_id || typeof connection_id !== "string") {
+      return res.status(400).json({ error: "connection_id is required" });
+    }
+
+    const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
+    const result = await initiateOAuthFlow(
+      connection_id,
+      client_name,
+      `${config.apiBase}/api/mcp/oauth/callback`
+    );
+
+    return res.json(result);
+  } catch (error: any) {
+    logError("MCPOAuthInitiate", req, error);
+
+    // Check if it's a structured OAuthError
+    if (error instanceof OAuthError) {
+      const oauthError = error as {
+        code: string;
+        message: string;
+        statusCode: number;
+        retryable?: boolean;
+        details?: Record<string, any>;
+      };
+
+      return res.status(oauthError.statusCode).json({
+        error_code: oauthError.code,
+        error: oauthError.message,
+        message: oauthError.message,
+        retryable: oauthError.retryable || false,
+        details: oauthError.details,
+        timestamp: new Date().toISOString(),
+        ...(oauthError.code === "OAUTH_CLIENT_REGISTRATION_FAILED" && {
+          hint: "Enable 'Allow Dynamic OAuth Apps' in Supabase Dashboard > Authentication > OAuth Server, or set SUPABASE_OAUTH_CLIENT_ID in .env file",
+        }),
+      });
+    }
+
+    // Fallback for non-OAuth errors
+    const isConfigError =
+      error.message?.includes("client_id not configured") ||
+      error.message?.includes("SUPABASE_OAUTH_CLIENT_ID");
+    const statusCode = isConfigError ? 400 : 500;
+
+    return res.status(statusCode).json({
+      error_code: isConfigError ? "OAUTH_CLIENT_REGISTRATION_FAILED" : "INTERNAL_ERROR",
+      error: error.message,
+      message: error.message,
+      timestamp: new Date().toISOString(),
+      ...(isConfigError && {
+        hint: "Enable 'Allow Dynamic OAuth Apps' in Supabase Dashboard, or set SUPABASE_OAUTH_CLIENT_ID in .env file",
+      }),
+    });
+  }
+});
+
+// OAuth callback endpoint
+app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
+  try {
+    const { code, state } = req.query;
+
+    if (!code || !state || typeof code !== "string" || typeof state !== "string") {
+      return res.status(400).send("Missing code or state parameter");
+    }
+
+    const { handleOAuthCallback } = await import("./services/mcp_oauth.js");
+    const { connectionId, redirectUri, clientState } = await handleOAuthCallback(code, state);
+
+    // If client used Cursor (or other protocol) redirect_uri, return code+state there
+    if (redirectUri && redirectUri.startsWith("cursor://")) {
+      const params = new URLSearchParams({ code: connectionId, state: clientState ?? state });
+      return res.redirect(`${redirectUri}?${params.toString()}`);
+    }
+
+    // Default: redirect to frontend success page
+    const successUrl = `${process.env.FRONTEND_URL || "http://localhost:5195"}/oauth?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+    return res.redirect(successUrl);
+  } catch (error: any) {
+    logError("MCPOAuthCallback", req, error);
+
+    // Extract structured error information
+    let errorCode = "OAUTH_TOKEN_EXCHANGE_FAILED";
+    let errorMessage = error.message || "OAuth callback failed";
+    let errorDetails: string | undefined;
+
+    if (error instanceof OAuthError) {
+      errorCode = error.code;
+      errorMessage = error.message;
+      if (error.details) {
+        errorDetails = JSON.stringify(error.details);
+      }
+    }
+
+    // Build error URL with structured error information
+    const params = new URLSearchParams({
+      status: "error",
+      error_code: errorCode,
+      error: errorMessage,
+    });
+    if (errorDetails) {
+      params.set("error_details", errorDetails);
+    }
+
+    const errorUrl = `${process.env.FRONTEND_URL || "http://localhost:5195"}/oauth?${params.toString()}`;
+    return res.redirect(errorUrl);
+  }
+});
+
+// RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
+app.get("/api/mcp/oauth/authorize", async (req, res) => {
+  try {
+    const redirect_uri = req.query.redirect_uri as string | undefined;
+    const state = req.query.state as string | undefined;
+    const code_challenge = req.query.code_challenge as string | undefined;
+    const code_challenge_method = req.query.code_challenge_method as string | undefined;
+    const client_id = req.query.client_id as string | undefined;
+
+    if (!redirect_uri) {
+      return res.status(400).send("redirect_uri is required");
+    }
+    if (!state) {
+      return res.status(400).send("state is required");
+    }
+    if (!code_challenge || code_challenge_method !== "S256") {
+      return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
+    }
+
+    const { randomUUID } = await import("node:crypto");
+    const connectionId = randomUUID();
+    const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
+    const result = await initiateOAuthFlow(
+      connectionId,
+      client_id ?? undefined,
+      redirect_uri,
+      state
+    );
+
+    return res.redirect(result.authUrl);
+  } catch (error: any) {
+    logError("MCPOAuthAuthorize", req, error);
+    return res.status(500).send(error.message ?? "Authorization failed");
+  }
+});
+
+// RFC 8414 token endpoint (POST) for Cursor and other OAuth clients
+app.post("/api/mcp/oauth/token", oauthTokenLimit, express.urlencoded({ extended: true }), async (req, res) => {
+  try {
+    const grant_type = req.body?.grant_type;
+    const code = req.body?.code;
+    const redirect_uri = req.body?.redirect_uri;
+
+    if (grant_type !== "authorization_code") {
+      return res.status(400).json({
+        error: "unsupported_grant_type",
+        error_description: "Only authorization_code is supported",
+      });
+    }
+    if (!code || typeof code !== "string") {
+      return res
+        .status(400)
+        .json({ error: "invalid_request", error_description: "code is required" });
+    }
+
+    const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
+    const token = await getTokenResponseForConnection(code);
+
+    res.setHeader("Content-Type", "application/json");
+    return res.json(token);
+  } catch (error: any) {
+    logError("MCPOAuthToken", req, error);
+    return res.status(400).json({
+      error: "invalid_grant",
+      error_description: error.message ?? "Token exchange failed",
+    });
+  }
+});
+
+// Get connection status
+app.get("/api/mcp/oauth/status", async (req, res) => {
+  try {
+    const { connection_id } = req.query;
+
+    if (!connection_id || typeof connection_id !== "string") {
+      return res.status(400).json({ error: "connection_id is required" });
+    }
+
+    const { getConnectionStatus } = await import("./services/mcp_oauth.js");
+    const status = await getConnectionStatus(connection_id);
+
+    return res.json({ status, connection_id });
+  } catch (error: any) {
+    logError("MCPOAuthStatus", req, error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// List user's MCP connections (authenticated)
+app.get("/api/mcp/oauth/connections", async (req, res) => {
+  try {
+    // Extract bearer token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Authorization header required" });
+    }
+
+    const token = authHeader.substring(7);
+
+    // Validate token and get user
+    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
+    const { userId } = await validateSupabaseSessionToken(token);
+
+    // List connections
+    const { listConnections } = await import("./services/mcp_oauth.js");
+    const connections = await listConnections(userId);
+
+    return res.json({ connections });
+  } catch (error: any) {
+    logError("MCPOAuthListConnections", req, error);
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+});
+
+// Revoke MCP connection (authenticated)
+app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
+  try {
+    // Extract bearer token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Authorization header required" });
+    }
+
+    const token = authHeader.substring(7);
+    const { connection_id } = req.params;
+
+    // Validate token and get user
+    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
+    const { userId } = await validateSupabaseSessionToken(token);
+
+    // Revoke connection
+    const { revokeConnection } = await import("./services/mcp_oauth.js");
+    await revokeConnection(connection_id, userId);
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    logError("MCPOAuthRevokeConnection", req, error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Dev-only endpoint to sign in as a specific user (for development/testing)
+app.post("/api/auth/dev-signin", async (req, res) => {
+  // Only allow in development mode
+  if (config.environment !== "development") {
+    return res.status(403).json({ error: "Dev signin only available in development mode" });
+  }
+
+  const { userId } = req.body;
+
+  if (!userId || typeof userId !== "string") {
+    return res.status(400).json({ error: "userId is required" });
+  }
+
+  // Check if userId is nil UUID - Supabase doesn't allow nil UUIDs
+  const isNilUuid = userId === "00000000-0000-0000-0000-000000000000";
+
+  try {
+    let targetUserId = userId;
+    let userEmail = `dev-${userId}@neotoma.local`;
+
+    // Check if user exists (only if not nil UUID, as nil UUID lookup will fail)
+    if (!isNilUuid) {
+      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+
+      if (!userError && userData.user) {
+        // User exists, use it
+        targetUserId = userData.user.id;
+        userEmail = userData.user.email || userEmail;
+      } else {
+        // User doesn't exist, create them with specified ID
+        const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+          id: userId,
+          email: userEmail,
+          email_confirm: true,
+        });
+
+        if (createError) {
+          logError("DevSigninCreateUser", req, createError);
+          return res
+            .status(500)
+            .json({ error: `Failed to create dev user: ${createError.message}` });
+        }
+
+        targetUserId = newUser.user.id;
+        userEmail = newUser.user.email || userEmail;
+      }
+    } else {
+      // For nil UUID, create user without specifying ID (let Supabase generate it)
+      // First check if a dev user with this email already exists
+      const { data: existingUsers } = await supabase.auth.admin.listUsers();
+      const existingDevUser = existingUsers?.users?.find(
+        (u) => u.email === userEmail || u.email?.startsWith("dev-00000000")
+      );
+
+      if (existingDevUser) {
+        // Use existing dev user
+        targetUserId = existingDevUser.id;
+        userEmail = existingDevUser.email || userEmail;
+      } else {
+        // Create new user without specifying ID (Supabase will generate a valid UUID)
+        const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+          email: userEmail,
+          email_confirm: true,
+        });
+
+        if (createError) {
+          logError("DevSigninCreateUser", req, createError);
+          return res
+            .status(500)
+            .json({ error: `Failed to create dev user: ${createError.message}` });
+        }
+
+        targetUserId = newUser.user.id;
+        userEmail = newUser.user.email || userEmail;
+      }
+    }
+
+    // Generate a magic link to get an access token
+    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
+      type: "magiclink",
+      email: userEmail,
+      options: {
+        redirectTo: "http://localhost:5173",
+      },
+    });
+
+    if (linkError) {
+      logError("DevSigninGenerateLink", req, linkError);
+      return res.status(500).json({ error: `Failed to generate link: ${linkError.message}` });
+    }
+
+    // Extract access token from the magic link URL
+    const magicLink = linkData.properties.action_link;
+    const url = new URL(magicLink);
+    const accessToken = url.hash.includes("access_token=")
+      ? url.hash.split("access_token=")[1]?.split("&")[0]
+      : url.searchParams.get("access_token");
+
+    if (!accessToken) {
+      return res.status(500).json({ error: "Could not extract access token from magic link" });
+    }
+
+    // Get refresh token from URL as well
+    const refreshToken = url.hash.includes("refresh_token=")
+      ? url.hash.split("refresh_token=")[1]?.split("&")[0]
+      : url.searchParams.get("refresh_token");
+
+    return res.json({
+      userId: targetUserId,
+      accessToken,
+      refreshToken: refreshToken || undefined,
+    });
+  } catch (error) {
+    logError("DevSignin", req, error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to sign in as dev user",
+    });
+  }
+});
+
 // Public key-based authentication middleware
 app.use(async (req, res, next) => {
-  // Bypass auth for public endpoints
+  // Bypass auth only for truly public endpoints (no user data)
   if (
     req.method === "OPTIONS" ||
-    (req.method === "GET" &&
-      (req.path === "/openapi.yaml" ||
-        req.path === "/health"))
+    (req.method === "GET" && (req.path === "/openapi.yaml" || req.path === "/health")) ||
+    (req.method === "POST" && req.path === "/api/auth/dev-signin")
   ) {
     return next();
   }
+
+  // All data endpoints require authentication
 
   const headerAuth = req.headers.authorization || "";
 
@@ -211,45 +751,111 @@ app.use(async (req, res, next) => {
 
   const bearerToken = headerAuth.slice("Bearer ".length).trim();
 
-  // Bearer token is now base64url-encoded Ed25519 public key
-  // Auto-register if not exists (first-time user)
+  // Try to validate as Ed25519 bearer token first
   const registered = ensurePublicKeyRegistered(bearerToken);
-  if (!registered) {
-    logWarn("AuthInvalidTokenFormat", req, {
-      bearerTokenLength: bearerToken.length,
-    });
-    return res.status(403).json({
-      error:
-        "Invalid bearer token format (must be base64url-encoded Ed25519 public key)",
-    });
-  }
+  let isEd25519Valid = false;
 
-  if (!isBearerTokenValid(bearerToken)) {
-    logWarn("AuthInvalidToken", req);
-    return res.status(403).json({ error: "Invalid bearer token (public key)" });
-  }
+  if (registered && isBearerTokenValid(bearerToken)) {
+    isEd25519Valid = true;
 
-  // Optional: Verify signature if provided
-  const { signature } = parseAuthHeader(headerAuth);
-  if (signature && req.body) {
-    const bodyString =
-      typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-    const isValid = verifyRequest(bodyString, signature, bearerToken);
-    if (!isValid) {
-      logWarn("AuthInvalidSignature", req);
-      return res.status(403).json({ error: "Invalid request signature" });
+    // Optional: Verify signature if provided
+    const { signature } = parseAuthHeader(headerAuth);
+    if (signature && req.body) {
+      const bodyString = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
+      const isValid = verifyRequest(bodyString, signature, bearerToken);
+      if (!isValid) {
+        logWarn("AuthInvalidSignature", req);
+        return res.status(403).json({ error: "Invalid request signature" });
+      }
+    }
+
+    // Attach public key to request for encryption service
+    (req as any).publicKey = getPublicKey(bearerToken);
+    (req as any).bearerToken = bearerToken;
+  } else {
+    // Try to validate as Supabase session token
+    try {
+      const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
+      const validated = await validateSupabaseSessionToken(bearerToken);
+      // Attach user_id to request for user-scoped queries
+      (req as any).authenticatedUserId = validated.userId;
+      (req as any).bearerToken = bearerToken;
+    } catch (authError) {
+      // Not a valid token
+      logWarn("AuthInvalidToken", req, {
+        error: authError instanceof Error ? authError.message : String(authError),
+      });
+      return res.status(401).json({ error: "Unauthorized - invalid authentication token" });
     }
   }
-
-  // Attach public key to request for encryption service
-  (req as any).publicKey = getPublicKey(bearerToken);
-  (req as any).bearerToken = bearerToken;
 
   return next();
 });
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+
+/**
+ * Helper to extract authenticated user_id from request
+ * Supports both Ed25519 bearer tokens (requires user_id in body/query) and Supabase session tokens
+ * @param req - Express request object
+ * @param providedUserId - Optional user_id from request body/query
+ * @returns Authenticated user_id
+ * @throws Error if not authenticated or user_id mismatch
+ */
+async function getAuthenticatedUserId(
+  req: express.Request,
+  providedUserId?: string
+): Promise<string> {
+  const headerAuth = req.headers.authorization || "";
+
+  if (!headerAuth.startsWith("Bearer ")) {
+    throw new Error("Not authenticated - missing Bearer token");
+  }
+
+  const token = headerAuth.slice("Bearer ".length).trim();
+
+  // Check if Supabase session token (already validated in middleware)
+  const authenticatedUserId = (req as any).authenticatedUserId;
+  if (authenticatedUserId) {
+    // Validate provided user_id matches authenticated user
+    if (providedUserId && providedUserId !== authenticatedUserId) {
+      throw new Error(
+        `user_id parameter (${providedUserId}) does not match authenticated user (${authenticatedUserId})`
+      );
+    }
+    return authenticatedUserId;
+  }
+
+  // Ed25519 bearer token - user_id must be provided
+  if (!providedUserId) {
+    throw new Error("user_id required when using Ed25519 bearer token");
+  }
+
+  // For Ed25519 tokens, we trust the provided user_id (token validation happens in middleware)
+  return providedUserId;
+}
+
+/**
+ * Helper to handle errors in API endpoints, including authentication errors
+ */
+function handleApiError(
+  req: express.Request,
+  res: express.Response,
+  error: unknown,
+  defaultMessage: string,
+  logContext?: string
+): express.Response {
+  if (error instanceof Error && error.message.includes("Not authenticated")) {
+    return res.status(401).json({ error: error.message });
+  }
+  if (error instanceof Error && error.message.includes("user_id parameter")) {
+    return res.status(403).json({ error: error.message });
+  }
+  logError(logContext || "APIError", req, error);
+  const message = error instanceof Error ? error.message : defaultMessage;
+  return res.status(500).json({ error: message });
+}
 
 // Schemas
 const StoreSchema = z.object({
@@ -272,10 +878,7 @@ const RetrieveSchema = z.object({
   properties: z.record(z.unknown()).optional(),
   limit: z.number().int().positive().max(500).optional(),
   search: z.array(z.string()).optional(),
-  search_mode: z
-    .enum(["semantic", "keyword", "both"])
-    .optional()
-    .default("both"),
+  search_mode: z.enum(["semantic", "keyword", "both"]).optional().default("both"),
   similarity_threshold: z.number().min(0).max(1).optional().default(0.3),
   query_embedding: z.array(z.number()).optional(),
   ids: z.array(z.string().uuid()).min(1).max(100).optional(),
@@ -290,13 +893,9 @@ const DeleteRecordsSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
 });
 
-
 // Endpoints
 app.get("/types", async (req, res) => {
-  const { data, error } = await supabase
-    .from("records")
-    .select("type")
-    .limit(1000);
+  const { data, error } = await supabase.from("records").select("type").limit(1000);
   if (error) {
     logError("SupabaseError:types", req, error);
     return res.status(500).json({ error: error.message });
@@ -315,20 +914,19 @@ app.get("/types", async (req, res) => {
   });
 });
 
-
-
 // ============================================================================
 // v0.2.15 Entity-Based HTTP API Endpoints
 // ============================================================================
 
 // POST /api/entities/query - Query entities with filters
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
 app.post("/api/entities/query", async (req, res) => {
   const schema = z.object({
     entity_type: z.string().optional(),
     search: z.string().optional(),
     limit: z.number().optional().default(100),
     offset: z.number().optional().default(0),
-    user_id: z.string().uuid().optional(), // Optional for authenticated requests
+    user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id if not provided
   });
 
   const parsed = schema.safeParse(req.body);
@@ -340,19 +938,16 @@ app.post("/api/entities/query", async (req, res) => {
   }
 
   try {
-    const { entity_type, search, limit, offset, user_id } = parsed.data;
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    // Build query
-    let query = supabase
-      .from("entities")
-      .select("*", { count: "exact" });
+    const { entity_type, search, limit, offset } = parsed.data;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase.from("entities").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     if (entity_type) {
       query = query.eq("entity_type", entity_type);
-    }
-
-    if (user_id) {
-      query = query.eq("user_id", user_id);
     }
 
     // Exclude merged entities
@@ -377,14 +972,690 @@ app.post("/api/entities/query", async (req, res) => {
       offset,
     });
   } catch (error) {
-    logError("APIError:entities_query", req, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to query entities";
+    return handleApiError(req, res, error, "Failed to query entities", "APIError:entities_query");
+  }
+});
+
+// GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
+// REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
+app.get("/api/entities/:id", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req);
+
+    // Verify entity exists and belongs to authenticated user
+    const { data: entity, error: entityError } = await supabase
+      .from("entities")
+      .select("id, user_id")
+      .eq("id", entityId)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    if (entityError || !entity) {
+      return res.status(404).json({ error: "Entity not found" });
+    }
+
+    const { getEntityWithProvenance } = await import("./services/entity_queries.js");
+    const entityWithProvenance = await getEntityWithProvenance(entityId);
+
+    if (!entityWithProvenance) {
+      return res.status(404).json({ error: "Entity not found" });
+    }
+
+    return res.json(entityWithProvenance);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return res.status(401).json({ error: error.message });
+    }
+    logError("APIError:entity_detail", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get entity";
     return res.status(500).json({ error: message });
   }
 });
 
+// GET /api/entities/:id/observations - Get observations for entity (FU-601)
+// REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
+app.get("/api/entities/:id/observations", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req);
+
+    // Verify entity exists and belongs to authenticated user
+    const { data: entity, error: entityError } = await supabase
+      .from("entities")
+      .select("id")
+      .eq("id", entityId)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    if (entityError || !entity) {
+      return res.status(404).json({ error: "Entity not found" });
+    }
+
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Get observations for this entity - filter by user_id for security
+    const { data, error, count } = await supabase
+      .from("observations")
+      .select("*", { count: "exact" })
+      .eq("entity_id", entityId)
+      .eq("user_id", userId) // SECURITY: Only return observations for authenticated user
+      .order("observed_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    return res.json({
+      observations: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return res.status(401).json({ error: error.message });
+    }
+    logError("APIError:entity_observations", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get observations";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/entities/:id/relationships - Get relationships for entity (FU-601)
+// REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
+app.get("/api/entities/:id/relationships", async (req, res) => {
+  try {
+    const entityId = req.params.id;
+
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req);
+
+    // Verify entity exists and belongs to authenticated user
+    const { data: entity, error: entityError } = await supabase
+      .from("entities")
+      .select("id")
+      .eq("id", entityId)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    if (entityError || !entity) {
+      return res.status(404).json({ error: "Entity not found" });
+    }
+
+    // Get relationships where this entity is the source - filter by user_id
+    const { data: outgoing, error: outgoingError } = await supabase
+      .from("relationship_snapshots")
+      .select("*")
+      .eq("source_entity_id", entityId)
+      .eq("user_id", userId); // SECURITY: Only return relationships for authenticated user
+
+    if (outgoingError) throw outgoingError;
+
+    // Get relationships where this entity is the target - filter by user_id
+    const { data: incoming, error: incomingError } = await supabase
+      .from("relationship_snapshots")
+      .select("*")
+      .eq("target_entity_id", entityId)
+      .eq("user_id", userId); // SECURITY: Only return relationships for authenticated user
+
+    if (incomingError) throw incomingError;
+
+    // Add id field for frontend compatibility (use relationship_key)
+    const formatRelationships = (rels: any[]) =>
+      (rels || []).map((rel: any) => ({
+        ...rel,
+        id: rel.relationship_key,
+      }));
+
+    return res.json({
+      outgoing: formatRelationships(outgoing),
+      incoming: formatRelationships(incoming),
+    });
+  } catch (error) {
+    logError("APIError:entity_relationships", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get relationships";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/schemas - List all schemas (FU-XXX)
+// REQUIRES AUTHENTICATION - returns global schemas + user-specific schemas for authenticated user
+app.get("/api/schemas", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    // For Ed25519 tokens, user_id may be in query params; for Supabase tokens, it's extracted from token
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const keyword = req.query.keyword as string | undefined;
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+
+    // Get schemas - listEntityTypes will return global + user-specific schemas
+    // The service should filter by user_id, but for now we'll filter in the endpoint
+    const allSchemas = await schemaRegistry.listEntityTypes(keyword);
+
+    // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
+    // Note: listEntityTypes doesn't currently filter by user_id, so we need to query directly
+    const { data: dbSchemas, error: dbError } = await supabase
+      .from("schema_registry")
+      .select("entity_type")
+      .eq("active", true)
+      .or(`user_id.is.null,user_id.eq.${userId}`); // SECURITY: Only global or user's schemas
+
+    if (dbError) throw dbError;
+
+    const allowedEntityTypes = new Set((dbSchemas || []).map((s: any) => s.entity_type));
+    const filteredSchemas = allSchemas.filter((s) => allowedEntityTypes.has(s.entity_type));
+
+    return res.json({
+      schemas: filteredSchemas,
+      total: filteredSchemas.length,
+    });
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to list schemas", "APIError:schemas_list");
+  }
+});
+
+// GET /api/schemas/:entity_type - Get specific schema (FU-XXX)
+app.get("/api/schemas/:entity_type", async (req, res) => {
+  try {
+    const entityType = decodeURIComponent(req.params.entity_type);
+    const { SchemaRegistryService } = await import("./services/schema_registry.js");
+    const schemaRegistry = new SchemaRegistryService();
+
+    // Handle authentication - support both Ed25519 and Supabase session tokens
+    const headerAuth = req.headers.authorization || "";
+    let userId: string | undefined = req.query.user_id as string | undefined;
+
+    if (headerAuth.startsWith("Bearer ")) {
+      const token = headerAuth.slice("Bearer ".length).trim();
+
+      // Try to validate as Ed25519 bearer token first
+      const registered = ensurePublicKeyRegistered(token);
+      if (!registered || !isBearerTokenValid(token)) {
+        // Try to validate as Supabase session token
+        try {
+          const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
+          const validated = await validateSupabaseSessionToken(token);
+          // Use validated user ID if not provided in query
+          userId = userId || validated.userId;
+        } catch (authError) {
+          // Not a valid token - continue without user_id (will try global schema)
+        }
+      }
+      // If Ed25519 token is valid, use user_id from query (Ed25519 tokens don't contain user info)
+    }
+
+    // Try to load active schema (global or user-specific)
+    const schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+
+    if (!schema) {
+      return res.status(404).json({ error: `Schema not found: ${entityType}` });
+    }
+
+    return res.json(schema);
+  } catch (error) {
+    logError("APIError:schema_detail", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get schema";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/relationships - List all relationships with filtering (FU-XXX)
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.get("/api/relationships", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const relationshipType = req.query.relationship_type as string | undefined;
+    const sourceEntityId = req.query.source_entity_id as string | undefined;
+    const targetEntityId = req.query.target_entity_id as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase
+      .from("relationship_snapshots")
+      .select("*", { count: "exact" })
+      .eq("user_id", userId); // SECURITY: Always filter by authenticated user
+
+    if (relationshipType) {
+      query = query.eq("relationship_type", relationshipType);
+    }
+    if (sourceEntityId) {
+      query = query.eq("source_entity_id", sourceEntityId);
+    }
+    if (targetEntityId) {
+      query = query.eq("target_entity_id", targetEntityId);
+    }
+
+    const { data, error, count } = await query
+      .order("last_observation_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) throw error;
+
+    // Get unique entity IDs to fetch entity details
+    const entityIds = new Set<string>();
+    (data || []).forEach((rel: any) => {
+      entityIds.add(rel.source_entity_id);
+      entityIds.add(rel.target_entity_id);
+    });
+
+    // Fetch entity details - filter by user_id for security
+    let entityMap = new Map<string, { canonical_name: string; entity_type: string }>();
+    if (entityIds.size > 0) {
+      const { data: entities, error: entityError } = await supabase
+        .from("entities")
+        .select("id, canonical_name, entity_type")
+        .in("id", Array.from(entityIds))
+        .eq("user_id", userId); // SECURITY: Only return entities for authenticated user
+
+      if (!entityError && entities) {
+        entityMap = new Map(
+          entities.map((e: any) => [
+            e.id,
+            { canonical_name: e.canonical_name, entity_type: e.entity_type },
+          ])
+        );
+      }
+    }
+
+    // Add id field and entity information for frontend compatibility
+    const relationships = (data || []).map((rel: any) => {
+      const sourceEntity = entityMap.get(rel.source_entity_id);
+      const targetEntity = entityMap.get(rel.target_entity_id);
+
+      return {
+        ...rel,
+        id: rel.relationship_key,
+        source_canonical_name: sourceEntity?.canonical_name,
+        source_entity_type: sourceEntity?.entity_type,
+        target_canonical_name: targetEntity?.canonical_name,
+        target_entity_type: targetEntity?.entity_type,
+      };
+    });
+
+    return res.json({
+      relationships,
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list relationships",
+      "APIError:relationships_list"
+    );
+  }
+});
+
+// GET /api/relationships/:id - Get specific relationship (FU-XXX)
+// REQUIRES AUTHENTICATION - verifies relationship belongs to authenticated user
+// Note: id is actually relationship_key (composite key)
+app.get("/api/relationships/:id", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req);
+
+    const relationshipKey = decodeURIComponent(req.params.id);
+
+    // Verify relationship exists and belongs to authenticated user
+    const { data, error } = await supabase
+      .from("relationship_snapshots")
+      .select("*")
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return res.status(404).json({ error: `Relationship not found: ${relationshipKey}` });
+      }
+      throw error;
+    }
+
+    // Fetch entity details - filter by user_id for security
+    const { data: sourceEntity } = await supabase
+      .from("entities")
+      .select("canonical_name, entity_type")
+      .eq("id", data.source_entity_id)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    const { data: targetEntity } = await supabase
+      .from("entities")
+      .select("canonical_name, entity_type")
+      .eq("id", data.target_entity_id)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    // Add id field and entity information for frontend compatibility
+    return res.json({
+      ...data,
+      id: data.relationship_key,
+      source_canonical_name: sourceEntity?.canonical_name,
+      source_entity_type: sourceEntity?.entity_type,
+      target_canonical_name: targetEntity?.canonical_name,
+      target_entity_type: targetEntity?.entity_type,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get relationship",
+      "APIError:relationship_detail"
+    );
+  }
+});
+
+// GET /api/timeline - Get timeline events with filtering (FU-303)
+// REQUIRES AUTHENTICATION - filters events through sources.user_id
+app.get("/api/timeline", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const startDate = req.query.start_date as string | undefined;
+    const endDate = req.query.end_date as string | undefined;
+    const eventType = req.query.event_type as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Get source IDs for this user first (timeline_events doesn't have user_id)
+    const { data: userSources, error: sourcesError } = await supabase
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId);
+
+    if (sourcesError) throw sourcesError;
+
+    const sourceIds = (userSources || []).map((s: any) => s.id);
+
+    // Build query - filter by source_ids that belong to authenticated user
+    let query = supabase.from("timeline_events").select("*", { count: "exact" });
+
+    // SECURITY: Only return events from sources that belong to authenticated user
+    if (sourceIds.length > 0) {
+      query = query.in("source_id", sourceIds);
+    } else {
+      // User has no sources - return empty result
+      return res.json({
+        events: [],
+        total: 0,
+        limit,
+        offset,
+      });
+    }
+
+    // Filter by date range
+    if (startDate) {
+      query = query.gte("event_timestamp", startDate);
+    }
+    if (endDate) {
+      query = query.lte("event_timestamp", endDate);
+    }
+
+    // Filter by event type
+    if (eventType) {
+      query = query.eq("event_type", eventType);
+    }
+
+    // Sort by event timestamp (chronological)
+    query = query.order("event_timestamp", { ascending: false });
+
+    // Pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      // Log detailed error information
+      logError("APIError:timeline_query", req, error, {
+        errorCode: error.code,
+        errorMessage: error.message,
+        errorDetails: error.details,
+        errorHint: error.hint,
+        userId: userId || "none",
+      });
+
+      // Return more detailed error to help with debugging
+      return res.status(500).json({
+        error: "Failed to query timeline events",
+        details: {
+          code: error.code,
+          message: error.message,
+          hint: error.hint,
+        },
+      });
+    }
+
+    return res.json({
+      events: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return res.status(401).json({ error: error.message });
+    }
+    logError("APIError:timeline", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get timeline";
+    // Include error code if available (for Supabase errors)
+    const errorCode = (error as any)?.code;
+    const errorDetails = errorCode ? { code: errorCode, message } : { message };
+    return res.status(500).json({ error: errorDetails });
+  }
+});
+
+// GET /api/sources - Get source list (FU-301)
+app.get("/api/sources", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const search = req.query.search as string | undefined;
+    const mimeType = req.query.mime_type as string | undefined;
+    const sourceType = req.query.source_type as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase.from("sources").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+
+    // Filter by MIME type
+    if (mimeType) {
+      query = query.eq("mime_type", mimeType);
+    }
+
+    // Filter by source type
+    if (sourceType) {
+      query = query.eq("source_type", sourceType);
+    }
+
+    // Search in file names and raw text
+    if (search) {
+      query = query.or(`file_name.ilike.%${search}%,original_filename.ilike.%${search}%`);
+    }
+
+    // Sort by created_at descending (most recent first)
+    query = query.order("created_at", { ascending: false });
+
+    // Pagination
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return res.json({
+      sources: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to get sources", "APIError:sources_list");
+  }
+});
+
+// GET /api/sources/:id - Get source detail (FU-302)
+// REQUIRES AUTHENTICATION - verifies source belongs to authenticated user
+app.get("/api/sources/:id", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req);
+
+    const sourceId = req.params.id;
+
+    // Verify source exists and belongs to authenticated user
+    const { data: source, error } = await supabase
+      .from("sources")
+      .select("*")
+      .eq("id", sourceId)
+      .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
+      .single();
+
+    if (error) {
+      if (error.code === "PGRST116") {
+        return res.status(404).json({ error: "Source not found" });
+      }
+      throw error;
+    }
+
+    if (!source) {
+      return res.status(404).json({ error: "Source not found" });
+    }
+
+    return res.json(source);
+  } catch (error) {
+    return handleApiError(req, res, error, "Failed to get source", "APIError:source_detail");
+  }
+});
+
+// GET /api/interpretations - Get interpretations with filters (FU-302)
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.get("/api/interpretations", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const sourceId = req.query.source_id as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase
+      .from("interpretations")
+      .select("*", { count: "exact" })
+      .eq("user_id", userId); // SECURITY: Always filter by authenticated user
+
+    if (sourceId) {
+      query = query.eq("source_id", sourceId);
+    }
+
+    query = query.order("started_at", { ascending: false });
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return res.json({
+      interpretations: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    logError("APIError:interpretations_list", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get interpretations";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/observations - Get observations with filters (FU-302, FU-601)
+// REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
+app.get("/api/observations", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const sourceId = req.query.source_id as string | undefined;
+    const entityId = req.query.entity_id as string | undefined;
+    const limit = parseInt(req.query.limit as string) || 100;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+
+    if (sourceId) {
+      query = query.eq("source_id", sourceId);
+    }
+
+    if (entityId) {
+      query = query.eq("entity_id", entityId);
+    }
+
+    query = query.order("observed_at", { ascending: false });
+    query = query.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await query;
+
+    if (error) throw error;
+
+    return res.json({
+      observations: data || [],
+      total: count || 0,
+      limit,
+      offset,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get observations",
+      "APIError:observations_list"
+    );
+  }
+});
+
+// GET /api/stats - Get dashboard statistics (FU-305)
+// REQUIRES AUTHENTICATION - all stats filtered by authenticated user_id
+app.get("/api/stats", async (req, res) => {
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    const { getDashboardStats } = await import("./services/dashboard_stats.js");
+    const stats = await getDashboardStats(userId); // SECURITY: Stats filtered by authenticated user
+
+    return res.json(stats);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get dashboard stats",
+      "APIError:dashboard_stats"
+    );
+  }
+});
+
 // POST /api/observations/create - Create observation for entity
+// REQUIRES AUTHENTICATION - validates user_id matches authenticated user
 app.post("/api/observations/create", async (req, res) => {
   const schema = z.object({
     entity_type: z.string(),
@@ -403,34 +1674,33 @@ app.post("/api/observations/create", async (req, res) => {
   }
 
   try {
+    // Get authenticated user_id and validate it matches provided user_id
+    const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     const { entity_type, entity_identifier, fields, source_priority, user_id } = parsed.data;
+
+    // SECURITY: Ensure provided user_id matches authenticated user
+    if (user_id !== authenticatedUserId) {
+      return res.status(403).json({
+        error: `user_id parameter (${user_id}) does not match authenticated user (${authenticatedUserId})`,
+      });
+    }
 
     // Use the ingestStructuredInternal helper from the MCP server
     // For HTTP, we'll implement directly here
     const { createObservationsFromRecord } = await import("./services/observation_ingestion.js");
-    const { generateEntityId, normalizeEntityValue } = await import("./services/entity_resolution.js");
+    const { generateEntityId, normalizeEntityValue } =
+      await import("./services/entity_resolution.js");
 
-    // Generate entity ID
+    // Use resolveEntity to ensure entity exists with correct user_id
+    // This handles the case where entity exists with null user_id
+    const { resolveEntity } = await import("./services/entity_resolution.js");
     const normalizedValue = normalizeEntityValue(entity_type, entity_identifier);
-    const entity_id = generateEntityId(entity_type, normalizedValue);
-
-    // Ensure entity exists
-    const { data: existingEntity } = await supabase
-      .from("entities")
-      .select("id")
-      .eq("id", entity_id)
-      .eq("user_id", user_id)
-      .single();
-
-    if (!existingEntity) {
-      // Create entity
-      await supabase.from("entities").insert({
-        id: entity_id,
-        entity_type,
-        canonical_name: normalizedValue,
-        user_id,
-      });
-    }
+    const entity_id = await resolveEntity({
+      entityType: entity_type,
+      fields: { name: entity_identifier }, // Use entity_identifier as name field
+      userId: user_id,
+    });
 
     // Create observation
     const observation = {
@@ -438,7 +1708,7 @@ app.post("/api/observations/create", async (req, res) => {
       entity_id,
       entity_type,
       schema_version: "1.0",
-      source_material_id: null, // No source for direct API creation
+      source_id: null, // No source for direct API creation
       interpretation_id: null,
       observed_at: new Date().toISOString(),
       specificity_score: 1.0,
@@ -471,8 +1741,7 @@ app.post("/api/observations/create", async (req, res) => {
     });
   } catch (error) {
     logError("APIError:observations_create", req, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to create observation";
+    const message = error instanceof Error ? error.message : "Failed to create observation";
     return res.status(500).json({ error: message });
   }
 });
@@ -496,11 +1765,13 @@ app.post("/api/observations/query", async (req, res) => {
   }
 
   try {
-    const { entity_id, entity_type, limit, offset, user_id } = parsed.data;
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    let query = supabase
-      .from("observations")
-      .select("*", { count: "exact" });
+    const { entity_id, entity_type, limit, offset } = parsed.data;
+
+    // Build query - ALWAYS filter by authenticated user_id
+    let query = supabase.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     if (entity_id) {
       query = query.eq("entity_id", entity_id);
@@ -510,13 +1781,7 @@ app.post("/api/observations/query", async (req, res) => {
       query = query.eq("entity_type", entity_type);
     }
 
-    if (user_id) {
-      query = query.eq("user_id", user_id);
-    }
-
-    query = query
-      .order("observed_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    query = query.order("observed_at", { ascending: false }).range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 
@@ -529,14 +1794,17 @@ app.post("/api/observations/query", async (req, res) => {
       offset,
     });
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return res.status(401).json({ error: error.message });
+    }
     logError("APIError:observations_query", req, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to query observations";
+    const message = error instanceof Error ? error.message : "Failed to query observations";
     return res.status(500).json({ error: message });
   }
 });
 
 // POST /api/entities/merge - Merge duplicate entities
+// REQUIRES AUTHENTICATION - validates user_id matches authenticated user and entities belong to user
 app.post("/api/entities/merge", async (req, res) => {
   const schema = z.object({
     from_entity_id: z.string(),
@@ -554,21 +1822,31 @@ app.post("/api/entities/merge", async (req, res) => {
   }
 
   try {
+    // Get authenticated user_id and validate it matches provided user_id
+    const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
     const { from_entity_id, to_entity_id, merge_reason, user_id } = parsed.data;
 
-    // Validate both entities exist and belong to user
+    // SECURITY: Ensure provided user_id matches authenticated user
+    if (user_id !== authenticatedUserId) {
+      return res.status(403).json({
+        error: `user_id parameter (${user_id}) does not match authenticated user (${authenticatedUserId})`,
+      });
+    }
+
+    // Validate both entities exist and belong to authenticated user
     const { data: fromEntity } = await supabase
       .from("entities")
       .select("id, merged_to_entity_id")
       .eq("id", from_entity_id)
-      .eq("user_id", user_id)
+      .eq("user_id", authenticatedUserId) // SECURITY: Only merge entities belonging to authenticated user
       .single();
 
     const { data: toEntity } = await supabase
       .from("entities")
       .select("id, merged_to_entity_id")
       .eq("id", to_entity_id)
-      .eq("user_id", user_id)
+      .eq("user_id", authenticatedUserId) // SECURITY: Only merge entities belonging to authenticated user
       .single();
 
     if (!fromEntity || !toEntity) {
@@ -632,8 +1910,7 @@ app.post("/api/entities/merge", async (req, res) => {
     });
   } catch (error) {
     logError("APIError:entities_merge", req, error);
-    const message =
-      error instanceof Error ? error.message : "Failed to merge entities";
+    const message = error instanceof Error ? error.message : "Failed to merge entities";
     return res.status(500).json({ error: message });
   }
 });
@@ -687,9 +1964,7 @@ app.post("/retrieve_records", async (req, res) => {
       appendResults(idMatches);
     } catch (error) {
       logError("SupabaseError:retrieve_records:ids", req, error);
-      return res
-        .status(500)
-        .json({ error: (error as any)?.message || "Database error" });
+      return res.status(500).json({ error: (error as any)?.message || "Database error" });
     }
   }
 
@@ -710,18 +1985,12 @@ app.post("/retrieve_records", async (req, res) => {
           // Switch to keyword mode if semantic was required
           const keywordQuery = supabase.from("records").select("*");
           if (normalizedType) keywordQuery.eq("type", normalizedType);
-          const { data: keywordCandidates } = await keywordQuery.limit(
-            finalLimit * 2
-          );
+          const { data: keywordCandidates } = await keywordQuery.limit(finalLimit * 2);
           const searchTextLower = search.join(" ").toLowerCase();
           const keywordMatches = (keywordCandidates || [])
             .filter((rec: any) => {
-              const typeMatch = rec.type
-                ?.toLowerCase()
-                .includes(searchTextLower);
-              const propsText = JSON.stringify(
-                rec.properties || {}
-              ).toLowerCase();
+              const typeMatch = rec.type?.toLowerCase().includes(searchTextLower);
+              const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
               return typeMatch || propsText.includes(searchTextLower);
             })
             .slice(0, finalLimit);
@@ -751,33 +2020,24 @@ app.post("/retrieve_records", async (req, res) => {
         received: query_embedding.length,
       });
       return res.status(400).json({
-        error:
-          "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)",
+        error: "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)",
       });
     }
 
     if (query_embedding) {
       // Fetch records with embeddings for similarity calculation
       // Note: For better performance at scale, create a PostgreSQL function using pgvector operators
-      let embeddingQuery = supabase
-        .from("records")
-        .select("*")
-        .not("embedding", "is", null);
+      let embeddingQuery = supabase.from("records").select("*").not("embedding", "is", null);
 
       if (normalizedType) {
         embeddingQuery = embeddingQuery.eq("type", normalizedType);
       }
 
       // Fetch more candidates than limit to filter by similarity
-      const { data: candidates, error: fetchError } =
-        await embeddingQuery.limit(finalLimit * 10);
+      const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
 
       if (fetchError) {
-        logError(
-          "SupabaseError:retrieve_records:semantic:fetch",
-          req,
-          fetchError
-        );
+        logError("SupabaseError:retrieve_records:semantic:fetch", req, fetchError);
       } else if (candidates) {
         // Debug: Check embedding format of first candidate
         const sampleEmbedding = candidates[0]?.embedding;
@@ -785,15 +2045,13 @@ app.post("/retrieve_records", async (req, res) => {
           ? {
               type: typeof sampleEmbedding,
               isArray: Array.isArray(sampleEmbedding),
-              length: Array.isArray(sampleEmbedding)
-                ? sampleEmbedding.length
-                : "N/A",
+              length: Array.isArray(sampleEmbedding) ? sampleEmbedding.length : "N/A",
               preview:
                 typeof sampleEmbedding === "string"
                   ? sampleEmbedding.substring(0, 50)
                   : Array.isArray(sampleEmbedding)
-                  ? `[${sampleEmbedding.slice(0, 3).join(", ")}, ...]`
-                  : JSON.stringify(sampleEmbedding).substring(0, 50),
+                    ? `[${sampleEmbedding.slice(0, 3).join(", ")}, ...]`
+                    : JSON.stringify(sampleEmbedding).substring(0, 50),
             }
           : null;
 
@@ -805,9 +2063,7 @@ app.post("/retrieve_records", async (req, res) => {
         });
 
         // Calculate cosine similarity for each record
-        const queryNorm = Math.sqrt(
-          query_embedding.reduce((sum, val) => sum + val * val, 0)
-        );
+        const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
 
         const scoredCandidates = candidates
           .map((rec: any) => {
@@ -836,9 +2092,7 @@ app.post("/retrieve_records", async (req, res) => {
               logWarn("SemanticSearch:embedding_format_error", req, {
                 rec_id: rec.id?.substring(0, 8),
                 embedding_type: typeof recEmbedding,
-                embedding_length: Array.isArray(recEmbedding)
-                  ? recEmbedding.length
-                  : "not-array",
+                embedding_length: Array.isArray(recEmbedding) ? recEmbedding.length : "not-array",
               });
               return null;
             }
@@ -848,10 +2102,7 @@ app.post("/retrieve_records", async (req, res) => {
               0
             );
             const recNorm = Math.sqrt(
-              recEmbedding.reduce(
-                (sum: number, val: number) => sum + val * val,
-                0
-              )
+              recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
             );
             const similarity = dotProduct / (queryNorm * recNorm);
 
@@ -897,8 +2148,9 @@ app.post("/retrieve_records", async (req, res) => {
     }
 
     // Fetch candidates and filter by keyword match
-    const { data: keywordCandidates, error: keywordError } =
-      await keywordQuery.limit(finalLimit * 2);
+    const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(
+      finalLimit * 2
+    );
 
     if (keywordError) {
       logError("SupabaseError:retrieve_records:keyword", req, keywordError);
@@ -1022,15 +2274,12 @@ app.post("/retrieve_records", async (req, res) => {
 
   logDebug("Success:retrieve_records", req, {
     count: resultsWithoutEmbeddings.length,
-    total_count: includeTotalCount
-      ? totalCount ?? resultsWithoutEmbeddings.length
-      : undefined,
+    total_count: includeTotalCount ? (totalCount ?? resultsWithoutEmbeddings.length) : undefined,
     search_mode,
     has_search: !!search,
   });
   return res.json(payload);
 });
-
 
 // Historical API endpoints for event-sourcing (FU-050)
 app.get("/api/records/:id/history", async (req, res) => {
@@ -1053,10 +2302,7 @@ app.get("/api/records/:id/history", async (req, res) => {
     return res.json({ events: formattedEvents });
   } catch (error) {
     logError("HistoricalAPIError:history", req, error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Failed to retrieve event history";
+    const message = error instanceof Error ? error.message : "Failed to retrieve event history";
     return res.status(500).json({ error: message });
   }
 });
@@ -1071,18 +2317,14 @@ app.get("/api/records/:id", async (req, res) => {
       const record = await getRecordAtTimestamp(id, at);
 
       if (!record) {
-        return res
-          .status(404)
-          .json({ error: "Record not found at specified timestamp" });
+        return res.status(404).json({ error: "Record not found at specified timestamp" });
       }
 
       return res.json(record);
     } catch (error) {
       logError("HistoricalAPIError:at_timestamp", req, error);
       const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to retrieve record at timestamp";
+        error instanceof Error ? error.message : "Failed to retrieve record at timestamp";
 
       if (message.includes("Invalid timestamp")) {
         return res.status(400).json({ error: message });
@@ -1093,11 +2335,7 @@ app.get("/api/records/:id", async (req, res) => {
   }
 
   // Otherwise, return current state from records table
-  const { data, error } = await supabase
-    .from("records")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const { data, error } = await supabase.from("records").select("*").eq("id", id).single();
 
   if (error) {
     logError("SupabaseError:get_record", req, error);
@@ -1230,8 +2468,7 @@ app.post("/get_field_provenance", async (req, res) => {
   }
 
   // Get source records
-  const recordIds =
-    observations?.map((obs) => obs.source_record_id).filter(Boolean) || [];
+  const recordIds = observations?.map((obs) => obs.source_record_id).filter(Boolean) || [];
 
   const { data: records, error: recordError } = await supabase
     .from("records")
@@ -1277,13 +2514,8 @@ app.post("/create_relationship", async (req, res) => {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
 
-  const {
-    relationship_type,
-    source_entity_id,
-    target_entity_id,
-    source_record_id,
-    metadata,
-  } = parsed.data;
+  const { relationship_type, source_entity_id, target_entity_id, source_record_id, metadata } =
+    parsed.data;
 
   const userId = "00000000-0000-0000-0000-000000000000"; // v0.1.0 single-user
 
@@ -1299,15 +2531,14 @@ app.post("/create_relationship", async (req, res) => {
       user_id: userId,
     });
 
-    logDebug("Success:create_relationship", req, { relationship_key: relationship.relationship_key });
+    logDebug("Success:create_relationship", req, {
+      relationship_key: relationship.relationship_key,
+    });
     return res.json(relationship);
   } catch (error) {
     logError("RelationshipCreationError:create_relationship", req, error);
     return res.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create relationship",
+      error: error instanceof Error ? error.message : "Failed to create relationship",
     });
   }
 });
@@ -1334,20 +2565,13 @@ app.post("/list_relationships", async (req, res) => {
   try {
     let relationships;
     if (relationship_type) {
-      relationships = await relationshipsService.getRelationshipsByType(
-        relationship_type as any
-      );
+      relationships = await relationshipsService.getRelationshipsByType(relationship_type as any);
       // Filter by entity_id
       relationships = relationships.filter(
-        (rel) =>
-          rel.source_entity_id === entity_id ||
-          rel.target_entity_id === entity_id
+        (rel) => rel.source_entity_id === entity_id || rel.target_entity_id === entity_id
       );
     } else {
-      relationships = await relationshipsService.getRelationshipsForEntity(
-        entity_id,
-        direction
-      );
+      relationships = await relationshipsService.getRelationshipsForEntity(entity_id, direction);
     }
 
     logDebug("Success:list_relationships", req, {
@@ -1358,14 +2582,10 @@ app.post("/list_relationships", async (req, res) => {
   } catch (error) {
     logError("RelationshipQueryError:list_relationships", req, error);
     return res.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to query relationships",
+      error: error instanceof Error ? error.message : "Failed to query relationships",
     });
   }
 });
-
 
 type NormalizedCsvRowResult = ReturnType<typeof normalizeRow>;
 
@@ -1377,7 +2597,8 @@ interface PreparedCsvRow {
 async function persistCsvRowRecords(
   rows: PreparedCsvRow[],
   parentRecordId: string,
-  filePath: string
+  filePath: string,
+  userId: string = "00000000-0000-0000-0000-000000000000" // v0.1.0 single-user default
 ): Promise<Array<{ id: string; row_index: number }>> {
   if (!rows.length) {
     return [];
@@ -1386,10 +2607,7 @@ async function persistCsvRowRecords(
   const preparedEntries = rows.map(({ normalized, rowIndex }) => {
     const canonicalType = normalizeRecordType(normalized.type).type;
     const rowId = randomUUID();
-    const baseProperties = (normalized.properties ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const baseProperties = (normalized.properties ?? {}) as Record<string, unknown>;
     const properties = {
       ...baseProperties,
       csv_origin: {
@@ -1404,6 +2622,7 @@ async function persistCsvRowRecords(
         type: canonicalType,
         properties,
         file_urls: [filePath],
+        user_id: userId, // FU-701: Set user_id for RLS
       },
       rowIndex,
     };
@@ -1452,9 +2671,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
   if (typeof properties === "string") {
     if (properties.trim().length === 0) {
       logWarn("ValidationError:upload_file:properties_empty", req);
-      return res
-        .status(400)
-        .json({ error: "properties must be valid JSON object when provided" });
+      return res.status(400).json({ error: "properties must be valid JSON object when provided" });
     }
     try {
       const parsedProperties = JSON.parse(properties);
@@ -1466,9 +2683,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
         logWarn("ValidationError:upload_file:properties_shape", req, {
           properties: parsedProperties,
         });
-        return res
-          .status(400)
-          .json({ error: "properties must be a JSON object" });
+        return res.status(400).json({ error: "properties must be a JSON object" });
       }
       overrideProperties = parsedProperties as Record<string, unknown>;
     } catch (error) {
@@ -1477,11 +2692,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
       });
       return res.status(400).json({ error: "properties must be valid JSON" });
     }
-  } else if (
-    properties &&
-    typeof properties === "object" &&
-    !Array.isArray(properties)
-  ) {
+  } else if (properties && typeof properties === "object" && !Array.isArray(properties)) {
     overrideProperties = properties as Record<string, unknown>;
   }
 
@@ -1534,11 +2745,9 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
             const normalized = normalizeRow(row, existingTypes);
             if (csvRowWarnings.length < 10 && normalized.warnings.length > 0) {
               const remainingSlots = 10 - csvRowWarnings.length;
-              normalized.warnings
-                .slice(0, remainingSlots)
-                .forEach((warning) => {
-                  csvRowWarnings.push(`Row ${index + 1}: ${warning}`);
-                });
+              normalized.warnings.slice(0, remainingSlots).forEach((warning) => {
+                csvRowWarnings.push(`Row ${index + 1}: ${warning}`);
+              });
             }
             return { normalized, rowIndex: index };
           });
@@ -1564,10 +2773,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
   const baseName = safeBase.endsWith(ext)
     ? safeBase.slice(0, safeBase.length - ext.length)
     : safeBase;
-  const fileName = `${recordId}/${Date.now()}-${baseName.replace(
-    /\.+/g,
-    "-"
-  )}${ext}`;
+  const fileName = `${recordId}/${Date.now()}-${baseName.replace(/\.+/g, "-")}${ext}`;
 
   if (record_id) {
     const { data: recordData, error: fetchError } = await supabase
@@ -1587,7 +2793,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
   // Allow tests to skip storage upload (bucket might not exist)
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
   let uploadData: { path: string } | null = null;
-  
+
   if (!isTestEnv) {
     const { data, error: uploadError } = await supabase.storage
       .from(bucketName)
@@ -1642,11 +2848,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
 
     if (shouldGenerateCsvRows && preparedCsvRows.length > 0) {
       try {
-        const insertedRows = await persistCsvRowRecords(
-          preparedCsvRows,
-          created.id,
-          filePath
-        );
+        const insertedRows = await persistCsvRowRecords(preparedCsvRows, created.id, filePath);
         if (insertedRows.length > 0) {
           const relationshipPayload = insertedRows.map((row) => ({
             source_id: created.id,
@@ -1658,11 +2860,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
             .from("record_relationships")
             .insert(relationshipPayload);
           if (relationshipError) {
-            logError(
-              "SupabaseError:upload_file:relationships",
-              req,
-              relationshipError
-            );
+            logError("SupabaseError:upload_file:relationships", req, relationshipError);
           }
 
           const mergedProperties = {
@@ -1674,20 +2872,15 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
             },
           };
 
-          const { data: updatedDataset, error: datasetUpdateError } =
-            await supabase
-              .from("records")
-              .update({ properties: mergedProperties })
-              .eq("id", created.id)
-              .select()
-              .single();
+          const { data: updatedDataset, error: datasetUpdateError } = await supabase
+            .from("records")
+            .update({ properties: mergedProperties })
+            .eq("id", created.id)
+            .select()
+            .single();
 
           if (datasetUpdateError) {
-            logError(
-              "SupabaseError:upload_file:update_csv_summary",
-              req,
-              datasetUpdateError
-            );
+            logError("SupabaseError:upload_file:update_csv_summary", req, datasetUpdateError);
             responseRecord = { ...created, properties: mergedProperties };
           } else if (updatedDataset) {
             responseRecord = updatedDataset as typeof created;
@@ -1720,10 +2913,7 @@ app.post("/upload_file", upload.single("file"), async (req, res) => {
   } catch (error) {
     logError("SupabaseError:upload_file:create_record", req, error);
     return res.status(500).json({
-      error:
-        error instanceof Error
-          ? error.message
-          : "Failed to create record from file",
+      error: error instanceof Error ? error.message : "Failed to create record from file",
     });
   }
 });
@@ -1743,9 +2933,7 @@ app.post("/analyze_file", upload.single("file"), async (req, res) => {
   const fileSize = req.file?.size ?? fileBuffer.length;
 
   try {
-    const { analyzeFileForRecord } = await import(
-      "./services/file_analysis.js"
-    );
+    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
     const analysis = await analyzeFileForRecord({
       buffer: fileBuffer,
       fileName: originalName,
@@ -1807,9 +2995,7 @@ app.post("/record_comparison", async (req, res) => {
 
   if (!config.openaiApiKey) {
     logWarn("RecordComparison:openai_unconfigured", req);
-    return res
-      .status(503)
-      .json({ error: "OpenAI API key is not configured on the server" });
+    return res.status(503).json({ error: "OpenAI API key is not configured on the server" });
   }
 
   try {
@@ -1817,9 +3003,7 @@ app.post("/record_comparison", async (req, res) => {
     return res.json({ analysis });
   } catch (error) {
     logError("RecordComparison:failure", req, error);
-    return res
-      .status(500)
-      .json({ error: "Failed to generate record comparison" });
+    return res.status(500).json({ error: "Failed to generate record comparison" });
   }
 });
 
@@ -1838,9 +3022,7 @@ app.post("/generate_embedding", async (req, res) => {
 
   if (!config.openaiApiKey) {
     logWarn("GenerateEmbedding:openai_unconfigured", req);
-    return res
-      .status(503)
-      .json({ error: "OpenAI API key is not configured on the server" });
+    return res.status(503).json({ error: "OpenAI API key is not configured on the server" });
   }
 
   try {
@@ -1969,22 +3151,16 @@ async function executeRetrieveRecords(params: {
     }
 
     if (query_embedding && query_embedding.length === 1536) {
-      let embeddingQuery = supabase
-        .from("records")
-        .select("*")
-        .not("embedding", "is", null);
+      let embeddingQuery = supabase.from("records").select("*").not("embedding", "is", null);
 
       if (normalizedType) {
         embeddingQuery = embeddingQuery.eq("type", normalizedType);
       }
 
-      const { data: candidates, error: fetchError } =
-        await embeddingQuery.limit(finalLimit * 10);
+      const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
 
       if (!fetchError && candidates) {
-        const queryNorm = Math.sqrt(
-          query_embedding.reduce((sum, val) => sum + val * val, 0)
-        );
+        const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
 
         const scoredCandidates = candidates
           .map((rec: any) => {
@@ -2009,10 +3185,7 @@ async function executeRetrieveRecords(params: {
               0
             );
             const recNorm = Math.sqrt(
-              recEmbedding.reduce(
-                (sum: number, val: number) => sum + val * val,
-                0
-              )
+              recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
             );
             const similarity = dotProduct / (queryNorm * recNorm);
 
@@ -2037,8 +3210,9 @@ async function executeRetrieveRecords(params: {
       keywordQuery = keywordQuery.eq("type", normalizedType);
     }
 
-    const { data: keywordCandidates, error: keywordError } =
-      await keywordQuery.limit(finalLimit * 2);
+    const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(
+      finalLimit * 2
+    );
 
     if (!keywordError && keywordCandidates) {
       const searchText = search.join(" ").toLowerCase();
@@ -2097,9 +3271,7 @@ async function executeRetrieveRecords(params: {
 
   if (includeTotalCount && totalCount === null && !hasSearch && !properties) {
     try {
-      let countQuery = supabase
-        .from("records")
-        .select("id", { count: "exact", head: true });
+      let countQuery = supabase.from("records").select("id", { count: "exact", head: true });
       if (normalizedType) {
         countQuery = countQuery.eq("type", normalizedType);
       }
@@ -2114,7 +3286,7 @@ async function executeRetrieveRecords(params: {
 
   return {
     records: sanitized,
-    totalCount: includeTotalCount ? totalCount ?? sanitized.length : undefined,
+    totalCount: includeTotalCount ? (totalCount ?? sanitized.length) : undefined,
   };
 }
 
@@ -2187,11 +3359,7 @@ async function executeRetrieveRecordsLocal(
       query_embedding = generated || undefined;
     }
 
-    if (
-      query_embedding &&
-      Array.isArray(query_embedding) &&
-      query_embedding.length === 1536
-    ) {
+    if (query_embedding && Array.isArray(query_embedding) && query_embedding.length === 1536) {
       const recordsWithEmbeddings = candidates.filter((rec: any) => {
         if (!rec.embedding) return false;
         let recEmbedding = rec.embedding;
@@ -2205,9 +3373,7 @@ async function executeRetrieveRecordsLocal(
         return Array.isArray(recEmbedding) && recEmbedding.length === 1536;
       });
 
-      const queryNorm = Math.sqrt(
-        query_embedding.reduce((sum, val) => sum + val * val, 0)
-      );
+      const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
 
       const scoredCandidates = recordsWithEmbeddings
         .map((rec: any) => {
@@ -2229,10 +3395,7 @@ async function executeRetrieveRecordsLocal(
             0
           );
           const recNorm = Math.sqrt(
-            recEmbedding.reduce(
-              (sum: number, val: number) => sum + val * val,
-              0
-            )
+            recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
           );
           const similarity = dotProduct / (queryNorm * recNorm);
 
@@ -2309,13 +3472,12 @@ async function executeRetrieveRecordsLocal(
 
   return {
     records: sanitized,
-    totalCount: includeTotalCount ? totalCount ?? sanitized.length : undefined,
+    totalCount: includeTotalCount ? (totalCount ?? sanitized.length) : undefined,
   };
 }
 
 function extractUUIDs(text: string): string[] {
-  const uuidRegex =
-    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
   const matches = text.match(uuidRegex);
   return matches ? Array.from(new Set(matches)) : [];
 }
@@ -2339,14 +3501,19 @@ app.get("/openapi.yaml", (req, res) => {
 export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
-  
+
   const httpPort = process.env.HTTP_PORT
     ? parseInt(process.env.HTTP_PORT, 10)
-    : config.port || 3000;
-  
+    : config.httpPort || 8080;
+
   app.listen(httpPort, () => {
     // eslint-disable-next-line no-console
     console.log(`HTTP Actions listening on :${httpPort}`);
+
+    // Start background OAuth state cleanup job
+    import("./services/mcp_oauth.js").then((oauth) => {
+      oauth.startStateCleanupJob();
+    });
   });
 }
 
@@ -2363,13 +3530,13 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
  * Check if a record matches keyword search terms
  */
 export function recordMatchesKeywordSearch(
-  record: import('./db.js').NeotomaRecord,
+  record: import("./db.js").NeotomaRecord,
   searchTerms: string[]
 ): boolean {
   const recordText = JSON.stringify(record.properties || {}).toLowerCase();
   const recordType = record.type.toLowerCase();
-  
-  return searchTerms.some(term => {
+
+  return searchTerms.some((term) => {
     const termLower = term.toLowerCase();
     return recordText.includes(termLower) || recordType.includes(termLower);
   });

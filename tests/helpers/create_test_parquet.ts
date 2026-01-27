@@ -12,6 +12,7 @@ export interface TestParquetOptions {
   outputPath: string;
   rows?: Array<Record<string, unknown>>;
   includeBigInt?: boolean;
+  customSchema?: Record<string, { type: string; optional?: boolean }>;
 }
 
 /**
@@ -21,7 +22,7 @@ export interface TestParquetOptions {
 export async function createTestParquetFile(
   options: TestParquetOptions
 ): Promise<string> {
-  const { outputPath, rows, includeBigInt = true } = options;
+  const { outputPath, rows, includeBigInt = true, customSchema } = options;
 
   // Ensure output directory exists
   const dir = path.dirname(outputPath);
@@ -29,14 +30,29 @@ export async function createTestParquetFile(
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  // Define schema with Int64 fields (which will be read as BigInt)
-  const schema = new ParquetSchema({
-    id: { type: "INT64", optional: false },
-    name: { type: "UTF8", optional: true },
-    amount: { type: "DOUBLE", optional: true },
-    count: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
-    timestamp: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
-  });
+  // Use custom schema if provided, otherwise use default
+  let schemaFields: Record<string, any>;
+  
+  if (customSchema) {
+    schemaFields = {};
+    for (const [fieldName, fieldDef] of Object.entries(customSchema)) {
+      schemaFields[fieldName] = {
+        type: fieldDef.type,
+        optional: fieldDef.optional !== false,
+      };
+    }
+  } else {
+    // Default schema with Int64 fields (which will be read as BigInt)
+    schemaFields = {
+      id: { type: "INT64", optional: false },
+      name: { type: "UTF8", optional: true },
+      amount: { type: "DOUBLE", optional: true },
+      count: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
+      timestamp: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
+    };
+  }
+  
+  const schema = new ParquetSchema(schemaFields);
 
   // Default test data (use smaller BigInt values that fit in Int53 range)
   const defaultRows = rows || [

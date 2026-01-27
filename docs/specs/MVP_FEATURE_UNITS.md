@@ -571,35 +571,35 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - E2E: Design system preview accessible at `/design-system`
 - **Acceptance:** All components match design system specifications, style guide displays all components correctly
 - **Status:** 🔨 Partial (foundation exists, design system implementation in progress)
-#### FU-301: Source Material List View
+#### FU-301: Source List View
 - **Priority:** P0
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source
 - **Deliverables:**
-  - Table view with sortable columns (source material, not deprecated records)
+  - Table view with sortable columns (source, not deprecated records)
   - Type filter dropdown (file types, structured data types)
-  - Search input (full-text across source material)
+  - Search input (full-text across source)
   - Pagination (load more)
-  - Click row → show source material detail
+  - Click row → show source detail
   - Uses `sources` table (NOT deprecated `records` table)
 - **UI Pattern:** List (see `docs/ui/patterns/list.md`)
 - **Tests:**
-  - Component: SourceMaterialTable rendering
+  - Component: SourceNodeTable rendering
   - Accessibility: Keyboard nav, ARIA labels
   - E2E: Filter, search, sort, click
   - Database: Queries use `sources` table, NOT `records`
-- **Acceptance:** Displays all source material, filters work, <2s load time, uses current architecture (no deprecated tables)
+- **Acceptance:** Displays all source, filters work, <2s load time, uses current architecture (no deprecated tables)
 - **Status:** 🔨 Partial (existing RecordsTable.tsx needs refactoring to use `sources` table)
 - **Migration Note:** Rename from "Records List View" to align with canonical vocabulary; refactor to query `sources` table instead of deprecated `records` table
-#### FU-302: Source Material Detail View
+#### FU-302: Source Detail View
 - **Priority:** P0
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material, interpretations, observations
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source, interpretations, observations
 - **Deliverables:**
   - Slide-out panel or modal
-  - Display source material metadata (id, content_hash, mime_type, file_name, created_at)
+  - Display source metadata (id, content_hash, mime_type, file_name, created_at)
   - Display interpretations (AI interpretation runs with config: model, temperature, prompt_hash)
   - Display observations (extracted facts with provenance)
   - Display linked entities (from observations)
@@ -609,13 +609,13 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - Actions: Reinterpret, Delete
 - **UI Pattern:** Detail (see `docs/ui/patterns/detail.md`)
 - **Tests:**
-  - Component: SourceMaterialDetailsPanel
+  - Component: SourceNodeDetailsPanel
   - Accessibility: Focus management, ESC to close
-  - E2E: Click source material → see details with interpretations and observations
+  - E2E: Click source → see details with interpretations and observations
   - Database: Queries use `sources`, `interpretations`, `observations` tables, NOT `records`
-- **Acceptance:** All source material metadata visible, interpretations shown with config, observations shown with provenance, entities/events linked
+- **Acceptance:** All source metadata visible, interpretations shown with config, observations shown with provenance, entities/events linked
 - **Status:** 🔨 Partial (existing RecordDetailsPanel.tsx needs refactoring to use `sources` + `interpretations` + `observations`)
-- **Migration Note:** Rename from "Record Detail View" to align with canonical vocabulary; refactor to show source material, interpretations, and observations (four-layer truth model)
+- **Migration Note:** Rename from "Record Detail View" to align with canonical vocabulary; refactor to show source, interpretations, and observations (four-layer truth model)
 #### FU-303: Timeline View
 - **Priority:** P0
 - **Risk:** Medium
@@ -648,7 +648,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - **Progress tracking** (per-file and overall progress)
   - **Resume on failure** (retry failed uploads)
   - Upload progress indicator
-  - Success notification → navigate to source material detail
+  - Success notification → navigate to source detail
   - Error handling with retry
 - **Tests:**
   - Component: Upload zone states (idle, dragging, uploading, error)
@@ -662,10 +662,10 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Low
-- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source material, entities, events
+- **Dependencies:** FU-300 (UI foundation), MCP retrieve actions for source, entities, events
 - **Deliverables:**
-  - Stats widgets (total source material, entities by type, events, observations, interpretations)
-  - Recent source material list (last 5)
+  - Stats widgets (total source, entities by type, events, observations, interpretations)
+  - Recent source list (last 5)
   - Entity count by type (companies, people, invoices, etc.)
   - Quick actions (Upload, Search)
   - Uses main objects from `docs/vocabulary/canonical_terms.md` (NOT deprecated records)
@@ -674,9 +674,9 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - Component: Dashboard widgets
   - E2E: Dashboard loads, stats accurate, uses correct tables
   - Database: Queries use `sources`, `entities`, `observations` tables, NOT `records`
-- **Acceptance:** Dashboard displays in <2s, shows stats for main objects (source material, entities, observations, events)
+- **Acceptance:** Dashboard displays in <2s, shows stats for main objects (source, entities, observations, events)
 - **Status:** ⏳ Not Started
-- **Migration Note:** Dashboard stats should reflect main objects (source material, entities, observations, events), not deprecated records
+- **Migration Note:** Dashboard stats should reflect main objects (source, entities, observations, events), not deprecated records
 #### FU-306: Settings UI
 - **Priority:** P2
 - **Risk:** Low
@@ -748,7 +748,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P0
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-302 (source material detail), FU-401 (processing)
+- **Dependencies:** FU-302 (source detail), FU-401 (processing)
 - **Deliverables:**
   - Show extracted fields with labels
   - Highlight entities (visual distinction)
@@ -820,7 +820,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** FU-105 (search service), FU-301 (source material list)
+- **Dependencies:** FU-105 (search service), FU-301 (source list)
 - **Deliverables:**
   - Search input with auto-complete
   - Filter panel (type, date range, properties)
@@ -846,7 +846,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Deliverables:**
   - Entity list view (browse entities by type: company, person, location, invoice, etc.)
   - Entity detail view (shows entity snapshot + observations + provenance)
-  - Entity detail shows all linked source material (via observations)
+  - Entity detail shows all linked source (via observations)
   - Entity detail shows all relationships (PART_OF, REFERS_TO, SETTLES, etc.)
   - Entity graph visualization (basic, can defer advanced viz to post-MVP)
   - Filter by entity type
@@ -856,9 +856,9 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - Component: EntityList, EntityDetail, EntitySnapshot display
   - Accessibility: Keyboard nav, ARIA labels
   - E2E: Browse entities → click entity → see entity snapshot with observations
-  - E2E: Entity detail shows provenance (which source material contributed which fields)
+  - E2E: Entity detail shows provenance (which source contributed which fields)
   - E2E: Entity detail shows relationships to other entities
-- **Acceptance:** Users can browse all entities, see entity snapshots with provenance, see relationships, navigate to source material
+- **Acceptance:** Users can browse all entities, see entity snapshots with provenance, see relationships, navigate to source
 - **Status:** ⏳ Not Started (prototype exists in `EntityExplorerView.tsx`)
 - **Promotion Rationale:** 
   - Entity resolution (FU-101) is MVP-critical competitive differentiator
@@ -1126,8 +1126,8 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 | FU-207   | Plaid Integration              | 2     | Post-MVP      | Medium | High       | ✅ Complete                          | FU-200                         |
 | FU-208   | Provider Integrations          | 2     | P1            | Medium | High       | ✅ Complete                          | FU-200                         |
 | FU-300   | UI Foundation                  | 3     | P0            | Medium | Medium     | 🔨 Partial                           | None                           |
-| FU-301   | Source Material List           | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
-| FU-302   | Source Material Detail         | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
+| FU-301   | Source List           | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
+| FU-302   | Source Detail         | 3     | P0            | Low    | Medium     | 🔨 Partial (needs refactor)          | FU-300, MCP retrieve actions   |
 | FU-303   | Timeline View                  | 3     | P0            | Medium | Medium     | ⏳ Not Started                       | FU-102, FU-300                 |
 | FU-304   | File Upload UI                 | 3     | P0            | Medium | Medium     | 🔨 Partial                           | FU-205, FU-300                 |
 | FU-305   | Dashboard                      | 3     | P1            | Low    | Low        | ⏳ Not Started                       | FU-300, MCP retrieve actions   |
@@ -1189,8 +1189,8 @@ graph TD
     FU103 --> FU105[FU-105: Deterministic Search]
     FU105 --> FU303[FU-303: Timeline View]
     FU205[FU-205: upload_file MCP<br/>✅ Complete] --> FU304[FU-304: Upload UI]
-    FU300[FU-300: UI Foundation<br/>🔨 Partial] --> FU301[FU-301: Source Material List<br/>🔨 Partial]
-    FU300 --> FU302[FU-302: Source Material Detail<br/>🔨 Partial]
+    FU300[FU-300: UI Foundation<br/>🔨 Partial] --> FU301[FU-301: Source List<br/>🔨 Partial]
+    FU300 --> FU302[FU-302: Source Detail<br/>🔨 Partial]
     FU300 --> FU400[FU-400: Welcome Screen]
     FU101[FU-101: Entity Resolution<br/>🔨 Partial] --> FU601[FU-601: Entity Explorer<br/>⏳ Not Started<br/>P0]
     FU300 --> FU601

@@ -37,13 +37,13 @@ interface I18nSpec {
   locale_formats: LocaleFormat[];
 }
 ```
-## Example: Record List View
+## Example: Source List View
 ```yaml
 component_type: list
-title: "Records"
+title: "Sources"
 data_source:
   type: mcp_action
-  source: list_records
+  source: list_sources
   params:
     limit: 20
     offset: 0
@@ -62,19 +62,19 @@ interactions:
     target: "row"
     action: navigate
     params:
-      to: "/records/{id}"
+      to: "/sources/{id}"
 accessibility:
   keyboard_shortcuts:
     - key: "/"
       action: focus_search
       label: "Focus search"
   aria_labels:
-    table: "List of records"
-    row: "Record {type} created {created_at}"
+    table: "List of sources"
+    row: "Source {type} created {created_at}"
   focus_management: "Focus first row on load"
 i18n:
   translatable_keys:
-    - "records.title"
+    - "sources.title"
     - "records.columns.type"
     - "records.columns.created"
   locale_formats:

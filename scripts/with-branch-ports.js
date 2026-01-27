@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import fs from 'fs';
 import net from 'net';
 import path from 'path';
+import { platform } from 'os';
 
 const BASE_HTTP_PORT = 8080;
 const BASE_VITE_PORT = 5173;
@@ -182,12 +183,118 @@ async function tryReusePorts(previousPorts, reserved) {
   return null;
 }
 
+function findProcessOnPort(port) {
+  const portNum = Number(port);
+  if (!Number.isFinite(portNum) || portNum < 1 || portNum > 65535) {
+    return [];
+  }
+
+  try {
+    if (platform() === 'win32') {
+      // Windows: Use netstat to find process using port
+      const result = execSync(
+        `netstat -ano | findstr :${portNum}`,
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+      );
+      const lines = result.trim().split('\n').filter(Boolean);
+      const pids = new Set();
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid)) {
+          pids.add(pid);
+        }
+      }
+      return Array.from(pids).map(Number);
+    } else {
+      // Unix-like (macOS, Linux): Use lsof to find process using port
+      const result = execSync(
+        `lsof -ti :${portNum}`,
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }
+      );
+      const pids = result.trim().split('\n').filter(Boolean);
+      return pids.map(Number);
+    }
+  } catch (error) {
+    // lsof/netstat returns non-zero exit code when no process found
+    if (error.status === 1 || error.code === 1) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function killProcessesOnPorts(ports) {
+  const allPids = new Set();
+  
+  for (const port of ports) {
+    const pids = findProcessOnPort(port);
+    pids.forEach(pid => allPids.add(pid));
+  }
+
+  if (allPids.size === 0) {
+    return;
+  }
+
+  console.log(`[with-branch-ports] Found processes on ports ${ports.join(', ')}: ${Array.from(allPids).join(', ')}`);
+  
+  for (const pid of allPids) {
+    // Skip killing our own process
+    if (pid === process.pid) {
+      continue;
+    }
+    
+    try {
+      if (platform() === 'win32') {
+        execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+      } else {
+        // Try SIGTERM first
+        try {
+          process.kill(pid, 'SIGTERM');
+        } catch (error) {
+          if (error.code !== 'ESRCH') {
+            throw error;
+          }
+        }
+      }
+      console.log(`[with-branch-ports] Killed process ${pid} on port`);
+    } catch (error) {
+      if (error.code === 'ESRCH' || error.status === 1) {
+        // Process already dead
+        continue;
+      }
+      console.warn(`[with-branch-ports] Failed to kill process ${pid}: ${error.message}`);
+    }
+  }
+
+  // On Unix, wait a moment for SIGTERM to take effect, then try SIGKILL if needed
+  if (platform() !== 'win32' && allPids.size > 0) {
+    await delay(1000);
+    for (const pid of allPids) {
+      if (pid === process.pid) {
+        continue;
+      }
+      try {
+        if (isProcessAlive(pid)) {
+          process.kill(pid, 'SIGKILL');
+          console.log(`[with-branch-ports] Force-killed process ${pid}`);
+        }
+      } catch (error) {
+        // Process already dead
+      }
+    }
+    await delay(500);
+  }
+}
+
 async function assignPorts(previousPorts) {
   const reserved = new Set();
 
   const reused = await tryReusePorts(previousPorts, reserved);
   if (reused) {
     console.log('[with-branch-ports] Reusing previously assigned ports');
+    // Still kill processes on these ports in case they're from other branches
+    await killProcessesOnPorts([reused.http.port, reused.vite.port, reused.ws.port]);
     return reused;
   }
 
@@ -199,6 +306,9 @@ async function assignPorts(previousPorts) {
 
   const ws = await findOpenPort(WS_BASE, reserved);
   reserved.add(ws.port);
+
+  // Kill any processes using these ports before returning
+  await killProcessesOnPorts([http.port, vite.port, ws.port]);
 
   return { http, vite, ws };
 }

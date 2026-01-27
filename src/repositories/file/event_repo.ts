@@ -13,7 +13,7 @@ import type { EventRepository } from "../interfaces.js";
 export class FileEventRepository implements EventRepository {
   private eventsDir: string;
 
-  constructor(eventsDir: string = './data/events') {
+  constructor(eventsDir: string = "./data/events") {
     this.eventsDir = eventsDir;
   }
 
@@ -29,14 +29,14 @@ export class FileEventRepository implements EventRepository {
     if (recordId) {
       return path.join(this.eventsDir, `record_${recordId}.jsonl`);
     }
-    return path.join(this.eventsDir, 'all_events.jsonl');
+    return path.join(this.eventsDir, "all_events.jsonl");
   }
 
-  async appendEvent(event: Omit<StateEvent, 'created_at'>): Promise<StateEvent> {
+  async appendEvent(event: Omit<StateEvent, "created_at">): Promise<StateEvent> {
     // Validate event before storage
     const validation = validateEvent(event);
     if (!validation.valid) {
-      throw new Error(`Event validation failed: ${validation.errors.join(', ')}`);
+      throw new Error(`Event validation failed: ${validation.errors.join(", ")}`);
     }
 
     await this.ensureDirectoryExists();
@@ -48,12 +48,12 @@ export class FileEventRepository implements EventRepository {
 
     // Append to record-specific file
     const filePath = this.getEventFilePath(event.record_id);
-    const line = JSON.stringify(eventWithTimestamp) + '\n';
+    const line = JSON.stringify(eventWithTimestamp) + "\n";
 
     try {
-      await fs.appendFile(filePath, line, 'utf-8');
+      await fs.appendFile(filePath, line, "utf-8");
       // Ensure durability with fsync
-      const fd = await fs.open(filePath, 'r+');
+      const fd = await fs.open(filePath, "r+");
       await fd.sync();
       await fd.close();
     } catch (error) {
@@ -67,8 +67,8 @@ export class FileEventRepository implements EventRepository {
     const filePath = this.getEventFilePath(recordId);
 
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      const lines = content.trim().split('\n').filter((line) => line.trim());
+      const content = await fs.readFile(filePath, "utf-8");
+      const lines = content.trim().split("\n").filter((line) => line.trim());
       
       return lines
         .map((line) => {
@@ -81,7 +81,7 @@ export class FileEventRepository implements EventRepository {
         .filter((event): event is StateEvent => event !== null)
         .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         // File doesn't exist, return empty array
         return [];
       }
@@ -103,11 +103,11 @@ export class FileEventRepository implements EventRepository {
       const files = await fs.readdir(this.eventsDir);
       
       for (const file of files) {
-        if (!file.endsWith('.jsonl')) continue;
+        if (!file.endsWith(".jsonl")) continue;
 
         const filePath = path.join(this.eventsDir, file);
-        const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter((line) => line.trim());
+        const content = await fs.readFile(filePath, "utf-8");
+        const lines = content.trim().split("\n").filter((line) => line.trim());
 
         for (const line of lines) {
           try {
@@ -121,7 +121,7 @@ export class FileEventRepository implements EventRepository {
         }
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw new Error(`Failed to read events by timestamp range: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
@@ -138,11 +138,11 @@ export class FileEventRepository implements EventRepository {
       const files = await fs.readdir(this.eventsDir);
       
       for (const file of files) {
-        if (!file.endsWith('.jsonl')) continue;
+        if (!file.endsWith(".jsonl")) continue;
 
         const filePath = path.join(this.eventsDir, file);
-        const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter((line) => line.trim());
+        const content = await fs.readFile(filePath, "utf-8");
+        const lines = content.trim().split("\n").filter((line) => line.trim());
 
         for (const line of lines) {
           try {
@@ -161,7 +161,7 @@ export class FileEventRepository implements EventRepository {
         }
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         throw new Error(`Failed to read all events: ${error instanceof Error ? error.message : String(error)}`);
       }
     }

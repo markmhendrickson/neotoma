@@ -113,8 +113,16 @@ const SelectItem = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
 >(({ className, children, value, ...props }, ref) => {
+  // Radix UI Select doesn't allow empty string values
+  // Throw error in development to catch this early
   if (value === '' || value === undefined || value === null) {
-    console.warn('SelectItem received invalid value for option:', value, children);
+    const errorMsg = `SelectItem received invalid value: "${value}". SelectItem values cannot be empty strings, undefined, or null.`;
+    if (process.env.NODE_ENV === 'development') {
+      throw new Error(errorMsg);
+    }
+    console.error(errorMsg);
+    // Don't render invalid SelectItem
+    return null;
   }
   return (
     <SelectPrimitive.Item

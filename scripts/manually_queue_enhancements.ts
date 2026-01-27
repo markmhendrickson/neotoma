@@ -16,8 +16,8 @@ async function manuallyQueueEnhancements() {
   // Get all unique fragment_keys from raw_fragments
   const { data: fragments, error: fragError } = await supabase
     .from("raw_fragments")
-    .select("fragment_key, frequency_count, fragment_type, user_id")
-    .eq("fragment_type", entityType)
+    .select("fragment_key, frequency_count, entity_type, user_id")
+    .eq("entity_type", entityType)
     .eq("user_id", userId);
 
   if (fragError) {

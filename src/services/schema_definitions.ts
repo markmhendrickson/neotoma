@@ -20,9 +20,22 @@
 
 import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 
+/**
+ * Metadata for entity schemas
+ * Contains human-readable labels, descriptions, categories, and aliases
+ */
+export interface EntitySchemaMetadata {
+  label: string;
+  description: string;
+  category: "finance" | "productivity" | "knowledge" | "health" | "media";
+  aliases?: string[];
+  primaryProperties?: string[]; // Optional: can derive from required fields
+}
+
 export interface EntitySchema {
   entity_type: string;
   schema_version: string;
+  metadata?: EntitySchemaMetadata;
   schema_definition: SchemaDefinition;
   reducer_config: ReducerConfig;
 }
@@ -35,6 +48,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   holding: {
     entity_type: "holding",
     schema_version: "1.0",
+    metadata: {
+      label: "Holding",
+      description: "Portfolio position snapshots tracking asset holdings over time.",
+      category: "finance",
+      aliases: ["portfolio_position", "asset_holding"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -64,6 +83,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   income: {
     entity_type: "income",
     schema_version: "1.0",
+    metadata: {
+      label: "Income",
+      description: "Income stream records from various sources.",
+      category: "finance",
+      aliases: ["earnings", "revenue"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -91,6 +116,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   tax_event: {
     entity_type: "tax_event",
     schema_version: "1.0",
+    metadata: {
+      label: "Tax Event",
+      description: "Capital gains, losses, and tax-related transactions.",
+      category: "finance",
+      aliases: ["capital_gain", "tax_transaction"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -119,6 +150,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   crypto_transaction: {
     entity_type: "crypto_transaction",
     schema_version: "1.0",
+    metadata: {
+      label: "Crypto Transaction",
+      description: "On-chain cryptocurrency transactions.",
+      category: "finance",
+      aliases: ["blockchain_transaction", "crypto_tx"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -148,6 +185,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   liability: {
     entity_type: "liability",
     schema_version: "1.0",
+    metadata: {
+      label: "Liability",
+      description: "Debt and obligation tracking.",
+      category: "finance",
+      aliases: ["debt", "obligation"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -173,6 +216,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   flow: {
     entity_type: "flow",
     schema_version: "1.0",
+    metadata: {
+      label: "Flow",
+      description: "Cash flow tracking for income and expenses over time.",
+      category: "finance",
+      aliases: ["cash_flow", "money_flow"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -204,6 +253,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   invoice: {
     entity_type: "invoice",
     schema_version: "1.0",
+    metadata: {
+      label: "Invoice",
+      description: "Money owed to you or vendors.",
+      category: "finance",
+      aliases: ["bill"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -236,6 +291,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   receipt: {
     entity_type: "receipt",
     schema_version: "1.0",
+    metadata: {
+      label: "Receipt",
+      description: "Proof-of-purchase documents.",
+      category: "finance",
+      aliases: ["proof_of_purchase"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -264,6 +325,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   purchase: {
     entity_type: "purchase",
     schema_version: "1.0",
+    metadata: {
+      label: "Purchase",
+      description: "Planned and completed purchase tracking.",
+      category: "productivity",
+      aliases: ["buy", "acquisition"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -293,6 +360,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   transfer: {
     entity_type: "transfer",
     schema_version: "1.0",
+    metadata: {
+      label: "Transfer",
+      description: "Asset transfers between accounts.",
+      category: "finance",
+      aliases: ["asset_transfer", "account_transfer"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -322,6 +395,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   wallet: {
     entity_type: "wallet",
     schema_version: "1.0",
+    metadata: {
+      label: "Wallet",
+      description: "Financial institutions and wallets containing accounts.",
+      category: "finance",
+      aliases: ["financial_institution", "institution"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -349,6 +428,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   tax_filing: {
     entity_type: "tax_filing",
     schema_version: "1.0",
+    metadata: {
+      label: "Tax Filing",
+      description: "Tax filing tracking and status.",
+      category: "finance",
+      aliases: ["tax_return", "filing"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -380,6 +465,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   order: {
     entity_type: "order",
     schema_version: "1.0",
+    metadata: {
+      label: "Order",
+      description: "Trading orders and order tracking.",
+      category: "finance",
+      aliases: ["trade_order", "trading_order"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -408,6 +499,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   fixed_cost: {
     entity_type: "fixed_cost",
     schema_version: "1.0",
+    metadata: {
+      label: "Fixed Cost",
+      description: "Recurring expenses and subscriptions.",
+      category: "finance",
+      aliases: ["recurring_expense", "subscription_cost"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -446,6 +543,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   property: {
     entity_type: "property",
     schema_version: "1.0",
+    metadata: {
+      label: "Property",
+      description: "Real estate property tracking.",
+      category: "finance",
+      aliases: ["real_estate", "asset_property"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -472,6 +575,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   balance: {
     entity_type: "balance",
     schema_version: "1.0",
+    metadata: {
+      label: "Balance",
+      description: "Account balance snapshots over time.",
+      category: "finance",
+      aliases: ["account_balance", "balance_snapshot"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -498,6 +607,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   address: {
     entity_type: "address",
     schema_version: "1.0",
+    metadata: {
+      label: "Address",
+      description: "Physical and mailing addresses.",
+      category: "knowledge",
+      aliases: ["location", "mailing_address"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -528,6 +643,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   company: {
     entity_type: "company",
     schema_version: "1.0",
+    metadata: {
+      label: "Company",
+      description: "Company and organization records.",
+      category: "knowledge",
+      aliases: ["organization", "business"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -560,6 +681,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   person: {
     entity_type: "person",
     schema_version: "1.0",
+    metadata: {
+      label: "Person",
+      description: "Individual person records.",
+      category: "knowledge",
+      aliases: ["individual", "contact_person"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -592,6 +719,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   location: {
     entity_type: "location",
     schema_version: "1.0",
+    metadata: {
+      label: "Location",
+      description: "Geographic locations and coordinates.",
+      category: "knowledge",
+      aliases: ["place", "geographic_location"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -622,6 +755,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   relationship: {
     entity_type: "relationship",
     schema_version: "1.0",
+    metadata: {
+      label: "Relationship",
+      description: "Relationships between entities.",
+      category: "knowledge",
+      aliases: ["connection", "link"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -648,6 +787,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   task: {
     entity_type: "task",
     schema_version: "1.0",
+    metadata: {
+      label: "Task",
+      description: "Action items with status.",
+      category: "productivity",
+      aliases: ["todo", "action_item"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -661,6 +806,30 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         completed_date: { type: "date", required: false },
         created_date: { type: "date", required: false },
         updated_date: { type: "date", required: false },
+        created_at: {
+          type: "date",
+          required: false,
+          converters: [
+            {
+              from: "number",
+              to: "date",
+              function: "timestamp_nanos_to_iso",
+              deterministic: true,
+            },
+          ],
+        },
+        updated_at: {
+          type: "date",
+          required: false,
+          converters: [
+            {
+              from: "number",
+              to: "date",
+              function: "timestamp_nanos_to_iso",
+              deterministic: true,
+            },
+          ],
+        },
         tags: { type: "string", required: false },
         notes: { type: "string", required: false, preserveCase: true },
         import_date: { type: "date", required: false },
@@ -672,6 +841,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         status: { strategy: "last_write" },
         completed_date: { strategy: "last_write" },
         updated_date: { strategy: "last_write" },
+        created_at: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
       },
     },
   },
@@ -679,6 +850,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   project: {
     entity_type: "project",
     schema_version: "1.0",
+    metadata: {
+      label: "Project",
+      description: "Multi-step initiatives.",
+      category: "productivity",
+      aliases: ["initiative", "program"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -708,6 +885,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   goal: {
     entity_type: "goal",
     schema_version: "1.0",
+    metadata: {
+      label: "Goal",
+      description: "Target metrics and OKRs to achieve.",
+      category: "productivity",
+      aliases: ["target", "okr", "key_result"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -736,6 +919,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   email: {
     entity_type: "email",
     schema_version: "1.0",
+    metadata: {
+      label: "Email",
+      description: "Email-specific messages with threads and subjects.",
+      category: "knowledge",
+      aliases: ["email_message", "email_thread"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -768,6 +957,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   message: {
     entity_type: "message",
     schema_version: "1.0",
+    metadata: {
+      label: "Message",
+      description: "Generic messages (DMs, SMS, chat) without email-specific structure.",
+      category: "knowledge",
+      aliases: ["dm", "sms", "chat_message"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -796,6 +991,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   note: {
     entity_type: "note",
     schema_version: "1.0",
+    metadata: {
+      label: "Note",
+      description: "Free-form text, journals, scratchpads.",
+      category: "productivity",
+      aliases: ["journal", "memo"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -822,6 +1023,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   event: {
     entity_type: "event",
     schema_version: "1.0",
+    metadata: {
+      label: "Event",
+      description: "Meetings, appointments, scheduled interactions.",
+      category: "productivity",
+      aliases: ["meeting", "appointment", "calendar_event", "recurring_event"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -852,6 +1059,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   exercise: {
     entity_type: "exercise",
     schema_version: "1.0",
+    metadata: {
+      label: "Exercise",
+      description: "Individual exercise activities or training sets (atomic unit).",
+      category: "health",
+      aliases: ["training_session", "activity"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -880,6 +1093,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   meal: {
     entity_type: "meal",
     schema_version: "1.0",
+    metadata: {
+      label: "Meal",
+      description: "Food logs and nutrition captures.",
+      category: "health",
+      aliases: ["food_log", "nutrition"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -907,6 +1126,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   transaction: {
     entity_type: "transaction",
     schema_version: "1.0",
+    metadata: {
+      label: "Transaction",
+      description: "Individual debits/credits pulled from Plaid or uploads.",
+      category: "finance",
+      aliases: ["transactions", "txn", "expense", "purchase", "payment"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -927,6 +1152,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   contact: {
     entity_type: "contact",
     schema_version: "1.0",
+    metadata: {
+      label: "Contact",
+      description: "People and organization records.",
+      category: "knowledge",
+      aliases: ["person", "lead"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -966,6 +1197,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   contract: {
     entity_type: "contract",
     schema_version: "1.0",
+    metadata: {
+      label: "Contract",
+      description: "Legal contracts and agreements.",
+      category: "finance",
+      aliases: ["agreement", "legal_document"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -988,6 +1225,12 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
   account: {
     entity_type: "account",
     schema_version: "1.0",
+    metadata: {
+      label: "Account",
+      description: "Financial account snapshots (bank, brokerage, wallet).",
+      category: "finance",
+      aliases: ["bank_account", "wallet", "ledger_account"],
+    },
     schema_definition: {
       fields: {
         schema_version: { type: "string", required: true },
@@ -1004,6 +1247,510 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       merge_policies: {
         status: { strategy: "last_write" },
         categories: { strategy: "merge_array" },
+      },
+    },
+  },
+
+  belief: {
+    entity_type: "belief",
+    schema_version: "1.0",
+    metadata: {
+      label: "Belief",
+      description: "Personal beliefs and assumptions tracking.",
+      category: "knowledge",
+      aliases: ["assumption", "conviction"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        belief_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        categories: { type: "string", required: false },
+        confidence_level: { type: "string", required: false },
+        asset_types: { type: "string", required: false },
+        date: { type: "date", required: false },
+        events: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "last_write" },
+        confidence_level: { strategy: "last_write" },
+        categories: { strategy: "merge_array" },
+      },
+    },
+  },
+
+  habit: {
+    entity_type: "habit",
+    schema_version: "1.0",
+    metadata: {
+      label: "Habit",
+      description: "Habit tracking for recurring behaviors and daily practices.",
+      category: "health",
+      aliases: ["daily_habit", "practice", "behavior"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        habit_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        description: { type: "string", required: false },
+        target_frequency: { type: "string", required: false },
+        current_streak: { type: "number", required: false },
+        longest_streak: { type: "number", required: false },
+        status: { type: "string", required: false },
+        start_date: { type: "date", required: false },
+        priority: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        current_streak: { strategy: "last_write" },
+        longest_streak: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+      },
+    },
+  },
+
+  workout: {
+    entity_type: "workout",
+    schema_version: "1.0",
+    metadata: {
+      label: "Workout",
+      description: "Complete workout routines combining multiple exercises.",
+      category: "health",
+      aliases: ["training_routine", "exercise_plan", "routine"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        workout_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        exercises: { type: "string", required: false },
+        type: { type: "string", required: false },
+        circuits: { type: "string", required: false },
+        primary_muscles: { type: "string", required: false },
+        secondary_muscles: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "last_write" },
+        exercises: { strategy: "merge_array" },
+      },
+    },
+  },
+
+  outcome: {
+    entity_type: "outcome",
+    schema_version: "1.0",
+    metadata: {
+      label: "Outcome",
+      description: "Achieved results and deliverables organized by strategic goals.",
+      category: "productivity",
+      aliases: ["objective", "result", "deliverable"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        outcome_id: { type: "string", required: false },
+        outcome_name: { type: "string", required: true },
+        outcome_type: { type: "string", required: false },
+        goal_id: { type: "string", required: false },
+        goal_category: { type: "string", required: false },
+        domain: { type: "string", required: false },
+        status: { type: "string", required: false },
+        target_date: { type: "date", required: false },
+        description: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        updated_at: { type: "date", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        updated_at: { strategy: "last_write" },
+      },
+    },
+  },
+
+  emotion: {
+    entity_type: "emotion",
+    schema_version: "1.0",
+    metadata: {
+      label: "Emotion",
+      description: "Emotion tracking and categorization.",
+      category: "health",
+      aliases: ["feeling", "mood"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        emotion_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        category: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        name: { strategy: "last_write" },
+      },
+    },
+  },
+
+  domain: {
+    entity_type: "domain",
+    schema_version: "1.0",
+    metadata: {
+      label: "Domain",
+      description: "Domain name registrations and management.",
+      category: "knowledge",
+      aliases: ["domain_name", "website_domain"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        domain_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        companies: { type: "string", required: false },
+        registrar: { type: "string", required: false },
+        expiry_date: { type: "date", required: false },
+        status: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        status: { strategy: "last_write" },
+        expiry_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  research: {
+    entity_type: "research",
+    schema_version: "1.0",
+    metadata: {
+      label: "Research",
+      description: "Research summaries and notes from articles, podcasts, papers, and other sources.",
+      category: "knowledge",
+      aliases: ["research_note", "study", "article_summary"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        research_id: { type: "string", required: false },
+        title: { type: "string", required: true },
+        source_url: { type: "string", required: false },
+        source_type: { type: "string", required: false },
+        author: { type: "string", required: false },
+        publication_date: { type: "date", required: false },
+        summary: { type: "string", required: false },
+        topics: { type: "string", required: false },
+        created_date: { type: "date", required: false },
+        updated_date: { type: "date", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        summary: { strategy: "last_write" },
+        updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  argument: {
+    entity_type: "argument",
+    schema_version: "1.0",
+    metadata: {
+      label: "Argument",
+      description: "Relationship arguments tracking (restricted).",
+      category: "knowledge",
+      aliases: ["dispute", "disagreement"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        argument_id: { type: "string", required: false },
+        name: { type: "string", required: true },
+        date: { type: "date", required: false },
+        category: { type: "string", required: false },
+        resolution: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        resolution: { strategy: "last_write" },
+      },
+    },
+  },
+
+  strategy: {
+    entity_type: "strategy",
+    schema_version: "1.0",
+    metadata: {
+      label: "Strategy",
+      description: "Strategic documents and tactics from markdown files.",
+      category: "productivity",
+      aliases: ["strategic_document", "tactic"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        strategy_id: { type: "string", required: true },
+        title: { type: "string", required: true },
+        content: { type: "string", required: true },
+        category: { type: "string", required: true },
+        domain: { type: "string", required: true },
+        file_path: { type: "string", required: true },
+        status: { type: "string", required: false },
+        last_updated_date: { type: "date", required: false },
+        created_date: { type: "date", required: false },
+        import_date: { type: "date", required: true },
+        import_source_file: { type: "string", required: true },
+        notes: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        content: { strategy: "last_write" },
+        status: { strategy: "last_write" },
+        last_updated_date: { strategy: "last_write" },
+      },
+    },
+  },
+
+  process: {
+    entity_type: "process",
+    schema_version: "1.0",
+    metadata: {
+      label: "Process",
+      description: "Process documents and analysis records.",
+      category: "productivity",
+      aliases: ["procedure", "workflow"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        process_id: { type: "string", required: false },
+        title: { type: "string", required: true },
+        content: { type: "string", required: false },
+        process_type: { type: "string", required: false },
+        sources: { type: "string", required: false },
+        created_date: { type: "date", required: false },
+        created_datetime: { type: "date", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        content: { strategy: "last_write" },
+      },
+    },
+  },
+
+  task_attachment: {
+    entity_type: "task_attachment",
+    schema_version: "1.0",
+    metadata: {
+      label: "Task Attachment",
+      description: "File attachments on tasks.",
+      category: "productivity",
+      aliases: ["task_file", "attachment"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        attachment_id: { type: "string", required: false },
+        task_id: { type: "string", required: false },
+        asana_task_gid: { type: "string", required: false },
+        asana_attachment_gid: { type: "string", required: false },
+        asana_workspace: { type: "string", required: false },
+        name: { type: "string", required: true },
+        resource_subtype: { type: "string", required: false },
+        content_type: { type: "string", required: false },
+        size_bytes: { type: "number", required: false },
+        local_path: { type: "string", required: false },
+        download_url: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        imported_at: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        local_path: { strategy: "last_write" },
+      },
+    },
+  },
+
+  task_comment: {
+    entity_type: "task_comment",
+    schema_version: "1.0",
+    metadata: {
+      label: "Task Comment",
+      description: "Comments on tasks.",
+      category: "productivity",
+      aliases: ["comment", "task_note"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        comment_id: { type: "string", required: false },
+        task_id: { type: "string", required: false },
+        asana_task_gid: { type: "string", required: false },
+        asana_story_gid: { type: "string", required: false },
+        asana_workspace: { type: "string", required: false },
+        author_name: { type: "string", required: false },
+        author_gid: { type: "string", required: false },
+        text: { type: "string", required: true },
+        comment_html: { type: "string", required: false },
+        comment_html_remote: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        imported_at: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        text: { strategy: "last_write" },
+      },
+    },
+  },
+
+  task_dependency: {
+    entity_type: "task_dependency",
+    schema_version: "1.0",
+    metadata: {
+      label: "Task Dependency",
+      description: "Task blocking relationships.",
+      category: "productivity",
+      aliases: ["dependency", "task_blocker"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        dependency_id: { type: "string", required: false },
+        task_id: { type: "string", required: false },
+        asana_task_gid: { type: "string", required: false },
+        asana_workspace: { type: "string", required: false },
+        predecessor_task_id: { type: "string", required: false },
+        predecessor_asana_gid: { type: "string", required: false },
+        successor_task_id: { type: "string", required: false },
+        successor_asana_gid: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        imported_at: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {},
+    },
+  },
+
+  task_story: {
+    entity_type: "task_story",
+    schema_version: "1.0",
+    metadata: {
+      label: "Task Story",
+      description: "Activity log entries for tasks.",
+      category: "productivity",
+      aliases: ["story", "activity_log"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        story_id: { type: "string", required: false },
+        task_id: { type: "string", required: false },
+        asana_task_gid: { type: "string", required: false },
+        asana_story_gid: { type: "string", required: false },
+        asana_workspace: { type: "string", required: false },
+        story_type: { type: "string", required: false },
+        author_name: { type: "string", required: false },
+        author_gid: { type: "string", required: false },
+        text: { type: "string", required: false },
+        story_html: { type: "string", required: false },
+        story_html_remote: { type: "string", required: false },
+        created_at: { type: "date", required: false },
+        imported_at: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {},
+    },
+  },
+
+  habit_completion: {
+    entity_type: "habit_completion",
+    schema_version: "1.0",
+    metadata: {
+      label: "Habit Completion",
+      description: "Daily completion tracking for habits.",
+      category: "health",
+      aliases: ["completion", "habit_log"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        completion_id: { type: "string", required: false },
+        habit_id: { type: "string", required: true },
+        completion_date: { type: "date", required: true },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {},
+    },
+  },
+
+  habit_objective: {
+    entity_type: "habit_objective",
+    schema_version: "1.0",
+    metadata: {
+      label: "Habit Objective",
+      description: "Target benefits and objectives for habits.",
+      category: "health",
+      aliases: ["habit_goal", "habit_target"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        objective_id: { type: "string", required: false },
+        habit_id: { type: "string", required: true },
+        objective: { type: "string", required: true },
+        objective_type: { type: "string", required: false },
+        priority: { type: "string", required: false },
+        notes: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        priority: { strategy: "last_write" },
       },
     },
   },

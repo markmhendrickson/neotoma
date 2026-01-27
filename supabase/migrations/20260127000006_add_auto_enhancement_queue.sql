@@ -1,6 +1,14 @@
 -- Create auto_enhancement_queue table for deferred auto-enhancement processing
 -- Migration: 20260127000006_add_auto_enhancement_queue.sql
 
+-- Temporarily disable event trigger to avoid double schema prefix issue
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table DISABLE;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS auto_enhancement_queue (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   entity_type TEXT NOT NULL,
@@ -50,3 +58,14 @@ COMMENT ON TABLE auto_enhancement_queue IS 'Queue for deferred auto-enhancement 
 COMMENT ON COLUMN auto_enhancement_queue.status IS 'Status: pending (not processed), processing (in progress), completed (done), failed (error), skipped (blacklisted or ineligible)';
 COMMENT ON COLUMN auto_enhancement_queue.priority IS 'Priority for processing. Lower values = higher priority';
 COMMENT ON COLUMN auto_enhancement_queue.retry_count IS 'Number of times processing was retried after failure';
+
+-- Re-enable event trigger (if it exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table ENABLE;
+  END IF;
+END $$;
+
+-- Ensure RLS is enabled (in case event trigger was disabled)
+ALTER TABLE auto_enhancement_queue ENABLE ROW LEVEL SECURITY;

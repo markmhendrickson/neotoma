@@ -1,5 +1,6 @@
 import * as React from "react"
 import * as DialogPrimitive from "@radix-ui/react-dialog"
+import { cn } from "@/lib/utils"
 
 const Dialog = DialogPrimitive.Root
 
@@ -13,10 +14,15 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm" />
     <DialogPrimitive.Content
       ref={ref}
-      className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg"
+      className={cn(
+        "fixed left-[50%] top-[50%] z-50 flex flex-col w-full max-w-lg max-h-[90vh] translate-x-[-50%] translate-y-[-50%] border bg-background shadow-lg duration-200 sm:rounded-lg overflow-hidden",
+        className
+      )}
       {...props}
     >
-      {children}
+      <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 p-6">
+        {children}
+      </div>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
 ))

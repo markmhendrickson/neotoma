@@ -47,10 +47,10 @@ As of this plan, the following FUs are in scope for v1.0.0 (MVP), derived from `
 
 **UI Layer (Main Objects per `docs/vocabulary/canonical_terms.md`):**
 - `FU-300`: Design System Implementation (core UI foundation)
-- `FU-301`: Source Material List View (browse/search source material using `sources` table)
-- `FU-302`: Source Material Detail View (show source material + interpretations + observations)
+- `FU-301`: Source List View (browse/search source using `sources` table)
+- `FU-302`: Source Detail View (show source + interpretations + observations)
 - `FU-303`: Timeline View (chronological events)
-- `FU-304`: File Upload UI (upload source material)
+- `FU-304`: File Upload UI (upload source)
 - `FU-601`: Entity Explorer (entity list + detail, MVP-critical for validating entity resolution differentiator)
 
 **Auth & Security:**
@@ -61,7 +61,7 @@ As of this plan, the following FUs are in scope for v1.0.0 (MVP), derived from `
 - `FU-710`: Spec Compliance Automation (multi-agent, multi-model spec-compliance checks and reports for marketed/high-risk releases)
 
 **Critical Notes:**
-- **FU-301/302 renamed** from "Records List/Detail" to "Source Material List/Detail" to align with current architecture (deprecated `records` table will be removed in v0.3.0)
+- **FU-301/302 renamed** from "Records List/Detail" to "Source List/Detail" to align with current architecture (deprecated `records` table will be removed in v0.3.0)
 - **FU-601 promoted from P2 to P0** — Entity resolution (FU-101) is MVP-critical differentiator; users must see entities to validate value
 - **FU-101, FU-102, FU-601 together validate competitive differentiators** — Entity resolution + timelines + entity-centric UX differentiate from provider memory
 

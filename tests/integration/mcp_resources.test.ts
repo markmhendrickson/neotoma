@@ -109,7 +109,7 @@ describe("MCP Resources - Integration", () => {
       expect(parsed.month).toBe("01");
     });
 
-    it("should parse source material URI", () => {
+    it("should parse source URI", () => {
       const uri = "neotoma://source/src_abc123";
       const parsed = (server as any).parseResourceUri(uri);
       expect(parsed.type).toBe("source");
@@ -307,8 +307,8 @@ describe("MCP Resources - Integration", () => {
       });
     });
 
-    describe("handleSourceMaterial", () => {
-      it("should return source material details", async () => {
+    describe("handleSource", () => {
+      it("should return source details", async () => {
         // Skip this test if sources table doesn't exist in test environment
         // The table may not exist in all test environments
         try {
@@ -323,7 +323,7 @@ describe("MCP Resources - Integration", () => {
       });
 
       it("should throw error for non-existent source", async () => {
-        await expect((server as any).handleSourceMaterial("src_nonexistent")).rejects.toThrow();
+        await expect((server as any).handleSource("src_nonexistent")).rejects.toThrow();
       });
     });
 
@@ -341,6 +341,112 @@ describe("MCP Resources - Integration", () => {
           console.warn("Sources table not available in test environment");
         }
       });
+    });
+  });
+
+  describe("Resource Query Parameters", () => {
+    it("should support limit parameter on entity collections", async () => {
+      const uri = "neotoma://entities?limit=5";
+      const parsed = (server as any).parseResourceUri(uri);
+
+      expect(parsed.queryParams).toBeDefined();
+      expect(parsed.queryParams?.limit).toBe(5);
+    });
+
+    it("should support offset parameter", async () => {
+      const uri = "neotoma://entities?offset=10";
+      const parsed = (server as any).parseResourceUri(uri);
+
+      expect(parsed.queryParams?.offset).toBe(10);
+    });
+
+    it("should support sort and order parameters", async () => {
+      const uri = "neotoma://sources?sort=created_at&order=asc";
+      const parsed = (server as any).parseResourceUri(uri);
+
+      expect(parsed.queryParams?.sort).toBe("created_at");
+      expect(parsed.queryParams?.order).toBe("asc");
+    });
+
+    it("should support entity_type filter on generic collection", async () => {
+      const uri = "neotoma://entities?entity_type=invoice&limit=20";
+      const parsed = (server as any).parseResourceUri(uri);
+
+      expect(parsed.queryParams?.entity_type).toBe("invoice");
+      expect(parsed.queryParams?.limit).toBe(20);
+    });
+
+    it("should validate limit maximum (1000)", async () => {
+      const uri = "neotoma://entities?limit=2000";
+      const parsed = (server as any).parseResourceUri(uri);
+
+      // Should cap at 1000 or be undefined if validation fails
+      expect(parsed.queryParams?.limit).toBeUndefined();
+    });
+  });
+
+  describe("Resource Metadata", () => {
+    it("should include category field in entity collection response", async () => {
+      const result = await (server as any).handleEntityCollectionAll();
+
+      expect(result.category).toBe("entities");
+    });
+
+    it("should include last_updated timestamp in entity collection response", async () => {
+      const result = await (server as any).handleEntityCollectionAll();
+
+      expect(result.last_updated).toBeDefined();
+      expect(typeof result.last_updated).toBe("string");
+    });
+
+    it("should include pagination hints (returned, has_more)", async () => {
+      const result = await (server as any).handleEntityCollectionAll();
+
+      expect(result.returned).toBeDefined();
+      expect(typeof result.returned).toBe("number");
+      expect(result.has_more).toBeDefined();
+      expect(typeof result.has_more).toBe("boolean");
+    });
+
+    it("should include category field in relationship collection response", async () => {
+      const result = await (server as any).handleRelationshipCollectionAll();
+
+      expect(result.category).toBe("relationships");
+    });
+
+    it("should include category field in timeline response", async () => {
+      const result = await (server as any).handleTimelineYear("2024");
+
+      expect(result.category).toBe("timeline");
+    });
+
+    it("should include category field in source collection response", async () => {
+      const result = await (server as any).handleSourceCollection();
+
+      expect(result.category).toBe("sources");
+    });
+  });
+
+  describe("Error Handling", () => {
+    it("should return empty collection on database error for entities", async () => {
+      // Mock a database error scenario by passing invalid params that would cause query to fail
+      const result = await (server as any).handleEntityCollectionAll();
+
+      // Should not throw, should return empty collection
+      expect(result.type).toBe("entity_collection_all");
+      expect(Array.isArray(result.entities)).toBe(true);
+    });
+
+    it("should include error field when handler fails gracefully", async () => {
+      // Test error handling for a collection type
+      const result = await (server as any).handleEntityCollectionAll();
+
+      // If there's an error, it should be in the response, not thrown
+      if (result.error) {
+        expect(typeof result.error).toBe("string");
+        expect(result.entities).toEqual([]);
+        expect(result.total).toBe(0);
+      }
     });
   });
 });

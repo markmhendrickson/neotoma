@@ -8,7 +8,7 @@ This document outlines the required UI refactoring to align MVP with main object
 
 **Date:** 2026-01-19
 
-**Issue:** MVP UI plan (FU-301, FU-302) references deprecated `records` table that will be removed in v0.3.0. MVP UI must use main objects: Source Material, Entity, Observation, Event.
+**Issue:** MVP UI plan (FU-301, FU-302) references deprecated `records` table that will be removed in v0.3.0. MVP UI must use main objects: Source, Entity, Observation, Event.
 
 **Impact:** 
 - MVP validates deprecated architecture instead of current architecture
@@ -19,7 +19,7 @@ This document outlines the required UI refactoring to align MVP with main object
 
 **Core Objects Users Need to Browse:**
 
-1. **Source Material** — Raw data (files, structured JSON)
+1. **Source** — Raw data (files, structured JSON)
 2. **Entity** — Canonical representations (companies, people, invoices)
 3. **Entity Snapshot** — Current truth for an entity (computed from observations)
 4. **Observation** — Granular facts with provenance
@@ -28,13 +28,13 @@ This document outlines the required UI refactoring to align MVP with main object
 7. **Interpretation** — AI interpretation runs with config
 
 **Deprecated Objects (DO NOT USE):**
-- ❌ **Record** — Replaced by Source Material (removed in v0.3.0)
+- ❌ **Record** — Replaced by Source (removed in v0.3.0)
 - ❌ **Record Type** — Replaced by Entity Type
 - ❌ **Capability** — Removed in v0.2.15
 
 ## Required Changes
 
-### 1. FU-301: Rename and Refactor to Source Material List
+### 1. FU-301: Rename and Refactor to Source List
 
 **Current (Incorrect):**
 - Name: "Records List View"
@@ -42,22 +42,22 @@ This document outlines the required UI refactoring to align MVP with main object
 - Shows: Record types, properties
 
 **Target (Correct):**
-- Name: "Source Material List View"
+- Name: "Source List View"
 - Uses: `sources` table
-- Shows: Source material (files, structured data)
+- Shows: Sources (files, structured data)
 - Filters: By mime type, source type, date range
-- Search: Across source material content
+- Search: Across source content
 
 **Required Work:**
-1. Rename component from `RecordsTable` to `SourceMaterialTable`
+1. Rename component from `RecordsTable` to `SourceTable`
 2. Update DB queries from `records` table to `sources` table
 3. Update filters (mime_type, source_type, file_name)
-4. Update UI labels ("Source Material" not "Records")
+4. Update UI labels ("Source" not "Records")
 5. Update tests to query `sources` table
 
 **Estimated:** 0.5-1 day
 
-### 2. FU-302: Rename and Refactor to Source Material Detail
+### 2. FU-302: Rename and Refactor to Source Detail
 
 **Current (Incorrect):**
 - Name: "Record Detail View"
@@ -65,25 +65,25 @@ This document outlines the required UI refactoring to align MVP with main object
 - Shows: Record metadata, properties
 
 **Target (Correct):**
-- Name: "Source Material Detail View"
+- Name: "Source Detail View"
 - Uses: `sources`, `interpretations`, `observations` tables
 - Shows:
-  - Source material metadata (content_hash, mime_type, file_name, created_at)
+  - Source metadata (content_hash, mime_type, file_name, created_at)
   - Interpretations (AI runs with model, temperature, prompt_hash)
   - Observations (extracted facts with provenance)
   - Linked entities (from observations)
   - Linked events (timeline)
 
 **Required Work:**
-1. Rename component from `RecordDetailsPanel` to `SourceMaterialDetailsPanel`
+1. Rename component from `RecordDetailsPanel` to `SourceDetail`
 2. Update DB queries:
    - Load source from `sources` table
    - Load interpretations from `interpretations` table
    - Load observations from `observations` table
 3. Add interpretation history section (show config for each run)
-4. Add observations section (show provenance: which source material + interpretation contributed which fields)
+4. Add observations section (show provenance: which source + interpretation contributed which fields)
 5. Update entity/event linking (via observations)
-6. Update UI labels ("Source Material" not "Record")
+6. Update UI labels ("Source" not "Record")
 7. Update tests to query correct tables
 
 **Estimated:** 1-1.5 days
@@ -111,9 +111,9 @@ This document outlines the required UI refactoring to align MVP with main object
    - Show entity count by type
 2. Implement Entity Detail view:
    - Display entity snapshot (current truth)
-   - Display observations (with provenance: which source material contributed which fields)
+   - Display observations (with provenance: which source contributed which fields)
    - Display relationships (PART_OF, REFERS_TO, SETTLES, etc.)
-   - Link to source material (via observations)
+   - Link to source (via observations)
    - Show merge history (if entity was merged)
 3. Basic relationship visualization (can defer advanced viz to post-MVP)
 4. Update tests for entity browsing
@@ -130,7 +130,7 @@ This document outlines the required UI refactoring to align MVP with main object
 1. Add "Observations" tab to Entity Detail view
 2. List all observations for an entity
 3. Show observation fields + source priority
-4. Link to source material (via source_material_id)
+4. Link to source (via source_material_id)
 5. Link to interpretation (via interpretation_id, if applicable)
 6. Show observed_at timestamp
 
@@ -143,7 +143,7 @@ This document outlines the required UI refactoring to align MVP with main object
 
 **Target (Correct):**
 - Stats on main objects:
-  - Source material count (total files + structured data)
+  - Sources count (total files + structured data)
   - Entity count by type (companies, people, invoices, etc.)
   - Observation count
   - Interpretation count
@@ -153,7 +153,7 @@ This document outlines the required UI refactoring to align MVP with main object
 1. Update dashboard queries to use correct tables
 2. Add entity count by type widget
 3. Add observation count widget
-4. Update "Recent items" to show recent source material (not records)
+4. Update "Recent items" to show recent source (not records)
 
 **Estimated:** 0.5-1 day
 
@@ -182,7 +182,7 @@ This document outlines the required UI refactoring to align MVP with main object
 
 1. Rename FU-301 component and update queries to `sources`
 2. Rename FU-302 component and update queries to `sources` + `interpretations` + `observations`
-3. Update all UI labels from "Records" to "Source Material"
+3. Update all UI labels from "Records" to "Source"
 4. Run tests to verify correct tables used
 
 ### Phase 2: Implement Entity Explorer (2-3 days)
@@ -190,13 +190,13 @@ This document outlines the required UI refactoring to align MVP with main object
 1. Build Entity List view
 2. Build Entity Detail view
 3. Add relationship display
-4. Link entities to source material (via observations)
+4. Link entities to source (via observations)
 5. Run tests for entity browsing
 
 ### Phase 3: Add Observation Visibility (1-2 days, P1)
 
 1. Add observations tab to Entity Detail
-2. Link observations to source material and interpretations
+2. Link observations to source and interpretations
 3. Show provenance chain
 
 ### Phase 4: Update Dashboard (0.5-1 day)
@@ -210,13 +210,13 @@ This document outlines the required UI refactoring to align MVP with main object
 **MVP UI is successful when:**
 
 1. ✅ No references to deprecated `records` table in UI code
-2. ✅ Source Material List uses `sources` table
-3. ✅ Source Material Detail shows interpretations and observations
+2. ✅ Source List uses `sources` table
+3. ✅ Source Detail shows interpretations and observations
 4. ✅ Entity List shows entities by type
 5. ✅ Entity Detail shows entity snapshots with provenance
 6. ✅ Dashboard shows stats for main objects
 7. ✅ All tests use correct tables (no `records`)
-8. ✅ Users can browse source material, entities, and timeline
+8. ✅ Users can browse source, entities, and timeline
 9. ✅ Users can see provenance (where entity snapshot fields came from)
 10. ✅ Users can validate entity resolution competitive differentiator
 

@@ -1,0 +1,63 @@
+[
+  {
+    "schema_version": "1.0",
+    "external_id": "acc-checking-001",
+    "institution": "Chase Bank",
+    "balance": 10000.0,
+    "currency": "USD",
+    "status": "active",
+    "wallet": "Chase",
+    "wallet_name": "Chase Bank",
+    "number": "****1234",
+    "categories": "checking,primary",
+    "denomination": "USD",
+    "notes": "Primary checking account"
+  },
+  {
+    "schema_version": "1.0",
+    "external_id": "acc-savings-001",
+    "institution": "Chase Bank",
+    "balance": 50000.0,
+    "currency": "USD",
+    "status": "active",
+    "wallet": "Chase",
+    "wallet_name": "Chase Bank",
+    "number": "****5678",
+    "categories": "savings",
+    "denomination": "USD",
+    "notes": "High-yield savings account"
+  },
+  {
+    "schema_version": "1.0",
+    "external_id": "acc-brokerage-001",
+    "institution": "Fidelity",
+    "balance": 85000.0,
+    "currency": "USD",
+    "status": "active",
+    "wallet": "Fidelity",
+    "wallet_name": "Fidelity Investments",
+    "number": "****9012",
+    "categories": "investment,brokerage",
+    "denomination": "USD",
+    "notes": "Main investment account"
+  },
+  {
+    "schema_version": "1.0",
+    "external_id": "acc-closed-001",
+    "institution": "Wells Fargo",
+    "balance": 0.0,
+    "currency": "USD",
+    "status": "closed",
+    "number": "****3456",
+    "categories": "checking",
+    "notes": "Closed old account"
+  },
+  {
+    "schema_version": "1.0",
+    "external_id": "acc-minimal-001",
+    "status": "active"
+  }
+]
+
+
+

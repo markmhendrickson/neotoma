@@ -1,0 +1,53 @@
+[
+  {
+    "schema_version": "1.0",
+    "task_id": "task-001",
+    "asana_task_gid": "1234567890",
+    "asana_story_gid": "story-002",
+    "asana_workspace": "workspace-001",
+    "story_type": "marked_complete",
+    "author_name": "John Doe",
+    "author_gid": "user-001",
+    "text": "marked this task complete",
+    "created_at": "2024-05-20T16:30:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "task_id": "task-001",
+    "asana_task_gid": "1234567890",
+    "asana_story_gid": "story-003",
+    "asana_workspace": "workspace-001",
+    "story_type": "added_to_project",
+    "author_name": "System",
+    "text": "added this task to Project Alpha",
+    "created_at": "2024-05-10T09:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "task_id": "task-002",
+    "asana_task_gid": "1234567891",
+    "asana_story_gid": "story-004",
+    "asana_workspace": "workspace-001",
+    "story_type": "due_date_changed",
+    "author_name": "Jane Smith",
+    "author_gid": "user-002",
+    "text": "changed the due date to May 25",
+    "created_at": "2024-05-18T11:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "task_id": "task-003",
+    "asana_task_gid": "1234567892",
+    "asana_story_gid": "story-005",
+    "asana_workspace": "workspace-001",
+    "story_type": "assigned",
+    "author_name": "System",
+    "text": "assigned this task to Bob Johnson",
+    "created_at": "2024-05-19T14:30:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "story_type": "comment",
+    "text": "Minimal story"
+  }
+]

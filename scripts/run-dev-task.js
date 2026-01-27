@@ -100,10 +100,15 @@ function reportExistingDevServeIfRunning() {
   return true;
 }
 
+// Check if ports are already explicitly set via environment variables
+const hasExplicitPorts =
+  typeof process.env.HTTP_PORT === 'string' && process.env.HTTP_PORT.length > 0;
+
 const hasSharedPorts =
-  typeof process.env.BRANCH_PORTS_FILE === 'string' &&
+  hasExplicitPorts ||
+  (typeof process.env.BRANCH_PORTS_FILE === 'string' &&
   process.env.BRANCH_PORTS_FILE.length > 0 &&
-  fs.existsSync(process.env.BRANCH_PORTS_FILE);
+  fs.existsSync(process.env.BRANCH_PORTS_FILE));
 
 const isDevServeInvocation =
   args[0] === 'node' &&

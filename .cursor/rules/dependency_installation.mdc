@@ -84,6 +84,11 @@ After installing:
 - Test that tools/commands work as expected
 - Ensure no installation errors occurred
 
+### 5. Proceed After Installing
+
+- After installing dependencies, retry the operation that failed (re-run the command or continue the workflow)
+- Do not stop and ask the user to run the command; run it again in the same workflow
+
 ## Constraints
 
 - **Do NOT ask for permission** - Install dependencies automatically when needed

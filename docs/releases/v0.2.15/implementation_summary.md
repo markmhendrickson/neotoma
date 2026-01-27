@@ -6,23 +6,23 @@
 
 ## Executive Summary
 
-v0.2.15 completes the architecture migration to unified source material-based ingestion, eliminates capability-based processing, and aligns all terminology with the canonical vocabulary defined in `docs/vocabulary/canonical_terms.md`.
+v0.2.15 completes the architecture migration to unified source-based ingestion, eliminates capability-based processing, and aligns all terminology with the canonical vocabulary defined in `docs/vocabulary/canonical_terms.md`.
 
 ## Key Changes Implemented
 
 ### 1. Unified Ingestion (`ingest` Action)
 
-**Single MCP action for all source material types:**
+**Single MCP action for all source types:**
 
 ```typescript
 ingest({
   user_id: string,
-  // For unstructured source material
+  // For unstructured source
   file_content?: string,
   mime_type?: string,
   interpret?: boolean,
   interpretation_config?: object,
-  // For structured source material
+  // For structured source
   entities?: Array<{entity_type: string, ...}>,
   source_priority?: number
 })
@@ -132,7 +132,7 @@ ingest({
 ### 7. Terminology Alignment
 
 **Canonical Terms Applied:**
-- "record" → "source material" or "entity" (context-dependent)
+- "record" → "source" or "entity" (context-dependent)
 - "capability" → deprecated, moved to "entity schema"
 - "submit_payload" → unified into "ingest"
 - "ingest_structured" → unified into "ingest"
@@ -183,7 +183,7 @@ ingest({
 - Test source-based queries
 
 **Phase 4 (Pending):**
-- Create data migration script (records → source material)
+- Create data migration script (records → source)
 - Run migration in dry-run mode
 - Verify data integrity
 

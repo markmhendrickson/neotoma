@@ -1,3 +1,5 @@
+import { ENTITY_SCHEMAS } from "../services/schema_definitions.js";
+
 export type RecordTypeCategory =
   | "finance"
   | "productivity"
@@ -16,7 +18,28 @@ export interface RecordTypeDefinition {
 
 export type RecordTypeMatch = "canonical" | "alias" | "custom" | "default";
 
-const definitions: ReadonlyArray<RecordTypeDefinition> = [
+// Derive record type definitions from entity schemas
+function deriveDefinitionsFromSchemas(): ReadonlyArray<RecordTypeDefinition> {
+  return Object.values(ENTITY_SCHEMAS)
+    .filter(schema => schema.metadata)
+    .map(schema => ({
+      id: schema.entity_type,
+      label: schema.metadata!.label,
+      description: schema.metadata!.description,
+      category: schema.metadata!.category,
+      primaryProperties: schema.metadata!.primaryProperties || 
+        Object.entries(schema.schema_definition.fields)
+          .filter(([_, def]) => def.required)
+          .map(([key]) => key),
+      aliases: schema.metadata!.aliases || [],
+    }));
+}
+
+const definitions: ReadonlyArray<RecordTypeDefinition> = deriveDefinitionsFromSchemas();
+
+// Legacy static definitions (kept for reference, no longer used)
+// These are now derived from ENTITY_SCHEMAS in schema_definitions.ts
+const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
   {
     id: "account",
     label: "Account",
@@ -483,6 +506,7 @@ const definitions: ReadonlyArray<RecordTypeDefinition> = [
   },
 ] as const;
 
+// Build alias map from derived definitions
 type AliasMap = Map<string, RecordTypeDefinition>;
 
 const aliasMap: AliasMap = definitions.reduce((map, definition) => {

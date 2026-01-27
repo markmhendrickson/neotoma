@@ -1,0 +1,23 @@
+# Supabase Configuration
+# This file configures Supabase CLI settings for local and remote projects
+# See: https://supabase.com/docs/reference/cli/config
+
+# Project reference (set when linking: npx supabase link --project-ref YOUR_PROJECT_ID)
+# project_id = ""
+
+[auth]
+# JWT expiration time in seconds
+# Default: 3600 (1 hour)
+# Maximum: 604800 (1 week)
+# Current setting: 604800 (7 days) - configured via Management API
+# Recommended: 7200 (2 hours) for development, 3600 (1 hour) for production
+jwt_expiry = 604800  # 7 days - maximum allowed
+
+# Rate limiting for anonymous sign-ins
+# Default: 30 requests per hour per IP address
+# Increased for E2E testing to prevent rate limit errors
+[auth.rate_limit]
+anonymous_users = 1000  # Increased from default 30 to allow more test runs
+
+# Additional auth settings can be added here
+# See: https://supabase.com/docs/reference/cli/config#auth

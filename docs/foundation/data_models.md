@@ -57,7 +57,7 @@ This model enables:
 - `relationship_type` (PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, etc.)
 - `source_entity_id` (source entity)
 - `target_entity_id` (target entity)
-- `source_id` (which source material created this observation)
+- `source_id` (which source created this observation)
 - `interpretation_id` (which interpretation run, nullable)
 - `observed_at` (timestamp when observation was made)
 - `specificity_score` (0-1, how specific this observation is)

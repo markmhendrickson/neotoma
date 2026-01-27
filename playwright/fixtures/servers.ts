@@ -1,5 +1,7 @@
 import { test as base } from '@playwright/test';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import path from 'node:path';
+import fs from 'node:fs';
 import {
   buildBackendEnv,
   buildFrontendEnv,
@@ -48,7 +50,20 @@ async function startServers(): Promise<RunningServers> {
     bearerToken: credentials.bearerToken,
     wsPort: ports.wsPort,
   });
-  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort, ports.wsPort);
+  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort, ports.wsPort, {
+    forceLocalSupabase: true,
+  });
+
+  // Write .env.development.local so Vite (dev mode) loads local Supabase URL for E2E.
+  // Removed in finally so we don't leave it for normal dev.
+  const envLocalPath = path.join(repoRoot, 'frontend', '.env.development.local');
+  fs.writeFileSync(
+    envLocalPath,
+    `VITE_SUPABASE_URL=${frontendEnv.VITE_SUPABASE_URL || 'http://127.0.0.1:54321'}
+VITE_SUPABASE_ANON_KEY=${frontendEnv.VITE_SUPABASE_ANON_KEY || ''}
+`,
+    'utf8'
+  );
 
   const backend = spawn(npmCommand, ['run', 'dev:http'], {
     cwd: repoRoot,
@@ -105,6 +120,7 @@ function terminate(child?: ChildProcessWithoutNullStreams | null) {
 type ServersFixture = {
   apiBaseUrl: string;
   uiBaseUrl: string;
+  mcpBaseUrl: string;
   bearerToken: string;
   keyExports: KeyExportBundle;
   mockApi?: MockApiServer;
@@ -130,6 +146,14 @@ export const test = base.extend<
         terminate(servers.backend);
         if (servers.mockApi) {
           await servers.mockApi.close();
+        }
+        const envLocalPath = path.join(repoRoot, 'frontend', '.env.development.local');
+        if (fs.existsSync(envLocalPath)) {
+          try {
+            fs.unlinkSync(envLocalPath);
+          } catch {
+            // ignore
+          }
         }
       }
     },
@@ -162,6 +186,14 @@ export const test = base.extend<
   mockApi: [
     async ({ servers }, use) => {
       await use(servers.mockApi);
+    },
+    { scope: 'worker' },
+  ],
+  mcpBaseUrl: [
+    async ({ servers }, use) => {
+      // MCP actions are exposed via HTTP API endpoints
+      // Use the same base URL as apiBaseUrl
+      await use(servers.apiUrl);
     },
     { scope: 'worker' },
   ],

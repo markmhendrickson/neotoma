@@ -1,0 +1,52 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Primary Residence",
+    "address": "123 Main St, City, State 12345",
+    "type": "residential",
+    "purchase_date": "2020-06-15T00:00:00Z",
+    "purchase_price": 500000.0,
+    "current_value": 650000.0,
+    "currency": "USD",
+    "notes": "Primary residence purchased in 2020"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Primary Residence",
+    "address": "123 Main St, City, State 12345",
+    "type": "residential",
+    "purchase_date": "2020-06-15T00:00:00Z",
+    "purchase_price": 500000.0,
+    "current_value": 675000.0,
+    "currency": "USD",
+    "notes": "Primary residence - updated valuation"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Rental Property - Downtown",
+    "address": "456 Oak Ave, Metro, State 67890",
+    "type": "investment",
+    "purchase_date": "2022-03-01T00:00:00Z",
+    "purchase_price": 300000.0,
+    "current_value": 325000.0,
+    "currency": "USD",
+    "notes": "Income-producing rental property"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Vacation Home",
+    "address": "789 Beach Rd, Coastal Town, State 13579",
+    "type": "residential",
+    "purchase_date": "2023-06-15T00:00:00Z",
+    "purchase_price": 400000.0,
+    "currency": "USD"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal property",
+    "purchase_date": "2024-01-01T00:00:00Z"
+  }
+]
+
+
+

@@ -428,22 +428,70 @@ async function checkPublicReadPolicies(): Promise<void> {
       continue;
     }
 
-    // Find public read policies with USING (true)
-    const publicReadMatches = content.matchAll(
-      /CREATE\s+POLICY\s+["']?([^"'\s]+)["']?\s+ON\s+(\w+)\s+FOR\s+SELECT\s+USING\s*\(\s*true\s*\)/gi
+    // Find ALL policies with USING (true) that are NOT restricted to service_role
+    // This catches overly permissive policies for any operation (SELECT, INSERT, UPDATE, DELETE, ALL)
+    const permissivePolicyMatches = content.matchAll(
+      /CREATE\s+POLICY\s+["']?([^"'\s]+)["']?\s+ON\s+(\w+)\s+(?:FOR\s+(\w+)\s+)?(?:TO\s+(\w+)\s+)?USING\s*\(\s*true\s*\)/gi
     );
 
-    for (const match of publicReadMatches) {
+    for (const match of permissivePolicyMatches) {
       const policyName = match[1];
       const tableName = match[2];
+      const operation = match[3] || "ALL";
+      const role = match[4] || "public";
+      
+      // Skip service_role policies (they're intentionally permissive)
+      if (role.toLowerCase() === "service_role") {
+        continue;
+      }
+      
+      // Check if this is a service role policy by looking ahead in the content
+      const matchIndex = match.index || 0;
+      const afterMatch = content.substring(matchIndex, matchIndex + 200);
+      if (afterMatch.includes("TO service_role") || afterMatch.includes("service_role")) {
+        continue;
+      }
       
       issues.push({
-        severity: "error",
+        severity: "warning",
         type: "Overly Permissive RLS Policy",
         entity: `public.${tableName}`,
-        description: `Policy "${policyName}" on ${tableName} allows public read access (USING (true))`,
+        description: `Policy "${policyName}" on ${tableName} allows access with USING (true) for ${operation} operation. Should be user-scoped or restricted to service_role.`,
         fixable: true,
-        fix: `Replace with authenticated-only: CREATE POLICY "${policyName}" ON ${tableName} FOR SELECT USING (auth.role() = 'authenticated');`,
+        fix: `Replace with user-scoped policy: DROP POLICY "${policyName}" ON ${tableName}; CREATE POLICY "${policyName}" ON ${tableName} FOR ${operation} USING (user_id = auth_uid());`,
+      });
+    }
+    
+    // Also check for policies without USING clause (implicitly permissive)
+    const noUsingMatches = content.matchAll(
+      /CREATE\s+POLICY\s+["']?([^"'\s]+)["']?\s+ON\s+(\w+)\s+FOR\s+(\w+)(?:\s+TO\s+(\w+))?(?![\s\S]*?USING)/gi
+    );
+    
+    for (const match of noUsingMatches) {
+      const policyName = match[1];
+      const tableName = match[2];
+      const operation = match[3];
+      const role = match[4] || "public";
+      
+      // Skip service_role policies
+      if (role.toLowerCase() === "service_role") {
+        continue;
+      }
+      
+      // Check if this is a service role policy
+      const matchIndex = match.index || 0;
+      const afterMatch = content.substring(matchIndex, matchIndex + 200);
+      if (afterMatch.includes("TO service_role") || afterMatch.includes("service_role")) {
+        continue;
+      }
+      
+      issues.push({
+        severity: "warning",
+        type: "Overly Permissive RLS Policy",
+        entity: `public.${tableName}`,
+        description: `Policy "${policyName}" on ${tableName} for ${operation} operation lacks USING clause, which may allow overly permissive access.`,
+        fixable: true,
+        fix: `Add user-scoped USING clause: DROP POLICY "${policyName}" ON ${tableName}; CREATE POLICY "${policyName}" ON ${tableName} FOR ${operation} USING (user_id = auth_uid());`,
       });
     }
   }

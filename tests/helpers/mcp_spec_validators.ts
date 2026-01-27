@@ -202,8 +202,15 @@ export function validateListEntityTypesResponse(response: any): asserts response
     expect(typeof entityType.entity_type).toBe("string");
     expect(entityType.schema_version).toBeDefined();
     expect(typeof entityType.schema_version).toBe("string");
-    expect(Array.isArray(entityType.field_names)).toBe(true);
-    expect(typeof entityType.field_summary).toBe("object");
+    
+    // In summary mode, field_count is present instead of field_names/field_summary
+    if (entityType.field_count !== undefined) {
+      expect(typeof entityType.field_count).toBe("number");
+    } else {
+      // Full mode: field_names and field_summary are required
+      expect(Array.isArray(entityType.field_names)).toBe(true);
+      expect(typeof entityType.field_summary).toBe("object");
+    }
   }
   
   expect(typeof response.total).toBe("number");

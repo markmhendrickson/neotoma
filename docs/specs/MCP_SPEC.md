@@ -50,23 +50,158 @@ flowchart LR
 - All responses structured and typed
 - All errors use ErrorEnvelope
 
-## 2. Complete MCP Action Catalog
+## 2. Authentication
+
+**REQUIRED:** All MCP connections MUST authenticate using OAuth (recommended) or session tokens (deprecated).
+
+### 2.0 User ID Inference
+
+**For all authenticated actions:** The `user_id` parameter is **optional** and will be automatically inferred from the authentication context if omitted. Agents should omit `user_id` unless they need to explicitly validate it matches the authenticated user.
+
+**How it works:**
+- If `user_id` is omitted → Server uses the authenticated user's ID from the session token or OAuth connection
+- If `user_id` is provided → Server validates it matches the authenticated user (returns error if mismatch)
+- This ensures all actions operate on the authenticated user's data by default
+
+**Actions that support user_id inference:**
+- `store` (all variants)
+- `retrieve_entities`
+- `correct`
+- `merge_entities`
+- `analyze_schema_candidates`
+- `get_schema_recommendations`
+- `update_schema_incremental` (when `user_specific=true`)
+- `register_schema` (when `user_specific=true`)
+
+**Note:** Some actions (like `retrieve_entity_snapshot`, `list_observations`) don't require `user_id` because they operate on entity IDs which are already user-scoped.
+
+### 2.1 OAuth Authentication Flow (Recommended)
+
+**Setup:**
+
+1. **User navigates** to Neotoma web UI MCP Setup page
+2. **User creates** OAuth connection with unique `connection_id`
+3. **Backend initiates** OAuth flow via `POST /api/mcp/oauth/initiate`
+4. **Backend returns** authorization URL with PKCE challenge
+5. **User opens** authorization URL in browser
+6. **User signs in** via Supabase Auth and approves connection
+7. **Supabase redirects** to callback URL with authorization code
+8. **Backend exchanges** code for access token and refresh token
+9. **Backend stores** encrypted refresh token in database
+10. **MCP client polls** `GET /api/mcp/oauth/status` until status is "active"
+
+**MCP Initialization:**
+
+```json
+// Set in MCP client configuration (e.g., .cursor/mcp.json)
+{
+  "env": {
+    "NEOTOMA_CONNECTION_ID": "cursor-2025-01-21-abc123"
+  }
+}
+```
+
+**Token Management:**
+
+- Refresh tokens stored encrypted in database (AES-256-GCM)
+- Access tokens cached and automatically refreshed before expiration
+- Connections persist until explicitly revoked by user
+- No manual token management required
+
+**OAuth Endpoints:**
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/mcp/oauth/initiate` | POST | Start OAuth flow, generate PKCE challenge |
+| `/api/mcp/oauth/callback` | GET | Handle OAuth callback, store tokens |
+| `/api/mcp/oauth/status` | GET | Check connection status (pending/active/expired) |
+| `/api/mcp/oauth/connections` | GET | List user's connections (authenticated) |
+| `/api/mcp/oauth/connections/:id` | DELETE | Revoke connection (authenticated) |
+
+### 2.2 Session Token Flow (Deprecated)
+
+**Will be removed in a future version. Use OAuth instead.**
+
+**Authentication Flow:**
+
+1. **User signs in** to Neotoma web UI via Supabase Auth
+2. **Frontend obtains** `access_token` (JWT) from Supabase session
+3. **User copies** session token from MCP Setup page
+4. **MCP client passes** session token in environment variable
+5. **MCP server validates** token using Supabase Auth
+6. **MCP server extracts** `user_id` from validated token
+7. **All subsequent actions** use authenticated `user_id`
+
+**Implementation:**
+
+```json
+// Set in MCP client configuration (deprecated)
+{
+  "env": {
+    "NEOTOMA_SESSION_TOKEN": "supabase_access_token_here"
+  }
+}
+```
+
+**Limitations:**
+
+- Tokens expire when user signs out or after inactivity
+- Requires manual token copying and updating
+- No automatic refresh mechanism
+
+### 2.3 User ID Handling
+
+- **Authenticated user_id** is extracted from OAuth connection or session token during initialization
+- **All MCP actions** operate under the authenticated user's context
+- **`user_id` parameter** in action schemas:
+  - **Optional** for most actions (will use authenticated user_id if not provided)
+  - **Validated** if provided (must match authenticated user_id)
+  - **Deprecated** for explicit passing (authentication handles this automatically)
+
+### 2.4 Authentication Errors
+
+| Error Code | Meaning | When |
+|------------|---------|------|
+| `InvalidParams` | `Authentication required. Set NEOTOMA_CONNECTION_ID or NEOTOMA_SESSION_TOKEN` | No authentication method provided |
+| `InvalidParams` | `OAuth connection failed: [reason]` | OAuth connection lookup or validation failed |
+| `InvalidParams` | `Invalid session token: [reason]` | Session token validation failed (deprecated) |
+| `InvalidRequest` | `Not authenticated. Call initialize first.` | Action called without authentication |
+| `InvalidParams` | `user_id does not match authenticated user` | Provided user_id doesn't match authenticated user |
+
+### 2.5 Token Management
+
+**OAuth (Recommended):**
+
+- Refresh tokens automatically managed by backend
+- Access tokens cached and refreshed before expiration
+- Connections persist until revoked
+- No user intervention required
+
+**Session Tokens (Deprecated):**
+
+- Tokens expire when user signs out or after inactivity
+- MCP clients must handle token expiration:
+  - Detect `Invalid session token` errors
+  - User must obtain fresh token from web UI
+  - Reinitialize MCP connection with new token
+
+## 3. Complete MCP Action Catalog
 
 ### 2.1 Core [Storing](../vocabulary/canonical_terms.md#storing) Operations
 
 | Action             | Purpose                                    | Consistency | Deterministic          |
 | ------------------ | ------------------------------------------ | ----------- | ---------------------- |
-| `store`           | **Unified** [storing](../vocabulary/canonical_terms.md#storing) for all [source material](../vocabulary/canonical_terms.md#source-material) (unstructured and structured) | Strong      | Yes (content-hash based) |
+| `store`           | **Unified** [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source) (unstructured and structured) | Strong      | Yes (content-hash based) |
 
-**Note:** `store` is the single unified action for all [source material](../vocabulary/canonical_terms.md#source-material). It accepts either:
-- Unstructured: `{file_content, mime_type}` for unstructured [source material](../vocabulary/canonical_terms.md#source-material) that needs [interpretation](../vocabulary/canonical_terms.md#interpretation)
-- Structured: `{entities: [{entity_type, ...}]}` for pre-structured [source material](../vocabulary/canonical_terms.md#source-material)
+**Note:** `store` is the single unified action for all [source](../vocabulary/canonical_terms.md#source). It accepts either:
+- Unstructured: `{file_content, mime_type}` for unstructured [source](../vocabulary/canonical_terms.md#source) that needs [interpretation](../vocabulary/canonical_terms.md#interpretation)
+- Structured: `{entities: [{entity_type, ...}]}` for pre-structured [source](../vocabulary/canonical_terms.md#source)
 
 ### 2.2 File Operations
 
 | Action         | Purpose                              | Consistency | Deterministic            |
 | -------------- | ------------------------------------ | ----------- | ------------------------ |
-| `retrieve_file_url` | Retrieve signed URL for [source material](../vocabulary/canonical_terms.md#source-material) access       | Strong      | N/A (URL signing)        |
+| `retrieve_file_url` | Retrieve signed URL for [source](../vocabulary/canonical_terms.md#source) access       | Strong      | N/A (URL signing)        |
 
 **Note:** File uploads are handled via the unified `store` action (section 2.1). Agents can read files from the local filesystem, base64-encode the content, and use `store` with `file_content` and `mime_type` parameters. The REST endpoint `/upload_file` exists for UI/frontend use but is not part of the MCP protocol.
 
@@ -87,7 +222,7 @@ flowchart LR
 | Action                 | Purpose                                    | Consistency | Deterministic | MVP Status |
 | ---------------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
 | `list_observations`    | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [observations](../vocabulary/canonical_terms.md#observation) for [entity](../vocabulary/canonical_terms.md#entity)              | Strong      | Yes           | MVP     |
-| `retrieve_field_provenance` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) field [provenance](../vocabulary/canonical_terms.md#provenance) chain to [source material](../vocabulary/canonical_terms.md#source-material)            | Strong      | Yes           | MVP     |
+| `retrieve_field_provenance` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) field [provenance](../vocabulary/canonical_terms.md#provenance) chain to [source](../vocabulary/canonical_terms.md#source)            | Strong      | Yes           | MVP     |
 | `create_relationship`  | Create typed [relationship](../vocabulary/canonical_terms.md#relationship) between [entities](../vocabulary/canonical_terms.md#entity) | Strong      | Yes           | MVP     |
 | `list_relationships`   | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [entity](../vocabulary/canonical_terms.md#entity) [relationships](../vocabulary/canonical_terms.md#relationship)                 | Strong      | Yes           | MVP     |
 | `get_relationship_snapshot` | [Retrieve](../vocabulary/canonical_terms.md#retrieving) [relationship](../vocabulary/canonical_terms.md#relationship) snapshot with [provenance](../vocabulary/canonical_terms.md#provenance)         | Strong      | Yes           | MVP     |
@@ -100,18 +235,18 @@ flowchart LR
 | Action          | Purpose                                    | Consistency | Deterministic | MVP Status |
 | --------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
 | `correct`       | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation) | Strong      | Yes           | MVP     |
-| `reinterpret`   | Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source material](../vocabulary/canonical_terms.md#source-material) | Strong      | Yes           | MVP     |
+| `reinterpret`   | Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) | Strong      | Yes           | MVP     |
 
 **Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override AI [extraction](../vocabulary/canonical_terms.md#extraction). `reinterpret` creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones.
 
 ### 2.6 Using the Unified `store` Action
 
-The unified `store` action handles all [source material](../vocabulary/canonical_terms.md#source-material) types:
+The unified `store` action handles all [source](../vocabulary/canonical_terms.md#source) types:
 
-**For Unstructured [Source Material](../vocabulary/canonical_terms.md#source-material):**
+**For Unstructured [Source](../vocabulary/canonical_terms.md#source):**
 ```typescript
 {
-  user_id: string;                    // Required: User ID (UUID)
+  user_id?: string;                   // Optional: User ID (UUID) - inferred from authentication if omitted
   file_content: string;               // Required: Base64-encoded file content
   mime_type: string;                  // Required: MIME type (e.g., "application/pdf")
   original_filename?: string;         // Optional: Original filename
@@ -130,9 +265,9 @@ The unified `store` action handles all [source material](../vocabulary/canonical
 
 **Note**: Interpretation is automatically skipped for deduplicated files regardless of the `interpret` setting.
 
-Flow: [Store](../vocabulary/canonical_terms.md#storing) [source material](../vocabulary/canonical_terms.md#source-material) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) (if `interpret=true` and not deduplicated) → Structured [source material](../vocabulary/canonical_terms.md#source-material) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation)
+Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) (if `interpret=true` and not deduplicated) → Structured [source](../vocabulary/canonical_terms.md#source) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation)
 
-**For Structured [Source Material](../vocabulary/canonical_terms.md#source-material):**
+**For Structured [Source](../vocabulary/canonical_terms.md#source):**
 ```typescript
 {
   user_id: string;                    // Required: User ID (UUID)
@@ -144,16 +279,16 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source material](../voc
   provenance?: { ... };               // Optional: Provenance metadata
 }
 ```
-Flow: [Store](../vocabulary/canonical_terms.md#storing) [source material](../vocabulary/canonical_terms.md#source-material) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation) (schema fields) + [raw_fragments](../subsystems/schema.md#210-raw_fragments-table) (unknown fields)
+Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation) (schema fields) + [raw_fragments](../subsystems/schema.md#210-raw_fragments-table) (unknown fields)
 
 **CRITICAL: Agents MUST include ALL fields from source data**, not just schema fields. Unknown fields are automatically stored in `raw_fragments` for future schema expansion. See section 3.1 for details.
 
 **Decision Logic:**
 1. **Raw file content?** → Use `store` with `file_content` and `mime_type`
-2. **Structured [source material](../vocabulary/canonical_terms.md#source-material)?** → Use `store` with `entities` array containing `entity_type`
+2. **Structured [source](../vocabulary/canonical_terms.md#source)?** → Use `store` with `entities` array containing `entity_type`
 
 **Important: Entity Type Determination**
-Before storing structured [source material](../vocabulary/canonical_terms.md#source-material) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` for the data and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when:
+Before storing structured [source](../vocabulary/canonical_terms.md#source) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` for the data and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when:
 - The entity type can be determined from existing data in Neotoma
 - The entity type is explicitly provided by the user
 - The entity type is unambiguous from the data structure itself
@@ -197,7 +332,7 @@ This minimizes reliance on [interpretation](../vocabulary/canonical_terms.md#int
 
 ### 2.8 MCP Resources
 
-**Overview:** Neotoma MCP server exposes resources for browseable, read-only access to entities, timelines, and source materials. Resources complement actions by enabling discovery and exploration patterns.
+**Overview:** Neotoma MCP server exposes resources for browseable, read-only access to entities, timelines, and sources. Resources complement actions by enabling discovery and exploration patterns.
 
 **Resource vs. Action:**
 - **Resources**: Read-only, browseable data accessible via URIs (for discovery and exploration)
@@ -207,33 +342,50 @@ This minimizes reliance on [interpretation](../vocabulary/canonical_terms.md#int
 
 **Available Resources:**
 
-| Resource Type | URI Pattern | Description |
-| ------------- | ----------- | ----------- |
-| Entity Collections | `neotoma://entities/{entity_type}` | All entities of a specific type (e.g., `neotoma://entities/invoice`) |
-| Individual Entity | `neotoma://entity/{entity_id}` | Specific entity with snapshot and provenance |
-| Entity Observations | `neotoma://entity/{entity_id}/observations` | All observations for an entity |
-| Entity Relationships | `neotoma://entity/{entity_id}/relationships` | All relationships for an entity (inbound and outbound) |
-| Timeline (Year) | `neotoma://timeline/{year}` | All timeline events in a specific year (e.g., `neotoma://timeline/2024`) |
-| Timeline (Month) | `neotoma://timeline/{year}-{month}` | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`) |
-| Source Material | `neotoma://source/{source_id}` | Specific source material with metadata |
-| Source Collection | `neotoma://sources` | All source materials |
+| Resource Type | URI Pattern | Description | Enumerated? |
+| ------------- | ----------- | ----------- | ----------- |
+| All Entities | `neotoma://entities` | All entities regardless of type | Yes - always available |
+| Entity Collections | `neotoma://entities/{entity_type}` | All entities of a specific type (e.g., `neotoma://entities/invoice`) | No - use `neotoma://entity_types` resource or `list_entity_types` action for discovery |
+| Entity Types | `neotoma://entity_types` | All available entity types (schema-level discovery) | Yes - always available |
+| Individual Entity | `neotoma://entity/{entity_id}` | Specific entity with snapshot and provenance | No - requires entity ID |
+| Entity Observations | `neotoma://entity/{entity_id}/observations` | All observations for an entity | No - requires entity ID |
+| Entity Relationships | `neotoma://entity/{entity_id}/relationships` | All relationships for an entity (inbound and outbound) | No - requires entity ID |
+| All Relationships | `neotoma://relationships` | All relationships regardless of type | Yes - always available |
+| Relationship Collections | `neotoma://relationships/{relationship_type}` | All relationships of a specific type (e.g., `neotoma://relationships/PART_OF`) | Yes - dynamically enumerated |
+| Timeline (Year) | `neotoma://timeline/{year}` | All timeline events in a specific year (e.g., `neotoma://timeline/2024`) | Yes - dynamically enumerated |
+| Timeline (Month) | `neotoma://timeline/{year}-{month}` | All timeline events in a specific month (e.g., `neotoma://timeline/2024-01`) | Yes - dynamically enumerated |
+| Source | `neotoma://source/{source_id}` | Specific source with metadata | No - requires source ID |
+| Source Collection | `neotoma://sources` | All sources | Yes - always available |
 
 **Resource Discovery:**
 - Use MCP `list_resources` to discover available resources dynamically
-- Resources are generated based on actual data (entity types, timeline years available)
+- Resources are generated based on actual data (timeline years, relationship types available)
+- Use `list_resource_templates` to discover resource templates (e.g., `neotoma://entities/{entity_type}`)
+- Entity type discovery: Use `neotoma://entity_types` resource (enumerated) or `list_entity_types` action (for detailed schema information with keyword filtering)
 - User context is respected where applicable
+
+**Enhanced Features:**
+- **Query Parameters**: Filter, sort, and paginate collections via URI query parameters
+- **Error Handling**: Graceful failures return empty collections with error context instead of throwing
+- **Metadata**: All collections include category, pagination hints, and last_updated timestamps
+- **Templates**: Use resource templates for entity type collections
+- **Subscriptions**: Subscribe to resource updates for real-time notifications
 
 **Resource Response Format:**
 
-All resources return JSON with consistent structure:
+All resources return JSON with consistent structure including metadata:
 
 **Entity Collection:**
 ```json
 {
   "type": "entity_collection",
+  "category": "entities",
   "entity_type": "invoice",
   "entities": [...],
   "total": 42,
+  "returned": 42,
+  "has_more": false,
+  "last_updated": "2025-01-15T10:30:00Z",
   "uri": "neotoma://entities/invoice"
 }
 ```
@@ -255,37 +407,120 @@ All resources return JSON with consistent structure:
 ```json
 {
   "type": "timeline",
+  "category": "timeline",
   "year": "2024",
   "events": [...],
   "total": 150,
+  "returned": 150,
+  "has_more": false,
+  "last_updated": "2024-12-31T23:59:59Z",
   "uri": "neotoma://timeline/2024"
 }
 ```
+
+**Entity Types:**
+```json
+{
+  "type": "entity_types",
+  "category": "schema",
+  "entity_types": [
+    {
+      "entity_type": "invoice",
+      "schema_version": "1.0",
+      "field_count": 15
+    },
+    {
+      "entity_type": "transaction",
+      "schema_version": "1.0",
+      "field_count": 12
+    }
+  ],
+  "total": 2,
+  "uri": "neotoma://entity_types"
+}
+```
+
+**Response Metadata Fields:**
+- `category`: Resource category (entities, relationships, timeline, sources, schema)
+- `total`: Total number of items available
+- `returned`: Number of items in current response (for collections)
+- `has_more`: Boolean indicating if more items exist beyond current response (for collections)
+- `last_updated`: ISO timestamp of most recent item in collection (for data collections)
+
+**Query Parameter Support:**
+
+Resources support query parameters for filtering, sorting, and pagination:
+
+| Parameter | Values | Description | Applies To |
+| --------- | ------ | ----------- | ---------- |
+| `limit` | 1-1000 | Maximum items to return | All collections |
+| `offset` | ≥0 | Number of items to skip | All collections |
+| `sort` | Field name | Sort by field (e.g., `created_at`, `canonical_name`) | Most collections |
+| `order` | `asc`, `desc` | Sort order | Most collections |
+| `entity_type` | Entity type | Filter entities by type | Generic entity collection |
+| `relationship_type` | Relationship type | Filter relationships by type | Generic relationship collection |
+| `user_id` | UUID | Filter by user ID (for multi-user isolation) | All collections (entities, sources, relationships, timeline) |
+
+**Examples:**
+- `neotoma://entities?limit=50&offset=100` - Get entities 101-150
+- `neotoma://sources?sort=created_at&order=asc` - Oldest sources first
+- `neotoma://entities?entity_type=invoice&limit=20` - First 20 invoices
+- `neotoma://relationships?relationship_type=PART_OF` - Only PART_OF relationships
+- `neotoma://entities?user_id={uuid}&entity_type=invoice` - User's invoices only
+- `neotoma://sources?user_id={uuid}&limit=50` - User's sources (first 50)
+- `neotoma://timeline/2024?user_id={uuid}` - User's timeline events in 2024
+
+**Resource Templates:**
+
+Entity type collections are available as resource templates:
+- Template: `neotoma://entities/{entity_type}`
+- Use `list_resource_templates` to discover available templates
+- Use `list_entity_types` action to discover available entity types
+
+**Resource Subscriptions:**
+
+Clients can subscribe to resource updates:
+- Use `resources/subscribe` to subscribe to a resource URI
+- Server sends `notifications/resources/updated` when subscribed resources change
+- Use `resources/unsubscribe` to stop receiving notifications
 
 **When to Use Resources vs. Actions:**
 
 | Use Case | Recommended Approach |
 | -------- | -------------------- |
-| Discover available entity types | Resource: `neotoma://` (list resources) |
-| Browse all invoices | Resource: `neotoma://entities/invoice` |
+| Discover available entity types | Resource: `neotoma://entity_types` (simple discovery) OR Action: `list_entity_types` (detailed schema info with keyword filtering) |
+| Browse all entities | Resource: `neotoma://entities` (all entities) |
+| Browse all invoices | Resource: `neotoma://entities/invoice` (if you know the type) OR Action: `retrieve_entities` with `entity_type` filter |
+| Browse user's entities | Resource: `neotoma://entities?user_id={uuid}` OR Action: `retrieve_entities` with `user_id` parameter |
+| Browse all relationships | Resource: `neotoma://relationships` (all relationships) |
+| Browse user's relationships | Resource: `neotoma://relationships?user_id={uuid}` (filters through related entities) |
 | Get specific entity | Resource: `neotoma://entity/{id}` OR Action: `retrieve_entity_snapshot` |
-| Query entities with filters | Action: `retrieve_entities` (supports pagination, user filtering) |
+| Query entities with filters | Action: `retrieve_entities` (supports pagination, user filtering, entity_type filter) OR Resource with query params |
+| Filter and paginate collections | Resource with query params: `neotoma://entities?limit=50&offset=100&user_id={uuid}` |
 | Store new data | Action: `store` (resources are read-only) |
 | Create relationships | Action: `create_relationship` (resources are read-only) |
 | Correct entity fields | Action: `correct` (resources are read-only) |
+| Subscribe to updates | Resource subscriptions: `resources/subscribe` |
 
-**Note:** Resources are read-only complements to actions. For mutations (store, correct, create relationships), use actions. For discovery and simple browsing, resources provide a more intuitive interface.
+**Note:** Resources are read-only complements to actions. For mutations (store, correct, create relationships), use actions. For discovery and simple browsing, resources provide a more intuitive interface. Resources support `user_id` filtering for multi-user isolation. For complex filtering and pagination, use query parameters on resources or use actions for more control.
+
+**User Filtering:**
+- Resources support `user_id` query parameter for all collections
+- Entities: Direct `user_id` filtering on entities table
+- Sources: Direct `user_id` filtering on sources table
+- Relationships: Filtered through related entities' `user_id` (relationships where source or target entity belongs to user)
+- Timeline: Filtered through sources' `user_id` (events from user's sources)
 
 ## 3. Action Specifications
 
 ### 3.1 `store` (Unified)
 
-**Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source material](../vocabulary/canonical_terms.md#source-material). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
+**Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
 
 **Request Schema (Unstructured - Base64):**
 ```typescript
 {
-  user_id: string;                    // Required: User ID (UUID)
+  user_id?: string;                   // Optional: User ID (UUID) - inferred from authentication if omitted
   file_content: string;               // Required: Base64-encoded file content
   mime_type: string;                  // Required: MIME type (e.g., "application/pdf", "image/jpeg")
   original_filename?: string;          // Optional: Original filename
@@ -350,7 +585,7 @@ The server handles all interpretation automatically. Agents should only pass the
 **Request Schema (Structured):**
 ```typescript
 {
-  user_id: string;                    // Required: User ID (UUID)
+  user_id?: string;                   // Optional: User ID (UUID) - inferred from authentication if omitted
   entities: Array<{                   // Required: Array of entity data
     entity_type: string;              // Required: Entity type (e.g., "invoice", "note")
     // ... entity-specific fields per entity schema
@@ -425,7 +660,7 @@ Agents MUST use `list_entity_types` (optionally with a keyword matching the data
   source_id: string;                   // UUID of created source
   content_hash: string;                // SHA-256 hash of content
   file_size?: number;                  // File size in bytes (if unstructured)
-  deduplicated: boolean;               // Whether [source material](../vocabulary/canonical_terms.md#source-material) was already [stored](../vocabulary/canonical_terms.md#storing)
+  deduplicated: boolean;               // Whether [source](../vocabulary/canonical_terms.md#source) was already [stored](../vocabulary/canonical_terms.md#storing)
   interpretation?: {                   // Present if interpret=true (unstructured) or always (structured)
     run_id: string;                    // UUID of interpretation
     entities_created: number;          // Number of entities created
@@ -462,14 +697,14 @@ Agents MUST use `list_entity_types` (optionally with a keyword matching the data
 **When to Use:**
 - Uploading PDFs, images, or text files that need AI [interpretation](../vocabulary/canonical_terms.md#interpretation)
 - [Storing](../vocabulary/canonical_terms.md#storing) structured [entity](../vocabulary/canonical_terms.md#entity) data (invoices, transactions, notes, etc.)
-- All [source material](../vocabulary/canonical_terms.md#source-material) [storing](../vocabulary/canonical_terms.md#storing). This is the single unified action.
+- All [source](../vocabulary/canonical_terms.md#source) [storing](../vocabulary/canonical_terms.md#storing). This is the single unified action.
 
-**Consistency:** Strong ([source material](../vocabulary/canonical_terms.md#source-material) immediately queryable, [observations](../vocabulary/canonical_terms.md#observation) created synchronously)
+**Consistency:** Strong ([source](../vocabulary/canonical_terms.md#source) immediately queryable, [observations](../vocabulary/canonical_terms.md#observation) created synchronously)
 **Determinism:** Yes (same content → same content_hash → same source_id)
 
 ### 3.2 `list_entity_types`
 
-**Purpose:** List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with their [entity schema](../vocabulary/canonical_terms.md#entity-schema) information. Optionally filter by keyword to find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data. Use this action before storing structured [source material](../vocabulary/canonical_terms.md#source-material) to determine the correct `entity_type`.
+**Purpose:** List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with their [entity schema](../vocabulary/canonical_terms.md#entity-schema) information. Optionally filter by keyword to find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data. Use this action before storing structured [source](../vocabulary/canonical_terms.md#source) to determine the correct `entity_type`.
 
 **Request Schema:**
 ```typescript
@@ -527,7 +762,7 @@ list_entity_types({ keyword: "date" })
 | `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
 
 **When to Use:**
-- Before storing structured [source material](../vocabulary/canonical_terms.md#source-material) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type)
+- Before storing structured [source](../vocabulary/canonical_terms.md#source) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type)
 - To understand what fields are expected for a specific [entity type](../vocabulary/canonical_terms.md#entity-type)
 - To find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data by keyword matching
 
@@ -541,12 +776,12 @@ list_entity_types({ keyword: "date" })
 
 ### 3.3 `retrieve_file_url`
 
-**Purpose:** Retrieve signed URL for accessing [stored](../vocabulary/canonical_terms.md#storing) [source material](../vocabulary/canonical_terms.md#source-material).
+**Purpose:** Retrieve signed URL for accessing [stored](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source).
 
 **Request Schema:**
 ```typescript
 {
-  file_path: string;               // Required: Path to [source material](../vocabulary/canonical_terms.md#source-material) in storage
+  file_path: string;               // Required: Path to [source](../vocabulary/canonical_terms.md#source) in storage
   expires_in?: number;             // Optional: URL expiry seconds (default: 3600)
 }
 ```
@@ -572,12 +807,12 @@ list_entity_types({ keyword: "date" })
 
 **Purpose:** Retrieve [entity](../vocabulary/canonical_terms.md#entity) [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) with [provenance](../vocabulary/canonical_terms.md#provenance). Returns current truth for [entity](../vocabulary/canonical_terms.md#entity) computed by [reducer](../vocabulary/canonical_terms.md#reducer) from [observations](../vocabulary/canonical_terms.md#observation).
 
-**Three-Layer Model Context:** This action returns the **[Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)** layer, the deterministic output of the [reducer](../vocabulary/canonical_terms.md#reducer) engine that merges multiple **[Observations](../vocabulary/canonical_terms.md#observation)** ([extracted](../vocabulary/canonical_terms.md#extraction) from **[Source Material](../vocabulary/canonical_terms.md#source-material)**) about an **[Entity](../vocabulary/canonical_terms.md#entity)**. The [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) represents the current truth, with every field traceable to its source [observation](../vocabulary/canonical_terms.md#observation) and [source material](../vocabulary/canonical_terms.md#source-material).
+**Three-Layer Model Context:** This action returns the **[Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)** layer, the deterministic output of the [reducer](../vocabulary/canonical_terms.md#reducer) engine that merges multiple **[Observations](../vocabulary/canonical_terms.md#observation)** ([extracted](../vocabulary/canonical_terms.md#extraction) from **[Source](../vocabulary/canonical_terms.md#source)**) about an **[Entity](../vocabulary/canonical_terms.md#entity)**. The [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) represents the current truth, with every field traceable to its source [observation](../vocabulary/canonical_terms.md#observation) and [source](../vocabulary/canonical_terms.md#source).
 
 **Use Cases:**
 - Get current state of an [entity](../vocabulary/canonical_terms.md#entity) (company, person, invoice)
 - **Historical state (primary):** Get [entity](../vocabulary/canonical_terms.md#entity) state at any point in time by filtering [observations](../vocabulary/canonical_terms.md#observation) up to a timestamp and recomputing [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot). This enables tracking how [entities](../vocabulary/canonical_terms.md#entity) evolved as new [observations](../vocabulary/canonical_terms.md#observation) arrived.
-- Trace which [source material](../vocabulary/canonical_terms.md#source-material) contributed to current truth
+- Trace which [source](../vocabulary/canonical_terms.md#source) contributed to current truth
 - Track how multiple sources were merged over time
 
 **Request Schema:**
@@ -628,7 +863,7 @@ list_entity_types({ keyword: "date" })
 
 **Purpose:** Query [observations](../vocabulary/canonical_terms.md#observation) for [entity](../vocabulary/canonical_terms.md#entity). Returns all [observations](../vocabulary/canonical_terms.md#observation) that contributed to [entity](../vocabulary/canonical_terms.md#entity) [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot).
 
-**Three-Layer Model Context:** This action returns the **[Observation](../vocabulary/canonical_terms.md#observation)** layer, granular source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from **[Source Material](../vocabulary/canonical_terms.md#source-material)** about an **[Entity](../vocabulary/canonical_terms.md#entity)**. Each [observation](../vocabulary/canonical_terms.md#observation) represents what one [source material](../vocabulary/canonical_terms.md#source-material) said about the [entity](../vocabulary/canonical_terms.md#entity) at a specific point in time. The [reducer](../vocabulary/canonical_terms.md#reducer) merges these [observations](../vocabulary/canonical_terms.md#observation) into a [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) using merge policies from [entity schema](../vocabulary/canonical_terms.md#entity-schema).
+**Three-Layer Model Context:** This action returns the **[Observation](../vocabulary/canonical_terms.md#observation)** layer, granular source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from **[Source](../vocabulary/canonical_terms.md#source)** about an **[Entity](../vocabulary/canonical_terms.md#entity)**. Each [observation](../vocabulary/canonical_terms.md#observation) represents what one [source](../vocabulary/canonical_terms.md#source) said about the [entity](../vocabulary/canonical_terms.md#entity) at a specific point in time. The [reducer](../vocabulary/canonical_terms.md#reducer) merges these [observations](../vocabulary/canonical_terms.md#observation) into a [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) using merge policies from [entity schema](../vocabulary/canonical_terms.md#entity-schema).
 
 **Request Schema:**
 ```typescript
@@ -671,15 +906,15 @@ list_entity_types({ keyword: "date" })
 
 ### 3.6 `retrieve_field_provenance`
 
-**Purpose:** Retrieve provenance chain for a field tracing to [source material](../vocabulary/canonical_terms.md#source-material). Returns full [provenance](../vocabulary/canonical_terms.md#provenance) chain: [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field → [observation](../vocabulary/canonical_terms.md#observation) → [source material](../vocabulary/canonical_terms.md#source-material) → file.
+**Purpose:** Retrieve provenance chain for a field tracing to [source](../vocabulary/canonical_terms.md#source). Returns full [provenance](../vocabulary/canonical_terms.md#provenance) chain: [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field → [observation](../vocabulary/canonical_terms.md#observation) → [source](../vocabulary/canonical_terms.md#source) → file.
 
 **Three-Layer Model Context:** This action traverses the complete three-layer truth model:
 1. **[Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)** field (current truth) →
 2. **[Observation](../vocabulary/canonical_terms.md#observation)** (which [observation](../vocabulary/canonical_terms.md#observation) contributed this value) →
-3. **[Source Material](../vocabulary/canonical_terms.md#source-material)** (which [source material](../vocabulary/canonical_terms.md#source-material) contained the [observation](../vocabulary/canonical_terms.md#observation)) →
-4. **[Source Material](../vocabulary/canonical_terms.md#source-material)** (original [source material](../vocabulary/canonical_terms.md#source-material))
+3. **[Source](../vocabulary/canonical_terms.md#source)** (which [source](../vocabulary/canonical_terms.md#source) contained the [observation](../vocabulary/canonical_terms.md#observation)) →
+4. **[Source](../vocabulary/canonical_terms.md#source)** (original [source](../vocabulary/canonical_terms.md#source))
 
-This enables full explainability: for any fact in the system, you can trace it back to the exact [source material](../vocabulary/canonical_terms.md#source-material) and see why it was selected (via specificity_score and source_priority).
+This enables full explainability: for any fact in the system, you can trace it back to the exact [source](../vocabulary/canonical_terms.md#source) and see why it was selected (via specificity_score and source_priority).
 
 **Request Schema:**
 ```typescript
@@ -843,7 +1078,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.10 `retrieve_graph_neighborhood`
 
-**Purpose:** Retrieve complete graph neighborhood around a node ([entity](../vocabulary/canonical_terms.md#entity) or [source material](../vocabulary/canonical_terms.md#source-material)): related [entities](../vocabulary/canonical_terms.md#entity), [relationships](../vocabulary/canonical_terms.md#relationship), [source material](../vocabulary/canonical_terms.md#source-material), and [events](../vocabulary/canonical_terms.md#event). Provides full context for a given node.
+**Purpose:** Retrieve complete graph neighborhood around a node ([entity](../vocabulary/canonical_terms.md#entity) or [source](../vocabulary/canonical_terms.md#source)): related [entities](../vocabulary/canonical_terms.md#entity), [relationships](../vocabulary/canonical_terms.md#relationship), [source](../vocabulary/canonical_terms.md#source), and [events](../vocabulary/canonical_terms.md#event). Provides full context for a given node.
 
 **Request Schema:**
 ```typescript
@@ -851,7 +1086,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   node_id: string;                     // Required: Node ID (entity_id or source_id)
   node_type?: 'entity' | 'source';     // Optional: Type of node (default: 'entity')
   include_relationships?: boolean;      // Optional: Include relationships (default: true)
-  include_sources?: boolean;           // Optional: Include related [source material](../vocabulary/canonical_terms.md#source-material) (default: true)
+  include_sources?: boolean;           // Optional: Include related [source](../vocabulary/canonical_terms.md#source) (default: true)
   include_events?: boolean;            // Optional: Include timeline events (default: true)
   include_observations?: boolean;      // Optional: Include observations (default: false)
 }
@@ -864,10 +1099,10 @@ This enables full explainability: for any fact in the system, you can trace it b
   node_type: 'entity' | 'source';
   entity?: Entity;                    // Present if node_type='entity'
   entity_snapshot?: Record<string, any>; // Present if node_type='entity'
-  source_material?: SourceMaterial;   // Present if node_type='source'
+  source?: SourceNode;   // Present if node_type='source'
   relationships?: Array<Relationship>;
   related_entities?: Array<Entity>;
-  related_sources?: Array<SourceMaterial>;
+  sources?: Array<SourceNode>;
   timeline_events?: Array<TimelineEvent>;
   observations?: Array<Observation>;
 }
@@ -877,7 +1112,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
 | `ENTITY_NOT_FOUND` | 404 | Entity doesn't exist | No |
-| `SOURCE_NOT_FOUND` | 404 | [Source material](../vocabulary/canonical_terms.md#source-material) doesn't exist | No |
+| `SOURCE_NOT_FOUND` | 404 | [Source](../vocabulary/canonical_terms.md#source) doesn't exist | No |
 | `VALIDATION_ERROR` | 400 | Invalid node_id or node_type | No |
 
 **Consistency:** Strong
@@ -885,7 +1120,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.11 `list_timeline_events`
 
-**Purpose:** Query timeline [events](../vocabulary/canonical_terms.md#event) with filters (type, date range, [source material](../vocabulary/canonical_terms.md#source-material)). Returns chronological [events](../vocabulary/canonical_terms.md#event).
+**Purpose:** Query timeline [events](../vocabulary/canonical_terms.md#event) with filters (type, date range, [source](../vocabulary/canonical_terms.md#source)). Returns chronological [events](../vocabulary/canonical_terms.md#event).
 
 **Request Schema:**
 ```typescript
@@ -893,7 +1128,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   event_type?: string;                 // Optional: Filter by event type (e.g., 'InvoiceIssued')
   after_date?: string;                 // Optional: Filter events after this date (ISO 8601)
   before_date?: string;                // Optional: Filter events before this date (ISO 8601)
-  source_id?: string;                  // Optional: Filter by [source material](../vocabulary/canonical_terms.md#source-material) ID
+  source_id?: string;                  // Optional: Filter by [source](../vocabulary/canonical_terms.md#source) ID
   limit?: number;                      // Optional: Max results (default: 100)
   offset?: number;                     // Optional: Pagination offset (default: 0)
 }
@@ -930,7 +1165,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Request Schema:**
 ```typescript
 {
-  user_id: string;                     // Required: User ID (UUID)
+  user_id?: string;                    // Optional: User ID (UUID) - inferred from authentication if omitted
   entity_id: string;                   // Required: Entity ID to correct
   entity_type: string;                 // Required: Entity type
   field: string;                       // Required: Field name to correct
@@ -961,7 +1196,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.13 `reinterpret`
 
-**Purpose:** Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source material](../vocabulary/canonical_terms.md#source-material) with new config. Creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones.
+**Purpose:** Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) with new config. Creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones.
 
 **Request Schema:**
 ```typescript
@@ -991,12 +1226,12 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 |------|------|---------|--------|
-| `SOURCE_NOT_FOUND` | 404 | [Source material](../vocabulary/canonical_terms.md#source-material) doesn't exist | No |
+| `SOURCE_NOT_FOUND` | 404 | [Source](../vocabulary/canonical_terms.md#source) doesn't exist | No |
 | `QUOTA_EXCEEDED` | 429 | [Interpretation](../vocabulary/canonical_terms.md#interpretation) quota exceeded | No |
 | `DB_INSERT_FAILED` | 500 | Failed to create [interpretation](../vocabulary/canonical_terms.md#interpretation) | Yes |
 
 **Consistency:** Strong (new [observations](../vocabulary/canonical_terms.md#observation) immediately queryable)
-**Determinism:** Yes (same [source material](../vocabulary/canonical_terms.md#source-material) + config → same [interpretation](../vocabulary/canonical_terms.md#interpretation) result)
+**Determinism:** Yes (same [source](../vocabulary/canonical_terms.md#source) + config → same [interpretation](../vocabulary/canonical_terms.md#interpretation) result)
 
 ### 3.14 `merge_entities`
 
@@ -1005,7 +1240,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Request Schema:**
 ```typescript
 {
-  user_id: string;                     // Required: User ID (UUID)
+  user_id?: string;                    // Optional: User ID (UUID) - inferred from authentication if omitted
   from_entity_id: string;              // Required: Source entity ID to merge from
   to_entity_id: string;                // Required: Target entity ID to merge into
   merge_reason?: string;               // Optional: Reason for merge
@@ -1276,7 +1511,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   }>;
   schema_version?: string; // Optional: New schema version (auto-increments if not provided)
   user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
-  user_id?: string; // Required if user_specific=true
+  user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: true)
   migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
 }
@@ -1338,7 +1573,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   };
   schema_version?: string; // Optional (default: "1.0")
   user_specific?: boolean; // Optional (default: false)
-  user_id?: string; // Required if user_specific=true
+  user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
   activate?: boolean; // Optional: Activate schema immediately (default: false)
 }
 ```
@@ -1409,7 +1644,7 @@ interface MCPErrorEnvelope {
 | ----------------------- | ---- | ------------------------- |
 | `VALIDATION_ERROR`      | 400  | Invalid input schema      |
 | `ENTITY_NOT_FOUND`      | 404  | Entity ID doesn't exist   |
-| `SOURCE_NOT_FOUND`      | 404  | [Source material](../vocabulary/canonical_terms.md#source-material) doesn't exist |
+| `SOURCE_NOT_FOUND`      | 404  | [Source](../vocabulary/canonical_terms.md#source) doesn't exist |
 | `FILE_NOT_FOUND`        | 404  | File doesn't exist in storage |
 | `FILE_TOO_LARGE`        | 400  | File exceeds size limit   |
 | `UNSUPPORTED_FILE_TYPE` | 400  | File type not supported   |
@@ -1436,7 +1671,7 @@ interface MCPErrorEnvelope {
 ### 6.1 Strong Consistency Actions
 
 **Immediate read-after-write:**
-- `store` → [source material](../vocabulary/canonical_terms.md#source-material) and [observations](../vocabulary/canonical_terms.md#observation) queryable immediately
+- `store` → [source](../vocabulary/canonical_terms.md#source) and [observations](../vocabulary/canonical_terms.md#observation) queryable immediately
 - `correct` → correction [observation](../vocabulary/canonical_terms.md#observation) affects [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) immediately
 - `merge_entities` → merge visible immediately
 
@@ -1451,7 +1686,7 @@ interface MCPErrorEnvelope {
 ### 7.1 Deterministic Actions
 
 **Same input → same output (modulo timestamps/IDs):**
-- `store`: Same [source material](../vocabulary/canonical_terms.md#source-material) → same content_hash
+- `store`: Same [source](../vocabulary/canonical_terms.md#source) → same content_hash
 - `retrieve_entities`: Same query + DB state → same order
 
 ### 7.2 Non-Deterministic Actions (Documented)
@@ -1491,7 +1726,7 @@ interface MCPErrorEnvelope {
 
 | Action                  | Limit   | Window   | Notes          |
 | ----------------------- | ------- | -------- | -------------- |
-| `store`                | 100/min | Per user | [Source material](../vocabulary/canonical_terms.md#source-material) [storing](../vocabulary/canonical_terms.md#storing) |
+| `store`                | 100/min | Per user | [Source](../vocabulary/canonical_terms.md#source) [storing](../vocabulary/canonical_terms.md#storing) |
 | `retrieve_entities`     | 300/min | Per user | Query [entities](../vocabulary/canonical_terms.md#entity)  |
 
 **Exceeding Limit:**
@@ -1555,7 +1790,7 @@ test("store and retrieve entity", async () => {
 ### 10.3 E2E Tests (via MCP Client)
 
 ```typescript
-test("store creates [source material](../vocabulary/canonical_terms.md#source-material) with [interpretation](../vocabulary/canonical_terms.md#interpretation)", async () => {
+test("store creates [source](../vocabulary/canonical_terms.md#source) with [interpretation](../vocabulary/canonical_terms.md#interpretation)", async () => {
   // Read file from local filesystem and base64-encode
   const fileContent = fs.readFileSync("fixtures/sample_invoice.pdf");
   const base64Content = fileContent.toString("base64");
@@ -1610,7 +1845,7 @@ Load when:
 6. All deterministic actions MUST be testable for determinism
 7. Backward compatibility MUST be maintained
 8. No PII in error messages or logs
-9. **Entity Type Determination:** Before storing structured [source material](../vocabulary/canonical_terms.md#source-material) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself.
+9. **Entity Type Determination:** Before storing structured [source](../vocabulary/canonical_terms.md#source) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself.
 
 ### Forbidden Patterns
 

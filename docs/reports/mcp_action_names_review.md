@@ -22,12 +22,12 @@ Review of all MCP action names against canonical terminology to ensure alignment
 **Note:** The example itself uses `get_entity_snapshot`, suggesting that while "get" is discouraged as a generic term, specific action names like `get_entity_snapshot` may be acceptable if they are sufficiently descriptive.
 
 ### "Storing" (Lines 106-118)
-**Definition:** The process of uploading, [extracting](#extraction), and inserting [source material](#source-material) into the [memory graph](#memory-graph).
+**Definition:** The process of uploading, [extracting](#extraction), and inserting [source](#source) into the [memory graph](#memory-graph).
 
 **Status:** ✅ Already renamed from `ingest` to `store`
 
 ### "Interpretation" (Lines 120-131)
-**Definition:** Versioned interpretation attempt on unstructured [source material](#source-material).
+**Definition:** Versioned interpretation attempt on unstructured [source](#source).
 
 **Action:** ✅ `reinterpret` aligns with this term
 
@@ -37,7 +37,7 @@ Review of all MCP action names against canonical terminology to ensure alignment
 
 | Action Name | Purpose | Canonical Term | Status |
 |------------|---------|----------------|--------|
-| `store` | Unified storing for all source material | "Storing" | ✅ Aligned |
+| `store` | Unified storing for all source | "Storing" | ✅ Aligned |
 | `retrieve_entities` | Query entities with filters | "Retrieving" | ✅ Aligned |
 | `list_observations` | Query observations for entity | "Retrieving" | ✅ Aligned |
 | `list_relationships` | Query entity relationships | "Retrieving" | ✅ Aligned |

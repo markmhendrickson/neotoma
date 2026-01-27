@@ -293,9 +293,33 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
           const hasRelevantResult = responseData.entity_types.some(
             (et: any) => 
               et.entity_type.includes("task") || 
-              et.field_names.some((f: string) => f.includes("task"))
+              (et.field_names && et.field_names.some((f: string) => f.includes("task")))
           );
           expect(hasRelevantResult).toBe(true);
+        }
+      });
+
+      it("should return summary mode with field counts only", async () => {
+        const result = await callMCPAction(server, "list_entity_types", {
+          summary: true,
+        });
+
+        const responseData = JSON.parse(result.content[0].text);
+        validateListEntityTypesResponse(responseData);
+
+        expect(responseData.entity_types).toBeDefined();
+        expect(Array.isArray(responseData.entity_types)).toBe(true);
+        expect(responseData.entity_types.length).toBeGreaterThan(0);
+
+        // In summary mode, each entity type should have field_count but not full field definitions
+        for (const et of responseData.entity_types) {
+          expect(et.entity_type).toBeDefined();
+          expect(et.schema_version).toBeDefined();
+          expect(typeof et.field_count).toBe("number");
+          expect(et.field_count).toBeGreaterThanOrEqual(0);
+          // Should not have full field definitions in summary mode
+          expect(et.field_names).toBeUndefined();
+          expect(et.field_summary).toBeUndefined();
         }
       });
     });

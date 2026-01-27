@@ -17,13 +17,84 @@ CREATE POLICY "Users see only their records" ON records
   USING (user_id = auth.uid());
 ```
 ## MCP Authentication
-MCP clients MUST authenticate via session token.
+
+MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE (recommended) or session tokens (deprecated).
+
+### OAuth Flow (Recommended)
+
+**Authentication Flow:**
+
+1. MCP client initiates OAuth via `POST /api/mcp/oauth/initiate` with `connection_id`
+2. Backend generates PKCE challenge and returns authorization URL
+3. User opens authorization URL in browser and signs in via Supabase Auth
+4. User approves connection
+5. Supabase redirects to callback URL with authorization code
+6. Backend exchanges code for access token and refresh token
+7. Backend stores encrypted refresh token in database
+8. MCP client polls `GET /api/mcp/oauth/status` until status is "active"
+9. MCP client passes `connection_id` in environment variable during initialization
+10. MCP server retrieves refresh token, obtains access token, extracts `user_id`
+11. All subsequent MCP actions use authenticated `user_id`
+
+**Implementation:**
+
 ```typescript
-// MCP connection
-const mcpClient = new MCPClient({
-  token: sessionToken, // From Supabase auth
-});
+// MCP initialization with OAuth connection
+// Set environment variable in mcp.json:
+{
+  "env": {
+    "NEOTOMA_CONNECTION_ID": "cursor-2025-01-21-abc123"
+  }
+}
 ```
+
+**OAuth Endpoints:**
+
+- `POST /api/mcp/oauth/initiate` - Start OAuth flow, get authorization URL
+- `GET /api/mcp/oauth/callback` - OAuth callback, exchange code for tokens
+- `GET /api/mcp/oauth/status` - Check connection status
+- `GET /api/mcp/oauth/connections` - List user's connections (authenticated)
+- `DELETE /api/mcp/oauth/connections/:connection_id` - Revoke connection (authenticated)
+
+**Security:**
+
+- PKCE prevents authorization code interception attacks
+- Refresh tokens are encrypted at rest (AES-256-GCM)
+- Access tokens are cached and automatically refreshed
+- Users can revoke connections via UI
+- OAuth state expires after 10 minutes
+- All tokens validated via Supabase Auth
+
+### Session Token Flow (Deprecated)
+
+**Will be removed in a future version. Use OAuth instead.**
+
+**Authentication Flow:**
+
+1. User signs in via Supabase Auth (frontend)
+2. Frontend obtains `access_token` (JWT) from Supabase session
+3. MCP client passes session token in environment variable during initialization
+4. MCP server validates token using Supabase Auth
+5. MCP server extracts `user_id` from validated token
+6. All subsequent MCP actions use authenticated `user_id`
+
+**Implementation:**
+
+```typescript
+// MCP initialization with session token (deprecated)
+{
+  "env": {
+    "NEOTOMA_SESSION_TOKEN": "supabase_access_token_here"
+  }
+}
+```
+
+**Limitations:**
+
+- Tokens expire when user signs out or after inactivity
+- Requires manual token copying from web UI
+- No automatic token refresh
+- Less secure for long-lived connections
 ## Error Handling
 | Error Code | Meaning | HTTP Status |
 |------------|---------|-------------|

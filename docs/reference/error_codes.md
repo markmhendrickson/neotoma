@@ -110,6 +110,29 @@ interface ErrorEnvelope {
 **Common Causes:**
 - `PROVIDER_TOKEN_EXPIRED`: OAuth token needs refresh
 - `PROVIDER_RATE_LIMIT_EXCEEDED`: Exceeded provider's rate limits
+### MCP OAuth Errors
+| Code | HTTP | Retry? | Description |
+|------|------|--------|-------------|
+| `OAUTH_CLIENT_REGISTRATION_FAILED` | 500 | No | Dynamic OAuth client registration failed |
+| `OAUTH_STATE_INVALID` | 400 | No | Invalid or missing OAuth state token |
+| `OAUTH_STATE_EXPIRED` | 400 | No | OAuth state token expired (10 minute limit) |
+| `OAUTH_TOKEN_EXCHANGE_FAILED` | 500 | Yes | Failed to exchange authorization code for tokens |
+| `OAUTH_TOKEN_REFRESH_FAILED` | 401 | Yes | Failed to refresh access token |
+| `OAUTH_CONNECTION_NOT_FOUND` | 404 | No | MCP OAuth connection not found |
+| `OAUTH_CONNECTION_REVOKED` | 403 | No | Connection has been revoked by user |
+| `OAUTH_ENCRYPTION_KEY_MISSING` | 500 | No | Token encryption key not configured |
+| `OAUTH_ENCRYPTION_KEY_INVALID` | 500 | No | Encryption key format is invalid (must be 64 hex chars) |
+| `OAUTH_INVALID_REDIRECT_URI` | 400 | No | Redirect URI format validation failed |
+| `OAUTH_DECRYPTION_FAILED` | 500 | No | Failed to decrypt refresh token |
+| `OAUTH_USER_INFO_FAILED` | 500 | Yes | Failed to get user info from access token |
+**Common Causes:**
+- `OAUTH_CLIENT_REGISTRATION_FAILED`: Dynamic OAuth Apps not enabled in Supabase Dashboard, or missing SUPABASE_OAUTH_CLIENT_ID env var
+- `OAUTH_STATE_INVALID`: State token not found in database or already consumed
+- `OAUTH_STATE_EXPIRED`: State created more than 10 minutes ago
+- `OAUTH_TOKEN_REFRESH_FAILED`: Refresh token expired or invalid, user needs to re-authenticate
+- `OAUTH_CONNECTION_NOT_FOUND`: Connection_id doesn't exist or was deleted
+- `OAUTH_ENCRYPTION_KEY_MISSING`: MCP_TOKEN_ENCRYPTION_KEY not set in environment
+- `OAUTH_DECRYPTION_FAILED`: Invalid encrypted token format or wrong encryption key
 ## Validation Errors
 | Code | HTTP | Retry? | Description |
 |------|------|--------|-------------|
@@ -167,6 +190,7 @@ Error codes follow this pattern:
 - `STORAGE_*`: File storage
 - `PLAID_*`: Plaid integration
 - `PROVIDER_*`: External provider integrations
+- `OAUTH_*`: MCP OAuth authentication
 - `VALIDATION_*`: Input validation
 - `GRAPH_*`: Graph operations
 ## Agent Instructions

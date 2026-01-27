@@ -14,21 +14,22 @@ This document does NOT cover:
 ### 1.1 What is a Reducer?
 A **reducer** is a pure function that computes an entity snapshot from multiple observations:
 ```
-Reducer(observations[], merge_policies) → EntitySnapshot
+Reducer(observations[], schema, merge_policies) → EntitySnapshot
 ```
 **Key Properties:**
-- **Deterministic:** Same observations + same merge rules → same snapshot
+- **Deterministic:** Same observations + same schema + same merge rules → same snapshot
 - **Pure:** No side effects, no external dependencies
 - **Idempotent:** Can be run multiple times with same result
 - **Provenance-aware:** Tracks which observation contributed each field
+- **Type-consistent:** Applies converters to ensure snapshot values match active schema types
 ### 1.2 Four-Layer Model Context
 [Reducers](../vocabulary/canonical_terms.md#reducer) operate in the four-layer truth model:
 ```
-Source Material → Interpretation → Observation → [Reducer] → Snapshot → Entity
+Source → Interpretation → Observation → [Reducer] → Snapshot → Entity
 ```
-- **[Source Material](../vocabulary/canonical_terms.md#source-material):** Raw content (files, structured JSON, URLs)
+- **[Source](../vocabulary/canonical_terms.md#source):** Raw content (files, structured JSON, URLs)
 - **[Interpretation](../vocabulary/canonical_terms.md#interpretation):** Versioned AI extraction attempt
-- **[Observation](../vocabulary/canonical_terms.md#observation):** Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material)
+- **[Observation](../vocabulary/canonical_terms.md#observation):** Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source)
 - **[Reducer](../vocabulary/canonical_terms.md#reducer):** Computes [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) from [observations](../vocabulary/canonical_terms.md#observation)
 - **[Snapshot](../vocabulary/canonical_terms.md#snapshot):** Current truth for [entity](../vocabulary/canonical_terms.md#entity)
 - **[Entity](../vocabulary/canonical_terms.md#entity):** Logical thing in the world
@@ -43,7 +44,10 @@ flowchart TD
     SortObs --> Loop[For Each Field]
     Loop --> GetPolicy[Get Merge Policy<br/>for Field]
     GetPolicy --> ApplyStrategy[Apply Merge Strategy]
-    ApplyStrategy --> StoreValue[Store Value + Provenance]
+    ApplyStrategy --> CheckType{Value Matches<br/>Schema Type?}
+    CheckType -->|Yes| StoreValue[Store Value + Provenance]
+    CheckType -->|No| ApplyConverter[Apply Converter<br/>from Schema]
+    ApplyConverter --> StoreValue
     StoreValue --> NextField{More Fields?}
     NextField -->|Yes| Loop
     NextField -->|No| CreateSnapshot[Create Snapshot]
@@ -52,6 +56,7 @@ flowchart TD
     style Start fill:#e1f5ff
     style StoreSnapshot fill:#e6ffe6
     style ApplyStrategy fill:#fff4e6
+    style ApplyConverter fill:#ffe6e6
 ```
 ### 2.2 Reducer Interface
 ```typescript
@@ -230,7 +235,57 @@ function sortObservations(observations: Observation[]): Observation[] {
   });
 }
 ```
-## 6. Provenance Tracking
+## 6. Type Conversion During Snapshot Computation
+
+### 6.1 Converter Application
+
+The reducer applies converters from the active schema during snapshot computation to ensure snapshot values always conform to the schema's type definitions, even when observations contain values from older schema versions.
+
+**Process:**
+1. Apply merge strategy to select value from observations
+2. Check if value matches active schema's field type
+3. If type matches → use value as-is
+4. If type doesn't match → apply converters from schema
+5. Store converted value in snapshot
+
+**Example:**
+```typescript
+// Schema 1.0.0: amount_due is string
+// Schema 2.0.0: amount_due is number with string_to_number converter
+
+// Observation from schema 1.0.0
+{
+  schema_version: "1.0.0",
+  fields: { amount_due: "1000.00" }  // String
+}
+
+// Snapshot computed with schema 2.0.0
+{
+  schema_version: "2.0.0",
+  snapshot: { amount_due: 1000.0 }  // Converted to number
+}
+```
+
+### 6.2 Determinism with Converters
+
+Converters are deterministic functions, so applying them during snapshot computation maintains determinism:
+- Same observations + same schema + same converters → same snapshot
+- Converter functions are pure (no side effects)
+- Conversion results are deterministic (same input → same output)
+
+### 6.3 Converter Application Order
+
+1. **Merge strategy first**: Select value from observations using merge policy
+2. **Type check second**: Verify value matches schema type
+3. **Converter application third**: Apply converters if type doesn't match
+4. **Store result**: Use converted value (or original if already correct type)
+
+**Note**: Converters are also applied during observation creation (field validation), but are applied again during snapshot computation to handle cases where:
+- Old observations have old types
+- Schema changed after observation creation
+- Multiple observations with different types need reconciliation
+
+## 7. Provenance Tracking
 ### 6.1 Provenance Structure
 Snapshots include provenance mapping:
 ```typescript
@@ -257,7 +312,7 @@ interface Provenance {
 ### 6.2 Provenance Chain
 Full [provenance](../vocabulary/canonical_terms.md#provenance) chain:
 ```
-Snapshot Field → Observation → Interpretation (if AI) → Source Material
+Snapshot Field → Observation → Interpretation (if AI) → Source
 ```
 **Query Pattern:**
 ```typescript
@@ -325,7 +380,7 @@ describe('Observation → Snapshot flow', () => {
   });
 });
 ```
-## 8. Performance Considerations
+## 9. Performance Considerations
 ### 8.1 Entity Snapshot Caching
 Snapshots are cached and recomputed only when:
 - New observations arrive
@@ -356,21 +411,26 @@ Load `docs/subsystems/reducer.md` when:
 - Debugging provenance issues
 - Understanding four-layer truth model
 ### Constraints Agents Must Enforce
-1. **Reducers MUST be deterministic** (same observations → same snapshot)
+1. **Reducers MUST be deterministic** (same observations + same schema → same snapshot)
 2. **Merge policies MUST be configured** in schema registry
 3. **Provenance MUST be tracked** for all snapshot fields
 4. **Observations MUST be sorted** deterministically before merging
+5. **Converters MUST be applied** during snapshot computation to ensure type consistency
+6. **Snapshots MUST conform** to active schema type definitions (via converters if needed)
 ### Forbidden Patterns
 - ❌ Non-deterministic reducers (randomness, timestamps)
 - ❌ Missing provenance tracking
 - ❌ Ad-hoc merge logic (must use configured policies)
 - ❌ Side effects in reducers (must be pure functions)
 ### Validation Checklist
-- [ ] Reducer is deterministic (same observations → same snapshot)
+- [ ] Reducer is deterministic (same observations + same schema → same snapshot)
 - [ ] Merge policies configured in schema registry
 - [ ] Provenance tracked for all snapshot fields
 - [ ] Observations sorted deterministically (observed_at DESC, then id ASC)
 - [ ] Reducer is pure function (no side effects)
+- [ ] Converters applied during snapshot computation for type consistency
+- [ ] Snapshot values conform to active schema types (via converters if needed)
 - [ ] Tests verify determinism (same input → same output)
+- [ ] Tests verify converter application (old types converted to new types)
 - [ ] Integration with schema registry verified
 - [ ] Four-layer model respected

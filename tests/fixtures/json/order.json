@@ -1,0 +1,62 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Buy 100 AAPL",
+    "status": "pending",
+    "accounts": "acc-001",
+    "amount": 18500.0,
+    "asset_type": "stock",
+    "order_type": "buy",
+    "price": 185.0,
+    "url": "https://fidelity.com/orders/12345",
+    "date": "2024-12-15T10:00:00Z",
+    "notes": "Market order to buy Apple stock"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Buy 100 AAPL",
+    "status": "filled",
+    "accounts": "acc-001",
+    "amount": 18500.0,
+    "asset_type": "stock",
+    "order_type": "buy",
+    "price": 185.0,
+    "url": "https://fidelity.com/orders/12345",
+    "date": "2024-12-15T10:00:00Z",
+    "notes": "Market order filled at market price"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Sell 50 TSLA",
+    "status": "cancelled",
+    "accounts": "acc-001",
+    "amount": 12500.0,
+    "asset_type": "stock",
+    "order_type": "sell",
+    "date": "2024-12-20T14:00:00Z",
+    "notes": "Cancelled before execution"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Buy 0.1 BTC",
+    "status": "pending",
+    "amount": 4000.0,
+    "order_type": "limit_buy",
+    "date": "2024-12-22T09:30:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Sell 200 MSFT",
+    "status": "filled",
+    "accounts": "acc-brokerage-001",
+    "amount": 74000.0,
+    "asset_type": "stock",
+    "order_type": "sell",
+    "price": 370.0,
+    "date": "2024-12-25T11:15:00Z",
+    "notes": "Profit taking after earnings"
+  }
+]
+
+
+

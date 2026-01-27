@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -122,13 +122,28 @@ export function buildBackendEnv(
   port: number,
   options: { bearerToken: string; wsPort?: number },
 ): NodeJS.ProcessEnv {
-  // Test environment: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
-  const supabaseProjectId = process.env.DEV_SUPABASE_PROJECT_ID;
-  const supabaseUrl = supabaseProjectId
-    ? `https://${supabaseProjectId}.supabase.co`
-    : ensureValue(process.env.DEV_SUPABASE_URL) || 'https://example.supabase.co';
-  const supabaseKey =
-    ensureValue(process.env.DEV_SUPABASE_SERVICE_KEY) || 'test-service-role-key';
+  // Test environment: Prefer local Supabase if running, otherwise use remote
+  // Check if local Supabase is running (default ports)
+  const useLocalSupabase = process.env.USE_LOCAL_SUPABASE === '1' || 
+    process.env.DEV_SUPABASE_URL?.includes('127.0.0.1') ||
+    process.env.DEV_SUPABASE_URL?.includes('localhost');
+  
+  let supabaseUrl: string;
+  let supabaseKey: string;
+  
+  if (useLocalSupabase) {
+    // Force local Supabase so E2E never hits remote
+    supabaseUrl = 'http://127.0.0.1:54321';
+    supabaseKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU'; // supabase start default service role key
+  } else {
+    // Remote Supabase (existing logic)
+    const supabaseProjectId = process.env.DEV_SUPABASE_PROJECT_ID;
+    supabaseUrl = supabaseProjectId
+      ? `https://${supabaseProjectId}.supabase.co`
+      : ensureValue(process.env.DEV_SUPABASE_URL) || 'https://example.supabase.co';
+    supabaseKey = ensureValue(process.env.DEV_SUPABASE_SERVICE_KEY) || 'test-service-role-key';
+  }
   const connectorSecret =
     ensureValue(
       process.env.DEV_CONNECTOR_SECRET_KEY,
@@ -155,11 +170,39 @@ export function buildBackendEnv(
   };
 }
 
+export type BuildFrontendEnvOptions = {
+  /** When true, always use local Supabase URL/keys (for E2E fixture so frontend never hits remote). */
+  forceLocalSupabase?: boolean;
+};
+
 export function buildFrontendEnv(
   vitePort: number,
   apiPort: number,
   wsPort?: number,
+  options: BuildFrontendEnvOptions = {},
 ): NodeJS.ProcessEnv {
+  const useLocalSupabase =
+    options.forceLocalSupabase === true ||
+    process.env.USE_LOCAL_SUPABASE === '1' ||
+    process.env.VITE_SUPABASE_URL?.includes('127.0.0.1') ||
+    process.env.VITE_SUPABASE_URL?.includes('localhost');
+
+  let supabaseUrl: string;
+  let supabaseAnonKey: string;
+
+  if (useLocalSupabase) {
+    // Force local Supabase so E2E never hits remote (avoids 429 and test pollution)
+    supabaseUrl = 'http://127.0.0.1:54321';
+    supabaseAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'; // supabase start default anon key
+  } else {
+    // Remote Supabase (existing logic)
+    const supabaseProjectId = process.env.DEV_SUPABASE_PROJECT_ID;
+    supabaseUrl = supabaseProjectId
+      ? `https://${supabaseProjectId}.supabase.co`
+      : ensureValue(process.env.VITE_SUPABASE_URL) || 'https://example.supabase.co';
+    supabaseAnonKey = ensureValue(process.env.VITE_SUPABASE_ANON_KEY) || 'test-anon-key';
+  }
   const apiBase =
     process.env.VITE_API_BASE_URL || `http://127.0.0.1:${apiPort}`;
 
@@ -172,6 +215,8 @@ export function buildFrontendEnv(
     HTTP_PORT: String(apiPort),
     ...(wsPort ? { WS_PORT: String(wsPort) } : {}),
     VITE_API_BASE_URL: apiBase,
+    VITE_SUPABASE_URL: supabaseUrl,
+    VITE_SUPABASE_ANON_KEY: supabaseAnonKey,
     NEOTOMA_ACTIONS_DISABLE_AUTOSTART: '0',
   };
 }
@@ -183,6 +228,81 @@ type WaitOptions = {
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const LOCAL_SUPABASE_API_URL = 'http://127.0.0.1:54321';
+const LOCAL_SUPABASE_START_TIMEOUT_MS = 120_000;
+const LOCAL_SUPABASE_HEALTH_POLL_MS = 30_000;
+const LOCAL_SUPABASE_HEALTH_CHECK_MS = 3_000;
+
+/**
+ * Returns true if local Supabase API (Kong at 54321) responds.
+ */
+async function isLocalSupabaseUp(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), LOCAL_SUPABASE_HEALTH_CHECK_MS);
+    const res = await fetch(`${LOCAL_SUPABASE_API_URL}/`, {
+      signal: controller.signal,
+    });
+    clearTimeout(id);
+    return res.ok || res.status === 404;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * When USE_LOCAL_SUPABASE=1 and PLAYWRIGHT_START_SUPABASE=1, ensures local
+ * Supabase is running: if the API is not reachable, runs `supabase start` from
+ * repo root and waits until the API responds. No-op otherwise. Call from
+ * Playwright globalSetup so it runs once before workers.
+ */
+export async function ensureLocalSupabase(): Promise<void> {
+  if (process.env.USE_LOCAL_SUPABASE !== '1' || process.env.PLAYWRIGHT_START_SUPABASE !== '1') {
+    return;
+  }
+  if (await isLocalSupabaseUp()) {
+    return;
+  }
+  const supabaseCmd = process.platform === 'win32' ? 'supabase.cmd' : 'supabase';
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(supabaseCmd, ['start'], {
+      cwd: repoRoot,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+    });
+    const timeout = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`supabase start timed out after ${LOCAL_SUPABASE_START_TIMEOUT_MS / 1000}s`));
+    }, LOCAL_SUPABASE_START_TIMEOUT_MS);
+    let stderr = '';
+    child.stderr?.setEncoding('utf8');
+    child.stderr?.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on('error', (err: Error) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+    child.on('close', (code: number | null, signal: string | null) => {
+      clearTimeout(timeout);
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `supabase start exited with code ${code}${signal ? ` signal ${signal}` : ''}. ${stderr.slice(-500)}`,
+          ),
+        );
+      }
+    });
+  });
+  await waitForHttp(`${LOCAL_SUPABASE_API_URL}/`, {
+    timeoutMs: LOCAL_SUPABASE_HEALTH_POLL_MS,
+    intervalMs: 2_000,
+    expectedStatus: (s) => s === 200 || s === 404,
+  });
+}
 
 export async function waitForHttp(
   url: string,

@@ -1,0 +1,56 @@
+[
+  {
+    "schema_version": "1.0",
+    "outcome_name": "Launch MVP",
+    "outcome_type": "strategic",
+    "goal_id": "goal-startup-001",
+    "goal_category": "primary",
+    "domain": "neotoma",
+    "status": "active",
+    "target_date": "2025-03-31",
+    "description": "Ship working MVP to first 10 users",
+    "notes": "Includes ingestion, entity resolution, and timeline views"
+  },
+  {
+    "schema_version": "1.0",
+    "outcome_name": "Implement ingestion pipeline",
+    "outcome_type": "tactical",
+    "goal_id": "goal-startup-001",
+    "goal_category": "primary",
+    "domain": "neotoma",
+    "status": "completed",
+    "target_date": "2024-12-31",
+    "description": "Build file upload and processing system",
+    "notes": "Completed ahead of schedule"
+  },
+  {
+    "schema_version": "1.0",
+    "outcome_name": "Achieve product-market fit",
+    "outcome_type": "strategic",
+    "goal_id": "goal-startup-002",
+    "goal_category": "primary",
+    "domain": "neotoma",
+    "status": "active",
+    "target_date": "2025-06-30",
+    "description": "Validate that users find core value proposition compelling",
+    "notes": "Measure via retention and NPS"
+  },
+  {
+    "schema_version": "1.0",
+    "outcome_name": "Build entity resolution system",
+    "outcome_type": "operational",
+    "goal_id": "goal-startup-001",
+    "goal_category": "primary",
+    "domain": "neotoma",
+    "status": "completed",
+    "target_date": "2024-11-30",
+    "description": "Deterministic entity deduplication and merging",
+    "notes": "Core Truth Layer capability"
+  },
+  {
+    "schema_version": "1.0",
+    "outcome_name": "Minimal outcome",
+    "outcome_type": "operational",
+    "status": "active"
+  }
+]

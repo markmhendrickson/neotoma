@@ -182,9 +182,9 @@ describe("IT-006: MCP Action Validation", () => {
 
   it("should support upload_file action", async () => {
     const testPrefix = `${context.testPrefix}`;
-    // Note: This test assumes upload_file endpoint exists
-    // For full testing, would need to create actual file and upload
-    // Placeholder test - verifies endpoint exists and returns appropriate response
+    const testFilePath = "tests/fixtures/pdf/sample_invoice.pdf";
+    
+    // Upload file via MCP action
     const response = await fetch(`${context.baseUrl}/upload_file`, {
       method: "POST",
       headers: {
@@ -192,16 +192,50 @@ describe("IT-006: MCP Action Validation", () => {
         Authorization: `Bearer ${context.bearerToken}`,
       },
       body: JSON.stringify({
-        file_path: "/path/to/test/file.pdf",
+        file_path: testFilePath,
       }),
     });
 
-    // Endpoint exists and returns structured response (may error due to missing file, that's OK)
-    expect([200, 400, 404, 500]).toContain(response.status);
+    // Verify upload succeeded
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.source_id).toBeDefined();
+    expect(result.file_url).toBeDefined();
+    
+    // Verify source was created in database
+    const { supabase } = await import("../../../db.js");
+    const { data: source, error } = await supabase
+      .from("sources")
+      .select("*")
+      .eq("id", result.source_id)
+      .single();
+    
+    expect(error).toBeNull();
+    expect(source).toBeDefined();
+    expect(source!.storage_status).toBe("uploaded");
+    expect(source!.content_hash).toBeDefined();
   });
 
   it("should support get_file_url action", async () => {
-    // Note: This test verifies endpoint exists
+    const testFilePath = "tests/fixtures/pdf/sample_invoice.pdf";
+    
+    // First upload a file to get a valid file ID
+    const uploadResponse = await fetch(`${context.baseUrl}/upload_file`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${context.bearerToken}`,
+      },
+      body: JSON.stringify({
+        file_path: testFilePath,
+      }),
+    });
+
+    expect(uploadResponse.status).toBe(200);
+    const uploadResult = await uploadResponse.json();
+    const fileId = uploadResult.source_id;
+    
+    // Now get the file URL
     const response = await fetch(`${context.baseUrl}/get_file_url`, {
       method: "POST",
       headers: {
@@ -209,12 +243,21 @@ describe("IT-006: MCP Action Validation", () => {
         Authorization: `Bearer ${context.bearerToken}`,
       },
       body: JSON.stringify({
-        file_path: "test/file.pdf",
+        file_id: fileId,
       }),
     });
 
-    // Endpoint exists and returns structured response
-    expect([200, 400, 404, 500]).toContain(response.status);
+    // Verify URL retrieval succeeded
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.file_url).toBeDefined();
+    expect(typeof result.file_url).toBe("string");
+    expect(result.file_url.length).toBeGreaterThan(0);
+    
+    // Verify URL is valid (starts with http or is a path)
+    expect(
+      result.file_url.startsWith("http") || result.file_url.startsWith("/")
+    ).toBe(true);
   });
 
   it("should support get_entity_snapshot action", async () => {

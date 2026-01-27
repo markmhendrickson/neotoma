@@ -17,8 +17,8 @@ export function encryptResponseMiddleware(
 ): void {
   const originalJson = res.json.bind(res);
   const publicKey = (req as any).publicKey as Uint8Array | undefined;
-  const encryptMode = req.headers['x-encrypt-response'] === 'true' || 
-                      req.headers['x-neotoma-encrypted'] === 'true';
+  const encryptMode = req.headers["x-encrypt-response"] === "true" || 
+                      req.headers["x-neotoma-encrypted"] === "true";
 
   if (encryptMode && publicKey) {
     (res as any).json = function(data: unknown) {
@@ -27,8 +27,8 @@ export function encryptResponseMiddleware(
           return originalJson({ encryptedPayload: encrypted });
         })
         .catch(error => {
-          console.error('Error encrypting response:', error);
-          return originalJson({ error: 'Failed to encrypt response' });
+          console.error("Error encrypting response:", error);
+          return originalJson({ error: "Failed to encrypt response" });
         });
       return res;
     };

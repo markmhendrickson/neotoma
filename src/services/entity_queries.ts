@@ -150,7 +150,7 @@ export async function queryEntities(
         let fragmentQuery = supabase
           .from("raw_fragments")
           .select("fragment_key, fragment_value, last_seen, source_id")
-          .eq("fragment_type", entityType)
+          .eq("entity_type", entityType)
           .in("source_id", Array.from(sourceIdsForType));
 
         // Handle user_id
@@ -279,11 +279,11 @@ export async function getEntityWithProvenance(
     const userIds = [...new Set(observations.map((o: any) => o.user_id).filter(Boolean))];
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
 
-    // Query raw_fragments for these sources with matching fragment_type
+    // Query raw_fragments for these sources with matching entity_type
     let fragmentQuery = supabase
       .from("raw_fragments")
       .select("fragment_key, fragment_value, last_seen, first_seen, source_id")
-      .eq("fragment_type", entity.entity_type)
+      .eq("entity_type", entity.entity_type)
       .in("source_id", sourceIds);
 
     // Handle user_id: check both provided user_ids and default UUID

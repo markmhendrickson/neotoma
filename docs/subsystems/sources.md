@@ -1,9 +1,9 @@
-# Neotoma Source Material Architecture
+# Neotoma Source Architecture
 
 ## Scope
 
 This document covers:
-- `sources` table structure and semantics (stores [source material](../vocabulary/canonical_terms.md#source-material))
+- `sources` table structure and semantics (stores [source](../vocabulary/canonical_terms.md#source))
 - `interpretations` table structure and semantics
 - Content-addressed storage with SHA-256 hashing
 - Deduplication via `(user_id, content_hash)` uniqueness
@@ -21,13 +21,13 @@ This document does NOT cover:
 ### 1.1 Data Flow
 
 ```
-Source Material → Interpretation → Observations → Entity Snapshots
+Source → Interpretation → Observations → Entity Snapshots
 ```
 
 **Layers:**
-1. **[Source Material](../vocabulary/canonical_terms.md#source-material)**: Raw content (structured or unstructured) stored with content hash for deduplication
+1. **[Source](../vocabulary/canonical_terms.md#source)**: Raw content (structured or unstructured) stored with content hash for deduplication
 2. **[Interpretations](../vocabulary/canonical_terms.md#interpretation)**: Versioned interpretation attempts with config logging (stored in `interpretations` table)
-3. **[Observations](../vocabulary/canonical_terms.md#observation)**: Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material) (via [interpretations](../vocabulary/canonical_terms.md#interpretation))
+3. **[Observations](../vocabulary/canonical_terms.md#observation)**: Granular facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source) (via [interpretations](../vocabulary/canonical_terms.md#interpretation))
 4. **[Entity Snapshots](../vocabulary/canonical_terms.md#snapshot)**: Deterministic [reducer](../vocabulary/canonical_terms.md#reducer) output
 
 ### 1.2 Key Principles
@@ -35,7 +35,7 @@ Source Material → Interpretation → Observations → Entity Snapshots
 | Principle | Description |
 |-----------|-------------|
 | Content-Addressed | Same bytes = same hash; deduplication per user |
-| Immutable [Source Material](../vocabulary/canonical_terms.md#source-material) | Raw content never modified after storage |
+| Immutable [Source](../vocabulary/canonical_terms.md#source) | Raw content never modified after storage |
 | Versioned [Interpretation](../vocabulary/canonical_terms.md#interpretation) | Each [interpretation](../vocabulary/canonical_terms.md#interpretation) creates a new [interpretation](../vocabulary/canonical_terms.md#interpretation) record |
 | [Observation](../vocabulary/canonical_terms.md#observation) Immutability | Reinterpretation creates NEW [observations](../vocabulary/canonical_terms.md#observation); never modifies existing |
 | User Isolation | All tables user-scoped with RLS |
@@ -98,10 +98,10 @@ Example: `sources/usr_abc123/a1b2c3d4e5f6...`
 Per-user deduplication via `(user_id, content_hash)` unique constraint:
 
 ```typescript
-async function ingestSourceMaterial(content: Buffer, userId: string): Promise<Source> {
+async function ingestSourceNode(content: Buffer, userId: string): Promise<Source> {
   const hash = computeContentHash(content);
   
-  // Check for existing source material
+  // Check for existing source
   const existing = await supabase
     .from('sources')
     .select('id')
@@ -113,7 +113,7 @@ async function ingestSourceMaterial(content: Buffer, userId: string): Promise<So
     return { ...existing.data, deduplicated: true };
   }
   
-  // Create new source material
+  // Create new source
   // ...
 }
 ```
@@ -198,7 +198,7 @@ The `interpretation_config` JSONB field stores all parameters needed to understa
 **Rule:** `reinterpret()` always creates a new [interpretation](../vocabulary/canonical_terms.md#interpretation) and new [observations](../vocabulary/canonical_terms.md#observation). Existing [observations](../vocabulary/canonical_terms.md#observation) remain unchanged and linked to their original [interpretation](../vocabulary/canonical_terms.md#interpretation).
 
 ```
-Source Material A
+Source A
   └─ Interpretation 1 (2024-01-01)
   │    └─ Observation X → Entity E1
   └─ Interpretation 2 (2024-06-01, new model)
@@ -224,7 +224,7 @@ reinterpret({
 
 **Preconditions:**
 1. `storage_status = 'uploaded'` (else `STORAGE_PENDING`)
-2. No concurrent [interpretation](../vocabulary/canonical_terms.md#interpretation) with `status = 'running'` for this [source material](../vocabulary/canonical_terms.md#source-material) (else `INTERPRETATION_IN_PROGRESS`)
+2. No concurrent [interpretation](../vocabulary/canonical_terms.md#interpretation) with `status = 'running'` for this [source](../vocabulary/canonical_terms.md#source) (else `INTERPRETATION_IN_PROGRESS`)
 3. User has not exceeded `interpretation_limit_month` (else `INTERPRETATION_QUOTA_EXCEEDED`)
 
 ## 6. Quota Enforcement (v0.2.0: Simple Hard-Coded Limit)
@@ -299,11 +299,11 @@ The following features are intentionally deferred to v0.3.0 to keep v0.2.0 minim
 
 ### 8.1 `ingest()`
 
-Unified [ingestion](../vocabulary/canonical_terms.md#ingestion) action for both unstructured and structured [source material](../vocabulary/canonical_terms.md#source-material):
+Unified [ingestion](../vocabulary/canonical_terms.md#ingestion) action for both unstructured and structured [source](../vocabulary/canonical_terms.md#source):
 
 ```typescript
 ingest({
-  // For unstructured source material
+  // For unstructured source
   file_content?: string,       // Base64, <1MB
   file_path?: string,
   external_url?: string,
@@ -312,7 +312,7 @@ ingest({
   interpret?: boolean,         // Default: true
   interpretation_config?: { model?: string, extractor_type?: string },
   
-  // For structured source material
+  // For structured source
   entities?: Array<{
     entity_type: string,
     properties: object
@@ -330,13 +330,13 @@ ingest({
     extraction_completeness: string,
     confidence: number
   } | null,
-  // For structured source material
+  // For structured source
   entities?: Array<{ entity_id: string, observation_id: string }>
 }
 ```
 
-- Unstructured [source material](../vocabulary/canonical_terms.md#source-material) (files, URLs) → stored → [interpretation](../vocabulary/canonical_terms.md#interpretation) → structured [source material](../vocabulary/canonical_terms.md#source-material) → [entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../vocabulary/canonical_terms.md#observation)
-- Structured [source material](../vocabulary/canonical_terms.md#source-material) (entities array) → stored → [entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../vocabulary/canonical_terms.md#observation)
+- Unstructured [source](../vocabulary/canonical_terms.md#source) (files, URLs) → stored → [interpretation](../vocabulary/canonical_terms.md#interpretation) → structured [source](../vocabulary/canonical_terms.md#source) → [entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../vocabulary/canonical_terms.md#observation)
+- Structured [source](../vocabulary/canonical_terms.md#source) (entities array) → stored → [entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../vocabulary/canonical_terms.md#observation)
 - Validates against [entity schemas](../vocabulary/canonical_terms.md#entity-schema); rejects on schema violation
 - Creates [observations](../vocabulary/canonical_terms.md#observation) with appropriate `source_priority`
 
@@ -373,10 +373,10 @@ correct({
 4. **Unknown Field Routing:** Fields not in [entity schema](../vocabulary/canonical_terms.md#entity-schema) → `raw_fragments` (not silently dropped)
 5. **[Provenance](../vocabulary/canonical_terms.md#provenance) Enforcement:** Every [observation](../vocabulary/canonical_terms.md#observation) MUST have valid `source_material_id` and `interpretation_id`
 
-**For Structured [Source Material](../vocabulary/canonical_terms.md#source-material) (via `ingest()` with entities):**
+**For Structured [Source](../vocabulary/canonical_terms.md#source) (via `ingest()` with entities):**
 1. **Schema Validation:** Properties MUST match registered [entity schema](../vocabulary/canonical_terms.md#entity-schema) for `entity_type`
 2. **Type Validation:** Field types MUST match [entity schema](../vocabulary/canonical_terms.md#entity-schema) definitions
-3. **Rejection Policy:** Invalid [source material](../vocabulary/canonical_terms.md#source-material) is rejected with error code (not quarantined)
+3. **Rejection Policy:** Invalid [source](../vocabulary/canonical_terms.md#source) is rejected with error code (not quarantined)
 
 ### 9.3 Failure Paths
 
@@ -402,9 +402,9 @@ ALTER TABLE raw_fragments
 ```
 
 **NOT NULL Constraints:**
-- `observations.source_material_id` — MUST link to [source material](../vocabulary/canonical_terms.md#source-material)
-- `observations.interpretation_id` — MUST link to [interpretation](../vocabulary/canonical_terms.md#interpretation) (for AI-derived; NULL for corrections and structured [source material](../vocabulary/canonical_terms.md#source-material))
-- `raw_fragments.source_material_id` — MUST link to [source material](../vocabulary/canonical_terms.md#source-material)
+- `observations.source_material_id` — MUST link to [source](../vocabulary/canonical_terms.md#source)
+- `observations.interpretation_id` — MUST link to [interpretation](../vocabulary/canonical_terms.md#interpretation) (for AI-derived; NULL for corrections and structured [source](../vocabulary/canonical_terms.md#source))
+- `raw_fragments.source_material_id` — MUST link to [source](../vocabulary/canonical_terms.md#source)
 - `raw_fragments.interpretation_id` — MUST link to [interpretation](../vocabulary/canonical_terms.md#interpretation)
 
 ### 9.5 Validation Service
@@ -444,11 +444,11 @@ async function validateAndIngest(
 ### 9.6 Testing Requirements
 
 **Integration Tests:**
-1. **Valid [Source Material](../vocabulary/canonical_terms.md#source-material):** Verify [observation](../vocabulary/canonical_terms.md#observation) created with correct [provenance](../vocabulary/canonical_terms.md#provenance)
+1. **Valid [Source](../vocabulary/canonical_terms.md#source):** Verify [observation](../vocabulary/canonical_terms.md#observation) created with correct [provenance](../vocabulary/canonical_terms.md#provenance)
 2. **Invalid Type:** Verify rejection with `SCHEMA_VALIDATION_FAILED`
 3. **Unknown Fields:** Verify routing to `raw_fragments`
 4. **Missing [Provenance](../vocabulary/canonical_terms.md#provenance):** Verify FK constraint violation
-5. **Prompt Change Test:** Verify prompt/model changes do NOT silently alter [source material](../vocabulary/canonical_terms.md#source-material) shapes without [entity schema](../vocabulary/canonical_terms.md#entity-schema) version bump
+5. **Prompt Change Test:** Verify prompt/model changes do NOT silently alter [source](../vocabulary/canonical_terms.md#source) shapes without [entity schema](../vocabulary/canonical_terms.md#entity-schema) version bump
 
 ## 10. Security Model
 
@@ -470,7 +470,7 @@ async function validateAndIngest(
 ### When to Load This Document
 
 Load `docs/subsystems/sources.md` when:
-- Implementing [source material](../vocabulary/canonical_terms.md#source-material) storage or retrieval
+- Implementing [source](../vocabulary/canonical_terms.md#source) storage or retrieval
 - Working with [interpretations](../vocabulary/canonical_terms.md#interpretation)
 - Implementing deduplication logic
 - Understanding [provenance](../vocabulary/canonical_terms.md#provenance) chain
@@ -491,5 +491,5 @@ Load `docs/subsystems/sources.md` when:
 - Modifying existing [observations](../vocabulary/canonical_terms.md#observation) during reinterpretation
 - Exposing storage URLs to clients
 - Skipping quota checks
-- Cross-user [source material](../vocabulary/canonical_terms.md#source-material) access
+- Cross-user [source](../vocabulary/canonical_terms.md#source) access
 - Deleting [interpretations](../vocabulary/canonical_terms.md#interpretation) (archive instead)

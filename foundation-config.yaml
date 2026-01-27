@@ -37,6 +37,14 @@ development:
     require_references: false  # whether "References:" line is required
     pattern: "FU-{id}: {description}"  # Neotoma Feature Unit format
   
+  # Commit workflow configuration
+  commit:
+    migrate_plans: true  # Enable automatic plan migration during commit
+    migrate_plans_config:
+      proposals_dir: "docs/proposals"
+      archive_completed: true
+      auto_remove_obsolete: false  # Require manual confirmation for removal
+  
   # Pull requests
   pull_requests:
     require_id_in_title: true
@@ -242,6 +250,7 @@ tooling:
           - ACTIONS_BEARER_TOKEN  # Environment-based (dev/prod selected automatically) - HTTP Actions API auth
           # Note: MCP_AUTH_TOKEN removed - MCP uses Supabase session tokens, not a separate env var
           - CURSOR_CLOUD_API_KEY  # For multi-agent orchestration
+          - NGROK_AUTHTOKEN  # For HTTPS tunneling (development environment)
         # Optional, feature-specific
         optional: []
         # Backward compatibility: DEV_*/PROD_* prefixed variables still supported

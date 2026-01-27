@@ -5,7 +5,7 @@
 
 ## Overview
 
-All legacy support and deprecated functionality has been removed from the MCP server implementation. The codebase now uses only canonical terminology and modern source material architecture.
+All legacy support and deprecated functionality has been removed from the MCP server implementation. The codebase now uses only canonical terminology and modern source architecture.
 
 ## Removed Legacy Features
 
@@ -29,13 +29,13 @@ All legacy support and deprecated functionality has been removed from the MCP se
 - **Change:** Removed fallback to `records` table
 - **Result:** Now only uses `sources` table (canonical)
 
-### 5. Removed Legacy Source Material Lookup
+### 5. Removed Legacy Source Lookup
 - **Location:** `get_graph_neighborhood` (when `node_type === "source"`)
 - **Change:** Removed `records` table lookup, now uses `sources` table
-- **Result:** All source material queries use canonical `sources` table
+- **Result:** All source queries use canonical `sources` table
 
 ### 6. Removed Legacy Observation Source Lookup
-- **Location:** `get_graph_neighborhood` (observations → source material)
+- **Location:** `get_graph_neighborhood` (observations → source)
 - **Change:** Removed `records` table lookup for observation sources
 - **Result:** Now uses `sources` table via `source_id`
 

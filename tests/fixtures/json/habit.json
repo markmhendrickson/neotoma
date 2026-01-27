@@ -1,0 +1,54 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Morning exercise",
+    "description": "30 minutes of cardio every morning",
+    "target_frequency": "daily",
+    "current_streak": 15,
+    "longest_streak": 45,
+    "status": "active",
+    "start_date": "2024-01-01",
+    "priority": "high",
+    "notes": "Best done before breakfast"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Read before bed",
+    "description": "Read for 20 minutes before sleep",
+    "target_frequency": "daily",
+    "current_streak": 7,
+    "longest_streak": 30,
+    "status": "active",
+    "start_date": "2024-02-15",
+    "priority": "medium"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Weekly review",
+    "description": "Review tasks and projects every Sunday",
+    "target_frequency": "weekly",
+    "current_streak": 8,
+    "longest_streak": 20,
+    "status": "active",
+    "start_date": "2024-03-01",
+    "priority": "high",
+    "notes": "Critical for staying organized"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Abandoned habit",
+    "description": "Tried meditation but didn't stick",
+    "target_frequency": "daily",
+    "current_streak": 0,
+    "longest_streak": 5,
+    "status": "inactive",
+    "start_date": "2024-04-01",
+    "priority": "low",
+    "notes": "Need to restart this"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal habit",
+    "status": "active"
+  }
+]

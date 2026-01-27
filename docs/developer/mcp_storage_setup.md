@@ -49,7 +49,7 @@ The Neotoma MCP server requires two storage buckets:
 
 | Bucket Name | Purpose | Required For |
 |------------|---------|--------------|
-| `sources` | Source material storage | `ingest()` operations, content-addressed storage |
+| `sources` | Source storage | `ingest()` operations, content-addressed storage |
 | `files` | General file uploads | File upload endpoints |
 
 Both buckets should be **private** (not public) for security. The system uses the `service_role` key for uploads/downloads and creates signed URLs for client access.

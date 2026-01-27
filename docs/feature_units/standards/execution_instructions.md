@@ -24,21 +24,35 @@ flowchart TD
 1. **Load Documentation**
    - `docs/NEOTOMA_MANIFEST.md`
    - Relevant subsystem docs from context index
+   - `docs/conventions/agent_test_execution_rules.mdc` (MANDATORY)
+   - `docs/conventions/test_first_workflow_rules.mdc` (MANDATORY)
 2. **Implement Domain Logic**
    - Write deterministic extraction/entity resolution
-   - Unit test each function
+   - **Write unit tests FIRST or alongside** (see test-first workflow)
+   - **Run unit tests immediately** after each function (`npm test`)
+   - **Fix any failing tests** before proceeding
 3. **Implement Application Logic**
    - Wire up domain services
    - Handle errors, emit events
-   - Integration tests
+   - **Write integration tests FIRST or alongside**
+   - **Run integration tests immediately** (`npm run test:integration`)
+   - **Fix any failing tests** before proceeding
 4. **Implement UI (if applicable)**
    - Build components per spec
    - Add accessibility (keyboard, ARIA)
    - Add i18n strings
-   - Component tests
-5. **E2E Tests**
-   - Test full user flows
-   - Verify observability (metrics, logs)
+   - **Write Playwright E2E tests FIRST or alongside** (see UI test requirements)
+   - **Run E2E tests immediately** (`npm run test:e2e`)
+   - **Fix any failing tests** before proceeding
+5. **Final Test Verification**
+   - **Run full test suite:**
+     - Type check: `npm run type-check`
+     - Lint: `npm run lint`
+     - Unit tests: `npm test`
+     - Integration tests: `npm run test:integration`
+     - E2E tests: `npm run test:e2e` (if UI changes)
+   - **Verify all tests pass** before proceeding
+   - **Check coverage** meets requirements (`npm run test:coverage`)
 6. **Documentation**
    - Update subsystem docs if patterns changed
    - Add examples
@@ -65,5 +79,9 @@ Constraints:
 - MUST have complete spec before coding (see creation workflow)
 - MUST have prototype approved (if UI changes) before implementation
 - MUST follow implementation order (this document)
-- MUST write tests
+- **MANDATORY: MUST run tests after EVERY code change** (see `docs/conventions/agent_test_execution_rules.mdc`)
+- **MANDATORY: MUST write tests FIRST or alongside implementation** (see `docs/conventions/test_first_workflow_rules.mdc`)
+- **MANDATORY: MUST fix failing tests before proceeding** (do not mark complete with failing tests)
+- **MANDATORY: MUST run full test suite before marking FU complete**
+- MUST write tests (unit, integration, E2E as applicable)
 - MUST update docs if patterns change

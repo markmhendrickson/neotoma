@@ -18,7 +18,7 @@
 ### 1. Storing Operations
 
 #### `ingest`
-**Purpose:** Unified storing for all source material (unstructured and structured)
+**Purpose:** Unified storing for all source (unstructured and structured)
 
 **Input:**
 - Unstructured: `{user_id, file_content, mime_type, original_filename?, interpret?, interpretation_config?}`
@@ -36,7 +36,7 @@
 ### 2. File Operations
 
 #### `get_file_url`
-**Purpose:** Get signed URL for accessing stored source material
+**Purpose:** Get signed URL for accessing stored source
 
 **Input:** `{file_path, expires_in?}`
 
@@ -106,7 +106,7 @@
 **Output:** `{node_id, node_type, entity?, entity_snapshot?, source_material?, relationships?, related_entities?, related_sources?, timeline_events?, observations?}`
 
 **Features:**
-- Works with entities or source material
+- Works with entities or source
 - Configurable inclusion of related data
 - Complete graph context
 
@@ -138,7 +138,7 @@
 - Sorted by `observed_at` DESC
 
 #### `get_field_provenance`
-**Purpose:** Trace field to source material (full provenance chain)
+**Purpose:** Trace field to source (full provenance chain)
 
 **Input:** `{entity_id, field}`
 
@@ -146,7 +146,7 @@
 
 **Features:**
 - Complete provenance chain
-- Field → Observation → Source Material
+- Field → Observation → Source
 - Explains why value was selected
 
 #### `create_relationship`
@@ -182,7 +182,7 @@
 
 **Features:**
 - Date range filtering
-- Source material filtering
+- Source filtering
 - Type filtering
 - Chronological ordering
 
@@ -203,7 +203,7 @@
 - Immediate effect on snapshot
 
 #### `reinterpret`
-**Purpose:** Re-run AI interpretation on existing source material
+**Purpose:** Re-run AI interpretation on existing source
 
 **Input:** `{source_id, interpretation_config}`
 
@@ -228,7 +228,7 @@
 ## Action Categories by Use Case
 
 ### Data Ingestion
-- `ingest` - Store source material (files or structured data)
+- `ingest` - Store source (files or structured data)
 
 ### Entity Queries
 - `get_entity_snapshot` - Get current/historical entity state

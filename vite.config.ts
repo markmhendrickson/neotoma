@@ -110,7 +110,7 @@ export default defineConfig({
       "/api": {
         target: `http://localhost:${process.env.HTTP_PORT || "8080"}`,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        // Don't rewrite - backend routes include /api prefix
       },
     },
     headers: undefined,

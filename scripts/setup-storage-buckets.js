@@ -17,7 +17,7 @@ import { config } from "dotenv";
 config();
 
 const requiredBuckets = [
-  { name: "sources", description: "Required for MCP ingest() and source material operations" },
+  { name: "sources", description: "Required for MCP ingest() and source operations" },
   { name: "files", description: "Used for general file uploads" },
 ];
 

@@ -15,7 +15,7 @@ export class FileStateRepository implements StateRepository {
   private eventRepository: { getEventsByRecordId(recordId: string): Promise<unknown[]> };
 
   constructor(
-    statesDir: string = './data/states',
+    statesDir: string = "./data/states",
     eventRepository: { getEventsByRecordId(recordId: string): Promise<unknown[]> }
   ) {
     this.statesDir = statesDir;
@@ -38,10 +38,10 @@ export class FileStateRepository implements StateRepository {
     const filePath = this.getStateFilePath(recordId);
 
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
+      const content = await fs.readFile(filePath, "utf-8");
       return JSON.parse(content) as NeotomaRecord;
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         // File doesn't exist, try to reconstruct from events
         const events = await this.eventRepository.getEventsByRecordId(recordId);
         if (events.length === 0) {
@@ -67,12 +67,12 @@ export class FileStateRepository implements StateRepository {
 
     try {
       // Atomic write: write to temp file first, then rename
-      const tempPath = filePath + '.tmp';
-      await fs.writeFile(tempPath, content, 'utf-8');
+      const tempPath = filePath + ".tmp";
+      await fs.writeFile(tempPath, content, "utf-8");
       await fs.rename(tempPath, filePath);
       
       // Ensure durability with fsync
-      const fd = await fs.open(filePath, 'r+');
+      const fd = await fs.open(filePath, "r+");
       await fd.sync();
       await fd.close();
     } catch (error) {
