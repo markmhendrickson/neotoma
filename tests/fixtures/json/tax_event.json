@@ -1,0 +1,60 @@
+[
+  {
+    "schema_version": "1.0",
+    "event_date": "2024-06-15T00:00:00Z",
+    "event_type": "sale",
+    "asset_symbol": "AAPL",
+    "quantity": 50,
+    "cost_basis_usd": 7500.0,
+    "proceeds_usd": 9500.0,
+    "gain_loss_usd": 2000.0,
+    "tax_year": 2024,
+    "jurisdiction": "US",
+    "description": "Sale of 50 AAPL shares"
+  },
+  {
+    "schema_version": "1.0",
+    "event_date": "2024-08-20T00:00:00Z",
+    "event_type": "sale",
+    "asset_symbol": "BTC",
+    "quantity": 0.1,
+    "cost_basis_usd": 4000.0,
+    "proceeds_usd": 4500.0,
+    "gain_loss_usd": 500.0,
+    "tax_year": 2024,
+    "jurisdiction": "US",
+    "description": "Sale of 0.1 BTC"
+  },
+  {
+    "schema_version": "1.0",
+    "event_date": "2024-09-10T00:00:00Z",
+    "event_type": "sale",
+    "asset_symbol": "TSLA",
+    "quantity": 25,
+    "cost_basis_usd": 5000.0,
+    "proceeds_usd": 4500.0,
+    "gain_loss_usd": -500.0,
+    "tax_year": 2024,
+    "jurisdiction": "US",
+    "description": "Sale of 25 TSLA shares - loss"
+  },
+  {
+    "schema_version": "1.0",
+    "event_date": "2024-10-05T00:00:00Z",
+    "event_type": "dividend",
+    "asset_symbol": "MSFT",
+    "tax_year": 2024,
+    "jurisdiction": "US",
+    "description": "Quarterly dividend income"
+  },
+  {
+    "schema_version": "1.0",
+    "event_date": "2024-11-15T00:00:00Z",
+    "event_type": "sale",
+    "asset_symbol": "BTC",
+    "tax_year": 2024
+  }
+]
+
+
+

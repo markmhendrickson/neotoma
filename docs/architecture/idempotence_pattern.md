@@ -106,7 +106,7 @@ The idempotence pattern integrates with Neotoma's interpretation pipeline:
 
 Observations table already supports:
 
-- `source_id` (links to source material)
+- `source_id` (links to source)
 - `interpretation_id` (links to interpretation run)
 - `entity_id` (links to entity)
 - `fields` (JSONB with validated fields)

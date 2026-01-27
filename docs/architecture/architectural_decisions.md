@@ -6,7 +6,7 @@
 
 This document covers:
 - Core architectural decisions and their rationale
-- Three-layer truth model ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
+- Three-layer truth model ([Source](../vocabulary/canonical_terms.md#source) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
 - Schema evolution and registry patterns
 - [Reducer](../vocabulary/canonical_terms.md#reducer)-based merge strategies
 - [Relationship](../vocabulary/canonical_terms.md#relationship) modeling approach
@@ -41,8 +41,8 @@ This document does NOT cover:
 ## 2. Three-Layer Truth Model
 
 **Decision:** Neotoma implements a three-layer truth model:
-1. **[Source Material](../vocabulary/canonical_terms.md#source-material)** — unified [ingestion](../vocabulary/canonical_terms.md#ingestion) primitive (files + agent data)
-2. **[Observation](../vocabulary/canonical_terms.md#observation)** — granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material)
+1. **[Source](../vocabulary/canonical_terms.md#source)** — unified [ingestion](../vocabulary/canonical_terms.md#ingestion) primitive (files + agent data)
+2. **[Observation](../vocabulary/canonical_terms.md#observation)** — granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source)
 3. **[Entity](../vocabulary/canonical_terms.md#entity)** — the logical thing in the world with a stable ID
 4. **[Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)** — deterministic [reducer](../vocabulary/canonical_terms.md#reducer) output representing current truth
 
@@ -50,22 +50,22 @@ This document does NOT cover:
 - Decouples [ingestion](../vocabulary/canonical_terms.md#ingestion) order from truth
 - Enables multiple sources to contribute [observations](../vocabulary/canonical_terms.md#observation) about the same [entity](../vocabulary/canonical_terms.md#entity)
 - Supports deterministic merging via [reducers](../vocabulary/canonical_terms.md#reducer)
-- Provides full [provenance](../vocabulary/canonical_terms.md#provenance): every [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to specific [observations](../vocabulary/canonical_terms.md#observation) and [source material](../vocabulary/canonical_terms.md#source-material)
+- Provides full [provenance](../vocabulary/canonical_terms.md#provenance): every [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to specific [observations](../vocabulary/canonical_terms.md#observation) and [source](../vocabulary/canonical_terms.md#source)
 - Unifies file uploads and agent submissions into single [ingestion](../vocabulary/canonical_terms.md#ingestion) primitive
 
 **Model Diagram:**
 ```mermaid
 %%{init: {'theme':'neutral'}}%%
 flowchart TD
-    SourceMaterial[Source Material<br/>Files + Agent Data]
+    SourceNode[Source<br/>Files + Agent Data]
     Observation[Observation<br/>Granular Facts]
     Entity[Entity<br/>Stable ID]
     Snapshot[Snapshot<br/>Current Truth]
-    SourceMaterial -->|Extract| Observation
+    SourceNode -->|Extract| Observation
     Observation -->|Merge via Reducer| Snapshot
     Entity -.->|Target| Observation
     Entity -.->|Represents| Snapshot
-    style SourceMaterial fill:#e1f5ff
+    style SourceNode fill:#e1f5ff
     style Observation fill:#fff4e6
     style Entity fill:#e6ffe6
     style Snapshot fill:#ffe6f0
@@ -75,8 +75,8 @@ flowchart TD
 - [Ingestion](../vocabulary/canonical_terms.md#ingestion) creates [observations](../vocabulary/canonical_terms.md#observation), not direct [entity](../vocabulary/canonical_terms.md#entity) updates
 - [Reducers](../vocabulary/canonical_terms.md#reducer) compute [entity snapshots](../vocabulary/canonical_terms.md#entity-snapshot) from [observations](../vocabulary/canonical_terms.md#observation) deterministically
 - Multiple [observations](../vocabulary/canonical_terms.md#observation) about same [entity](../vocabulary/canonical_terms.md#entity) can coexist
-- [Provenance](../vocabulary/canonical_terms.md#provenance) tracks [observation](../vocabulary/canonical_terms.md#observation) → [source material](../vocabulary/canonical_terms.md#source-material) chain
-- File uploads and agent submissions both create [source material](../vocabulary/canonical_terms.md#source-material) (unified [ingestion](../vocabulary/canonical_terms.md#ingestion))
+- [Provenance](../vocabulary/canonical_terms.md#provenance) tracks [observation](../vocabulary/canonical_terms.md#observation) → [source](../vocabulary/canonical_terms.md#source) chain
+- File uploads and agent submissions both create [source](../vocabulary/canonical_terms.md#source) (unified [ingestion](../vocabulary/canonical_terms.md#ingestion))
 
 **Related Documents:**
 - `docs/subsystems/observation_architecture.md`
@@ -85,7 +85,7 @@ flowchart TD
 
 ## 3. Typed, Deterministic [Entity Schemas](../vocabulary/canonical_terms.md#entity-schema)
 
-**Decision:** Strict [entity schemas](../vocabulary/canonical_terms.md#entity-schema) apply to [source material](../vocabulary/canonical_terms.md#source-material), [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), and [relationships](../vocabulary/canonical_terms.md#relationship). [Entity schemas](../vocabulary/canonical_terms.md#entity-schema) are typed and versioned; [ingestion](../vocabulary/canonical_terms.md#ingestion) is deterministic.
+**Decision:** Strict [entity schemas](../vocabulary/canonical_terms.md#entity-schema) apply to [source](../vocabulary/canonical_terms.md#source), [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), and [relationships](../vocabulary/canonical_terms.md#relationship). [Entity schemas](../vocabulary/canonical_terms.md#entity-schema) are typed and versioned; [ingestion](../vocabulary/canonical_terms.md#ingestion) is deterministic.
 
 **Rationale:**
 - Ensures deterministic [extraction](../vocabulary/canonical_terms.md#extraction) and processing
@@ -103,7 +103,7 @@ flowchart TD
 - No ad-hoc JSON fields in core schemas
 - [Entity schema](../vocabulary/canonical_terms.md#entity-schema) versioning enables backward compatibility
 - Raw fragments enable schema discovery and promotion
-- Deterministic [extraction](../vocabulary/canonical_terms.md#extraction): same [source material](../vocabulary/canonical_terms.md#source-material) + [entity schema](../vocabulary/canonical_terms.md#entity-schema) → same [observations](../vocabulary/canonical_terms.md#observation)
+- Deterministic [extraction](../vocabulary/canonical_terms.md#extraction): same [source](../vocabulary/canonical_terms.md#source) + [entity schema](../vocabulary/canonical_terms.md#entity-schema) → same [observations](../vocabulary/canonical_terms.md#observation)
 
 **Related Documents:**
 - `docs/subsystems/schema.md`
@@ -254,7 +254,7 @@ flowchart LR
 **UX Components:**
 - **[Entity](../vocabulary/canonical_terms.md#entity) Lists:** Filterable, sortable [entity](../vocabulary/canonical_terms.md#entity) views
 - **[Entity](../vocabulary/canonical_terms.md#entity) Detail Views:** [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) with [provenance](../vocabulary/canonical_terms.md#provenance) panel
-- **Evidence Panel:** Shows [observation](../vocabulary/canonical_terms.md#observation) → [source material](../vocabulary/canonical_terms.md#source-material) → file chain
+- **Evidence Panel:** Shows [observation](../vocabulary/canonical_terms.md#observation) → [source](../vocabulary/canonical_terms.md#source) → file chain
 - **[Relationship](../vocabulary/canonical_terms.md#relationship) Graphs:** Visualize [entity](../vocabulary/canonical_terms.md#entity) connections
 - **Insights:** Unsettled invoices, duplicate transactions, mismatched summaries, spending analysis, subscription detection
 
@@ -271,7 +271,7 @@ flowchart LR
 
 ## 9. Explainability & [Provenance](../vocabulary/canonical_terms.md#provenance)
 
-**Decision:** Every property in a [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) traces back to specific [observations](../vocabulary/canonical_terms.md#observation) and files. Timeline view: how a property changed across [source material](../vocabulary/canonical_terms.md#source-material), corrections, and sources.
+**Decision:** Every property in a [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) traces back to specific [observations](../vocabulary/canonical_terms.md#observation) and files. Timeline view: how a property changed across [source](../vocabulary/canonical_terms.md#source), corrections, and sources.
 
 **Rationale:**
 - Enables trust, auditability, and debugging
@@ -281,7 +281,7 @@ flowchart LR
 
 **[Provenance](../vocabulary/canonical_terms.md#provenance) Chain:**
 ```
-Snapshot Field → Observation → Source Material → File
+Snapshot Field → Observation → Source → File
 ```
 
 **Timeline View:**
@@ -367,7 +367,7 @@ These 11 decisions produce the following architectural properties:
 Same inputs → same truth. [Reducers](../vocabulary/canonical_terms.md#reducer) are pure functions. [Entity schema](../vocabulary/canonical_terms.md#entity-schema)-based [extraction](../vocabulary/canonical_terms.md#extraction) is reproducible.
 
 ### Explainable
-Every field is sourced and intelligible. [Provenance](../vocabulary/canonical_terms.md#provenance) chain: [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) → [observation](../vocabulary/canonical_terms.md#observation) → [source material](../vocabulary/canonical_terms.md#source-material) → file.
+Every field is sourced and intelligible. [Provenance](../vocabulary/canonical_terms.md#provenance) chain: [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) → [observation](../vocabulary/canonical_terms.md#observation) → [source](../vocabulary/canonical_terms.md#source) → file.
 
 ### Extensible
 New properties/[relationships](../vocabulary/canonical_terms.md#relationship) added without code. Schema registry enables config-driven evolution.
@@ -404,10 +404,10 @@ Load `docs/architecture/architectural_decisions.md` when:
 ### Constraints Agents Must Enforce
 
 1. **[Entity](../vocabulary/canonical_terms.md#entity)-centric design:** All user-facing APIs expose [entities](../vocabulary/canonical_terms.md#entity) as primary objects
-2. **Three-layer model:** [Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
+2. **Three-layer model:** [Source](../vocabulary/canonical_terms.md#source) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
 3. **Deterministic [reducers](../vocabulary/canonical_terms.md#reducer):** Same [observations](../vocabulary/canonical_terms.md#observation) + merge rules → same [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot)
 4. **Schema registry:** Domain [entity schemas](../vocabulary/canonical_terms.md#entity-schema) live in registry, not code
-5. **[Provenance](../vocabulary/canonical_terms.md#provenance) tracking:** Every [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to [observations](../vocabulary/canonical_terms.md#observation) and [source material](../vocabulary/canonical_terms.md#source-material)
+5. **[Provenance](../vocabulary/canonical_terms.md#provenance) tracking:** Every [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to [observations](../vocabulary/canonical_terms.md#observation) and [source](../vocabulary/canonical_terms.md#source)
 6. **[Relationship](../vocabulary/canonical_terms.md#relationship)-first:** No hard-coded hierarchies, [relationships](../vocabulary/canonical_terms.md#relationship) are first-class
 7. **Append-only changes:** All [entity schema](../vocabulary/canonical_terms.md#entity-schema) evolution is additive and versioned
 
@@ -423,7 +423,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 ### Validation Checklist
 
 - [ ] [Entity](../vocabulary/canonical_terms.md#entity)-centric design maintained
-- [ ] Three-layer model respected ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity](../vocabulary/canonical_terms.md#entity) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
+- [ ] Three-layer model respected ([Source](../vocabulary/canonical_terms.md#source) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity](../vocabulary/canonical_terms.md#entity) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
 - [ ] [Reducers](../vocabulary/canonical_terms.md#reducer) are deterministic (same inputs → same outputs)
 - [ ] [Entity schemas](../vocabulary/canonical_terms.md#entity-schema) managed via registry, not code
 - [ ] [Provenance](../vocabulary/canonical_terms.md#provenance) tracked for all [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) fields
@@ -435,7 +435,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 
 ### Related Documents
 - `docs/architecture/architecture.md` — Canonical platform architecture
-- `docs/architecture/source_material_model.md` — [Source material](../vocabulary/canonical_terms.md#source-material) architecture
+- `docs/architecture/source_material_model.md` — [Source](../vocabulary/canonical_terms.md#source) architecture
 - `docs/vocabulary/canonical_terms.md` — Authoritative terminology
 - `docs/subsystems/observation_architecture.md` — [Observation](../vocabulary/canonical_terms.md#observation) layer architecture
 - `docs/subsystems/reducer.md` — [Reducer](../vocabulary/canonical_terms.md#reducer) engine patterns
@@ -447,7 +447,7 @@ Load `docs/architecture/architectural_decisions.md` when:
 
 ### Release Documentation
 - `docs/releases/v0.1.0/` — Internal MCP Release (foundational architecture)
-- `docs/releases/v0.2.0/` — Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture ([source material](../vocabulary/canonical_terms.md#source-material) storage, [interpretations](../vocabulary/canonical_terms.md#interpretation), [provenance](../vocabulary/canonical_terms.md#provenance))
+- `docs/releases/v0.2.0/` — Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture ([source](../vocabulary/canonical_terms.md#source) storage, [interpretations](../vocabulary/canonical_terms.md#interpretation), [provenance](../vocabulary/canonical_terms.md#provenance))
 - `docs/releases/v0.2.15/` — Complete Architecture Migration (unified `ingest`, vocabulary alignment)
 - `docs/releases/v2.0.0/` — End-to-End Encryption (local-first E2EE architecture)
 - `docs/releases/v2.1.0/` — GDPR & Privacy Compliance

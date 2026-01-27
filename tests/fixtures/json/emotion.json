@@ -1,0 +1,31 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Excited",
+    "category": "positive",
+    "notes": "About new project launch"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Anxious",
+    "category": "negative",
+    "notes": "Deadline approaching"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Calm",
+    "category": "neutral",
+    "notes": "Morning meditation helped"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Frustrated",
+    "category": "negative",
+    "notes": "Bug taking longer than expected to fix"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Motivated",
+    "category": "positive"
+  }
+]

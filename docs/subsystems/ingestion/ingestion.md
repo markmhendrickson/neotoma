@@ -1,4 +1,4 @@
-# Neotoma [Storing](#storing) Pipeline — [Source Material](#source-material) Processing and Truth [Extraction](#extraction)
+# Neotoma [Storing](#storing) Pipeline — [Source](#source) Processing and Truth [Extraction](#extraction)
 ## Sources-First Architecture
 Neotoma uses a **sources-first architecture** that decouples raw content storage from [interpretation](#interpretation):
 ```
@@ -11,7 +11,7 @@ Raw Content → Sources → [Interpretations](#interpretation) → [Observations
 4. **User Isolation**: All tables user-scoped with RLS
 5. **Correction via Priority**: User corrections create priority-1000 [observations](#observation) that override AI
 **Benefits:**
-- **[Provenance](#provenance)**: Every [observation](#observation) traces to [source material](#source-material) and [interpretation](#interpretation)
+- **[Provenance](#provenance)**: Every [observation](#observation) traces to [source](#source) and [interpretation](#interpretation)
 - **Auditability**: [Interpretation](#interpretation) config logged; can understand how data was [extracted](#extraction)
 - **Flexibility**: Can reinterpret with new models without losing history
 - **Cost Control**: [Interpretation](#interpretation) quotas prevent runaway AI costs
@@ -19,7 +19,7 @@ See [`docs/subsystems/sources.md`](../sources.md) for complete sources-first arc
 ## Scope
 This document covers:
 - File upload and normalization
-- **[Source material](#source-material) storage and deduplication**
+- **[Source](#source) storage and deduplication**
 - **[Interpretations](#interpretation)**
 - OCR and text [extraction](#extraction) (file uploads only)
 - [Entity schema](#entity-schema) detection
@@ -31,7 +31,7 @@ This document covers:
 - **[Entity](#entity) merge**
 **[Storing](#storing) Paths:**
 1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are [stored](#storing) in `sources`, undergo [interpretation](#interpretation), and [observations](#observation) are created.
-2. **Structured [Source Material](#source-material) via `ingest()`**: Agents provide pre-structured data with explicit [entity types](#entity-type). Bypasses AI [interpretation](#interpretation); creates [observations](#observation) directly with priority=100.
+2. **Structured [Source](#source) via `ingest()`**: Agents provide pre-structured data with explicit [entity types](#entity-type). Bypasses AI [interpretation](#interpretation); creates [observations](#observation) directly with priority=100.
 3. **Corrections via `correct()`**: Users or agents correct [extracted](#extraction) values. Creates priority-1000 [observations](#observation) that override AI [extraction](#extraction).
 All paths feed into the same truth model (Sources → [Interpretations](#interpretation) → [Observations](#observation) → [Entity Snapshots](#entity-snapshot)), ensuring unified memory regardless of [storing](#storing) source.
 This document does NOT cover:

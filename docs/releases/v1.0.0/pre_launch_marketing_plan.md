@@ -1,122 +1,132 @@
-## Release v1.0.0 — Pre-Launch Marketing Plan
+## Release v1.0.0 — Build-in-Public Content Plan
+
 ### Purpose
-This document defines the pre-launch marketing activities for v1.0.0, focused on building waitlist, early access beta, and content teasers before launch.
+This document defines build-in-public content activities for v1.0.0 during the build phase (dogfooding-first approach). Focus is on technical thought leadership, community engagement, and reactive content to industry announcements—not traditional pre-launch marketing (no waitlist/beta).
+
+**Key Changes from Original Pre-Launch Marketing Plan:**
+- ❌ **Removed**: Waitlist building, early access beta, formal pre-launch marketing
+- ✅ **Added**: Build-in-public content, reactive content to industry announcements, MCP ecosystem engagement
+- ✅ **Reframed**: Technical thought leadership instead of product marketing
+- ✅ **Timeline**: Week 0-12 (during build), not Week -4 to Week 0 (before build)
+- ✅ **Approach**: Building for personal use (ateles integration), sharing learnings
+
 **Related Documents:**
 - `marketing_plan.md` — Marketing overview and coordination
-- `post_launch_marketing_plan.md` — Post-launch marketing activities
+- `post_launch_marketing_plan.md` — Post-launch marketing activities (deferred until after dogfooding)
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
-### 1. Pre-Launch Overview
-- **Timeline**: Week -4 to Week 0
-- **Strategy**: Organic only (no paid acquisition for MVP)
-- **Goals**: Build waitlist, identify early adopters, create advocates, generate awareness
-### 2. Waitlist Building
-#### 2.1 Timeline and Channels
-- **Timeline**: Week -4 to Week 0
+- `marketing_dogfooding_analysis.md` — Analysis of pre-launch marketing for dogfooding-first approach
+- `visibility_timing_analysis.md` — Visibility timing risk and build-in-public strategy
+
+### 1. Build-in-Public Overview
+- **Timeline**: Week 0-12 (during build + dogfooding)
+- **Strategy**: Strategic build-in-public content (technical thought leadership, not product marketing)
+- **Goals**: Technical credibility, thought leadership positioning, community engagement, visibility during industry announcements
+- **No Waitlist/Beta**: Just sharing learnings, not marketing
+- **Approach**: Building for personal use (ateles integration), sharing what I'm learning
+### 2. Build-in-Public Content Strategy
+
+#### 2.1 Overview
+- **Timeline**: Week 0-12 (ongoing during build + dogfooding)
 - **Channels**: Personal Twitter/X (@markymark), Personal LinkedIn, Personal Website/Blog, Indie Hackers, Hacker News
-- **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
-- **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Hacker News) prioritized for waitlist building; aligns with AI-Native Individual Operators segment
-- **Strategy**: Leverage personal accounts and website for authentic, build-in-public marketing
+- **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers, MCP ecosystem
+- **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Hacker News) for technical content; aligns with AI-Native Individual Operators segment
+- **Strategy**: Authentic build-in-public content (technical learnings, not product marketing)
+- **No Waitlist/Beta**: Just sharing, not marketing
 #### 2.2 Personal Twitter/X Account (@markymark)
-**Timeline**: Week -4 to Week 0
-**Profile Setup** (Week -4):
-- [ ] Update bio: "Building Neotoma — Privacy-first truth layer for AI memory | MCP integration"
-- [ ] Pin tweet: Announcement tweet linking to waitlist
-- [ ] Add Neotoma website link in bio
+**Timeline**: Week 0-12 (ongoing during build)
+**Profile Setup** (Week 0):
+- [ ] Update bio: "Building Neotoma — Privacy-first truth layer for AI memory | MCP integration | Building for ateles integration"
+- [ ] Pin tweet: Build-in-public announcement (no waitlist link, just sharing journey)
+- [ ] Add Neotoma website link in bio (if website exists)
 - [ ] Add location/company info if relevant
-**Weekly Posting Schedule**:
-**Week -4 (Waitlist Launch Week)**:
-- **Monday**: Launch waitlist announcement thread (5-7 tweets)
-  - Tweet 1: Hook — "I've been building something to solve a problem I've had with AI tools..."
-  - Tweet 2-3: Problem statement (AI tools lack persistent memory, context limits)
-  - Tweet 4-5: Solution teaser (Neotoma, MCP integration, privacy-first)
-  - Tweet 6: Call-to-action (join waitlist link)
-  - Tweet 7: Thread end with engagement question
-- **Wednesday**: Technical thread — "Why deterministic extraction matters" (4-5 tweets)
-- **Friday**: Build-in-public update — Progress update, screenshots, learnings
-**Week -3**:
-- **Monday**: Problem thread — "The problem with semantic search for personal data" (5-6 tweets)
-- **Wednesday**: Architecture thread — "How Neotoma works: Records → Entities → Events" (6-7 tweets)
-- **Friday**: Use case thread — "What if Claude could remember your contracts?" (4-5 tweets)
-**Week -2 (Beta Launch Week)**:
-- **Monday**: Beta launch announcement thread (5-6 tweets)
-- **Wednesday**: MCP integration deep-dive thread (6-7 tweets)
-- **Friday**: Early feedback thread — Share beta user insights (anonymized)
-**Week -1**:
-- **Monday**: Privacy thread — "Why privacy-first architecture matters for AI memory" (5-6 tweets)
-- **Wednesday**: Entity resolution thread — "How Neotoma unifies entities across documents" (5-6 tweets)
-- **Friday**: Launch prep thread — "What's coming in v1.0.0" (4-5 tweets)
-**Week 0 (Launch Week)**:
-- **Monday**: Final pre-launch thread — "Launching Neotoma this week" (3-4 tweets)
-- **Wednesday**: Launch day prep — Behind-the-scenes thread
-- **Friday**: Launch day (see `post_launch_marketing_plan.md`)
+
+**Weekly Posting Schedule** (Flexible, reactive to industry announcements):
+**Regular Content** (Weekly):
+- **Monday**: Technical thread — "Why deterministic extraction matters" (4-5 tweets)
+- **Wednesday**: Architecture thread — "How I'm building Neotoma: Records → Entities → Events" (6-7 tweets)
+- **Friday**: Build-in-public update — Progress update, screenshots, learnings from ateles integration
+
+**Reactive Content** (When industry announcements happen):
+- **Within 24-48 hours**: Respond to industry announcements (OpenAI, Anthropic, Google, MCP ecosystem)
+- **Technical analysis**: "Here's what [competitor] announced, here's why it doesn't solve [problem]"
+- **Positioning**: "I'm building Neotoma to solve [problem] differently"
+- **No CTA**: Just thought leadership, not marketing
+
+**Content Themes**:
+- Problem/solution framing (from personal experience)
+- Technical deep-dives (determinism, MCP, entity resolution)
+- Build-in-public updates (ateles integration learnings)
+- Privacy-first positioning
+- Architecture decisions (why I'm making specific choices)
+- Reactive content (responding to industry announcements)
 **Daily Engagement**:
 - Reply to comments on threads (within 24 hours)
-- Engage with competitor follower posts (value-first, see Section 4)
+- Engage with MCP ecosystem discussions (value-first, not promotional)
 - Retweet/share relevant AI memory discussions
 - Answer questions about Neotoma/MCP authentically
-**Content Themes**:
-- Problem/solution framing
-- Technical deep-dives (determinism, MCP, entity resolution)
-- Build-in-public updates
-- Privacy-first positioning
-- Use case examples
-- Early user feedback (anonymized)
-**Thread Structure Template**:
-1. Hook tweet (problem/insight)
+- Monitor industry announcements (OpenAI, Anthropic, Google, MCP ecosystem)
+
+**Thread Structure Template** (Build-in-Public):
+1. Hook tweet (problem/insight from building)
 2. Problem expansion (2-3 tweets)
-3. Solution introduction (1-2 tweets)
+3. How I'm solving it (1-2 tweets)
 4. Technical details (2-3 tweets)
-5. Call-to-action (waitlist link)
-6. Engagement question
+5. What I'm learning (1-2 tweets)
+6. Engagement question (no CTA, just discussion)
 #### 2.3 Personal Website/Blog
-**Timeline**: Week -4 to Week 0
-**Website Setup** (Week -4):
+**Timeline**: Week 0-12 (ongoing during build)
+**Website Setup** (Week 0):
 - [ ] Create/update personal website landing page with Neotoma section
 - [ ] Add "Building Neotoma" section to homepage
 - [ ] Create blog section (if not exists)
-- [ ] Add waitlist signup form/widget
+- [ ] **No waitlist signup form** (building for personal use, not ready for external users)
 - [ ] Add Neotoma logo/branding
 - [ ] Set up analytics (Google Analytics or Plausible)
-**Blog Content Schedule**:
-**Week -4**:
+
+**Blog Content Schedule** (Flexible, reactive to learnings):
+**Technical Deep-Dives** (Monthly, ~2-3 posts):
 - [ ] **Post 1**: "Why I'm Building Neotoma: The Problem with AI Memory"
-  - Personal story, problem statement
+  - Personal story (ateles integration use case)
+  - Problem statement (from building experience)
   - Why existing solutions don't work
-  - What Neotoma solves
-  - Waitlist CTA
+  - What I'm building to solve it
+  - **No CTA**: Just sharing learnings
   - ~1500 words
-**Week -3**:
+
 - [ ] **Post 2**: "Deterministic Extraction: Why It Matters for Personal Data"
   - Technical deep-dive on determinism vs. ML-based extraction
-  - Why reproducibility matters
-  - Examples and use cases
+  - Why reproducibility matters (from building experience)
+  - Examples and use cases (from ateles integration)
+  - **No CTA**: Just technical insights
   - ~2000 words
-**Week -2**:
+
 - [ ] **Post 3**: "Building a Truth Layer: Neotoma's Architecture"
   - Four-layer truth model (Document → Entity → Observation → Snapshot)
-  - Entity resolution
-  - Timeline generation
-  - MCP integration
+  - Entity resolution (how I'm implementing it)
+  - Timeline generation (architectural decisions)
+  - MCP integration (patterns I'm discovering)
+  - **No CTA**: Just architectural insights
   - ~2500 words
-**Week -1**:
+
 - [ ] **Post 4**: "Privacy-First AI Memory: Why User Control Matters"
-  - Privacy-first architecture
+  - Privacy-first architecture (why I'm building it this way)
   - Comparison with provider-controlled models
-  - User control benefits
+  - User control benefits (from building perspective)
+  - **No CTA**: Just thought leadership
   - ~1500 words
-**Week 0**:
-- [ ] **Post 5**: "Launching Neotoma v1.0.0: What's Inside"
-  - Feature overview
-  - Launch announcement
-  - Signup CTA
-  - ~1000 words
+
+**Reactive Content** (When industry announcements happen):
+- Respond to competitor announcements with technical analysis
+- "Why [competitor approach] doesn't solve [problem]" posts
+- **No CTA**: Just thought leadership
 **Blog Post Promotion**:
 - Share each post on Twitter/X with thread summary
 - Share on LinkedIn with professional framing
 - Share on Indie Hackers (if relevant)
 - Share on Hacker News (if technical enough)
 - Include in email newsletter (if exists)
+- **No waitlist CTAs**: Just sharing technical content
 **SEO Optimization**:
 - Target keywords: "AI memory", "MCP integration", "deterministic extraction", "privacy-first AI"
 - Internal linking between posts
@@ -124,100 +134,82 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 - Meta descriptions optimized
 - Open Graph tags for social sharing
 #### 2.4 Personal LinkedIn Account
-**Timeline**: Week -4 to Week 0
-**Profile Setup** (Week -4):
-- [ ] Update headline: "Building Neotoma | Privacy-First Truth Layer for AI Memory"
+**Timeline**: Week 0-12 (ongoing during build)
+**Profile Setup** (Week 0):
+- [ ] Update headline: "Building Neotoma | Privacy-First Truth Layer for AI Memory | Building for ateles integration"
 - [ ] Add Neotoma to experience section
-- [ ] Update "About" section to mention Neotoma
-- [ ] Add Neotoma website link
+- [ ] Update "About" section to mention Neotoma (building for personal use)
+- [ ] Add Neotoma website link (if website exists)
 - [ ] Add skills: MCP, AI Memory, Privacy-First Architecture
-**Weekly Posting Schedule**:
-**Week -4**:
-- **Monday**: Professional announcement post — "I'm building Neotoma to solve AI memory challenges"
-- **Thursday**: Thought leadership post — "Why Privacy-First Architecture Matters for AI Tools"
-**Week -3**:
-- **Monday**: Technical post — "Deterministic vs. ML-Based Extraction: A Technical Comparison"
-- **Thursday**: Use case post — "How Knowledge Workers Can Benefit from Structured AI Memory"
-**Week -2**:
-- **Monday**: Beta launch announcement — "Opening Neotoma Beta: Join Early Access"
-- **Thursday**: Community post — "What I've Learned Building Neotoma"
-**Week -1**:
-- **Monday**: Launch prep post — "Launching Neotoma v1.0.0 Next Week"
-- **Thursday**: Positioning post — "Privacy-First AI Memory: Why It Matters"
-**Week 0**:
-- **Monday**: Launch announcement — "Neotoma v1.0.0 is Live"
+
+**Weekly Posting Schedule** (Flexible, ~2 posts/month):
+- **Technical posts**: "Deterministic vs. ML-Based Extraction: A Technical Comparison"
+- **Thought leadership**: "Why Privacy-First Architecture Matters for AI Tools"
+- **Build-in-public**: "What I'm Learning Building Neotoma for My Ateles Integration"
+- **Architecture insights**: "MCP Integration Patterns I'm Discovering"
+- **No beta/launch announcements**: Just sharing learnings
 **Post Format**:
 - Professional tone
 - 300-500 words
-- Include relevant hashtags (#AI #MCP #Privacy #Tech)
-- Link to blog post or waitlist
+- Include relevant hashtags (#AI #MCP #Privacy #Tech #BuildInPublic)
+- Link to blog post (no waitlist links)
 - Engage with comments
 **Engagement Strategy**:
 - Comment thoughtfully on AI/tech posts
-- Share relevant industry news with Neotoma angle
+- Share relevant industry news with Neotoma angle (thought leadership)
 - Engage with High-Context Knowledge Workers segment
 - Join relevant LinkedIn groups
+- **No promotional content**: Just technical insights and learnings
 #### 2.5 Indie Hackers Personal Account
-**Timeline**: Week -4 to Week 0
-**Profile Setup** (Week -4):
+**Timeline**: Week 0-12 (ongoing during build)
+**Profile Setup** (Week 0):
 - [ ] Verify Indie Hackers account exists
 - [ ] Update profile with Neotoma info
-- [ ] Create product page for Neotoma
-- [ ] Add Neotoma logo, description, website link
-**Weekly Posting Schedule**:
-**Week -4**:
-- **Monday**: Build-in-public post — "Starting Neotoma: Week 1 Progress"
-  - What you built this week
+- [ ] Create product page for Neotoma (optional, can defer)
+- [ ] Add Neotoma logo, description, website link (if website exists)
+- [ ] **No waitlist link**: Building for personal use, not ready for external users
+
+**Weekly Posting Schedule** (Weekly progress updates):
+- **Monday**: Build-in-public post — "Week X: Building Neotoma for Ateles Integration"
+  - What I built this week
   - Challenges faced
-  - Learnings
-  - Waitlist link
-**Week -3**:
-- **Monday**: Build-in-public post — "Week 2: Entity Resolution Implementation"
-  - Technical progress
-  - Screenshots/demos
-  - Community questions
-**Week -2**:
-- **Monday**: Build-in-public post — "Week 3: Beta Launch"
-  - Beta launch announcement
-  - Early user feedback
-  - What's next
-**Week -1**:
-- **Monday**: Build-in-public post — "Week 4: Launch Prep"
-  - Final features completed
-  - Launch timeline
-  - Excitement/nerves
-**Week 0**:
-- **Monday**: Launch announcement — "Neotoma v1.0.0 is Live!"
+  - Learnings (determinism, MCP integration, entity resolution)
+  - Screenshots/demos (if available)
+  - **No waitlist link**: Just sharing progress
 **Post Format**:
 - Build-in-public style
 - Honest about challenges
-- Share metrics (waitlist signups, beta users)
-- Include screenshots/demos
+- Share progress (technical milestones, not user metrics)
+- Include screenshots/demos (if available)
 - Engage with community comments
+- **No waitlist/beta mentions**: Just sharing journey
+
 **Community Engagement**:
 - Comment on other builders' posts
 - Answer questions in community
 - Share learnings and insights
 - Support other indie hackers
+- **No promotional content**: Just authentic build-in-public sharing
 #### 2.6 Hacker News Personal Account
-**Timeline**: Week -4 to Week 0
-**Account Setup** (Week -4):
+**Timeline**: Week 0-12 (ongoing during build)
+**Account Setup** (Week 0):
 - [ ] Verify HN account exists and is active
 - [ ] Build karma by commenting thoughtfully on relevant threads
 - [ ] Identify relevant "Ask HN" threads to engage with
-**Pre-Launch Engagement** (Week -4 to Week -1):
+
+**Ongoing Engagement** (Week 0-12):
 - Comment on AI memory discussions
-- Share insights on MCP, deterministic extraction
+- Share insights on MCP, deterministic extraction (from building experience)
 - Answer questions authentically (not promotional)
 - Build reputation as helpful community member
-**Week 0**:
-- Prepare "Show HN" post for launch day (see `post_launch_marketing_plan.md`)
+- **No "Show HN" yet**: Defer until after dogfooding validation (see `post_launch_marketing_plan.md`)
 **Comment Strategy**:
 - Provide value, not promotion
-- Share technical insights when relevant
+- Share technical insights when relevant (from building experience)
 - Answer questions authentically
 - Build karma and reputation
 - Avoid promotional comments
+- **No product pitches**: Just helpful technical contributions
 #### 2.7 Cross-Platform Promotion
 **Website → Social**:
 - Share blog posts on Twitter/X with thread summary
@@ -226,9 +218,9 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 - Include social share buttons on blog posts
 **Social → Website**:
 - Link to blog posts in Twitter threads
-- Link to waitlist from all social posts
-- Include website link in all social bios
-- Drive traffic from social to website
+- **No waitlist links**: Just technical content
+- Include website link in all social bios (if website exists)
+- Drive traffic from social to website (for technical content)
 **Social → Social**:
 - Cross-post between Twitter/X and LinkedIn (adapted for platform)
 - Share Indie Hackers posts on Twitter/X
@@ -236,7 +228,7 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 **Email → All**:
 - If email newsletter exists, include blog posts
 - Share social media updates
-- Drive to website and waitlist
+- Drive to website (for technical content, not waitlist)
 #### 2.8 Personal Brand Leverage
 **Existing Network**:
 - Leverage existing Twitter/X followers
@@ -265,137 +257,152 @@ This document defines the pre-launch marketing activities for v1.0.0, focused on
 | Cost per waitlist signup | $0 (organic only) | Time investment / signups         |
 | Social engagement rate   | 3%                | Twitter analytics, blog analytics |
 | Demo video views         | 500               | YouTube/Twitter video views       |
-### 3. Early Access Beta
-#### 3.1 Timeline and Participants
-- **Timeline**: Week -2 to Week 0
-- **Participants**: Discovery interview participants (13 users) + top 20 waitlist
-#### 3.2 Process
-- **Week -2**: Invite discovery participants (13 users) + top 20 waitlist
-- **Week -2 to -1**: Onboard beta testers, collect initial feedback
-- **Week -1 to 0**: Iterate based on feedback, identify advocates
-- **Week 0**: Convert beta testers to launch day advocates
-#### 3.3 Goals
-- Beta feedback collection
-- Advocate creation
-- Pre-launch activation
-- Testimonials collection
-#### 3.4 Metrics
-| Metric                   | Target                                             | Tracking                             |
-| ------------------------ | -------------------------------------------------- | ------------------------------------ |
-| Beta participants        | 25 (13 discovery + 20 waitlist, assume 75% accept) | Beta signup confirmations            |
-| Beta activation rate     | 70% (beta users who upload ≥1 document)            | Usage analytics                      |
-| Advocate conversion rate | 30% (beta users willing to share/testimonial)      | Advocate opt-ins                     |
-| Testimonials collected   | 5                                                  | Written testimonials or case studies |
-### 4. Competitor Follower Outreach
+### 3. Reactive Content to Industry Announcements
+
+#### 3.1 Overview
+- **Timeline**: Week 0-12 (reactive, as announcements happen)
+- **Strategy**: Respond to industry announcements within 24-48 hours
+- **Goal**: Capture visibility during industry announcement windows (3-5x engagement)
+
+#### 3.2 Monitoring
+- **Set up alerts**: OpenAI, Anthropic, Google, MCP ecosystem announcements
+- **Monitor channels**: Twitter, LinkedIn, GitHub, Discord, Reddit
+- **Track competitors**: Supermemory.ai, MemCP, Mem0, provider memory features
+
+#### 3.3 Response Framework
+**When Industry Announcement Happens:**
+1. **Immediate Analysis** (Day 1):
+   - What did they announce?
+   - What problem does it solve?
+   - What problem does it NOT solve? (your opportunity)
+   - How does Neotoma approach it differently?
+
+2. **Content Creation** (Day 1-2):
+   - Technical thread on Twitter (5-7 tweets)
+   - Blog post (if significant announcement)
+   - Community engagement (comments, discussions)
+
+3. **Positioning**:
+   - "I'm building Neotoma to solve [problem they didn't solve]"
+   - "Here's why [their approach] doesn't work for [use case]"
+   - "Here's how I'm approaching it differently"
+
+4. **No CTA**:
+   - Just thought leadership, not marketing
+   - No waitlist, no beta, no product pitch
+   - Just valuable insights
+
+#### 3.4 Example Response Timeline
+- **Day 1, 10am**: OpenAI announces structured memory
+- **Day 1, 2pm**: Your Twitter thread: "OpenAI's memory is provider-controlled. I'm building Neotoma for user-controlled, deterministic memory. Here's why it matters..."
+- **Day 2**: Blog post: "Why Provider-Controlled Memory Doesn't Solve the Privacy Problem"
+- **Day 3**: Community engagement: Comments on relevant discussions, answer questions
+
+**Result**: High visibility during industry announcement window, establishes thought leadership
+
+#### 3.5 Goals
+- Capture visibility during industry announcement windows
+- Establish thought leadership positioning
+- Technical credibility
+- Community engagement
+
+#### 3.6 Metrics
+| Metric                          | Target | Tracking                                    |
+| ------------------------------- | ------ | ------------------------------------------- |
+| Industry announcement responses | 3-5    | Manual tracking (announcements responded to) |
+| Engagement on reactive content  | 3-5x   | Twitter analytics (vs. scheduled content)    |
+| Community mentions              | 20     | Manual tracking (Discord, Reddit mentions)  |
+### 4. MCP Ecosystem Engagement
+
 #### 4.1 Timeline and Targets
-- **Timeline**: Week -4 to Week 0
-- **Target Competitors**:
-  - Supermemory.ai (High risk - direct MCP competitor)
-  - MCP Memory Tools (MemCP, MemMachine, OpenMemory MCP, Mem0 MCP Server, Cognee, CoreMemory-MCP, In Memoria, Roampal, Memara - High risk - direct MCP competitors)
-  - AI Memory Tools (Mem0, LangChain Memory, Zep, LangMem - Medium-High risk)
-  - Model Provider Native Memory (OpenAI ChatGPT Memory, Anthropic Claude Memory, Google Gemini Personal Context - Very High risk)
-- **Platforms**: Twitter/X, LinkedIn, Reddit, Discord
-- **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
-#### 4.2 Outreach Strategy
+- **Timeline**: Week 0-12 (ongoing during build)
+- **Target Ecosystem**: MCP community, AI tool communities, relevant technical communities
+- **Platforms**: Twitter/X, LinkedIn, Reddit, Discord, GitHub
+- **Target Segments**: AI-Native Individual Operators, MCP developers, AI tool users
+
+#### 4.2 Engagement Strategy
 **Approach**: Value-first engagement, not promotional spam
 **Activities**:
-1. **Identify Competitor Followers**
-   - Follow Supermemory.ai, MemCP, MemMachine, OpenMemory, Mem0, Cognee, Roampal, Memara, and related AI memory tool accounts on Twitter
+1. **Monitor MCP Ecosystem**
+   - Follow MCP-related accounts on Twitter
    - Join relevant Discord servers (AI tool communities, MCP communities)
    - Monitor Reddit communities (r/ChatGPT, r/ClaudeAI, r/Cursor, r/MCP)
-   - Track LinkedIn discussions about AI memory tools
-   - Monitor GitHub repositories for MCP memory tools
+   - Track GitHub repositories for MCP memory tools
+   - Monitor MCP directory updates
+
 2. **Authentic Engagement**
-   - Comment thoughtfully on competitor posts (provide value, not promotion)
+   - Comment thoughtfully on MCP-related posts (provide value, not promotion)
    - Answer questions in Discord/Reddit where relevant
-   - Share insights about AI memory challenges (without mentioning Neotoma initially)
+   - Share insights about MCP integration patterns (from building experience)
    - Build reputation as helpful community member
-3. **Soft Introduction**
-   - When users express pain points Neotoma addresses (privacy, determinism, cross-platform), mention Neotoma naturally
-   - Share Neotoma content when directly relevant to discussion
-   - Offer to help users with specific problems Neotoma solves
+
+3. **Technical Contributions**
+   - Share MCP integration patterns you're discovering
+   - Answer questions about MCP server development
+   - Contribute to MCP ecosystem discussions
+   - **No product pitches**: Just technical insights
+
 4. **Content Sharing**
-   - Share Neotoma blog posts/tweets in relevant discussions
-   - Reference Neotoma when discussing privacy-first architecture, deterministic extraction, entity resolution
-   - Provide comparisons when users ask about alternatives
+   - Share technical blog posts/tweets in relevant discussions
+   - Reference Neotoma when discussing MCP integration patterns (from building experience)
+   - Provide technical insights when users ask about MCP development
+
 #### 4.3 Goals
-- Build awareness among competitor users
-- Identify early adopters interested in alternatives
-- Generate waitlist signups from competitor followers
-- Establish Neotoma as viable alternative
+- Ecosystem visibility (MCP community awareness)
+- Community engagement (helpful contributions)
+- Technical credibility (MCP integration expertise)
+- **No waitlist signups**: Just community engagement
+
 #### 4.4 Metrics
 | Metric                          | Target | Tracking                                    |
 | ------------------------------- | ------ | ------------------------------------------- |
-| Competitor follower engagements | 50     | Manual tracking (comments, replies, shares) |
-| Waitlist signups from outreach  | 10     | UTM tracking (competitor-outreach source)   |
+| MCP ecosystem engagements       | 50     | Manual tracking (comments, replies, shares) |
 | Community mentions              | 20     | Manual tracking (Discord, Reddit mentions)  |
-### 5. Personal Network Outreach
+| Technical contributions         | 10     | Manual tracking (helpful answers, insights) |
+### 5. Personal Network Engagement (Optional)
+
 #### 5.1 Timeline and Targets
-- **Timeline**: Week -4 to Week 0
+- **Timeline**: Week 0-12 (optional, low priority)
 - **Targets**: Friends, professional contacts, former colleagues, industry connections
 - **Platforms**: GitHub, Twitter/X, LinkedIn
-- **Goal**: Build initial social proof, visibility, and early support
-#### 5.2 GitHub Stars Outreach
-**Timeline**: Week -4 to Week 0
+- **Goal**: Share build-in-public journey, not ask for support
+
+#### 5.2 GitHub Stars (Optional, Low Priority)
+**Timeline**: Week 0-12 (optional)
 **Targets**:
 - Friends and family in tech
 - Former colleagues and coworkers
 - Professional network contacts
 - Industry connections (developers, founders, investors)
-- Alumni networks (university, bootcamp, previous companies)
-**Outreach Strategy**:
-1. **Personal Messages** (Week -4)
-   - Send personalized messages to close contacts
-   - Explain what Neotoma is and why you're building it
-   - Ask for GitHub star if they find it interesting
-   - Include link to GitHub repository: https://github.com/neotoma/neotoma
-2. **Email Outreach** (Week -3)
-   - Send email to professional network
-   - Share build-in-public update
-   - Request GitHub star and feedback
-   - Include brief description and value proposition
-3. **Social Media Ask** (Week -2 to Week 0)
-   - Post on Twitter/X asking for GitHub stars
+
+**Engagement Strategy** (Not Outreach):
+1. **Share Build-in-Public Updates** (Ongoing)
+   - Include GitHub link in build-in-public posts
+   - Share progress updates with network
+   - **No explicit ask**: Just sharing journey
+
+2. **Social Media Sharing** (Ongoing)
+   - Post build-in-public updates on Twitter/X
    - Share on LinkedIn with professional framing
-   - Include in build-in-public updates
-**Message Templates**:
-**Personal Message (Close Contacts)**:
+   - Include GitHub link in posts
+   - **No explicit ask**: Just sharing progress
+**Social Media Post Template** (No Explicit Ask):
 ```
-Hey [Name],
-I've been building Neotoma - a privacy-first truth layer for AI memory that gives ChatGPT/Claude access to your personal documents via MCP.
-If you're interested in AI tools or privacy-first tech, I'd love a GitHub star: https://github.com/neotoma/neotoma
-No pressure, but would appreciate the support!
-- Mark
-```
-**Email (Professional Network)**:
-```
-Subject: Building Neotoma - Would appreciate your support
-Hi [Name],
-I'm building Neotoma, a privacy-first truth layer that transforms personal documents into structured memory for AI agents via MCP.
-If you're interested in AI memory or privacy-first architecture, I'd appreciate a GitHub star: https://github.com/neotoma/neotoma
-Happy to share more if you're curious!
-Best,
-Mark
-```
-**Social Media Post**:
-```
-Building Neotoma - a privacy-first truth layer for AI memory 🧠
-If you're interested in AI tools, privacy-first architecture, or MCP integrations, I'd appreciate a GitHub star ⭐
-https://github.com/neotoma/neotoma
+Building Neotoma for my ateles integration - a privacy-first truth layer for AI memory 🧠
+Sharing progress and learnings as I build: https://github.com/neotoma/neotoma
 #BuildInPublic #AI #MCP
 ```
+
 **Goals**:
-- Generate initial GitHub stars for social proof
-- Build awareness among personal network
-- Identify potential beta testers from network
-- Create early advocates
-**Metrics**:
+- Share build-in-public journey with network
+- Build awareness (not explicit support requests)
+- **No waitlist/beta**: Just sharing progress
+
+**Metrics** (Low Priority):
 | Metric                    | Target | Tracking                      |
 | ------------------------- | ------ | ----------------------------- |
-| GitHub stars from network | 50     | GitHub analytics              |
-| Personal messages sent    | 30     | Manual tracking               |
-| Email outreach sent       | 50     | Email tracking                |
-| Network to waitlist rate  | 10%    | UTM tracking (network source) |
+| Network engagement        | N/A    | Social media analytics        |
+| Network awareness         | N/A    | Manual tracking               |
 #### 5.3 Social Media Follows Outreach
 **Timeline**: Week -4 to Week 0
 **Targets**:
@@ -485,10 +492,12 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Keep network informed of progress
 - Ask for feedback from network
 - Convert network supporters to beta testers
-### 6. MCP Directory Listings
+### 6. MCP Directory Listings (Deferred)
+
 #### 6.1 Timeline and Targets
-- **Timeline**: Week -3 to Week 0
-- **Target Directories**:
+- **Timeline**: **Deferred until after dogfooding validation** (Week 12+)
+- **Rationale**: Product must work for ateles integration before submitting to directories
+- **Target Directories** (Prepare for post-dogfooding):
   - **Primary MCP Directories**:
     - [Model Context Protocol Directory](https://model-context-protocol.com/) — Official MCP directory
     - [Open MCP Directory](https://www.openmcpdirectory.com/) — Comprehensive daily-updated listing
@@ -500,34 +509,20 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
     - [MCP Server Directory](https://www.mcpdirectory.info/) — Browse/search/filter platform
     - [MCP Server Directory](https://mcpserverdirectory.org/) — 2,500+ MCP resources
     - [FindMCPs](https://findmcps.com/) — Comprehensive discovery platform
-  - **Secondary Directories**:
-    - GitHub awesome-mcp-servers (if applicable)
-    - MCP community showcases
-#### 6.2 Submission Strategy
-**Week -3**:
+
+#### 6.2 Preparation (During Build Phase)
+**Week 0-12** (Optional preparation):
 - Research submission requirements for each directory
-- Prepare Neotoma MCP server listing materials:
-  - Server name: "Neotoma"
-  - Description: "Privacy-first deterministic truth layer for AI memory via MCP. Schema-first extraction, entity resolution, timelines, and cross-platform access (ChatGPT, Claude, Cursor)."
-  - Category: Memory / Personal Data / Privacy
-  - Features: File upload, record storage, entity resolution, timeline generation, MCP integration
-  - Website: https://neotoma.io (or landing page)
-  - GitHub: https://github.com/neotoma/neotoma
-  - Documentation: Link to MCP setup docs
-  - Tags: privacy-first, deterministic, entity-resolution, timelines, mcp-integration
-**Week -2**:
-- Submit to primary MCP directories (model-context-protocol.com, openmcpdirectory.com, mcpstore.site, mcpez.com)
-- Ensure MCP server is functional and documented
-- Test MCP integration with Claude Desktop, Cursor, ChatGPT
-**Week -1**:
-- Submit to secondary MCP directories (mcpindex.net, mcpcurator.com, directorymcp.com, mcpdirectory.info, mcpserverdirectory.org, findmcps.com)
-- Follow up on pending submissions
-- Verify listings are live
-**Week 0**:
-- Final verification of all directory listings
-- Update listings with launch announcement
+- Prepare Neotoma MCP server listing materials (for future use)
+- Ensure MCP server is functional and documented (for ateles integration)
+- Test MCP integration with Claude Desktop, Cursor, ChatGPT (for ateles integration)
+
+#### 6.3 Submission Strategy (Post-Dogfooding)
+**Week 12+** (After dogfooding validation, if proceeding):
+- Submit to MCP directories (now that product is validated)
+- Update listings with working product information
 - Monitor directory traffic/referrals
-#### 6.3 Submission Requirements
+#### 6.4 Submission Requirements (For Post-Dogfooding)
 **Common Requirements**:
 - MCP server name and description
 - Category/classification
@@ -537,7 +532,8 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Installation/setup instructions
 - Example use cases
 - Tags/keywords
-**Neotoma-Specific Materials**:
+
+**Neotoma-Specific Materials** (Prepare during build):
 - **Description**: "Privacy-first deterministic truth layer that transforms personal documents into structured memory for AI agents via MCP. Features schema-first extraction, entity resolution, timeline generation, and cross-platform access (ChatGPT, Claude, Cursor)."
 - **Key Features**:
   - Privacy-first architecture (user-controlled, no provider access)
@@ -548,44 +544,55 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
   - Dual-path ingestion (file uploads + agent interactions)
 - **Use Cases**: Personal document memory, invoice/receipt tracking, contract management, cross-platform AI memory
 - **Tags**: privacy-first, deterministic, entity-resolution, timelines, mcp-integration, personal-data, memory
-#### 6.4 Goals
+
+#### 6.5 Goals (Post-Dogfooding)
 - Increase visibility in MCP ecosystem
 - Generate referral traffic from directory listings
 - Establish Neotoma as recognized MCP server
 - Build backlinks for SEO
 - Reach AI-Native Individual Operators discovering MCP tools
-#### 6.5 Metrics
+
+#### 6.6 Metrics (Post-Dogfooding)
 | Metric                      | Target | Tracking                             |
 | --------------------------- | ------ | ------------------------------------ |
 | Directory listings approved | 8      | Manual tracking (submission status)  |
 | Directory referral traffic  | 100    | Website analytics (referral sources) |
-| Directory to waitlist rate  | 5%     | UTM tracking (directory source)      |
 | Directory to signup rate    | 2%     | UTM tracking (directory source)      |
-### 7. Content Teasers
+### 7. Technical Content (Build-in-Public)
+
 #### 7.1 Timeline and Formats
-- **Timeline**: Week -2 to Week 0
-- **Formats**: Blog posts (on personal website), demo video, Twitter threads, LinkedIn posts
+- **Timeline**: Week 0-12 (ongoing during build)
+- **Formats**: Blog posts (on personal website), demo videos (optional), Twitter threads, LinkedIn posts
 - **Distribution**: Personal accounts and website
+- **Focus**: Technical thought leadership, not product marketing
+
 #### 7.2 Content Pieces
-**Blog Posts** (on personal website):
-- "Why deterministic extraction matters for personal data" (Week -3)
-- "Building a truth layer for AI-native workflows" (Week -2)
-- "Privacy-First AI Memory: Why User Control Matters" (Week -1)
-- "Launching Neotoma v1.0.0: What's Inside" (Week 0)
-**Demo Video**:
-- **Title**: "Neotoma: Upload → Timeline → MCP Query in 90 Seconds"
-- **Length**: 90 seconds
-- **Content**: Screen recording showing upload → extraction → timeline → MCP query workflow
+**Blog Posts** (on personal website, flexible schedule):
+- "Why I'm Building Neotoma: The Problem with AI Memory" (from building experience)
+- "Deterministic Extraction: Why It Matters for Personal Data" (technical deep-dive)
+- "Building a Truth Layer: Neotoma's Architecture" (architectural decisions)
+- "Privacy-First AI Memory: Why User Control Matters" (thought leadership)
+- "MCP Integration Patterns: Lessons from Building Neotoma" (technical insights)
+- **No launch posts**: Just technical content, not marketing
+
+**Demo Videos** (Optional, if time permits):
+- **Title**: "Building Neotoma: Ateles Integration Progress"
+- **Length**: 2-3 minutes
+- **Content**: Screen recording showing ateles integration, MCP query workflow
 - **Platforms**: YouTube (unlisted initially), Twitter/X, LinkedIn, embed on website
-- **Timeline**: Week -2 (publish), promote Week -2 to Week 0
-**Twitter Threads**:
-- "The problem with semantic search" (Week -3)
-- "How Neotoma works (architecture)" (Week -2)
-- "Privacy-first architecture explained" (Week -1)
-**LinkedIn Posts**:
+- **Timeline**: Flexible, when significant progress made
+- **No product pitch**: Just showing what you're building
+
+**Twitter Threads** (Weekly):
+- "The problem with semantic search" (from building experience)
+- "How I'm building Neotoma (architecture)" (technical insights)
+- "Privacy-first architecture explained" (thought leadership)
+- "MCP integration patterns I'm discovering" (technical learnings)
+
+**LinkedIn Posts** (Monthly):
 - Professional versions of blog posts
 - Thought leadership content
-- Use case examples
+- Technical insights from building
 #### 7.3 Content Distribution Strategy
 **Blog Posts**:
 - Publish on personal website
@@ -594,125 +601,144 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Share on Indie Hackers (if relevant)
 - Include in email newsletter (if exists)
 - Add to website blog archive
-**Demo Video**:
-- Upload to YouTube (unlisted initially, make public Week -2)
+- **No waitlist CTAs**: Just technical content
+
+**Demo Videos** (If created):
+- Upload to YouTube (unlisted initially, make public when ready)
 - Share on Twitter/X with thread
 - Share on LinkedIn
-- Embed on website homepage
+- Embed on website (if website exists)
 - Embed in blog posts
 - Share on Indie Hackers
+- **No product pitch**: Just showing what you're building
+
 **Twitter Threads**:
 - Post on @markymark
-- Pin important threads
+- Pin important threads (technical insights, not marketing)
 - Cross-post summary to LinkedIn
 - Link to blog posts for deeper dive
+- **No waitlist CTAs**: Just technical content
+
 **LinkedIn Posts**:
 - Post on personal LinkedIn account
 - Share blog post links
 - Professional framing
 - Engage with comments
+- **No promotional content**: Just technical insights
+
 #### 7.4 Goals
-- Awareness building
-- Waitlist conversion
 - Technical credibility
-- Personal brand building
+- Thought leadership positioning
 - Community engagement
+- Visibility during industry announcements
+- **No waitlist conversion**: Just sharing learnings
+
 #### 7.5 Metrics
 | Metric                    | Target                                 | Tracking                                 |
 | ------------------------- | -------------------------------------- | ---------------------------------------- |
 | Blog post views           | 2000 (across all posts)                | Website analytics                        |
-| Demo video views          | 500                                    | YouTube analytics, Twitter analytics     |
-| Content to waitlist rate  | 5% (content viewers who join waitlist) | UTM tracking from content → landing page |
+| Demo video views          | 500 (if created)                       | YouTube analytics, Twitter analytics     |
 | Content shares            | 50 (organic shares)                    | Social share counts                      |
 | Twitter thread engagement | 3% engagement rate                     | Twitter analytics                        |
 | LinkedIn post engagement  | 2% engagement rate                     | LinkedIn analytics                       |
+| **No waitlist metrics**: Just content engagement
 ### 8. Success Criteria
-**Waitlist & Beta**:
-- ≥100 waitlist signups
-- ≥25 beta participants
-- ≥70% beta activation rate
-- ≥5 testimonials collected
+
+**Build-in-Public Content**:
+- Technical credibility established (thought leadership positioning)
+- Community engagement (MCP ecosystem, relevant discussions)
+- Visibility during industry announcements (reactive content gets 3-5x engagement)
+- No premature commitments (no waitlist/beta expectations)
+
 **Content Performance**:
 - ≥2000 blog post views (across all posts)
-- ≥500 demo video views
-- ≥5% content to waitlist conversion rate
+- ≥500 demo video views (if created)
 - ≥50 content shares (organic)
-**Directory Listings**:
-- ≥8 MCP directory listings approved
-- ≥100 directory referral visits
-- ≥5 waitlist signups from directory listings
-**Social Media Performance**:
 - ≥3% Twitter/X engagement rate
 - ≥2% LinkedIn engagement rate
-- ≥10 waitlist signups from competitor follower outreach
-- ≥20 waitlist signups from Twitter/X threads
-- ≥15 waitlist signups from blog posts
-- ≥5 waitlist signups from LinkedIn posts
+
+**MCP Ecosystem Engagement**:
+- ≥50 MCP ecosystem engagements (comments, replies, shares)
+- ≥20 community mentions (Discord, Reddit)
+- ≥10 technical contributions (helpful answers, insights)
+
+**Reactive Content**:
+- ≥3-5 industry announcement responses (within 24-48 hours)
+- 3-5x engagement on reactive content (vs. scheduled content)
+
 **Personal Brand**:
 - Increase Twitter/X followers by 10% (from existing base)
 - Increase LinkedIn connections by 5% (from existing base)
 - Establish Neotoma as recognized project in AI memory space
 - Build reputation as helpful community member
-**Network Outreach**:
-- ≥50 GitHub stars from personal network
-- ≥30 Twitter/X followers from personal network
-- ≥20 LinkedIn connections from personal network
-- ≥5 waitlist signups from personal network
-- ≥10% network engagement rate
-### 9. Agent-Based Automation
+
+**No Waitlist/Beta Metrics**: Just content engagement and community participation
+### 9. Agent-Based Automation (Optional)
+
 #### 9.1 Content Generation Automation
-**Strategy**: Use AI agents (Claude/ChatGPT via MCP or direct API) to generate content drafts based on marketing schedule.
+**Strategy**: Use AI agents (Claude/ChatGPT via MCP or direct API) to generate content drafts based on build-in-public schedule.
 **Agent Workflow**:
 1. **Weekly Schedule Reading**
-   - Agent reads `pre_launch_marketing_plan.md` weekly schedule
+   - Agent reads build-in-public content plan
    - Identifies content needs for upcoming week (Twitter threads, blog posts, LinkedIn posts)
    - Creates content generation tasks
+
 2. **Content Generation**
    - Agent generates content drafts following templates and brand guidelines
-   - Uses release data (`release_report.md`, `manifest.yaml`) for context
+   - Uses build progress data for context
    - Outputs platform-specific formats (Twitter threads, blog posts, LinkedIn posts)
+   - **No waitlist CTAs**: Just technical content
+
 3. **Content Review** (Human-in-the-loop)
    - Review generated content for quality and brand voice
    - Approve or request revisions
    - Store approved content for publishing
+
 **Agent Instructions**:
-- Follow brand voice: technical, authentic, privacy-first
+- Follow brand voice: technical, authentic, privacy-first, build-in-public
 - Lead with defensible differentiators (privacy-first, deterministic, cross-platform)
-- Use thread structure templates from Section 2.2
-- Include relevant CTAs (waitlist links with UTM parameters)
+- Use thread structure templates (no CTAs)
+- **No waitlist links**: Just technical content
 - Maintain consistency across platforms
+
 **Content Templates for Agents**:
-- Twitter thread template (5-7 tweets, hook → problem → solution → CTA)
-- Blog post template (1500-2500 words, intro → body → conclusion → CTA)
-- LinkedIn post template (300-500 words, professional tone, CTA)
-- Build-in-public update template (honest, metrics, learnings)
+- Twitter thread template (5-7 tweets, hook → problem → how I'm solving it → technical details → what I'm learning)
+- Blog post template (1500-2500 words, intro → body → conclusion, no CTA)
+- LinkedIn post template (300-500 words, professional tone, no CTA)
+- Build-in-public update template (honest, progress, learnings)
+
 **MVP Approach**:
 - Use Claude/ChatGPT directly (via MCP or web interface) to generate content drafts
-- Provide agent with marketing schedule and release data
+- Provide agent with build progress and technical learnings
 - Review and approve generated content before publishing
 - Manual publishing (automated publishing in post-MVP)
+
 **Time Savings**:
-- Content generation: ~70% time reduction (from 60 hours to ~18 hours)
+- Content generation: ~70% time reduction (from 15 hours/month to ~5 hours/month)
 - Agent generates drafts, human reviews and publishes
 - Focus human time on review, refinement, and community engagement
+
 #### 9.2 Scheduling Automation (Post-MVP)
 **Future**: Automated scheduling and publishing agents (see `marketing_automation_plan.md`)
 ### 10. Budget
 - **Total**: $0 (organic only)
-- **Time Investment**: ~35 hours with agent automation (down from ~60 hours)
-  - Agent content generation: ~5 hours (prompting, reviewing, refining)
-  - Twitter/X threads: ~5 hours (agent drafts + review + publishing)
-  - Blog posts: ~8 hours (agent drafts + review + editing + publishing)
-  - Demo video: ~5 hours (scripting, recording, editing)
-  - LinkedIn posts: ~2 hours (agent drafts + review + publishing)
-  - Indie Hackers posts: ~2 hours (agent drafts + review + publishing)
-  - Website updates: ~3 hours (setup, optimization)
-  - Community engagement: ~5 hours (daily engagement across platforms)
-  - Personal network outreach: ~5 hours (messages, emails, follow-ups)
-  - MCP directory listings: ~5 hours (research, submission, follow-up)
+- **Time Investment**: ~10-15 hours/month (build-in-public content, not marketing)
+  - Agent content generation: ~2 hours (prompting, reviewing, refining)
+  - Twitter/X threads: ~3 hours (agent drafts + review + publishing)
+  - Blog posts: ~4 hours (agent drafts + review + editing + publishing, monthly)
+  - Demo video: ~3 hours (optional, if time permits)
+  - LinkedIn posts: ~1 hour (agent drafts + review + publishing, monthly)
+  - Indie Hackers posts: ~1 hour (weekly updates)
+  - Website updates: ~2 hours (setup, optimization)
+  - Community engagement: ~3 hours (MCP ecosystem, relevant discussions)
+  - Reactive content: ~2-3 hours per industry announcement (as needed)
+  - MCP directory preparation: ~1 hour (optional, for post-dogfooding)
 - **Agent Costs**: ~$10-20/month (Claude/ChatGPT API for content generation)
 ### 11. Related Documents
 - `marketing_plan.md` — Marketing overview and coordination
-- `post_launch_marketing_plan.md` — Post-launch marketing activities
+- `post_launch_marketing_plan.md` — Post-launch marketing activities (deferred until after dogfooding)
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
+- `marketing_dogfooding_analysis.md` — Analysis of pre-launch marketing for dogfooding-first approach
+- `visibility_timing_analysis.md` — Visibility timing risk and build-in-public strategy
+- `approach_comparison.md` — Discovery-first vs. dogfooding-first comparative analysis

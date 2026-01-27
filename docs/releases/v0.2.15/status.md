@@ -18,7 +18,7 @@
 ### Code Implementation ✅
 
 - [x] Remove deprecated MCP actions (`submit_payload`, `ingest_structured`, `update_record`, `retrieve_records`, `delete_record`)
-- [x] Implement unified `ingest()` action for both unstructured and structured source material
+- [x] Implement unified `ingest()` action for both unstructured and structured source
 - [x] Create new HTTP API endpoints (`/api/entities/query`, `/api/observations/create`, `/api/observations/query`, `/api/entities/merge`)
 - [x] Update frontend API client to use new endpoints
 - [x] Rename `interpretation_runs` → `interpretations` in code

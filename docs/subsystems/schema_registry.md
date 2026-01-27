@@ -49,11 +49,21 @@ See [`docs/subsystems/schema.md`](./schema.md) for complete table definition.
 interface SchemaDefinition {
   fields: Record<string, FieldDefinition>;
 }
+
 interface FieldDefinition {
   type: "string" | "number" | "date" | "boolean" | "array" | "object";
   required?: boolean;
   validator?: string; // Validator function name
-  description?: string;
+  preserveCase?: boolean; // Preserve case for this field during canonicalization
+  description?: string; // Field description
+  converters?: ConverterDefinition[]; // Field type converters
+}
+
+interface ConverterDefinition {
+  from: "number" | "string" | "boolean" | "array" | "object";
+  to: "string" | "number" | "date" | "boolean" | "array" | "object";
+  function: string; // Converter function name
+  deterministic: boolean; // Must be true for MVP
 }
 ```
 **Example:**
@@ -74,6 +84,18 @@ interface FieldDefinition {
       "type": "date",
       "required": true,
       "validator": "iso8601_date"
+    },
+    "created_at": {
+      "type": "date",
+      "required": false,
+      "converters": [
+        {
+          "from": "number",
+          "to": "date",
+          "function": "timestamp_nanos_to_iso",
+          "deterministic": true
+        }
+      ]
     }
   }
 }
@@ -107,12 +129,167 @@ interface MergePolicy {
   }
 }
 ```
+
+### 2.4 Field Type Converters
+
+Field type converters enable automatic type conversion when source data doesn't match the schema field type. This allows deterministic transformation of values while preserving the original data in `raw_fragments`.
+
+**Purpose:**
+- Handle type mismatches automatically (e.g., numeric timestamps → ISO date strings)
+- Maintain zero data loss (original values preserved in `raw_fragments`)
+- Enable schema evolution without reprocessing all source data
+- Support multiple input formats for the same logical field
+
+**Architecture:**
+
+```
+Source Data (numeric timestamp)
+  ↓
+Field Validation
+  ↓
+Type Match? → No → Converter Defined? → Yes → Apply Converter
+  ↓                                              ↓
+  Yes                                   Conversion Successful?
+  ↓                                              ↓
+Store in observations                            Yes → Store converted value in observations
+                                                 ↓
+                                                 Store original in raw_fragments
+```
+
+**Converter Definition:**
+
+```typescript
+interface ConverterDefinition {
+  from: "number" | "string" | "boolean" | "array" | "object";
+  to: "string" | "number" | "date" | "boolean" | "array" | "object";
+  function: string; // Converter function name (must exist in CONVERTER_REGISTRY)
+  deterministic: boolean; // Must be true (Neotoma requirement)
+}
+```
+
+**Available Converters:**
+
+| Converter Function | From Type | To Type | Description |
+| --- | --- | --- | --- |
+| `timestamp_nanos_to_iso` | `number` | `date` | Convert nanosecond timestamp to ISO 8601 string |
+| `timestamp_ms_to_iso` | `number` | `date` | Convert millisecond timestamp to ISO 8601 string |
+| `timestamp_s_to_iso` | `number` | `date` | Convert second timestamp to ISO 8601 string |
+| `number_to_string` | `number` | `string` | Convert number to string |
+| `string_to_number` | `string` | `number` | Parse string to number |
+| `boolean_to_string` | `boolean` | `string` | Convert boolean to "true"/"false" |
+| `string_to_boolean` | `string` | `boolean` | Parse "true"/"false" to boolean |
+
+**Example: Timestamp Conversion**
+
+```json
+{
+  "fields": {
+    "created_at": {
+      "type": "date",
+      "required": false,
+      "converters": [
+        {
+          "from": "number",
+          "to": "date",
+          "function": "timestamp_nanos_to_iso",
+          "deterministic": true
+        }
+      ]
+    }
+  }
+}
+```
+
+**Multiple Converters:**
+
+Converters are applied in order. The first successful conversion is used:
+
+```json
+{
+  "fields": {
+    "created_at": {
+      "type": "date",
+      "required": false,
+      "converters": [
+        {
+          "from": "number",
+          "to": "date",
+          "function": "timestamp_nanos_to_iso",
+          "deterministic": true
+        },
+        {
+          "from": "number",
+          "to": "date",
+          "function": "timestamp_ms_to_iso",
+          "deterministic": true
+        },
+        {
+          "from": "number",
+          "to": "date",
+          "function": "timestamp_s_to_iso",
+          "deterministic": true
+        }
+      ]
+    }
+  }
+}
+```
+
+**Conversion Behavior:**
+
+1. **Type matches directly**: Value stored in observations, no conversion needed
+2. **Type doesn't match, no converters**: Value routed to `raw_fragments` as unknown field
+3. **Type doesn't match, converter defined**: Converter applied
+   - **Success**: Converted value stored in observations, original value stored in `raw_fragments` with `reason: "converted_value_original"`
+   - **Failure**: Value routed to `raw_fragments` as unknown field
+
+**Determinism Requirement:**
+
+All converters MUST be deterministic:
+- Same input → same output (always)
+- No external API calls
+- No randomness
+- No current timestamp dependencies
+
+**Zero Data Loss:**
+
+Original values are ALWAYS preserved in `raw_fragments`, even after successful conversion. This enables:
+- Reprocessing with different converters
+- Audit trails of data transformations
+- Future schema evolution without data loss
+
+**Implementation:**
+
+Converters are defined in `src/services/field_converters.ts` and registered in `CONVERTER_REGISTRY`. All converters are validated during schema registration.
+
 ## 3. Schema Versioning
 ### 3.1 Version Format
-Schema versions use semantic versioning:
-- `1.0` — Initial version
-- `1.1` — Additive changes (new fields)
-- `2.0` — Major changes (breaking changes avoided in MVP)
+Schema versions use semantic versioning (major.minor.patch):
+- `1.0.0` — Initial version
+- `1.1.0` — Minor version: Additive changes (new optional fields, new converters) - backward compatible
+- `1.1.1` — Patch version: Non-functional changes (documentation, formatting)
+- `2.0.0` — Major version: Breaking changes (removing fields, changing types, making fields required)
+
+**Version Increment Rules:**
+- **Major (X.0.0)**: Breaking changes that require migration
+  - Removing fields
+  - Changing field types (not just adding converters)
+  - Changing field from optional to required
+  - Removing converters
+- **Minor (x.Y.0)**: Additive, backward-compatible changes
+  - Adding new optional fields
+  - Adding converters to existing fields
+  - Changing reducer strategies (non-breaking)
+- **Patch (x.y.Z)**: Non-functional changes
+  - Documentation updates
+  - Formatting changes
+  - No schema structure changes
+
+**Backward Compatibility:**
+- Old schema versions (e.g., `1.0.0`) remain readable
+- Observations store their `schema_version` at creation time (immutable)
+- Snapshots are computed using the active schema, which can read observations from any version
+- Reducers handle missing fields gracefully (optional fields may be absent in old observations)
 ### 3.2 Active Schema
 Only one active schema version per entity_type at a time:
 ```sql
@@ -127,12 +304,56 @@ You can also manually export all schemas:
 npm run schema:export
 ```
 This creates versioned JSON files (e.g., `invoice/v1.0.json`) containing complete schema definitions and reducer configs. See the [schema snapshots README](./schema_snapshots/README.md) for details.
-### 3.3 Schema Migration
-**Migration Process:**
-1. Register new schema version in registry
-2. Set new version as active (deactivate old version)
-3. Backfill observations if needed (lazy or immediate)
-4. Recompute snapshots with new schema
+### 3.3 Schema Migration and Breaking Changes
+
+**How Breaking Changes Work with Existing Data:**
+
+Neotoma's immutable observation model enables breaking schema changes without data loss:
+
+1. **Observations are Immutable**: Each observation stores its `schema_version` at creation time and never changes
+2. **Multiple Versions Coexist**: Old observations (e.g., `schema_version: "1.0.0"`) and new observations (e.g., `schema_version: "2.0.0"`) can exist simultaneously
+3. **Snapshots Use Active Schema**: Entity snapshots are computed using the active schema, which must handle missing fields from old observations
+4. **Backward Compatibility**: The active schema must be able to read observations from all previous versions
+
+**Migration Process for Breaking Changes:**
+
+1. **Register new schema version** (e.g., `2.0.0`) in registry
+2. **Ensure backward compatibility**: New schema must handle missing fields from old observations
+3. **Set new version as active** (deactivates old version)
+4. **New observations** automatically use new schema version
+5. **Old observations remain unchanged** (immutable)
+6. **Snapshots recomputed** using new schema (handles missing fields gracefully)
+
+**Reconciliation Example:**
+
+See [`docs/examples/schema_breaking_change_reconciliation.md`](../examples/schema_breaking_change_reconciliation.md) for a detailed example showing how an entity snapshot is reconciled when a breaking change removes a field.
+
+**Key Reconciliation Behavior:**
+
+- **Reducer collects fields from observations**, not from the schema
+- If a field exists in any observation (even from old schema), it can appear in the snapshot
+- Removed fields from schema don't prevent them from appearing in snapshots
+- Fields without merge policies use default `"last_write"` strategy
+- Old observations keep their original `schema_version` (immutable)
+- Snapshot's `schema_version` reflects the active schema used for computation
+
+**Example: Removing a Field (Breaking Change)**
+
+See [`docs/examples/schema_breaking_change_reconciliation.md`](../examples/schema_breaking_change_reconciliation.md) for a complete example.
+
+**Key Behavior:**
+- Reducer collects fields from **all observations**, not just the schema
+- If `old_field` exists in old observations, it will still appear in the snapshot
+- Removed fields use default merge policy (`last_write`)
+- Old observations keep their original `schema_version` (immutable)
+
+**Migration Process for Non-Breaking Changes:**
+
+1. Register new schema version (e.g., `1.1.0` for minor, `1.0.1` for patch)
+2. Set new version as active
+3. New observations automatically use new schema
+4. Optionally backfill historical data via `migrate_existing=true` (moves raw_fragments to observations)
+5. Snapshots recomputed (new fields appear in snapshots)
 **Example:**
 ```typescript
 async function migrateSchema(
@@ -210,7 +431,10 @@ class SchemaRegistry {
 - **Add fields without full replacement**: Merge new fields with existing schema
 - **Immediate application**: New schema applies to all new data immediately after activation
 - **Optional migration**: Backfill historical data only if needed (not required for new data)
-- **Version auto-increment**: Automatically increment version (1.0 → 1.1, 1.9 → 2.0)
+- **Semantic versioning**: Automatically increments version based on change type:
+  - `1.0.0` → `1.1.0` (adding optional field - minor)
+  - `1.1.0` → `1.1.1` (patch change)
+  - `1.1.1` → `2.0.0` (breaking change - major)
 
 **Example Workflow:**
 1. Store data with unknown fields → fields go to `raw_fragments`

@@ -7,3 +7,6 @@
 [submodule "mcp/web-scraper"]
 	path = mcp/web-scraper
 	url = https://github.com/markmhendrickson/mcp-server-web-scraper.git
+[submodule "frontend/src/shared"]
+	path = frontend/src/shared
+	url = git@github.com:markmhendrickson/react-components.git

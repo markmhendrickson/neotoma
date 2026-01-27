@@ -69,7 +69,7 @@ function calculateScore(record: NeotomaRecord, query: string): number {
   }
 
   // Exact field value matches (higher score)
-  for (const [key, value] of Object.entries(record.properties || {})) {
+  for (const [_key, value] of Object.entries(record.properties || {})) {
     if (typeof value === "string" && value.toLowerCase() === queryLower) {
       score += 3;
     } else if (

@@ -1,0 +1,31 @@
+[
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-001",
+    "completion_date": "2024-12-15",
+    "notes": "Completed 30 minutes cardio"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-001",
+    "completion_date": "2024-12-16",
+    "notes": "Morning run, felt great"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-002",
+    "completion_date": "2024-12-15",
+    "notes": "Read chapter 5"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-003",
+    "completion_date": "2024-12-17",
+    "notes": "Weekly review completed on Sunday"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-001",
+    "completion_date": "2024-12-17"
+  }
+]

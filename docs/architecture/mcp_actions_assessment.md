@@ -14,7 +14,7 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 **Note:** `upload_file` was intentionally removed from the MCP spec. File uploads are handled via the unified `store` action. Agents can read files from the local filesystem, base64-encode the content, and use `store` with `file_content` and `mime_type` parameters.
 
 ### ✅ Core Ingestion (1/1)
-- `store` - Unified ingestion for structured and unstructured source material (replaces `ingest` terminology in implementation)
+- `store` - Unified ingestion for structured and unstructured source (replaces `ingest` terminology in implementation)
 
 ### ✅ File Operations (1/1)
 - `get_file_url` - Get signed URL for file access
@@ -31,14 +31,14 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 
 ### ✅ Observation & Relationship Operations (5/5)
 - `list_observations` - Query observations for entity
-- `get_field_provenance` - Trace field to source material
+- `get_field_provenance` - Trace field to source
 - `create_relationship` - Create typed relationship between entities
 - `list_relationships` - Query entity relationships
 - `list_timeline_events` - Query timeline events with filters
 
 ### ✅ Correction & Reinterpretation (2/2)
 - `correct` - Create high-priority correction observation
-- `reinterpret` - Re-run AI interpretation on existing source material
+- `reinterpret` - Re-run AI interpretation on existing source
 
 ### ❌ Integration Operations (0/2)
 - ❌ `list_provider_catalog` - **MISSING** (spec requires for MVP)
@@ -69,14 +69,14 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 **Violates:** `docs/vocabulary/canonical_terms.md` canonical vocabulary rules
 
 #### `get_graph_neighborhood`
-- **Issue:** Uses "record" terminology instead of "source material"
+- **Issue:** Uses "record" terminology instead of "source"
 - **Location:** `src/server.ts:1150, 1152, 1273-1287`
 - **Details:**
   - Parameter `node_type: "record"` should be `"source_material"` (or removed if redundant)
   - Parameter `include_records` is legacy; `include_source_material` exists but both are present
   - Implementation queries `records` table instead of `sources` table
   - Response includes `related_records` instead of `related_source_material`
-- **Impact:** Violates canonical vocabulary, confuses "record" (legacy) vs "source material" (canonical)
+- **Impact:** Violates canonical vocabulary, confuses "record" (legacy) vs "source" (canonical)
 - **Recommendation:** Remove `node_type: "record"` option, remove `include_records` parameter, update implementation to use `sources` table
 
 #### `list_timeline_events`
@@ -94,8 +94,8 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 - **Details:**
   - Queries `records` table instead of `sources` table
   - Uses `observation.source_record_id` instead of `observation.source_material_id`
-  - Response includes `source_record_id` and `record_type` instead of `source_material_id` and source material metadata
-- **Impact:** Returns legacy terminology in response, breaks provenance chain to source material
+  - Response includes `source_record_id` and `record_type` instead of `source_material_id` and source metadata
+- **Impact:** Returns legacy terminology in response, breaks provenance chain to source
 - **Recommendation:** Update to query `sources` table, use `source_material_id` field, return canonical terminology
 
 ### 3. Database Schema Misalignment
@@ -107,7 +107,7 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 - `get_graph_neighborhood` - Queries `records` table (lines 1249, 1275)
 
 **Impact:** 
-- Breaks architecture migration to source material model
+- Breaks architecture migration to source model
 - Observations may reference `source_record_id` instead of `source_material_id`
 - Provenance chain incomplete
 
@@ -165,18 +165,18 @@ Assessment of all current MCP actions against documented architecture (`docs/voc
 ## Compliance Checklist
 
 - [ ] All MVP-required actions implemented
-- [ ] All actions use canonical vocabulary (`source material`, not `record`)
+- [ ] All actions use canonical vocabulary (`source`, not `record`)
 - [ ] All actions query `sources` table (not `records`)
 - [ ] All actions use `source_material_id` field (not `source_record_id`)
 - [ ] All action descriptions conform to `docs/vocabulary/canonical_terms.md`
 - [ ] No legacy terminology in action schemas or responses
-- [ ] All database queries align with source material architecture
+- [ ] All database queries align with source architecture
 
 ## References
 
 - **Canonical Vocabulary:** `docs/vocabulary/canonical_terms.md`
 - **MCP Specification:** `docs/specs/MCP_SPEC.md`
-- **Source Material Architecture:** `docs/architecture/source_material_model.md`
+- **Source Architecture:** `docs/architecture/source_material_model.md`
 - **Implementation:** `src/server.ts`
 
 

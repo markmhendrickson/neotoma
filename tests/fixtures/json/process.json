@@ -1,0 +1,43 @@
+[
+  {
+    "schema_version": "1.0",
+    "title": "Weekly Review Process",
+    "content": "# Weekly Review\n\n1. Review completed tasks\n2. Update progress on projects\n3. Plan next week\n4. Archive completed items",
+    "process_type": "review",
+    "sources": "GTD,personal-experience",
+    "created_date": "2024-01-01",
+    "created_datetime": "2024-01-01T10:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Monthly Financial Close",
+    "content": "# Monthly Close\n\n1. Reconcile all accounts\n2. Review expenses\n3. Update budget tracking\n4. Generate reports",
+    "process_type": "financial",
+    "sources": "accounting-best-practices",
+    "created_date": "2024-02-01",
+    "created_datetime": "2024-02-01T09:00:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Daily Standup",
+    "content": "# Standup\n\n1. What did I do yesterday?\n2. What will I do today?\n3. Any blockers?",
+    "process_type": "meeting",
+    "sources": "agile,scrum",
+    "created_date": "2024-03-15",
+    "created_datetime": "2024-03-15T08:30:00Z"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Minimal process",
+    "process_type": "other"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Quarterly Planning",
+    "content": "# Q1 Planning\n\n1. Review last quarter results\n2. Set OKRs\n3. Allocate resources\n4. Communicate plan",
+    "process_type": "planning",
+    "sources": "OKR-framework",
+    "created_date": "2023-12-15",
+    "created_datetime": "2023-12-15T14:00:00Z"
+  }
+]

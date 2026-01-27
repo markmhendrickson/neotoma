@@ -27,64 +27,108 @@
 --   );
 
 -- Index for auto_enhancement_queue.user_id -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_auto_enhancement_queue_user_id ON auto_enhancement_queue(user_id) WHERE user_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'auto_enhancement_queue') THEN
+    CREATE INDEX IF NOT EXISTS idx_auto_enhancement_queue_user_id ON auto_enhancement_queue(user_id) WHERE user_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for schema_recommendations.user_id -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_schema_recommendations_user_id ON schema_recommendations(user_id) WHERE user_id IS NOT NULL;
-
--- Index for schema_recommendations.applied_by -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_schema_recommendations_applied_by ON schema_recommendations(applied_by) WHERE applied_by IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_recommendations') THEN
+    CREATE INDEX IF NOT EXISTS idx_schema_recommendations_user_id ON schema_recommendations(user_id) WHERE user_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_schema_recommendations_applied_by ON schema_recommendations(applied_by) WHERE applied_by IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for field_blacklist.user_id -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_field_blacklist_user_id ON field_blacklist(user_id) WHERE user_id IS NOT NULL;
-
--- Index for field_blacklist.created_by -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_field_blacklist_created_by ON field_blacklist(created_by) WHERE created_by IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'field_blacklist') THEN
+    CREATE INDEX IF NOT EXISTS idx_field_blacklist_user_id ON field_blacklist(user_id) WHERE user_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_field_blacklist_created_by ON field_blacklist(created_by) WHERE created_by IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for relationship_observations.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_relationship_observations_source_id ON relationship_observations(source_id) WHERE source_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'relationship_observations') THEN
+    CREATE INDEX IF NOT EXISTS idx_relationship_observations_source_id ON relationship_observations(source_id) WHERE source_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_relationship_observations_interpretation_id ON relationship_observations(interpretation_id) WHERE interpretation_id IS NOT NULL;
+  END IF;
+END $$;
 
--- Index for relationship_observations.interpretation_id -> interpretations(id)
-CREATE INDEX IF NOT EXISTS idx_relationship_observations_interpretation_id ON relationship_observations(interpretation_id) WHERE interpretation_id IS NOT NULL;
-
--- Index for source_entity_edges.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_source_entity_edges_source_id ON source_entity_edges(source_id) WHERE source_id IS NOT NULL;
-
--- Index for source_entity_edges.entity_id -> entities(id)
-CREATE INDEX IF NOT EXISTS idx_source_entity_edges_entity_id ON source_entity_edges(entity_id) WHERE entity_id IS NOT NULL;
-
--- Index for source_entity_edges.interpretation_id -> interpretations(id)
-CREATE INDEX IF NOT EXISTS idx_source_entity_edges_interpretation_id ON source_entity_edges(interpretation_id) WHERE interpretation_id IS NOT NULL;
+-- Index for source_entity_edges (already created in earlier migrations, but ensure they exist)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'source_entity_edges') THEN
+    CREATE INDEX IF NOT EXISTS idx_source_entity_edges_source_id ON source_entity_edges(source_id) WHERE source_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_source_entity_edges_entity_id ON source_entity_edges(entity_id) WHERE entity_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_source_entity_edges_interpretation_id ON source_entity_edges(interpretation_id) WHERE interpretation_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for source_event_edges.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_source_event_edges_source_id ON source_event_edges(source_id) WHERE source_id IS NOT NULL;
-
--- Index for source_event_edges.event_id -> timeline_events(id)
-CREATE INDEX IF NOT EXISTS idx_source_event_edges_event_id ON source_event_edges(event_id) WHERE event_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'source_event_edges') THEN
+    CREATE INDEX IF NOT EXISTS idx_source_event_edges_source_id ON source_event_edges(source_id) WHERE source_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_source_event_edges_event_id ON source_event_edges(event_id) WHERE event_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for timeline_events.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_timeline_events_source_id ON timeline_events(source_id) WHERE source_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'timeline_events') THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_source_id ON timeline_events(source_id) WHERE source_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for observations.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_observations_source_id ON observations(source_id) WHERE source_id IS NOT NULL;
-
--- Index for observations.interpretation_id -> interpretations(id)
-CREATE INDEX IF NOT EXISTS idx_observations_interpretation_id ON observations(interpretation_id) WHERE interpretation_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'observations') THEN
+    CREATE INDEX IF NOT EXISTS idx_observations_source_id ON observations(source_id) WHERE source_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_observations_interpretation_id ON observations(interpretation_id) WHERE interpretation_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for raw_fragments.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_raw_fragments_source_id ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
-
--- Index for raw_fragments.interpretation_id -> interpretations(id)
-CREATE INDEX IF NOT EXISTS idx_raw_fragments_interpretation_id ON raw_fragments(interpretation_id) WHERE interpretation_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'raw_fragments') THEN
+    CREATE INDEX IF NOT EXISTS idx_raw_fragments_source_id ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_raw_fragments_interpretation_id ON raw_fragments(interpretation_id) WHERE interpretation_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for relationships.source_material_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_relationships_source_material_id ON relationships(source_material_id) WHERE source_material_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'relationships') THEN
+    CREATE INDEX IF NOT EXISTS idx_relationships_source_material_id ON relationships(source_material_id) WHERE source_material_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for interpretations.source_id -> sources(id)
-CREATE INDEX IF NOT EXISTS idx_interpretations_source_id ON interpretations(source_id) WHERE source_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'interpretations') THEN
+    CREATE INDEX IF NOT EXISTS idx_interpretations_source_id ON interpretations(source_id) WHERE source_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- Index for schema_registry.user_id -> auth.users(id)
-CREATE INDEX IF NOT EXISTS idx_schema_registry_user_id ON schema_registry(user_id) WHERE user_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'schema_registry') THEN
+    CREATE INDEX IF NOT EXISTS idx_schema_registry_user_id ON schema_registry(user_id) WHERE user_id IS NOT NULL;
+  END IF;
+END $$;
 
 -- ============================================================================
 -- 2. Review unused indexes (52 issues)

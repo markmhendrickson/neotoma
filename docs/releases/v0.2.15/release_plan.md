@@ -7,16 +7,16 @@
 
 ## Executive Summary
 
-Migrate entirely to [source material](../../vocabulary/canonical_terms.md#source-material)-based architecture, eliminating the legacy records table and record-based APIs. Unify all ingestion into a single `ingest` MCP action that handles both unstructured and structured [source material](../../vocabulary/canonical_terms.md#source-material). Eliminate the capability concept by moving normalization and extraction rules into [entity schemas](../../vocabulary/canonical_terms.md#entity-schema). This is a breaking change that requires data migration and API updates.
+Migrate entirely to [source](../../vocabulary/canonical_terms.md#source)-based architecture, eliminating the legacy records table and record-based APIs. Unify all ingestion into a single `ingest` MCP action that handles both unstructured and structured [source](../../vocabulary/canonical_terms.md#source). Eliminate the capability concept by moving normalization and extraction rules into [entity schemas](../../vocabulary/canonical_terms.md#entity-schema). This is a breaking change that requires data migration and API updates.
 
 ## Goals
 
-1. **Unified Architecture:** Single [ingestion](../../vocabulary/canonical_terms.md#ingestion) path using [source material](../../vocabulary/canonical_terms.md#source-material) → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → [observations](../../vocabulary/canonical_terms.md#observation) → [entities](../../vocabulary/canonical_terms.md#entity)
-2. **Unified Ingestion API:** Single `ingest` action for both unstructured and structured [source material](../../vocabulary/canonical_terms.md#source-material)
+1. **Unified Architecture:** Single [ingestion](../../vocabulary/canonical_terms.md#ingestion) path using [source](../../vocabulary/canonical_terms.md#source) → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → [observations](../../vocabulary/canonical_terms.md#observation) → [entities](../../vocabulary/canonical_terms.md#entity)
+2. **Unified Ingestion API:** Single `ingest` action for both unstructured and structured [source](../../vocabulary/canonical_terms.md#source)
 3. **Eliminate Capabilities:** Move normalization and [entity extraction rules](../../vocabulary/canonical_terms.md#entity-extraction-rule) into [entity schemas](../../vocabulary/canonical_terms.md#entity-schema), remove capability concept entirely
-4. **Remove Duplication:** Eliminate parallel systems (records vs [source material](../../vocabulary/canonical_terms.md#source-material))
+4. **Remove Duplication:** Eliminate parallel systems (records vs [source](../../vocabulary/canonical_terms.md#source))
 5. **Simplify Codebase:** Drop ~2000 lines of deprecated code
-6. **Better [Provenance](../../vocabulary/canonical_terms.md#provenance):** All data traces to [source material](../../vocabulary/canonical_terms.md#source-material) with [interpretations](../../vocabulary/canonical_terms.md#interpretation)
+6. **Better [Provenance](../../vocabulary/canonical_terms.md#provenance):** All data traces to [source](../../vocabulary/canonical_terms.md#source) with [interpretations](../../vocabulary/canonical_terms.md#interpretation)
 7. **User Isolation:** Proper multi-user support with RLS from day one
 
 ## Current State Analysis
@@ -49,16 +49,16 @@ Migrate entirely to [source material](../../vocabulary/canonical_terms.md#source
 ### New Architecture (Partially Implemented)
 
 **MCP Actions:**
-- `submit_payload` - Creates [source material](../../vocabulary/canonical_terms.md#source-material) → [observations](../../vocabulary/canonical_terms.md#observation) → [entities](../../vocabulary/canonical_terms.md#entity) ✅ (to be deprecated and merged into unified `ingest`)
-- `ingest` - Creates [source material](../../vocabulary/canonical_terms.md#source-material) → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → [observations](../../vocabulary/canonical_terms.md#observation) ✅ (to become unified action)
+- `submit_payload` - Creates [source](../../vocabulary/canonical_terms.md#source) → [observations](../../vocabulary/canonical_terms.md#observation) → [entities](../../vocabulary/canonical_terms.md#entity) ✅ (to be deprecated and merged into unified `ingest`)
+- `ingest` - Creates [source](../../vocabulary/canonical_terms.md#source) → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → [observations](../../vocabulary/canonical_terms.md#observation) ✅ (to become unified action)
 - `ingest_structured` - Direct [observation](../../vocabulary/canonical_terms.md#observation) creation ✅ (to be deprecated and merged into unified `ingest`)
-- `reinterpret` - Rerun [interpretation](../../vocabulary/canonical_terms.md#interpretation) on existing [source material](../../vocabulary/canonical_terms.md#source-material) ✅
+- `reinterpret` - Rerun [interpretation](../../vocabulary/canonical_terms.md#interpretation) on existing [source](../../vocabulary/canonical_terms.md#source) ✅
 - [Entity](../../vocabulary/canonical_terms.md#entity)/[observation](../../vocabulary/canonical_terms.md#observation) query actions ✅
 
 **Planned Unification & Simplification:**
-- **Unified `ingest` action** - single action for all [source material](../../vocabulary/canonical_terms.md#source-material) (unstructured and structured)
+- **Unified `ingest` action** - single action for all [source](../../vocabulary/canonical_terms.md#source) (unstructured and structured)
 - `ingest` accepts either:
-  - Unstructured: `{file_content, mime_type}` → stored → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → structured [source material](../../vocabulary/canonical_terms.md#source-material) → [entity schema](../../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../../vocabulary/canonical_terms.md#observation)
+  - Unstructured: `{file_content, mime_type}` → stored → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → structured [source](../../vocabulary/canonical_terms.md#source) → [entity schema](../../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../../vocabulary/canonical_terms.md#observation)
   - Structured: `{entities: [{entity_type, ...}]}` → stored → [entity schema](../../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../../vocabulary/canonical_terms.md#observation)
 - **Deprecate `submit_payload` and `ingest_structured`** - merge into unified `ingest`
 - **Eliminate capabilities entirely** - move [canonicalization rules](../../vocabulary/canonical_terms.md#canonicalization-rules) and [entity extraction rules](../../vocabulary/canonical_terms.md#entity-extraction-rule) into [entity schemas](../../vocabulary/canonical_terms.md#entity-schema)
@@ -69,10 +69,10 @@ Migrate entirely to [source material](../../vocabulary/canonical_terms.md#source
   - **[Entity extraction rules](../../vocabulary/canonical_terms.md#entity-extraction-rule)** (new - for multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction))
 - No separate "capability" concept - all processing rules come from [entity schema](../../vocabulary/canonical_terms.md#entity-schema)
 - Simplifies API from 3 actions to 1, eliminates capability registry
-- All [source material](../../vocabulary/canonical_terms.md#source-material) automatically gets normalization, deduplication, and multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction) via [entity schema](../../vocabulary/canonical_terms.md#entity-schema)
+- All [source](../../vocabulary/canonical_terms.md#source) automatically gets normalization, deduplication, and multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction) via [entity schema](../../vocabulary/canonical_terms.md#entity-schema)
 
 **Database Tables:**
-- `sources` - Content-addressed [source material](../../vocabulary/canonical_terms.md#source-material) storage ✅
+- `sources` - Content-addressed [source](../../vocabulary/canonical_terms.md#source) storage ✅
 - `interpretations` - Versioned [interpretation](../../vocabulary/canonical_terms.md#interpretation) tracking ✅
 - `observations` - Has `source_id` for [provenance](../../vocabulary/canonical_terms.md#provenance) ✅
 - `entities` - With merge tracking ✅
@@ -100,8 +100,8 @@ Replace record-based HTTP endpoints with [entity](../../vocabulary/canonical_ter
    - Input: `{ entity_id?, entity_type?, limit?, offset?, user_id }`
    - Output: `{ observations: Observation[], total: number }`
 
-4. **POST /api/upload_file** → Update to use [source material](../../vocabulary/canonical_terms.md#source-material) architecture
-   - Create [source material](../../vocabulary/canonical_terms.md#source-material) with content-addressed storage
+4. **POST /api/upload_file** → Update to use [source](../../vocabulary/canonical_terms.md#source) architecture
+   - Create [source](../../vocabulary/canonical_terms.md#source) with content-addressed storage
    - Optionally run [interpretation](../../vocabulary/canonical_terms.md#interpretation)
    - Return source_id + [entity](../../vocabulary/canonical_terms.md#entity) [entity snapshots](../../vocabulary/canonical_terms.md#entity-snapshot)
    - Uses: unified `ingest` MCP action logic
@@ -131,7 +131,7 @@ Replace record-based HTTP endpoints with [entity](../../vocabulary/canonical_ter
    - Recent items tracked as [entity](../../vocabulary/canonical_terms.md#entity) IDs
 
 4. **Update File Upload Flow**
-   - Upload creates [source material](../../vocabulary/canonical_terms.md#source-material)
+   - Upload creates [source](../../vocabulary/canonical_terms.md#source)
    - Shows [interpretation](../../vocabulary/canonical_terms.md#interpretation) progress
    - Displays [extracted](../../vocabulary/canonical_terms.md#extraction) [entities](../../vocabulary/canonical_terms.md#entity)/[observations](../../vocabulary/canonical_terms.md#observation)
 
@@ -169,15 +169,15 @@ Replace record-based HTTP endpoints with [entity](../../vocabulary/canonical_ter
 
 4. **Update Graph Builder**
    - `insertSourceWithGraph()` - New function
-   - Creates [source material](../../vocabulary/canonical_terms.md#source-material) → [entity](../../vocabulary/canonical_terms.md#entity) edges
-   - Creates [source material](../../vocabulary/canonical_terms.md#source-material) → [event](../../vocabulary/canonical_terms.md#event) edges
+   - Creates [source](../../vocabulary/canonical_terms.md#source) → [entity](../../vocabulary/canonical_terms.md#entity) edges
+   - Creates [source](../../vocabulary/canonical_terms.md#source) → [event](../../vocabulary/canonical_terms.md#event) edges
    - Deprecate `insertRecordWithGraph()`
 
 ### Phase 4: Data Migration Script
 
 **Priority: P0**
 
-Create migration script to convert existing records → [source material](../../vocabulary/canonical_terms.md#source-material). See `scripts/migrate-records-to-sources-v0.2.15.ts`.
+Create migration script to convert existing records → [source](../../vocabulary/canonical_terms.md#source). See `scripts/migrate-records-to-sources-v0.2.15.ts`.
 
 **Migration Safety:**
 - Run in dry-run mode first
@@ -228,7 +228,7 @@ Create migration script to convert existing records → [source material](../../
 - [ ] Implement `POST /api/entities/query` endpoint
 - [ ] Implement `POST /api/observations/create` endpoint
 - [ ] Implement `POST /api/observations/query` endpoint
-- [ ] Update `POST /api/upload_file` to use [source material](../../vocabulary/canonical_terms.md#source-material)
+- [ ] Update `POST /api/upload_file` to use [source](../../vocabulary/canonical_terms.md#source)
 - [ ] Implement `POST /api/entities/merge` endpoint
 - [ ] **Unify into single `ingest` action**
   - [ ] Update `ingest` to accept both unstructured (`file_content`) and structured (`entities` array)
@@ -263,7 +263,7 @@ Create migration script to convert existing records → [source material](../../
 **Acceptance Criteria:**
 - UI fully functional with new endpoints
 - No references to old `/retrieve_records` endpoint
-- File upload creates [source material](../../vocabulary/canonical_terms.md#source-material)
+- File upload creates [source](../../vocabulary/canonical_terms.md#source)
 - Chat queries [entities](../../vocabulary/canonical_terms.md#entity) correctly
 - Search works with [entity](../../vocabulary/canonical_terms.md#entity) model
 
@@ -278,8 +278,8 @@ Create migration script to convert existing records → [source material](../../
 - [ ] Update timeline [event](../../vocabulary/canonical_terms.md#event) generation
 
 **Acceptance Criteria:**
-- Graph edges reference [source material](../../vocabulary/canonical_terms.md#source-material) instead of records
-- Timeline [events](../../vocabulary/canonical_terms.md#event) can reference [source material](../../vocabulary/canonical_terms.md#source-material)
+- Graph edges reference [source](../../vocabulary/canonical_terms.md#source) instead of records
+- Timeline [events](../../vocabulary/canonical_terms.md#event) can reference [source](../../vocabulary/canonical_terms.md#source)
 - Graph integrity checks pass
 - No broken foreign keys
 
@@ -296,7 +296,7 @@ Create migration script to convert existing records → [source material](../../
 
 **Acceptance Criteria:**
 - Migration script runs successfully
-- All records converted to [source material](../../vocabulary/canonical_terms.md#source-material)
+- All records converted to [source](../../vocabulary/canonical_terms.md#source)
 - [Observations](../../vocabulary/canonical_terms.md#observation) created correctly
 - Graph edges migrated
 - No data loss
@@ -339,11 +339,11 @@ Create migration script to convert existing records → [source material](../../
 - `delete_record` → No direct equivalent
 
 **Deprecated MCP Actions (removed in v0.2.16):**
-- `submit_payload` → Use unified `ingest` with structured [source material](../../vocabulary/canonical_terms.md#source-material)
-- `ingest_structured` → Use unified `ingest` with structured [source material](../../vocabulary/canonical_terms.md#source-material)
+- `submit_payload` → Use unified `ingest` with structured [source](../../vocabulary/canonical_terms.md#source)
+- `ingest_structured` → Use unified `ingest` with structured [source](../../vocabulary/canonical_terms.md#source)
 
 **Unified MCP Actions:**
-- `ingest` → Single action for all [source material](../../vocabulary/canonical_terms.md#source-material) (replaces `ingest`, `submit_payload`, and `ingest_structured`)
+- `ingest` → Single action for all [source](../../vocabulary/canonical_terms.md#source) (replaces `ingest`, `submit_payload`, and `ingest_structured`)
 - Accepts unstructured: `{file_content, mime_type}` → [interpretation](../../vocabulary/canonical_terms.md#interpretation) → [observations](../../vocabulary/canonical_terms.md#observation)
 - Accepts structured: `{entities: [{entity_type, ...}]}` → [entity schema](../../vocabulary/canonical_terms.md#entity-schema) processing → [observations](../../vocabulary/canonical_terms.md#observation)
 - Uses [entity schema](../../vocabulary/canonical_terms.md#entity-schema) for normalization, deduplication, and multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction)
@@ -379,7 +379,7 @@ Create migration script to convert existing records → [source material](../../
 
 **For MCP Users:**
 - Replace `retrieve_records` with `retrieve_entities`
-- Replace `store_record` with unified `ingest` (with `entities` array for structured [source material](../../vocabulary/canonical_terms.md#source-material))
+- Replace `store_record` with unified `ingest` (with `entities` array for structured [source](../../vocabulary/canonical_terms.md#source))
 - Replace `submit_payload` with unified `ingest` (specify `entity_type` in entities array)
 - Replace `ingest_structured` with unified `ingest`
 - Use `correct` instead of `update_record` for corrections
@@ -397,7 +397,7 @@ If issues are discovered post-migration:
 **Backup Strategy:**
 - Full database backup before migration
 - Keep records table for 2 releases (mark as deprecated)
-- Ability to recreate records from [source material](../../vocabulary/canonical_terms.md#source-material) if needed
+- Ability to recreate records from [source](../../vocabulary/canonical_terms.md#source) if needed
 
 ## Testing Strategy
 
@@ -408,21 +408,21 @@ If issues are discovered post-migration:
 - [ ] Migration script logic
 
 ### Integration Tests
-- [ ] Full [ingestion](../../vocabulary/canonical_terms.md#ingestion) flow (file → [source material](../../vocabulary/canonical_terms.md#source-material) → [observation](../../vocabulary/canonical_terms.md#observation) → [entity](../../vocabulary/canonical_terms.md#entity))
+- [ ] Full [ingestion](../../vocabulary/canonical_terms.md#ingestion) flow (file → [source](../../vocabulary/canonical_terms.md#source) → [observation](../../vocabulary/canonical_terms.md#observation) → [entity](../../vocabulary/canonical_terms.md#entity))
 - [ ] [Entity](../../vocabulary/canonical_terms.md#entity) query with filters
 - [ ] [Observation](../../vocabulary/canonical_terms.md#observation) creation and merging
 - [ ] Graph integrity with new edges
-- [ ] Timeline [events](../../vocabulary/canonical_terms.md#event) with [source material](../../vocabulary/canonical_terms.md#source-material) references
+- [ ] Timeline [events](../../vocabulary/canonical_terms.md#event) with [source](../../vocabulary/canonical_terms.md#source) references
 
 ### End-to-End Tests
-- [ ] File upload via UI → creates [source material](../../vocabulary/canonical_terms.md#source-material) → shows [entities](../../vocabulary/canonical_terms.md#entity)
+- [ ] File upload via UI → creates [source](../../vocabulary/canonical_terms.md#source) → shows [entities](../../vocabulary/canonical_terms.md#entity)
 - [ ] Chat queries [entities](../../vocabulary/canonical_terms.md#entity) correctly
 - [ ] Search returns [entities](../../vocabulary/canonical_terms.md#entity)
 - [ ] [Entity](../../vocabulary/canonical_terms.md#entity) merge works in UI
 
 ### Migration Tests
 - [ ] Dry-run produces correct plan
-- [ ] Migration converts records → [source material](../../vocabulary/canonical_terms.md#source-material)
+- [ ] Migration converts records → [source](../../vocabulary/canonical_terms.md#source)
 - [ ] Graph edges migrate correctly
 - [ ] Rollback restores state
 - [ ] No data loss
@@ -474,7 +474,7 @@ If issues are discovered post-migration:
 
 ## Dependencies
 
-- Supabase instance with sufficient storage for [source material](../../vocabulary/canonical_terms.md#source-material)
+- Supabase instance with sufficient storage for [source](../../vocabulary/canonical_terms.md#source)
 - User ID system in place for RLS
 - Testing environment with production-like data
 - Staging environment for migration validation
@@ -492,9 +492,9 @@ If issues are discovered post-migration:
 - This is a breaking change requiring careful coordination
 - Consider API versioning (v1 = records, v2 = [entities](../../vocabulary/canonical_terms.md#entity)) if gradual migration needed
 - Keep records table read-only for one release cycle as safety net
-- Unified `ingest` simplifies agent decision-making: one action for all [source material](../../vocabulary/canonical_terms.md#source-material)
+- Unified `ingest` simplifies agent decision-making: one action for all [source](../../vocabulary/canonical_terms.md#source)
 - [Entity schemas](../../vocabulary/canonical_terms.md#entity-schema) now include [canonicalization rules](../../vocabulary/canonical_terms.md#canonicalization-rules) and [entity extraction rules](../../vocabulary/canonical_terms.md#entity-extraction-rule) - no separate capability concept needed
-- All [source material](../../vocabulary/canonical_terms.md#source-material) gets normalization, deduplication, and multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction) automatically via [entity schema](../../vocabulary/canonical_terms.md#entity-schema)
+- All [source](../../vocabulary/canonical_terms.md#source) gets normalization, deduplication, and multi-[entity](../../vocabulary/canonical_terms.md#entity) [extraction](../../vocabulary/canonical_terms.md#extraction) automatically via [entity schema](../../vocabulary/canonical_terms.md#entity-schema)
 - Consider offering migration-as-a-service for enterprise users
 
 ## Release Sequence Context

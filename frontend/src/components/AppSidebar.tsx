@@ -9,6 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   ChevronDown,
@@ -96,14 +97,33 @@ interface AppSidebarProps {
   onNavigate?: (href: string) => void;
 }
 
+/**
+ * Documentation sidebar component
+ * 
+ * @param props.currentPath - Current path for active state detection
+ * @param props.onNavigate - Optional navigation handler for docs
+ * 
+ * Features:
+ * - Collapsible navigation sections
+ * - Active state detection
+ * - Auto-closes on mobile when navigation link is clicked
+ */
 export function AppSidebar({
   currentPath,
   onNavigate,
 }: AppSidebarProps) {
+  const { isMobile, setOpen } = useSidebar();
+
   const handleNavigate = (href: string, e?: React.MouseEvent<HTMLAnchorElement>) => {
     if (e) {
       e.preventDefault();
     }
+
+    // Auto-close sidebar on mobile
+    if (isMobile) {
+      setOpen(false);
+    }
+
     // If navigating to main app, do full page navigation
     if (href === '/') {
       window.location.href = '/';
@@ -127,7 +147,7 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="flex-row items-center gap-2 p-2">
+      <SidebarHeader className="flex-row items-center gap-2 py-2 px-3 h-16">
         <Database className="h-5 w-5 shrink-0" />
         <h2 className="text-lg font-semibold">Neotoma</h2>
       </SidebarHeader>

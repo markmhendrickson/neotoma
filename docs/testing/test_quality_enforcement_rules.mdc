@@ -280,7 +280,81 @@ it("should create queue items", async () => {
 });
 ```
 
-### 7. Integration Tests MUST Test Complete Workflows
+### 7. External API Contract Tests MUST Validate URL Parameters
+
+**MUST:** When generating URLs for external APIs (OAuth, third-party services), validate that parameters match the API's actual requirements.
+
+**MUST NOT:** Only check that URLs contain strings without validating parameter correctness.
+
+**Example from actual Neotoma bug that was missed:**
+
+```typescript
+// ❌ This test passed but didn't catch the invalid provider parameter
+it("creates valid OAuth authorization URL", () => {
+  const url = createAuthUrl(state, codeChallenge, redirectUri);
+  
+  expect(url).toContain("/auth/v1/authorize");
+  expect(url).toContain("code_challenge");
+  // Missing: validation that provider parameter is valid or absent
+});
+
+// ✅ This test would have caught the bug
+it("creates valid OAuth authorization URL", () => {
+  const url = createAuthUrl(state, codeChallenge, redirectUri);
+  const parsedUrl = new URL(url);
+  
+  expect(url).toContain("/auth/v1/authorize");
+  expect(url).toContain("code_challenge");
+  
+  // Validate no invalid parameters
+  const provider = parsedUrl.searchParams.get("provider");
+  if (provider) {
+    // If provider is present, it must be a valid Supabase provider
+    const validProviders = ["github", "google", "discord", "azure", "apple"];
+    expect(validProviders).toContain(provider);
+  }
+  // For Supabase OAuth 2.1 Server, provider should be absent
+  expect(provider).not.toBe("oauth"); // Would catch the bug
+});
+
+// ✅ Even better: Test negative cases explicitly
+it("does not include invalid provider parameter", () => {
+  const url = createAuthUrl(state, codeChallenge, redirectUri);
+  const parsedUrl = new URL(url);
+  
+  const provider = parsedUrl.searchParams.get("provider");
+  // Supabase doesn't support generic "oauth" provider
+  expect(provider).not.toBe("oauth");
+  // For OAuth 2.1 Server, provider should be absent
+  expect(provider).toBeNull();
+});
+
+// ✅ Best: Validate against actual API documentation
+it("creates URL matching Supabase OAuth 2.1 Server requirements", () => {
+  const url = createAuthUrl(state, codeChallenge, redirectUri);
+  const parsedUrl = new URL(url);
+  
+  // Required parameters per Supabase OAuth 2.1 Server spec
+  expect(parsedUrl.searchParams.get("response_type")).toBe("code");
+  expect(parsedUrl.searchParams.get("code_challenge")).toBeDefined();
+  expect(parsedUrl.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(parsedUrl.searchParams.get("redirect_uri")).toBeDefined();
+  expect(parsedUrl.searchParams.get("state")).toBeDefined();
+  
+  // Invalid parameters that would cause API errors
+  expect(parsedUrl.searchParams.get("provider")).not.toBe("oauth");
+  expect(parsedUrl.searchParams.get("provider")).not.toBe("generic");
+});
+```
+
+**Enforcement for OAuth/External API URL generation:**
+
+1. **Parse and validate URL parameters** - Don't just check string contains
+2. **Test negative cases** - Verify invalid parameters are not present
+3. **Reference API documentation** - Validate against actual API requirements
+4. **Test parameter combinations** - Ensure required vs optional parameters are correct
+
+### 8. Integration Tests MUST Test Complete Workflows
 
 **MUST:** Test end-to-end workflows that verify all steps work together.
 
@@ -364,6 +438,8 @@ Agents MUST:
 - Verify database state after operations
 - Test both success and failure paths for silent error handling
 - Test complete workflows end-to-end
+- Validate external API URL parameters against actual API requirements
+- Test negative cases for URL parameters (invalid values, missing required params)
 
 Agents MUST NOT:
 
@@ -373,6 +449,8 @@ Agents MUST NOT:
 - Assume operations succeeded without verifying database state
 - Skip tests for foreign key constraints
 - Skip tests for user_id null vs UUID handling
+- Only check URL strings contain values without parsing and validating parameters
+- Skip negative test cases for external API URL generation
 
 ## Validation Checklist
 
@@ -385,6 +463,8 @@ Before marking integration test complete:
 - [ ] Database state verified after operations
 - [ ] Both success and failure paths tested (for silent errors)
 - [ ] Complete workflow tested (not just individual steps)
+- [ ] External API URLs validated (parameters parsed and checked against API requirements)
+- [ ] Negative test cases for URL parameters (invalid values tested)
 - [ ] Test cleanup prevents data leaks
 - [ ] Test is deterministic (repeatable)
 

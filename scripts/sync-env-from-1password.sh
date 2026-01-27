@@ -64,22 +64,16 @@ else
     # Try to get account identifier
     ACCOUNT=$(op account list 2>/dev/null | head -1 | awk '{print $NF}' 2>/dev/null || echo "")
     
-    if [ -n "$ACCOUNT" ]; then
-        echo "Signing in to 1Password (account: $ACCOUNT)..."
-        # Sign in and capture session token (non-interactive if possible)
-        SESSION_TOKEN=$(op signin --raw "$ACCOUNT" 2>/dev/null)
-        if [ -n "$SESSION_TOKEN" ]; then
-            # Export session token for this account
-            ACCOUNT_ENV=$(echo "$ACCOUNT" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
-            export "OP_SESSION_${ACCOUNT_ENV}=${SESSION_TOKEN}"
-            echo "✓ 1Password session established and exported"
-        else
-            echo "Warning: Could not establish 1Password session automatically."
-            echo "The Python script will prompt for authentication if needed."
-        fi
+    echo "Signing in to 1Password..."
+    echo "Please complete authentication (biometric/password prompt may appear)..."
+    # Use eval to properly export session token and trigger interactive prompt
+    # op signin outputs export commands that need to be evaluated
+    if eval "$(op signin)" 2>&1; then
+        echo "✓ 1Password session established"
     else
-        echo "Warning: Could not determine 1Password account."
-        echo "The Python script will prompt for authentication if needed."
+        echo "Error: Failed to sign in to 1Password."
+        echo "Please run manually: op signin"
+        exit 1
     fi
 fi
 

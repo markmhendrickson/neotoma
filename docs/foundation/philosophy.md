@@ -85,7 +85,7 @@ Every output MUST trace to:
 4. **No nondeterminism in core components** (no random IDs for entities/events, no Date.now() in entity ID generation)
 5. **No schema mutation** (once assigned, schema_type never changes)
 6. **No observation modification** (immutable after creation; reinterpretation creates NEW observations)
-7. **No inferred entities beyond extraction** (only extract what's present in source material)
+7. **No inferred entities beyond extraction** (only extract what's present in source)
 8. **No strategy logic** (that's Strategy Layer, e.g., Agentic Portfolio)
 9. **No execution logic** (that's Execution Layer, e.g., Agentic Wallet)
 10. **No agent behavior** (Neotoma is not an agent)

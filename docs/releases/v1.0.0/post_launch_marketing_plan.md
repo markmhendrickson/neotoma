@@ -1,25 +1,36 @@
 ## Release v1.0.0 — Post-Launch Marketing Plan
+
 ### Purpose
-This document defines the post-launch marketing activities for v1.0.0, focused on launch announcement, waitlist conversion, organic growth, partnership outreach, and user reengagement.
+This document defines post-launch marketing activities for v1.0.0, **deferred until after dogfooding validation** (Week 12+). Marketing activities will only proceed if dogfooding validates the product works for ateles integration.
+
 **Related Documents:**
 - `marketing_plan.md` — Marketing overview and coordination
-- `pre_launch_marketing_plan.md` — Pre-launch marketing activities
+- `pre_launch_marketing_plan.md` — Build-in-public content plan (during build phase)
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
+- `marketing_dogfooding_analysis.md` — Analysis of pre-launch marketing for dogfooding-first approach
+- `visibility_timing_analysis.md` — Visibility timing risk and build-in-public strategy
+- `approach_comparison.md` — Discovery-first vs. dogfooding-first comparative analysis
+
 ### 1. Post-Launch Overview
-- **Timeline**: Day 0 to Week 4
+- **Timeline**: **Deferred until Week 12+** (after dogfooding validation)
+- **Conditional**: Only proceed if dogfooding validates product works for ateles integration
 - **Strategy**: Organic only (no paid acquisition for MVP)
-- **Goals**: Maximize signups, convert waitlist, build organic growth, reengage users
-### 2. Launch Announcement
+- **Goals**: Maximize signups, build waitlist, build organic growth, reengage users
+- **Prerequisite**: Product must work for ateles integration before external marketing
+### 2. Launch Announcement (Post-Dogfooding)
+
 #### 2.1 Timeline and Channels
-- **Timeline**: Day 0
+- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
+- **Conditional**: Only if dogfooding validates product works
 - **Channels**: Product Hunt, Hacker News, Twitter, Indie Hacker, Email, Blog
 - **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Product Hunt, Hacker News) prioritized for launch day maximum reach
-#### 2.2 Launch Sequence
+
+#### 2.2 Launch Sequence (Post-Dogfooding)
 - **00:01 PST**: Product Hunt launch — **Use personal maker account**
 - **06:00 PST**: Hacker News Show HN post — **Use personal account**
 - **08:00 PST**: Twitter announcement thread — **Use personal account**
-- **09:00 PST**: Email to waitlist (convert to signups)
+- **09:00 PST**: Email to waitlist (convert to signups) — **If waitlist exists**
 - **10:00 PST**: Indie Hacker launch post — **Use personal account**
 - **12:00 PST**: Blog post announcement
 - **Throughout day**: Engage with comments, respond to questions — **Use personal accounts**
@@ -37,14 +48,22 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 | Hacker News points   | 50 (modest goal)            | HN thread score                 |
 | Press mentions       | 2 (blogs, newsletters)      | Manual tracking + Google Alerts |
 | Social shares        | 100                         | Twitter shares, retweets        |
-### 3. Waitlist Conversion
+### 3. Waitlist Building and Conversion (Post-Dogfooding)
+
 #### 3.1 Timeline and Target
-- **Timeline**: Day 0 to Day 7
-- **Target**: All waitlist signups (target: 100)
-#### 3.2 Email Sequence
+- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
+- **Conditional**: Only if dogfooding validates product works
+- **Target**: Build waitlist, then convert (targets TBD after dogfooding validation)
+
+#### 3.2 Waitlist Building (Post-Dogfooding)
+- **Week 12+**: Launch waitlist (now that product is validated)
+- **Channels**: Twitter, LinkedIn, blog, Indie Hackers, Hacker News
+- **Message**: "I've been dogfooding Neotoma in my ateles integration. It works. Here's what I built..."
+
+#### 3.3 Email Sequence (Post-Dogfooding)
 - **Day 0**: Launch announcement + signup link + early adopter pricing
 - **Day 3**: Feature deep-dive (privacy-first architecture, deterministic extraction, cross-platform MCP access)
-- **Day 7**: Testimonials from beta testers + defensible differentiators recap + last call for early adopter pricing
+- **Day 7**: Dogfooding insights + defensible differentiators recap + last call for early adopter pricing
 #### 3.3 Goals
 - Waitlist to signup conversion
 - Activation (signup → first upload)
@@ -53,11 +72,13 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 | ------------------------ | ---------------------------- | -------------------------------------- |
 | Waitlist conversion rate | 40% (waitlist → signup)      | Email opens, clicks, signups by source |
 | Waitlist activation rate | 60% (signups → first upload) | Usage analytics                        |
-### 4. Organic Growth
+### 4. Organic Growth (Post-Dogfooding)
+
 #### 4.1 Timeline and Channels
-- **Timeline**: Week 1 to Week 4
+- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
+- **Conditional**: Only if dogfooding validates product works
 - **Channels**: Twitter, blog, community, word of mouth
-- **Platform Priority**: P0 platforms (Twitter) for sustained engagement; P1 platforms (LinkedIn, Reddit, Discord) added for Week 1-4 growth
+- **Platform Priority**: P0 platforms (Twitter) for sustained engagement; P1 platforms (LinkedIn, Reddit, Discord) added for growth
 #### 4.2 Activities
 - **Weekly**: Twitter threads on use cases, tips, workflows — **Use personal account**
 - **Weekly**: Blog post (tutorial, case study, or technical deep-dive)
@@ -109,9 +130,11 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 | Content to signup rate      | 3% (blog/twitter → signup) | UTM tracking                              |
 | Organic search traffic      | 500 (visits from Google)   | Google Analytics                          |
 | Competitor outreach signups | 20 (from Section 4.3)      | UTM tracking (competitor-outreach source) |
-### 5. Partnership Outreach
+### 5. Partnership Outreach (Post-Dogfooding)
+
 #### 5.1 Timeline and Targets
-- **Timeline**: Week 1 to Week 4
+- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
+- **Conditional**: Only if dogfooding validates product works
 - **Targets**:
   - **MCP Directories** (Primary):
     - [Model Context Protocol Directory](https://model-context-protocol.com/) — Official MCP directory
@@ -136,20 +159,19 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
   - **Indie Hacker Resources**:
     - Indie hacker podcasts
     - Indie hacker newsletters
-#### 5.2 Submission Strategy
-**Week 1**:
-- Verify all MCP directory listings from pre-launch are live
-- Update MCP directory listings with launch announcement and v1.0.0 features
-- Submit to any MCP directories missed in pre-launch
+#### 5.2 Submission Strategy (Post-Dogfooding)
+**Week 12+** (After dogfooding validation):
+- Submit to MCP directories (now that product is validated)
+- Update MCP directory listings with working product information
 - Submit to AI tool directories (There's An AI For That, Future Tools, AI Tools)
-**Week 2**:
-- Submit to productivity communities (Notie, Obsidian, Roam)
+- Submit to productivity communities (Notion, Obsidian, Roam)
 - Reach out to indie hacker podcasts/newsletters
-- Follow up on pending directory submissions
 - Monitor directory referral traffic
-**Week 3-4**:
+
+**Week 13-14** (If proceeding):
+- Follow up on pending directory submissions
 - Continue monitoring directory performance
-- Update directory listings with user testimonials/case studies
+- Update directory listings with dogfooding insights/case studies
 - Optimize directory listings based on performance data
 - Build relationships with directory maintainers
 #### 5.3 Goals
@@ -200,21 +222,31 @@ This document defines the post-launch marketing activities for v1.0.0, focused o
 | ----------------------- | -------------------------------- | --------------- |
 | Email open rate         | 35%                              | Email analytics |
 | Tip to feature adoption | 20% (users who try featured tip) | Usage analytics |
-### 7. Success Criteria
-- ≥50 signups Day 1
-- ≥200 signups Week 1
-- ≥40% waitlist conversion rate
-- ≥100 organic signups (non-waitlist) Week 1-4
-- ≥20 organic signups from competitor follower outreach (Week 1-4)
-- ≥60% overall activation rate (signup → first upload)
-- ≥15% nudge response rate
-- ≥20% tip to feature adoption rate
-### 8. Budget
+### 7. Success Criteria (Post-Dogfooding)
+
+**Prerequisite**: Product must work for ateles integration (dogfooding validation)
+
+**Post-Dogfooding Marketing** (If proceeding):
+- Success criteria TBD after dogfooding validation
+- Typical targets (to be confirmed):
+  - ≥50 signups Day 1
+  - ≥200 signups Week 1
+  - ≥40% waitlist conversion rate (if waitlist exists)
+  - ≥100 organic signups (non-waitlist) Week 1-4
+  - ≥60% overall activation rate (signup → first upload)
+  - ≥15% nudge response rate
+  - ≥20% tip to feature adoption rate
+### 8. Budget (Post-Dogfooding)
+
 - **Total**: $0 (organic only for MVP)
 - **Time Investment**: ~60 hours (launch activities, content, community)
+- **Conditional**: Only if dogfooding validates product works
 **Note**: Paid acquisition deferred to post-MVP (v1.1+) after organic validation
 ### 9. Related Documents
 - `marketing_plan.md` — Marketing overview and coordination
-- `pre_launch_marketing_plan.md` — Pre-launch marketing activities
+- `pre_launch_marketing_plan.md` — Build-in-public content plan (during build phase)
 - `marketing_segments_plan.md` — User segment definitions
 - `marketing_metrics_plan.md` — Metrics and tracking
+- `marketing_dogfooding_analysis.md` — Analysis of pre-launch marketing for dogfooding-first approach
+- `visibility_timing_analysis.md` — Visibility timing risk and build-in-public strategy
+- `approach_comparison.md` — Discovery-first vs. dogfooding-first comparative analysis

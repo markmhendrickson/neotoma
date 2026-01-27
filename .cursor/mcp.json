@@ -1,12 +1,7 @@
 {
   "mcpServers": {
     "neotoma": {
-      "command": "node",
-      "args": ["dist/index.js"],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "NODE_ENV": "development"
-      }
+      "url": "https://melissia-introrse-correspondently.ngrok-free.dev/mcp"
     },
     "web-scraper": {
       "command": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh",

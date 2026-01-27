@@ -5,7 +5,7 @@
 
 ## Overview
 
-Complete migration to source material-based architecture with unified ingestion, vocabulary alignment, and capability elimination.
+Complete migration to source-based architecture with unified ingestion, vocabulary alignment, and capability elimination.
 
 ## Breaking Changes
 
@@ -30,7 +30,7 @@ The following MCP actions have been **removed entirely**:
 
 ### Unified `ingest()` Action
 
-Single MCP action for all source material:
+Single MCP action for all source:
 
 **Unstructured (Files):**
 ```typescript
@@ -81,9 +81,9 @@ Entity-based REST API:
 
 ### Architecture
 
-- **Unified ingestion:** Single path for all source material
+- **Unified ingestion:** Single path for all source
 - **No capabilities:** Normalization/extraction rules now in entity schemas
-- **Better provenance:** Full chain: Source Material → Interpretation → Observation → Entity Snapshot
+- **Better provenance:** Full chain: Source → Interpretation → Observation → Entity Snapshot
 - **Simplified model:** Clearer separation of concerns
 
 ## Migration Guide

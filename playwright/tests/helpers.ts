@@ -160,6 +160,49 @@ export function attachBrowserLogging(page: Page): void {
   });
 }
 
+/**
+ * Collect console errors and page errors for assertion
+ * Use this to verify no console errors occur during UI interactions
+ * 
+ * @example
+ * ```typescript
+ * test("should not have console errors", async ({ page }) => {
+ *   const errors = collectConsoleErrors(page);
+ *   await page.goto("/page-path");
+ *   await page.click("button");
+ *   expect(errors.getErrors()).toHaveLength(0);
+ * });
+ * ```
+ */
+export function collectConsoleErrors(page: Page): {
+  getErrors: () => string[];
+  getPageErrors: () => string[];
+  clear: () => void;
+} {
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on('console', (message) => {
+    if (message.type() === 'error') {
+      consoleErrors.push(message.text());
+    }
+  });
+
+  page.on('pageerror', (error) => {
+    const errorMessage = error?.stack || error?.message || String(error);
+    pageErrors.push(errorMessage);
+  });
+
+  return {
+    getErrors: () => [...consoleErrors],
+    getPageErrors: () => [...pageErrors],
+    clear: () => {
+      consoleErrors.length = 0;
+      pageErrors.length = 0;
+    },
+  };
+}
+
 
 export async function routeChatThroughMock(page: Page, mockApiOrigin?: string): Promise<void> {
   if (!mockApiOrigin) {
@@ -400,4 +443,167 @@ export async function getStatusBadgeText(page: Page, recordId: string): Promise<
   if (className?.includes('Ready')) return 'Ready';
   
   return null;
+}
+
+// ============================================================================
+// OAuth Flow Helpers
+// ============================================================================
+
+/**
+ * Wait for the app to show authenticated shell (MainApp after ProtectedRoute).
+ * Use after guest sign-in or when verifying auth. Default route is Dashboard ("Welcome to Neotoma").
+ */
+export async function waitForAuthenticatedUI(page: Page, options?: { timeout?: number }): Promise<void> {
+  const timeout = options?.timeout ?? 30_000;
+  await page.waitForFunction(
+    () => {
+      const guestButtons = Array.from(document.querySelectorAll('button')).filter(
+        (btn) => {
+          const t = (btn.textContent || '').trim();
+          return t.includes('Continue as Guest') || (t.includes('Guest') && t.length < 30);
+        },
+      );
+      const notAuthPage = guestButtons.length === 0;
+      const hasNav = document.querySelector('nav, aside, [role="navigation"]') !== null;
+      const hasMain = document.querySelector('main, [role="main"]') !== null;
+      const hasHeading = document.querySelector('h1, h2') !== null;
+      return notAuthPage && (hasNav || hasMain || hasHeading);
+    },
+    { timeout },
+  );
+}
+
+/**
+ * Sign in as guest (anonymous user).
+ * Waits for authenticated UI (nav/main/heading, no guest button). Default landing is Dashboard.
+ */
+export async function signInAsGuest(page: Page): Promise<void> {
+  const alreadyAuthenticated = await page
+    .waitForFunction(
+      () => {
+        const hasNav = document.querySelector('nav, aside, [role="navigation"]') !== null;
+        const hasMain = document.querySelector('main, [role="main"]') !== null;
+        const guestButtons = Array.from(document.querySelectorAll('button')).filter(
+          (btn) => (btn.textContent || '').includes('Continue as Guest') || (btn.textContent || '').includes('Guest'),
+        );
+        return (hasNav || hasMain) && guestButtons.length === 0;
+      },
+      { timeout: 2_000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+
+  if (alreadyAuthenticated) {
+    return;
+  }
+
+  const guestButton = page.getByRole('button', { name: /Continue as Guest/i });
+  const isVisible = await guestButton.isVisible({ timeout: 5000 }).catch(() => false);
+
+  if (isVisible) {
+    await guestButton.click();
+    await waitForAuthenticatedUI(page);
+  }
+}
+
+/**
+ * Navigate to MCP config area. App may show Dashboard by default; OAuth page is at /oauth.
+ * Use this when a test expects to be on a page with MCP/OAuth UI (e.g. after going to /oauth or /mcp/cursor).
+ */
+export async function navigateToMCPConfig(page: Page): Promise<void> {
+  await waitForAuthenticatedUI(page, { timeout: 10_000 });
+  const oauthTab = page.getByRole('tab', { name: 'OAuth Connection' });
+  if (await oauthTab.isVisible({ timeout: 2000 }).catch(() => false)) {
+    await oauthTab.click();
+    await page.waitForTimeout(500);
+  }
+}
+
+/**
+ * Generate connection ID in UI
+ */
+export async function generateConnectionId(page: Page): Promise<string> {
+  const generateButton = page.getByRole('button', { name: /Generate/i });
+  await generateButton.click();
+  await page.waitForTimeout(500);
+  
+  // Get the generated connection ID from the input
+  const connectionIdInput = page.locator('input#oauth-connection-id');
+  const connectionId = await connectionIdInput.inputValue();
+  return connectionId;
+}
+
+/**
+ * Start OAuth flow and get auth URL
+ */
+export async function startOAuthFlow(page: Page, connectionId: string): Promise<string> {
+  // Ensure connection ID is set
+  const connectionIdInput = page.locator('input#oauth-connection-id');
+  await connectionIdInput.fill(connectionId);
+  await page.waitForTimeout(300);
+  
+  // Intercept the initiate request to capture authUrl
+  let authUrl = '';
+  await page.route('**/api/mcp/oauth/initiate', async (route) => {
+    const response = await route.fetch();
+    const data = await response.json();
+    authUrl = data.authUrl;
+    await route.fulfill({ response, json: data });
+  });
+  
+  // Click "Start OAuth Flow" button
+  const startButton = page.getByRole('button', { name: /Start OAuth Flow/i });
+  await startButton.click();
+  
+  // Wait for auth URL to be set
+  await page.waitForTimeout(1500);
+  
+  return authUrl;
+}
+
+/**
+ * Mock OAuth callback (simulate Supabase redirect)
+ */
+export async function simulateOAuthCallback(
+  page: Page,
+  apiBaseUrl: string,
+  code: string,
+  state: string
+): Promise<void> {
+  // Directly navigate to callback URL (simulates browser redirect from Supabase)
+  const callbackUrl = `${apiBaseUrl}/mcp/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+  await page.goto(callbackUrl);
+}
+
+/**
+ * Wait for connection to appear in list
+ */
+export async function waitForConnectionInList(
+  page: Page,
+  connectionId: string,
+  status: 'active' | 'pending' | 'expired'
+): Promise<void> {
+  // Wait for connections list to load
+  const connectionsList = page.locator('[data-connections-list]');
+  await connectionsList.waitFor({ timeout: 10_000 });
+  
+  // Find connection by ID
+  const connectionRow = page.locator(`[data-connection-id="${connectionId}"]`);
+  await connectionRow.waitFor({ state: 'visible', timeout: 10_000 });
+  
+  // Verify status badge exists (we mark active connections with the badge)
+  const statusBadge = connectionRow.locator('[data-connection-status]');
+  await statusBadge.waitFor({ state: 'visible', timeout: 5_000 });
+}
+
+/**
+ * Get connection status from API
+ */
+export async function getConnectionStatus(
+  apiBaseUrl: string,
+  connectionId: string
+): Promise<string> {
+  const response = await fetch(`${apiBaseUrl}/mcp/oauth/status?connection_id=${encodeURIComponent(connectionId)}`);
+  const data = await response.json();
+  return data.status;
 }

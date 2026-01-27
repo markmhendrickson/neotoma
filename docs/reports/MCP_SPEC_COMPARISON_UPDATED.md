@@ -65,7 +65,7 @@
 |--------|------|----------------|-------|
 | **Request** | `entity_id`, `field` | ✅ | **FIXED** - Parameter name changed from `field_name` to `field` |
 | **Response** | Nested `source_observation` and `source_material` | ✅ | **FIXED** - Response structure now matches spec |
-| **Source Material** | Uses `sources` table (canonical) | ✅ | **FIXED** - Uses sources table with records fallback |
+| **Source** | Uses `sources` table (canonical) | ✅ | **FIXED** - Uses sources table with records fallback |
 
 **Fixed:** 
 - Parameter name standardized to `field`

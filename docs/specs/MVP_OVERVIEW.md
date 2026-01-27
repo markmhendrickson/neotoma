@@ -82,8 +82,8 @@ Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no stra
 ✅ Entity resolution (hash-based IDs)
 ✅ Timeline events
 ✅ Structured search (no semantic search in MVP)
-✅ MCP actions (unified `ingest()` for all source material)
-✅ Basic UI (source material list/detail, entity list/detail, timeline)
+✅ MCP actions (unified `ingest()` for all source)
+✅ Basic UI (source list/detail, entity list/detail, timeline)
 ✅ External providers (Gmail only)
 ✅ Multi-user authentication and workspaces
 ✅ Row-level security (data isolation)

@@ -261,10 +261,9 @@ CREATE INDEX idx_schema_active ON schema_registry(entity_type, active) WHERE act
 ```sql
 CREATE TABLE raw_fragments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  record_id UUID REFERENCES records(id),
   source_id UUID REFERENCES sources(id),
-  interpretation_run UUID REFERENCES interpretations(id),
-  fragment_type TEXT NOT NULL,
+  interpretation_id UUID REFERENCES interpretations(id),
+  entity_type TEXT NOT NULL,
   fragment_key TEXT NOT NULL,
   fragment_value JSONB NOT NULL,
   fragment_envelope JSONB NOT NULL,
@@ -278,10 +277,9 @@ CREATE TABLE raw_fragments (
 | Field                   | Type        | Purpose                                                | Mutable | Indexed     |
 | ----------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
 | `id`                    | UUID        | Unique fragment ID                                     | No      | Primary key |
-| `record_id`             | UUID        | Source record (legacy, nullable)                       | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this fragment                     | No      | Yes         |
-| `interpretation_run` | UUID        | Interpretation that produced this fragment             | No      | Yes         |
-| `fragment_type`         | TEXT        | Fragment type (unknown_field, unstructured_text, etc.) | No      | No          |
+| `interpretation_id`     | UUID        | Interpretation that produced this fragment             | No      | Yes         |
+| `entity_type`           | TEXT        | Entity type (e.g., "invoice", "transaction", "task")   | No      | No          |
 | `fragment_key`          | TEXT        | Field name/key                                         | No      | Yes         |
 | `fragment_value`        | JSONB       | Field value                                            | No      | No          |
 | `fragment_envelope`     | JSONB       | Type metadata (type, confidence, etc.)                 | No      | No          |
@@ -309,7 +307,7 @@ CREATE POLICY "Service role full access" ON raw_fragments
 - Raw fragments accumulate until patterns emerge
 - Automated schema promotion analyzes fragments to propose schema updates
 - Frequency tracking enables pattern detection
-- `source_id` and `interpretation_run_id` provide full provenance
+- `source_id` and `interpretation_id` provide full provenance
 - See [`docs/architecture/schema_expansion.md`](../architecture/schema_expansion.md) for promotion pipeline
 - See [`docs/subsystems/sources.md`](./sources.md) for sources-first architecture
 ### 2.11 `sources` Table
@@ -622,7 +620,7 @@ CREATE TABLE relationship_observations (
 | `relationship_type`   | TEXT        | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.)       | No      | Yes         |
 | `source_entity_id`    | TEXT        | Source entity ID                                              | No      | Yes         |
 | `target_entity_id`    | TEXT        | Target entity ID                                              | No      | Yes         |
-| `source_id`           | UUID        | Source material that created this observation                 | No      | Yes         |
+| `source_id`           | UUID        | Source that created this observation                 | No      | Yes         |
 | `interpretation_id`   | UUID        | Interpretation run that created this observation (nullable)   | No      | Yes         |
 | `observed_at`         | TIMESTAMPTZ | When observation was made                                     | No      | Yes         |
 | `specificity_score`   | NUMERIC     | How specific this observation is (0-1)                        | No      | No          |
@@ -922,7 +920,7 @@ WHERE entity_type = 'flight'
 Unknown fields and validation warnings are stored in the `raw_fragments` table. This is part of the **three-layer storage model** that preserves all [extracted](#extraction) data while maintaining [entity schema](#entity-schema) compliance in observation `fields`.
 
 **Three-Layer Storage Model:**
-- `raw_text`: Immutable original [extracted](#extraction) text ([stored](#storing) with [source material](#source-material))
+- `raw_text`: Immutable original [extracted](#extraction) text ([stored](#storing) with [source](#source))
 - `fields`: [Entity schema](#entity-schema)-compliant fields only (deterministic, queryable) in [observations](#observation)
 - `raw_fragments`: Unknown fields, warnings, quality indicators (preservation layer)
 
@@ -1191,17 +1189,31 @@ ALTER TABLE records ADD COLUMN IF NOT EXISTS summary TEXT;
 Each [entity type](#entity-type) SHOULD include `schema_version` in observation `fields`:
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.0.0",
   ...
 }
 ```
+**Semantic Versioning (major.minor.patch):**
+- **Major (X.0.0)**: Breaking changes
+  - Removing fields
+  - Changing field types
+  - Making optional fields required
+- **Minor (x.Y.0)**: Additive, backward-compatible changes
+  - Adding optional fields
+  - Adding converters
+- **Patch (x.y.Z)**: Non-functional changes
+  - Documentation updates
+
 **When to bump version:**
-- Adding required fields
-- Changing field semantics
-- Changing data types (e.g., string → number)
+- **Major**: Removing fields, changing types, making fields required
+- **Minor**: Adding optional fields, adding converters
+- **Patch**: Documentation, formatting
+
 **Backward Compatibility:**
 - Old schema versions MUST remain readable
 - Application MUST handle missing fields gracefully
+- Observations are immutable - they keep their original `schema_version`
+- Snapshots use the active schema and must handle missing fields from old observations
 **Example Version Migration:**
 ```typescript
 function migrateFinancialRecordProperties(properties: any): any {

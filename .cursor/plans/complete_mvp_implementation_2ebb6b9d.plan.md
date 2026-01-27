@@ -4,49 +4,49 @@ overview: "Execute all remaining P0 and P1 work for MVP v1.0.0. Pre-MVP releases
 todos:
   - id: phase1_rls
     content: "Phase 1: Fix RLS policy (FU-701) - Update records table policy to user-scoped"
-    status: pending
+    status: completed
   - id: phase2_entity_api
     content: "Phase 2: Build Entity Explorer backend APIs (queries, filters, provenance)"
-    status: pending
+    status: completed
   - id: phase2_timeline_api
     content: "Phase 2: Build Timeline backend APIs (date filtering, event queries)"
-    status: pending
+    status: completed
   - id: phase2_dashboard_api
     content: "Phase 2: Build Dashboard stats backend (aggregate queries for main objects)"
-    status: pending
+    status: completed
   - id: phase3_refactor_list
-    content: "Phase 3: Refactor Source Material List (FU-301) - Rename from RecordsTable, query sources table"
-    status: pending
+    content: "Phase 3: Refactor Source List (FU-301) - Rename from RecordsTable, query sources table"
+    status: completed
   - id: phase3_refactor_detail
-    content: "Phase 3: Refactor Source Material Detail (FU-302) - Show four-layer truth model with provenance"
-    status: pending
+    content: "Phase 3: Refactor Source Detail (FU-302) - Show four-layer truth model with provenance"
+    status: completed
   - id: phase4_auth_ui
     content: "Phase 4: Build Authentication UI (FU-700) - Signup, signin, password reset, OAuth"
-    status: pending
+    status: completed
   - id: phase4_entity_ui
     content: "Phase 4: Build Entity Explorer UI (FU-601) - Entity list, detail with provenance"
-    status: pending
+    status: completed
   - id: phase4_timeline_ui
     content: "Phase 4: Build Timeline View (FU-303) - Chronological events with filtering"
-    status: pending
+    status: completed
   - id: phase4_dashboard_ui
     content: "Phase 4: Update Dashboard (FU-305) - Stats on main objects, not records"
-    status: pending
+    status: completed
   - id: phase4_observation_ui
     content: "Phase 4: Add Observation Browsing (P1) - Observations tab in Entity Detail"
-    status: pending
+    status: completed
   - id: phase4_upload_ui
     content: "Phase 4: Integrate File Upload UI (FU-304) - Production integration with real APIs"
-    status: pending
+    status: completed
   - id: phase5_polish
     content: "Phase 5: Design System polish (FU-300) - Complete component library, verify boundaries"
-    status: pending
+    status: completed
   - id: phase6_integration
     content: "Phase 6: Run integration tests - End-to-end workflows, cross-user isolation, MCP"
-    status: pending
+    status: completed
   - id: phase6_deploy
     content: "Phase 6: Deploy to staging and production - Final testing and deployment"
-    status: pending
+    status: completed
 ---
 
 # Complete MVP (v1.0.0) Implementation Plan
@@ -126,7 +126,7 @@ These APIs are needed before building UI components.
 
 1. Implement entity list query with filters (entity_type, search, pagination)
 2. Implement entity detail query (snapshot + observations + relationships)
-3. Add observation provenance queries (which source material contributed which fields)
+3. Add observation provenance queries (which source contributed which fields)
 4. Add relationship traversal queries
 5. Verify user-scoped queries respect RLS
 
@@ -155,7 +155,7 @@ These APIs are needed before building UI components.
 1. Implement timeline query with date range filtering
 2. Implement event type filtering
 3. Add pagination
-4. Link events to source material
+4. Link events to source
 
 **API Endpoints Needed:**
 
@@ -177,7 +177,7 @@ These APIs are needed before building UI components.
 
 1. Implement stat queries for main objects:
 
-   - Total source material count
+   - Total source count
    - Entities by type (company, person, invoice, etc.)
    - Total events count
    - Total observations count
@@ -202,11 +202,11 @@ These APIs are needed before building UI components.
 
 Refactor existing prototype UI from deprecated `records` table to main objects.
 
-### 3.1 Refactor Source Material List (FU-301)
+### 3.1 Refactor Source List (FU-301)
 
 **Files to update:**
 
-- [`frontend/src/components/RecordsTable.tsx`](frontend/src/components/RecordsTable.tsx) → Rename to `SourceMaterialTable.tsx`
+- [`frontend/src/components/RecordsTable.tsx`](frontend/src/components/RecordsTable.tsx) → Rename to `SourceTable.tsx`
 - Frontend API client
 
 **Tasks:**
@@ -218,7 +218,7 @@ Refactor existing prototype UI from deprecated `records` table to main objects.
    - Replace `record_type` filter with `mime_type` and `source_type` filters
    - Update search to use `file_name` and `raw_text`
 
-4. Update column headers ("Source Material" not "Records")
+4. Update column headers ("Source" not "Records")
 5. Update tests to query `sources` table
 
 **Key Changes:**
@@ -235,13 +235,13 @@ const { data } = await supabase.from('sources').select('*')
 
 - Unit: Component rendering
 - Integration: API queries to `sources` table
-- E2E: List view displays source material
+- E2E: List view displays source
 
-### 3.2 Refactor Source Material Detail (FU-302)
+### 3.2 Refactor Source Detail (FU-302)
 
 **Files to update:**
 
-- [`frontend/src/components/RecordDetailsPanel.tsx`](frontend/src/components/RecordDetailsPanel.tsx) → Rename to `SourceMaterialDetailsPanel.tsx`
+- [`frontend/src/components/RecordDetailsPanel.tsx`](frontend/src/components/RecordDetailsPanel.tsx) → Rename to `SourceDetailsPanel.tsx`
 - Frontend API client
 
 **Tasks:**
@@ -261,13 +261,13 @@ const { data } = await supabase.from('sources').select('*')
    - Link observations to entities
 
 5. Update entity/event linking (via observations)
-6. Update labels ("Source Material" not "Record")
+6. Update labels ("Source" not "Record")
 7. Update tests
 
 **UI Structure:**
 
 ```
-Source Material Detail
+Source Detail
 ├─ Source Metadata (file_name, mime_type, size, uploaded_at)
 ├─ Raw Content Preview (first 1000 chars)
 ├─ Interpretations
@@ -343,12 +343,12 @@ Source Material Detail
 1. Display entity snapshot (current truth computed from observations)
 2. Display observations with provenance:
 
-   - Which source material contributed each field
+   - Which source contributed each field
    - Which interpretation extracted the field
    - Timestamp of observation
 
 3. Display relationships (PART_OF, REFERS_TO, SETTLES, etc.)
-4. Link to source material (click to open source detail)
+4. Link to source (click to open source detail)
 5. Show merge history (if entity was merged)
 6. Basic relationship graph visualization (simple node-link diagram)
 
@@ -361,7 +361,7 @@ Entity Detail
 │  └─ For each observation: field, value, source_id, interpretation_id
 ├─ Relationships  
 │  └─ For each relationship: type, target_entity
-├─ Source Material Links (via observations)
+├─ Source Links (via observations)
 └─ Relationship Graph (simple visualization)
 ```
 
@@ -384,7 +384,7 @@ Entity Detail
 1. Display chronological event list (sorted by event date)
 2. Add date range filtering (start_date, end_date)
 3. Add event type filtering (invoice_date, payment_date, contract_start, etc.)
-4. Link events to source material (click to open source detail)
+4. Link events to source (click to open source detail)
 5. Show event metadata (entity refs, extracted from which field)
 6. Pagination
 
@@ -417,14 +417,14 @@ Timeline View
 
 1. Update stats to show main objects:
 
-   - Total source material count
+   - Total source count
    - Entities by type (bar chart or list)
    - Total events count
    - Total observations count
    - Interpretations count
 
 2. Remove references to deprecated `records` count
-3. Add quick links to entity explorer, timeline, source material list
+3. Add quick links to entity explorer, timeline, source list
 
 **Tests:**
 
@@ -446,13 +446,13 @@ Timeline View
 2. Display all observations for this entity
 3. Show provenance for each observation:
 
-   - Source material that contributed it
+   - Source that contributed it
    - Interpretation that extracted it
    - Field name and value
    - Priority (for correction mechanism)
    - Timestamp
 
-4. Link to source material detail
+4. Link to source detail
 5. Highlight corrections (priority-1000 observations)
 
 **UI Enhancement:**
@@ -463,7 +463,7 @@ Entity Detail (with Observations tab)
 ├─ Observations Tab (NEW)
 │  └─ For each observation:
 │     ├─ Field: value
-│     ├─ Source: [link to source material]
+│     ├─ Source: [link to source]
 │     ├─ Interpretation: model, config
 │     ├─ Priority: 100 (or 1000 for corrections)
 │     └─ Timestamp
@@ -497,7 +497,7 @@ Entity Detail (with Observations tab)
 
 - Unit: File validation
 - Integration: Upload API calls
-- E2E: Upload single file → verify in source material list
+- E2E: Upload single file → verify in source list
 
 ---
 
@@ -541,8 +541,8 @@ Entity Detail (with Observations tab)
 1. End-to-end workflow:
 
    - User signup → signin
-   - Upload file → verify source material list
-   - View source material detail → verify four-layer truth
+   - Upload file → verify source list
+   - View source detail → verify four-layer truth
    - View entity list → view entity detail → verify provenance
    - View timeline → filter events
    - View dashboard → verify stats
@@ -631,7 +631,7 @@ graph TD
 1. ✅ All P0 Feature Units deployed and operational
 2. ✅ All P1 Feature Units deployed and operational
 3. ✅ RLS policies enforce user data isolation
-4. ✅ UI focuses on main objects (source material, entities, observations, events)
+4. ✅ UI focuses on main objects (source, entities, observations, events)
 5. ✅ Core workflows functional:
 
    - Upload → extraction → entity resolution → timeline → browsing

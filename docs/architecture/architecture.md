@@ -18,7 +18,7 @@ This document does NOT cover:
 ### Completed Releases
 **v0.1.0 (2025-12-11):** Internal MCP Release — Full architecture implementation complete.
 All foundational architectural components described in this document are now fully implemented:
-- ✅ Three-layer truth model ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
+- ✅ Three-layer truth model ([Source](../vocabulary/canonical_terms.md#source) → [Entity](../vocabulary/canonical_terms.md#entity) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot))
 - ✅ Five-layer internal architecture (External → Infrastructure → Domain → Application → Presentation)
 - ✅ Event-sourced state management
 - ✅ Repository abstractions with DB and file implementations
@@ -29,7 +29,7 @@ All foundational architectural components described in this document are now ful
 See `docs/releases/v0.1.0/` for release details.
 ### Planned Releases
 **v0.2.0:** Sources-First [Ingestion](../vocabulary/canonical_terms.md#ingestion) Architecture — Minimal [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Correction Loop
-- [Source material](../vocabulary/canonical_terms.md#source-material) table migration (content-addressed raw storage with RLS)
+- [Source](../vocabulary/canonical_terms.md#source) table migration (content-addressed raw storage with RLS)
 - [Interpretations](../vocabulary/canonical_terms.md#interpretation) table for versioned [interpretation](../vocabulary/canonical_terms.md#interpretation) tracking
 - [Observation](../vocabulary/canonical_terms.md#observation) and raw fragments extensions with [provenance](../vocabulary/canonical_terms.md#provenance) (`source_id`, `interpretation_id` linkage)
 - [Entity](../vocabulary/canonical_terms.md#entity) extensions with user_id and merge tracking
@@ -38,11 +38,11 @@ See `docs/releases/v0.1.0/` for release details.
 See `docs/releases/v0.2.0/` for detailed release plan.
 
 **v0.2.15:** Complete Architecture Migration — Unified [Ingestion](../vocabulary/canonical_terms.md#ingestion) + Terminology Alignment
-- Unified `ingest` MCP action for all [source material](../vocabulary/canonical_terms.md#source-material) (unstructured and structured)
+- Unified `ingest` MCP action for all [source](../vocabulary/canonical_terms.md#source) (unstructured and structured)
 - Elimination of capabilities — [canonicalization rules](../vocabulary/canonical_terms.md#canonicalization-rules) and [entity extraction rules](../vocabulary/canonical_terms.md#entity-extraction-rule) moved to [entity schemas](../vocabulary/canonical_terms.md#entity-schema)
 - Vocabulary alignment per [`docs/vocabulary/canonical_terms.md`](../vocabulary/canonical_terms.md)
 - Deprecation of `submit_payload` and `ingest_structured` (merged into unified `ingest`)
-- Migration from records to [source material](../vocabulary/canonical_terms.md#source-material)-based architecture
+- Migration from records to [source](../vocabulary/canonical_terms.md#source)-based architecture
 See `docs/releases/v0.2.15/` for detailed release plan.
 **v0.2.1:** Documentation & Support System
 - AI-powered repository analysis and comprehensive documentation generation
@@ -204,7 +204,7 @@ Neotoma MUST:
 - Assign schemas based on field detection
 - Resolve entities (people, companies, locations)
 - Generate timeline events from extracted dates
-- Build and maintain the memory graph (source material → observations → entities → events)
+- Build and maintain the memory graph (source → observations → entities → events)
 - Expose truth via MCP tools
 - Maintain provenance and immutability
 - Process Domain Events through reducers to update state
@@ -373,12 +373,12 @@ flowchart TD
 **Components:**
 - **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, Supabase Storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
 - **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
-- **[Observation](../vocabulary/canonical_terms.md#observation) Storage:** Store granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source material](../vocabulary/canonical_terms.md#source-material) with [provenance](../vocabulary/canonical_terms.md#provenance) (source_id, interpretation_id)
+- **[Observation](../vocabulary/canonical_terms.md#observation) Storage:** Store granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source) with [provenance](../vocabulary/canonical_terms.md#provenance) (source_id, interpretation_id)
 - **Reducer Engine:** Compute entity snapshots from observations using deterministic merge strategies
 - **Schema Registry:** Manage config-driven schema definitions, versions, and merge policies
 - **Entity Resolution:** Canonical entity ID generation and deduplication
 - **Event Generation:** Extract dates → create timeline events
-- **Graph Builder:** Insert nodes (source material, entities, events) and edges, manage relationships
+- **Graph Builder:** Insert nodes (source, entities, events) and edges, manage relationships
 - **Search Service:** Query records, entities, events by structured filters
 **Constraints:**
 - MUST be deterministic (same input → same output)
@@ -391,7 +391,7 @@ flowchart TD
 **Responsibility:** Orchestrate domain services, implement MCP actions, manage workflows.
 **Components:**
 - **MCP Actions (v0.1.0):** `upload_file`, `retrieve_entities`, `get_entity_snapshot`, `search`, `list_observations`, `list_timeline_events` (operational)
-- **MCP Actions (v0.2.15+):** Unified `ingest()` for all [source material](../vocabulary/canonical_terms.md#source-material), `reinterpret()`, `correct()`, `merge_entities()` ([source material](../vocabulary/canonical_terms.md#source-material)-based architecture)
+- **MCP Actions (v0.2.15+):** Unified `ingest()` for all [source](../vocabulary/canonical_terms.md#source), `reinterpret()`, `correct()`, `merge_entities()` ([source](../vocabulary/canonical_terms.md#source)-based architecture)
 - **Workflows:** Multi-step operations orchestrating domain services
 - **Orchestration:** Request routing, validation, error handling
 **Constraints:**
@@ -462,7 +462,7 @@ sequenceDiagram
     User->>UI: Upload file
     UI->>API: POST /api/upload
     API->>MCP_Action: ingest({file_content, mime_type} or {entities: [...]})
-    alt Unstructured source material (file)
+    alt Unstructured source (file)
         MCP_Action->>Storage: Store file (SHA-256 hash)
         Storage->>Storage: Compute content_hash
         Storage->>Sources: Check for existing (user_id, content_hash)
@@ -489,7 +489,7 @@ sequenceDiagram
         Reducer->>Reducer: Compute snapshots from observations
         Reducer->>Snapshots: UPDATE entity_snapshots
         Interp->>InterpRun: UPDATE status = 'completed'
-    else Structured source material (entities array)
+    else Structured source (entities array)
         MCP_Action->>Interp: Validate against schema_registry
         Interp->>EntityRes: resolve_entities(properties)
         EntityRes-->>Interp: entity_ids
@@ -803,7 +803,7 @@ Load `docs/architecture/architecture.md` when:
 9. **Event-sourced updates:** All state changes via Domain Events → Reducers
 10. **Pure Strategy:** Strategy Layer has no side effects
 11. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly
-12. **Four-layer model:** [Source Material](../vocabulary/canonical_terms.md#source-material) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
+12. **Four-layer model:** [Source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) must be respected
 13. **Reducer determinism:** Same observations + merge rules → same entity snapshot
 14. **Provenance tracking:** All entity snapshot fields trace to observations and documents
 15. **Schema registry:** Domain schemas managed via registry, not code

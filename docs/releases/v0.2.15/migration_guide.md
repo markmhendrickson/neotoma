@@ -214,11 +214,11 @@ Update your code/documentation to use canonical terms:
 
 | Old Term | New Term | Context |
 |----------|----------|---------|
-| record | source material | When referring to raw data |
+| record | source | When referring to raw data |
 | record | entity | When referring to resolved objects |
 | capability | entity schema | Processing rules |
 | interpretation run | interpretation | AI extraction attempt |
-| payload | source material | Submitted data |
+| payload | source | Submitted data |
 
 ## Error Handling
 

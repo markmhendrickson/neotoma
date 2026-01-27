@@ -6,7 +6,7 @@
  */
 
 import { supabase } from "../db.js";
-import { SchemaRegistryService, SchemaDefinition } from "./schema_registry.js";
+import { SchemaRegistryService } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
 export interface FieldRecommendation {
@@ -76,6 +76,12 @@ export class SchemaRecommendationService {
       | "array"
       | "object";
     reasoning?: string;
+    converter_suggestion?: {
+      from: "number" | "string" | "boolean" | "array" | "object";
+      to: "string" | "number" | "date" | "boolean" | "array" | "object";
+      function: string;
+      deterministic: boolean;
+    };
   }> {
     const config = options.config || DEFAULT_AUTO_ENHANCEMENT_CONFIG;
 
@@ -102,13 +108,20 @@ export class SchemaRecommendationService {
       };
     }
 
-    // 3. Query raw_fragments for this field
-    // Include both record_id (for CSV/record-based) and source_id for diversity checks
-    // Note: fragment_type stores entity_type for structured data (parquet files)
+    // 3. Load current schema to check if field exists (type mismatch detection)
+    const currentSchema = await this.schemaRegistry.loadActiveSchema(
+      options.entity_type,
+      options.user_id
+    );
+    
+    const fieldExists = currentSchema?.schema_definition.fields[options.fragment_key];
+
+    // 4. Query raw_fragments for this field
+    // Include source_id for diversity checks
     let fragmentsQuery = supabase
       .from("raw_fragments")
-      .select("fragment_value, frequency_count, source_id, record_id, fragment_type")
-      .eq("fragment_type", options.entity_type) // fragment_type stores entity_type for structured data
+      .select("fragment_value, frequency_count, source_id, entity_type")
+      .eq("entity_type", options.entity_type)
       .eq("fragment_key", options.fragment_key);
     
     // Handle user_id properly: check both the provided user_id and the default UUID
@@ -136,7 +149,43 @@ export class SchemaRecommendationService {
       };
     }
 
-    // Sum frequency counts
+    // 5. If field exists in schema, check if converter is needed (type mismatch)
+    if (fieldExists) {
+      // Field exists but is in raw_fragments = type mismatch or missing converter
+      const converterNeeded = await this.detectConverterNeeded({
+        field_name: options.fragment_key,
+        schema_field: fieldExists,
+        fragments: fragments,
+      });
+      
+      if (converterNeeded) {
+        // Converter detected - eligible for auto-enhancement
+        return {
+          eligible: true,
+          confidence: converterNeeded.confidence,
+          inferred_type: fieldExists.type, // Keep schema type
+          converter_suggestion: converterNeeded.converter,
+          reasoning: `Field exists but needs converter: ${converterNeeded.reasoning}`,
+        };
+      } else {
+        // Field exists but converter detection failed
+        // Calculate confidence from fragments for pending recommendation
+        const confidenceResult = await this.calculateFieldConfidence({
+          fragment_key: options.fragment_key,
+          entity_type: options.entity_type,
+          user_id: options.user_id,
+        });
+        
+        const actualType = confidenceResult.inferred_type || "unknown";
+        return {
+          eligible: false,
+          confidence: confidenceResult.confidence,
+          reasoning: `Field exists in schema (type: ${fieldExists.type}) but converter detection failed. Actual data type: ${actualType}. May need manual review or custom converter.`,
+        };
+      }
+    }
+
+    // 6. Sum frequency counts
     const totalFrequency = fragments.reduce(
       (sum, f) => sum + (f.frequency_count || 1),
       0,
@@ -154,14 +203,14 @@ export class SchemaRecommendationService {
       };
     }
 
-    // 4. Calculate confidence
+    // 7. Calculate confidence
     const confidenceResult = await this.calculateFieldConfidence({
       fragment_key: options.fragment_key,
       entity_type: options.entity_type,
       user_id: options.user_id,
     });
 
-    // 5. Check minimum confidence
+    // 8. Check minimum confidence
     if (confidenceResult.confidence < config.min_confidence) {
       return {
         eligible: false,
@@ -170,20 +219,16 @@ export class SchemaRecommendationService {
       };
     }
 
-    // 6. Check source diversity (2+ different sources) OR row diversity (2+ different rows/observations)
+    // 9. Check source diversity (2+ different sources) OR row diversity (2+ different rows/observations)
     // This allows structured files (parquet, CSV, JSON arrays) with multiple rows to trigger enhancement
     // while still requiring multiple sources for single-row file types
     
     const uniqueSources = new Set(fragments.map((f) => f.source_id)).size;
     
-    // For row diversity: check record_id (CSV/records) OR count observations per source (parquet/structured)
-    // Parquet files have record_id = null, so we need to count observations instead
-    const uniqueRows = new Set(fragments.map((f) => f.record_id).filter(id => id != null)).size;
-    
-    // For sources with record_id = null (parquet/structured), count unique observations
+    // For row diversity: count unique observations per source
     // Each observation represents a row in the structured file
     let uniqueObservations = 0;
-    if (uniqueRows === 0 && uniqueSources === 1) {
+    if (uniqueSources === 1) {
       // This is likely a parquet/structured file - count observations for this field
       const sourceId = fragments[0]?.source_id;
       if (sourceId) {
@@ -215,28 +260,26 @@ export class SchemaRecommendationService {
       }
     }
     
-    // Require EITHER 2+ sources OR 2+ rows/observations
+    // Require EITHER 2+ sources OR 2+ observations
     // This enables auto-enhancement for structured files (parquet, CSV) while preserving
     // source diversity requirement for single-row file types
-    const hasDiversity = uniqueSources >= 2 || uniqueRows >= 2 || uniqueObservations >= 2;
+    const hasDiversity = uniqueSources >= 2 || uniqueObservations >= 2;
     
     if (!hasDiversity) {
       return {
         eligible: false,
         confidence: confidenceResult.confidence,
-        reasoning: uniqueSources < 2 && uniqueRows < 2 && uniqueObservations < 2
-          ? "Field appears in only one source and one row/observation (no diversity)"
+        reasoning: uniqueSources < 2 && uniqueObservations < 2
+          ? "Field appears in only one source and one observation (no diversity)"
           : uniqueSources < 2
           ? "Field appears in only one source (no diversity)"
-          : "Field appears in only one row/observation (no diversity)",
+          : "Field appears in only one observation (no diversity)",
       };
     }
 
     // Eligible for auto-enhancement!
     const diversityInfo = uniqueSources >= 2 
       ? `${uniqueSources} sources`
-      : uniqueRows >= 2
-      ? `${uniqueRows} rows`
       : `${uniqueObservations} observations`;
     return {
       eligible: true,
@@ -256,6 +299,12 @@ export class SchemaRecommendationService {
     field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
     user_id?: string;
     user_specific?: boolean;
+    converter_suggestion?: {
+      from: "number" | "string" | "boolean" | "array" | "object";
+      to: "string" | "number" | "date" | "boolean" | "array" | "object";
+      function: string;
+      deterministic: boolean;
+    };
   }): Promise<any> {
     // Generate idempotency key to prevent duplicate enhancements
     const idempotencyKey = `auto_enhance_${options.entity_type}_${options.field_name}_${options.user_id || "global"}`;
@@ -277,15 +326,29 @@ export class SchemaRecommendationService {
     // Check if field already exists in schema
     const currentSchema = await this.schemaRegistry.loadActiveSchema(
       options.entity_type,
+      options.user_id,
     );
-    if (
-      currentSchema &&
-      currentSchema.schema_definition.fields[options.field_name]
-    ) {
+    
+    const fieldExists = currentSchema?.schema_definition.fields[options.field_name];
+    
+    // Determine recommendation type based on field existence and converter suggestion
+    let recommendationType: "add_fields" | "add_converters";
+    
+    if (fieldExists && options.converter_suggestion) {
+      // Field exists - add converter to existing field
+      recommendationType = "add_converters";
       logger.error(
-        `[AUTO_ENHANCE] Field ${options.field_name} already exists in schema for ${options.entity_type}`,
+        `[AUTO_ENHANCE] Field ${options.field_name} exists in schema, adding converter for ${options.entity_type}`,
+      );
+    } else if (fieldExists && !options.converter_suggestion) {
+      // Field exists but no converter suggestion - shouldn't enhance
+      logger.error(
+        `[AUTO_ENHANCE] Field ${options.field_name} already exists in schema for ${options.entity_type} and no converter needed`,
       );
       return currentSchema;
+    } else {
+      // Field doesn't exist - add new field
+      recommendationType = "add_fields";
     }
 
     try {
@@ -298,26 +361,40 @@ export class SchemaRecommendationService {
         : null;
 
       // Create recommendation record
+      const recommendationData: any = {
+        entity_type: options.entity_type,
+        user_id: userId,
+        source: "raw_fragments",
+        recommendation_type: recommendationType,
+        confidence_score: 0.9, // High confidence for auto-enhancement
+        status: "auto_applied",
+        applied_at: new Date().toISOString(),
+        idempotency_key: idempotencyKey,
+        can_rollback: true,
+      };
+      
+      // Add type-specific fields
+      if (recommendationType === "add_fields") {
+        recommendationData.fields_to_add = [
+          {
+            field_name: options.field_name,
+            field_type: options.field_type,
+            required: false,
+          },
+        ];
+      } else if (recommendationType === "add_converters") {
+        recommendationData.fields_to_add = null; // Null for add_converters recommendations
+        recommendationData.converters_to_add = [
+          {
+            field_name: options.field_name,
+            converter: options.converter_suggestion,
+          },
+        ];
+      }
+      
       const { data: recommendation, error: recError } = await supabase
         .from("schema_recommendations")
-        .insert({
-          entity_type: options.entity_type,
-          user_id: userId,
-          source: "raw_fragments",
-          recommendation_type: "add_fields",
-          fields_to_add: [
-            {
-              field_name: options.field_name,
-              field_type: options.field_type,
-              required: false,
-            },
-          ],
-          confidence_score: 0.9, // High confidence for auto-enhancement
-          status: "auto_applied",
-          applied_at: new Date().toISOString(),
-          idempotency_key: idempotencyKey,
-          can_rollback: true,
-        })
+        .insert(recommendationData)
         .select()
         .single();
 
@@ -332,9 +409,15 @@ export class SchemaRecommendationService {
         throw recError;
       }
 
-      logger.error(
-        `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} with type ${options.field_type}`,
-      );
+      if (recommendationType === "add_converters") {
+        logger.error(
+          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} by adding converter: ${options.converter_suggestion?.function}`,
+        );
+      } else {
+        logger.error(
+          `[AUTO_ENHANCE] Auto-enhancing ${options.entity_type}.${options.field_name} with type ${options.field_type}`,
+        );
+      }
 
       // Note: Actual schema update would be done via SchemaRegistryService.updateSchemaIncremental()
       // This would be called by the auto-enhancement processor, not here directly
@@ -372,12 +455,10 @@ export class SchemaRecommendationService {
       | "object";
   }> {
     // Get all samples for this field
-    // Note: For structured data (parquet), fragment_type stores entity_type
-    // The raw_fragments table only has fragment_type, not entity_type
     let confidenceQuery = supabase
       .from("raw_fragments")
       .select("fragment_value, frequency_count")
-      .eq("fragment_type", options.entity_type) // fragment_type stores entity_type for structured data
+      .eq("entity_type", options.entity_type)
       .eq("fragment_key", options.fragment_key);
     
     // Handle user_id properly: check both the provided user_id and the default UUID
@@ -450,16 +531,14 @@ export class SchemaRecommendationService {
     const minConfidence = options.min_confidence || 0.8;
 
     // Query raw_fragments grouped by entity_type and fragment_key
-    // Note: For structured data, fragment_type stores entity_type
     let query = supabase
       .from("raw_fragments")
       .select(
-        "entity_type, fragment_type, fragment_key, fragment_value, frequency_count, user_id",
+        "entity_type, fragment_key, fragment_value, frequency_count, user_id",
       );
 
     if (options.entity_type) {
-      // Check both fragment_type (structured data) and entity_type (unstructured data)
-      query = query.or(`fragment_type.eq.${options.entity_type},entity_type.eq.${options.entity_type}`);
+      query = query.eq("entity_type", options.entity_type);
     }
     
     // Handle user_id properly: check both the provided user_id and the default UUID
@@ -484,19 +563,16 @@ export class SchemaRecommendationService {
     }
 
     // Group by entity_type and fragment_key
-    // Note: For structured data, use fragment_type; for unstructured, use entity_type
     const grouped = new Map<
       string,
       Array<{ fragment_value: unknown; frequency_count: number }>
     >();
     for (const fragment of fragments) {
-      // Use fragment_type for structured data (parquet), entity_type for unstructured
-      const effectiveEntityType = fragment.fragment_type || fragment.entity_type;
-      if (!effectiveEntityType) {
+      if (!fragment.entity_type) {
         // Skip fragments without entity type (shouldn't happen, but defensive)
         continue;
       }
-      const key = `${effectiveEntityType}::${fragment.fragment_key}::${fragment.user_id || "global"}`;
+      const key = `${fragment.entity_type}::${fragment.fragment_key}::${fragment.user_id || "global"}`;
       if (!grouped.has(key)) {
         grouped.set(key, []);
       }
@@ -865,6 +941,192 @@ Return your recommendations in JSON format:
   // --- Private helper methods ---
 
   /**
+   * Detect if a converter is needed for an existing field with type mismatch
+   * Analyzes raw_fragments data to determine appropriate converter based on data patterns
+   */
+  private async detectConverterNeeded(options: {
+    field_name: string;
+    schema_field: { type: string; converters?: any[] };
+    fragments: Array<{ fragment_value: unknown }>;
+  }): Promise<{
+    converter: {
+      from: "number" | "string" | "boolean" | "array" | "object";
+      to: "string" | "number" | "date" | "boolean" | "array" | "object";
+      function: string;
+      deterministic: boolean;
+    };
+    confidence: number;
+    reasoning: string;
+  } | null> {
+    const samples = options.fragments.map((f) => f.fragment_value);
+    const schemaType = options.schema_field.type;
+
+    // Determine the ACTUAL type (JavaScript type) of the data, not semantic type
+    // We need the raw type to determine if conversion is needed
+    const typeCounts = new Map<string, number>();
+    for (const sample of samples) {
+      let rawType: string;
+      if (sample === null || sample === undefined) {
+        rawType = "null";
+      } else if (typeof sample === "boolean") {
+        rawType = "boolean";
+      } else if (typeof sample === "number") {
+        rawType = "number";
+      } else if (typeof sample === "string") {
+        rawType = "string";
+      } else if (Array.isArray(sample)) {
+        rawType = "array";
+      } else {
+        rawType = "object";
+      }
+      typeCounts.set(rawType, (typeCounts.get(rawType) || 0) + 1);
+    }
+
+    // Find dominant raw type (excluding null)
+    let actualType = "string";
+    let maxCount = 0;
+    for (const [type, count] of typeCounts.entries()) {
+      if (type === "null") continue;
+      if (count > maxCount) {
+        maxCount = count;
+        actualType = type;
+      }
+    }
+
+    // If raw type matches schema type, no converter needed
+    // Exception: "date" schema type accepts both string and Date objects
+    if (actualType === schemaType) {
+      return null;
+    }
+    if (schemaType === "date" && actualType === "string") {
+      // Strings are valid for date type (ISO dates)
+      return null;
+    }
+
+    // Detect converter based on type combination
+    
+    // Case 1: Schema expects date, data is number (timestamp)
+    if (schemaType === "date" && actualType === "number") {
+      // Find a numeric sample to determine timestamp format
+      const numericSample = samples.find((s) => typeof s === "number") as number;
+      if (numericSample) {
+        // Detect timestamp format based on value magnitude
+        if (numericSample > 9999999999999) {
+          // Nanoseconds (> 9,999,999,999,999 = year 2286 in milliseconds)
+          return {
+            converter: {
+              from: "number",
+              to: "date",
+              function: "timestamp_nanos_to_iso",
+              deterministic: true,
+            },
+            confidence: 0.95,
+            reasoning: "Number values are nanosecond timestamps (>9,999,999,999,999)",
+          };
+        } else if (numericSample > 9999999999) {
+          // Milliseconds (> 9,999,999,999 = year 2286 in seconds)
+          return {
+            converter: {
+              from: "number",
+              to: "date",
+              function: "timestamp_ms_to_iso",
+              deterministic: true,
+            },
+            confidence: 0.95,
+            reasoning: "Number values are millisecond timestamps (>9,999,999,999)",
+          };
+        } else {
+          // Seconds
+          return {
+            converter: {
+              from: "number",
+              to: "date",
+              function: "timestamp_s_to_iso",
+              deterministic: true,
+            },
+            confidence: 0.95,
+            reasoning: "Number values are second timestamps",
+          };
+        }
+      }
+    }
+
+    // Case 2: Schema expects number, data is string (numeric string)
+    if (schemaType === "number" && actualType === "string") {
+      // Verify all strings are numeric
+      const allNumeric = samples.every((s) => {
+        if (typeof s !== "string") return false;
+        return this.isNumericString(s);
+      });
+      
+      if (allNumeric) {
+        return {
+          converter: {
+            from: "string",
+            to: "number",
+            function: "string_to_number",
+            deterministic: true,
+          },
+          confidence: 0.90,
+          reasoning: "String values are numeric and can be converted to numbers",
+        };
+      }
+    }
+
+    // Case 3: Schema expects string, data is number
+    if (schemaType === "string" && actualType === "number") {
+      return {
+        converter: {
+          from: "number",
+          to: "string",
+          function: "number_to_string",
+          deterministic: true,
+        },
+        confidence: 0.90,
+        reasoning: "Number values can be converted to strings",
+      };
+    }
+
+    // Case 4: Schema expects boolean, data is string (boolean string)
+    if (schemaType === "boolean" && actualType === "string") {
+      const allBooleanStrings = samples.every((s) => {
+        if (typeof s !== "string") return false;
+        return this.isBooleanString(s);
+      });
+      
+      if (allBooleanStrings) {
+        return {
+          converter: {
+            from: "string",
+            to: "boolean",
+            function: "string_to_boolean",
+            deterministic: true,
+          },
+          confidence: 0.90,
+          reasoning: "String values are boolean strings (true/false/yes/no)",
+        };
+      }
+    }
+
+    // Case 5: Schema expects string, data is boolean
+    if (schemaType === "string" && actualType === "boolean") {
+      return {
+        converter: {
+          from: "boolean",
+          to: "string",
+          function: "boolean_to_string",
+          deterministic: true,
+        },
+        confidence: 0.90,
+        reasoning: "Boolean values can be converted to strings",
+      };
+    }
+
+    // No converter detected - return null
+    return null;
+  }
+
+  /**
    * Check if field matches blacklist patterns
    */
   private async checkBlacklist(
@@ -994,7 +1256,7 @@ Return your recommendations in JSON format:
       // - Unix timestamp in seconds: 1000000000 to 9999999999 (1970-2099)
       // - Unix timestamp in milliseconds: 1000000000000 to 9999999999999 (1970-2099)
       // - BigInt timestamps (nanoseconds): 1000000000000000 to 9999999999999999999
-      if (value > 1000000000 && value < 9999999999999999999) {
+      if (value > 1000000000 && value < 1e19) {
         // Check if it's in a reasonable timestamp range
         // Convert to milliseconds if needed and check if it's a valid date
         let timestampMs = value;

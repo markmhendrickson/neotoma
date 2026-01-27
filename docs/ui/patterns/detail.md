@@ -1,10 +1,10 @@
 # UI Pattern: Detail View
 *(Single Item Display with Metadata and Actions)*
 ## Purpose
-Detail pattern for displaying a single record, entity, or event with full metadata.
+Detail pattern for displaying a single source, entity, or event with full metadata.
 ## When to Use
-- Record detail page
-- Entity profile view
+- Source detail page (SourceDetail component)
+- Entity profile view (EntityDetail component)
 - Event detail
 ## DSL Example
 ```yaml
@@ -31,13 +31,13 @@ layout:
           label: "Invoice #"
 accessibility:
   aria_labels:
-    detail_card: "Record details"
+    detail_card: "Source details"
 ```
 ## States
 | State | Display |
 |-------|---------|
 | Loading | Skeleton card |
-| Not Found | "Record not found" |
+| Not Found | "Source not found" or "Entity not found" |
 | Error | Error message |
 ## Accessibility
 - Headings MUST use semantic HTML (`<h1>`, `<h2>`)
@@ -48,7 +48,7 @@ accessibility:
 ## Agent Instructions
 ### When to Load This Document
 Load `docs/ui/patterns/detail.md` when:
-- Designing or implementing detail views for records, entities, or events
+- Designing or implementing detail views for sources, entities, or events
 - Modifying layout, sections, or actions in a detail screen
 - Planning accessibility or i18n behavior for detail pages
 ### Required Co-Loaded Documents

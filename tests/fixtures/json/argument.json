@@ -1,0 +1,39 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Budget allocation disagreement",
+    "date": "2024-06-15",
+    "category": "finance",
+    "resolution": "Compromised on 70/30 split",
+    "notes": "Resolved through discussion"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Vacation timing conflict",
+    "date": "2024-07-20",
+    "category": "lifestyle",
+    "resolution": "Agreed on August dates",
+    "notes": "Both parties satisfied with outcome"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Investment strategy difference",
+    "date": "2024-03-10",
+    "category": "finance",
+    "resolution": "Ongoing discussion",
+    "notes": "Need more research"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal argument",
+    "category": "other"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "House renovation priorities",
+    "date": "2024-09-05",
+    "category": "property",
+    "resolution": "Decided on phased approach",
+    "notes": "Kitchen first, bathroom second"
+  }
+]

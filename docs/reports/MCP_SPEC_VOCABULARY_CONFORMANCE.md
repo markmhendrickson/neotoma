@@ -15,7 +15,7 @@ The MCP spec generally follows canonical vocabulary well, using proper markdown 
 The spec correctly uses canonical terms with proper markdown links:
 
 - ✅ `[storing](../vocabulary/canonical_terms.md#storing)` - Used consistently
-- ✅ `[source material](../vocabulary/canonical_terms.md#source-material)` - Used consistently
+- ✅ `[source](../vocabulary/canonical_terms.md#source)` - Used consistently
 - ✅ `[entity](../vocabulary/canonical_terms.md#entity)` - Used consistently
 - ✅ `[entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot)` - Used consistently
 - ✅ `[observation](../vocabulary/canonical_terms.md#observation)` - Used consistently
@@ -36,44 +36,44 @@ The spec correctly uses canonical terms with proper markdown links:
 #### "upload" / "Upload" (Forbidden synonym for [storing](#storing))
 
 **Locations:**
-- Line 69: `| \`upload_file\`  | Upload file and create [source material]...`
-- Line 218: `**Purpose:** Upload file from local path, create [source material]...`
+- Line 69: `| \`upload_file\`  | Upload file and create [source]...`
+- Line 218: `**Purpose:** Upload file from local path, create [source]...`
 - Line 223: `file_path: string;               // Required: Local file path`
 
 **Issue:** The canonical terms document states:
 > ❌ "upload" (only one step)
 
 **Recommendation:** 
-- Change "Upload file" to "Store file" or "Store unstructured source material"
+- Change "Upload file" to "Store file" or "Store unstructured source"
 - The action name `upload_file` is acceptable as an API identifier, but the description should use canonical terminology
 
-#### "file" / "File" (Forbidden synonym for [source material](#source-material))
+#### "file" / "File" (Forbidden synonym for [source](#source))
 
 **Locations:**
 - Line 62: `- Unstructured: \`{file_content, mime_type}\` for files that need [interpretation]`
 - Line 70: `| \`get_file_url\` | Get signed URL for file access`
-- Line 108: `**For Unstructured [Source Material] (Files):**`
+- Line 108: `**For Unstructured [Source] (Files):**`
 - Line 259: `**Purpose:** Get signed URL for accessing [stored] file.`
 - Line 264: `file_path: string;               // Required: File path in storage`
 - Line 387: `4. **File** (original source file)`
 
 **Issue:** The canonical terms document states:
-> ❌ "file" ([source material](#source-material) includes files but also text, URLs, structured data)
+> ❌ "file" ([source](#source) includes files but also text, URLs, structured data)
 
 **Recommendation:**
-- Line 62: Change "for files" to "for unstructured source material"
-- Line 70: Change "file access" to "source material access" or keep as-is if referring specifically to file storage
-- Line 108: Change "(Files)" to "(Unstructured Source Material)"
-- Line 259: Change "file" to "source material" or "stored source material"
-- Line 264: Keep `file_path` as parameter name (implementation detail), but description should reference "source material"
-- Line 387: Change "File" to "Source Material" or "Original Source Material"
+- Line 62: Change "for files" to "for unstructured source"
+- Line 70: Change "file access" to "source access" or keep as-is if referring specifically to file storage
+- Line 108: Change "(Files)" to "(Unstructured Source)"
+- Line 259: Change "file" to "source" or "stored source"
+- Line 264: Keep `file_path` as parameter name (implementation detail), but description should reference "source"
+- Line 387: Change "File" to "Source" or "Original Source"
 
-#### "data" / "Data" (Forbidden synonym for [source material](#source-material))
+#### "data" / "Data" (Forbidden synonym for [source](#source))
 
 **Locations:**
 - Line 39: `Domain -->|Structured Data| App`
 - Line 63: `- Structured: \`{entities: [{entity_type, ...}]}\` for pre-structured data`
-- Line 121: `**For Structured [Source Material] (Agent Data):**`
+- Line 121: `**For Structured [Source] (Agent Data):**`
 - Line 136: `2. **Structured data?** → Use \`ingest\` with \`entities\` array`
 
 **Issue:** The canonical terms document states:
@@ -81,11 +81,11 @@ The spec correctly uses canonical terms with proper markdown links:
 
 **Recommendation:**
 - Line 39: "Structured Data" is acceptable in architecture diagram context
-- Line 63: Change "pre-structured data" to "pre-structured source material"
-- Line 121: Change "(Agent Data)" to "(Structured Source Material)"
-- Line 136: Change "Structured data?" to "Structured source material?"
+- Line 63: Change "pre-structured data" to "pre-structured source"
+- Line 121: Change "(Agent Data)" to "(Structured Source)"
+- Line 136: Change "Structured data?" to "Structured source?"
 
-#### "content" (Forbidden synonym for [source material](#source-material))
+#### "content" (Forbidden synonym for [source](#source))
 
 **Locations:**
 - Line 189: `content_hash: string;                // SHA-256 hash of content`
@@ -93,11 +93,11 @@ The spec correctly uses canonical terms with proper markdown links:
 - Line 191: `deduplicated: boolean;               // Whether content was already [stored]`
 
 **Issue:** The canonical terms document states:
-> ❌ "content" (replaced by [source material](#source-material) for clarity)
+> ❌ "content" (replaced by [source](#source) for clarity)
 
 **Recommendation:**
 - Line 189: `content_hash` is acceptable as a technical field name
-- Line 191: Change "content was already [stored]" to "source material was already [stored]"
+- Line 191: Change "content was already [stored]" to "source was already [stored]"
 
 ### 2. Acceptable Uses (Not Violations)
 
@@ -143,51 +143,51 @@ The spec does not use any of the explicitly forbidden terms:
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 62 | Forbidden synonym | "for files" | "for unstructured source material" |
-| 63 | Forbidden synonym | "pre-structured data" | "pre-structured source material" |
-| 69 | Forbidden synonym | "Upload file" | "Store file" or "Store unstructured source material" |
-| 70 | Forbidden synonym | "file access" | "source material access" (or keep if file-specific) |
+| 62 | Forbidden synonym | "for files" | "for unstructured source" |
+| 63 | Forbidden synonym | "pre-structured data" | "pre-structured source" |
+| 69 | Forbidden synonym | "Upload file" | "Store file" or "Store unstructured source" |
+| 70 | Forbidden synonym | "file access" | "source access" (or keep if file-specific) |
 
 ### Section 2.5: Using the Unified `ingest` Action
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 108 | Forbidden synonym | "(Files)" | "(Unstructured Source Material)" |
-| 121 | Forbidden synonym | "(Agent Data)" | "(Structured Source Material)" |
-| 136 | Forbidden synonym | "Structured data?" | "Structured source material?" |
+| 108 | Forbidden synonym | "(Files)" | "(Unstructured Source)" |
+| 121 | Forbidden synonym | "(Agent Data)" | "(Structured Source)" |
+| 136 | Forbidden synonym | "Structured data?" | "Structured source?" |
 
 ### Section 3.2: `upload_file`
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 218 | Forbidden synonym | "Upload file" | "Store file" or "Store unstructured source material" |
+| 218 | Forbidden synonym | "Upload file" | "Store file" or "Store unstructured source" |
 
 ### Section 3.3: `get_file_url`
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 259 | Forbidden synonym | "accessing [stored] file" | "accessing [stored] source material" |
-| 264 | Parameter name | `file_path` | Keep name, update description to reference "source material" |
+| 259 | Forbidden synonym | "accessing [stored] file" | "accessing [stored] source" |
+| 264 | Parameter name | `file_path` | Keep name, update description to reference "source" |
 
 ### Section 3.6: `get_field_provenance`
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 387 | Forbidden synonym | "**File** (original source file)" | "**Source Material** (original source material)" |
+| 387 | Forbidden synonym | "**File** (original source file)" | "**Source** (original source)" |
 
 ### Section 3.1: `ingest`
 
 | Line | Issue | Current | Recommended |
 |------|-------|---------|-------------|
-| 191 | Forbidden synonym | "content was already [stored]" | "source material was already [stored]" |
+| 191 | Forbidden synonym | "content was already [stored]" | "source was already [stored]" |
 
 ## Recommendations
 
 ### High Priority
 1. **Replace "upload" with "store"** in action descriptions (keep `upload_file` as action name)
-2. **Replace "file" with "source material"** in descriptive text (keep `file_path` as parameter names)
-3. **Replace "data" with "source material"** in structured data contexts
-4. **Replace "content" with "source material"** in user-facing descriptions
+2. **Replace "file" with "source"** in descriptive text (keep `file_path` as parameter names)
+3. **Replace "data" with "source"** in structured data contexts
+4. **Replace "content" with "source"** in user-facing descriptions
 
 ### Medium Priority
 5. Update section headers to use canonical terminology
@@ -211,9 +211,9 @@ The spec does not use any of the explicitly forbidden terms:
 The MCP spec demonstrates **strong conformance** to canonical vocabulary. The main issues are:
 
 1. Use of "upload" instead of "store" in action descriptions
-2. Use of "file" instead of "source material" in some contexts
-3. Use of "data" instead of "source material" for structured data
-4. Use of "content" instead of "source material" in one instance
+2. Use of "file" instead of "source" in some contexts
+3. Use of "data" instead of "source" for structured data
+4. Use of "content" instead of "source" in one instance
 
 These are relatively minor and mostly in descriptive text rather than core terminology. The spec correctly uses canonical terms with proper markdown links throughout, which is excellent practice.
 

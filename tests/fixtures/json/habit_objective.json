@@ -1,0 +1,40 @@
+[
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-001",
+    "objective": "Improve cardiovascular health",
+    "objective_type": "health",
+    "priority": "high",
+    "notes": "Primary objective for morning exercise habit"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-001",
+    "objective": "Build consistent routine",
+    "objective_type": "behavioral",
+    "priority": "medium",
+    "notes": "Secondary objective for discipline building"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-002",
+    "objective": "Expand knowledge base",
+    "objective_type": "cognitive",
+    "priority": "high",
+    "notes": "Reading before bed improves learning"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-003",
+    "objective": "Reduce stress levels",
+    "objective_type": "mental-health",
+    "priority": "high",
+    "notes": "Weekly review reduces anxiety"
+  },
+  {
+    "schema_version": "1.0",
+    "habit_id": "habit-004",
+    "objective": "Minimal objective",
+    "priority": "low"
+  }
+]

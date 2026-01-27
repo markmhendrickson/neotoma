@@ -317,6 +317,12 @@ docs/feature_units/standards/release_workflow.md:
     - path: docs/releases/*/manifest.yaml
       type: implicit
       reason: Manifests follow workflow structure
+# Conventions Layer
+docs/conventions/native_browser_debugging_rules.mdc:
+  downstream:
+    - path: README.md
+      type: explicit
+      reason: README references debugging workflow conventions
 # README dependencies (all docs → README)
 # Note: README is downstream of all major doc categories
 # This is handled by readme_maintenance.md rule, but listed here for completeness

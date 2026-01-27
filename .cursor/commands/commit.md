@@ -13,6 +13,8 @@ This file will be overwritten when running setup_cursor_copies.
 
 # commit
 
+**CRITICAL REQUIREMENT:** All submodule commits MUST use the same comprehensive change analysis and detailed commit message format as the main repository. Generic commit messages like "Update submodule changes" are FORBIDDEN. Each submodule commit must analyze changes, categorize by type/area, and generate structured commit messages with detailed sections.
+
 **PARAMETER MODES:**
 
 1. **No parameter** (default): Commit ALL submodules first, then the main repository
@@ -90,7 +92,48 @@ fi
    git add -A
    ```
 
-5. **Generate commit message** (analyze changes in submodule context - follow same comprehensive analysis as main repo)
+5. **Generate comprehensive commit message** - **CRITICAL: MUST follow same detailed analysis as main repo:**
+   
+   **MANDATORY:** Analyze changes using the same comprehensive workflow as main repository:
+   
+   a. **Categorize changes by type:**
+      - Run `git diff --cached --name-status` to get all changed files with status (A/M/D)
+      - Group files by status: Added (A), Modified (M), Deleted (D)
+      - Count files in each category
+   
+   b. **Categorize changes by functional area:**
+      - Group files by directory/domain (documentation, source code, tests, configuration, etc.)
+      - Identify major functional areas affected
+   
+   c. **Analyze change magnitude:**
+      - Run `git diff --cached --stat` to get line counts
+      - Identify files with significant changes (>100 lines)
+      - Note new vs. modified vs. deleted files
+   
+   d. **Extract key themes:**
+      - Review file names and paths to identify common themes
+      - Look for patterns: new features, refactoring, documentation, bug fixes, tests
+      - Identify if changes span multiple areas
+   
+   e. **Generate structured commit message:**
+      - **Summary line** (50-72 chars): High-level description of PRIMARY change
+      - **Detailed sections** organized by priority:
+        - **New Features** (if new functionality added)
+        - **Testing Infrastructure** (if tests/coverage added)
+        - **Code Improvements** (if code refactored/enhanced)
+        - **Documentation** (if docs updated)
+        - **Configuration** (if config files modified)
+        - **Bug Fixes** (if bugs fixed)
+        - **Other Changes** (miscellaneous)
+      - **For each section**, list:
+        - Files added/modified/deleted
+        - Key changes or new capabilities
+        - Rationale if significant architectural changes
+   
+   f. **Validation:**
+      - Ensure commit message covers ALL staged files
+      - If any file category missing, add it
+      - Message must be as detailed as main repository commits
 
 6. **Commit and push submodule:**
    ```bash
@@ -167,11 +210,21 @@ fi
          # Stage all changes
          echo "  📝 Staging changes..."
          git add -A
-
-         # Generate commit message (analyze changes in submodule context)
+         
+         # Generate comprehensive commit message - CRITICAL: MUST follow same detailed analysis as main repo
          echo "  📝 Generating commit message..."
-         # (Follow comprehensive change analysis workflow)
-
+         # MANDATORY: Follow the same comprehensive change analysis workflow as main repository:
+         # 1. Categorize changes by type (A/M/D) and count files
+         # 2. Categorize by functional area (docs, code, tests, config, etc.)
+         # 3. Analyze change magnitude (git diff --cached --stat)
+         # 4. Extract key themes (features, refactoring, tests, etc.)
+         # 5. Generate structured commit message with:
+         #    - Summary line (50-72 chars) describing PRIMARY change
+         #    - Detailed sections (New Features, Testing, Code Improvements, Documentation, etc.)
+         #    - List files and key changes for each section
+         # 6. Validate message covers ALL staged files
+         # Commit message MUST be as detailed as main repository commits - no generic messages allowed
+         
          # Commit submodule
          echo "  💾 Committing changes..."
          git commit -m "$COMMIT_MSG" || {
@@ -709,5 +762,7 @@ development:
 3. **`/commit <submodule-name>`** - Commits only the specified submodule, skips main repository
 
 All modes follow the same security audit, change analysis, and commit message generation workflows appropriate to their scope.
+
+**MANDATORY:** Submodule commits MUST use the same comprehensive analysis and detailed commit message format as main repository commits. Generic messages like "Update submodule changes" are FORBIDDEN.
 
 

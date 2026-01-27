@@ -9,23 +9,31 @@ This document provides the overview and coordination framework for v1.0.0 market
 - `release_plan.md` — Release overview and scope
 - `discovery_plan.md` — Discovery activities
 ### 1. Marketing Overview
-- **Strategy**: Hybrid (pre-launch + post-launch)
+- **Strategy**: Dogfooding-first (build-in-public during build, marketing deferred until after dogfooding validation)
+- **Approach**: Strategic build-in-public content during build phase, formal marketing after dogfooding validation
 - **Owner**: Mark Hendrickson
 - **Status**: Not started
 - **Budget**: $0 (organic only for MVP)
+- **Rationale**: Building MVP for personal use (ateles integration) first, then validate market fit with working product
+**Related Documents:**
+- `approach_comparison.md` — Discovery-first vs. dogfooding-first comparative analysis
+- `marketing_dogfooding_analysis.md` — Pre-launch marketing analysis for dogfooding-first approach
+- `visibility_timing_analysis.md` — Visibility timing risk and build-in-public strategy
 ### 2. Marketing Activities Summary
-#### 2.1 Pre-Launch Marketing
-**See `pre_launch_marketing_plan.md` for complete details.**
-- **Timeline**: Week -4 to Week 0
-- **Tactics**: Waitlist building, early access beta, content teasers, competitor follower outreach, MCP directory listings
-- **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers
-- **Success Criteria**: ≥100 waitlist signups, ≥25 beta participants, ≥70% beta activation rate, ≥10 waitlist signups from competitor outreach, ≥8 MCP directory listings approved
-#### 2.2 Post-Launch Marketing
-**See `post_launch_marketing_plan.md` for complete details.**
-- **Timeline**: Day 0 to Week 4
-- **Tactics**: Launch announcement, waitlist conversion, organic growth, partnership outreach (MCP directories, AI tool directories), competitor follower outreach
+#### 2.1 Build-in-Public Content (During Build Phase)
+**See `pre_launch_marketing_plan.md` for complete details (reframed as build-in-public content plan).**
+- **Timeline**: Week 0-12 (during build + dogfooding)
+- **Tactics**: Technical threads, blog posts, progress updates, reactive content to industry announcements, community engagement
+- **Target Segments**: AI-Native Individual Operators, High-Context Knowledge Workers, MCP ecosystem
+- **Success Criteria**: Technical credibility, thought leadership positioning, community engagement, visibility during industry announcements
+- **No Waitlist/Beta**: Just sharing learnings, not marketing
+#### 2.2 Post-Dogfooding Marketing (Deferred)
+**See `post_launch_marketing_plan.md` for complete details (updated for post-dogfooding timeline).**
+- **Timeline**: Week 12+ (after dogfooding validation, if product works)
+- **Tactics**: Launch announcement, waitlist building, organic growth, partnership outreach (MCP directories, AI tool directories), competitor follower outreach
 - **Reengagement**: Onboarding nudges, usage tips campaign
-- **Success Criteria**: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate, ≥20 organic signups from competitor outreach, ≥10 MCP directory listings, ≥30 directory referral signups
+- **Success Criteria**: TBD after dogfooding validation (product must work for ateles integration first)
+- **Conditional**: Only proceed if dogfooding validates product works
 #### 2.3 User Segments
 **See `marketing_segments_plan.md` for complete details.**
 - **Acquisition Targets**: AI-Native Individual Operators (P0), High-Context Knowledge Workers (P1)
@@ -142,42 +150,55 @@ Automated marketing system that creates content from release data, posts to soci
 - **Post-Launch**: Day 0 (launch announcement), Day 1-7 (waitlist conversion), Week 1-4 (organic growth)
 **Status**: Not implemented (planned for post-MVP automation)
 ### 3. Marketing Timeline
-**Pre-Launch (Week -4 to Week 0):**
-- Week -4: Begin waitlist building, start content creation
-- Week -3: Continue waitlist building, publish first content pieces
-- Week -2: Launch early access beta, continue content marketing
-- Week -1: Continue beta testing, finalize launch materials
-- Week 0: Final beta feedback, prepare launch announcement
-**Post-Launch (Day 0 to Week 4):**
-- Day 0: Launch announcement across all channels
-- Day 1-7: Waitlist conversion campaigns, launch follow-up
-- Week 2: Organic growth activities, partnership outreach begins
-- Week 3-4: Continued organic growth, usage tips campaigns, reengagement
+**Build Phase (Week 0-12):**
+- **Build-in-Public Content** (ongoing, ~10-15 hours/month):
+  - Technical threads on Twitter (weekly progress, learnings)
+  - Blog posts (technical deep-dives, architectural decisions)
+  - Indie Hackers progress updates (weekly)
+  - Reactive content to industry announcements (2-3 hours per announcement)
+  - Community engagement (MCP ecosystem, relevant discussions)
+  - **No waitlist/beta**: Just sharing, not marketing
+**Post-Dogfooding Validation (Week 12-13):**
+- Assess: Does product work for ateles integration?
+- Decision: Proceed to discovery + marketing or iterate?
+**Discovery Phase (Week 13-16) - If Proceeding:**
+- Conduct discovery with working product
+- Validate market fit, pricing, competitive positioning
+- **Advantage**: Can show working product in interviews
+**Marketing Launch (Week 16-20) - If Proceeding:**
+- Launch waitlist (now that product is validated)
+- Launch beta (now that product works)
+- Launch announcement (now that you have confidence)
+- Post-launch marketing campaigns (Week 1-4 after launch)
 ### 4. Budget
-**Pre-Launch:**
+**Build Phase (Build-in-Public Content):**
 - Total: $0 (organic only)
-- Time investment: ~40 hours (content creation, community engagement)
-**Post-Launch:**
+- Time investment: ~10-15 hours/month (technical content, community engagement)
+- **Focus**: Thought leadership, not marketing
+**Post-Dogfooding Marketing (If Proceeding):**
 - Total: $0 (organic only for MVP)
 - Time investment: ~60 hours (launch activities, content, community)
+- **Conditional**: Only if dogfooding validates product works
 **Note**: Paid acquisition deferred to post-MVP (v1.1+) after organic validation
 ### 5. Success Criteria
-#### 5.1 Pre-Launch
-- ≥100 waitlist signups
-- ≥25 beta participants
-- ≥70% beta activation rate
-- ≥5 testimonials collected
-#### 5.2 Post-Launch
-- ≥50 signups Day 1
-- ≥200 signups Week 1
-- ≥40% waitlist conversion rate
-- ≥100 organic signups (non-waitlist) Week 1-4
-- ≥60% overall activation rate (signup → first upload)
+#### 5.1 Build Phase (Build-in-Public Content)
+- Technical credibility established (thought leadership positioning)
+- Community engagement (MCP ecosystem, relevant discussions)
+- Visibility during industry announcements (reactive content gets 3-5x engagement)
+- No premature commitments (no waitlist/beta expectations)
+#### 5.2 Post-Dogfooding Validation
+- Product works for ateles integration (primary validation)
+- Technical feasibility validated (determinism, MCP integration, performance)
+- Decision: Proceed to discovery + marketing or iterate?
+#### 5.3 Post-Dogfooding Marketing (If Proceeding)
+- TBD after dogfooding validation
+- Success criteria will be defined based on discovery findings
+- Typical targets: ≥50 signups Day 1, ≥200 signups Week 1, ≥40% waitlist conversion rate
 ### 6. Document Index
 This marketing plan coordinates the following topic-specific documents:
 **Marketing Activity Plans:**
-- `pre_launch_marketing_plan.md` — Pre-launch user acquisition tactics and activities
-- `post_launch_marketing_plan.md` — Post-launch user acquisition and reengagement tactics
+- `pre_launch_marketing_plan.md` — Build-in-public content plan (during build phase, dogfooding-first approach)
+- `post_launch_marketing_plan.md` — Post-launch user acquisition and reengagement tactics (deferred until after dogfooding)
 - `marketing_segments_plan.md` — User segment definitions, targeting, and messaging
 - `marketing_metrics_plan.md` — Metrics definitions, tracking, and efficacy comparison
 - `marketing_automation_plan.md` — Automated content generation, posting, and performance measurement
@@ -190,12 +211,14 @@ This marketing plan coordinates the following topic-specific documents:
 ### 7. Status
 - **Current Status**: Not started
 - **Owner**: Mark Hendrickson
+- **Approach**: Dogfooding-first (build for ateles integration, validate through usage, then consider marketing)
 - **Next Steps**:
-  1. Begin pre-launch marketing (Week -4)
-  2. Launch waitlist building campaign
-  3. Create pre-launch content
-  4. Launch early access beta (Week -2)
-  5. Prepare launch announcement materials
-  6. Execute launch day activities (Day 0)
-  7. Execute post-launch marketing campaigns (Week 1-4)
-  8. Evaluate marketing performance for automation planning (post-MVP)
+  1. Begin build-in-public content (Week 0-12, ongoing)
+  2. Share technical learnings (determinism, MCP integration, entity resolution)
+  3. Respond to industry announcements (reactive content, 2-3 hours per announcement)
+  4. Engage with MCP ecosystem (community engagement, 2-3 hours/week)
+  5. Dogfood Neotoma in ateles integration (validate through real usage)
+  6. Post-dogfooding validation (Week 12-13): Assess if product works
+  7. If proceeding: Conduct discovery with working product (Week 13-16)
+  8. If proceeding: Launch marketing (Week 16-20): Waitlist, beta, announcement
+  9. Evaluate marketing performance for automation planning (post-MVP)

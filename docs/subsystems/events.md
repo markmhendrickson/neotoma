@@ -17,7 +17,7 @@ interface Event {
 ## [Event](../vocabulary/canonical_terms.md#event) Types
 | Event Type | When Emitted | Payload |
 |------------|--------------|---------|
-| `source.created` | [Source material](../vocabulary/canonical_terms.md#source-material) stored | `{ source_id, mime_type }` |
+| `source.created` | [Source](../vocabulary/canonical_terms.md#source) stored | `{ source_id, mime_type }` |
 | `observation.created` | [Observation](../vocabulary/canonical_terms.md#observation) created | `{ observation_id, entity_id }` |
 | `entity.created` | [Entity](../vocabulary/canonical_terms.md#entity) created | `{ entity_id, entity_type }` |
 | `snapshot.computed` | [Snapshot](../vocabulary/canonical_terms.md#snapshot) recomputed | `{ entity_id, observation_count }` |
@@ -28,7 +28,7 @@ interface Event {
 | `search.executed` | Search query run | `{ query, results_count, duration_ms }` |
 ## Emission Pattern
 ```typescript
-async function createSourceMaterial(data: SourceMaterialInput): Promise<SourceMaterial> {
+async function createSourceNode(data: SourceNodeInput): Promise<SourceNode> {
   const source = await db.insert('sources', data);
   
   // Emit event

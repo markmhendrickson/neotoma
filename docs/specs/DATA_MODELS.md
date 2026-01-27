@@ -4,7 +4,7 @@
 
 **Note:** This is a **high-level summary** document for quick reference. For implementation details, see:
 - [`docs/subsystems/schema.md`](../subsystems/schema.md) — Complete database schema, JSONB structures, migrations
-- [`docs/subsystems/sources.md`](../subsystems/sources.md) — [Source material](../vocabulary/canonical_terms.md#source-material) architecture
+- [`docs/subsystems/sources.md`](../subsystems/sources.md) — [Source](../vocabulary/canonical_terms.md#source) architecture
 - [`docs/subsystems/ingestion/ingestion.md`](../subsystems/ingestion/ingestion.md) — Field extraction implementation
 - [`docs/NEOTOMA_MANIFEST.md`](../NEOTOMA_MANIFEST.md) — Sections 12, 15, 16 (data model doctrine)
 
@@ -12,15 +12,15 @@
 
 ## Purpose
 
-Consolidates data model specifications for Neotoma's four-layer truth model ([Source Material](../vocabulary/canonical_terms.md#source-material) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)) with complete examples for quick reference.
+Consolidates data model specifications for Neotoma's four-layer truth model ([Source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)) with complete examples for quick reference.
 
 ## Four-Layer Truth Model
 
 Neotoma implements a four-layer truth model:
 
-1. **[Source Material](../vocabulary/canonical_terms.md#source-material)** — raw data (files, structured JSON, URLs) with content-addressed storage
+1. **[Source](../vocabulary/canonical_terms.md#source)** — raw data (files, structured JSON, URLs) with content-addressed storage
 2. **[Interpretation](../vocabulary/canonical_terms.md#interpretation)** — versioned AI extraction attempt with config logging
-3. **[Observation](../vocabulary/canonical_terms.md#observation)** — granular, source-specific facts extracted from source material
+3. **[Observation](../vocabulary/canonical_terms.md#observation)** — granular, source-specific facts extracted from source
 4. **[Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot)** — deterministic [reducer](../vocabulary/canonical_terms.md#reducer) output representing current truth
 This model enables:
 - Multiple sources to contribute observations about the same entity
@@ -28,10 +28,10 @@ This model enables:
 - Full provenance: every snapshot field traces to specific observations and documents
 - Out-of-order ingestion support
 See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for complete architectural rationale.
-## 1. [Source Material](../vocabulary/canonical_terms.md#source-material) Model
+## 1. [Source](../vocabulary/canonical_terms.md#source) Model
 
 ```typescript
-interface SourceMaterial {
+interface SourceNode {
   id: string; // UUID
   content_hash: string; // SHA-256 hash for deduplication
   storage_url: string; // Storage URL
@@ -62,7 +62,7 @@ interface SourceMaterial {
 }
 ```
 
-**Note:** [Source material](../vocabulary/canonical_terms.md#source-material) is content-addressed (same bytes = same hash). See [`docs/subsystems/sources.md`](../subsystems/sources.md) for complete architecture.
+**Note:** [Source](../vocabulary/canonical_terms.md#source) is content-addressed (same bytes = same hash). See [`docs/subsystems/sources.md`](../subsystems/sources.md) for complete architecture.
 
 See [`docs/subsystems/schema.md`](../subsystems/schema.md)
 ## 2. Entity Model
@@ -92,7 +92,7 @@ interface Observation {
   entity_id: string; // Hash-based entity ID
   entity_type: string; // person, company, invoice, etc.
   schema_version: string; // Entity schema version used
-  source_material_id: string; // UUID of source material
+  source_material_id: string; // UUID of source
   interpretation_id?: string; // UUID of interpretation (null for structured ingestion or corrections)
   observed_at: string; // ISO 8601 timestamp
   specificity_score: number; // 0-1, how specific this observation is
@@ -163,15 +163,15 @@ interface EntitySnapshot {
 See [`docs/subsystems/reducer.md`](../subsystems/reducer.md)
 ## 4.1 Four-Layer Model Integration Example
 
-This section demonstrates how [Source Material](../vocabulary/canonical_terms.md#source-material) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) layers work together with [entity schemas](../vocabulary/canonical_terms.md#entity-schema) and [reducer](../vocabulary/canonical_terms.md#reducer) engine.
+This section demonstrates how [Source](../vocabulary/canonical_terms.md#source) → [Interpretation](../vocabulary/canonical_terms.md#interpretation) → [Observation](../vocabulary/canonical_terms.md#observation) → [Entity Snapshot](../vocabulary/canonical_terms.md#entity-snapshot) layers work together with [entity schemas](../vocabulary/canonical_terms.md#entity-schema) and [reducer](../vocabulary/canonical_terms.md#reducer) engine.
 
 ### Scenario: Two Invoices from Same Vendor
 
-**Step 1: [Source Material](../vocabulary/canonical_terms.md#source-material) [Ingestion](../vocabulary/canonical_terms.md#ingestion)**
+**Step 1: [Source](../vocabulary/canonical_terms.md#source) [Ingestion](../vocabulary/canonical_terms.md#ingestion)**
 
 Two invoice PDFs uploaded:
 
-**[Source Material](../vocabulary/canonical_terms.md#source-material) 1 (Invoice INV-001):**
+**[Source](../vocabulary/canonical_terms.md#source) 1 (Invoice INV-001):**
 ```json
 {
   "id": "src_invoice_001",
@@ -184,7 +184,7 @@ Two invoice PDFs uploaded:
 }
 ```
 
-**[Source Material](../vocabulary/canonical_terms.md#source-material) 2 (Invoice INV-002):**
+**[Source](../vocabulary/canonical_terms.md#source) 2 (Invoice INV-002):**
 ```json
 {
   "id": "src_invoice_002",
@@ -205,7 +205,7 @@ AI [interpretation](../vocabulary/canonical_terms.md#interpretation) extracts st
 
 **Step 3: [Entity](../vocabulary/canonical_terms.md#entity) Resolution**
 
-Both [source materials](../vocabulary/canonical_terms.md#source-material) mention the same vendor (normalized to same [entity](../vocabulary/canonical_terms.md#entity)):
+Both [sources](../vocabulary/canonical_terms.md#source) mention the same vendor (normalized to same [entity](../vocabulary/canonical_terms.md#entity)):
 ```json
 {
   "id": "ent_abc123def456",
@@ -303,33 +303,33 @@ Final [entity](../vocabulary/canonical_terms.md#entity) [entity snapshot](../voc
 ```
 ### [Provenance](../vocabulary/canonical_terms.md#provenance) Chain
 
-Each [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to [source material](../vocabulary/canonical_terms.md#source-material):
+Each [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot) field traces to [source](../vocabulary/canonical_terms.md#source):
 ```
 snapshot.name = "Acme Corporation"
   → obs_002 (higher specificity_score)
     → int_002 (interpretation)
-      → src_invoice_002 (source material)
+      → src_invoice_002 (source)
         → invoice_002.pdf
 
 snapshot.address = "123 Main Street"
   → obs_002 (only source)
     → int_002 (interpretation)
-      → src_invoice_002 (source material)
+      → src_invoice_002 (source)
         → invoice_002.pdf
 
 snapshot.invoice_amount = 2500.00
   → obs_002 (last write)
     → int_002 (interpretation)
-      → src_invoice_002 (source material)
+      → src_invoice_002 (source)
         → invoice_002.pdf
 ```
 
 ### Key Benefits Demonstrated
 
-1. **Multi-Source Truth:** Two [source materials](../vocabulary/canonical_terms.md#source-material) contribute facts about same [entity](../vocabulary/canonical_terms.md#entity)
+1. **Multi-Source Truth:** Two [sources](../vocabulary/canonical_terms.md#source) contribute facts about same [entity](../vocabulary/canonical_terms.md#entity)
 2. **Deterministic Merging:** [Entity schema](../vocabulary/canonical_terms.md#entity-schema) merge policies produce consistent results
-3. **Full [Provenance](../vocabulary/canonical_terms.md#provenance):** Every field traces to specific [observation](../vocabulary/canonical_terms.md#observation), [interpretation](../vocabulary/canonical_terms.md#interpretation), and [source material](../vocabulary/canonical_terms.md#source-material)
-4. **Out-of-Order Support:** [Source material](../vocabulary/canonical_terms.md#source-material) can arrive in any order; [reducer](../vocabulary/canonical_terms.md#reducer) recomputes [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot)
+3. **Full [Provenance](../vocabulary/canonical_terms.md#provenance):** Every field traces to specific [observation](../vocabulary/canonical_terms.md#observation), [interpretation](../vocabulary/canonical_terms.md#interpretation), and [source](../vocabulary/canonical_terms.md#source)
+4. **Out-of-Order Support:** [Source](../vocabulary/canonical_terms.md#source) can arrive in any order; [reducer](../vocabulary/canonical_terms.md#reducer) recomputes [entity snapshot](../vocabulary/canonical_terms.md#entity-snapshot)
 ### Related Documents
 - [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) — Four-layer model rationale
 - [`docs/subsystems/observation_architecture.md`](../subsystems/observation_architecture.md) — Observation lifecycle
@@ -343,7 +343,7 @@ interface Relationship {
   relationship_type: string; // PART_OF, CORRECTS, REFERS_TO, SETTLES, etc.
   source_entity_id: string; // Source entity ID
   target_entity_id: string; // Target entity ID
-  source_material_id?: string; // UUID of source material that created relationship
+  source_material_id?: string; // UUID of source that created relationship
   metadata?: Record<string, any>; // JSONB relationship-specific metadata
   created_at: string; // ISO 8601
 }
@@ -375,7 +375,7 @@ interface Event {
   id: string; // Hash-based: evt_{sha256(source_material:field:date)}
   event_type: string; // InvoiceIssued, FlightDeparture, etc.
   event_timestamp: string; // ISO 8601
-  source_material_id: string; // UUID of source material
+  source_material_id: string; // UUID of source
   source_field: string; // e.g., 'date_issued'
 }
 ```
@@ -402,14 +402,14 @@ interface GraphEdge {
 ```
 
 **[Relationships](../vocabulary/canonical_terms.md#relationship):**
-- [Source Material](../vocabulary/canonical_terms.md#source-material) → [Entity](../vocabulary/canonical_terms.md#entity) (which [entities](../vocabulary/canonical_terms.md#entity) mentioned)
-- [Source Material](../vocabulary/canonical_terms.md#source-material) → [Event](../vocabulary/canonical_terms.md#event) (which [events](../vocabulary/canonical_terms.md#event) derived)
+- [Source](../vocabulary/canonical_terms.md#source) → [Entity](../vocabulary/canonical_terms.md#entity) (which [entities](../vocabulary/canonical_terms.md#entity) mentioned)
+- [Source](../vocabulary/canonical_terms.md#source) → [Event](../vocabulary/canonical_terms.md#event) (which [events](../vocabulary/canonical_terms.md#event) derived)
 - [Event](../vocabulary/canonical_terms.md#event) → [Entity](../vocabulary/canonical_terms.md#entity) (which [entities](../vocabulary/canonical_terms.md#entity) involved)
 
 ## Detailed Documentation References
 
 - [`docs/subsystems/schema.md`](../subsystems/schema.md) — Database tables
-- [`docs/subsystems/sources.md`](../subsystems/sources.md) — [Source material](../vocabulary/canonical_terms.md#source-material) architecture
+- [`docs/subsystems/sources.md`](../subsystems/sources.md) — [Source](../vocabulary/canonical_terms.md#source) architecture
 - [`docs/NEOTOMA_MANIFEST.md`](../NEOTOMA_MANIFEST.md) — Sections 12, 14, 15, 16
 - [`docs/subsystems/ingestion/ingestion.md`](../subsystems/ingestion/ingestion.md) — Field extraction
 
@@ -418,7 +418,7 @@ interface GraphEdge {
 ### When to Load This Document
 
 Load `docs/specs/DATA_MODELS.md` when:
-- Understanding core data structures ([Source Material](../vocabulary/canonical_terms.md#source-material), [Entity](../vocabulary/canonical_terms.md#entity), [Observation](../vocabulary/canonical_terms.md#observation), [Event](../vocabulary/canonical_terms.md#event))
+- Understanding core data structures ([Source](../vocabulary/canonical_terms.md#source), [Entity](../vocabulary/canonical_terms.md#entity), [Observation](../vocabulary/canonical_terms.md#observation), [Event](../vocabulary/canonical_terms.md#event))
 - Planning graph relationships
 - Quick reference for data models
 
@@ -427,19 +427,19 @@ Load `docs/specs/DATA_MODELS.md` when:
 - `docs/vocabulary/canonical_terms.md` (authoritative terminology)
 - `docs/NEOTOMA_MANIFEST.md` (always — sections 12, 14, 15, 16)
 - `docs/subsystems/schema.md` (database schema details)
-- `docs/subsystems/sources.md` ([source material](../vocabulary/canonical_terms.md#source-material) architecture)
+- `docs/subsystems/sources.md` ([source](../vocabulary/canonical_terms.md#source) architecture)
 
 ### Constraints Agents Must Enforce
 
 1. **Use [entity types](../vocabulary/canonical_terms.md#entity-type):** Examples must use proper [entity types](../vocabulary/canonical_terms.md#entity-type) (e.g., `"invoice"`, `"company"`)
 2. **Hash-based IDs:** [Entity](../vocabulary/canonical_terms.md#entity) and [event](../vocabulary/canonical_terms.md#event) IDs are deterministic hashes
-3. **Immutability:** [Source material](../vocabulary/canonical_terms.md#source-material), [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), [events](../vocabulary/canonical_terms.md#event) never change after creation
+3. **Immutability:** [Source](../vocabulary/canonical_terms.md#source), [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), [events](../vocabulary/canonical_terms.md#event) never change after creation
 4. **Typed edges:** Graph edges must specify type (source_entity, source_event, event_entity)
 5. **Defer to detailed docs:** This is a summary; `schema.md` and `sources.md` are authoritative
 
 ### Forbidden Patterns
 
-- Using deprecated "record" terminology (use "[source material](../vocabulary/canonical_terms.md#source-material)" or "[entity](../vocabulary/canonical_terms.md#entity)")
+- Using deprecated "record" terminology (use "[source](../vocabulary/canonical_terms.md#source)" or "[entity](../vocabulary/canonical_terms.md#entity)")
 - Non-deterministic IDs (random UUIDs for [entities](../vocabulary/canonical_terms.md#entity)/[events](../vocabulary/canonical_terms.md#event))
 - Modifying data models after creation
 - Creating untyped graph edges

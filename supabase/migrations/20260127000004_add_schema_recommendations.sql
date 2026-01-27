@@ -1,6 +1,14 @@
 -- Create schema_recommendations table for tracking schema update recommendations
 -- Migration: 20260127000004_add_schema_recommendations.sql
 
+-- Temporarily disable event trigger to avoid double schema prefix issue
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table DISABLE;
+  END IF;
+END $$;
+
 -- Table to store schema recommendations (from agents, inference, or analysis)
 CREATE TABLE IF NOT EXISTS schema_recommendations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -48,3 +56,14 @@ COMMENT ON COLUMN schema_recommendations.fields_to_add IS 'JSONB array of field 
 COMMENT ON COLUMN schema_recommendations.confidence_score IS 'Confidence score 0-1 for auto-enhancement eligibility';
 COMMENT ON COLUMN schema_recommendations.status IS 'Status: pending, approved, rejected, applied, or auto_applied';
 COMMENT ON COLUMN schema_recommendations.idempotency_key IS 'Unique key to prevent duplicate auto-enhancements';
+
+-- Re-enable event trigger (if it exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table ENABLE;
+  END IF;
+END $$;
+
+-- Ensure RLS is enabled (in case event trigger was disabled)
+ALTER TABLE schema_recommendations ENABLE ROW LEVEL SECURITY;

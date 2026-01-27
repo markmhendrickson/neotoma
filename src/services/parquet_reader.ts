@@ -13,6 +13,7 @@ export interface ParquetReadResult {
     field_count: number;
     field_names: string[];
     entity_type: string;
+    schema_metadata?: Record<string, { type: string; optional: boolean }>;
   };
 }
 
@@ -29,7 +30,7 @@ async function ensureFileAvailable(filePath: string): Promise<void> {
   const fs = await import("fs");
   
   // Check if file is in iCloud Drive
-  if (filePath.includes('Mobile Documents/com~apple~CloudDocs')) {
+  if (filePath.includes("Mobile Documents/com~apple~CloudDocs")) {
     logger.error(`[PARQUET] File is in iCloud Drive, checking availability...`);
     
     try {
@@ -43,7 +44,7 @@ async function ensureFileAvailable(filePath: string): Promise<void> {
       // Small delay to allow iCloud sync to stabilize
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (error: any) {
-      if (error.code === 'ENOENT') {
+      if (error.code === "ENOENT") {
         throw new Error(
           `File not available locally. iCloud Drive may be syncing. ` +
           `Please wait for sync to complete and try again. ` +
@@ -75,7 +76,7 @@ export async function readParquetFile(
     // Final safety check: try to serialize the result to catch any BigInt values
     try {
       JSON.stringify(result, (key, value) => {
-        if (typeof value === 'bigint') {
+        if (typeof value === "bigint") {
           return Number(value);
         }
         return value;
@@ -92,7 +93,7 @@ export async function readParquetFile(
     return result;
   } catch (error: any) {
     // If error is about BigInt serialization, provide more context
-    if (error?.message?.includes('BigInt') || error?.message?.includes('serialize')) {
+    if (error?.message?.includes("BigInt") || error?.message?.includes("serialize")) {
       throw new Error(
         `BigInt serialization error while reading parquet file. ` +
         `This may indicate a field with INT64 type that wasn't converted. ` +
@@ -138,13 +139,24 @@ async function readParquetFileInternal(
     const fieldNames = Object.keys(schema.fields);
     const rawRowCount = reader.getRowCount();
     
+    // Extract schema metadata for type inference
+    const schemaMetadata: Record<string, { type: string; optional: boolean }> = {};
+    for (const [fieldName, field] of Object.entries(schema.fields)) {
+      const parquetType = (field as any).primitiveType || (field as any).type || "UNKNOWN";
+      const optional = (field as any).optional !== false; // Default to optional
+      schemaMetadata[fieldName] = {
+        type: parquetType,
+        optional,
+      };
+    }
+    
     // Convert BigInt/Int64 to number (handle various formats)
     let rowCount: number;
-    if (typeof rawRowCount === 'bigint') {
+    if (typeof rawRowCount === "bigint") {
       rowCount = Number(rawRowCount);
     } else if ((rawRowCount as any)?.toNumber) {
       rowCount = (rawRowCount as any).toNumber();
-    } else if (typeof rawRowCount === 'number') {
+    } else if (typeof rawRowCount === "number") {
       rowCount = rawRowCount;
     } else {
       // Fallback: try to convert to number
@@ -177,7 +189,7 @@ async function readParquetFileInternal(
           entity_type: entityType,
         };
         for (const [key, value] of Object.entries(convertedRecord)) {
-          if (typeof value === 'bigint') {
+          if (typeof value === "bigint") {
             finalRecord[key] = Number(value);
           } else {
             finalRecord[key] = value;
@@ -219,7 +231,7 @@ async function readParquetFileInternal(
       try {
         // Try to serialize and parse to catch any remaining BigInt values
         const jsonStr = JSON.stringify(entity, (key, value) => {
-          if (typeof value === 'bigint') {
+          if (typeof value === "bigint") {
             return Number(value);
           }
           return value;
@@ -242,11 +254,12 @@ async function readParquetFileInternal(
         field_count: fieldNames.length,
         field_names: fieldNames,
         entity_type: entityType,
+        schema_metadata: schemaMetadata,
       },
     };
   } catch (error: any) {
     // Handle specific error types
-    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout') || error.message?.includes('ETIMEDOUT')) {
+    if (error.code === "ETIMEDOUT" || error.message?.includes("timeout") || error.message?.includes("ETIMEDOUT")) {
       throw new Error(
         `Parquet file read timed out. This may be due to:\n` +
         `- Large file size (use smaller files or batch processing)\n` +
@@ -256,11 +269,11 @@ async function readParquetFileInternal(
       );
     }
     
-    if (error.code === 'ENOENT') {
+    if (error.code === "ENOENT") {
       throw new Error(`Parquet file not found: ${filePath}`);
     }
     
-    if (error.code === 'EACCES') {
+    if (error.code === "EACCES") {
       throw new Error(`Permission denied reading parquet file: ${filePath}`);
     }
     
@@ -304,7 +317,7 @@ function inferEntityType(basename: string): string {
  * Deep convert BigInt values (handles any type)
  */
 function deepConvertBigInt(value: unknown): unknown {
-  if (typeof value === 'bigint') {
+  if (typeof value === "bigint") {
     return Number(value);
   }
   if (value === null || value === undefined) {
@@ -313,7 +326,7 @@ function deepConvertBigInt(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(item => deepConvertBigInt(item));
   }
-  if (typeof value === 'object' && !(value instanceof Date)) {
+  if (typeof value === "object" && !(value instanceof Date)) {
     const converted: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
       converted[key] = deepConvertBigInt(val);
@@ -331,17 +344,17 @@ function deepConvertBigInt(value: unknown): unknown {
 export function convertBigIntValues(obj: Record<string, unknown>): Record<string, unknown> {
   const converted: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === 'bigint') {
+    if (typeof value === "bigint") {
       converted[key] = Number(value);
-    } else if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+    } else if (value !== null && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
       // Recursively convert nested objects
       converted[key] = convertBigIntValues(value as Record<string, unknown>);
     } else if (Array.isArray(value)) {
       // Convert BigInt values in arrays (including nested objects)
       converted[key] = value.map(item => {
-        if (typeof item === 'bigint') {
+        if (typeof item === "bigint") {
           return Number(item);
-        } else if (item !== null && typeof item === 'object' && !(item instanceof Date) && !Array.isArray(item)) {
+        } else if (item !== null && typeof item === "object" && !(item instanceof Date) && !Array.isArray(item)) {
           // Recursively convert nested objects in arrays
           return convertBigIntValues(item as Record<string, unknown>);
         }

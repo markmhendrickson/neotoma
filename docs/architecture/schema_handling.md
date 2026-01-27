@@ -1,15 +1,15 @@
 # Schema Handling Architecture
 ## 1. Three-Layer Storage Model
 Neotoma uses a **three-layer storage model** to reconcile two requirements:
-1. **Preserve all extracted data** (users can upload any [source material](#source-material) without data loss)
+1. **Preserve all extracted data** (users can upload any [source](#source) without data loss)
 2. **Maintain deterministic [entity schemas](#entity-schema)** (structured, queryable truth layer)
 ### Layer 1: `raw_text` (Immutable Original)
 **Purpose:** Store the original extracted text exactly as extracted.
 **Characteristics:**
 - Immutable after [storing](#storing) (per NEOTOMA_MANIFEST.md Section 5.4)
-- Full [source material](#source-material) preserved
+- Full [source](#source) preserved
 - Used for re-[extraction](#extraction) if [entity schemas](#entity-schema) evolve
-**Storage:** Stored with [source material](#source-material) in the `sources` table
+**Storage:** Stored with [source](#source) in the `sources` table
 ### Layer 2: `properties` ([Entity Schema](#entity-schema)-Compliant, Deterministic)
 **Purpose:** Store only fields that match the assigned [entity schema](#entity-schema) definition.
 **Characteristics:**
@@ -60,9 +60,9 @@ Neotoma uses a **three-layer storage model** to reconcile two requirements:
 }
 ```
 ### Why Three Layers?
-**Problem:** Users want to upload any [source material](#source-material) without losing data, but we need deterministic [entity schemas](#entity-schema) for queries and AI reasoning.
+**Problem:** Users want to upload any [source](#source) without losing data, but we need deterministic [entity schemas](#entity-schema) for queries and AI reasoning.
 **Solution:**
-- `raw_text`: Never loses [source material](#source-material)
+- `raw_text`: Never loses [source](#source)
 - `properties`: Maintains [entity schema](#entity-schema) compliance for deterministic queries
 - `extraction_metadata`: Preserves everything else for future use
 **Benefits:**
@@ -131,7 +131,7 @@ function extractAndValidate(
 ```
 ### Validation Rules
 **MUST:**
-- Always create [observation](#observation) (never reject entire [source material](#source-material))
+- Always create [observation](#observation) (never reject entire [source](#source))
 - Filter unknown fields to `extraction_metadata.unknown_fields`
 - Log warnings for filtered fields and missing required fields
 - Include `schema_version: "1.0"` in all `properties`

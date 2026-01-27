@@ -14,10 +14,10 @@ const __dirname = dirname(__filename);
 // Always resolve project root from file location (dist/ -> project root, src/ -> project root)
 // This works regardless of process.cwd() when running as MCP
 const projectRoot = process.env.NEOTOMA_PROJECT_ROOT || 
-  (__dirname.endsWith('/dist') || __dirname.includes('/dist/') 
-    ? join(__dirname, '..') 
-    : __dirname.endsWith('/src') || __dirname.includes('/src/')
-    ? join(__dirname, '..')
+  (__dirname.endsWith("/dist") || __dirname.includes("/dist/") 
+    ? join(__dirname, "..") 
+    : __dirname.endsWith("/src") || __dirname.includes("/src/")
+    ? join(__dirname, "..")
     : __dirname);
 
 // Load environment-specific .env files
@@ -54,13 +54,18 @@ function getOpenAIConfig() {
   return process.env.OPENAI_API_KEY || "";
 }
 
+const httpPort = parseInt(process.env.HTTP_PORT || "8080", 10);
+
 export const config = {
   supabaseUrl: supabaseConfig.url,
   supabaseKey: supabaseConfig.key,
   openaiApiKey: getOpenAIConfig(),
   port: parseInt(process.env.PORT || "3000", 10),
-  httpPort: parseInt(process.env.HTTP_PORT || "8080", 10),
+  httpPort,
   environment: env,
+  apiBase: process.env.API_BASE_URL || (env === "production" ? "https://neotoma.fly.dev" : `http://localhost:${httpPort}`),
+  mcpTokenEncryptionKey: process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
+  oauthClientId: process.env.SUPABASE_OAUTH_CLIENT_ID || "",
 };
 
 if (!config.supabaseUrl || !config.supabaseKey) {

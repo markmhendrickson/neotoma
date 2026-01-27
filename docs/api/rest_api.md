@@ -44,11 +44,158 @@ Authorization: Bearer <ACTIONS_BEARER_TOKEN>
 - Use strong random token in production
 - Never commit tokens to git
 
+## MCP OAuth Endpoints
+
+OAuth endpoints for MCP client authentication (no bearer token required for public endpoints).
+
+### Initiate OAuth Flow
+
+Start OAuth authorization flow for MCP client.
+
+**Endpoint:** `POST /api/mcp/oauth/initiate`
+
+**Request:**
+
+```json
+{
+  "connection_id": "cursor-2025-01-21-abc123",
+  "client_name": "Cursor"
+}
+```
+
+**Parameters:**
+
+- `connection_id`: Unique identifier for this connection (required)
+- `client_name`: Name of MCP client (optional, e.g., "Cursor", "Claude Code")
+
+**Response:** `200 OK`
+
+```json
+{
+  "auth_url": "https://your-project.supabase.co/auth/v1/authorize?...",
+  "connection_id": "cursor-2025-01-21-abc123",
+  "expires_at": "2025-01-21T10:10:00Z"
+}
+```
+
+**Errors:**
+
+- `400`: Missing or invalid connection_id
+- `500`: Failed to create OAuth state
+
+### OAuth Callback
+
+Handles OAuth authorization callback.
+
+**Endpoint:** `GET /api/mcp/oauth/callback`
+
+**Query Parameters:**
+
+- `code`: Authorization code from Supabase (required)
+- `state`: OAuth state token (required)
+
+**Response:** Redirects to frontend with connection status
+
+- Success: `{FRONTEND_URL}/mcp-setup?connection_id={id}&status=success`
+- Error: `{FRONTEND_URL}/mcp-setup?status=error&error={message}`
+
+**Errors:**
+
+- `400`: Missing code or state
+- `500`: Token exchange or storage failed
+
+### Get Connection Status
+
+Check status of MCP OAuth connection.
+
+**Endpoint:** `GET /api/mcp/oauth/status`
+
+**Query Parameters:**
+
+- `connection_id`: Connection identifier (required)
+
+**Response:** `200 OK`
+
+```json
+{
+  "status": "active",
+  "connection_id": "cursor-2025-01-21-abc123"
+}
+```
+
+**Status Values:**
+
+- `pending`: OAuth flow initiated but not completed
+- `active`: Connection active and ready to use
+- `expired`: Connection revoked or OAuth flow timed out
+
+**Errors:**
+
+- `400`: Missing connection_id
+- `500`: Failed to query status
+
+### List MCP Connections
+
+List user's active MCP OAuth connections (authenticated).
+
+**Endpoint:** `GET /api/mcp/oauth/connections`
+
+**Headers:**
+
+```http
+Authorization: Bearer <SESSION_TOKEN>
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "connections": [
+    {
+      "connectionId": "cursor-2025-01-21-abc123",
+      "clientName": "Cursor",
+      "createdAt": "2025-01-21T10:00:00Z",
+      "lastUsedAt": "2025-01-21T11:30:00Z"
+    }
+  ]
+}
+```
+
+**Errors:**
+
+- `401`: Missing or invalid bearer token
+- `500`: Failed to fetch connections
+
+### Revoke MCP Connection
+
+Revoke an OAuth connection (authenticated).
+
+**Endpoint:** `DELETE /api/mcp/oauth/connections/:connection_id`
+
+**Headers:**
+
+```http
+Authorization: Bearer <SESSION_TOKEN>
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors:**
+
+- `401`: Missing or invalid bearer token
+- `500`: Failed to revoke connection
+
 ## Core Record Operations
 
 **Use MCP actions instead:**
 
-- `store()` - For [storing](#storing) [source material](#source-material) (unstructured files or structured data)
+- `store()` - For [storing](#storing) [source](#source) (unstructured files or structured data)
 - `correct()` - For corrections
 - `merge_entities()` - For entity merging
 - `retrieve_entities()` - For querying entities

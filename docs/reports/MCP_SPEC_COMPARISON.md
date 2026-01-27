@@ -180,7 +180,7 @@
 
 **Spec Details:**
 - Upload file from local path
-- Create source material
+- Create source
 - Run interpretation optionally
 
 **Implementation:** 

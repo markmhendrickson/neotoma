@@ -111,17 +111,28 @@ Unlike provider memory, which is ephemeral and platform-locked, the system's mem
 ### Immediate Repetition of Proper Nouns
 **NEVER use:**
 - Repeating the same proper noun in consecutive sentences
-- Starting multiple sentences with the same proper noun
-- Overusing proper nouns when pronouns or descriptive terms would work
+- Starting multiple consecutive sentences with the same proper noun
+- Overusing proper nouns when pronouns or descriptive terms would work better
 **Use instead:**
-- Use pronouns (it, they, them) after first mention
-- Use descriptive terms (the system, the platform, the service)
+- Use the proper noun when needed for clarity, emphasis, or after a paragraph break
+- Use pronouns (it, they, them) after first mention within the same paragraph
+- Use descriptive terms (the system, the platform, the service) to vary sentence structure
 - Vary sentence structure to avoid repetitive openings
-**Example:**
+**Guidelines for proper noun usage:**
+- **Use the proper noun**: At the start of a new paragraph, when clarity is needed, or when emphasizing the subject
+- **Use pronouns/descriptive terms**: Within the same paragraph after first mention, or when the subject is clear from context
+- **Avoid**: Repeating the proper noun in consecutive sentences within the same paragraph
+**Examples:**
 ❌ "Neotoma provides cross-platform memory. Neotoma works with ChatGPT, Claude, and Cursor. Neotoma enables agents to access structured data."
 ✅ "Neotoma provides cross-platform memory. It works with ChatGPT, Claude, and Cursor. The system enables agents to access structured data."
 ❌ "MCP integration enables cross-platform access. MCP provides a standard protocol. MCP works with multiple AI tools."
 ✅ "MCP integration enables cross-platform access. The protocol provides a standard interface. It works with multiple AI tools."
+**Better example showing balanced usage:**
+✅ "Neotoma provides cross-platform memory that works with ChatGPT, Claude, and Cursor. The system enables agents to access structured data regardless of platform. Memory grows incrementally as agent usage scales. Neotoma creates a persistent knowledge graph that survives individual conversations. Unlike provider memory, which is ephemeral and platform-locked, the system's memory persists across all AI interactions."
+**Why this works:**
+- Uses "Neotoma" at paragraph start and when introducing a new concept
+- Uses "the system" and pronouns within the paragraph to vary structure
+- Avoids immediate consecutive repetition while maintaining clarity
 ## Preferred Patterns
 ### Formatting Techniques
 **Use formatting to improve readability:**
@@ -183,6 +194,8 @@ When writing or editing documentation, verify:
 - [ ] Colons used for list descriptions, not dashes
 - [ ] Paragraphs are short (3-4 sentences, maximum 5)
 - [ ] No immediate repetition of proper nouns in consecutive sentences
+- [ ] Lists used for 3+ related items or concepts
+- [ ] Formatting techniques applied where appropriate (lists, subheadings)
 ## Integration with Documentation Standards
 This style guide complements `docs/conventions/documentation_standards.md`. Apply both:
 - **Documentation Standards**: Structure, format, required sections, diagrams
@@ -205,9 +218,10 @@ Load this document whenever:
 5. Simple, declarative sentences with active voice
 6. One idea per sentence
 7. Keep paragraphs short (3-4 sentences, maximum 5)
-8. Avoid immediate repetition of proper nouns in consecutive sentences
-9. Use formatting techniques (lists, subheadings) for complex topics
-10. Convert series of related points into lists when appropriate
+8. Avoid immediate repetition of proper nouns in consecutive sentences within the same paragraph
+9. Use proper nouns when needed for clarity, emphasis, or at paragraph starts
+10. Use formatting techniques (lists, subheadings) for complex topics
+11. Convert series of related points into lists when appropriate
 ### Forbidden Patterns
 - Em dashes (—)
 - En dashes (–)
@@ -218,7 +232,8 @@ Load this document whenever:
 - Redundant qualifiers
 - Complex nested sentence structures
 - Long paragraphs (over 5 sentences)
-- Immediate repetition of proper nouns in consecutive sentences
+- Immediate repetition of proper nouns in consecutive sentences within the same paragraph
+- Overusing proper nouns when pronouns or descriptive terms would work better
 - Long series of related points in paragraph form (use lists instead)
 ### Validation Checklist
 - [ ] No em dashes found (search for "—")
@@ -230,4 +245,8 @@ Load this document whenever:
 - [ ] Active voice used
 - [ ] Colons used for list descriptions
 - [ ] Paragraphs are short (3-4 sentences, maximum 5)
-- [ ] No immediate repetition of proper nouns in consecutive sentences
+- [ ] No immediate repetition of proper nouns in consecutive sentences within the same paragraph
+- [ ] Proper nouns used appropriately (for clarity, emphasis, or at paragraph starts)
+- [ ] Pronouns and descriptive terms used to vary sentence structure
+- [ ] Lists used for 3+ related items or concepts
+- [ ] Formatting techniques applied where appropriate

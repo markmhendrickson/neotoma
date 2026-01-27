@@ -6,7 +6,7 @@ Neotoma is a deterministic truth layer that transforms fragmented personal data 
 
 Neotoma builds persistent structured memory for AI agents through **dual-path storing**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation. This creates an incremental knowledge base that grows more accurate and comprehensive over time.
 
-The system transforms fragmented personal data into a unified memory graph. The graph connects people, companies, events, and relationships across all your data. Every fact traces back to its source material. Dates automatically create timelines. Entities are unified across all source material, so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
+The system transforms fragmented personal data into a unified memory graph. The graph connects people, companies, events, and relationships across all your data. Every fact traces back to its source. Dates automatically create timelines. Entities are unified across all source, so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
 
 All memory is exposed to AI tools via Model Context Protocol (MCP). This ensures agents have structured, validated access to your truth layer. Agents can maintain context across sessions, answer questions about your personal data, and build on previous interactions. This turns fragmented personal data into a persistent, queryable memory that scales with your agent usage.
 
@@ -39,13 +39,13 @@ Neotoma provides persistent, structured memory built on three architectural foun
 - **Cryptographic integrity**: Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 - **Event-sourced history**: Complete event log enables historical replay and audit trail of all modifications
 - **Deterministic guarantees**: Same input always produces same output. No probabilistic behavior or hallucinations.
-- **Dual-path storing**: Documents (PDFs, images, receipts) AND agent-created structured source material
+- **Dual-path storing**: Documents (PDFs, images, receipts) AND agent-created structured source
 - **Entity resolution**: Deterministic hash-based canonical IDs unify entities across invoices, contracts, and agent interactions automatically
 - **Timeline generation**: Automatic chronological ordering from date fields across all personal data
 - **No context window limits**: Persistent storage means no truncation. All data remains accessible with consistent performance at scale
 - **Persistent across sessions**: Memory persists indefinitely across all conversations and sessions
 
-This enables agents to reason across all your data: documents, agent-created source material, and conversations. This creates a unified memory graph that grows more valuable with each interaction.
+This enables agents to reason across all your data: documents, agent-created source, and conversations. This creates a unified memory graph that grows more valuable with each interaction.
 
 ## Problems Solved
 
@@ -54,7 +54,7 @@ This enables agents to reason across all your data: documents, agent-created sou
 | **Personal data is fragmented**                                                                  | Dual-path storing from file uploads (PDFs, images, email attachments) and agent interactions, creating a single source of truth                                                         |
 | **Provider memory is conversation-only**                                                         | Structured personal data memory. Entity resolution and timelines work across documents AND agent-created data                                                                           |
 | **AI has no memory across sessions**                                                             | Persistent structured memory via MCP. Agents can read accumulated memory and write new structured data, maintaining continuity across sessions                                          |
-| **No cross-data reasoning**                                                                      | Memory graph connects source material, entities, and events with typed relationships, enabling agents to reason across all personal data                                                |
+| **No cross-data reasoning**                                                                      | Memory graph connects source, entities, and events with typed relationships, enabling agents to reason across all personal data                                                |
 | **Repetitive context-setting**                                                                   | Agents query existing structured memory instead of requiring manual context re-entry; incremental memory growth reduces need for repeated explanations                                  |
 | **Lost institutional knowledge**                                                                 | All insights and contextual data persist in structured, queryable format with full provenance                                                                                           |
 | **Entity fragmentation**                                                                         | Hash-based canonical IDs unify entities across all personal data. "Acme Corp" in documents matches "Acme Corp" in agent-created data                                                    |
@@ -111,7 +111,7 @@ ChatGPT, Claude, and Gemini offer conversation-only memory. Neotoma provides str
 - **Immutable audit trail**: Every change permanently recorded with full provenance. Time-travel queries enable viewing entity state at any point in time
 - **Event-sourced history**: Complete event log enables historical replay and audit trail of all modifications
 - **No context window limits**: Persistent storage with consistent performance at scale. All data remains accessible without truncation.
-- **Dual-path storing**: File uploads (PDFs, images, receipts) + agent-created structured source material during interactions
+- **Dual-path storing**: File uploads (PDFs, images, receipts) + agent-created structured source during interactions
 
 ## Current Status
 
@@ -256,23 +256,26 @@ npm run lint
 
 Neotoma provides MCP (Model Context Protocol) integration for AI tools, enabling agents to access and modify your structured memory.
 
+**Authentication:** OAuth 2.0 with PKCE (recommended) provides secure, long-lived connections with automatic token refresh. Session tokens are deprecated.
+
 **Setup Guides:**
 
-- **[Cursor MCP Setup](docs/developer/mcp_cursor_setup.md)**: Configure Neotoma MCP server for Cursor (stdio-based)
-- **[Claude Code MCP Setup](docs/developer/mcp_claude_code_setup.md)**: Configure Neotoma MCP server for Claude Code localhost agent (stdio-based)
+- **[Cursor MCP Setup](docs/developer/mcp_cursor_setup.md)**: Configure Neotoma MCP server for Cursor (stdio-based, OAuth)
+- **[Claude Code MCP Setup](docs/developer/mcp_claude_code_setup.md)**: Configure Neotoma MCP server for Claude Code localhost agent (stdio-based, OAuth)
 - **[ChatGPT Custom GPT Setup](docs/developer/mcp_chatgpt_setup.md)**: Configure Neotoma HTTP Actions for ChatGPT Custom GPTs (OpenAPI-based)
+- **[OAuth Implementation](docs/developer/mcp_oauth_implementation.md)**: OAuth flow details and migration guide
 
 **Available Actions:**
 
-- **Storing:** `store` (unified storing for structured and unstructured source material)
-- **Interpretation:** `reinterpret` (re-run interpretation on existing source material with new config)
+- **Storing:** `store` (unified storing for structured and unstructured source)
+- **Interpretation:** `reinterpret` (re-run interpretation on existing source with new config)
 - **Correction:** `correct` (create high-priority correction observations)
 - **Entity Operations:** `retrieve_entities`, `retrieve_entity_by_identifier`, `retrieve_entity_snapshot`, `merge_entities`, `list_entity_types`
 - **Observation Operations:** `list_observations`, `retrieve_field_provenance`
 - **Relationship Operations:** `create_relationship`, `list_relationships`, `get_relationship_snapshot`, `retrieve_related_entities`
 - **Timeline Operations:** `list_timeline_events`
 - **Graph Operations:** `retrieve_graph_neighborhood` (complete graph context around any node)
-- **File Operations:** `retrieve_file_url` (retrieve signed URL for stored source material)
+- **File Operations:** `retrieve_file_url` (retrieve signed URL for stored source)
 - **Schema Management:** `analyze_schema_candidates`, `get_schema_recommendations`, `update_schema_incremental`, `register_schema`
 
 ## Using Neotoma MCP in Another Workspace
@@ -308,7 +311,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 
 **Additional Resources:**
 
-- **Conventions** (`docs/conventions/`): Documentation standards, README generation framework
+- **Conventions** (`docs/conventions/`): Documentation standards, README generation framework, native browser debugging rule
 - **Legal** (`docs/legal/`): Compliance, privacy policy, terms of service, changelogs
 - **Migration** (`docs/migration/`): Migration guides, breaking changes
 - **Templates** (`docs/templates/`): Issue templates, PR templates
@@ -320,17 +323,17 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 
 1. **Deterministic (Creates Verifiable Domain)**: Same input → same output, always. No randomness, no LLM extraction in MVP. By making extraction deterministic and verifiable, Neotoma creates a verifiable domain for personal data. This provides objective, non-gameable results that enable reliable, consistent outcomes LLMs can depend on.
 2. **Schema-first**: Type-driven extraction, not freeform notes or conversation-only memory
-3. **Explainable**: Every field traces to source material (document or agent interaction)
+3. **Explainable**: Every field traces to source (document or agent interaction)
 4. **Entity-unified**: Canonical IDs across all personal data (hash-based)
 5. **Timeline-aware**: Automatic chronological ordering from date fields across all personal data
 6. **Cross-platform**: MCP-exposed structured memory for ChatGPT, Claude, Cursor. Not platform-locked.
 7. **Privacy-first**: User-controlled memory with encryption and row-level security
 8. **Immutable**: Truth never changes once stored. Immutable audit trail with cryptographic integrity.
-9. **Provenance**: Full audit trail for all source material (documents and agent interactions). Every change permanently recorded.
+9. **Provenance**: Full audit trail for all source (documents and agent interactions). Every change permanently recorded.
 10. **Event-sourced**: Domain Events → Reducers → State updates. Complete event log enables historical replay and time-travel queries.
 11. **Cryptographic integrity**: Hash-based entity IDs and event chaining ensure deterministic, tamper-evident records
 12. **Dual-path storing**: File uploads + agent interactions via MCP
-13. **Four-layer model**: Source Material → Observation → Entity → Entity Snapshot
+13. **Four-layer model**: Source → Observation → Entity → Entity Snapshot
 
 ## Testing
 

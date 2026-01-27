@@ -1,0 +1,50 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Mortgage - Primary Residence",
+    "liability_type": "mortgage",
+    "amount_usd": 500000.0,
+    "amount_original": 500000.0,
+    "currency_original": "USD",
+    "snapshot_date": "2024-12-15T00:00:00Z",
+    "notes": "30-year fixed rate mortgage"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Student Loan",
+    "liability_type": "student_loan",
+    "amount_usd": 25000.0,
+    "amount_original": 25000.0,
+    "currency_original": "USD",
+    "snapshot_date": "2024-12-15T00:00:00Z",
+    "notes": "Federal student loan"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Mortgage - Primary Residence",
+    "liability_type": "mortgage",
+    "amount_usd": 495000.0,
+    "amount_original": 495000.0,
+    "currency_original": "USD",
+    "snapshot_date": "2025-01-15T00:00:00Z",
+    "notes": "30-year fixed rate mortgage - updated balance"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Credit Card - Chase Sapphire",
+    "liability_type": "credit_card",
+    "amount_usd": 2500.0,
+    "snapshot_date": "2024-12-15T00:00:00Z",
+    "notes": "Current credit card balance"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal liability",
+    "liability_type": "other",
+    "amount_usd": 1000.0,
+    "snapshot_date": "2024-12-01T00:00:00Z"
+  }
+]
+
+
+

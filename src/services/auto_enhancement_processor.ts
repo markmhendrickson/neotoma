@@ -94,23 +94,42 @@ export async function processAutoEnhancementQueue(): Promise<{
           field_name: item.fragment_key,
           field_type: eligibility.inferred_type || "string",
           user_id: item.user_id || undefined,
+          converter_suggestion: eligibility.converter_suggestion,
         });
 
-        // Actually update the schema (this was missing - the bug!)
-        await schemaRegistry.updateSchemaIncremental({
-          entity_type: item.entity_type,
-          fields_to_add: [
-            {
-              field_name: item.fragment_key,
-              field_type: eligibility.inferred_type || "string",
-              required: false,
-            },
-          ],
-          user_id: item.user_id || undefined,
-          user_specific: !!item.user_id,
-          activate: true, // Activate immediately so new data uses updated schema
-          migrate_existing: true, // Migrate raw_fragments to observations for existing data
-        });
+        // Actually update the schema - handle both add_fields and add_converters
+        if (eligibility.converter_suggestion) {
+          // Add converter to existing field
+          await schemaRegistry.updateSchemaIncremental({
+            entity_type: item.entity_type,
+            converters_to_add: [
+              {
+                field_name: item.fragment_key,
+                converter: eligibility.converter_suggestion,
+              },
+            ],
+            user_id: item.user_id || undefined,
+            user_specific: !!item.user_id,
+            activate: true, // Activate immediately so new data uses updated schema
+            migrate_existing: true, // Migrate raw_fragments to observations for existing data
+          });
+        } else {
+          // Add new field
+          await schemaRegistry.updateSchemaIncremental({
+            entity_type: item.entity_type,
+            fields_to_add: [
+              {
+                field_name: item.fragment_key,
+                field_type: eligibility.inferred_type || "string",
+                required: false,
+              },
+            ],
+            user_id: item.user_id || undefined,
+            user_specific: !!item.user_id,
+            activate: true, // Activate immediately so new data uses updated schema
+            migrate_existing: true, // Migrate raw_fragments to observations for existing data
+          });
+        }
 
         // Mark as completed
         await supabase

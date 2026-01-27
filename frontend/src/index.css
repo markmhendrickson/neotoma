@@ -4,64 +4,122 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Light Mode - Base Colors */
+    --background: 0 0% 100%;             /* #FFFFFF - Pure white */
+    --foreground: 222 47% 11%;            /* #111827 - Near-black */
+    --card: 210 20% 98%;                 /* #F9FAFB - Subtle gray */
+    --card-foreground: 222 47% 11%;      /* #111827 - Primary text */
+    --popover: 0 0% 100%;                /* #FFFFFF - Pure white */
+    --popover-foreground: 222 47% 11%;   /* #111827 - Primary text */
+    
+    /* Primary (Trust/Action) */
+    --primary: 210 100% 40%;              /* #0066CC - Professional blue */
+    --primary-foreground: 0 0% 100%;     /* #FFFFFF - White text */
+    
+    /* Secondary */
+    --secondary: 210 20% 96%;             /* #F3F4F6 - Tertiary background */
+    --secondary-foreground: 222 47% 11%; /* #111827 - Primary text */
+    
+    /* Muted */
+    --muted: 210 20% 96%;                 /* #F3F4F6 - Tertiary background */
+    --muted-foreground: 215 16% 47%;     /* #6B7280 - Secondary text */
+    
+    /* Accent */
+    --accent: 210 20% 96%;                /* #F3F4F6 - Tertiary background */
+    --accent-foreground: 222 47% 11%;    /* #111827 - Primary text */
+    
+    /* Status Colors */
+    --destructive: 0 84% 60%;             /* #EF4444 - Red */
+    --destructive-foreground: 0 0% 100%; /* #FFFFFF - White text */
+    --success: 142 71% 45%;               /* #10B981 - Green */
+    --warning: 38 92% 50%;                /* #F59E0B - Amber */
+    --info: 217 91% 60%;                  /* #3B82F6 - Blue */
+    
+    /* Borders and Dividers */
+    --border: 210 20% 90%;                /* #E5E7EB - Subtle gray borders */
+    --input: 210 20% 90%;                 /* #E5E7EB - Input borders */
+    --divider: 210 20% 82%;               /* #D1D5DB - Dividers */
+    
+    /* Ring (focus) */
+    --ring: 210 100% 40%;                 /* #0066CC - Primary blue */
+    
+    /* Border Radius */
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    
+    /* Sidebar */
+    --sidebar-background: 210 20% 98%;     /* #F9FAFB - Subtle gray (matches secondary) */
+    --sidebar-foreground: 222 47% 11%;    /* #111827 - Primary text */
+    --sidebar-primary: 210 100% 40%;     /* #0066CC - Primary blue */
+    --sidebar-primary-foreground: 0 0% 100%; /* #FFFFFF - White text */
+    --sidebar-accent: 210 20% 96%;        /* #F3F4F6 - Tertiary background */
+    --sidebar-accent-foreground: 222 47% 11%; /* #111827 - Primary text */
+    --sidebar-border: 210 20% 90%;        /* #E5E7EB - Subtle gray borders */
+    --sidebar-ring: 210 100% 40%;         /* #0066CC - Primary blue */
+    
+    /* Entity Type Colors */
+    --entity-person: 239 84% 67%;         /* #6366F1 - Indigo */
+    --entity-company: 258 90% 66%;        /* #8B5CF6 - Purple */
+    --entity-location: 330 81% 60%;         /* #EC4899 - Pink */
+    --entity-event: 38 92% 50%;           /* #F59E0B - Amber */
+    --entity-document: 142 71% 45%;       /* #10B981 - Green */
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Dark Mode - Base Colors */
+    --background: 222 47% 11%;            /* #0F172A - Deep slate */
+    --foreground: 210 40% 95%;            /* #F1F5F9 - Near-white */
+    --card: 217 33% 18%;                  /* #1E293B - Slightly lighter */
+    --card-foreground: 210 40% 95%;       /* #F1F5F9 - Near-white */
+    --popover: 222 47% 11%;               /* #0F172A - Deep slate */
+    --popover-foreground: 210 40% 95%;   /* #F1F5F9 - Near-white */
+    
+    /* Primary (Trust/Action) */
+    --primary: 217 91% 60%;               /* #3B82F6 - Brighter blue */
+    --primary-foreground: 0 0% 100%;      /* #FFFFFF - White text */
+    
+    /* Secondary */
+    --secondary: 217 33% 25%;             /* #334155 - Tertiary background */
+    --secondary-foreground: 210 40% 95%; /* #F1F5F9 - Near-white */
+    
+    /* Muted */
+    --muted: 217 33% 25%;                 /* #334155 - Tertiary background */
+    --muted-foreground: 215 20% 65%;      /* #94A3B8 - Secondary text */
+    
+    /* Accent */
+    --accent: 217 33% 25%;                /* #334155 - Tertiary background */
+    --accent-foreground: 210 40% 95%;    /* #F1F5F9 - Near-white */
+    
+    /* Status Colors (Dark Mode) */
+    --destructive: 0 72% 51%;             /* #F87171 - Softer red */
+    --destructive-foreground: 0 0% 100%;  /* #FFFFFF - White text */
+    --success: 142 76% 36%;               /* #22C55E - Brighter green */
+    --warning: 43 96% 56%;                /* #FBBF24 - Brighter amber */
+    --info: 213 94% 68%;                  /* #60A5FA - Lighter blue */
+    
+    /* Borders and Dividers */
+    --border: 217 33% 25%;                /* #334155 - Subtle slate borders */
+    --input: 217 33% 25%;                 /* #334155 - Input borders */
+    --divider: 215 20% 35%;               /* #475569 - Dividers */
+    
+    /* Ring (focus) */
+    --ring: 217 91% 60%;                  /* #3B82F6 - Primary blue */
+    
+    /* Sidebar */
+    --sidebar-background: 217 33% 18%;     /* #1E293B - Slightly lighter (matches secondary) */
+    --sidebar-foreground: 210 40% 95%;    /* #F1F5F9 - Near-white */
+    --sidebar-primary: 217 91% 60%;       /* #3B82F6 - Brighter blue */
+    --sidebar-primary-foreground: 0 0% 100%; /* #FFFFFF - White text */
+    --sidebar-accent: 217 33% 25%;        /* #334155 - Tertiary background */
+    --sidebar-accent-foreground: 210 40% 95%; /* #F1F5F9 - Near-white */
+    --sidebar-border: 217 33% 25%;         /* #334155 - Subtle slate borders */
+    --sidebar-ring: 217 91% 60%;          /* #3B82F6 - Primary blue */
+    
+    /* Entity Type Colors (same in dark mode) */
+    --entity-person: 239 84% 67%;         /* #6366F1 - Indigo */
+    --entity-company: 258 90% 66%;        /* #8B5CF6 - Purple */
+    --entity-location: 330 81% 60%;       /* #EC4899 - Pink */
+    --entity-event: 38 92% 50%;           /* #F59E0B - Amber */
+    --entity-document: 142 71% 45%;       /* #10B981 - Green */
   }
 }
 
@@ -107,42 +165,39 @@
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 0.9375rem; /* 15px - body text size */
+    font-size: 0.8125rem; /* 13px - body text size (0.8rem from spec) */
     line-height: 1.6;
     margin: 0;
     padding: 0;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
   }
   #root {
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
   }
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', 'Courier New', monospace;
-    font-size: 0.875rem; /* 14px - monospace size */
+    font-size: 0.8125rem; /* 13px - monospace size */
     line-height: 1.5;
   }
   h1 {
-    font-size: 2rem; /* 32px */
+    font-size: 1.5rem; /* 24px */
     font-weight: 700;
     line-height: 1.2;
     letter-spacing: -0.02em;
   }
   h2 {
-    font-size: 1.5rem; /* 24px */
+    font-size: 1.25rem; /* 20px */
     font-weight: 600;
     line-height: 1.3;
     letter-spacing: -0.01em;
   }
   h3 {
-    font-size: 1.25rem; /* 20px */
+    font-size: 1rem; /* 16px */
     font-weight: 600;
     line-height: 1.4;
   }
   h4 {
-    font-size: 1rem; /* 16px */
+    font-size: 0.875rem; /* 14px */
     font-weight: 600;
     line-height: 1.5;
   }

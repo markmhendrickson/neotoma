@@ -1,0 +1,61 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "2024 US Federal Tax Return",
+    "jurisdiction": "US",
+    "year": 2024,
+    "filings": "1040,8949",
+    "status": "pending",
+    "companies": "",
+    "due_date": "2025-04-15T00:00:00Z",
+    "filed_date": null,
+    "amount_owed": 0,
+    "amount_paid": 0,
+    "currency": "USD",
+    "notes": "2024 federal tax return - not yet filed"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "2024 US Federal Tax Return",
+    "jurisdiction": "US",
+    "year": 2024,
+    "filings": "1040,8949",
+    "status": "filed",
+    "companies": "",
+    "due_date": "2025-04-15T00:00:00Z",
+    "filed_date": "2025-04-10T00:00:00Z",
+    "amount_owed": 2500.0,
+    "amount_paid": 2500.0,
+    "currency": "USD",
+    "notes": "2024 federal tax return - filed early"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "2024 California State Tax",
+    "jurisdiction": "California",
+    "year": 2024,
+    "status": "pending",
+    "due_date": "2025-04-15T00:00:00Z",
+    "amount_owed": 0,
+    "amount_paid": 0,
+    "currency": "USD"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "2023 Federal Amended",
+    "jurisdiction": "US",
+    "year": 2023,
+    "status": "filed",
+    "filed_date": "2024-10-15T00:00:00Z",
+    "notes": "Amended for missing deductions"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal filing",
+    "year": 2024,
+    "status": "pending"
+  }
+]
+
+
+

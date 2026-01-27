@@ -19,7 +19,7 @@ config();
 
 // Expected tables (canonical, should exist)
 const EXPECTED_TABLES = [
-  // Core source material
+  // Core source
   "sources",
   "interpretations",
   

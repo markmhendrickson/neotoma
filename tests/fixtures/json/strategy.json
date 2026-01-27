@@ -1,0 +1,68 @@
+[
+  {
+    "schema_version": "1.0",
+    "strategy_id": "strat-fin-001",
+    "title": "Financial Independence Strategy",
+    "content": "# Financial Independence Strategy\n\n## Principles\n\n1. Live below means\n2. Invest surplus\n3. Build passive income\n\n## Tactics\n\n- Max out tax-advantaged accounts\n- Dollar-cost averaging into index funds\n- Build emergency fund (6 months)",
+    "category": "strategy",
+    "domain": "financial",
+    "file_path": "strategy/financial-goals.md",
+    "status": "active",
+    "created_date": "2024-01-01",
+    "last_updated_date": "2024-06-15",
+    "import_date": "2025-01-15",
+    "import_source_file": "strategy/financial-goals.md",
+    "notes": "Core financial strategy document"
+  },
+  {
+    "schema_version": "1.0",
+    "strategy_id": "strat-prod-001",
+    "title": "GTD Implementation",
+    "content": "# Getting Things Done\n\n## Capture\n\nCollect everything in inbox\n\n## Clarify\n\nProcess inbox daily\n\n## Organize\n\nSort by context and priority",
+    "category": "tactics",
+    "domain": "operations",
+    "file_path": "tactics/gtd-workflow.md",
+    "status": "active",
+    "created_date": "2024-02-01",
+    "import_date": "2025-01-15",
+    "import_source_file": "tactics/gtd-workflow.md"
+  },
+  {
+    "schema_version": "1.0",
+    "strategy_id": "strat-startup-001",
+    "title": "MVP Launch Strategy",
+    "content": "# MVP Strategy\n\n1. Build core features\n2. Get 10 early users\n3. Iterate based on feedback",
+    "category": "strategy",
+    "domain": "neotoma",
+    "file_path": "strategy/mvp-launch.md",
+    "status": "active",
+    "created_date": "2024-01-15",
+    "last_updated_date": "2024-12-01",
+    "import_date": "2025-01-15",
+    "import_source_file": "strategy/mvp-launch.md",
+    "notes": "Product launch strategy"
+  },
+  {
+    "schema_version": "1.0",
+    "strategy_id": "strat-archived-001",
+    "title": "Legacy approach",
+    "content": "# Old Strategy\n\nNo longer relevant",
+    "category": "strategy",
+    "domain": "general",
+    "file_path": "archive/old-strategy.md",
+    "status": "archived",
+    "import_date": "2025-01-15",
+    "import_source_file": "archive/old-strategy.md"
+  },
+  {
+    "schema_version": "1.0",
+    "strategy_id": "strat-min-001",
+    "title": "Minimal strategy",
+    "content": "Basic content",
+    "category": "strategy",
+    "domain": "general",
+    "file_path": "strategy/minimal.md",
+    "import_date": "2025-01-15",
+    "import_source_file": "strategy/minimal.md"
+  }
+]

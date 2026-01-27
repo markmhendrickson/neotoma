@@ -4,11 +4,11 @@
 
 ### Canonicalization Rules
 
-**Definition:** Rules for normalizing structured [source material](#source-material) data for deterministic deduplication (field selection, string normalization, array sorting). [Canonicalization rules](#canonicalization-rules) are part of [entity schemas](#entity-schema).
+**Definition:** Rules for normalizing structured [source](#source) data for deterministic deduplication (field selection, string normalization, array sorting). [Canonicalization rules](#canonicalization-rules) are part of [entity schemas](#entity-schema).
 
-**Use:** "[Entity schemas](#entity-schema) define [canonicalization rules](#canonicalization-rules) to ensure same [source material](#source-material) produces same content_id."
+**Use:** "[Entity schemas](#entity-schema) define [canonicalization rules](#canonicalization-rules) to ensure same [source](#source) produces same content_id."
 
-**Example:** "The invoice [entity schema](#entity-schema) defines [canonicalization rules](#canonicalization-rules): include only `invoice_number`, `amount`, `vendor_name`; normalize strings to lowercase; sort arrays. Structured [source material](#source-material) `{invoice_number: 'INV-001', vendor_name: 'Acme Corp'}` and `{invoice_number: 'INV-001', vendor_name: 'acme corp'}` produce the same `content_id`."
+**Example:** "The invoice [entity schema](#entity-schema) defines [canonicalization rules](#canonicalization-rules): include only `invoice_number`, `amount`, `vendor_name`; normalize strings to lowercase; sort arrays. Structured [source](#source) `{invoice_number: 'INV-001', vendor_name: 'Acme Corp'}` and `{invoice_number: 'INV-001', vendor_name: 'acme corp'}` produce the same `content_id`."
 
 **Forbidden Synonyms:**
 - ❌ "normalization" (canonicalization is specific type of normalization for deduplication)
@@ -28,11 +28,11 @@
 
 ### Entity Extraction Rule
 
-**Definition:** Rule defining how [entities](#entity) are [extracted](#extraction) from structured [source material](#source-material) (material_self, field_value, or array_items [extraction](#extraction) types). [Entity extraction rules](#entity-extraction-rule) are part of [entity schemas](#entity-schema).
+**Definition:** Rule defining how [entities](#entity) are [extracted](#extraction) from structured [source](#source) (material_self, field_value, or array_items [extraction](#extraction) types). [Entity extraction rules](#entity-extraction-rule) are part of [entity schemas](#entity-schema).
 
-**Use:** "[Entity schemas](#entity-schema) define [entity extraction rules](#entity-extraction-rule) for multi-[entity](#entity) [extraction](#extraction) from structured [source material](#source-material)."
+**Use:** "[Entity schemas](#entity-schema) define [entity extraction rules](#entity-extraction-rule) for multi-[entity](#entity) [extraction](#extraction) from structured [source](#source)."
 
-**Example:** "The note [entity schema](#entity-schema) defines: `{extraction_type: 'material_self', entity_type: 'note'}` [extracts](#extraction) the note [entity](#entity), and `{extraction_type: 'array_items', source_field: 'tasks', entity_type: 'task'}` [extracts](#extraction) task [entities](#entity) from the tasks array in structured [source material](#source-material)."
+**Example:** "The note [entity schema](#entity-schema) defines: `{extraction_type: 'material_self', entity_type: 'note'}` [extracts](#extraction) the note [entity](#entity), and `{extraction_type: 'array_items', source_field: 'tasks', entity_type: 'task'}` [extracts](#extraction) task [entities](#entity) from the tasks array in structured [source](#source)."
 
 **Forbidden Synonyms:**
 - ❌ "extraction rule" (too generic, must specify entity extraction)
@@ -40,7 +40,7 @@
 
 ### Entity Schema
 
-**Definition:** Versioned definition of fields, types, validators, merge policies, [canonicalization rules](#canonicalization-rules), and [entity extraction rules](#entity-extraction-rule) for an [entity type](#entity-type), stored in the schema registry. Defines how structured [source material](#source-material) is normalized, deduplicated, and processed into [observations](#observation) and [entity snapshots](#entity-snapshot).
+**Definition:** Versioned definition of fields, types, validators, merge policies, [canonicalization rules](#canonicalization-rules), and [entity extraction rules](#entity-extraction-rule) for an [entity type](#entity-type), stored in the schema registry. Defines how structured [source](#source) is normalized, deduplicated, and processed into [observations](#observation) and [entity snapshots](#entity-snapshot).
 
 **Use:** "Each [entity type](#entity-type) has an [entity schema](#entity-schema) that defines its field structure, validation rules, normalization for deduplication, and extraction of related [entities](#entity)."
 
@@ -68,11 +68,11 @@
 
 ### Event
 
-**Definition:** A timeline [event](#event) derived from extracted date fields in [source material](#source-material). [Events](#event) reference their [source material](#source-material) via `source_material_id` and include the field name that contained the date.
+**Definition:** A timeline [event](#event) derived from extracted date fields in [source](#source). [Events](#event) reference their [source](#source) via `source_material_id` and include the field name that contained the date.
 
-**Use:** "[Events](#event) appear on the timeline view and are generated from date fields in [source material](#source-material)."
+**Use:** "[Events](#event) appear on the timeline view and are generated from date fields in [source](#source)."
 
-**Example:** "An invoice [source material](#source-material) with `date_issued: '2025-01-15'` generates an [event](#event) with `event_type: 'InvoiceIssued'`, `event_timestamp: '2025-01-15T00:00:00Z'`, and `source_field: 'date_issued'`."
+**Example:** "An invoice [source](#source) with `date_issued: '2025-01-15'` generates an [event](#event) with `event_type: 'InvoiceIssued'`, `event_timestamp: '2025-01-15T00:00:00Z'`, and `source_field: 'date_issued'`."
 
 **Forbidden Synonyms:**
 - ❌ "activity" (too informal)
@@ -93,11 +93,11 @@
 
 ### Extraction
 
-**Definition:** Deterministic rule-based field [extraction](#extraction) from [source material](#source-material).
+**Definition:** Deterministic rule-based field [extraction](#extraction) from [source](#source).
 
 **Use:** "[Extraction](#extraction) uses regex to find invoice numbers."
 
-**Example:** "[Extraction](#extraction) applies the regex pattern `/INV-(\d+)/i` to find invoice numbers, always producing 'INV-001' from [source material](#source-material) containing 'Invoice #INV-001' or 'invoice inv-001'."
+**Example:** "[Extraction](#extraction) applies the regex pattern `/INV-(\d+)/i` to find invoice numbers, always producing 'INV-001' from [source](#source) containing 'Invoice #INV-001' or 'invoice inv-001'."
 
 **Forbidden Synonyms:**
 - ❌ "parsing" (too generic)
@@ -105,11 +105,11 @@
 
 ### Storing
 
-**Definition:** The process of uploading, [extracting](#extraction), and inserting [source material](#source-material) into the [memory graph](#memory-graph). [Storing](#storing) handles both unstructured [source material](#source-material) (files, raw text, URLs) and structured [source material](#source-material) (JSON with entity types) via a unified `store` MCP action. Unstructured [source material](#source-material) is stored → [interpretation](#interpretation) → structured [source material](#source-material) → processed via [entity schema](#entity-schema) → [observations](#observation). Structured [source material](#source-material) is stored → processed via [entity schema](#entity-schema) → [observations](#observation).
+**Definition:** The process of uploading, [extracting](#extraction), and inserting [source](#source) into the [memory graph](#memory-graph). [Storing](#storing) handles both unstructured [source](#source) (files, raw text, URLs) and structured [source](#source) (JSON with entity types) via a unified `store` MCP action. Unstructured [source](#source) is stored → [interpretation](#interpretation) → structured [source](#source) → processed via [entity schema](#entity-schema) → [observations](#observation). Structured [source](#source) is stored → processed via [entity schema](#entity-schema) → [observations](#observation).
 
-**Use:** "[Storing](#storing) pipeline processes [source material](#source-material) deterministically. Unstructured [source material](#source-material) is interpreted into structured [source material](#source-material), which is then processed to create [observations](#observation)."
+**Use:** "[Storing](#storing) pipeline processes [source](#source) deterministically. Unstructured [source](#source) is interpreted into structured [source](#source), which is then processed to create [observations](#observation)."
 
-**Example:** "The unified `store` action accepts either unstructured [source material](#source-material) (e.g., `{file_content: '...', mime_type: 'application/pdf'}`) or structured [source material](#source-material) (e.g., `{entities: [{entity_type: 'invoice', ...}]}`). Uploading invoice.pdf triggers [storing](#storing): the unstructured [source material](#source-material) is stored, an [interpretation](#interpretation) transforms it into structured [source material](#source-material) with entity types, then the structured [source material](#source-material) is processed using [entity schemas](#entity-schema) to create [observations](#observation) for the invoice [entity](#entity) and vendor company [entity](#entity), and [events](#event) are generated from date fields. Alternatively, structured [source material](#source-material) with `entity_type: 'invoice'` submitted directly is stored and processed using the invoice [entity schema](#entity-schema) for normalization and [entity extraction](#entity-extraction-rule) to create [observations](#observation)."
+**Example:** "The unified `store` action accepts either unstructured [source](#source) (e.g., `{file_content: '...', mime_type: 'application/pdf'}`) or structured [source](#source) (e.g., `{entities: [{entity_type: 'invoice', ...}]}`). Uploading invoice.pdf triggers [storing](#storing): the unstructured [source](#source) is stored, an [interpretation](#interpretation) transforms it into structured [source](#source) with entity types, then the structured [source](#source) is processed using [entity schemas](#entity-schema) to create [observations](#observation) for the invoice [entity](#entity) and vendor company [entity](#entity), and [events](#event) are generated from date fields. Alternatively, structured [source](#source) with `entity_type: 'invoice'` submitted directly is stored and processed using the invoice [entity schema](#entity-schema) for normalization and [entity extraction](#entity-extraction-rule) to create [observations](#observation)."
 
 **Forbidden Synonyms:**
 - ❌ "import" (ambiguous)
@@ -119,11 +119,11 @@
 
 ### Interpretation
 
-**Definition:** Versioned interpretation attempt on unstructured [source material](#source-material), with config logging (provider, model, temperature, prompt_hash). Transforms unstructured [source material](#source-material) into structured [source material](#source-material) (with entity types) that is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation.
+**Definition:** Versioned interpretation attempt on unstructured [source](#source), with config logging (provider, model, temperature, prompt_hash). Transforms unstructured [source](#source) into structured [source](#source) (with entity types) that is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation.
 
-**Use:** "Each [interpretation](#interpretation) creates new structured [source material](#source-material) without modifying existing ones. The structured [source material](#source-material) is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation, just like directly submitted structured [source material](#source-material)."
+**Use:** "Each [interpretation](#interpretation) creates new structured [source](#source) without modifying existing ones. The structured [source](#source) is then processed using [entity schemas](#entity-schema) for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation, just like directly submitted structured [source](#source)."
 
-**Example:** "An [interpretation](#interpretation) on unstructured [source material](#source-material) `src_invoice_pdf` with config `{provider: 'openai', model_id: 'gpt-4', temperature: 0}` extracts structured data with entity types (e.g., `entity_type: 'invoice'`, `entity_type: 'company'`) and creates structured [source material](#source-material). This structured [source material](#source-material) is then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule) (to identify related entities), and [observation](#observation) creation `obs_001`, `obs_002`. Re-running with a different model creates new structured [source material](#source-material) and new [observations](#observation) `obs_003`, `obs_004` without modifying the original ones."
+**Example:** "An [interpretation](#interpretation) on unstructured [source](#source) `src_invoice_pdf` with config `{provider: 'openai', model_id: 'gpt-4', temperature: 0}` extracts structured data with entity types (e.g., `entity_type: 'invoice'`, `entity_type: 'company'`) and creates structured [source](#source). This structured [source](#source) is then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule) (to identify related entities), and [observation](#observation) creation `obs_001`, `obs_002`. Re-running with a different model creates new structured [source](#source) and new [observations](#observation) `obs_003`, `obs_004` without modifying the original ones."
 
 **Forbidden Synonyms:**
 - ❌ "interpretation run" (simplified to [interpretation](#interpretation))
@@ -132,11 +132,11 @@
 
 ### Memory Graph
 
-**Definition:** The interconnected graph of [source material](#source-material), [observations](#observation), [entities](#entity), [relationships](#relationship), and [events](#event) with typed edges.
+**Definition:** The interconnected graph of [source](#source), [observations](#observation), [entities](#entity), [relationships](#relationship), and [events](#event) with typed edges.
 
-**Use:** "The [memory graph](#memory-graph) connects [source material](#source-material) to [observations](#observation) to [entities](#entity)."
+**Use:** "The [memory graph](#memory-graph) connects [source](#source) to [observations](#observation) to [entities](#entity)."
 
-**Example:** "The [memory graph](#memory-graph) shows: [source material](#source-material) `src_invoice_pdf` → [observation](#observation) `obs_001` → [entity](#entity) `ent_acme_corp`, and [entity](#entity) `ent_invoice_123` has a SETTLES [relationship](#relationship) to [entity](#entity) `ent_payment_456`."
+**Example:** "The [memory graph](#memory-graph) shows: [source](#source) `src_invoice_pdf` → [observation](#observation) `obs_001` → [entity](#entity) `ent_acme_corp`, and [entity](#entity) `ent_invoice_123` has a SETTLES [relationship](#relationship) to [entity](#entity) `ent_payment_456`."
 
 **Forbidden Synonyms:**
 - ❌ "knowledge graph" (implies semantic reasoning)
@@ -144,9 +144,9 @@
 
 ### Observation
 
-**Definition:** Granular facts [extracted](#extraction) from [source material](#source-material). [Observations](#observation) are merged via [reducers](#reducer) to compute [entity](#entity) [entity snapshots](#entity-snapshot).
+**Definition:** Granular facts [extracted](#extraction) from [source](#source). [Observations](#observation) are merged via [reducers](#reducer) to compute [entity](#entity) [entity snapshots](#entity-snapshot).
 
-**Use:** "Each [observation](#observation) traces to its [source material](#source-material), and optionally to the [interpretation](#interpretation) that created the structured [source material](#source-material)."
+**Use:** "Each [observation](#observation) traces to its [source](#source), and optionally to the [interpretation](#interpretation) that created the structured [source](#source)."
 
 **Example:** "An [observation](#observation) for [entity](#entity) `ent_acme_corp` contains `fields: {name: 'Acme Corp', address: '123 Main St'}`, `source_material_id: 'src_001'`, `observed_at: '2025-01-15T10:30:00Z'`, and `source_priority: 0`."
 
@@ -158,11 +158,11 @@
 
 ### Provenance
 
-**Definition:** Metadata tracking the origin of data, including [source material](#source-material), timestamp, user, and [interpretation](#interpretation). [Source material](#source-material) is [stored](#storing) and tracked, and [provenance](#provenance) tracks these stored artifacts. Enables full traceability from [entity snapshots](#entity-snapshot) back to original [source material](#source-material).
+**Definition:** Metadata tracking the origin of data, including [source](#source), timestamp, user, and [interpretation](#interpretation). [Source](#source) is [stored](#storing) and tracked, and [provenance](#provenance) tracks these stored artifacts. Enables full traceability from [entity snapshots](#entity-snapshot) back to original [source](#source).
 
-**Use:** "[Provenance](#provenance) ensures every [observation](#observation) traces to its [source material](#source-material)."
+**Use:** "[Provenance](#provenance) ensures every [observation](#observation) traces to its [source](#source)."
 
-**Example:** "An [observation](#observation)'s [provenance](#provenance) from unstructured [source material](#source-material) includes `source_id: 'src_abc123'` (the uploaded PDF), `interpretation_id: 'run_xyz789'` (which AI model transformed it into structured [source material](#source-material)), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'`. An [observation](#observation)'s [provenance](#provenance) from directly submitted structured [source material](#source-material) includes `source_id: 'src_def456'` (the structured JSON), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'` (no `interpretation_id` since no [interpretation](#interpretation) was performed)."
+**Example:** "An [observation](#observation)'s [provenance](#provenance) from unstructured [source](#source) includes `source_id: 'src_abc123'` (the uploaded PDF), `interpretation_id: 'run_xyz789'` (which AI model transformed it into structured [source](#source)), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'`. An [observation](#observation)'s [provenance](#provenance) from directly submitted structured [source](#source) includes `source_id: 'src_def456'` (the structured JSON), `extracted_at: '2025-01-15T10:30:00Z'`, and `user_id: 'user_001'` (no `interpretation_id` since no [interpretation](#interpretation) was performed)."
 
 **Forbidden Synonyms:**
 - ❌ "metadata" (provenance is specific type of metadata)
@@ -207,20 +207,20 @@
 - ❌ "merged data" (entity snapshot is the computed result)
 - ❌ "aggregate" (implies accumulation, entity snapshot is deterministic computation)
 
-### Source Material
+### Source
 
-**Definition:** Raw data (structured or unstructured) that gets [stored](#storing) into Neotoma with content-addressed deduplication. [Source material](#source-material) can be unstructured (files, raw text, external URLs) or structured (JSON with entity type metadata). The same term applies both at submission time and when stored in the backend. If structured, [source material](#source-material) includes entity type(s) that it represents.
+**Definition:** Raw data (structured or unstructured) that gets [stored](#storing) into Neotoma with content-addressed deduplication. [Sources](#source) can be unstructured (files, raw text, external URLs) or structured (JSON with entity type metadata). The same term applies both at submission time and when stored in the backend. If structured, [sources](#source) include entity type(s) that they represent.
 
-**Use:** "[Source material](#source-material) is [stored](#storing) with SHA-256 hashing. Structured [source material](#source-material) includes entity type metadata for processing."
+**Use:** "[Sources](#source) are [stored](#storing) with SHA-256 hashing. Structured [sources](#source) include entity type metadata for processing."
 
-**Example:** "[Source material](#source-material) can be a PDF file (invoice.pdf), raw text string, external URL, or structured JSON with `entity_type: 'invoice'`. All [source material](#source-material) is stored with content-addressed deduplication. Unstructured [source material](#source-material) undergoes [interpretation](#interpretation) to transform it into structured [source material](#source-material) with entity types, which is then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule), and [observation](#observation) creation. Directly submitted structured [source material](#source-material) undergoes the same [entity schema](#entity-schema) processing for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation."
+**Example:** "A [source](#source) can be a PDF file (invoice.pdf), raw text string, external URL, or structured JSON with `entity_type: 'invoice'`. All [sources](#source) are stored with content-addressed deduplication. Unstructured [sources](#source) undergo [interpretation](#interpretation) to transform them into structured [sources](#source) with entity types, which are then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule), and [observation](#observation) creation. Directly submitted structured [sources](#source) undergo the same [entity schema](#entity-schema) processing for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation."
 
 **Forbidden Synonyms:**
-- ❌ "content" (replaced by [source material](#source-material) for clarity)
+- ❌ "content" (replaced by [source](#source) for clarity)
 - ❌ "data" (too generic)
-- ❌ "file" ([source material](#source-material) includes files but also text, URLs, structured data)
+- ❌ "file" ([source](#source) includes files but also text, URLs, structured data)
 - ❌ "document" (ambiguous)
-- ❌ "source" ([source material](#source-material) is the unified term; "source" was the old term for unstructured only)
+- ❌ "source" ([source](#source) is the unified term; "source" was the old term for unstructured only)
 
 ### Truth Layer
 
@@ -228,7 +228,7 @@
 
 **Use:** "Neotoma is the Truth Layer beneath Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)."
 
-**Example:** "The Truth Layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source material](#source-material) (files) or structured [source material](#source-material) (JSON with entity types), enabling other layers to make decisions based on accurate historical data."
+**Example:** "The Truth Layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling other layers to make decisions based on accurate historical data."
 
 **Forbidden Synonyms:**
 - ❌ "data layer" (too generic)
@@ -237,7 +237,7 @@
 
 ## Legacy Terms (Deprecated)
 
-These terms refer to the legacy record-based architecture that is being phased out in favor of [source material](#source-material)-based architecture. They are documented here for reference during the migration period but should not be used in new code or documentation.
+These terms refer to the legacy record-based architecture that is being phased out in favor of [source](#source)-based architecture. They are documented here for reference during the migration period but should not be used in new code or documentation.
 
 ### Capability
 
@@ -254,11 +254,11 @@ These terms refer to the legacy record-based architecture that is being phased o
 
 ### Record
 
-**Definition:** Legacy term for a single [stored](#storing) document with [extracted](#extraction) truth (metadata + properties + [provenance](#provenance)). Deprecated in favor of [source material](#source-material).
+**Definition:** Legacy term for a single [stored](#storing) document with [extracted](#extraction) truth (metadata + properties + [provenance](#provenance)). Deprecated in favor of [source](#source).
 
-**Status:** Will be removed in v0.2.15. Use "[source material](#source-material)" for all data (structured or unstructured) instead.
+**Status:** Will be removed in v0.2.15. Use "[source](#source)" for all data (structured or unstructured) instead.
 
-**Example:** "Legacy: A [record](#record) stored `{id: 'rec_001', type: 'invoice', properties: {invoice_number: 'INV-001'}}`. Modern: Use [source material](#source-material) for all data, with entity type metadata for structured data."
+**Example:** "Legacy: A [record](#record) stored `{id: 'rec_001', type: 'invoice', properties: {invoice_number: 'INV-001'}}`. Modern: Use [source](#source) for all data, with entity type metadata for structured data."
 
 **Forbidden Synonyms:**
 - ❌ "document" (ambiguous with source file)
@@ -271,7 +271,7 @@ These terms refer to the legacy record-based architecture that is being phased o
 
 **Status:** Will be removed in v0.2.15. Use "[entity type](#entity-type)" for [entity](#entity) classification. [Entity schemas](#entity-schema) now include all processing rules.
 
-**Example:** "Legacy: [Record type](#record-type) `invoice` determined which fields to [extract](#extraction). Modern: Use [entity type](#entity-type) `invoice` for [entity](#entity) classification. The invoice [entity schema](#entity-schema) defines normalization and extraction rules for processing structured [source material](#source-material)."
+**Example:** "Legacy: [Record type](#record-type) `invoice` determined which fields to [extract](#extraction). Modern: Use [entity type](#entity-type) `invoice` for [entity](#entity) classification. The invoice [entity schema](#entity-schema) defines normalization and extraction rules for processing structured [source](#source)."
 
 **Forbidden Synonyms:**
 - ❌ "schema type" (confusing - schemas apply to entity types, not record types)

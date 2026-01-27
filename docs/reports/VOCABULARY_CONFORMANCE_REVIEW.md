@@ -27,7 +27,7 @@ This review identifies terminology inconsistencies across documentation and code
 
 **Changes Made:**
 - Updated all terminology to use canonical terms with markdown links
-- "record" → "[source material](#source-material)" or "[entity](#entity)"
+- "record" → "[source](#source)" or "[entity](#entity)"
 - "record type" → "[entity type](#entity-type)"
 - "schema" → "[entity schema](#entity-schema)"
 - "ingestion" → "[storing](#storing)"
@@ -129,7 +129,7 @@ The following files contain potential deprecated terms. Priority review needed f
 ## 🔍 Common Issues Found
 
 ### Deprecated Terms to Replace
-1. **"record"** → "[source material](#source-material)" or "[entity](#entity)" (context-dependent)
+1. **"record"** → "[source](#source)" or "[entity](#entity)" (context-dependent)
 2. **"record type"** → "[entity type](#entity-type)"
 3. **"capability"** → "[entity schema](#entity-schema)"
 4. **"ingestion"** → "[storing](#storing)"

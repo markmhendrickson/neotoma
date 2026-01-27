@@ -30,7 +30,7 @@ Agents MUST use Neotoma MCP in the following scenarios:
 **Actions:**
 - Use `mcp_neotoma-neotoma_store` for structured data
 - Use `mcp_neotoma-neotoma_store` with `file_path` or `file_content` for files
-- Always include `user_id` (required parameter)
+- **Omit `user_id` parameter** - it is automatically inferred from authentication context (see User ID Inference section)
 - **Proactively persist data**—do not wait for explicit user requests to store
 
 ### 2. Implicit Remembrance Triggers
@@ -58,7 +58,7 @@ Agents MUST use Neotoma MCP in the following scenarios:
 - Use `mcp_neotoma-neotoma_list_entity_types` to discover available entity types (if needed)
 - Use `mcp_neotoma-neotoma_store` with `entities` array for structured data
 - Include ALL fields from source data (schema + non-schema fields)
-- Always include `user_id` (required parameter)
+- **Omit `user_id` parameter** - it is automatically inferred from authentication context (see User ID Inference section)
 - **Check for existing records first** to avoid duplicates (use `retrieve_entity_by_identifier` or `retrieve_entities` with filters)
 
 ### 3. Retrieval Triggers
@@ -85,10 +85,12 @@ Agents MUST use Neotoma MCP in the following scenarios:
 **When to Use Resources:**
 
 1. **Discovery:**
-   - List all available entity types (Neotoma MCP)
    - List all available data types (Parquet MCP)
+   - Discover timeline years/months with events (Neotoma MCP)
+   - Discover relationship types that exist (Neotoma MCP)
    - Discover what data exists without knowing specific IDs
    - Browse collections without complex query parameters
+   - **Note:** Entity type discovery should use `list_entity_types` action (entity types are schema-level, not enumerated as resources)
 
 2. **Simple Browsing:**
    - Get all invoices: `neotoma://entities/invoice` (Neotoma MCP)
@@ -103,9 +105,10 @@ Agents MUST use Neotoma MCP in the following scenarios:
 **When to Use Actions Instead:**
 
 1. **Filtering and Pagination:**
-   - Complex queries with filters (use `retrieve_entities` or `read_parquet` actions)
-   - User-specific filtering (use actions with `user_id` parameter)
-   - Pagination beyond 100 items (use actions with `limit` and `offset`)
+   - Complex queries with multiple filters (use `retrieve_entities` or `read_parquet` actions)
+   - Advanced filtering (date ranges, event types, source filters - use actions)
+   - Pagination beyond 1000 items (resources limited to 1000, use actions for larger datasets)
+   - Note: Resources now support `user_id` filtering via query parameters
 
 2. **Mutations:**
    - Store new data (use `store` action)
@@ -124,13 +127,17 @@ Agents MUST use Neotoma MCP in the following scenarios:
 
 | Resource | URI Pattern | Example |
 | -------- | ----------- | ------- |
+| All Entities | `neotoma://entities` | `neotoma://entities` |
 | Entity Collection | `neotoma://entities/{type}` | `neotoma://entities/invoice` |
+| Entity Types | `neotoma://entity_types` | `neotoma://entity_types` |
 | Individual Entity | `neotoma://entity/{id}` | `neotoma://entity/ent_abc123` |
 | Entity Observations | `neotoma://entity/{id}/observations` | `neotoma://entity/ent_abc123/observations` |
 | Entity Relationships | `neotoma://entity/{id}/relationships` | `neotoma://entity/ent_abc123/relationships` |
+| All Relationships | `neotoma://relationships` | `neotoma://relationships` |
+| Relationship Collection | `neotoma://relationships/{type}` | `neotoma://relationships/PART_OF` |
 | Timeline (Year) | `neotoma://timeline/{year}` | `neotoma://timeline/2024` |
 | Timeline (Month) | `neotoma://timeline/{year}-{month}` | `neotoma://timeline/2024-01` |
-| Source Material | `neotoma://source/{id}` | `neotoma://source/src_abc123` |
+| Source | `neotoma://source/{id}` | `neotoma://source/src_abc123` |
 | All Sources | `neotoma://sources` | `neotoma://sources` |
 
 **Parquet MCP Resources** (see [`docs/specs/PARQUET_MCP_RESOURCES_SPEC.md`](../specs/PARQUET_MCP_RESOURCES_SPEC.md) for specification):
@@ -146,19 +153,38 @@ Agents MUST use Neotoma MCP in the following scenarios:
 
 ```typescript
 // Discovery: List available resources
-list_resources() → Returns available entity types, timeline years, data types, etc.
+list_resources() → Returns available timeline years, relationship types, generic collections
 
-// Browse: Read a resource
+// List resource templates
+list_resource_templates() → Returns templates like neotoma://entities/{entity_type}
+
+// Browse: Read a resource (basic)
 read_resource({ uri: "neotoma://entities/invoice" })
  → Returns all invoices (up to 100)
+
+// Browse with query parameters: Read a resource (with filters)
+read_resource({ uri: "neotoma://entities?entity_type=invoice&limit=50&offset=100" })
+ → Returns invoices 101-150
+
+read_resource({ uri: "neotoma://entities?user_id={uuid}&entity_type=invoice" })
+ → Returns user's invoices only
+
+read_resource({ uri: "neotoma://sources?user_id={uuid}&sort=created_at&order=asc" })
+ → Returns user's sources oldest first
+
+read_resource({ uri: "neotoma://timeline/2024?user_id={uuid}" })
+ → Returns user's timeline events in 2024
 
 read_resource({ uri: "parquet://data_types/task" })
  → Returns task data (up to 100 rows)
 
+// Subscribe to resource updates
+subscribe({ uri: "neotoma://entities" })
+ → Receive notifications when entities change
+
 // For complex queries, use actions:
 retrieve_entities({ 
  entity_type: "invoice", 
- user_id: "...", 
  limit: 50,
  offset: 100 
 })
@@ -170,9 +196,66 @@ read_parquet({
 })
 ```
 
-**Key Principle:** Use resources for discovery and simple browsing. Use actions for filtering, mutations, and complex operations. Resources are read-only complements to actions, not replacements.
+**Key Principle:** Use resources for discovery and simple browsing. Use actions for filtering, mutations, and complex operations. Resources support query parameters for basic filtering, pagination, and user filtering (`user_id`). Resources are read-only complements to actions, not replacements.
 
-### 4. MCP-Only Mode ("via mcp")
+**User Filtering in Resources:**
+- All collection resources support `user_id` query parameter
+- Entities: Direct filtering by `user_id` column
+- Sources: Direct filtering by `user_id` column
+- Relationships: Filtered through related entities (relationships where source or target entity belongs to user)
+- Timeline: Filtered through sources (events from user's sources)
+
+### 4. Parquet MCP Data Type Names
+
+**MANDATORY:** When using Parquet MCP actions (`mcp_parquet__user__read_parquet`, `mcp_parquet__user__get_schema`, etc.), agents MUST:
+
+1. **Always use exact data type names from `list_data_types`:**
+   - Call `mcp_parquet__user__list_data_types` first to get the exact data type name
+   - Use the exact name as returned (e.g., `fixed_costs` not `fixed_cost`, `crypto_transactions` not `crypto_transaction`)
+   - Do NOT assume singular/plural forms—use the exact name from the list
+
+2. **Never guess data type names:**
+   - Do NOT assume data types follow a specific naming pattern
+   - Do NOT use singular forms if the list shows plural (or vice versa)
+   - Always verify the exact name exists in `list_data_types` before using it
+
+3. **Example:**
+   ```typescript
+   // ✅ CORRECT: Check list first, use exact name
+   list_data_types() → ["fixed_costs", "crypto_transactions", ...]
+   read_parquet({ data_type: "fixed_costs" })  // Uses exact name from list
+   
+   // ❌ INCORRECT: Guessing singular form
+   read_parquet({ data_type: "fixed_cost" })  // Wrong - should be "fixed_costs"
+   ```
+
+### 5. User ID Inference
+
+**MANDATORY:** For all authenticated Neotoma MCP actions, agents MUST omit the `user_id` parameter—it is automatically inferred from authentication context.
+
+1. **Omit `user_id` parameter:**
+   - The server automatically uses the authenticated user's ID from the session token or OAuth connection
+   - No need to retrieve, cache, or pass `user_id` explicitly
+   - This ensures all actions operate on the authenticated user's data by default
+
+2. **If `user_id` is provided (optional validation):**
+   - Server validates it matches the authenticated user
+   - Returns error if there's a mismatch
+   - Only provide `user_id` if you need explicit validation
+
+3. **Example:**
+   ```typescript
+   // ✅ CORRECT: Omit user_id - automatically inferred
+   await store({ entities: [...] });
+   await retrieve_entities({ entity_type: "invoice" });
+   await correct({ entity_id: "...", entity_type: "...", field: "...", value: "..." });
+   
+   // ✅ CORRECT: Provide user_id for explicit validation (optional)
+   await store({ user_id: "explicit-uuid", entities: [...] });
+   // Server validates user_id matches authenticated user
+   ```
+
+### 6. MCP-Only Mode ("via mcp")
 
 When a user ends their prompt with "via mcp", agents MUST:
 
@@ -296,7 +379,8 @@ This applies to ALL MCP calls, not just when "via mcp" is specified.
 - **Check for duplicates:** Before storing, use `retrieve_entity_by_identifier` or `retrieve_entities` with appropriate filters to avoid duplicates
 - **ALWAYS include ALL fields from source data** when storing structured entities via `store` action - include both schema fields and non-schema fields (non-schema fields are automatically stored in `raw_fragments` for future schema expansion)
 - **ALWAYS summarize entities and relationships** in the response after calling MCP actions (count, types, key details)
-- **Always include `user_id`** parameter (required for all store operations)
+- **Omit `user_id` parameter** - it is automatically inferred from authentication context (see User ID Inference section)
+- **Use exact data type names from `list_data_types`** for Parquet MCP actions - never guess singular/plural forms
 
 ### MCP-Only Mode ("via mcp")
 
@@ -315,7 +399,6 @@ User: "Remember that I prefer dark mode for my UI"
 Agent:
 1. Uses mcp_neotoma-neotoma_store with entities array:
    {
-     user_id: "uuid",
      entities: [{
        entity_type: "preference",
        key: "ui_theme",
@@ -332,7 +415,6 @@ User: "I just spent $45.50 on groceries at Whole Foods"
 Agent:
 1. Uses mcp_neotoma-neotoma_store with entities array:
    {
-     user_id: "uuid",
      entities: [{
        entity_type: "transaction",
        amount: 45.50,
@@ -351,7 +433,6 @@ User: "I need to finish the quarterly report by Friday"
 Agent:
 1. Uses mcp_neotoma-neotoma_store with entities array:
    {
-     user_id: "uuid",
      entities: [{
        entity_type: "task",
        title: "Finish quarterly report",
@@ -369,7 +450,6 @@ User: "John's email is john@example.com and he works at Acme Corp"
 Agent:
 1. Uses mcp_neotoma-neotoma_store with entities array:
    {
-     user_id: "uuid",
      entities: [{
        entity_type: "contact",
        name: "John",
@@ -387,7 +467,6 @@ User: "I have a meeting with Sarah next Tuesday at 2pm"
 Agent:
 1. Uses mcp_neotoma-neotoma_store with entities array:
    {
-     user_id: "uuid",
      entities: [{
        entity_type: "event",
        title: "Meeting with Sarah",
@@ -406,7 +485,6 @@ User: "What invoices did I receive last month?"
 Agent:
 1. Uses mcp_neotoma-neotoma_retrieve_entities with filters:
    {
-     user_id: "uuid",
      entity_type: "invoice",
      filters: {
        date_range: { start: "2024-12-01", end: "2024-12-31" }
@@ -423,9 +501,7 @@ User: "What's Sarah's email address?"
 Agent:
 1. Uses mcp_neotoma-neotoma_retrieve_entity_by_identifier with:
    {
-     user_id: "uuid",
-     identifier_type: "name",
-     identifier_value: "Sarah"
+     identifier: "Sarah"
    }
 2. Summarizes: "MCP action completed. Found 1 entity (contact: 'Sarah' - sarah@example.com) and 0 relationships."
 ```
@@ -542,6 +618,29 @@ Agent: "I don't recall that information."  # WRONG - should use MCP to retrieve
 ```
 User: "I just completed a task with these details: [40 fields provided]"
 Agent: Stores only 15 fields that match schema  # WRONG - must include ALL fields
+```
+
+### ❌ Incorrect: Guessing Parquet data type names
+
+```
+User: "Store all fixed costs from parquet via mcp"
+Agent: Uses read_parquet({ data_type: "fixed_cost" })  # WRONG - should check list_data_types first, use "fixed_costs"
+```
+
+### ❌ Incorrect: Requiring explicit user_id input
+
+```
+User: "Store this transaction via mcp"
+Agent: "What's your user_id?"  # WRONG - should omit user_id, it's automatically inferred
+```
+
+### ❌ Incorrect: Retrieving user_id unnecessarily
+
+```
+User: "Store this transaction via mcp"
+Agent: 
+1. Calls retrieve_entities to get user_id  # WRONG - unnecessary
+2. Calls store with user_id  # WRONG - should omit user_id
 ```
 
 ## Related Documents

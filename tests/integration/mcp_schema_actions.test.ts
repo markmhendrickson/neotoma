@@ -386,13 +386,9 @@ describe("MCP Schema Actions - Integration", () => {
       expect(activeSchema?.schema_version).toBe("1.0");
     });
 
-    it.skip("should require user_id for user-specific schemas", async () => {
-      // Skip this test - MCP handler validation is tested in MCP action tests
-      // Service layer doesn't validate user_id requirement (that's MCP handler's job)
-      // This test would need to test via MCP action, not service directly
-      // The service actually succeeds (creates a user-specific schema with null user_id)
-      // which is technically valid but not the intended behavior
-    });
+    // Note: user_id validation is MCP handler responsibility, not service layer
+    // MCP handler validation is tested in MCP action integration tests
+    // Service layer allows null user_id for system-level operations
   });
 
   describe("register_schema", () => {

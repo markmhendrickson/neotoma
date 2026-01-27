@@ -3,7 +3,7 @@
 **Date:** 2026-01-19  
 **Status:** Updated after documentation consistency fixes, pre-MVP release analysis, and release plan corrections (FU-301/302 renamed, FU-601 promoted to P0)
 
-**Latest Update:** Release planning documents corrected to align with main objects per `docs/vocabulary/canonical_terms.md`. MVP UI now focuses on Source Material, Entity, Observation, Event instead of deprecated `records` table.
+**Latest Update:** Release planning documents corrected to align with main objects per `docs/vocabulary/canonical_terms.md`. MVP UI now focuses on Source, Entity, Observation, Event instead of deprecated `records` table.
 
 ## Executive Summary
 
@@ -11,7 +11,7 @@
 
 **Key Findings:**
 1. AI interpretation is **correctly implemented** and **architecturally compliant**. The architecture explicitly allows AI interpretation for unstructured files with full auditability and system-level idempotence.
-2. **CRITICAL:** MVP UI plan has been **corrected** to focus on main objects (Source Material, Entity, Observation, Event) instead of deprecated `records` table. FU-301/302 renamed, FU-601 promoted to P0.
+2. **CRITICAL:** MVP UI plan has been **corrected** to focus on main objects (Source, Entity, Observation, Event) instead of deprecated `records` table. FU-301/302 renamed, FU-601 promoted to P0.
 
 **Pre-MVP Release Foundation:** The MVP builds on 4 pre-MVP releases (v0.1.0, v0.2.0, v0.2.1, v0.2.15) that completed 41+ feature units, providing a solid foundation for MVP launch.
 
@@ -121,7 +121,7 @@
 - ✅ Table renames (interpretation_runs → interpretations)
 
 **Key Achievements:**
-- Unified ingestion API (single action for all source material)
+- Unified ingestion API (single action for all source)
 - Simplified MCP surface (62.5% reduction in ingestion actions)
 - Code reduction (~450 lines removed)
 - Architecture alignment (sources-first fully integrated)
@@ -139,7 +139,7 @@
 |---------|----------------|----------------|-----------------|--------------------------|-------|
 | **AI Interpretation for Unstructured Files** | Allowed (auditable, idempotent) | ✅ **Complete** | v0.2.0 (FU-121) | ✅ **Compliant** | Interpretation service operational; config logged; idempotence enforced |
 | **Rule-Based Extraction** | Available for structured data | ✅ **Complete** | v0.1.0 (FU-100) | ✅ **Compliant** | Rule-based patterns exist in `extraction/rules.ts` |
-| **Four-Layer Truth Model** | Source Material → Interpretation → Observation → Entity Snapshot | ✅ **Complete** | v0.1.0 (FU-055-058) + v0.2.0 (FU-110-116) | ✅ **Compliant** | Fully implemented across v0.1.0 and v0.2.0 |
+| **Four-Layer Truth Model** | Source → Interpretation → Observation → Entity Snapshot | ✅ **Complete** | v0.1.0 (FU-055-058) + v0.2.0 (FU-110-116) | ✅ **Compliant** | Fully implemented across v0.1.0 and v0.2.0 |
 | **Sources-First Architecture** | Content-addressed storage, deduplication | ✅ **Complete** | v0.2.0 (FU-110, FU-120) | ✅ **Compliant** | SHA-256 hashing, per-user deduplication |
 | **FU-101: Entity Resolution** | Deterministic hash-based IDs | ✅ **Complete** | v0.1.0 (FU-101) + v0.2.0 (FU-113) | ✅ **Compliant** | Hash-based IDs, normalization, user-scoped |
 | **FU-102: Event Generation** | Deterministic timeline events | ✅ **Complete** | v0.1.0 (FU-102) | ✅ **Compliant** | Hash-based event IDs, schema-driven mapping |
@@ -149,13 +149,13 @@
 | **Observation Architecture** | Immutable observations, reducer snapshots | ✅ **Complete** | v0.1.0 (FU-055-058) + v0.2.0 (FU-114) | ✅ **Compliant** | Observations created, reducers compute snapshots, provenance tracked |
 | **Schema Registry** | Config-driven schemas, versioning | ✅ **Complete** | v0.1.0 (FU-057) | ✅ **Compliant** | Schema registry operational, merge policies configured |
 | **Interpretation Service** | AI interpretation with audit trail | ✅ **Complete** | v0.2.0 (FU-121) | ✅ **Compliant** | Uses LLM; config logged; idempotence via canonicalization |
-| **Unified MCP `ingest()` Action** | Single action for all source material | ✅ **Complete** | v0.2.0 (FU-122) + v0.2.15 (unified) | ✅ **Compliant** | Unified `store` action operational; supports unstructured + structured |
+| **Unified MCP `ingest()` Action** | Single action for all source | ✅ **Complete** | v0.2.0 (FU-122) + v0.2.15 (unified) | ✅ **Compliant** | Unified `store` action operational; supports unstructured + structured |
 | **Correction Mechanism** | Priority-1000 observations | ✅ **Complete** | v0.2.0 (FU-125) | ✅ **Compliant** | Corrections override AI extraction |
 | **Entity Merge** | Manual entity deduplication | ✅ **Complete** | v0.2.0 (FU-126) | ✅ **Compliant** | Entity merge with observation rewriting |
 | **Local Storage** | Local-first, offline mode | ✅ **Complete** | v0.1.0 (implied) | ✅ **Compliant** | SQLite with encryption, sync, vectors |
 | **FU-300: Design System** | UI foundation | 🔨 **Partial** | v0.2.1 (FU-300 docs) | ⚠️ **Needs review** | Documentation system complete; UI design system needs polish |
-| **FU-301: Source Material List** | Browse/search source material | 🔨 **Partial** | Prototype | ⚠️ **Needs refactor** | **RENAMED** from "Records List"; prototype uses deprecated `records` table; needs refactor to `sources` table |
-| **FU-302: Source Material Detail** | Source material + interpretations + observations | 🔨 **Partial** | Prototype | ⚠️ **Needs refactor** | **RENAMED** from "Record Detail"; prototype uses deprecated `records`; needs refactor to show four-layer truth model |
+| **FU-301: Source List** | Browse/search source | 🔨 **Partial** | Prototype | ⚠️ **Needs refactor** | **RENAMED** from "Records List"; prototype uses deprecated `records` table; needs refactor to `sources` table |
+| **FU-302: Source Detail** | Source + interpretations + observations | 🔨 **Partial** | Prototype | ⚠️ **Needs refactor** | **RENAMED** from "Record Detail"; prototype uses deprecated `records`; needs refactor to show four-layer truth model |
 | **FU-303: Timeline View** | Chronological events | ⏳ **Not Started** | Prototype | ⚠️ **Missing** | Required for MVP (P0); prototype exists |
 | **FU-304: File Upload UI** | Upload interface | 🔨 **Partial** | Prototype | ⚠️ **Incomplete** | Prototype exists; needs production integration |
 | **FU-305: Dashboard** | Overview stats | ⏳ **Not Started** | Prototype | ⚠️ **Missing** | Prototype exists; P1 priority; needs stats on main objects (not records) |
@@ -215,24 +215,24 @@
 - **Remaining:** UI component library completion, Truth Layer boundary verification
 - **Estimated:** 0.5 days
 
-**FU-301: Source Material List** — 🔨 Partial (Needs Refactor)
+**FU-301: Source List** — 🔨 Partial (Needs Refactor)
 - **Status:** Prototype exists, but uses deprecated `records` table
 - **Pre-MVP:** None (new for MVP)
 - **Evidence:** RecordsTable component in prototype (needs renaming and refactoring)
 - **Remaining:** 
-  - Rename component to SourceMaterialTable
+  - Rename component to SourceTable
   - Refactor DB queries from `records` to `sources` table
   - Update filters (mime_type, source_type instead of record type)
-  - Update UI labels ("Source Material" not "Records")
+  - Update UI labels ("Source" not "Records")
 - **Estimated:** 0.5-1 day (refactoring required)
 - **Migration Note:** Renamed from "Records List View" per release plan update
 
-**FU-302: Source Material Detail** — 🔨 Partial (Needs Refactor)
+**FU-302: Source Detail** — 🔨 Partial (Needs Refactor)
 - **Status:** Prototype exists, but uses deprecated `records` table
 - **Pre-MVP:** None (new for MVP)
 - **Evidence:** RecordDetailsPanel in prototype (needs renaming and refactoring)
 - **Remaining:**
-  - Rename component to SourceMaterialDetailsPanel
+  - Rename component to SourceDetail
   - Refactor to use `sources`, `interpretations`, `observations` tables
   - Show four-layer truth model (source → interpretation → observation → entity)
   - Display interpretation config (model, temperature, prompt_hash)
@@ -342,7 +342,7 @@
    - Non-deterministic but auditable (per architecture)
 
 2. **Four-Layer Truth Model** — ✅ Fully implemented (v0.1.0 + v0.2.0)
-   - Source Material → Interpretation → Observation → Entity Snapshot
+   - Source → Interpretation → Observation → Entity Snapshot
    - Provenance chain complete
    - Immutability preserved (reinterpretation creates NEW observations)
 
@@ -536,10 +536,10 @@
 | **Truth Layer boundaries** | ✅ Compliant | No strategy/execution logic; MCP actions are Truth Layer only | v0.1.0, v0.2.0 |
 | **Determinism (where required)** | ✅ Compliant | Deterministic components (hashing, reducers, entity IDs) operational; AI interpretation explicitly non-deterministic but auditable | v0.1.0, v0.2.0 |
 | **Idempotence (system-level)** | ✅ Compliant | AI interpretation enforces idempotence via canonicalization, hashing, deduplication (same source + config → same final state) | v0.2.0 |
-| **Four-layer truth model** | ✅ Compliant | Source Material → Interpretation → Observation → Entity Snapshot fully implemented | v0.1.0, v0.2.0 |
+| **Four-layer truth model** | ✅ Compliant | Source → Interpretation → Observation → Entity Snapshot fully implemented | v0.1.0, v0.2.0 |
 | **Event-sourcing** | ✅ Compliant | Event log, reducers, historical replay operational | v0.1.0 |
 | **Immutability** | ✅ Compliant | Observations immutable; snapshots computed via reducers | v0.1.0, v0.2.0 |
-| **Provenance** | ✅ Compliant | Full chain: Snapshot → Observation → Interpretation (with config) → Source Material | v0.2.0 |
+| **Provenance** | ✅ Compliant | Full chain: Snapshot → Observation → Interpretation (with config) → Source | v0.2.0 |
 | **Schema-first processing** | ✅ Compliant | Schema registry operational; extraction schema-driven | v0.1.0 |
 | **Explicit user control** | ⚠️ **Gap** | No auth UI (users can't sign up/sign in) | None (new for MVP) |
 | **Privacy-first** | ⚠️ **Gap** | RLS incomplete on `records` table (if still in use) | v0.2.0 (partial) |
@@ -695,31 +695,31 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 **Priority:** P0 (included in MVP release plan)
 
-**Issue:** UI components exist in prototype but use deprecated `records` table. Must refactor to use main objects (source material, observations, interpretations).
+**Issue:** UI components exist in prototype but use deprecated `records` table. Must refactor to use main objects (source, observations, interpretations).
 
 **Pre-MVP Context:** Prototype has Records List and Record Detail, but they use deprecated `records` table. Must refactor to `sources` table and show four-layer truth model.
 
 **Required Work:**
 
-**FU-301: Source Material List**
-1. Rename `RecordsTable.tsx` to `SourceMaterialTable.tsx`
+**FU-301: Source List**
+1. Rename `RecordsTable.tsx` to `SourceTable.tsx`
 2. Update DB queries from `records` to `sources` table
 3. Update filters (mime_type, source_type, file_name instead of record type)
-4. Update UI labels ("Source Material" not "Records")
+4. Update UI labels ("Source" not "Records")
 5. Update tests to query `sources` table
 
-**FU-302: Source Material Detail**
-1. Rename `RecordDetailsPanel.tsx` to `SourceMaterialDetailsPanel.tsx`
+**FU-302: Source Detail**
+1. Rename `RecordDetailsPanel.tsx` to `SourceDetail.tsx`
 2. Update to use `sources`, `interpretations`, `observations` tables
 3. Add interpretation history section (show config: model, temperature, prompt_hash)
-4. Add observations section (show provenance: which source material + interpretation contributed which fields)
+4. Add observations section (show provenance: which source + interpretation contributed which fields)
 5. Update entity/event linking (via observations)
-6. Update UI labels ("Source Material" not "Record")
+6. Update UI labels ("Source" not "Record")
 7. Update tests to query correct tables
 
 **Files to Update:**
-- `frontend/src/components/RecordsTable.tsx` → `SourceMaterialTable.tsx` (rename + refactor)
-- `frontend/src/components/RecordDetailsPanel.tsx` → `SourceMaterialDetailsPanel.tsx` (rename + refactor)
+- `frontend/src/components/RecordsTable.tsx` → `SourceTable.tsx` (rename + refactor)
+- `frontend/src/components/RecordDetailsPanel.tsx` → `SourceDetail.tsx` (rename + refactor)
 - Frontend API client (update endpoints)
 - All references to "records" in UI code
 
@@ -759,9 +759,9 @@ The codebase has successfully migrated to sources-first architecture across pre-
    - Show entity count by type
 2. Build Entity Detail view:
    - Display entity snapshot (current truth computed from observations)
-   - Display observations (with provenance: which source material contributed which fields)
+   - Display observations (with provenance: which source contributed which fields)
    - Display relationships (PART_OF, REFERS_TO, SETTLES, etc.)
-   - Link to source material (via observations)
+   - Link to source (via observations)
    - Show merge history (if entity was merged)
 3. Basic relationship visualization (can defer advanced viz to post-MVP)
 4. Update tests for entity browsing
@@ -785,7 +785,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 **Completed Updates:**
 1. ✅ Updated release plan to reference sources-first architecture
-2. ✅ Renamed FU-301/302 to "Source Material List/Detail" (removed references to deprecated `records`)
+2. ✅ Renamed FU-301/302 to "Source List/Detail" (removed references to deprecated `records`)
 3. ✅ Updated MCP action references to reflect unified `store` action
 4. ✅ Updated acceptance criteria to reflect interpretation service
 5. ✅ Promoted FU-601 to P0 (Entity Explorer now in MVP scope)
@@ -810,7 +810,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 6. ✅ **Deterministic components** (v0.1.0) — Entity resolution, event generation, search ranking
 7. ✅ **AI interpretation support** (v0.2.0) — With auditability and idempotence
 8. ✅ **Sources-first architecture** (v0.2.0) — Content-addressed, deduplicated storage
-9. ✅ **Unified MCP action** (v0.2.0 + v0.2.15) — Single `ingest()` for all source material types
+9. ✅ **Unified MCP action** (v0.2.0 + v0.2.15) — Single `ingest()` for all source types
 10. ✅ **Correction mechanism** (v0.2.0) — Priority-1000 observations override AI
 11. ✅ **Entity merge capability** (v0.2.0) — Manual deduplication with audit trail
 
@@ -820,7 +820,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 **Complete (13/20):** Core architecture, entity resolution, events, graph, search, MCP actions, observation architecture, event-sourcing, local storage, interpretation service, AI interpretation support, idempotence enforcement, sources-first architecture
 
-**Partial (5/20):** Design system (needs polish), Source Material List (needs refactor from records), Source Material Detail (needs refactor from records), Upload UI (prototype), Auth UI (missing)
+**Partial (5/20):** Design system (needs polish), Source List (needs refactor from records), Source Detail (needs refactor from records), Upload UI (prototype), Auth UI (missing)
 
 **Violations (2/20):** RLS on records table (must be fixed), Gmail integration design (non-compliant with explicit control)
 
@@ -837,10 +837,10 @@ The codebase has successfully migrated to sources-first architecture across pre-
 - Design system polish (FU-300): 0.5 days
 
 **✅ Planning Gaps RESOLVED:**
-1. ✅ **FU-301/302 renamed** — Now "Source Material List/Detail" (release plan updated)
+1. ✅ **FU-301/302 renamed** — Now "Source List/Detail" (release plan updated)
 2. ✅ **FU-601 promoted to P0** — Entity Explorer now in MVP scope (release plan updated)
 3. ⚠️ **Observation visibility** — Recommended P1 feature (add to Entity Detail view)
-4. ✅ **MVP validates current architecture** — UI plan now focuses on main objects (source material, entities, events)
+4. ✅ **MVP validates current architecture** — UI plan now focuses on main objects (source, entities, events)
 
 **Architectural Assessment:** The codebase is architecturally sound. AI interpretation is correctly implemented with full auditability and system-level idempotence. 
 
@@ -861,9 +861,9 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 **According to `docs/vocabulary/canonical_terms.md`, the main objects are:**
 
-1. **Source Material** — Raw data (structured/unstructured)
+1. **Source** — Raw data (structured/unstructured)
 2. **Interpretation** — AI interpretation runs
-3. **Observation** — Granular facts extracted from source material
+3. **Observation** — Granular facts extracted from source
 4. **Entity** — Canonical representations (person, company, location)
 5. **Entity Snapshot** — Current truth for an entity (computed from observations)
 6. **Relationship** — Typed connections between entities
@@ -871,7 +871,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 8. **Memory Graph** — Interconnected graph of all above
 
 **Deprecated/Legacy Objects:**
-- ❌ **Record** — Deprecated, being replaced by Source Material (to be removed in v0.3.0)
+- ❌ **Record** — Deprecated, being replaced by Source (to be removed in v0.3.0)
 - ❌ **Capability** — Removed in v0.2.15, now part of entity schemas
 - ❌ **Record Type** — Replaced by entity types
 
@@ -879,14 +879,14 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 | UI Feature | Object Focus | Status | Problem |
 |------------|--------------|--------|---------|
-| **FU-301: Source Material List** | ✅ **Source Material** (main object) | 🔨 Partial (needs refactor) | **RENAMED** from "Records List"; prototype uses deprecated `records` table |
-| **FU-302: Source Material Detail** | ✅ **Source Material** (main object) | 🔨 Partial (needs refactor) | **RENAMED** from "Record Detail"; prototype uses deprecated `records` table |
+| **FU-301: Source List** | ✅ **Source** (main object) | 🔨 Partial (needs refactor) | **RENAMED** from "Records List"; prototype uses deprecated `records` table |
+| **FU-302: Source Detail** | ✅ **Source** (main object) | 🔨 Partial (needs refactor) | **RENAMED** from "Record Detail"; prototype uses deprecated `records` table |
 | **FU-303: Timeline View** | ✅ **Events** (main object) | ⏳ Not Started | Correct object, needs implementation |
-| **FU-304: File Upload UI** | ✅ **Source Material** (upload) | 🔨 Partial | Correct object, needs production integration |
+| **FU-304: File Upload UI** | ✅ **Source** (upload) | 🔨 Partial | Correct object, needs production integration |
 | **FU-601: Entity Explorer** | ✅ **Entities** (main object) | ⏳ Not Started (P0) | **PROMOTED to P0**; now in MVP scope |
 
 **UI for Main Objects Status:**
-- 🔨 **Source Material** browsing — FU-301/302 renamed, needs refactor from `records` to `sources` table
+- 🔨 **Source** browsing — FU-301/302 renamed, needs refactor from `records` to `sources` table
 - ⏳ **Entity** browsing — FU-601 promoted to P0, now in MVP scope, needs implementation
 - ⚠️ **Observation** browsing — Not planned (recommended P1 feature)
 - ⏳ **Entity Snapshot** viewing — Part of FU-601 (now P0), needs implementation
@@ -901,7 +901,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 **MVP Release Plan (`docs/releases/v1.0.0/release_plan.md`) — ✅ UPDATED:**
 - ✅ **FU-601: Entity Explorer** **PROMOTED to P0** and **NOW included** in MVP scope
 - ✅ P0 FUs in MVP: FU-100, FU-101, FU-102, FU-103, FU-105, FU-300, **FU-301, FU-302, FU-303, FU-304, FU-601**, FU-700, FU-701
-- ✅ FU-301 and FU-302 **renamed** to "Source Material List/Detail" (focus on main objects)
+- ✅ FU-301 and FU-302 **renamed** to "Source List/Detail" (focus on main objects)
 
 **Current Status:**
 - ✅ Prototype exists (`EntityExplorerView` component)
@@ -915,7 +915,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 | Main Object | UI Feature | Current Status | Priority |
 |-------------|-----------|----------------|----------|
-| **Source Material** | Source Material List & Detail | 🔨 Partial (FU-301/302 renamed, needs refactor) | **P0 CRITICAL** |
+| **Source** | Source List & Detail | 🔨 Partial (FU-301/302 renamed, needs refactor) | **P0 CRITICAL** |
 | **Entity** | Entity List & Detail | ⏳ Not Started (FU-601 promoted to P0) | **P0 CRITICAL** |
 | **Entity Snapshot** | Entity Detail (shows current truth) | ⏳ Not Started (part of FU-601, now P0) | **P0 CRITICAL** |
 | **Observation** | Observation List (per entity) | ⚠️ Not Planned (recommended P1) | **P1** |
@@ -924,17 +924,17 @@ The codebase has successfully migrated to sources-first architecture across pre-
 | **Interpretation** | Interpretation History | ❌ Not Planned | **P2** |
 
 **Current MVP UI Plan (✅ CORRECTED in Release Plan):**
-- 🔨 **FU-301: Source Material List** — **RENAMED** from "Records List" in release plan; prototype needs refactor to use `sources` table
-- 🔨 **FU-302: Source Material Detail** — **RENAMED** from "Record Detail" in release plan; prototype needs refactor to show four-layer truth model
+- 🔨 **FU-301: Source List** — **RENAMED** from "Records List" in release plan; prototype needs refactor to use `sources` table
+- 🔨 **FU-302: Source Detail** — **RENAMED** from "Record Detail" in release plan; prototype needs refactor to show four-layer truth model
 - ⏳ **FU-303: Timeline** — Correct (uses events), P0 in release plan, needs implementation
-- 🔨 **FU-304: Upload** — Correct (uploads source material), P0 in release plan, needs production integration
+- 🔨 **FU-304: Upload** — Correct (uploads source), P0 in release plan, needs production integration
 - ⏳ **FU-601: Entity Explorer** — **PROMOTED to P0** in release plan, now in MVP scope, needs implementation
 
 **What MVP SHOULD Have:**
 
-1. **Source Material List & Detail** (replace FU-301/302)
-   - Browse/search source material (files, structured data)
-   - View source material detail with interpretations
+1. **Source List & Detail** (replace FU-301/302)
+   - Browse/search source (files, structured data)
+   - View source detail with interpretations
    - Uses `sources` table, not deprecated `records`
 
 2. **Entity List & Detail** (FU-601, should be P0)
@@ -948,13 +948,13 @@ The codebase has successfully migrated to sources-first architecture across pre-
    - Filter by entity, date range
 
 4. **Dashboard** (FU-305)
-   - Stats on source material, entities, events
+   - Stats on source, entities, events
    - Not stats on deprecated "records"
 
 ### The Critical Gaps
 
 **✅ Gap 1: RESOLVED — Release Plan Updated**
-- ✅ FU-301 and FU-302 **renamed** to "Source Material List/Detail" in release plan
+- ✅ FU-301 and FU-302 **renamed** to "Source List/Detail" in release plan
 - ✅ Release plan specifies use of `sources` table (not deprecated `records`)
 - ⚠️ **Implementation remaining:** Prototype still uses deprecated architecture; needs refactoring
 
@@ -977,12 +977,12 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 | Original (Incorrect) | Updated (Correct) | Status |
 |---------------------|-------------------|--------|
-| **FU-301: Records List View** | **FU-301: Source Material List View** | ✅ Renamed in release plan |
+| **FU-301: Records List View** | **FU-301: Source List View** | ✅ Renamed in release plan |
 | Uses deprecated `records` table | Uses `sources` table | ⚠️ Prototype needs refactor |
-| Browse "records" (deprecated) | Browse source material (files, structured data) | ⚠️ Implementation remaining |
+| Browse "records" (deprecated) | Browse source (files, structured data) | ⚠️ Implementation remaining |
 | | |
-| **FU-302: Record Detail View** | **FU-302: Source Material Detail View** | ✅ Renamed in release plan |
-| Shows record properties | Shows source material + interpretations + observations | ⚠️ Prototype needs refactor |
+| **FU-302: Record Detail View** | **FU-302: Source Detail View** | ✅ Renamed in release plan |
+| Shows record properties | Shows source + interpretations + observations | ⚠️ Prototype needs refactor |
 | Uses deprecated `records` table | Uses `sources` + `interpretations` + `observations` | ⚠️ Implementation remaining |
 
 **✅ 2. COMPLETED — FU-601 Promoted to P0:**
@@ -1002,7 +1002,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 | Current Focus | Should Focus On |
 |---------------|-----------------|
-| Record counts | Source material counts |
+| Record counts | Source counts |
 | Record types | Entity counts by type |
 | | Observation counts |
 | | Interpretation runs |
@@ -1010,7 +1010,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 ### Recommended MVP UI Features (Corrected)
 
 **P0 (Critical for MVP) — ✅ All in Release Plan:**
-1. ✅ **Source Material List & Detail** (FU-301/302 renamed in release plan, needs refactor)
+1. ✅ **Source List & Detail** (FU-301/302 renamed in release plan, needs refactor)
 2. ✅ **Entity List & Detail** (FU-601 promoted to P0 in release plan, needs implementation)
 3. ✅ **Timeline View** (FU-303, P0 in release plan, needs implementation)
 4. ✅ **Upload UI** (FU-304, P0 in release plan, needs production integration)
@@ -1029,9 +1029,9 @@ The codebase has successfully migrated to sources-first architecture across pre-
 ### Why This Matters
 
 **✅ Planning Complete — Release Plan Updated:**
-- ✅ FU-301/302 renamed to "Source Material List/Detail" (release plan updated)
+- ✅ FU-301/302 renamed to "Source List/Detail" (release plan updated)
 - ✅ FU-601 promoted to P0 (release plan updated)
-- ✅ MVP UI plan now focuses on main objects (source material, entities, events)
+- ✅ MVP UI plan now focuses on main objects (source, entities, events)
 
 **⚠️ Implementation Remaining:**
 - ⚠️ Prototype still uses deprecated `records` table (needs refactoring)
@@ -1040,7 +1040,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 - ⚠️ Observation browsing not yet planned (recommended P1 feature)
 
 **With Correct MVP UI (After Implementation):**
-- Users browse source material (current architecture)
+- Users browse source (current architecture)
 - Users see entities and entity snapshots (competitive differentiator)
 - Users see observations (provenance and trust) — if P1 feature added
 - Users understand the four-layer truth model
@@ -1056,7 +1056,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
 
 **Remaining Implementation Work:**
 
-1. **Refactor FU-301/302 to Source Material** (1.5-2.5 days)
+1. **Refactor FU-301/302 to Source** (1.5-2.5 days)
    - Rename components and update DB queries from `records` to `sources`
    - Show four-layer truth model (source → interpretation → observation → entity)
    - Display interpretations and observations with provenance
@@ -1065,12 +1065,12 @@ The codebase has successfully migrated to sources-first architecture across pre-
    - Entity list and detail views
    - Show entity snapshots with observations
    - Display relationships
-   - Link to source material
+   - Link to source
 
 3. **Build Timeline View (FU-303)** (1-2 days)
    - Chronological events display
    - Filter by date range and event type
-   - Link events to source material
+   - Link events to source
 
 4. **Fix RLS policy (FU-701)** (1-2 days)
    - Update `records` table policy to user-scoped
@@ -1090,7 +1090,7 @@ The codebase has successfully migrated to sources-first architecture across pre-
    - Show provenance chain
 
 8. **Update Dashboard (FU-305)** (0.5-1 day, P1)
-   - Stats on main objects (source material, entities, observations, events)
+   - Stats on main objects (source, entities, observations, events)
    - Not stats on deprecated records
 
 9. **Run integration tests** — Validate end-to-end flows with main objects

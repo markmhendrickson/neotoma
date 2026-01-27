@@ -1,6 +1,14 @@
 -- Create field_blacklist table to prevent noise fields from auto-enhancement
 -- Migration: 20260127000005_add_field_blacklist.sql
 
+-- Temporarily disable event trigger to avoid double schema prefix issue
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table DISABLE;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS field_blacklist (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   entity_type TEXT, -- NULL = applies to all entity types
@@ -58,3 +66,14 @@ COMMENT ON TABLE field_blacklist IS 'Blacklist of field patterns to prevent from
 COMMENT ON COLUMN field_blacklist.entity_type IS 'Entity type to apply blacklist to. NULL = applies to all entity types';
 COMMENT ON COLUMN field_blacklist.field_pattern IS 'Field pattern with wildcards (* = any characters). Example: _test* matches _test, _test1, _testing';
 COMMENT ON COLUMN field_blacklist.scope IS 'Scope: global (all users) or user (user-specific blacklist)';
+
+-- Re-enable event trigger (if it exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
+    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table ENABLE;
+  END IF;
+END $$;
+
+-- Ensure RLS is enabled (in case event trigger was disabled)
+ALTER TABLE field_blacklist ENABLE ROW LEVEL SECURITY;

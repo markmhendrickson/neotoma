@@ -91,6 +91,38 @@ export async function resolveEntity(
     .maybeSingle();
 
   if (existing) {
+    // Default test user ID that should be updated to actual user_id
+    const defaultTestUserId = "00000000-0000-0000-0000-000000000000";
+    const shouldUpdateUserId = 
+      userId && 
+      (existing.user_id === null || existing.user_id === defaultTestUserId);
+    
+    // If entity exists but has null or default test user_id and we have a userId, update it
+    // This ensures entities created with the old default user pattern get the correct user_id
+    if (shouldUpdateUserId) {
+      const { error: updateError } = await supabase
+        .from("entities")
+        .update({ user_id: userId, updated_at: new Date().toISOString() })
+        .eq("id", entityId);
+      
+      if (updateError) {
+        console.warn(
+          `Failed to update user_id for existing entity ${entityId}:`,
+          updateError.message
+        );
+      } else {
+        console.log(
+          `Updated user_id for entity ${entityId} from ${existing.user_id} to ${userId}`
+        );
+      }
+    } else if (existing.user_id && userId && existing.user_id !== userId) {
+      // Entity already has a different user_id - log warning but don't change it
+      // This preserves data integrity (entity belongs to another user)
+      console.warn(
+        `Entity ${entityId} already has user_id ${existing.user_id}, ` +
+          `but resolution requested with user_id ${userId}. Keeping existing user_id.`
+      );
+    }
     return entityId;
   }
 

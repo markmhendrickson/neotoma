@@ -1,0 +1,116 @@
+# Environment Variables from .env File Rule
+
+**Reference:** `foundation/agent_instructions/cursor_rules/configuration_management.mdc` - Configuration management
+
+## Purpose
+
+Ensures agents always check the `.env` file for environment variables before assuming they are unset or asking users for values. The `.env` file is the primary source of environment variable configuration in repositories.
+
+## Trigger Patterns
+
+When any of the following occur, agents MUST check the `.env` file first:
+
+- **Environment variable is referenced** in code, scripts, or configuration
+- **Environment variable appears to be unset** (empty value from `process.env` or `$VAR`)
+- **User mentions an environment variable** that needs to be used
+- **Scripts require environment variables** for execution
+- **Configuration depends on environment variables**
+
+## Agent Actions
+
+### Step 1: Check .env File First
+
+When an environment variable is needed:
+
+1. **Check if `.env` file exists:**
+   ```bash
+   test -f .env && echo ".env exists" || echo ".env not found"
+   ```
+
+2. **Read the variable from `.env`:**
+   ```bash
+   grep "^VARIABLE_NAME=" .env
+   # Or with value extraction:
+   grep "^VARIABLE_NAME=" .env | cut -d'=' -f2 | tr -d '"'
+   ```
+
+3. **For multiple variables or complex parsing:**
+   ```bash
+   # Use grep with pattern matching for multiple variable names
+   grep -E "^DATA_DIR=|^ALTERNATE_DATA_DIR=" .env
+   ```
+
+### Step 2: Use the Value from .env
+
+1. **Extract the value** from `.env` file
+2. **Use the value directly** in commands or scripts
+3. **Do NOT assume the variable is unset** just because it's not in the current shell environment
+
+### Step 3: Handle Missing Variables
+
+If the variable is not in `.env`:
+
+1. **Check `env.example`** for expected variables
+2. **Check repository documentation** for setup instructions
+3. **Check if variable should be synced from 1Password** (see `foundation/agent_instructions/cursor_rules/environment_variables_1password.mdc` if applicable)
+4. **Only then ask the user** if the variable is truly missing
+
+## Examples
+
+### ✅ Correct: Check .env First
+
+```
+User: "Use DATA_DIR to create symlink"
+Agent:
+1. Checks .env: grep "^DATA_DIR=" .env
+2. Finds: DATA_DIR="/path/to/data"
+3. Uses the value from .env to create symlink
+```
+
+### ✅ Correct: Extract Value from .env
+
+```bash
+# Extract DATA_DIR from .env
+DATA_DIR=$(grep -E "^DATA_DIR=" .env | cut -d'=' -f2 | tr -d '"')
+# Use the value
+ln -sfn "$DATA_DIR" data
+```
+
+### ❌ Incorrect: Assume Variable is Unset
+
+```
+User: "Use DATA_DIR"
+Agent: "DATA_DIR is not set" # WRONG - should check .env first
+```
+
+### ❌ Incorrect: Ask User Before Checking
+
+```
+User: "What's the value of DATA_DIR?"
+Agent: "What should DATA_DIR be set to?" # WRONG - should check .env first
+```
+
+## Constraints
+
+- **MUST check `.env` file first** before assuming an environment variable is unset
+- **MUST use values from `.env`** when they exist
+- **MUST NOT assume** environment variables are unset just because they're not in the current shell
+- **MUST handle quoted values** in `.env` (remove quotes when extracting)
+- **MUST check `env.example`** if variable is missing from `.env`
+- **MUST check repository-specific documentation** for environment variable setup if variable is missing
+
+## Integration with Other Rules
+
+This rule works in conjunction with:
+
+- **`foundation/agent_instructions/cursor_rules/environment_variables_1password.mdc`** - For syncing variables from 1Password to `.env` (if applicable)
+- **`foundation/agent_instructions/cursor_rules/configuration_management.mdc`** - Configuration file management
+- **Repository-specific environment documentation** - For setup instructions
+
+## Notes
+
+- The `.env` file is typically gitignored and may not be readable via `read_file` tool
+- Use terminal commands (`grep`, `cut`, etc.) to read `.env` file
+- Values in `.env` may be quoted (single or double quotes) - handle accordingly
+- Some variables may have multiple names (e.g., `DATA_DIR` and `ALTERNATE_DATA_DIR`) - check both
+- Repository-specific environment variable management may have additional rules or documentation

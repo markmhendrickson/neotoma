@@ -1,0 +1,53 @@
+[
+  {
+    "schema_version": "1.0",
+    "title": "Event-sourced architecture patterns",
+    "source_url": "https://example.com/article/event-sourcing",
+    "source_type": "article",
+    "author": "John Smith",
+    "publication_date": "2024-03-15",
+    "summary": "Comprehensive guide to implementing event sourcing with CQRS",
+    "topics": "architecture,event-sourcing,cqrs",
+    "created_date": "2024-03-20"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Personal data management systems",
+    "source_url": "https://example.com/podcast/data-management",
+    "source_type": "podcast",
+    "author": "Jane Doe",
+    "publication_date": "2024-05-10",
+    "summary": "Discussion of privacy-first approaches to personal data",
+    "topics": "privacy,data-management,systems",
+    "created_date": "2024-05-12",
+    "updated_date": "2024-05-15"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Schema evolution in production systems",
+    "source_url": "https://example.com/paper/schema-evolution",
+    "source_type": "paper",
+    "author": "Dr. Sarah Johnson",
+    "publication_date": "2024-02-28",
+    "summary": "Academic paper on backward-compatible schema changes",
+    "topics": "databases,schemas,migration",
+    "created_date": "2024-03-01"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Minimal research note",
+    "source_type": "article"
+  },
+  {
+    "schema_version": "1.0",
+    "title": "Deterministic systems design",
+    "source_url": "https://example.com/video/determinism",
+    "source_type": "video",
+    "author": "Tech Conference 2024",
+    "publication_date": "2024-04-20",
+    "summary": "Talk on building reproducible systems with no randomness",
+    "topics": "determinism,architecture,testing",
+    "created_date": "2024-04-22",
+    "updated_date": "2024-04-25"
+  }
+]

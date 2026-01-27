@@ -12,6 +12,7 @@ const defaultBaseUrl =
 const traceMode = process.env.CI ? 'retain-on-failure' : 'on-first-retry';
 
 export default defineConfig({
+  globalSetup: path.join(__dirname, 'playwright', 'global_setup.ts'),
   testDir: path.join(__dirname, 'playwright', 'tests'),
   timeout: 120 * 1000,
   expect: {

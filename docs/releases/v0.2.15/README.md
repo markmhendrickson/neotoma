@@ -8,7 +8,7 @@
 
 ## Overview
 
-Version 0.2.15 completes Neotoma's architectural migration to a unified [source material](../../vocabulary/canonical_terms.md#source-material)-based truth model. This release:
+Version 0.2.15 completes Neotoma's architectural migration to a unified [source](../../vocabulary/canonical_terms.md#source)-based truth model. This release:
 
 - Unifies all [ingestion](../../vocabulary/canonical_terms.md#ingestion) into a single `ingest` MCP action
 - Eliminates the capability concept (rules moved to [entity schemas](../../vocabulary/canonical_terms.md#entity-schema))
@@ -35,7 +35,7 @@ See `release_plan.md` for complete details.
 
 ### New APIs
 - HTTP: `/entities/query`, `/observations/create`, `/entities/merge`
-- MCP: Unified `ingest` (for all [source material](../../vocabulary/canonical_terms.md#source-material))
+- MCP: Unified `ingest` (for all [source](../../vocabulary/canonical_terms.md#source))
 
 ### Removed Database Tables
 - `records`
@@ -68,8 +68,8 @@ This release aligns to the authoritative vocabulary defined in [`docs/vocabulary
 
 | Term | Definition |
 |------|------------|
-| [Source Material](../../vocabulary/canonical_terms.md#source-material) | Raw data (structured or unstructured) that gets [ingested](../../vocabulary/canonical_terms.md#ingestion) |
-| [Observation](../../vocabulary/canonical_terms.md#observation) | Granular facts [extracted](../../vocabulary/canonical_terms.md#extraction) from [source material](../../vocabulary/canonical_terms.md#source-material) |
+| [Source](../../vocabulary/canonical_terms.md#source) | Raw data (structured or unstructured) that gets [ingested](../../vocabulary/canonical_terms.md#ingestion) |
+| [Observation](../../vocabulary/canonical_terms.md#observation) | Granular facts [extracted](../../vocabulary/canonical_terms.md#extraction) from [source](../../vocabulary/canonical_terms.md#source) |
 | [Entity](../../vocabulary/canonical_terms.md#entity) | Canonical representation of a person, company, or location |
 | [Entity Snapshot](../../vocabulary/canonical_terms.md#entity-snapshot) | Deterministic [reducer](../../vocabulary/canonical_terms.md#reducer) output representing current truth |
 | [Entity Schema](../../vocabulary/canonical_terms.md#entity-schema) | Versioned definition of fields, validators, merge policies, and extraction rules |

@@ -43,9 +43,9 @@ http://localhost:5174
 - Table view with all records
 - Search bar (full-text across fields)
 - Type filter dropdown
-- Click record → Opens detail panel
-- Shows record metadata, properties, tags
-**Sample Records**:
+- Click source → Opens detail panel
+- Shows source metadata, interpretations, observations
+**Sample Sources**:
 - Financial: Invoices, receipts, bank statements
 - Identity: Passport, driver's license
 - Travel: Flights, hotel bookings
@@ -57,9 +57,9 @@ http://localhost:5174
 - Utilities: Bills
 - Vehicles: Registration
 **Interactions**:
-1. Type in search box → Filters records
+1. Type in search box → Filters sources
 2. Select type from dropdown → Filters by type
-3. Click record row → Opens detail panel
+3. Click source row → Opens detail panel
 4. Click X on detail panel → Closes panel
 ### Timeline View
 **Purpose**: See chronological history of all events
@@ -68,7 +68,7 @@ http://localhost:5174
 - Collapsible year sections
 - Event type filtering
 - Color-coded event badges
-- Click event → Navigate to source record
+- Click event → Navigate to source detail
 - Date and time display
 **Event Types**:
 - InvoiceIssued, PaymentDue
@@ -86,7 +86,7 @@ http://localhost:5174
 1. Click year header → Expand/collapse months
 2. Select event type from dropdown → Filter events
 3. Toggle "Newest First" / "Oldest First" → Change sort order
-4. Click event card → Navigate to source record in Records view
+4. Click event card → Navigate to source detail in Sources view
 ### Entities View
 **Purpose**: Show extracted entities and their types
 **Features**:
@@ -171,7 +171,7 @@ fixtures/
 4. Click invoice → View details in side panel
 5. Switch to Timeline view
 6. See InvoiceIssued event on Nov 15, 2024
-7. Click event → Navigate back to invoice record
+7. Click event → Navigate back to invoice source
 ### Scenario 2: Travel Planning
 1. Start on Records view
 2. Search "travel" or "flight"
@@ -193,7 +193,7 @@ fixtures/
 3. See historical events (passport issued, contracts signed)
 4. Toggle sort order → Oldest First
 5. See chronological progression from 2010 (MBA graduation)
-6. Click event → View source record
+6. Click event → View source detail
 ## Troubleshooting
 ### Prototype won't start
 ```bash

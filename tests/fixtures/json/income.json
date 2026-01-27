@@ -1,0 +1,59 @@
+[
+  {
+    "schema_version": "1.0",
+    "income_date": "2024-01-15T00:00:00Z",
+    "income_type": "consulting",
+    "source": "Acme Corp",
+    "amount_usd": 5000.0,
+    "amount_original": 5000.0,
+    "currency_original": "USD",
+    "description": "Q1 2024 consulting services",
+    "entity": "Acme Corp",
+    "tax_year": 2024
+  },
+  {
+    "schema_version": "1.0",
+    "income_date": "2024-02-01T00:00:00Z",
+    "income_type": "dividend",
+    "source": "AAPL",
+    "amount_usd": 150.0,
+    "amount_original": 150.0,
+    "currency_original": "USD",
+    "description": "Quarterly dividend",
+    "entity": "",
+    "tax_year": 2024
+  },
+  {
+    "schema_version": "1.0",
+    "income_date": "2024-03-15T00:00:00Z",
+    "income_type": "consulting",
+    "source": "Acme Corp",
+    "amount_usd": 5200.0,
+    "amount_original": 4800.0,
+    "currency_original": "EUR",
+    "description": "Q1 2024 consulting services - updated",
+    "entity": "Acme Corp",
+    "tax_year": 2024
+  },
+  {
+    "schema_version": "1.0",
+    "income_date": "2024-04-10T00:00:00Z",
+    "income_type": "interest",
+    "source": "Chase Savings",
+    "amount_usd": 45.0,
+    "tax_year": 2024
+  },
+  {
+    "schema_version": "1.0",
+    "income_date": "2024-05-01T00:00:00Z",
+    "income_type": "salary",
+    "source": "Example Corp",
+    "amount_usd": 8000.0,
+    "currency_original": "USD",
+    "description": "Monthly salary May 2024",
+    "tax_year": 2024
+  }
+]
+
+
+

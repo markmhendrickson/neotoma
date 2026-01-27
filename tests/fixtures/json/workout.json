@@ -1,0 +1,45 @@
+[
+  {
+    "schema_version": "1.0",
+    "name": "Full Body Circuit",
+    "exercises": "squats,pushups,pullups,planks",
+    "type": "circuit",
+    "circuits": "3",
+    "primary_muscles": "legs,chest,back,core",
+    "secondary_muscles": "shoulders,arms",
+    "notes": "45 seconds work, 15 seconds rest"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Upper Body Strength",
+    "exercises": "bench_press,rows,shoulder_press,tricep_dips",
+    "type": "strength",
+    "primary_muscles": "chest,back,shoulders",
+    "secondary_muscles": "arms",
+    "notes": "3 sets of 8-12 reps"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "HIIT Cardio",
+    "exercises": "burpees,mountain_climbers,jumping_jacks,high_knees",
+    "type": "cardio",
+    "circuits": "4",
+    "primary_muscles": "legs,core",
+    "secondary_muscles": "shoulders",
+    "notes": "30 seconds work, 10 seconds rest, 20 min total"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Leg Day",
+    "exercises": "squats,deadlifts,lunges,leg_press",
+    "type": "strength",
+    "primary_muscles": "legs,glutes",
+    "secondary_muscles": "core",
+    "notes": "Heavy compound movements, 4 sets of 6-8 reps"
+  },
+  {
+    "schema_version": "1.0",
+    "name": "Minimal workout",
+    "type": "cardio"
+  }
+]

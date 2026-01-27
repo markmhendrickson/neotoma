@@ -72,16 +72,34 @@ export class RelationshipsService {
       100, // High priority for direct creation
     );
 
-    // Get the computed snapshot
-    const snapshot = await this.getRelationshipSnapshot(
+    // Get the computed snapshot (with retry for eventual consistency)
+    let snapshot = await this.getRelationshipSnapshot(
       params.relationship_type,
       params.source_entity_id,
       params.target_entity_id,
       params.user_id,
     );
 
+    // Retry once if snapshot not found (eventual consistency)
     if (!snapshot) {
-      throw new Error("Failed to retrieve relationship snapshot after creation");
+      // Wait a brief moment for snapshot computation to complete
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      snapshot = await this.getRelationshipSnapshot(
+        params.relationship_type,
+        params.source_entity_id,
+        params.target_entity_id,
+        params.user_id,
+      );
+    }
+
+    if (!snapshot) {
+      // If still not found, try computing it directly
+      snapshot = await this.computeRelationshipSnapshot(
+        params.relationship_type,
+        params.source_entity_id,
+        params.target_entity_id,
+        params.user_id,
+      );
     }
 
     // Also create in relationships table for backward compatibility (deprecated)

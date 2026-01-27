@@ -14,6 +14,7 @@ import {
   computeCanonicalHash, 
   checkObservationExistsByHash 
 } from "./observation_identity.js";
+import { validateFieldsWithConverters } from "./field_validation.js";
 
 // Migration compatibility: Resolve table name (interpretations vs interpretation_runs)
 let interpretationsTableName: string | null = null;
@@ -86,8 +87,8 @@ interface EntityData {
 }
 
 /**
- * Validate extracted data against schema definition
- * Returns: { validFields, unknownFields }
+ * Validate extracted data against schema definition with converter support
+ * Returns: { validFields, unknownFields, originalValues }
  */
 function validateAgainstSchema(
   data: Record<string, unknown>,
@@ -95,51 +96,10 @@ function validateAgainstSchema(
 ): {
   validFields: Record<string, unknown>;
   unknownFields: Record<string, unknown>;
+  originalValues: Record<string, unknown>;
 } {
-  const validFields: Record<string, unknown> = {};
-  const unknownFields: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(data)) {
-    const fieldDef = schema.fields[key];
-    
-    if (!fieldDef) {
-      // Unknown field - route to raw_fragments
-      unknownFields[key] = value;
-      continue;
-    }
-
-    // Basic type validation
-    let isValid = false;
-    switch (fieldDef.type) {
-      case "string":
-        isValid = typeof value === "string";
-        break;
-      case "number":
-        isValid = typeof value === "number";
-        break;
-      case "boolean":
-        isValid = typeof value === "boolean";
-        break;
-      case "date":
-        isValid = typeof value === "string" || value instanceof Date;
-        break;
-      case "array":
-        isValid = Array.isArray(value);
-        break;
-      case "object":
-        isValid = typeof value === "object" && value !== null && !Array.isArray(value);
-        break;
-    }
-
-    if (isValid) {
-      validFields[key] = value;
-    } else {
-      // Invalid type - route to raw_fragments
-      unknownFields[key] = value;
-    }
-  }
-
-  return { validFields, unknownFields };
+  // Use converter-aware validation
+  return validateFieldsWithConverters(data, schema.fields);
 }
 
 /**
@@ -224,11 +184,10 @@ export async function runInterpretation(
         const fragmentId = randomUUID();
         await supabase.from("raw_fragments").insert({
           id: fragmentId,
-          record_id: null, // No record_id in sources-first architecture
           source_id: sourceId,
           interpretation_id: interpretationId,
           user_id: userId,
-          fragment_type: entityType,
+          entity_type: entityType,
           fragment_key: "full_entity",
           fragment_value: entityData,
           fragment_envelope: {
@@ -245,11 +204,64 @@ export async function runInterpretation(
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
 
-      // Validate fields against schema
-      const { validFields, unknownFields } = validateAgainstSchema(
+      // Validate fields against schema (with converter support)
+      const { validFields, unknownFields, originalValues } = validateAgainstSchema(
         fieldsToValidate,
         schema.schema_definition
       );
+
+      // Store original values in raw_fragments for converted fields (preserves zero data loss)
+      for (const [key, value] of Object.entries(originalValues)) {
+        // Skip null or undefined values (database constraint)
+        if (value === null || value === undefined) {
+          continue;
+        }
+        
+        // Check if fragment already exists (for idempotence)
+        const { data: existing } = await supabase
+          .from("raw_fragments")
+          .select("id, frequency_count")
+          .eq("source_id", sourceId)
+          .eq("fragment_key", key)
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (existing) {
+          // Update existing fragment
+          await supabase
+            .from("raw_fragments")
+            .update({
+              fragment_value: value,
+              fragment_envelope: {
+                reason: "converted_value_original",
+                entity_type: entityType,
+                schema_version: schema.schema_version,
+                converted_to: validFields[key],
+              },
+              frequency_count: (existing.frequency_count || 1) + 1,
+              last_seen: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+        } else {
+          // Insert new fragment
+          const fragmentId = randomUUID();
+          await supabase.from("raw_fragments").insert({
+            id: fragmentId,
+            source_id: sourceId,
+            interpretation_id: interpretationId,
+            user_id: userId,
+            entity_type: entityType,
+            fragment_key: key,
+            fragment_value: value,
+            fragment_envelope: {
+              reason: "converted_value_original",
+              entity_type: entityType,
+              schema_version: schema.schema_version,
+              converted_to: validFields[key],
+            },
+          });
+        }
+      }
 
       // Store unknown fields in raw_fragments (with idempotence)
       // Filter out null/undefined values before storing
@@ -292,7 +304,7 @@ export async function runInterpretation(
             source_id: sourceId,
             interpretation_id: interpretationId,
             user_id: userId,
-            fragment_type: entityType,
+            entity_type: entityType,
             fragment_key: key,
             fragment_value: value,
             fragment_envelope: {
@@ -373,7 +385,7 @@ export async function runInterpretation(
 
       // Create observation with canonical fields and hash
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
-      let observationData: Record<string, unknown> = {
+      const observationData: Record<string, unknown> = {
         id: observationId,
         entity_id: entityId,
         entity_type: entityType,
@@ -681,7 +693,7 @@ export async function createRelationshipObservations(
 
       // Create relationship observation
       // Handle schema cache issues: if canonical_hash column not in cache, retry without it
-      let relationshipObsData: Record<string, unknown> = {
+      const relationshipObsData: Record<string, unknown> = {
         id: observationId,
         relationship_key: relationshipKey,
         relationship_type: rel.relationship_type,

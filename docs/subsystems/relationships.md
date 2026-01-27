@@ -23,7 +23,7 @@ This document does NOT cover:
 Relationships follow the same **observation-snapshot pattern** as entities:
 
 ```
-Source Material → Relationship Observations → Relationship Reducer → Relationship Snapshot
+Source → Relationship Observations → Relationship Reducer → Relationship Snapshot
 ```
 
 **Relationship Observations:**
