@@ -4,7 +4,7 @@
  * Display all available schemas with search and filtering
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,8 @@ import { Loader2, Search, Database } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
+import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface Schema {
   entity_type: string;
@@ -21,6 +23,7 @@ interface Schema {
   field_summary: Record<string, { type: string; required: boolean }>;
   similarity_score?: number;
   match_type?: "keyword" | "vector";
+  metadata?: SchemaMetadata;
 }
 
 interface SchemaListProps {
@@ -35,52 +38,86 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
+  const { sessionToken, user } = useAuth();
+  const { subscribe } = useRealtime();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
+  const sortSchemas = useCallback((items: Schema[]) => {
+    return [...items].sort((left, right) => {
+      const typeComparison = (left.entity_type || "").localeCompare(right.entity_type || "");
+      if (typeComparison !== 0) {
+        return typeComparison;
+      }
+      return (left.schema_version || "").localeCompare(right.schema_version || "");
+    });
+  }, []);
+
+  // Helper function to fetch schemas
+  const fetchSchemas = useCallback(async () => {
+    setLoading(true);
+    try {
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      // Include bearer token if available
+      if (bearerToken) {
+        headers["Authorization"] = `Bearer ${bearerToken}`;
+      }
+
+      const params = new URLSearchParams();
+      if (user?.id) {
+        params.append("user_id", user.id);
+      }
+      const url = `/api/schemas${params.toString() ? `?${params.toString()}` : ""}`;
+
+      const response = await fetch(url, { headers });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Unauthorized - check your Bearer Token");
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const nextSchemas = sortSchemas(data.schemas || []);
+      setSchemas(nextSchemas);
+      setFilteredSchemas(nextSchemas);
+    } catch (error) {
+      console.error("Failed to fetch schemas:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [bearerToken, sortSchemas, user?.id]);
+
+  // Initial fetch
   useEffect(() => {
     // Wait for keys to load before making request (if using keys)
     if (keysLoading && !sessionToken && !settings.bearerToken) {
       return;
     }
 
-    async function fetchSchemas() {
-      setLoading(true);
-      try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-
-        // Include bearer token if available
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        const url = `/api/schemas${searchQuery ? `?keyword=${encodeURIComponent(searchQuery)}` : ""}`;
-
-        const response = await fetch(url, { headers });
-
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Unauthorized - check your Bearer Token");
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        setSchemas(data.schemas || []);
-        setFilteredSchemas(data.schemas || []);
-      } catch (error) {
-        console.error("Failed to fetch schemas:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchSchemas();
-  }, [searchQuery, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+  }, [fetchSchemas, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription to refetch when schema_registry changes
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribe({
+      table: "schema_registry",
+      event: "*",
+      filter: `user_id=eq.${user.id}`,
+      callback: () => {
+        fetchSchemas();
+      },
+    });
+
+    return unsubscribe;
+  }, [user, subscribe, fetchSchemas]);
 
   // Filter schemas client-side as well for instant feedback
   useEffect(() => {
@@ -95,8 +132,8 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
         schema.entity_type?.toLowerCase().includes(query) ||
         (schema.field_names || []).some((field) => field?.toLowerCase().includes(query))
     );
-    setFilteredSchemas(filtered);
-  }, [searchQuery, schemas]);
+    setFilteredSchemas(sortSchemas(filtered));
+  }, [searchQuery, schemas, sortSchemas]);
 
   if (loading) {
     return (
@@ -141,21 +178,27 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSchemas.map((schema) => (
-              <Card
-                key={schema.entity_type}
-                className="cursor-pointer hover:bg-accent transition-colors"
-                onClick={() => onSchemaClick(schema)}
-              >
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{schema.entity_type}</CardTitle>
-                    <Badge variant="secondary">v{schema.schema_version}</Badge>
-                  </div>
-                  <CardDescription>
-                    {schema.field_names?.length || 0} field{(schema.field_names?.length || 0) !== 1 ? "s" : ""}
-                  </CardDescription>
-                </CardHeader>
+            {filteredSchemas.map((schema) => {
+              const Icon = getSchemaIcon(schema.entity_type, schema.metadata);
+              
+              return (
+                <Card
+                  key={schema.entity_type}
+                  className="cursor-pointer hover:bg-accent transition-colors"
+                  onClick={() => onSchemaClick(schema)}
+                >
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {Icon && <Icon className="size-5 shrink-0" />}
+                        <CardTitle className="text-lg">{schema.entity_type}</CardTitle>
+                      </div>
+                      <Badge variant="secondary">v{schema.schema_version}</Badge>
+                    </div>
+                    <CardDescription>
+                      {schema.field_names?.length || 0} field{(schema.field_names?.length || 0) !== 1 ? "s" : ""}
+                    </CardDescription>
+                  </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-1">
                     {(schema.field_names || []).slice(0, 5).map((field) => (
@@ -170,8 +213,9 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
                     )}
                   </div>
                 </CardContent>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>

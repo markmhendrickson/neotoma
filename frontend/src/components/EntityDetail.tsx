@@ -4,9 +4,7 @@
  * Display entity snapshot with provenance, observations, and relationships
  */
 
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ExternalLink } from "lucide-react";
@@ -14,6 +12,9 @@ import { Separator } from "@/components/ui/separator";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
+import { getEntityDisplayName } from "@/utils/entityDisplay";
+import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface EntitySnapshot {
   entity_id: string;
@@ -77,6 +78,7 @@ interface SchemaInfo {
       required?: boolean;
     }>;
   };
+  metadata?: SchemaMetadata;
 }
 
 interface EntityDetailProps {
@@ -103,10 +105,11 @@ export function EntityDetail({
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [schema, setSchema] = useState<SchemaInfo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showAllProperties, setShowAllProperties] = useState(false);
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
+  const { sessionToken, user } = useAuth();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
@@ -269,16 +272,43 @@ export function EntityDetail({
           }
         }
 
-        // Fetch schema for this entity type
+        // Fetch schema for this entity type (skip if not registered)
         if (entityData.entity_type) {
           try {
-            const schemaResponse = await fetch(
-              `/api/schemas/${encodeURIComponent(entityData.entity_type)}`,
+            const schemaParams = new URLSearchParams();
+            schemaParams.append("keyword", entityData.entity_type);
+            if (user?.id) {
+              schemaParams.append("user_id", user.id);
+            }
+            const schemaIndexResponse = await fetch(
+              `/api/schemas?${schemaParams.toString()}`,
               { headers }
             );
-            if (schemaResponse.ok) {
-              const schemaData = await schemaResponse.json();
-              setSchema(schemaData);
+
+            if (schemaIndexResponse.ok) {
+              const schemaIndex = await schemaIndexResponse.json();
+              const schemaExists = (schemaIndex.schemas || []).some(
+                (schemaItem: { entity_type?: string }) =>
+                  schemaItem.entity_type === entityData.entity_type
+              );
+
+              if (schemaExists) {
+                const detailParams = new URLSearchParams();
+                if (user?.id) {
+                  detailParams.append("user_id", user.id);
+                }
+                const detailQuery = detailParams.toString();
+                const schemaResponse = await fetch(
+                  `/api/schemas/${encodeURIComponent(entityData.entity_type)}${
+                    detailQuery ? `?${detailQuery}` : ""
+                  }`,
+                  { headers }
+                );
+                if (schemaResponse.ok) {
+                  const schemaData = await schemaResponse.json();
+                  setSchema(schemaData);
+                }
+              }
             }
           } catch (error) {
             console.error("Failed to fetch schema:", error);
@@ -293,6 +323,38 @@ export function EntityDetail({
 
     fetchEntityDetail();
   }, [entityId, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription for entity updates
+  const { subscribe } = useRealtime();
+
+  useEffect(() => {
+    if (!user || !entityId) return;
+
+    const unsubscribe = subscribe({
+      table: "entities",
+      event: "UPDATE",
+      filter: `entity_id=eq.${entityId}`,
+      callback: (payload) => {
+        const { new: updatedEntity } = payload;
+        setEntity(updatedEntity as EntitySnapshot);
+      },
+    });
+
+    return unsubscribe;
+  }, [entityId, user, subscribe]);
+
+  const entityName = useMemo(() => {
+    if (!entity) return "Entity";
+    return getEntityDisplayName(entity);
+  }, [entity]);
+
+  const snapshotEntries = useMemo(() => {
+    if (!entity) return [];
+    return Object.entries(entity.snapshot).sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+  }, [entity]);
+
+  const visibleSnapshotEntries = showAllProperties ? snapshotEntries : snapshotEntries.slice(0, 5);
+  const hasMoreProperties = snapshotEntries.length > 5;
 
   if (loading) {
     return (
@@ -314,151 +376,169 @@ export function EntityDetail({
 
   return (
     <div className="h-full overflow-auto p-6">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Entity Header */}
-        <Card>
-          <CardHeader>
+      <div className="max-w-4xl mx-auto space-y-8">
+        {/* Entity header (page title block) */}
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Badge variant="secondary">{entity.entity_type}</Badge>
+            {schema && (
+              <Badge variant="outline" className="text-xs">
+                Schema v{schema.schema_version}
+              </Badge>
+            )}
+          </div>
+          <h1 className="text-2xl font-semibold">{entityName}</h1>
+          <p className="text-xs font-mono text-muted-foreground mt-1">
+            {entity.entity_id}
+          </p>
+          <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Badge variant="secondary">{entity.entity_type}</Badge>
-                {schema && (
-                  <Badge variant="outline" className="text-xs">
-                    Schema v{schema.schema_version}
-                  </Badge>
+              <span className="text-muted-foreground">Observations:</span> {entity.observation_count}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Sources:</span> {sources.length}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Interpretations:</span> {interpretations.length}
+            </div>
+            <div>
+              <span className="text-muted-foreground">Timeline events:</span> {timelineEvents.length}
+            </div>
+            <div className="col-span-2">
+              <span className="text-muted-foreground">Last updated:</span>{" "}
+              {new Date(entity.last_observation_at).toLocaleString()}
+            </div>
+          </div>
+        </div>
+
+        {/* Current truth (entity snapshot) */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Current truth (entity snapshot)</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Computed from all observations via reducer
+          </p>
+          {snapshotEntries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No snapshot fields</p>
+          ) : (
+            <div className="space-y-2">
+              {visibleSnapshotEntries.map(([key, value]) => (
+                <div key={key} className="flex justify-between gap-4 text-sm">
+                  <span className="text-muted-foreground">{key}:</span>
+                  <span className="font-mono text-xs truncate">
+                    {JSON.stringify(value)}
+                  </span>
+                </div>
+              ))}
+              {hasMoreProperties && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="px-0 text-sm text-muted-foreground"
+                  onClick={() => setShowAllProperties((prev) => !prev)}
+                >
+                  {showAllProperties ? "Show fewer properties" : "Show all properties"}
+                </Button>
+              )}
+            </div>
+          )}
+        </section>
+
+        {entity.raw_fragments && Object.keys(entity.raw_fragments).length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold mb-2">Raw fragments (unvalidated)</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Fields not yet in schema
+            </p>
+            <div className="space-y-2">
+              {Object.entries(entity.raw_fragments).map(([key, value]) => (
+                <div key={key} className="flex justify-between gap-4 text-sm">
+                  <span className="text-muted-foreground">{key}:</span>
+                  <span className="font-mono text-xs truncate">
+                    {JSON.stringify(value)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Schema definition */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Schema definition</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            {schema ? `Entity type: ${schema.entity_type} (v${schema.schema_version})` : "Schema information"}
+          </p>
+          {schema ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 mb-4">
+                {getSchemaIcon(schema.entity_type, schema.metadata) && (
+                  <div className="shrink-0">
+                    {(() => {
+                      const Icon = getSchemaIcon(schema.entity_type, schema.metadata);
+                      return Icon ? <Icon className="size-6" /> : null;
+                    })()}
+                  </div>
                 )}
               </div>
-              <CardTitle className="text-2xl">{entity.canonical_name}</CardTitle>
-              <CardDescription className="text-xs font-mono mt-1">
-                {entity.entity_id}
-              </CardDescription>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <span className="text-muted-foreground">Observations:</span> {entity.observation_count}
-              </div>
-              <div>
-                <span className="text-muted-foreground">Sources:</span> {sources.length}
-              </div>
-              <div>
-                <span className="text-muted-foreground">Interpretations:</span> {interpretations.length}
-              </div>
-              <div>
-                <span className="text-muted-foreground">Timeline events:</span> {timelineEvents.length}
-              </div>
-              <div className="col-span-2">
-                <span className="text-muted-foreground">Last Updated:</span>{" "}
-                {new Date(entity.last_observation_at).toLocaleString()}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Tabs for different views */}
-        <Tabs defaultValue="snapshot" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
-            <TabsTrigger value="snapshot">
-              Snapshot
-            </TabsTrigger>
-            <TabsTrigger value="schema">
-              Schema
-            </TabsTrigger>
-            <TabsTrigger value="sources">
-              Sources ({sources.length})
-            </TabsTrigger>
-            <TabsTrigger value="interpretations">
-              Interpretations ({interpretations.length})
-            </TabsTrigger>
-            <TabsTrigger value="timeline">
-              Timeline ({timelineEvents.length})
-            </TabsTrigger>
-            <TabsTrigger value="observations">
-              Observations ({entity.observation_count})
-            </TabsTrigger>
-            <TabsTrigger value="relationships">
-              Relationships ({totalRelationships})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Schema Tab */}
-          <TabsContent value="schema" className="space-y-4">
-            {schema ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Schema definition</CardTitle>
-                  <CardDescription>
-                    Entity type: {schema.entity_type} (v{schema.schema_version})
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {Object.entries(schema.schema_definition.fields || {}).map(([fieldName, fieldDef]) => (
-                      <div key={fieldName} className="flex items-start gap-4 text-sm border-b pb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{fieldName}</span>
-                            {fieldDef.required && (
-                              <Badge variant="outline" className="text-xs">Required</Badge>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Type: {fieldDef.type}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    {Object.keys(schema.schema_definition.fields || {}).length === 0 && (
-                      <p className="text-sm text-muted-foreground">No fields defined</p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Schema not found
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          {/* Sources Tab */}
-          <TabsContent value="sources" className="space-y-4">
-            {sources.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    No sources found
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              sources.map((source) => (
-                <Card key={source.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-base">{source.original_filename}</CardTitle>
-                        <CardDescription className="text-xs font-mono mt-1">
-                          {source.id}
-                        </CardDescription>
-                      </div>
-                      {onNavigateToSource && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onNavigateToSource(source.id)}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          View
-                        </Button>
+              {Object.entries(schema.schema_definition.fields || {}).map(([fieldName, fieldDef]) => (
+                <div key={fieldName} className="flex items-start gap-4 text-sm border-b pb-2">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{fieldName}</span>
+                      {fieldDef.required && (
+                        <Badge variant="outline" className="text-xs">Required</Badge>
                       )}
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Type: {fieldDef.type}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {Object.keys(schema.schema_definition.fields || {}).length === 0 && (
+                <p className="text-sm text-muted-foreground">No fields defined</p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Schema not found
+            </p>
+          )}
+        </section>
+
+        {/* Sources */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Sources ({sources.length})</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Source files that contributed observations to this entity
+          </p>
+          {sources.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No sources found
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {sources.map((source) => (
+                <div key={source.id} className="border rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium text-sm">{source.original_filename}</div>
+                      <div className="text-xs font-mono text-muted-foreground mt-1">
+                        {source.id}
+                      </div>
+                    </div>
+                    {onNavigateToSource && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onNavigateToSource(source.id)}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-sm">
                     <div>
                       <span className="text-muted-foreground">MIME type:</span> {source.mime_type}
                     </div>
@@ -470,48 +550,48 @@ export function EntityDetail({
                       <span className="text-muted-foreground">Created:</span>{" "}
                       {new Date(source.created_at).toLocaleString()}
                     </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Interpretations Tab */}
-          <TabsContent value="interpretations" className="space-y-4">
-            {interpretations.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    No interpretations found
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              interpretations.map((interp) => (
-                <Card key={interp.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardDescription className="text-xs font-mono">
-                          {interp.id}
-                        </CardDescription>
-                        <Badge variant={interp.status === "completed" ? "default" : "secondary"} className="mt-2">
-                          {interp.status}
-                        </Badge>
+        {/* Interpretations */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Interpretations ({interpretations.length})</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            AI interpretations that extracted data for this entity
+          </p>
+          {interpretations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No interpretations found
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {interpretations.map((interp) => (
+                <div key={interp.id} className="border rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-xs font-mono text-muted-foreground">
+                        {interp.id}
                       </div>
-                      {onNavigateToSource && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onNavigateToSource(interp.source_id)}
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          View source
-                        </Button>
-                      )}
+                      <Badge variant={interp.status === "completed" ? "default" : "secondary"} className="mt-2">
+                        {interp.status}
+                      </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
+                    {onNavigateToSource && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onNavigateToSource(interp.source_id)}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        View source
+                      </Button>
+                    )}
+                  </div>
+                  <div className="space-y-1 text-sm">
                     <div>
                       <span className="text-muted-foreground">Started:</span>{" "}
                       {new Date(interp.started_at).toLocaleString()}
@@ -522,39 +602,39 @@ export function EntityDetail({
                         {new Date(interp.completed_at).toLocaleString()}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Timeline Events Tab */}
-          <TabsContent value="timeline" className="space-y-4">
-            {timelineEvents.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    No timeline events found
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              timelineEvents.map((event) => (
-                <Card key={event.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-base">{event.event_type}</CardTitle>
-                        <CardDescription className="text-xs font-mono mt-1">
-                          {event.id}
-                        </CardDescription>
+        {/* Timeline events */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Timeline events ({timelineEvents.length})</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Timeline events related to this entity
+          </p>
+          {timelineEvents.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No timeline events found
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {timelineEvents.map((event) => (
+                <div key={event.id} className="border rounded-lg p-4 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium text-sm">{event.event_type}</div>
+                      <div className="text-xs font-mono text-muted-foreground mt-1">
+                        {event.id}
                       </div>
-                      <Badge variant="outline">
-                        {new Date(event.event_timestamp).toLocaleString()}
-                      </Badge>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2 text-sm">
+                    <Badge variant="outline">
+                      {new Date(event.event_timestamp).toLocaleString()}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 text-sm">
                     {event.source_record_id && (
                       <div>
                         <span className="text-muted-foreground">Source:</span>{" "}
@@ -566,28 +646,77 @@ export function EntityDetail({
                         <span className="text-muted-foreground">Entities:</span> {event.entity_ids.length}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-          {/* Snapshot Tab */}
-          <TabsContent value="snapshot" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Current Truth (Entity Snapshot)</CardTitle>
-                <CardDescription>
-                  Computed from all observations via reducer
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {Object.keys(entity.snapshot).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No snapshot fields</p>
-                ) : (
-                  <div className="space-y-2">
-                    {Object.entries(entity.snapshot).map(([key, value]) => (
-                      <div key={key} className="flex justify-between gap-4 text-sm">
+        {/* Observations */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Observations ({entity.observation_count})</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Individual observations that contribute to the entity snapshot
+          </p>
+          {observations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No observations
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {observations.map((obs) => (
+                <div key={obs.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div className="text-xs font-mono text-muted-foreground">
+                      {obs.id}
+                    </div>
+                    <Badge variant={obs.source_priority === 1000 ? "destructive" : "secondary"}>
+                      Priority: {obs.source_priority}
+                    </Badge>
+                  </div>
+                  {/* Provenance */}
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Source:</span>
+                      {obs.source_id ? (
+                        <>
+                          <code className="text-xs">{obs.source_id.substring(0, 16)}...</code>
+                          {onNavigateToSource && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2"
+                              onClick={() => onNavigateToSource(obs.source_id!)}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <span>Direct API</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium">Interpretation:</span>{" "}
+                      {obs.interpretation_id ? (
+                        <code className="text-xs">{obs.interpretation_id.substring(0, 16)}...</code>
+                      ) : (
+                        <span>None</span>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium">Observed:</span>{" "}
+                      {new Date(obs.observed_at).toLocaleString()}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* Fields */}
+                  <div className="space-y-1 text-sm">
+                    {Object.entries(obs.fields).map(([key, value]) => (
+                      <div key={key} className="flex justify-between gap-4">
                         <span className="text-muted-foreground">{key}:</span>
                         <span className="font-mono text-xs truncate">
                           {JSON.stringify(value)}
@@ -595,187 +724,77 @@ export function EntityDetail({
                       </div>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
-            {entity.raw_fragments && Object.keys(entity.raw_fragments).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Raw Fragments (Unvalidated)</CardTitle>
-                  <CardDescription>
-                    Fields not yet in schema
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {Object.entries(entity.raw_fragments).map(([key, value]) => (
-                      <div key={key} className="flex justify-between gap-4 text-sm">
-                        <span className="text-muted-foreground">{key}:</span>
-                        <span className="font-mono text-xs truncate">
-                          {JSON.stringify(value)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+        {/* Relationships */}
+        <section>
+          <h2 className="text-lg font-semibold mb-2">Relationships ({totalRelationships})</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Entity relationships (outgoing and incoming)
+          </p>
+          {relationships.outgoing.length > 0 && (
+            <div className="space-y-3 mb-4">
+              <div className="text-sm font-medium text-muted-foreground">Outgoing relationships</div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Relationships where this entity is the source
+              </p>
+              {relationships.outgoing.map((rel) => (
+                <div key={rel.id} className="flex items-center gap-3 text-sm border rounded-lg p-3">
+                  <Badge variant="outline">{rel.relationship_type}</Badge>
+                  <span>→</span>
+                  <code className="text-xs">{rel.target_entity_id.substring(0, 16)}...</code>
+                  {onNavigateToEntity && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2"
+                      onClick={() => onNavigateToEntity(rel.target_entity_id)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
-          {/* Observations Tab */}
-          <TabsContent value="observations" className="space-y-4">
-            {observations.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    No observations
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              observations.map((obs) => (
-                <Card key={obs.id}>
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <CardDescription className="text-xs font-mono">
-                        {obs.id}
-                      </CardDescription>
-                      <Badge variant={obs.source_priority === 1000 ? "destructive" : "secondary"}>
-                        Priority: {obs.source_priority}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {/* Provenance */}
-                    <div className="text-xs text-muted-foreground space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">Source:</span>
-                        {obs.source_id ? (
-                          <>
-                            <code className="text-xs">{obs.source_id.substring(0, 16)}...</code>
-                            {onNavigateToSource && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2"
-                                onClick={() => onNavigateToSource(obs.source_id!)}
-                              >
-                                <ExternalLink className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </>
-                        ) : (
-                          <span>Direct API</span>
-                        )}
-                      </div>
-                      <div>
-                        <span className="font-medium">Interpretation:</span>{" "}
-                        {obs.interpretation_id ? (
-                          <code className="text-xs">{obs.interpretation_id.substring(0, 16)}...</code>
-                        ) : (
-                          <span>None</span>
-                        )}
-                      </div>
-                      <div>
-                        <span className="font-medium">Observed:</span>{" "}
-                        {new Date(obs.observed_at).toLocaleString()}
-                      </div>
-                    </div>
+          {relationships.incoming.length > 0 && (
+            <div className="space-y-3">
+              <div className="text-sm font-medium text-muted-foreground">Incoming relationships</div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Relationships where this entity is the target
+              </p>
+              {relationships.incoming.map((rel) => (
+                <div key={rel.id} className="flex items-center gap-3 text-sm border rounded-lg p-3">
+                  <code className="text-xs">{rel.source_entity_id.substring(0, 16)}...</code>
+                  {onNavigateToEntity && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-2"
+                      onClick={() => onNavigateToEntity(rel.source_entity_id)}
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  )}
+                  <span>→</span>
+                  <Badge variant="outline">{rel.relationship_type}</Badge>
+                  <span>→ this entity</span>
+                </div>
+              ))}
+            </div>
+          )}
 
-                    <Separator />
-
-                    {/* Fields */}
-                    <div className="space-y-1 text-sm">
-                      {Object.entries(obs.fields).map(([key, value]) => (
-                        <div key={key} className="flex justify-between gap-4">
-                          <span className="text-muted-foreground">{key}:</span>
-                          <span className="font-mono text-xs truncate">
-                            {JSON.stringify(value)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </TabsContent>
-
-          {/* Relationships Tab */}
-          <TabsContent value="relationships" className="space-y-4">
-            {relationships.outgoing.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Outgoing Relationships</CardTitle>
-                  <CardDescription>
-                    Relationships where this entity is the source
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {relationships.outgoing.map((rel) => (
-                    <div key={rel.id} className="flex items-center gap-3 text-sm">
-                      <Badge variant="outline">{rel.relationship_type}</Badge>
-                      <span>→</span>
-                      <code className="text-xs">{rel.target_entity_id.substring(0, 16)}...</code>
-                      {onNavigateToEntity && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2"
-                          onClick={() => onNavigateToEntity(rel.target_entity_id)}
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {relationships.incoming.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Incoming Relationships</CardTitle>
-                  <CardDescription>
-                    Relationships where this entity is the target
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {relationships.incoming.map((rel) => (
-                    <div key={rel.id} className="flex items-center gap-3 text-sm">
-                      <code className="text-xs">{rel.source_entity_id.substring(0, 16)}...</code>
-                      {onNavigateToEntity && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2"
-                          onClick={() => onNavigateToEntity(rel.source_entity_id)}
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                        </Button>
-                      )}
-                      <span>→</span>
-                      <Badge variant="outline">{rel.relationship_type}</Badge>
-                      <span>→ this entity</span>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            )}
-
-            {totalRelationships === 0 && (
-              <Card>
-                <CardContent className="pt-6">
-                  <p className="text-sm text-muted-foreground text-center">
-                    No relationships
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+          {totalRelationships === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No relationships
+            </p>
+          )}
+        </section>
       </div>
     </div>
   );

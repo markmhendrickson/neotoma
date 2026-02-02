@@ -7,7 +7,7 @@
 process.env.SUPABASE_OAUTH_CLIENT_ID = "test-client-id";
 process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
   generatePKCE,
   createAuthUrl,
@@ -154,7 +154,6 @@ describe("MCP OAuth Service", () => {
 
   // Note: Integration tests for full OAuth flow, token exchange, and database operations
   // should be in tests/integration/mcp_oauth.test.ts
-  });
 
   describe("Input Validation", () => {
     describe("validateConnectionId", () => {

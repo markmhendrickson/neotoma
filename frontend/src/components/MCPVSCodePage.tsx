@@ -55,12 +55,10 @@ export function MCPVSCodePage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Install an MCP client extension for VS Code (e.g., "MCP Client" or similar)</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
               <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
@@ -70,38 +68,32 @@ export function MCPVSCodePage() {
               <li>Restart VS Code</li>
               <li>Test connection by using MCP tools in VS Code</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Available MCP Extensions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+          <div>
+            <h2 className="text-xl font-semibold">Available MCP Extensions</h2>
+            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside mt-2">
               <li>Continue (includes MCP support)</li>
               <li>GitHub Copilot (includes MCP support)</li>
               <li>Other MCP client extensions from the VS Code marketplace</li>
             </ul>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              VS Code MCP Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://code.visualstudio.com/docs/copilot/customization/mcp-servers"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                VS Code MCP Documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

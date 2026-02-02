@@ -5,6 +5,8 @@
  * Updated to use relationship observations and snapshots.
  */
 
+import { createHash } from "node:crypto";
+
 import { supabase } from "../db.js";
 import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
 
@@ -26,6 +28,23 @@ export interface Relationship {
   metadata: Record<string, unknown>;
   created_at: string;
   user_id: string;
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
+  }
+
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([left], [right]) => left.localeCompare(right),
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
+      .join(",")}}`;
+  }
+
+  return JSON.stringify(value);
 }
 
 export class RelationshipsService {
@@ -54,10 +73,43 @@ export class RelationshipsService {
       throw new Error(`Invalid relationship type: ${params.relationship_type}`);
     }
 
+    const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
+    let sourceId = params.source_record_id || null;
+
+    if (!sourceId || sourceId === "00000000-0000-0000-0000-000000000000") {
+      const metadataString = stableStringify(params.metadata || {});
+      const contentHash = createHash("sha256")
+        .update(`${relationshipKey}:${params.user_id}:${metadataString}`)
+        .digest("hex");
+
+      const { data: source, error: sourceError } = await supabase
+        .from("sources")
+        .insert({
+          content_hash: `relationship_${contentHash.substring(0, 24)}`,
+          mime_type: "application/json",
+          storage_url: `internal://relationship/${params.relationship_type}`,
+          file_size: 0,
+          user_id: params.user_id,
+        })
+        .select()
+        .single();
+
+      if (sourceError || !source) {
+        throw new Error(
+          `Failed to create relationship source: ${sourceError?.message || "Unknown error"}`
+        );
+      }
+
+      sourceId = source.id;
+    }
+
+    if (sourceId == null) {
+      throw new Error("Missing source id for relationship observation");
+    }
+
     // Create relationship observation
     const { createRelationshipObservations } = await import("./interpretation.js");
-    
-    await createRelationshipObservations(
+    const relationshipsCreated = await createRelationshipObservations(
       [
         {
           relationship_type: params.relationship_type,
@@ -66,11 +118,26 @@ export class RelationshipsService {
           metadata: params.metadata || {},
         },
       ],
-      params.source_record_id || "00000000-0000-0000-0000-000000000000",
+      sourceId,
       null, // No interpretation_id for direct creation
       params.user_id,
       100, // High priority for direct creation
     );
+
+    if (relationshipsCreated === 0) {
+      const { data: observations } = await supabase
+        .from("relationship_observations")
+        .select("id")
+        .eq("relationship_key", relationshipKey)
+        .eq("user_id", params.user_id)
+        .limit(1);
+
+      if (!observations || observations.length === 0) {
+        throw new Error(
+          `Failed to create relationship observation for ${relationshipKey}`
+        );
+      }
+    }
 
     // Get the computed snapshot (with retry for eventual consistency)
     let snapshot = await this.getRelationshipSnapshot(
@@ -107,7 +174,7 @@ export class RelationshipsService {
       relationship_type: params.relationship_type,
       source_entity_id: params.source_entity_id,
       target_entity_id: params.target_entity_id,
-      source_record_id: params.source_record_id || null,
+      source_record_id: sourceId,
       metadata: params.metadata || {},
       user_id: params.user_id,
     });

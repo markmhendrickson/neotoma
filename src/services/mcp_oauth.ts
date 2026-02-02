@@ -51,7 +51,8 @@ interface OAuthTokens {
   expiresIn: number;
 }
 
-interface MCPConnection {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+interface _MCPConnection {
   id: string;
   user_id: string;
   connection_id: string;
@@ -100,9 +101,7 @@ function validateRedirectUri(redirectUri: string): void {
     const url = new URL(redirectUri);
     // Allow http/https for web, and custom schemes for apps (cursor://, vscode://, etc.)
     if (!url.protocol.match(/^(https?|cursor|vscode|app):$/)) {
-      throw createOAuthError.invalidRedirectUri(
-        `Invalid redirect URI protocol: ${url.protocol}`
-      );
+      throw createOAuthError.invalidRedirectUri(`Invalid redirect URI protocol: ${url.protocol}`);
     }
   } catch (error) {
     throw createOAuthError.invalidRedirectUri(`Invalid redirect URI format: ${redirectUri}`);
@@ -121,7 +120,9 @@ function validateState(state: string): void {
     throw createOAuthError.stateInvalid("state must be 10-256 characters");
   }
   if (!/^[a-zA-Z0-9_-]+$/.test(state)) {
-    throw createOAuthError.stateInvalid("state must be base64url format (alphanumeric, dash, underscore)");
+    throw createOAuthError.stateInvalid(
+      "state must be base64url format (alphanumeric, dash, underscore)"
+    );
   }
 }
 
@@ -268,13 +269,11 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
       const adminApi = adminClient.auth.admin as any;
 
       if (typeof adminApi.createOAuthClient === "function") {
-        
         // Use JavaScript client method if available
         const { data, error } = await adminApi.createOAuthClient({
           name: clientName,
           redirect_uris: [redirectUri],
         });
-
 
         if (error) {
           logger.warn(`[MCP OAuth] Failed to register OAuth client via JS API: ${error.message}`);
@@ -299,7 +298,7 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
       // Try the admin API endpoint for OAuth client registration
       // This endpoint may not be publicly documented yet (OAuth 2.1 Server is in beta)
       const registrationUrl = `${supabaseUrl}/auth/v1/admin/oauth/clients`;
-      
+
       const response = await fetch(registrationUrl, {
         method: "POST",
         headers: {
@@ -312,7 +311,6 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
           redirect_uris: [redirectUri],
         }),
       });
-
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -386,7 +384,6 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
  * 3. Caches the client_id to avoid re-registration
  */
 async function getOrRegisterClientId(redirectUri: string): Promise<string> {
-  
   // If client_id is explicitly configured, use it (manual registration takes precedence)
   if (config.oauthClientId) {
     return config.oauthClientId;
@@ -394,16 +391,15 @@ async function getOrRegisterClientId(redirectUri: string): Promise<string> {
 
   // Otherwise, try dynamic registration
   try {
-    
     const clientId = await registerOAuthClient(redirectUri);
-    
-    
+
     if (!clientId) {
-      throw createOAuthError.clientRegistrationFailed("Dynamic registration returned null client_id");
+      throw createOAuthError.clientRegistrationFailed(
+        "Dynamic registration returned null client_id"
+      );
     }
     return clientId;
   } catch (error: any) {
-    
     // If dynamic registration fails, provide helpful error message
     throw createOAuthError.clientRegistrationFailed(
       `OAuth client_id not configured and dynamic registration failed. ` +
@@ -413,6 +409,44 @@ async function getOrRegisterClientId(redirectUri: string): Promise<string> {
       { originalError: error.message }
     );
   }
+}
+
+/**
+ * Handle RFC 7591 Dynamic Client Registration requests.
+ * Used by Cursor and other MCP clients that require registration_endpoint in discovery.
+ * Registers a client for the given redirect_uris and returns client metadata.
+ */
+export async function handleDynamicRegistration(body: {
+  redirect_uris: string[];
+  client_name?: string;
+  scope?: string;
+}): Promise<{
+  client_id: string;
+  client_id_issued_at: number;
+  redirect_uris: string[];
+  grant_types_supported: string[];
+  response_types_supported: string[];
+  code_challenge_methods_supported: string[];
+  scope?: string;
+}> {
+  const { redirect_uris, scope } = body;
+  if (!Array.isArray(redirect_uris) || redirect_uris.length === 0) {
+    throw new Error("redirect_uris is required and must be a non-empty array");
+  }
+  for (const uri of redirect_uris) {
+    validateRedirectUri(uri);
+  }
+  const redirectUri = redirect_uris[0];
+  const clientId = await getOrRegisterClientId(redirectUri);
+  return {
+    client_id: clientId,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    redirect_uris,
+    grant_types_supported: ["authorization_code"],
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    ...(scope && { scope }),
+  };
 }
 
 /**
@@ -451,7 +485,6 @@ export async function createAuthUrl(
   // Get or register client_id
   const clientId = await getOrRegisterClientId(redirectUri);
 
-
   // Use OAuth 2.1 Server endpoint (requires client_id)
   const authUrl = new URL(`${supabaseUrl}/auth/v1/oauth/authorize`);
   authUrl.searchParams.set("client_id", clientId);
@@ -462,7 +495,6 @@ export async function createAuthUrl(
   authUrl.searchParams.set("code_challenge_method", "S256");
 
   const finalAuthUrl = authUrl.toString();
-  
 
   return finalAuthUrl;
 }
@@ -612,27 +644,30 @@ export async function initiateOAuthFlow(
   // IMPORTANT: OAuth redirect URI must match what's registered in Supabase exactly
   // Use OAuth-specific redirect URI that defaults to localhost:8080, independent of API_BASE_URL
   // This allows API_BASE_URL to be set to ngrok/proxy URLs for other purposes without breaking OAuth
-  const oauthRedirectBase = process.env.OAUTH_REDIRECT_BASE_URL || `http://localhost:${config.httpPort}`;
+  const oauthRedirectBase =
+    process.env.OAUTH_REDIRECT_BASE_URL || `http://localhost:${config.httpPort}`;
   const supabaseRedirectUri = `${oauthRedirectBase}/api/mcp/oauth/callback`;
-  
 
   // Store the supabaseRedirectUri in state (must match what's used in authorization URL)
   // finalRedirectUri is for client-side redirect after callback (e.g., cursor://), not for OAuth
   const finalRedirectUri = redirectUri; // Optional client-side redirect (e.g., cursor://)
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
 
-  const { error } = await getServiceRoleClient().from("mcp_oauth_state").insert({
-    state,
-    connection_id: connectionId,
-    code_verifier: codeVerifier,
-    redirect_uri: supabaseRedirectUri, // Store the OAuth redirect URI (must match authorization URL)
-    client_state: clientState ?? null,
-    expires_at: expiresAt.toISOString(),
-  });
+  const { error } = await getServiceRoleClient()
+    .from("mcp_oauth_state")
+    .insert({
+      state,
+      connection_id: connectionId,
+      code_verifier: codeVerifier,
+      redirect_uri: supabaseRedirectUri, // Store the OAuth redirect URI (must match authorization URL)
+      final_redirect_uri: finalRedirectUri ?? null, // Store the client's final redirect URI (e.g., cursor://)
+      client_state: clientState ?? null,
+      expires_at: expiresAt.toISOString(),
+    });
 
   if (error) {
     logger.error(`[MCP OAuth] Failed to store OAuth state: ${error.message}`);
-    
+
     // Provide helpful error message for schema cache issues
     if (error.message?.includes("Could not find") && error.message?.includes("column")) {
       throw createOAuthError.stateInvalid(
@@ -640,12 +675,12 @@ export async function initiateOAuthFlow(
         { originalError: error.message }
       );
     }
-    
+
     throw createOAuthError.stateInvalid(`Failed to store state: ${error.message}`, {
       originalError: error.message,
     });
   }
-  
+
   const authUrl = await createAuthUrl(state, codeChallenge, supabaseRedirectUri);
 
   logger.info(`[MCP OAuth] Initiated OAuth flow for connection: ${connectionId}`);
@@ -674,15 +709,14 @@ async function exchangeCodeForTokens(
   clientId: string
 ): Promise<OAuthTokens> {
   try {
-
     // Use OAuth 2.1 Server token endpoint with PKCE
     const tokenUrl = `${config.supabaseUrl}/auth/v1/oauth/token`;
-    
+
     const tokenResponse = await fetch(tokenUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "apikey": config.supabaseKey,
+        apikey: config.supabaseKey,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
@@ -696,28 +730,32 @@ async function exchangeCodeForTokens(
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
       logger.error(`[MCP OAuth] Token exchange failed: ${tokenResponse.status} ${errorText}`);
-      
+
       let errorJson: any = null;
       try {
         errorJson = JSON.parse(errorText);
       } catch {
         // Not JSON
       }
-      
+
       throw createOAuthError.tokenExchangeFailed(
         `Token exchange failed: ${tokenResponse.status} ${errorJson?.error_description || errorJson?.error || errorText}`,
-        { status: tokenResponse.status, error: errorJson?.error, error_description: errorJson?.error_description, body: errorText }
+        {
+          status: tokenResponse.status,
+          error: errorJson?.error,
+          error_description: errorJson?.error_description,
+          body: errorText,
+        }
       );
     }
 
     const tokenJson = await tokenResponse.json();
-    
+
     if (!tokenJson || !tokenJson.access_token) {
       logger.error(`[MCP OAuth] Invalid token response: missing access_token`);
-      throw createOAuthError.tokenExchangeFailed(
-        "Invalid token response: missing access_token",
-        { response: tokenJson }
-      );
+      throw createOAuthError.tokenExchangeFailed("Invalid token response: missing access_token", {
+        response: tokenJson,
+      });
     }
 
     return {
@@ -727,7 +765,7 @@ async function exchangeCodeForTokens(
     };
   } catch (error: any) {
     logger.error(`[MCP OAuth] Token exchange error: ${error.message}`);
-    
+
     if (error instanceof OAuthError) {
       throw error;
     }
@@ -794,10 +832,14 @@ export async function handleOAuthCallback(
   // stateData.redirect_uri is the OAuth redirect URI (supabaseRedirectUri) stored during initiation
   const clientId = await getOrRegisterClientId(stateData.redirect_uri);
 
-
   // Exchange code for tokens
   // redirect_uri must match exactly what was used in the authorization URL
-  const tokens = await exchangeCodeForTokens(code, stateData.code_verifier, stateData.redirect_uri, clientId);
+  const tokens = await exchangeCodeForTokens(
+    code,
+    stateData.code_verifier,
+    stateData.redirect_uri,
+    clientId
+  );
 
   // Get user info from access token
   const { data: userData, error: userError } = await supabase.auth.getUser(tokens.accessToken);
@@ -842,7 +884,7 @@ export async function handleOAuthCallback(
   return {
     connectionId: stateData.connection_id,
     userId: userData.user.id,
-    redirectUri: stateData.redirect_uri ?? undefined,
+    redirectUri: stateData.final_redirect_uri ?? stateData.redirect_uri ?? undefined,
     clientState: stateData.client_state ?? undefined,
   };
 }
@@ -986,6 +1028,39 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
     access_token: accessToken,
     token_type: "Bearer",
     expires_in,
+  };
+}
+
+/**
+ * Validate Bearer token and get associated connection ID
+ *
+ * Validates the access token and returns the connection ID it belongs to.
+ *
+ * @param accessToken - Bearer access token from OAuth flow
+ * @returns Connection ID and user ID
+ * @throws {OAuthError} If token is invalid or no connection found
+ * @example
+ * const { connectionId, userId } = await validateTokenAndGetConnectionId("eyJ...");
+ * // connectionId: "cursor-2025-01-27-abc123"
+ */
+export async function validateTokenAndGetConnectionId(
+  accessToken: string
+): Promise<{ connectionId: string; userId: string }> {
+  // Query mcp_oauth_connections for the access token
+  const { data: connection, error } = await supabase
+    .from("mcp_oauth_connections")
+    .select("connection_id, user_id")
+    .eq("access_token", accessToken)
+    .is("revoked_at", null)
+    .single();
+
+  if (error || !connection) {
+    throw createOAuthError.connectionNotFound("Connection not found for access token");
+  }
+
+  return {
+    connectionId: connection.connection_id,
+    userId: connection.user_id,
   };
 }
 

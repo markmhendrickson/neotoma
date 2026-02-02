@@ -55,12 +55,10 @@ export function MCPContinuePage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Install Continue extension in VS Code</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
               <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
@@ -69,25 +67,23 @@ export function MCPContinuePage() {
               <li>Restart VS Code</li>
               <li>Test connection by asking Continue to use Neotoma tools</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://continue.dev/docs/customization/mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              Continue MCP Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://continue.dev/docs/customization/mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                Continue MCP Documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

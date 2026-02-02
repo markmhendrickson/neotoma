@@ -1,7 +1,7 @@
 import React from "react";
 import { AlertCircle, Home, LucideIcon } from "lucide-react";
 import { Layout } from "@/components/Layout";
-import { BarChart, FileText, Users, Calendar, Upload, Database, Network } from "lucide-react";
+import { BarChart, FileText, Calendar, Upload, Database, Network } from "lucide-react";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -51,8 +51,8 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               <AlertCircle className="w-8 h-8 text-destructive" />
               <h1 className="text-[28px] font-medium tracking-tight">Something went wrong</h1>
             </div>
-            <div className="text-[17px] text-muted-foreground mb-12 font-normal tracking-wide">
-              An unexpected error occurred
+            <div className="text-[17px] text-muted-foreground mb-6 font-normal tracking-wide">
+              {this.state.error?.message || "An unexpected error occurred"}
             </div>
 
             <div className="text-[15px] leading-[1.75] font-light mb-8">
@@ -101,7 +101,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
         const defaultMenuItems = [
           { path: "/", label: "Dashboard", icon: BarChart },
           { path: "/sources", label: "Sources", icon: FileText },
-          { path: "/entities", label: "Entities", icon: Users },
           { path: "/schemas", label: "Schemas", icon: Database },
           { path: "/relationships", label: "Relationships", icon: Network },
           { path: "/timeline", label: "Timeline", icon: Calendar },

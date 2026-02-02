@@ -7,17 +7,20 @@
 import type { CapabilityRepository } from "../interfaces.js";
 
 export class DbCapabilityRepository implements CapabilityRepository {
-  async storeCapability(capability: unknown): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async storeCapability(_capability: unknown): Promise<void> {
     // Stub: Not implemented yet
     throw new Error("CapabilityRepository.storeCapability not yet implemented");
   }
 
-  async getCapability(capabilityId: string): Promise<unknown | null> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async getCapability(_capabilityId: string): Promise<unknown | null> {
     // Stub: Not implemented yet
     throw new Error("CapabilityRepository.getCapability not yet implemented");
   }
 
-  async validateCapability(capabilityId: string): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async validateCapability(_capabilityId: string): Promise<boolean> {
     // Stub: Not implemented yet
     throw new Error(
       "CapabilityRepository.validateCapability not yet implemented",

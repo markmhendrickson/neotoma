@@ -11,7 +11,7 @@ import { Home, Search } from "lucide-react";
 
 export function NotFound() {
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
+    <div className="flex items-center justify-center min-h-[calc(100vh-8rem)] bg-card">
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
           <div className="text-6xl font-bold text-muted-foreground mb-4">404</div>

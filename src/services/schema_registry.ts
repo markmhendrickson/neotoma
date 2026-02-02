@@ -45,6 +45,23 @@ export interface ReducerConfig {
   >;
 }
 
+export interface IconMetadata {
+  icon_type: "lucide" | "svg";
+  icon_name: string; // Lucide icon name or 'custom'
+  icon_svg?: string; // SVG code for custom icons
+  confidence?: number; // Match confidence (0-1)
+  generated_at: string; // ISO timestamp
+}
+
+export interface SchemaMetadata {
+  label?: string;
+  description?: string;
+  category?: "finance" | "productivity" | "knowledge" | "health" | "media";
+  icon?: IconMetadata;
+  test?: boolean; // Mark schemas created for testing
+  test_marked_at?: string; // ISO timestamp when test schema was marked
+}
+
 export interface SchemaRegistryEntry {
   id: string;
   entity_type: string;
@@ -55,6 +72,7 @@ export interface SchemaRegistryEntry {
   created_at: string;
   user_id?: string | null;
   scope?: "global" | "user";
+  metadata?: SchemaMetadata;
 }
 
 export class SchemaRegistryService {
@@ -69,6 +87,7 @@ export class SchemaRegistryService {
     user_id?: string;
     user_specific?: boolean;
     activate?: boolean;
+    metadata?: SchemaMetadata;
   }): Promise<SchemaRegistryEntry> {
     // Validate schema definition
     this.validateSchemaDefinition(config.schema_definition);
@@ -88,6 +107,7 @@ export class SchemaRegistryService {
         active: config.activate || false, // New schemas start inactive unless specified
         user_id: config.user_id || null,
         scope: scope,
+        metadata: config.metadata || {},
       })
       .select()
       .single();
@@ -96,10 +116,15 @@ export class SchemaRegistryService {
       throw new Error(`Failed to register schema: ${error.message}`);
     }
 
+    const registeredSchema = data as SchemaRegistryEntry;
+
+    // Auto-generate icon if not provided (non-blocking)
+    this.generateIconAsync(registeredSchema.entity_type, config.metadata);
+
     // Automatically export schema snapshots (non-blocking)
     this.exportSnapshotsAsync();
 
-    return data as SchemaRegistryEntry;
+    return registeredSchema;
   }
 
   /**
@@ -386,6 +411,7 @@ export class SchemaRegistryService {
         }
 
         // Process each group (represents one entity)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for (const [_groupKey, groupFragments] of fragmentGroups.entries()) {
           if (groupFragments.length === 0) continue;
 
@@ -669,6 +695,7 @@ export class SchemaRegistryService {
    * Activate schema version
    * Supports user-specific schemas: deactivates other versions for same entity_type and user_id/scope
    */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async activate(entityType: string, version: string, _userId?: string): Promise<void> {
     // Load the schema to get its scope and user_id
     const { data: schema } = await supabase
@@ -1136,6 +1163,65 @@ export class SchemaRegistryService {
           `Invalid tie breaker for ${fieldName}: ${policy.tie_breaker}`,
         );
       }
+    }
+  }
+
+  /**
+   * Update icon metadata for a schema
+   */
+  async updateIconMetadata(
+    entityType: string,
+    iconMetadata: IconMetadata,
+    userId?: string
+  ): Promise<void> {
+    // Find the active schema for this entity type
+    const schema = await this.loadActiveSchema(entityType, userId);
+    
+    if (!schema) {
+      console.warn(`[SCHEMA_REGISTRY] No active schema found for ${entityType}, cannot update icon`);
+      return;
+    }
+    
+    // Update metadata with icon
+    const updatedMetadata = {
+      ...(schema.metadata || {}),
+      icon: iconMetadata,
+    };
+    
+    const { error } = await supabase
+      .from("schema_registry")
+      .update({ metadata: updatedMetadata })
+      .eq("id", schema.id);
+    
+    if (error) {
+      console.error(`[SCHEMA_REGISTRY] Failed to update icon metadata for ${entityType}:`, error);
+    }
+  }
+
+  /**
+   * Generate icon for a schema asynchronously (non-blocking)
+   */
+  private async generateIconAsync(
+    entityType: string,
+    metadata?: SchemaMetadata
+  ): Promise<void> {
+    // Only generate if icon doesn't already exist
+    if (metadata?.icon) {
+      return;
+    }
+    
+    try {
+      // Import icon service dynamically to avoid circular dependencies
+      const { generateIconForEntityType } = await import("./schema_icon_service.js");
+      
+      // Generate icon
+      const iconMetadata = await generateIconForEntityType(entityType, metadata);
+      
+      // Update schema with icon
+      await this.updateIconMetadata(entityType, iconMetadata);
+    } catch (error) {
+      // Don't fail schema registration if icon generation fails
+      console.warn(`[SCHEMA_REGISTRY] Failed to generate icon for ${entityType}:`, error);
     }
   }
 

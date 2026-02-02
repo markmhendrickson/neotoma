@@ -8,19 +8,31 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
 
 **Check these first:**
 
+0. **MCP server running and reachable?**
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp
+   # Expect 401 (auth required) or 200; not 000 or connection refused
+   ```
+
+   If connection refused: run `npm run dev:mcp` and use `http://localhost:8080/mcp` as the MCP URL (not `https://...` or port 443). See scenario **0. ECONNREFUSED 127.0.0.1:443** below.
+
 1. **Encryption key configured?**
+
    ```bash
    echo $MCP_TOKEN_ENCRYPTION_KEY | wc -c
    # Should output 65 (64 chars + newline)
    ```
 
 2. **OAuth client configured?**
+
    ```bash
    echo $SUPABASE_OAUTH_CLIENT_ID
    # Should output client ID or be empty (dynamic registration)
    ```
 
 3. **Supabase connected?**
+
    ```bash
    npm run check:advisors
    # Should connect successfully
@@ -33,6 +45,76 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
    ```
 
 ## Common Error Scenarios
+
+### 0. ECONNREFUSED 127.0.0.1:443 / "fetch failed" / "No server info found"
+
+**Symptom:** Cursor MCP logs show:
+
+- `Client error for command fetch failed`
+- `SSE error: TypeError: fetch failed: connect ECONNREFUSED 127.0.0.1:443`
+- `Error connecting to streamableHttp server, falling back to SSE: fetch failed`
+- `No server info found` / `Server not yet created, returning empty offerings`
+
+**Root cause:** The MCP client is trying to reach Neotoma at **127.0.0.1:443** (HTTPS, port 443). The Neotoma dev server listens on **HTTP port 8080** at `http://localhost:8080/mcp`. Nothing listens on 443, so the connection is refused.
+
+**Common causes:**
+
+1. **MCP URL misconfigured:** Cursor project MCP or `.cursor/mcp.json` uses `https://127.0.0.1` or `https://localhost` (default port 443) instead of `http://localhost:8080/mcp`.
+2. **Neotoma server not running:** The API/MCP server is not started.
+
+**Fix:**
+
+1. **Start the Neotoma MCP server:**
+
+   ```bash
+   npm run dev:mcp
+   ```
+
+   You should see `HTTP Actions listening on :8080`. For UI + API: `npm run dev:full`.
+
+2. **Use the correct MCP URL** in Cursor:
+   - **Local dev:** `http://localhost:8080/mcp` (HTTP, port 8080, path `/mcp`).
+   - **Production:** `https://neotoma.fly.dev/mcp` (or your deployment URL).
+
+3. **If using Cursor project MCP / "Add to Cursor":**
+   - Remove any existing "neotoma" or "project-0-neotoma-neotoma" MCP entry that uses `https://...` or port 443.
+   - Add again via Neotoma MCP Setup ("Add to Cursor") so the URL is `http://localhost:8080/mcp`, or manually set `"url": "http://localhost:8080/mcp"` in `.cursor/mcp.json`.
+
+4. **Verify server is reachable:**
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp
+   ```
+
+   Expect `401` (auth required) or similar; not connection refused.
+
+5. **When using a tunnel (ngrok, cloudflared):** Set `MCP_PROXY_URL` to your tunnel URL (e.g. `https://xxx.ngrok-free.dev`). The Add to Cursor button then uses the proxy URL so Cursor connects via HTTPS. See [`mcp_cursor_setup.md`](mcp_cursor_setup.md) (Add to Cursor / "Using a tunnel or proxy").
+
+**See also:** [`mcp_cursor_setup.md`](mcp_cursor_setup.md) for full setup, [`getting_started.md`](getting_started.md) for environment setup.
+
+### 0a. "Incompatible auth server: does not support dynamic client registration"
+
+**Symptom:** Cursor MCP logs show:
+
+- `Client error for command Incompatible auth server: does not support dynamic client registration`
+- `Error connecting to streamableHttp server, falling back to SSE: Incompatible auth server...`
+- `No server info found` / `Server not yet created, returning empty offerings`
+
+**Root cause:** Cursor requires the OAuth authorization server to advertise a `registration_endpoint` in `/.well-known/oauth-authorization-server` (RFC 7591). Without it, Cursor refuses to use the auth server.
+
+**Fix:**
+
+1. **Ensure Neotoma exposes `registration_endpoint`:** The discovery document at `http://localhost:8080/.well-known/oauth-authorization-server` (or your API base) must include `"registration_endpoint": "…/api/mcp/oauth/register"`. Recent Neotoma versions add this and implement `POST /api/mcp/oauth/register`.
+
+2. **Enable dynamic OAuth apps in Supabase:** Dashboard → Authentication → OAuth Server → enable **Allow Dynamic OAuth Apps**. The registration endpoint registers a client for Cursor’s redirect URI (`cursor://anysphere.cursor-mcp/oauth/callback`); Supabase must allow that.
+
+3. **Restart the MCP server** after changing Supabase or env, then retry Connect in Cursor.
+
+4. **Verify discovery:**  
+   `curl -s http://localhost:8080/.well-known/oauth-authorization-server | jq .registration_endpoint`  
+   should output the registration URL, not `null`.
+
+**See also:** Scenario 1 (OAUTH_CLIENT_REGISTRATION_FAILED) for Supabase and `SUPABASE_OAUTH_CLIENT_ID` configuration.
 
 ### 1. "OAUTH_CLIENT_REGISTRATION_FAILED"
 
@@ -56,6 +138,7 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
    - Verify service role key (not anon key)
 
 **Fix:**
+
 ```bash
 # Option 1: Enable dynamic registration in Supabase
 # Then restart server
@@ -84,6 +167,7 @@ npm run dev:full
    - Table not created (missing migrations)
 
 **Fix:**
+
 ```bash
 # Check if state cleanup is running too aggressively
 # (Background job runs every 5 minutes, states expire after 10 minutes)
@@ -93,10 +177,11 @@ npm run dev:full
 ```
 
 **Debug:**
+
 ```sql
 -- Check active states
-SELECT connection_id, expires_at, created_at 
-FROM mcp_oauth_state 
+SELECT connection_id, expires_at, created_at
+FROM mcp_oauth_state
 WHERE expires_at > NOW();
 
 -- Check if state exists
@@ -123,6 +208,7 @@ SELECT * FROM mcp_oauth_state WHERE state = 'your-state-token';
    - Client configuration mismatch
 
 **Fix:**
+
 ```bash
 # Check Supabase logs for Auth errors
 # Restart OAuth flow from beginning
@@ -151,6 +237,7 @@ SELECT * FROM mcp_oauth_state WHERE state = 'your-state-token';
    - Token corruption
 
 **Fix:**
+
 ```bash
 # User must create new OAuth connection
 # Delete old connection and start fresh OAuth flow
@@ -177,6 +264,7 @@ echo $MCP_TOKEN_ENCRYPTION_KEY
    - `mcp_oauth_connections` table not created
 
 **Fix:**
+
 ```bash
 # Verify connection exists
 # Check Neotoma UI > MCP Setup > OAuth Connections
@@ -188,15 +276,16 @@ cat .cursor/mcp.json | grep NEOTOMA_CONNECTION_ID
 ```
 
 **Debug:**
+
 ```sql
 -- Check if connection exists
-SELECT connection_id, user_id, created_at, revoked_at 
-FROM mcp_oauth_connections 
+SELECT connection_id, user_id, created_at, revoked_at
+FROM mcp_oauth_connections
 WHERE connection_id = 'your-connection-id';
 
 -- List all active connections for user
-SELECT connection_id, client_name, created_at, last_used_at 
-FROM mcp_oauth_connections 
+SELECT connection_id, client_name, created_at, last_used_at
+FROM mcp_oauth_connections
 WHERE user_id = 'your-user-id' AND revoked_at IS NULL;
 ```
 
@@ -216,6 +305,7 @@ WHERE user_id = 'your-user-id' AND revoked_at IS NULL;
    - Key is wrong length
 
 **Fix:**
+
 ```bash
 # Generate new encryption key (32 bytes = 64 hex chars)
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
@@ -246,6 +336,7 @@ npm run dev:full
    - Redirect URI doesn't match registered URI in Supabase client
 
 **Fix:**
+
 ```bash
 # Check redirect URI format
 # Must be: http://..., https://..., cursor://..., vscode://..., or app://...
@@ -259,11 +350,13 @@ npm run dev:full
 **Symptom:** OAuth endpoint returns 429 Too Many Requests
 
 **Rate Limits:**
+
 - `/api/mcp/oauth/initiate`: 5 requests/minute per IP
 - `/api/mcp/oauth/callback`: 10 requests/minute per IP
 - `/api/mcp/oauth/token`: 20 requests/minute per IP
 
 **Fix:**
+
 ```bash
 # Wait 1 minute before retrying
 # Check for request loops or automated scripts hitting endpoints
@@ -276,6 +369,7 @@ npm run dev:full
 ### Step 1: Check Server Logs
 
 **Look for:**
+
 ```
 [MCP OAuth] Initiated OAuth flow for connection: ...
 [MCP OAuth] Connection created: ... for user: ...
@@ -285,6 +379,7 @@ npm run dev:full
 ```
 
 **Warning signs:**
+
 ```
 [MCP OAuth] Failed to ...
 [MCP OAuth Audit] ... FAILED
@@ -360,6 +455,7 @@ npm run dev:full
 ## Configuration Checklist
 
 **Environment Variables:**
+
 - [ ] `MCP_TOKEN_ENCRYPTION_KEY` set (64 hex characters)
 - [ ] `SUPABASE_OAUTH_CLIENT_ID` set OR dynamic registration enabled
 - [ ] `DEV_SUPABASE_URL` or `SUPABASE_URL` set
@@ -367,18 +463,21 @@ npm run dev:full
 - [ ] `API_BASE` set (for redirect URIs)
 
 **Supabase Dashboard:**
+
 - [ ] OAuth Server enabled (Authentication > OAuth Server)
 - [ ] "Allow Dynamic OAuth Apps" enabled (if not using SUPABASE_OAUTH_CLIENT_ID)
 - [ ] Client registered (if using SUPABASE_OAUTH_CLIENT_ID)
 - [ ] Redirect URI registered (must match exactly)
 
 **Database:**
+
 - [ ] Migrations applied (`npm run migrate`)
 - [ ] `mcp_oauth_connections` table exists
 - [ ] `mcp_oauth_state` table exists
 - [ ] RLS policies configured correctly
 
 **Server:**
+
 - [ ] Server running (`npm run dev:full`)
 - [ ] Background cleanup job started (check logs)
 - [ ] No errors in startup logs
@@ -386,6 +485,7 @@ npm run dev:full
 ## Log Analysis
 
 **Successful OAuth Flow:**
+
 ```
 [MCP OAuth] Initiated OAuth flow for connection: cursor-2025-01-27-abc123
 [MCP OAuth Audit] oauth_flow_initiated { connectionId: "...", success: true }
@@ -394,6 +494,7 @@ npm run dev:full
 ```
 
 **Failed Flow (State Expired):**
+
 ```
 [MCP OAuth] Initiated OAuth flow for connection: cursor-2025-01-27-abc123
 [MCP OAuth] Invalid or expired state: <state-token>
@@ -401,6 +502,7 @@ npm run dev:full
 ```
 
 **Failed Flow (Token Exchange):**
+
 ```
 [MCP OAuth] Initiated OAuth flow for connection: cursor-2025-01-27-abc123
 [MCP OAuth] Connection created: ...
@@ -415,11 +517,13 @@ npm run dev:full
 **Symptom:** `/api/mcp/oauth/initiate` takes >5 seconds
 
 **Causes:**
+
 - Dynamic client registration on every request (should be cached)
 - Slow database connection
 - State cleanup blocking (moved to background)
 
 **Fix:**
+
 ```bash
 # Verify client_id is cached (check logs)
 # Should see "Dynamically registered OAuth client" only once
@@ -436,11 +540,13 @@ npm run check:advisors
 **Symptom:** MCP calls slow after initial connection
 
 **Causes:**
+
 - Token refresh on every call (should cache)
 - Slow Supabase Auth API
 - Database query latency
 
 **Fix:**
+
 ```bash
 # Check token expiry time (should be cached for >5 minutes)
 # Verify "Refreshing access token" only appears occasionally
@@ -454,6 +560,7 @@ npm run check:advisors
 **Verify security settings:**
 
 1. **Refresh tokens encrypted:**
+
    ```sql
    -- Check encrypted format (should be iv:authTag:encrypted)
    SELECT refresh_token FROM mcp_oauth_connections LIMIT 1;
@@ -461,6 +568,7 @@ npm run check:advisors
    ```
 
 2. **State tokens expire:**
+
    ```sql
    -- Check no old states exist
    SELECT COUNT(*) FROM mcp_oauth_state WHERE created_at < NOW() - INTERVAL '10 minutes';
@@ -468,6 +576,7 @@ npm run check:advisors
    ```
 
 3. **Rate limiting active:**
+
    ```bash
    # Make 6 rapid requests to /api/mcp/oauth/initiate
    # 6th request should return 429 Too Many Requests
@@ -476,8 +585,8 @@ npm run check:advisors
 4. **RLS policies active:**
    ```sql
    -- Verify RLS enabled
-   SELECT tablename, rowsecurity 
-   FROM pg_tables 
+   SELECT tablename, rowsecurity
+   FROM pg_tables
    WHERE schemaname = 'public' AND tablename LIKE 'mcp_oauth%';
    -- rowsecurity should be TRUE
    ```

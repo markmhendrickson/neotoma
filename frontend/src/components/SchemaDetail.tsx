@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, Database, CheckCircle2, XCircle } from "lucide-react";
@@ -13,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
 
 interface SchemaDetail {
   id: string;
@@ -31,6 +31,7 @@ interface SchemaDetail {
   };
   active: boolean;
   created_at: string;
+  metadata?: SchemaMetadata;
 }
 
 interface SchemaDetailProps {
@@ -44,7 +45,7 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
+  const { sessionToken, user } = useAuth();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
@@ -67,7 +68,13 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
           headers["Authorization"] = `Bearer ${bearerToken}`;
         }
 
-        const response = await fetch(`/api/schemas/${encodeURIComponent(entityType)}`, { headers });
+        const params = new URLSearchParams();
+        if (user?.id) {
+          params.append("user_id", user.id);
+        }
+        const queryString = params.toString();
+        const url = `/api/schemas/${encodeURIComponent(entityType)}${queryString ? `?${queryString}` : ""}`;
+        const response = await fetch(url, { headers });
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -87,7 +94,7 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
     }
 
     fetchSchemaDetail();
-  }, [entityType, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+  }, [entityType, bearerToken, keysLoading, sessionToken, settings.bearerToken, user?.id]);
 
   if (loading) {
     return (
@@ -112,6 +119,7 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
 
   const fields = schema.schema_definition?.fields || {};
   const fieldEntries = Object.entries(fields).filter(([key]) => key); // Filter out empty keys
+  const Icon = getSchemaIcon(schema.entity_type, schema.metadata);
 
   return (
     <div className="flex flex-col h-full gap-4 p-4">
@@ -121,9 +129,12 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{schema.entity_type}</h1>
-            <p className="text-sm text-muted-foreground">Schema definition and field specifications</p>
+          <div className="flex items-center gap-3">
+            {Icon && <Icon className="size-8 shrink-0" />}
+            <div>
+              <h1 className="text-2xl font-bold">{schema.entity_type}</h1>
+              <p className="text-sm text-muted-foreground">Schema definition and field specifications</p>
+            </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -134,92 +145,84 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Schema Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Entity Type</p>
-                <p className="text-sm">{schema.entity_type}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Schema Version</p>
-                <p className="text-sm">{schema.schema_version}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Status</p>
-                <p className="text-sm">{schema.active ? "Active" : "Inactive"}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Created</p>
-                <p className="text-sm">{new Date(schema.created_at).toLocaleDateString()}</p>
-              </div>
+      <div className="flex-1 overflow-auto space-y-6">
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Schema Information</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Entity Type</p>
+              <p className="text-sm">{schema.entity_type}</p>
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Schema Version</p>
+              <p className="text-sm">{schema.schema_version}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Status</p>
+              <p className="text-sm">{schema.active ? "Active" : "Inactive"}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Created</p>
+              <p className="text-sm">{new Date(schema.created_at).toLocaleDateString()}</p>
+            </div>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Fields ({fieldEntries.length})</CardTitle>
-            <CardDescription>Field definitions and types</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {fieldEntries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No fields defined</p>
-              ) : (
-                fieldEntries.map(([fieldName, fieldDef], index) => (
-                  <div key={fieldName}>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium">{fieldName}</h4>
-                          <Badge variant="outline">{fieldDef.type}</Badge>
-                          {fieldDef.required ? (
-                            <Badge variant="destructive" className="text-xs">
-                              Required
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-xs">
-                              Optional
-                            </Badge>
-                          )}
-                        </div>
-                        {fieldDef.description && (
-                          <p className="text-sm text-muted-foreground mb-2">{fieldDef.description}</p>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Fields ({fieldEntries.length})</h2>
+            <p className="text-sm text-muted-foreground">Field definitions and types</p>
+          </div>
+          <div className="space-y-4">
+            {fieldEntries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No fields defined</p>
+            ) : (
+              fieldEntries.map(([fieldName, fieldDef], index) => (
+                <div key={fieldName}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium">{fieldName}</h4>
+                        <Badge variant="outline">{fieldDef.type}</Badge>
+                        {fieldDef.required ? (
+                          <Badge variant="destructive" className="text-xs">
+                            Required
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            Optional
+                          </Badge>
                         )}
                       </div>
+                      {fieldDef.description && (
+                        <p className="text-sm text-muted-foreground mb-2">{fieldDef.description}</p>
+                      )}
                     </div>
-                    {index < fieldEntries.length - 1 && <Separator className="mt-4" />}
                   </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                  {index < fieldEntries.length - 1 && <Separator className="mt-4" />}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
 
         {schema.reducer_config?.merge_policies && Object.keys(schema.reducer_config.merge_policies).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Merge Policies</CardTitle>
-              <CardDescription>Field-level merge strategies</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {Object.entries(schema.reducer_config.merge_policies).map(([field, policy]) => (
-                  <div key={field} className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{field}</span>
-                    <Badge variant="outline">
-                      {typeof policy === "string" ? policy : policy?.strategy || String(policy)}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">Merge Policies</h2>
+              <p className="text-sm text-muted-foreground">Field-level merge strategies</p>
+            </div>
+            <div className="space-y-2">
+              {Object.entries(schema.reducer_config.merge_policies).map(([field, policy]) => (
+                <div key={field} className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{field}</span>
+                  <Badge variant="outline">
+                    {typeof policy === "string" ? policy : policy?.strategy || String(policy)}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>

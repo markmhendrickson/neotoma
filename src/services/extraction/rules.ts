@@ -333,7 +333,7 @@ export const FIELD_EXTRACTION_PATTERNS: Record<
     full_name: /(?:name|full\s*name)[\s:]*([A-Za-z\s'-]+)/i,
     name: /(?:name|full\s*name)[\s:]*([A-Za-z\s'-]+)/i,
     email: /(?:email)[\s:]*([a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i,
-    phone: /(?:phone|tel)[\s:]*([\d\s\-\(\)]+)/i,
+    phone: /(?:phone|tel)[\s:]*([\d\s\-()]+)/i,
     address: /(?:address|street\s*address)[\s:]*([^\n]+)/i,
     country: /(?:country)[\s:]*([A-Za-z\s]+)/i,
     website: /(?:website|url)[\s:]*([^\s]+)/i,
@@ -553,7 +553,8 @@ export function detectSchemaType(rawText: string, fileName?: string): string {
     return "document";
   }
 
-  const text = rawText.toLowerCase();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _text = rawText.toLowerCase();
   const matchCounts: Record<string, number> = {};
 
   // Count pattern matches for each type
@@ -628,8 +629,10 @@ export function detectSchemaType(rawText: string, fileName?: string): string {
 
   // Find types with 2+ matches
   const candidates = Object.entries(matchCounts)
-    .filter(([_, count]) => count >= 2)
-    .sort(([_, countA], [__, countB]) => countB - countA);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .filter(([_type, count]) => count >= 2)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    .sort(([_typeA, countA], [_typeB, countB]) => countB - countA);
 
   // Return type with most matches, or fallback to 'document'
   if (candidates.length > 0) {

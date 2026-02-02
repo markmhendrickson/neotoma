@@ -20,6 +20,7 @@ import {
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeRelationships } from "@/hooks/useRealtimeRelationships";
 
 interface Relationship {
   id: string;
@@ -41,7 +42,7 @@ interface RelationshipListProps {
 }
 
 export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: RelationshipListProps) {
-  const [relationships, setRelationships] = useState<Relationship[]>([]);
+  const [fetchedRelationships, setFetchedRelationships] = useState<Relationship[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [relationshipType, setRelationshipType] = useState<string>("");
@@ -50,7 +51,7 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
+  const { user, sessionToken } = useAuth();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
@@ -79,6 +80,9 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
         }
         params.append("limit", limit.toString());
         params.append("offset", offset.toString());
+        if (user?.id) {
+          params.append("user_id", user.id);
+        }
 
         const url = `/api/relationships?${params.toString()}`;
 
@@ -92,7 +96,7 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
         }
 
         const data = await response.json();
-        setRelationships(data.relationships || []);
+        setFetchedRelationships(data.relationships || []);
         setTotalCount(data.total || 0);
       } catch (error) {
         console.error("Failed to fetch relationships:", error);
@@ -102,7 +106,15 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
     }
 
     fetchRelationships();
-  }, [relationshipType, offset, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+  }, [relationshipType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription
+  const relationships = useRealtimeRelationships(fetchedRelationships, {
+    relationshipType: relationshipType,
+    onInsert: (relationship) => {
+      console.log("New relationship added:", relationship);
+    },
+  });
 
   // Extract unique relationship types, filtering out empty strings
   const relationshipTypes = Array.from(

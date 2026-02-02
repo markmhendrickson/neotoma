@@ -1,6 +1,6 @@
 /**
  * OAuth Consent Page
- * 
+ *
  * Handles Supabase OAuth 2.1 Server consent flow
  * When Supabase redirects to /oauth/consent with authorization_id,
  * this page shows an approval screen and redirects to backend callback on approval
@@ -27,10 +27,12 @@ export function OAuthConsentPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
-  const [status, setStatus] = useState<"loading" | "pending_approval" | "approving" | "error" | "auth_required" | "denied">("loading");
+  const [status, setStatus] = useState<
+    "loading" | "pending_approval" | "approving" | "error" | "auth_required" | "denied"
+  >("loading");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authDetails, setAuthDetails] = useState<AuthorizationDetails | null>(null);
-  
+
   // Use ref to prevent duplicate fetches (React StrictMode + state batching issue)
   const loadingStartedRef = useRef(false);
   const lastAuthorizationIdRef = useRef<string | null>(null);
@@ -69,32 +71,54 @@ export function OAuthConsentPage() {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
         const session = await supabase.auth.getSession();
-        
+
         if (!session.data.session) {
           throw new Error("Not authenticated. Please sign in first.");
         }
 
-        // Get authorization details from Supabase OAuth 2.1 Server
-        const detailsUrl = `${supabaseUrl}/auth/v1/oauth/authorizations/${encodeURIComponent(authorizationId)}`;
-        
-        const detailsResponse = await fetch(detailsUrl, {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${session.data.session.access_token}`,
-            "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-          },
-        });
-
-        if (!detailsResponse.ok) {
-          const errorText = await detailsResponse.text();
-          throw new Error(`Failed to get authorization details (${detailsResponse.status}): ${errorText}`);
+        if (!session.data.session.access_token) {
+          throw new Error("Session token missing. Please sign in again.");
         }
 
-        const details = await detailsResponse.json();
+        // Use Supabase client library method to get authorization details
+        // This method handles CORS and authentication automatically
+        const { data: authData, error: authError } =
+          await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
+
+        if (authError) {
+          let errorMessage: string;
+
+          // Provide more helpful error message
+          if (authError.message?.includes("404") || authError.message?.includes("not found")) {
+            errorMessage =
+              `Authorization not found (404). This usually means:\n` +
+              `- The authorization_id has expired (authorizations expire after 10 minutes)\n` +
+              `- Supabase OAuth 2.1 Server is not enabled in your Supabase project\n` +
+              `- The authorization_id is invalid\n\n` +
+              `Please try the OAuth flow again from the beginning.`;
+          } else if (
+            authError.message?.includes("401") ||
+            authError.message?.includes("unauthorized")
+          ) {
+            errorMessage = `Authentication required (401). Please sign in to continue.`;
+          } else {
+            errorMessage = `Failed to get authorization details: ${authError.message}`;
+          }
+          throw new Error(errorMessage);
+        }
+
+        if (!authData) {
+          throw new Error("No authorization data returned from Supabase");
+        }
+
+        const details = authData;
 
         // Extract redirect URL (Supabase uses redirect_url, not redirect_uri)
-        const redirectUrl = details.redirect_url || details.redirectUrl || 
-                           details.redirect_uri || details.redirectUri;
+        const redirectUrl =
+          details.redirect_url ||
+          details.redirectUrl ||
+          details.redirect_uri ||
+          details.redirectUri;
 
         if (!redirectUrl) {
           throw new Error("No redirect URL found in authorization details");
@@ -106,12 +130,12 @@ export function OAuthConsentPage() {
         const redirectUrlObj = new URL(redirectUrl);
         const hasCode = redirectUrlObj.searchParams.has("code");
         const hasState = redirectUrlObj.searchParams.has("state");
-        
+
         // If redirect_url already has code, authorization is ready - skip approval and redirect directly
         if (hasCode && hasState) {
           // Set approving status to avoid showing error screen
           setStatus("approving");
-          
+
           // Redirect directly to the callback URL with the code
           // Use a small delay to ensure React state updates before navigation
           setTimeout(() => {
@@ -122,8 +146,8 @@ export function OAuthConsentPage() {
 
         // Extract client info for display (parse from redirect URL if not provided)
         const urlObj = new URL(redirectUrl);
-        const clientName = details.client_name || details.clientName || 
-                          urlObj.hostname || "MCP Client";
+        const clientName =
+          details.client_name || details.clientName || urlObj.hostname || "MCP Client";
         const clientId = details.client?.id || details.client_id || details.clientId || null;
         const redirectUri = details.redirect_uri || details.redirectUri || null;
 
@@ -137,30 +161,30 @@ export function OAuthConsentPage() {
           redirectUri: redirectUri || undefined,
         });
         setStatus("pending_approval");
-
       } catch (error: any) {
         console.error("OAuth consent error:", error);
         setStatus("error");
-        
+
         // Build detailed error message from all available error properties
         const errorParts: string[] = [];
-        
+
         // Extract from original error if available
         const originalError = error.originalError || error;
-        
+
         // Error code/identifier
         if (originalError.code || originalError.error_code) {
           errorParts.push(`[${originalError.code || originalError.error_code}]`);
         }
-        
+
         // Main message
-        const mainMessage = originalError.error || 
-                           originalError.error_description || 
-                           originalError.message || 
-                           error.message || 
-                           "Failed to process OAuth consent";
+        const mainMessage =
+          originalError.error ||
+          originalError.error_description ||
+          originalError.message ||
+          error.message ||
+          "Failed to process OAuth consent";
         errorParts.push(mainMessage);
-        
+
         // Additional details
         if (originalError.status) {
           errorParts.push(`\nHTTP Status: ${originalError.status}`);
@@ -169,19 +193,20 @@ export function OAuthConsentPage() {
           errorParts.push(`Status Text: ${originalError.statusText}`);
         }
         if (originalError.details) {
-          const detailsStr = typeof originalError.details === "object"
-            ? JSON.stringify(originalError.details, null, 2)
-            : String(originalError.details);
+          const detailsStr =
+            typeof originalError.details === "object"
+              ? JSON.stringify(originalError.details, null, 2)
+              : String(originalError.details);
           errorParts.push(`\nDetails: ${detailsStr}`);
         }
         if (originalError.hint) {
           errorParts.push(`\nHint: ${originalError.hint}`);
         }
-        
+
         // Include full error object for debugging
         errorParts.push(`\n\nFull Error Object:\n${JSON.stringify(originalError, null, 2)}`);
-        
-        setErrorMessage(errorParts.join('\n'));
+
+        setErrorMessage(errorParts.join("\n"));
       }
     };
 
@@ -194,9 +219,8 @@ export function OAuthConsentPage() {
     const authorizationId = searchParams.get("authorization_id");
     if (!authorizationId) return;
 
-
     setStatus("approving");
-    
+
     let storedAuthParams: {
       authUrl?: string;
       clientId?: string | null;
@@ -207,7 +231,7 @@ export function OAuthConsentPage() {
       scope?: string | null;
       storedAt?: number;
     } | null = null;
-    
+
     try {
       const storedRaw = sessionStorage.getItem("mcp_oauth_auth_url");
       if (storedRaw) {
@@ -217,7 +241,6 @@ export function OAuthConsentPage() {
       storedAuthParams = null;
     }
 
-    
     try {
       // Prefer Supabase OAuth client methods per docs
       const oauthClient = (supabase.auth as any).oauth;
@@ -226,43 +249,88 @@ export function OAuthConsentPage() {
       if (hasApprove) {
         const { data, error } = await oauthClient.approveAuthorization(authorizationId);
 
+        // Log response for debugging (only in dev)
+        if (import.meta.env.DEV) {
+          console.log("[OAuth] approveAuthorization response:", { data, error });
+        }
 
         if (error) {
           // Extract all available error details from Supabase AuthApiError
           const errorDetails: string[] = [];
-          
+
           // Check for all possible error properties
           if (error.message) errorDetails.push(`Message: ${error.message}`);
           if (error.status) errorDetails.push(`Status: ${error.status}`);
           if (error.statusText) errorDetails.push(`Status Text: ${error.statusText}`);
           if ((error as any).error) errorDetails.push(`Error: ${(error as any).error}`);
-          if ((error as any).error_description) errorDetails.push(`Description: ${(error as any).error_description}`);
+          if ((error as any).error_description)
+            errorDetails.push(`Description: ${(error as any).error_description}`);
           if ((error as any).code) errorDetails.push(`Code: ${(error as any).code}`);
           if ((error as any).details) errorDetails.push(`Details: ${(error as any).details}`);
           if ((error as any).hint) errorDetails.push(`Hint: ${(error as any).hint}`);
-          
+
           // Create enhanced error with all details
           const enhancedError = new Error(
-            errorDetails.length > 0 
-              ? errorDetails.join('\n')
+            errorDetails.length > 0
+              ? errorDetails.join("\n")
               : error.message || "OAuth authorization failed"
           );
           (enhancedError as any).originalError = error;
           throw enhancedError;
         }
 
-        const redirectTo = data?.redirect_to || data?.redirectTo || data?.url;
-        if (!redirectTo) {
-          throw new Error("No redirect_to returned from approveAuthorization");
+        // Check for redirect URL in multiple possible locations
+        const redirectTo =
+          data?.redirect_to ||
+          data?.redirectTo ||
+          data?.url ||
+          data?.redirect_url ||
+          data?.redirectUri ||
+          data?.redirect_uri;
+
+        // If redirect_to is provided, use it immediately
+        if (redirectTo) {
+          window.location.href = redirectTo;
+          return;
         }
 
-        window.location.href = redirectTo;
-        return;
+        // If no redirect_to but we have stored auth details, try using the redirect URL
+        // This handles cases where approveAuthorization succeeds but doesn't return redirect_to
+        // The redirect URL from authDetails should contain the authorization code
+        if (authDetails?.redirectUrl) {
+          // Small delay to ensure state updates before redirect
+          // This prevents the error page from flashing briefly
+          setTimeout(() => {
+            window.location.href = authDetails.redirectUrl!;
+          }, 100);
+          return;
+        }
+
+        // Check if data indicates success even without explicit redirect
+        // Some OAuth flows complete successfully but redirect happens via other means
+        if (data && Object.keys(data).length > 0) {
+          // If we have any data, assume success and try to redirect after a brief delay
+          // This prevents error flash when redirect is happening asynchronously
+          setTimeout(() => {
+            if (authDetails?.redirectUrl) {
+              window.location.href = authDetails.redirectUrl;
+            } else {
+              // Last resort: reload the page to trigger redirect
+              window.location.reload();
+            }
+          }, 200);
+          return;
+        }
+
+        // Only throw error if we truly have no way to redirect
+        throw new Error(
+          "No redirect_to returned from approveAuthorization and no fallback redirect URL available"
+        );
       }
 
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const session = await supabase.auth.getSession();
-      
+
       if (!session.data.session) {
         throw new Error("Not authenticated");
       }
@@ -270,12 +338,12 @@ export function OAuthConsentPage() {
       // Supabase OAuth 2.1 consent approval: POST to /auth/v1/oauth/authorize with authorization_id
       // This is the standard way to complete the consent flow
       const authorizeUrl = `${supabaseUrl}/auth/v1/oauth/authorize`;
-      
+
       const authorizeResponse = await fetch(authorizeUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${session.data.session.access_token}`,
-          "apikey": import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          Authorization: `Bearer ${session.data.session.access_token}`,
+          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
@@ -290,12 +358,13 @@ export function OAuthConsentPage() {
           consent: "allow",
         });
         const fallbackClientId = storedAuthParams?.clientId || authDetails?.clientId || null;
-        const fallbackRedirectUri = storedAuthParams?.redirectUri || authDetails?.redirectUri || null;
+        const fallbackRedirectUri =
+          storedAuthParams?.redirectUri || authDetails?.redirectUri || null;
         const fallbackState = storedAuthParams?.state || null;
         const fallbackCodeChallenge = storedAuthParams?.codeChallenge || null;
         const fallbackCodeChallengeMethod = storedAuthParams?.codeChallengeMethod || null;
         const fallbackScope = storedAuthParams?.scope || null;
-        
+
         if (fallbackClientId) {
           fallbackParams.set("client_id", fallbackClientId);
         }
@@ -316,7 +385,6 @@ export function OAuthConsentPage() {
         }
         fallbackParams.set("response_type", "code");
         const fallbackAuthorizeUrl = `${authorizeUrl}?${fallbackParams.toString()}`;
-        
 
         // Try to inspect the response before navigation
         try {
@@ -329,7 +397,6 @@ export function OAuthConsentPage() {
           const responseText = contentType?.includes("application/json")
             ? JSON.stringify(await fallbackResponse.json())
             : (await fallbackResponse.text()).slice(0, 500);
-          
 
           if (locationHeader) {
             window.location.href = locationHeader;
@@ -352,17 +419,17 @@ export function OAuthConsentPage() {
       // If we get a response body, try to parse it
       let responseData: any = null;
       const contentType = authorizeResponse.headers.get("content-type");
-      
+
       if (contentType?.includes("application/json")) {
         responseData = await authorizeResponse.json();
       } else {
         const responseText = await authorizeResponse.text();
-        
+
         // Check if it's an error
         if (!authorizeResponse.ok) {
           throw new Error(`Authorization failed (${authorizeResponse.status}): ${responseText}`);
         }
-        
+
         // Maybe it's HTML with a redirect or form
         // Check for Location header in response
         const locationHeader = authorizeResponse.headers.get("location");
@@ -372,17 +439,25 @@ export function OAuthConsentPage() {
         }
       }
 
-
       if (!authorizeResponse.ok) {
-        const errorMsg = responseData?.error || responseData?.message || responseData?.msg || "Authorization failed";
-        throw new Error(`Failed to complete authorization (${authorizeResponse.status}): ${errorMsg}`);
+        const errorMsg =
+          responseData?.error ||
+          responseData?.message ||
+          responseData?.msg ||
+          "Authorization failed";
+        throw new Error(
+          `Failed to complete authorization (${authorizeResponse.status}): ${errorMsg}`
+        );
       }
 
       // Look for redirect URL in response
-      const redirectUrl = responseData?.redirect_url || responseData?.redirectUrl || 
-                         responseData?.redirect_uri || responseData?.redirectUri ||
-                         responseData?.url;
-      
+      const redirectUrl =
+        responseData?.redirect_url ||
+        responseData?.redirectUrl ||
+        responseData?.redirect_uri ||
+        responseData?.redirectUri ||
+        responseData?.url;
+
       if (redirectUrl) {
         window.location.href = redirectUrl;
       } else if (authDetails?.redirectUrl) {
@@ -393,25 +468,25 @@ export function OAuthConsentPage() {
       }
     } catch (error: any) {
       console.error("Failed to approve authorization:", error);
-      
-      
+
       setStatus("error");
-      
+
       // Build detailed error message
       const errorParts: string[] = [];
-      
+
       // Error code/identifier
       if (error.code || error.error_code) {
         errorParts.push(`[${error.code || error.error_code}]`);
       }
-      
+
       // Main message
-      const mainMessage = error.error || 
-                         error.error_description || 
-                         error.message || 
-                         "Failed to approve authorization";
+      const mainMessage =
+        error.error ||
+        error.error_description ||
+        error.message ||
+        "Failed to approve authorization";
       errorParts.push(mainMessage);
-      
+
       // Additional details
       if (error.status) {
         errorParts.push(`\nHTTP Status: ${error.status}`);
@@ -420,19 +495,20 @@ export function OAuthConsentPage() {
         errorParts.push(`Status Text: ${error.statusText}`);
       }
       if (error.details) {
-        const detailsStr = typeof error.details === "object"
-          ? JSON.stringify(error.details, null, 2)
-          : String(error.details);
+        const detailsStr =
+          typeof error.details === "object"
+            ? JSON.stringify(error.details, null, 2)
+            : String(error.details);
         errorParts.push(`\nDetails: ${detailsStr}`);
       }
       if (error.hint) {
         errorParts.push(`\nHint: ${error.hint}`);
       }
-      
+
       // Include full error object for debugging
       errorParts.push(`\n\nFull Error Object:\n${JSON.stringify(error, null, 2)}`);
-      
-      setErrorMessage(errorParts.join('\n'));
+
+      setErrorMessage(errorParts.join("\n"));
     }
   };
 
@@ -442,11 +518,13 @@ export function OAuthConsentPage() {
 
   if (status === "loading" || authLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-card">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Loading Authorization</CardTitle>
-            <CardDescription>Please wait while we load the authorization details...</CardDescription>
+            <CardDescription>
+              Please wait while we load the authorization details...
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-center py-8">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -458,7 +536,7 @@ export function OAuthConsentPage() {
 
   if (status === "auth_required") {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-card">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Authentication Required</CardTitle>
@@ -479,7 +557,7 @@ export function OAuthConsentPage() {
 
   if (status === "pending_approval" && authDetails) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-card">
         <Card className="w-full max-w-md">
           <CardHeader>
             <div className="flex items-center gap-3 mb-2">
@@ -516,17 +594,10 @@ export function OAuthConsentPage() {
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                className="flex-1"
-                onClick={handleDeny}
-              >
+              <Button variant="outline" className="flex-1" onClick={handleDeny}>
                 Deny
               </Button>
-              <Button 
-                className="flex-1"
-                onClick={handleApprove}
-              >
+              <Button className="flex-1" onClick={handleApprove}>
                 Approve
               </Button>
             </div>
@@ -542,7 +613,7 @@ export function OAuthConsentPage() {
 
   if (status === "approving") {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-card">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Completing Authorization</CardTitle>
@@ -558,7 +629,7 @@ export function OAuthConsentPage() {
 
   if (status === "denied") {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-card">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>Connection Denied</CardTitle>
@@ -578,7 +649,7 @@ export function OAuthConsentPage() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
+    <div className="flex items-center justify-center min-h-screen bg-card">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Authorization Error</CardTitle>
@@ -596,7 +667,10 @@ export function OAuthConsentPage() {
               <p className="mb-2">Common fixes:</p>
               <ul className="list-disc list-inside space-y-1">
                 <li>Check server logs for detailed error information</li>
-                <li>Verify database migrations are applied: <code className="bg-muted px-1 rounded">npm run migrate</code></li>
+                <li>
+                  Verify database migrations are applied:{" "}
+                  <code className="bg-muted px-1 rounded">npm run migrate</code>
+                </li>
                 <li>Ensure MCP_TOKEN_ENCRYPTION_KEY is set in .env</li>
                 <li>Check Supabase connection and OAuth client configuration</li>
               </ul>

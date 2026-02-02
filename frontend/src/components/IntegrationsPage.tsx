@@ -21,9 +21,9 @@ export function IntegrationsPage() {
           const Icon = getIntegrationIcon(iconKey);
           return (
             <Link key={path} to={path} className="block">
-              <Card className="h-full transition-colors hover:bg-muted/50">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-lg">
+              <Card className="h-full hover:bg-accent transition-colors cursor-pointer">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
                     <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
                       <Icon className="size-5" />
                     </span>

@@ -14,23 +14,21 @@ import fs from "fs";
 import path from "path";
 import { normalizeRow } from "./normalize.js";
 import { createRecordFromUploadedFile } from "./services/file_analysis.js";
-import { generateRecordSummary } from "./services/summary.js";
 import { generateRecordComparisonInsight } from "./services/record_comparison.js";
 import {
   ensurePublicKeyRegistered,
   getPublicKey,
+  getUserIdFromBearerToken,
   isBearerTokenValid,
 } from "./services/public_key_registry.js";
 import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
 import { initServerKeys } from "./services/encryption_service.js";
 import { isCsvLike, parseCsvRows } from "./utils/csv.js";
-import { emitRecordCreated, emitRecordUpdated, emitRecordDeleted } from "./events/event_emitter.js";
+import { emitRecordCreated } from "./events/event_emitter.js";
 import { getEventsByRecordId } from "./events/event_log.js";
 import { getRecordAtTimestamp } from "./events/replay.js";
 import { rankSearchResults, sortRecordsDeterministically } from "./services/search.js";
-import { createObservationsFromRecord } from "./services/observation_ingestion.js";
-import { serializeChatMessagesForOpenAI, type ChatMessage } from "./utils/chat.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
@@ -39,6 +37,8 @@ import { OAuthError } from "./services/mcp_oauth_errors.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 export const app = express();
+// Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
+app.set("trust proxy", true);
 // Configure CSP to allow CDN scripts for the uploader and API connects
 app.use(
   helmet({
@@ -94,6 +94,14 @@ const oauthTokenLimit = rateLimit({
   legacyHeaders: false,
 });
 
+const oauthRegisterLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10, // 10 registrations per minute
+  message: "Too many registration requests, please try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Favicon (no-auth) to avoid 401 noise when not present on disk
 app.get("/favicon.ico", (_req, res) => res.status(204).end());
 
@@ -108,6 +116,7 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
     issuer: base,
     authorization_endpoint: `${base}/api/mcp/oauth/authorize`,
     token_endpoint: `${base}/api/mcp/oauth/token`,
+    registration_endpoint: `${base}/api/mcp/oauth/register`,
     scopes_supported: ["openid", "email"],
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
@@ -118,7 +127,9 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
 app.get("/.well-known/oauth-protected-resource", (req, res) => {
   // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
   // This may be required for Cursor to show Connect button
-  const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined;
+  const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
+    | string
+    | undefined;
   if (!authHeader?.startsWith("Bearer ")) {
     res.setHeader(
       "WWW-Authenticate",
@@ -136,14 +147,18 @@ app.get("/.well-known/oauth-protected-resource", (req, res) => {
 });
 
 // Server info endpoint (no-auth) - exposes server port for MCP configuration
+// When MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
 app.get("/api/server-info", (_req, res) => {
   const httpPort = process.env.HTTP_PORT
     ? parseInt(process.env.HTTP_PORT, 10)
     : config.httpPort || 8080;
+  const mcpBase = process.env.MCP_PROXY_URL || config.apiBase;
+  const base = mcpBase.replace(/\/$/, "");
+  const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
   res.json({
     httpPort,
     apiBase: config.apiBase,
-    mcpUrl: `${config.apiBase}/mcp`,
+    mcpUrl,
   });
 });
 
@@ -153,7 +168,8 @@ app.get("/api/server-info", (_req, res) => {
 
 // Store MCP transports by session ID
 const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
-let mcpServerInstance: NeotomaServer | null = null;
+// Store server instances by session ID to preserve authentication state
+const mcpServerInstances = new Map<string, NeotomaServer>();
 
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
@@ -168,7 +184,9 @@ app.all("/mcp", async (req, res) => {
     // Cursor may check auth on the initial GET request (SSE connection) first
     // CRITICAL: Return 401 whenever auth is missing, even if session exists
     // This ensures 401 is returned "on first protected call" as required by troubleshooting guide
-    const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined;
+    const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
+      | string
+      | undefined;
     const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
     const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader);
 
@@ -202,13 +220,19 @@ app.all("/mcp", async (req, res) => {
     let transport = sessionId ? mcpTransports.get(sessionId) : undefined;
 
     if (!transport && req.method === "POST" && isInitializeRequest(req.body)) {
+      // Create new server instance for each session to ensure clean auth state
+      // This ensures OAuth flow is required for each new connection
+      const serverInstance = new NeotomaServer();
+
       // Create new transport for initialization
       transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sid) => {
           if (transport) {
             mcpTransports.set(sid, transport);
-            logger.error(`[MCP HTTP] Session initialized: ${sid}`);
+            // Store server instance by session ID to preserve authentication state
+            mcpServerInstances.set(sid, serverInstance);
+            logger.error(`[MCP HTTP] Session initialized: ${sid}, server instance stored`);
           }
         },
       });
@@ -216,16 +240,13 @@ app.all("/mcp", async (req, res) => {
       transport.onclose = () => {
         if (transport?.sessionId) {
           mcpTransports.delete(transport.sessionId);
+          mcpServerInstances.delete(transport.sessionId);
           logger.error(`[MCP HTTP] Session closed: ${transport.sessionId}`);
         }
       };
 
-      // Create new server instance for each session to ensure clean auth state
-      // This ensures OAuth flow is required for each new connection
-      mcpServerInstance = new NeotomaServer();
-
       // Connect transport to server
-      await mcpServerInstance.runHTTP(transport);
+      await serverInstance.runHTTP(transport);
     } else if (!transport) {
       return res.status(400).json({
         jsonrpc: "2.0",
@@ -431,7 +452,12 @@ app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
     // If client used Cursor (or other protocol) redirect_uri, return code+state there
     if (redirectUri && redirectUri.startsWith("cursor://")) {
       const params = new URLSearchParams({ code: connectionId, state: clientState ?? state });
-      return res.redirect(`${redirectUri}?${params.toString()}`);
+      const redirectUrl = `${redirectUri}?${params.toString()}`;
+      // Log for debugging - connection is now active and ready
+      console.log(
+        `[MCP OAuth] Redirecting to Cursor: ${redirectUrl} (connection ${connectionId} is active)`
+      );
+      return res.redirect(redirectUrl);
     }
 
     // Default: redirect to frontend success page
@@ -505,34 +531,79 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
 });
 
 // RFC 8414 token endpoint (POST) for Cursor and other OAuth clients
-app.post("/api/mcp/oauth/token", oauthTokenLimit, express.urlencoded({ extended: true }), async (req, res) => {
-  try {
-    const grant_type = req.body?.grant_type;
-    const code = req.body?.code;
-    const redirect_uri = req.body?.redirect_uri;
+app.post(
+  "/api/mcp/oauth/token",
+  oauthTokenLimit,
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
+    try {
+      const grant_type = req.body?.grant_type;
+      const code = req.body?.code;
 
-    if (grant_type !== "authorization_code") {
+      if (grant_type !== "authorization_code") {
+        return res.status(400).json({
+          error: "unsupported_grant_type",
+          error_description: "Only authorization_code is supported",
+        });
+      }
+      if (!code || typeof code !== "string") {
+        return res
+          .status(400)
+          .json({ error: "invalid_request", error_description: "code is required" });
+      }
+
+      const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
+      const token = await getTokenResponseForConnection(code);
+
+      res.setHeader("Content-Type", "application/json");
+      return res.json(token);
+    } catch (error: any) {
+      logError("MCPOAuthToken", req, error);
       return res.status(400).json({
-        error: "unsupported_grant_type",
-        error_description: "Only authorization_code is supported",
+        error: "invalid_grant",
+        error_description: error.message ?? "Token exchange failed",
       });
     }
-    if (!code || typeof code !== "string") {
-      return res
-        .status(400)
-        .json({ error: "invalid_request", error_description: "code is required" });
+  }
+);
+
+// RFC 7591 Dynamic Client Registration (for Cursor and other MCP clients)
+app.post("/api/mcp/oauth/register", oauthRegisterLimit, async (req, res) => {
+  try {
+    const body = req.body as { redirect_uris?: string[]; client_name?: string; scope?: string };
+    if (!body || typeof body !== "object") {
+      return res.status(400).json({
+        error: "invalid_request",
+        error_description: "Request body must be JSON object with redirect_uris",
+      });
     }
-
-    const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
-    const token = await getTokenResponseForConnection(code);
-
+    const { handleDynamicRegistration } = await import("./services/mcp_oauth.js");
+    const reg = await handleDynamicRegistration({
+      redirect_uris: body.redirect_uris ?? [],
+      client_name: body.client_name,
+      scope: body.scope,
+    });
     res.setHeader("Content-Type", "application/json");
-    return res.json(token);
+    return res.status(201).json(reg);
   } catch (error: any) {
-    logError("MCPOAuthToken", req, error);
+    logError("MCPOAuthRegister", req, error);
+    if (error instanceof OAuthError) {
+      const oauth = error as { code?: string; message?: string; statusCode?: number };
+      const status = oauth.statusCode ?? 400;
+      const code =
+        oauth.code === "OAUTH_INVALID_REDIRECT_URI"
+          ? "invalid_redirect_uri"
+          : status >= 500
+            ? "server_error"
+            : "invalid_client_metadata";
+      return res.status(status).json({
+        error: code,
+        error_description: oauth.message ?? "Registration failed",
+      });
+    }
     return res.status(400).json({
-      error: "invalid_grant",
-      error_description: error.message ?? "Token exchange failed",
+      error: "invalid_client_metadata",
+      error_description: error.message ?? "Dynamic client registration failed",
     });
   }
 });
@@ -605,6 +676,75 @@ app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
     return res.json({ success: true });
   } catch (error: any) {
     logError("MCPOAuthRevokeConnection", req, error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// Get OAuth authorization details (proxy to avoid CORS)
+// This endpoint proxies requests to Supabase OAuth 2.1 Server to avoid CORS issues
+app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
+  logger.info(
+    `[MCP OAuth] Authorization details request: authorization_id=${req.query.authorization_id}`
+  );
+  try {
+    // Extract bearer token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ error: "Authorization header required" });
+    }
+
+    const token = authHeader.substring(7);
+    const { authorization_id } = req.query;
+
+    if (!authorization_id || typeof authorization_id !== "string") {
+      return res.status(400).json({ error: "authorization_id is required" });
+    }
+
+    // Validate token and get user (ensures user is authenticated)
+    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
+    await validateSupabaseSessionToken(token);
+
+    // Proxy request to Supabase OAuth 2.1 Server
+    // Use /auth/v1/oauth/authorizations/ endpoint (matches Supabase client library)
+    // This endpoint requires the user's access token to fetch their authorization details
+    // The apikey header can be service key or anon key - service key works fine here
+    const supabaseUrl = config.supabaseUrl;
+    const detailsUrl = `${supabaseUrl}/auth/v1/oauth/authorizations/${encodeURIComponent(authorization_id)}`;
+
+    logger.info(`[MCP OAuth] Fetching authorization details from Supabase: ${detailsUrl}`);
+
+    const detailsResponse = await fetch(detailsUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`, // User's access token (validates user identity)
+        apikey: config.supabaseKey, // Service key for Supabase API (works for OAuth endpoints)
+      },
+    });
+
+    logger.info(
+      `[MCP OAuth] Supabase response status: ${detailsResponse.status} for authorization_id=${authorization_id}`
+    );
+
+    if (!detailsResponse.ok) {
+      const errorText = await detailsResponse.text();
+      logger.warn(`[MCP OAuth] Supabase returned error: ${detailsResponse.status} - ${errorText}`);
+      if (detailsResponse.status === 404) {
+        return res.status(404).json({
+          error: "Authorization not found",
+          error_description:
+            "The authorization_id has expired or is invalid. Please try the OAuth flow again.",
+        });
+      }
+      return res.status(detailsResponse.status).json({
+        error: "Failed to get authorization details",
+        error_description: errorText,
+      });
+    }
+
+    const details = await detailsResponse.json();
+    return res.json(details);
+  } catch (error: any) {
+    logError("MCPOAuthAuthorizationDetails", req, error);
     return res.status(500).json({ error: error.message });
   }
 });
@@ -753,10 +893,8 @@ app.use(async (req, res, next) => {
 
   // Try to validate as Ed25519 bearer token first
   const registered = ensurePublicKeyRegistered(bearerToken);
-  let isEd25519Valid = false;
 
   if (registered && isBearerTokenValid(bearerToken)) {
-    isEd25519Valid = true;
 
     // Optional: Verify signature if provided
     const { signature } = parseAuthHeader(headerAuth);
@@ -772,6 +910,11 @@ app.use(async (req, res, next) => {
     // Attach public key to request for encryption service
     (req as any).publicKey = getPublicKey(bearerToken);
     (req as any).bearerToken = bearerToken;
+    // If this token was registered with a userId, set it so getAuthenticatedUserId works without query param
+    const registeredUserId = getUserIdFromBearerToken(bearerToken);
+    if (registeredUserId) {
+      (req as any).authenticatedUserId = registeredUserId;
+    }
   } else {
     // Try to validate as Supabase session token
     try {
@@ -812,8 +955,6 @@ async function getAuthenticatedUserId(
   if (!headerAuth.startsWith("Bearer ")) {
     throw new Error("Not authenticated - missing Bearer token");
   }
-
-  const token = headerAuth.slice("Bearer ".length).trim();
 
   // Check if Supabase session token (already validated in middleware)
   const authenticatedUserId = (req as any).authenticatedUserId;
@@ -865,7 +1006,8 @@ const StoreSchema = z.object({
   embedding: z.array(z.number()).optional(),
 });
 
-const UpdateSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _UpdateSchema = z.object({
   id: z.string(),
   type: z.string().optional(),
   properties: z.record(z.unknown()).optional(),
@@ -885,11 +1027,13 @@ const RetrieveSchema = z.object({
   include_total_count: z.boolean().optional(),
 });
 
-const StoreRecordsSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _StoreRecordsSchema = z.object({
   records: z.array(StoreSchema).min(1).max(100),
 });
 
-const DeleteRecordsSchema = z.object({
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _DeleteRecordsSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
 });
 
@@ -983,7 +1127,7 @@ app.get("/api/entities/:id", async (req, res) => {
     const entityId = req.params.id;
 
     // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
     const { data: entity, error: entityError } = await supabase
@@ -1022,7 +1166,7 @@ app.get("/api/entities/:id/observations", async (req, res) => {
     const entityId = req.params.id;
 
     // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
     const { data: entity, error: entityError } = await supabase
@@ -1073,7 +1217,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
     const entityId = req.params.id;
 
     // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
     const { data: entity, error: entityError } = await supabase
@@ -1141,9 +1285,10 @@ app.get("/api/schemas", async (req, res) => {
 
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
     // Note: listEntityTypes doesn't currently filter by user_id, so we need to query directly
+    // Also fetch metadata (including icons) for each schema
     const { data: dbSchemas, error: dbError } = await supabase
       .from("schema_registry")
-      .select("entity_type")
+      .select("entity_type, metadata")
       .eq("active", true)
       .or(`user_id.is.null,user_id.eq.${userId}`); // SECURITY: Only global or user's schemas
 
@@ -1152,9 +1297,25 @@ app.get("/api/schemas", async (req, res) => {
     const allowedEntityTypes = new Set((dbSchemas || []).map((s: any) => s.entity_type));
     const filteredSchemas = allSchemas.filter((s) => allowedEntityTypes.has(s.entity_type));
 
+    // Enrich schemas with metadata (including icons)
+    const schemaMetadataMap = new Map(
+      (dbSchemas || []).map((s: any) => [s.entity_type, s.metadata || {}])
+    );
+
+    const enrichedSchemas = filteredSchemas.map((schema) => ({
+      ...schema,
+      metadata: schemaMetadataMap.get(schema.entity_type) || {},
+    }));
+
+    // Filter out test schemas (marked with metadata.test === true)
+    const productionSchemas = enrichedSchemas.filter((schema) => {
+      const metadata = schema.metadata || {};
+      return metadata.test !== true;
+    });
+
     return res.json({
-      schemas: filteredSchemas,
-      total: filteredSchemas.length,
+      schemas: productionSchemas,
+      total: productionSchemas.length,
     });
   } catch (error) {
     return handleApiError(req, res, error, "Failed to list schemas", "APIError:schemas_list");
@@ -1305,7 +1466,7 @@ app.get("/api/relationships", async (req, res) => {
 app.get("/api/relationships/:id", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     const relationshipKey = decodeURIComponent(req.params.id);
 
@@ -1515,7 +1676,7 @@ app.get("/api/sources", async (req, res) => {
 app.get("/api/sources/:id", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
-    const userId = await getAuthenticatedUserId(req);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     const sourceId = req.params.id;
 
@@ -1688,14 +1849,9 @@ app.post("/api/observations/create", async (req, res) => {
 
     // Use the ingestStructuredInternal helper from the MCP server
     // For HTTP, we'll implement directly here
-    const { createObservationsFromRecord } = await import("./services/observation_ingestion.js");
-    const { generateEntityId, normalizeEntityValue } =
-      await import("./services/entity_resolution.js");
-
     // Use resolveEntity to ensure entity exists with correct user_id
     // This handles the case where entity exists with null user_id
     const { resolveEntity } = await import("./services/entity_resolution.js");
-    const normalizedValue = normalizeEntityValue(entity_type, entity_identifier);
     const entity_id = await resolveEntity({
       entityType: entity_type,
       fields: { name: entity_identifier }, // Use entity_identifier as name field
@@ -1742,6 +1898,96 @@ app.post("/api/observations/create", async (req, res) => {
   } catch (error) {
     logError("APIError:observations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create observation";
+    return res.status(500).json({ error: message });
+  }
+});
+
+// POST /api/store - Store structured entities (for quick-entry forms)
+app.post("/api/store", async (req, res) => {
+  const schema = z.object({
+    entities: z.array(z.record(z.unknown())),
+    source_priority: z.number().optional().default(100),
+    user_id: z.string().uuid().optional(),
+  });
+
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:store", req, {
+      issues: parsed.error.issues,
+    });
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+
+  try {
+    // Get authenticated user_id (REQUIRED)
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+
+    const { entities, source_priority } = parsed.data;
+
+    // Import entity resolution service
+    const { resolveEntity } = await import("./services/entity_resolution.js");
+
+    const createdEntities = [];
+
+    // Process each entity
+    for (const entityData of entities) {
+      const entity_type = entityData.entity_type as string;
+      if (!entity_type) {
+        throw new Error("entity_type is required for each entity");
+      }
+
+      // Remove entity_type from fields (destructure to omit from ...fields)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional omit
+      const { entity_type: _removed, ...fields } = entityData;
+
+      // Resolve or create entity
+      const entity_id = await resolveEntity({
+        entityType: entity_type,
+        fields,
+        userId,
+      });
+
+      // Create observation
+      const observation = {
+        id: randomUUID(),
+        entity_id,
+        entity_type,
+        schema_version: "1.0",
+        source_id: null, // No source for direct API creation
+        interpretation_id: null,
+        observed_at: new Date().toISOString(),
+        specificity_score: 1.0,
+        source_priority,
+        fields,
+        user_id: userId,
+        created_at: new Date().toISOString(),
+      };
+
+      const { data: obsData, error: obsError } = await supabase
+        .from("observations")
+        .insert(observation)
+        .select()
+        .single();
+
+      if (obsError) throw obsError;
+
+      createdEntities.push({
+        entity_id,
+        entity_type,
+        observation_id: obsData.id,
+      });
+    }
+
+    return res.json({
+      success: true,
+      entities: createdEntities,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return res.status(401).json({ error: error.message });
+    }
+    logError("APIError:store", req, error);
+    const message = error instanceof Error ? error.message : "Failed to store entities";
     return res.status(500).json({ error: message });
   }
 });
@@ -3091,10 +3337,11 @@ async function fetchRecordsByIds(ids: string[], type?: string): Promise<any[]> {
     const bIndex = orderMap.get(b.id) ?? 0;
     return aIndex - bIndex;
   });
-}
+} // eslint-disable-line @typescript-eslint/no-unused-vars
 
 // Helper function to execute retrieve_records logic (reusable for chat endpoint)
-async function executeRetrieveRecords(params: {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _executeRetrieveRecords(params: {
   type?: string;
   properties?: Record<string, unknown>;
   limit?: number;
@@ -3242,7 +3489,7 @@ async function executeRetrieveRecords(params: {
     if (!error && data) {
       appendResults(data);
     }
-  }
+  } // eslint-disable-line @typescript-eslint/no-unused-vars
 
   // Filter by exact property matches
   let results = Array.from(resultMap.values());
@@ -3291,7 +3538,8 @@ async function executeRetrieveRecords(params: {
 }
 
 // Local-only version of executeRetrieveRecords that works with in-memory records
-async function executeRetrieveRecordsLocal(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function _executeRetrieveRecordsLocal(
   localRecords: any[],
   params: {
     type?: string;
@@ -3476,7 +3724,8 @@ async function executeRetrieveRecordsLocal(
   };
 }
 
-function extractUUIDs(text: string): string[] {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function _extractUUIDs(text: string): string[] {
   const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
   const matches = text.match(uuidRegex);
   return matches ? Array.from(new Set(matches)) : [];

@@ -55,12 +55,10 @@ export function MCPWindsurfPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Open Windsurf AI IDE</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
               <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
@@ -70,37 +68,31 @@ export function MCPWindsurfPage() {
               <li>Restart Windsurf</li>
               <li>Test connection by asking Windsurf to use Neotoma tools</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Protocol Note</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
+          <div>
+            <h2 className="text-xl font-semibold">Protocol Note</h2>
+            <p className="text-sm text-muted-foreground mt-2">
               Windsurf currently supports <code className="bg-muted px-1 py-0.5 rounded">stdio</code> protocol for MCP servers. 
               Make sure your MCP server configuration uses stdio transport, not SSE (Server-Sent Events).
             </p>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://docs.windsurf.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              Windsurf Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://docs.windsurf.ai"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                Windsurf Documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

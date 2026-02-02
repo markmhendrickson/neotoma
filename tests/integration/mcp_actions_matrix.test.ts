@@ -578,6 +578,16 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         expect(responseData.target_entity_id).toBe(entity2Id);
         expect(responseData.created_at).toBeDefined();
 
+        const { data: snapshot, error: snapshotError } = await supabase
+          .from("relationship_snapshots")
+          .select("*")
+          .eq("relationship_key", responseData.id)
+          .eq("user_id", testUserId)
+          .maybeSingle();
+
+        expect(snapshotError).toBeNull();
+        expect(snapshot).toBeDefined();
+
         createdRelationshipIds.push(responseData.id);
       });
 

@@ -96,36 +96,32 @@ export function MCPChatGPTPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Limitations</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Limitations</h2>
+            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside mt-2">
               <li>ChatGPT doesn&apos;t have native one-click MCP installation like Cursor</li>
               <li>Full MCP support requires Developer Mode (beta, may not be available to all users)</li>
               <li>Custom GPTs require HTTP gateway setup (more complex than native MCP)</li>
               <li>MCP tools are dynamically discovered, while Custom GPTs need static OpenAPI specs</li>
             </ul>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://platform.openai.com/docs/guides/tools-connectors-mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              OpenAI MCP Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://platform.openai.com/docs/guides/tools-connectors-mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                OpenAI MCP Documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

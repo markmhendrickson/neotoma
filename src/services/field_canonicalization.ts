@@ -385,6 +385,7 @@ function canonicalizeObject(
  * Compute hash of canonical fields (for fixed-point convergence)
  */
 export function hashCanonicalFields(canonicalFields: Record<string, unknown>): string {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { createHash } = require("crypto");
   const hash = createHash("sha256")
     .update(JSON.stringify(canonicalFields))

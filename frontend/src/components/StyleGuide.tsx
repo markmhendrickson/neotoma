@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -148,39 +148,115 @@ interface StyleGuideProps {
   onClose?: () => void;
 }
 
+const SECTIONS = [
+  { id: "colors", label: "Colors", icon: Palette },
+  { id: "typography", label: "Typography", icon: Type },
+  { id: "spacing", label: "Spacing", icon: Layout },
+  { id: "buttons", label: "Buttons", icon: MousePointerClick },
+  { id: "inputs", label: "Inputs", icon: Edit },
+  { id: "tables", label: "Tables", icon: TableIcon },
+  { id: "cards", label: "Cards", icon: FileText },
+  { id: "badges", label: "Badges", icon: Tag },
+  { id: "tabs", label: "Tabs", icon: FileText },
+  { id: "progress", label: "Progress", icon: Loader2 },
+  { id: "skeleton", label: "Skeleton", icon: FileText },
+  { id: "switch", label: "Switch", icon: Settings },
+  { id: "tooltip", label: "Tooltip", icon: HelpCircle },
+  { id: "collapsible", label: "Collapsible", icon: ChevronDown },
+];
+
 export function StyleGuide({ onClose }: StyleGuideProps) {
   const [isDark, setIsDark] = useState(false);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
 
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle("dark");
   };
 
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
+      setActiveSection(sectionId);
+    }
+  };
+
+  // Track active section on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      const sections = SECTIONS.map((s) => s.id);
+      const scrollPosition = window.scrollY + 200; // Offset for header
+
+      for (let i = sections.length - 1; i >= 0; i--) {
+        const section = document.getElementById(sections[i]);
+        if (section && section.offsetTop <= scrollPosition) {
+          setActiveSection(sections[i]);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
   return (
-    <div className="bg-background px-6 pb-6">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight">Neotoma Design System</h1>
-            <p className="text-muted-foreground mt-2">
-              Interactive preview of all design system components and styles
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={toggleTheme}>
-              {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-            </Button>
-            {onClose && (
-              <Button variant="ghost" size="icon" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
-            )}
+    <div className="bg-background min-h-screen">
+      <div className="flex">
+        {/* Sidebar Navigation */}
+        <div className="w-64 border-r bg-muted/30 p-4 sticky top-0 h-screen overflow-y-auto">
+          <div className="space-y-2">
+            <div className="mb-4">
+              <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground mb-2">
+                Navigation
+              </h2>
+            </div>
+            {SECTIONS.map((section) => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.id}
+                  onClick={() => scrollToSection(section.id)}
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors ${
+                    activeSection === section.id
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted text-foreground"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  <span>{section.label}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
+        {/* Main Content */}
+        <div className="flex-1 px-6 pb-6">
+          <div className="max-w-7xl mx-auto space-y-8">
+            {/* Header */}
+            <div className="flex items-center justify-between pt-6">
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight">Neotoma Design System</h1>
+                <p className="text-muted-foreground mt-2">
+                  Interactive preview of all design system components and styles
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={toggleTheme}>
+                  {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                </Button>
+                {onClose && (
+                  <Button variant="ghost" size="icon" onClick={onClose}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
         {/* Colors Section */}
-        <section>
+        <section id="colors">
           <div className="flex items-center gap-2 mb-4">
             <Palette className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Colors</h2>
@@ -252,7 +328,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Typography Section */}
-        <section>
+        <section id="typography">
           <div className="flex items-center gap-2 mb-4">
             <Type className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Typography</h2>
@@ -331,57 +407,12 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
             </CardContent>
           </Card>
 
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle>Text Style Guide</CardTitle>
-              <CardDescription>
-                UI copy rules (inspired by{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">
-                  docs/conventions/writing_style_guide.md
-                </code>
-                ). Direct, active voice; no em dashes, soft questions, or motivational fluff.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Prefer</div>
-                  <ul className="space-y-1.5 text-sm">
-                    <li>
-                      <strong>Buttons:</strong> "Save", "Upload document", "Retry"
-                    </li>
-                    <li>
-                      <strong>Errors:</strong> "File too large. Maximum size 10 MB."
-                    </li>
-                    <li>
-                      <strong>Empty:</strong> "No sources yet."
-                    </li>
-                    <li>
-                      <strong>Success:</strong> "Upload complete."
-                    </li>
-                  </ul>
-                </div>
-                <div>
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">Avoid</div>
-                  <ul className="space-y-1.5 text-sm text-muted-foreground">
-                    <li>"Would you like to save?"</li>
-                    <li>"Oops! Something went wrong. Please try again!"</li>
-                    <li>"Get started! Upload your first file!"</li>
-                    <li>"You're all set! Great job!"</li>
-                  </ul>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                No em dashes; use commas, periods, colons. One idea per phrase. Keep messages short.
-              </p>
-            </CardContent>
-          </Card>
         </section>
 
         <Separator />
 
         {/* Spacing Section */}
-        <section>
+        <section id="spacing">
           <div className="flex items-center gap-2 mb-4">
             <Layout className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Spacing</h2>
@@ -418,7 +449,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Buttons Section */}
-        <section>
+        <section id="buttons">
           <div className="flex items-center gap-2 mb-4">
             <MousePointerClick className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Buttons</h2>
@@ -485,7 +516,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Inputs Section */}
-        <section>
+        <section id="inputs">
           <div className="flex items-center gap-2 mb-4">
             <Edit className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Inputs</h2>
@@ -525,7 +556,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Tables Section */}
-        <section>
+        <section id="tables">
           <div className="flex items-center gap-2 mb-4">
             <TableIcon className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Tables</h2>
@@ -706,7 +737,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Cards Section */}
-        <section>
+        <section id="cards">
           <div className="flex items-center gap-2 mb-4">
             <FileText className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Cards</h2>
@@ -739,7 +770,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Badges Section */}
-        <section>
+        <section id="badges">
           <div className="flex items-center gap-2 mb-4">
             <Tag className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Badges</h2>
@@ -803,7 +834,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                 <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                 <p className="text-sm font-medium mb-2">No sources yet</p>
                 <p className="text-xs text-muted-foreground mb-4">
-                  Upload your first document to get started
+                  Upload your first document to create sources
                 </p>
                 <Button size="sm">Upload Document</Button>
               </CardContent>
@@ -1857,7 +1888,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Tabs Section */}
-        <section>
+        <section id="tabs">
           <div className="flex items-center gap-2 mb-4">
             <Layout className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Tabs</h2>
@@ -1945,7 +1976,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Progress Section */}
-        <section>
+        <section id="progress">
           <div className="flex items-center gap-2 mb-4">
             <Loader2 className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Progress</h2>
@@ -1999,7 +2030,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Skeleton Section */}
-        <section>
+        <section id="skeleton">
           <div className="flex items-center gap-2 mb-4">
             <Loader2 className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Skeleton Loading States</h2>
@@ -2067,7 +2098,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Switch Section */}
-        <section>
+        <section id="switch">
           <div className="flex items-center gap-2 mb-4">
             <Settings className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Switch</h2>
@@ -2126,7 +2157,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Tooltip Section */}
-        <section>
+        <section id="tooltip">
           <div className="flex items-center gap-2 mb-4">
             <HelpCircle className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Tooltips</h2>
@@ -2217,7 +2248,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
         <Separator />
 
         {/* Collapsible Section */}
-        <section>
+        <section id="collapsible">
           <div className="flex items-center gap-2 mb-4">
             <ChevronDown className="h-5 w-5" />
             <h2 className="text-2xl font-semibold">Collapsible</h2>
@@ -2295,9 +2326,11 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
           </Card>
         </section>
 
-        {/* Footer */}
-        <div className="py-8 text-center text-sm text-muted-foreground">
-          <p>Neotoma Design System - Based on specifications from design_system.md</p>
+            {/* Footer */}
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <p>Neotoma Design System - Based on specifications from design_system.md</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

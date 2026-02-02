@@ -241,6 +241,7 @@ tooling:
         # Required for Neotoma to function (environment-based, set by 1Password sync)
         required:
           - SUPABASE_PROJECT_ID  # Environment-based (dev/prod selected automatically)
+          - SUPABASE_URL  # Local Supabase uses full URL (local_development)
           - SUPABASE_SERVICE_KEY  # Environment-based (dev/prod selected automatically)
           # Run: npm run generate:connector-key
         # Recommended for full functionality

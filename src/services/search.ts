@@ -69,6 +69,7 @@ function calculateScore(record: NeotomaRecord, query: string): number {
   }
 
   // Exact field value matches (higher score)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for (const [_key, value] of Object.entries(record.properties || {})) {
     if (typeof value === "string" && value.toLowerCase() === queryLower) {
       score += 3;

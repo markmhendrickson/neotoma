@@ -5,6 +5,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatEntityType } from "@/utils/entityTypeFormatter";
+import { getEntityDisplayName } from "@/utils/entityDisplay";
 import { SidebarProvider, SidebarInset, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
@@ -14,13 +15,161 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { AppNavigationSidebar } from "@/components/AppNavigationSidebar";
 import { cn } from "@/lib/utils";
+import { ChevronDown } from "lucide-react";
+import { RealtimeStatusIndicator } from "@/components/RealtimeStatusIndicator";
 
 interface MenuItem {
   path: string;
   label: string;
   icon: LucideIcon;
+}
+
+// Design system sub-pages for dropdown breadcrumb
+const DESIGN_SYSTEM_SECTIONS = [
+  { id: "colors", label: "Colors" },
+  { id: "typography", label: "Typography" },
+  { id: "style-guide", label: "Style Guide" },
+  { id: "page-formats", label: "Page formats" },
+  { id: "spacing", label: "Spacing" },
+  { id: "buttons", label: "Buttons" },
+  { id: "inputs", label: "Inputs" },
+  { id: "tables", label: "Tables" },
+  { id: "cards", label: "Cards" },
+  { id: "badges", label: "Badges" },
+  { id: "tabs", label: "Tabs" },
+  { id: "progress", label: "Progress" },
+  { id: "skeleton", label: "Skeleton" },
+  { id: "switch", label: "Switch" },
+  { id: "tooltip", label: "Tooltip" },
+  { id: "collapsible", label: "Collapsible" },
+];
+
+const PAGE_FADE_DELAY_MS = 200;
+const PAGE_FADE_DURATION_MS = 400;
+const TITLE_SEPARATOR = " | ";
+
+function decodePathSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function formatPathTitle(segment: string): string {
+  return segment
+    .split("-")
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ""))
+    .join(" ");
+}
+
+function buildDocumentTitle({
+  pathname,
+  siteName,
+  routeNames,
+  dynamicEntityName,
+  dynamicEntityType,
+}: {
+  pathname: string;
+  siteName: string;
+  routeNames: Record<string, string>;
+  dynamicEntityName: string | null;
+  dynamicEntityType: string | null;
+}): string {
+  const segments = pathname.split("/").filter(Boolean);
+  const routeKey = segments.join("/");
+
+  if (routeKey === "") {
+    return `Dashboard${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (routeNames[routeKey]) {
+    return `${routeNames[routeKey]}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  const [root, child] = segments;
+
+  if (root === "entity" && child) {
+    const entityLabel = dynamicEntityName && dynamicEntityName !== "…" ? dynamicEntityName : "Entity details";
+    return `${entityLabel}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "entities" && child) {
+    const entityType = formatEntityType(decodePathSegment(child));
+    return `${entityType}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "schemas" && child) {
+    const entityType = formatEntityType(decodePathSegment(child));
+    return `Schema: ${entityType}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "sources" && child) {
+    return `Source details${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "relationships" && child) {
+    return `Relationship details${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "design-system") {
+    if (!child) {
+      return `Design system${TITLE_SEPARATOR}${siteName}`;
+    }
+    const section = DESIGN_SYSTEM_SECTIONS.find((item) => item.id === child);
+    const label = section?.label ?? "Design system";
+    return `Design system: ${label}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "mcp" && child) {
+    return `MCP ${formatPathTitle(child)}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "docs") {
+    return `Documentation${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "oauth" && child === "consent") {
+    return `OAuth consent${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (root === "auth" && child === "callback") {
+    return `Auth callback${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  if (routeNames[root]) {
+    return `${routeNames[root]}${TITLE_SEPARATOR}${siteName}`;
+  }
+
+  return `${formatPathTitle(root)}${TITLE_SEPARATOR}${siteName}`;
+}
+
+function PageContentFade({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const [contentVisible, setContentVisible] = useState(false);
+
+  useEffect(() => {
+    setContentVisible(false);
+    const t = setTimeout(() => setContentVisible(true), PAGE_FADE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
+
+  return (
+    <div
+      className={`transition-opacity ease-in ${contentVisible ? "opacity-100" : "opacity-0"}`}
+      style={{ transitionDuration: `${PAGE_FADE_DURATION_MS}ms` }}
+    >
+      {children}
+    </div>
+  );
 }
 
 interface LayoutProps {
@@ -71,6 +220,8 @@ export function Layout({
   const location = useLocation();
   const params = useParams();
   const [dynamicLabel, setDynamicLabel] = useState<string | null>(null);
+  const [dynamicEntityType, setDynamicEntityType] = useState<string | null>(null);
+  const [dynamicEntityName, setDynamicEntityName] = useState<string | null>(null);
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
@@ -210,8 +361,15 @@ export function Layout({
       } else {
         setDynamicLabel(null);
       }
-    } else if (location.pathname.startsWith("/entities/") && params.id) {
-      // Fetch entity type for entity detail pages
+    } else if (location.pathname.startsWith("/entity/")) {
+      const entityId = location.pathname.split("/")[2];
+      if (!entityId) {
+        setDynamicLabel(null);
+        setDynamicEntityType(null);
+        setDynamicEntityName(null);
+        return;
+      }
+      // Fetch entity type for entity detail pages (label + link to entities list by type)
       if (keysLoading && !sessionToken && !settings.bearerToken) {
         return;
       }
@@ -226,12 +384,20 @@ export function Layout({
             headers["Authorization"] = `Bearer ${bearerToken}`;
           }
 
-          const entityResponse = await fetch(`/api/entities/${params.id}`, { headers });
+          const entityResponse = await fetch(`/api/entities/${entityId}`, { headers });
           if (entityResponse.ok) {
             const entityData = await entityResponse.json();
             if (entityData.entity_type) {
               setDynamicLabel(formatEntityType(entityData.entity_type));
+              setDynamicEntityType(entityData.entity_type);
             }
+            const displayName = getEntityDisplayName({
+              entity_type: entityData.entity_type ?? "",
+              canonical_name: entityData.canonical_name ?? "",
+              snapshot: entityData.snapshot,
+              entity_id: entityData.entity_id ?? entityData.id,
+            });
+            setDynamicEntityName(displayName);
           }
         } catch (error) {
           console.error("Failed to fetch entity for breadcrumb:", error);
@@ -240,6 +406,8 @@ export function Layout({
       fetchEntityType();
     } else {
       setDynamicLabel(null);
+      setDynamicEntityType(null);
+      setDynamicEntityName(null);
     }
   }, [
     location.pathname,
@@ -251,10 +419,26 @@ export function Layout({
     settings.bearerToken,
   ]);
 
+  useEffect(() => {
+    document.title = buildDocumentTitle({
+      pathname: location.pathname,
+      siteName,
+      routeNames,
+      dynamicEntityName,
+      dynamicEntityType,
+    });
+  }, [location.pathname, siteName, routeNames, dynamicEntityName, dynamicEntityType]);
+
   // Generate breadcrumb items from pathname
   const getBreadcrumbs = () => {
     const pathnames = location.pathname.split("/").filter((x) => x);
-    const breadcrumbs: Array<{ label: string; href: string; isLast?: boolean }> = [];
+    const breadcrumbs: Array<{ 
+      label: string; 
+      href: string; 
+      isLast?: boolean;
+      hasDropdown?: boolean;
+      dropdownItems?: Array<{ label: string; href: string }>;
+    }> = [];
 
     // Always include Home
     if (pathnames.length === 0) {
@@ -268,24 +452,68 @@ export function Layout({
 
     breadcrumbs.push({ label: "Home", href: "/", isLast: false });
 
+    // Segment looks like entity type (e.g. task, invoice) not entity id (ent_..., uuid)
+    const isEntityTypeSegment = (seg: string) =>
+      !seg.startsWith("ent_") &&
+      seg.length < 50 &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg);
+
+    const isEntityIdSegment = (seg: string) =>
+      seg.startsWith("ent_") || /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(seg);
+
     // Build breadcrumbs from path segments
     let currentPath = "";
     pathnames.forEach((segment, index) => {
       currentPath += `/${segment}`;
       const isLast = index === pathnames.length - 1;
+      const prevSegment = index > 0 ? pathnames[index - 1] : null;
+      const nextSegment = index + 1 < pathnames.length ? pathnames[index + 1] : null;
+
+      // /entities/:type shows "Home > Tasks" (no "Entities" segment)
+      if (segment === "entities" && nextSegment && isEntityTypeSegment(nextSegment)) {
+        return;
+      }
+      if (prevSegment === "entities" && isEntityTypeSegment(segment)) {
+        breadcrumbs.push({
+          label: formatEntityType(segment),
+          href: currentPath,
+          isLast,
+        });
+        return;
+      }
+
+      // /entity/:id shows "Home > Tasks > My task" (plural type + entity name; never show raw id)
+      if (segment === "entity" && nextSegment && isEntityIdSegment(nextSegment)) {
+        const typeLabel = dynamicLabel || (dynamicEntityType ? formatEntityType(dynamicEntityType) : null) || "Entity";
+        const typeHref = dynamicEntityType ? `/entities/${encodeURIComponent(dynamicEntityType)}` : currentPath;
+        breadcrumbs.push({
+          label: typeLabel,
+          href: typeHref,
+          isLast: false,
+        });
+        breadcrumbs.push({
+          label: dynamicEntityName || "…",
+          href: currentPath,
+          isLast: true,
+        });
+        return;
+      }
+      if (prevSegment === "entity" && isEntityIdSegment(segment)) {
+        return;
+      }
+
+      // Check if current segment is a design system sub-page
+      const isDesignSystemSubPageSegment = DESIGN_SYSTEM_SECTIONS.some(s => s.id === segment);
+      const isOnDesignSystemSubPage = isDesignSystemSubPageSegment && prevSegment === "design-system";
 
       // Use custom label function if provided
       let label: string;
-      // Check for "entities" segment first (before checking isLast)
-      // This ensures the "entities" segment shows the formatted entity type
-      if (segment === "entities" && dynamicLabel) {
-        // For /entities/:id routes, show formatted entity type instead of "Entities"
-        label = dynamicLabel;
-      } else if (routeNames[segment]) {
+      if (routeNames[segment]) {
         label = routeNames[segment];
+      } else if (isDesignSystemSubPageSegment) {
+        const section = DESIGN_SYSTEM_SECTIONS.find(s => s.id === segment);
+        label = section ? section.label : segment;
       } else {
-        // Format label (capitalize, replace hyphens with spaces)
-        // For entity IDs, just show the segment as-is (or truncated)
         if (segment.startsWith("ent_") && segment.length > 20) {
           label = `${segment.substring(0, 20)}...`;
         } else {
@@ -296,19 +524,35 @@ export function Layout({
         }
       }
 
-      breadcrumbs.push({
-        label,
-        href: currentPath,
-        isLast,
-      });
+      const entityListHref =
+        segment === "entity" && dynamicEntityType
+          ? `/entities/${encodeURIComponent(dynamicEntityType)}`
+          : currentPath;
+
+      if (isOnDesignSystemSubPage) {
+        breadcrumbs.push({
+          label,
+          href: currentPath,
+          isLast,
+          hasDropdown: true,
+          dropdownItems: DESIGN_SYSTEM_SECTIONS.map(section => ({
+            label: section.label,
+            href: `/design-system/${section.id}`,
+          })),
+        });
+      } else {
+        breadcrumbs.push({
+          label,
+          href: entityListHref,
+          isLast,
+        });
+      }
     });
 
     return breadcrumbs;
   };
 
   const breadcrumbs = getBreadcrumbs();
-
-  // Hide sidebar on OAuth approval pages
   const isOAuthApprovalPage = location.pathname.startsWith("/oauth/consent");
 
   // For OAuth approval pages, render children directly without sidebar/header
@@ -327,10 +571,16 @@ export function Layout({
         onSignOut={onSignOut}
       />
       <SidebarInset className="min-w-0 max-w-full overflow-x-hidden">
-        <PageHeader breadcrumbs={breadcrumbs} />
-        <main className="min-h-screen px-4 pb-4 md:px-6 md:pb-6 min-w-0 max-w-full overflow-x-hidden">
-          {children}
-        </main>
+        <PageContentFade>
+          <PageHeader breadcrumbs={breadcrumbs} />
+          <main
+            className={cn(
+              "min-h-screen px-4 pt-6 pb-4 md:px-6 md:pt-8 md:pb-6 min-w-0 max-w-full overflow-x-hidden"
+            )}
+          >
+            {children}
+          </main>
+        </PageContentFade>
       </SidebarInset>
     </SidebarProvider>
   );
@@ -340,26 +590,62 @@ export function Layout({
  * Page header component that conditionally shows sidebar trigger
  */
 interface PageHeaderProps {
-  breadcrumbs: Array<{ label: string; href: string; isLast?: boolean }>;
+  breadcrumbs: Array<{ 
+    label: string; 
+    href: string; 
+    isLast?: boolean;
+    hasDropdown?: boolean;
+    dropdownItems?: Array<{ label: string; href: string }>;
+  }>;
 }
 
 function PageHeader({ breadcrumbs }: PageHeaderProps) {
-  const { open } = useSidebar();
+  const { isMobile } = useSidebar();
+  const location = useLocation();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background px-4 min-w-0 max-w-full overflow-x-hidden">
-      {!open && <SidebarTrigger className="-ml-1 shrink-0" />}
+      {isMobile && <SidebarTrigger className="md:hidden" />}
       <Breadcrumb className="min-w-0 flex-1 overflow-hidden max-w-full">
         <BreadcrumbList className="flex-nowrap min-w-0 max-w-full">
           {breadcrumbs.map((crumb, index) => (
-            <React.Fragment key={crumb.href}>
+            <React.Fragment key={`${crumb.href}-${index}`}>
               <BreadcrumbItem
                 className={cn(
                   "min-w-0",
                   index === breadcrumbs.length - 1 ? "flex-1 min-w-0" : "shrink-0"
                 )}
               >
-                {crumb.isLast ? (
+                {crumb.hasDropdown && crumb.dropdownItems ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <BreadcrumbLink asChild>
+                        <Link 
+                          to={crumb.href} 
+                          className="truncate whitespace-nowrap flex items-center gap-1"
+                        >
+                          {crumb.label}
+                          <ChevronDown className="h-3 w-3" />
+                        </Link>
+                      </BreadcrumbLink>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {crumb.dropdownItems.map((item) => (
+                        <DropdownMenuItem key={item.href} asChild>
+                          <Link 
+                            to={item.href}
+                            className={cn(
+                              "w-full cursor-pointer",
+                              location.pathname === item.href && "bg-accent"
+                            )}
+                          >
+                            {item.label}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : crumb.isLast ? (
                   <BreadcrumbPage className="truncate block w-full">{crumb.label}</BreadcrumbPage>
                 ) : (
                   <BreadcrumbLink asChild>
@@ -374,6 +660,7 @@ function PageHeader({ breadcrumbs }: PageHeaderProps) {
           ))}
         </BreadcrumbList>
       </Breadcrumb>
+      <RealtimeStatusIndicator />
     </header>
   );
 }

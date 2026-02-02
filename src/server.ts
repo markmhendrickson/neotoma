@@ -7,9 +7,6 @@ import {
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
-  ListResourceTemplatesRequestSchema,
-  SubscribeRequestSchema,
-  UnsubscribeRequestSchema,
   InitializeRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -96,11 +93,36 @@ export class NeotomaServer {
       // Extract connection_id from HTTP headers, authInfo, or env vars (env vars only for stdio)
       const allHeaders = (extra?.requestInfo as any)?.headers || {};
       const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
-      const connectionId =
+      let connectionId =
         (extra?.authInfo as any)?.connectionId ||
         allHeaders["x-connection-id"] ||
         allHeaders["X-Connection-Id"] ||
         (!isHTTPTransport ? process.env.NEOTOMA_CONNECTION_ID : undefined);
+
+      // If no connection ID header, try to get it from Bearer token
+      if (
+        !connectionId &&
+        authHeader &&
+        typeof authHeader === "string" &&
+        authHeader.startsWith("Bearer ")
+      ) {
+        try {
+          const token = authHeader.substring(7);
+          const { validateTokenAndGetConnectionId } = await import("./services/mcp_oauth.js");
+          const { connectionId: resolvedConnectionId } =
+            await validateTokenAndGetConnectionId(token);
+          connectionId = resolvedConnectionId;
+          logger.error(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
+        } catch (error: any) {
+          logger.error(
+            `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
+          );
+        }
+      }
+
+      logger.error(
+        `[MCP Server] Initialize: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
+      );
 
       if (connectionId) {
         // In test environment, allow test connection ID to bypass authentication
@@ -230,6 +252,160 @@ export class NeotomaServer {
   }
 
   /**
+   * Get authenticated user information
+   * Returns the user_id that is automatically used for all authenticated actions
+   */
+  private async getAuthenticatedUser(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    // No arguments needed, but validate the schema
+    z.object({}).parse(args ?? {});
+
+    // Get authenticated user_id (will throw if not authenticated)
+    const userId = this.getAuthenticatedUserId();
+
+    return this.buildTextResponse({
+      user_id: userId,
+      authenticated: true,
+    });
+  }
+
+  /**
+   * Health check for entity snapshots
+   * Detects stale snapshots (observation_count=0 but observations exist)
+   */
+  private async healthCheckSnapshots(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      auto_fix: z.boolean().default(false),
+    });
+
+    const parsed = schema.parse(args ?? {});
+    const { supabase } = await import("./db.js");
+
+    // Get all entity snapshots with observation_count = 0
+    const { data: potentiallyStale, error: snapshotError } = await supabase
+      .from("entity_snapshots")
+      .select("entity_id, entity_type, observation_count, computed_at")
+      .eq("observation_count", 0)
+      .order("computed_at", { ascending: false });
+
+    if (snapshotError) {
+      return this.buildTextResponse({
+        healthy: false,
+        error: `Failed to query snapshots: ${snapshotError.message}`,
+      });
+    }
+
+    if (!potentiallyStale || potentiallyStale.length === 0) {
+      return this.buildTextResponse({
+        healthy: true,
+        message: "All snapshots healthy (no snapshots with observation_count=0)",
+        checked: 0,
+        stale: 0,
+      });
+    }
+
+    // Check for actual observations
+    const staleSnapshots: Array<{
+      entity_id: string;
+      entity_type: string;
+      observation_count_snapshot: number;
+      observation_count_actual: number;
+    }> = [];
+
+    for (const snapshot of potentiallyStale) {
+      const { data: observations, error: obsError } = await supabase
+        .from("observations")
+        .select("id")
+        .eq("entity_id", snapshot.entity_id);
+
+      if (obsError) {
+        continue;
+      }
+
+      const actualObsCount = observations?.length || 0;
+
+      if (actualObsCount > 0) {
+        staleSnapshots.push({
+          entity_id: snapshot.entity_id,
+          entity_type: snapshot.entity_type,
+          observation_count_snapshot: snapshot.observation_count,
+          observation_count_actual: actualObsCount,
+        });
+      }
+    }
+
+    // Auto-fix if requested
+    if (parsed.auto_fix && staleSnapshots.length > 0) {
+      const { observationReducer } = await import("./reducers/observation_reducer.js");
+      let fixedCount = 0;
+
+      for (const stale of staleSnapshots) {
+        try {
+          // Get all observations
+          const { data: observations } = await supabase
+            .from("observations")
+            .select("*")
+            .eq("entity_id", stale.entity_id)
+            .order("observed_at", { ascending: false });
+
+          if (!observations || observations.length === 0) continue;
+
+          // Recompute snapshot
+          const newSnapshot = await observationReducer.computeSnapshot(
+            stale.entity_id,
+            observations as any
+          );
+
+          // Save snapshot
+          await supabase.from("entity_snapshots").upsert(
+            {
+              entity_id: newSnapshot.entity_id,
+              entity_type: newSnapshot.entity_type,
+              schema_version: newSnapshot.schema_version,
+              snapshot: newSnapshot.snapshot,
+              computed_at: newSnapshot.computed_at,
+              observation_count: newSnapshot.observation_count,
+              last_observation_at: newSnapshot.last_observation_at,
+              provenance: newSnapshot.provenance,
+              user_id: newSnapshot.user_id,
+            },
+            {
+              onConflict: "entity_id",
+            }
+          );
+
+          fixedCount++;
+        } catch (error) {
+          console.error(`Failed to fix snapshot for ${stale.entity_id}:`, error);
+        }
+      }
+
+      return this.buildTextResponse({
+        healthy: false,
+        message: `Found ${staleSnapshots.length} stale snapshots, fixed ${fixedCount}`,
+        checked: potentiallyStale.length,
+        stale: staleSnapshots.length,
+        fixed: fixedCount,
+        stale_snapshots: staleSnapshots,
+      });
+    }
+
+    return this.buildTextResponse({
+      healthy: staleSnapshots.length === 0,
+      message:
+        staleSnapshots.length === 0
+          ? "All snapshots healthy"
+          : `Found ${staleSnapshots.length} stale snapshots`,
+      checked: potentiallyStale.length,
+      stale: staleSnapshots.length,
+      stale_snapshots: staleSnapshots,
+    });
+  }
+
+  /**
    * Validate Supabase session token and extract user_id
    * @param token - Supabase access_token (JWT)
    * @returns user_id extracted from token
@@ -247,11 +423,48 @@ export class NeotomaServer {
 
   private setupToolHandlers(): void {
     this.server.setRequestHandler(ListToolsRequestSchema, async (request, extra) => {
+      // Check authentication - try to get userId from request context if instance-level isn't set
+      // This handles cases where authentication happens in initialize but instance state isn't preserved
+      let userId = this.authenticatedUserId;
+
+      // If instance-level userId isn't set, try to get it from request context (HTTP transport)
+      if (!userId && extra?.requestInfo) {
+        const allHeaders = (extra.requestInfo as any)?.headers || {};
+        const connectionId =
+          (extra?.authInfo as any)?.connectionId ||
+          allHeaders["x-connection-id"] ||
+          allHeaders["X-Connection-Id"];
+
+        logger.error(
+          `[MCP Server] listTools fallback: connectionId=${connectionId}, hasRequestInfo=${!!extra?.requestInfo}, headers=${JSON.stringify(Object.keys(allHeaders))}`
+        );
+
+        if (connectionId) {
+          try {
+            const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+            const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+            userId = resolvedUserId;
+            // Cache it for this instance
+            this.authenticatedUserId = userId;
+            logger.error(`[MCP Server] listTools fallback resolved userId: ${userId}`);
+          } catch (error: any) {
+            logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+          }
+        } else {
+          logger.error(`[MCP Server] listTools fallback: no connectionId found in headers`);
+        }
+      }
+
       // Return empty tools when unauthenticated so the client shows success (green) with 0 tools.
       // Throwing causes Cursor to show "Error - Show Output" instead of "Needs authentication".
-      if (!this.authenticatedUserId) {
+      if (!userId) {
+        logger.error(
+          `[MCP Server] listTools called without authentication (authenticatedUserId: ${this.authenticatedUserId})`
+        );
         return { tools: [] };
       }
+
+      logger.error(`[MCP Server] listTools called for authenticated user: ${userId}`);
 
       return {
         tools: [
@@ -899,6 +1112,32 @@ export class NeotomaServer {
               required: ["entity_type", "schema_definition", "reducer_config"],
             },
           },
+          {
+            name: "get_authenticated_user",
+            description:
+              "Get the authenticated user ID for the current MCP session. Returns the user_id that is automatically used for all authenticated actions.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+              required: [],
+            },
+          },
+          {
+            name: "health_check_snapshots",
+            description:
+              "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                auto_fix: {
+                  type: "boolean",
+                  description: "If true, automatically recompute stale snapshots (default: false)",
+                  default: false,
+                },
+              },
+              required: [],
+            },
+          },
         ],
       };
     });
@@ -965,6 +1204,10 @@ export class NeotomaServer {
             return await this.correct(args);
           case "merge_entities":
             return await this.mergeEntities(args);
+          case "get_authenticated_user":
+            return await this.getAuthenticatedUser(args);
+          case "health_check_snapshots":
+            return await this.healthCheckSnapshots(args);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
@@ -1001,10 +1244,46 @@ export class NeotomaServer {
    */
   private setupResourceHandlers(): void {
     // List all available resources
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
-      if (!this.authenticatedUserId) {
+    this.server.setRequestHandler(ListResourcesRequestSchema, async (request, extra) => {
+      // Check authentication - try to get userId from request context if instance-level isn't set
+      let userId = this.authenticatedUserId;
+
+      // If instance-level userId isn't set, try to get it from request context (HTTP transport)
+      if (!userId && extra?.requestInfo) {
+        const allHeaders = (extra.requestInfo as any)?.headers || {};
+        const connectionId =
+          (extra?.authInfo as any)?.connectionId ||
+          allHeaders["x-connection-id"] ||
+          allHeaders["X-Connection-Id"];
+
+        logger.error(
+          `[MCP Server] listResources fallback: connectionId=${connectionId}, hasRequestInfo=${!!extra?.requestInfo}, headers=${JSON.stringify(Object.keys(allHeaders))}`
+        );
+
+        if (connectionId) {
+          try {
+            const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+            const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+            userId = resolvedUserId;
+            // Cache it for this instance
+            this.authenticatedUserId = userId;
+            logger.error(`[MCP Server] listResources fallback resolved userId: ${userId}`);
+          } catch (error: any) {
+            logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+          }
+        } else {
+          logger.error(`[MCP Server] listResources fallback: no connectionId found in headers`);
+        }
+      }
+
+      if (!userId) {
+        logger.error(
+          `[MCP Server] listResources called without authentication (authenticatedUserId: ${this.authenticatedUserId})`
+        );
         return { resources: [] };
       }
+
+      logger.error(`[MCP Server] listResources called for authenticated user: ${userId}`);
 
       try {
         const resources: Array<{
@@ -1610,9 +1889,6 @@ export class NeotomaServer {
     // Use authenticated user_id
     const userId = this.getAuthenticatedUserId();
 
-    // Create relationship observation (new approach)
-    const { createRelationshipObservations } = await import("./services/interpretation.js");
-
     try {
       // Create a source for this relationship
       const { data: source, error: sourceError } = await supabase
@@ -1634,59 +1910,12 @@ export class NeotomaServer {
         );
       }
 
-      await createRelationshipObservations(
-        [
-          {
-            relationship_type: parsed.relationship_type,
-            source_entity_id: parsed.source_entity_id,
-            target_entity_id: parsed.target_entity_id,
-            metadata: parsed.metadata || {},
-          },
-        ],
-        source.id, // Use the created source_id
-        null, // No interpretation_id for direct creation
-        userId,
-        100 // High priority for user-created relationships
-      );
-
-      // Get the relationship snapshot (with retry for async snapshot creation)
-      const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
-      let snapshot = null;
-      let snapshotError = null;
-
-      // Retry up to 5 times with increasing delays (snapshot creation is async)
-      for (let attempt = 0; attempt < 5; attempt++) {
-        if (attempt > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 200 * attempt)); // 200ms, 400ms, 600ms, 800ms
-        }
-
-        const result = await supabase
-          .from("relationship_snapshots")
-          .select("*")
-          .eq("relationship_key", relationshipKey)
-          .eq("user_id", userId)
-          .maybeSingle();
-
-        snapshot = result.data;
-        snapshotError = result.error;
-
-        if (snapshot) {
-          break; // Found it, exit retry loop
-        }
-      }
-
-      if (snapshotError || !snapshot) {
-        throw new McpError(
-          ErrorCode.InternalError,
-          `Failed to retrieve relationship snapshot: ${snapshotError?.message || "Not found"}`
-        );
-      }
-
-      // Also insert into relationships table for backward compatibility (deprecated)
-      await supabase.from("relationships").insert({
+      const { relationshipsService } = await import("./services/relationships.js");
+      const snapshot = await relationshipsService.createRelationship({
         relationship_type: parsed.relationship_type,
         source_entity_id: parsed.source_entity_id,
         target_entity_id: parsed.target_entity_id,
+        source_record_id: source.id,
         metadata: parsed.metadata || {},
         user_id: userId,
       });
@@ -2680,7 +2909,8 @@ export class NeotomaServer {
           try {
             parquetResult = await Promise.race([
               readParquetFile(parsed.file_path),
-              new Promise<never>((_, reject) =>
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              new Promise<never>((_resolve, reject) =>
                 setTimeout(
                   () =>
                     reject(
@@ -3168,6 +3398,22 @@ export class NeotomaServer {
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
         const isDefaultUser = userId === defaultUserId;
 
+        // Check if this is a test schema (by entity_type pattern)
+        const isTestEntityType = /^test$/i.test(entityType) ||
+          /^test_/i.test(entityType) ||
+          /_test$/i.test(entityType) ||
+          /^test\d+$/i.test(entityType) ||
+          /^test_record$/i.test(entityType) ||
+          /^test_entity$/i.test(entityType) ||
+          /^test_schema$/i.test(entityType) ||
+          /^auto_test/i.test(entityType) ||
+          /_auto_test/i.test(entityType);
+
+        // Mark test schemas with metadata
+        const metadata = isTestEntityType
+          ? { test: true, test_marked_at: new Date().toISOString() }
+          : undefined;
+
         schema = await schemaRegistry.register({
           entity_type: entityType,
           schema_version: "1.0",
@@ -3176,6 +3422,7 @@ export class NeotomaServer {
           user_id: isDefaultUser ? undefined : userId,
           user_specific: !isDefaultUser,
           activate: true,
+          metadata,
         });
 
         logger.error(
@@ -3250,7 +3497,8 @@ export class NeotomaServer {
       // Store unknown fields in raw_fragments (no interpretation_id for structured data)
       // Filter out null/undefined values before storing
       const nonNullUnknownFields = Object.entries(unknownFields).filter(
-        ([_, value]) => value !== null && value !== undefined
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ([_key, value]) => value !== null && value !== undefined
       );
 
       if (nonNullUnknownFields.length > 0) {

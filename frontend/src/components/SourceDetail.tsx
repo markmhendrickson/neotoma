@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface Source {
   id: string;
@@ -134,6 +135,26 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
 
     fetchSourceDetail();
   }, [sourceId, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription for source updates
+  const { subscribe } = useRealtime();
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (!user || !sourceId) return;
+
+    const unsubscribe = subscribe({
+      table: "sources",
+      event: "UPDATE",
+      filter: `id=eq.${sourceId}`,
+      callback: (payload) => {
+        const { new: updatedSource } = payload;
+        setSource(updatedSource as Source);
+      },
+    });
+
+    return unsubscribe;
+  }, [sourceId, user, subscribe]);
 
   if (loading) {
     return (

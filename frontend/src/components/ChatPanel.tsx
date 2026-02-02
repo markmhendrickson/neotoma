@@ -1166,12 +1166,12 @@ const mergeRecentRecords = (
 
         const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('Request timeout');
         const displayMessage = isTimeout
-          ? `Failed to process "${file.name}": Datastore operation timed out. The file may still be processing.`
-          : `Failed to process "${file.name}": ${errorMessage}`;
+          ? `Processing timed out. The file may still be processing.`
+          : `Processing failed: ${errorMessage}`;
 
-        notify.error(`Failed ${file.name}`, {
+        notify.error(`Upload failed`, {
           id: toastId,
-          description: displayMessage.replace(`Failed to process "${file.name}": `, ''),
+          description: displayMessage,
           duration: 6000,
         });
         uploadToastIdsRef.current.delete(file);

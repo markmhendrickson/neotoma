@@ -4,9 +4,10 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
+import { RealtimeProvider } from './contexts/RealtimeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { useAuth } from './contexts/AuthContext';
-import { LogOut, FileText, Users, Calendar, BarChart, Upload, Database, Network } from "lucide-react";
+import { LogOut, FileText, Calendar, BarChart, Upload, Database, Network } from "lucide-react";
 import { Button } from './components/ui/button';
 
 // Initialize theme on app load
@@ -32,7 +33,6 @@ function AppWithErrorBoundary() {
   const menuItems = [
     { path: "/", label: "Dashboard", icon: BarChart },
     { path: "/sources", label: "Sources", icon: FileText },
-    { path: "/entities", label: "Entities", icon: Users },
     { path: "/schemas", label: "Schemas", icon: Database },
     { path: "/relationships", label: "Relationships", icon: Network },
     { path: "/timeline", label: "Timeline", icon: Calendar },
@@ -60,7 +60,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <AppWithErrorBoundary />
+        <RealtimeProvider>
+          <AppWithErrorBoundary />
+        </RealtimeProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>

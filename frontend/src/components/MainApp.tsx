@@ -17,6 +17,7 @@ import { InterpretationList } from "@/components/InterpretationList";
 import { ObservationList } from "@/components/ObservationList";
 import { SearchResults } from "@/components/SearchResults";
 import { DashboardPage } from "@/components/DashboardPage";
+import { AboutPage } from "@/components/AboutPage";
 import { MCPCursorPage } from "@/components/MCPCursorPage";
 import { MCPChatGPTPage } from "@/components/MCPChatGPTPage";
 import { MCPClaudePage } from "@/components/MCPClaudePage";
@@ -37,8 +38,13 @@ import { RelationshipList } from "@/components/RelationshipList";
 import { RelationshipDetail } from "@/components/RelationshipDetail";
 import { NotFound } from "@/components/NotFound";
 import { OAuthConsentPage } from "@/components/OAuthConsentPage";
-import { StyleGuide } from "@/components/StyleGuide";
+import { DesignSystemRouter } from "@/components/design-system/DesignSystemRouter";
 import { Layout } from "@/components/Layout";
+import { SignInPage } from "@/components/auth/SignInPage";
+import { SignUpPage } from "@/components/auth/SignUpPage";
+import { ResetPasswordPage } from "@/components/auth/ResetPasswordPage";
+import { AuthCallback } from "@/components/auth/AuthCallback";
+import { DocumentationApp } from "@/docs/DocumentationApp";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -78,7 +84,7 @@ function EntityDetailRoute() {
   const navigate = useNavigate();
   
   if (!id) {
-    navigate("/entities");
+    navigate("/");
     return null;
   }
   
@@ -87,13 +93,13 @@ function EntityDetailRoute() {
   };
 
   const handleNavigateToEntity = (entityId: string) => {
-    navigate(`/entities/${entityId}`);
+    navigate(`/entity/${entityId}`);
   };
   
   return (
     <EntityDetail
       entityId={id}
-      onClose={() => navigate("/entities")}
+      onClose={() => navigate("/")}
       onNavigateToSource={handleNavigateToSource}
       onNavigateToEntity={handleNavigateToEntity}
     />
@@ -135,7 +141,7 @@ function RelationshipDetailRoute() {
   }
   
   const handleNavigateToEntity = (entityId: string) => {
-    navigate(`/entities/${entityId}`);
+    navigate(`/entity/${entityId}`);
   };
   
   return (
@@ -169,7 +175,7 @@ export function MainApp() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
         e.preventDefault();
-        const isDesignSystem = location.pathname === "/design-system";
+        const isDesignSystem = location.pathname.startsWith("/design-system");
         navigate(isDesignSystem ? "/" : "/design-system");
       }
     };
@@ -182,7 +188,7 @@ export function MainApp() {
   };
 
   const handleNavigateToEntity = (entityId: string) => {
-    navigate(`/entities/${entityId}`);
+    navigate(`/entity/${entityId}`);
   };
 
   const handleUploadComplete = (sourceIds: string[]) => {
@@ -218,6 +224,7 @@ export function MainApp() {
   const routeNames = {
     "": "Neotoma", // Root path
     "/": "Neotoma", // Alternative root path key
+    about: "About",
     sources: "Sources",
     entities: "Entities",
     interpretations: "Interpretations",
@@ -228,6 +235,11 @@ export function MainApp() {
     oauth: "OAuth",
     search: "Search",
     integrations: "Integrations",
+    "design-system": "Design System",
+    docs: "Documentation",
+    signin: "Sign in",
+    signup: "Create account",
+    "reset-password": "Reset password",
     "mcp/cursor": "Cursor Setup",
     "mcp/chatgpt": "ChatGPT Setup",
     "mcp/claude": "Claude Setup",
@@ -237,7 +249,7 @@ export function MainApp() {
   const getBreadcrumbLabel = (pathname: string, params: Record<string, string | undefined>): string | null => {
     // For entity detail pages, we'll fetch the entity type asynchronously
     // This function is called synchronously, so we return null and handle async loading in Layout
-    if (pathname.startsWith("/entities/") && params.id) {
+    if (pathname.startsWith("/entity/") && params.id) {
       // Return a placeholder - Layout will fetch the actual label
       return null;
     }
@@ -263,6 +275,10 @@ export function MainApp() {
         <Route
           path="/"
           element={<DashboardPage />}
+        />
+        <Route
+          path="/about"
+          element={<AboutPage />}
         />
         <Route
           path="/integrations"
@@ -340,15 +356,19 @@ export function MainApp() {
         />
         <Route
           path="/entities"
+          element={<Navigate to="/" replace />}
+        />
+        <Route
+          path="/entities/:type"
           element={
             <EntityList
-              onEntityClick={(entity) => navigate(`/entities/${entity.entity_id || entity.id || ""}`)}
+              onEntityClick={(entity) => navigate(`/entity/${entity.entity_id || entity.id || ""}`)}
               searchQuery={universalSearchQuery}
             />
           }
         />
         <Route
-          path="/entities/:id"
+          path="/entity/:id"
           element={<EntityDetailRoute />}
         />
         <Route
@@ -370,7 +390,7 @@ export function MainApp() {
             <ObservationList
               onObservationClick={(observation) => {
                 // Navigate to entity detail to see observation
-                navigate(`/entities/${observation.entity_id}`);
+                navigate(`/entity/${observation.entity_id}`);
               }}
               onNavigateToSource={handleNavigateToSource}
               onNavigateToEntity={handleNavigateToEntity}
@@ -417,16 +437,32 @@ export function MainApp() {
           element={<SearchResults />}
         />
         <Route
+          path="/signin"
+          element={<SignInPage />}
+        />
+        <Route
+          path="/signup"
+          element={<SignUpPage />}
+        />
+        <Route
+          path="/reset-password"
+          element={<ResetPasswordPage />}
+        />
+        <Route
+          path="/auth/callback"
+          element={<AuthCallback />}
+        />
+        <Route
           path="/oauth/consent"
           element={<OAuthConsentPage />}
         />
         <Route
-          path="/design-system"
-          element={
-            <StyleGuide
-              onClose={() => navigate("/")}
-            />
-          }
+          path="/design-system/*"
+          element={<DesignSystemRouter />}
+        />
+        <Route
+          path="/docs/*"
+          element={<DocumentationApp />}
         />
         <Route
           path="*"

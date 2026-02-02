@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   LucideIcon,
   Loader2,
@@ -20,6 +20,10 @@ import {
   Check,
   PanelLeft,
   List,
+  LogIn,
+  UserPlus,
+  RefreshCw,
+  BookOpen,
 } from "lucide-react";
 import {
   INTEGRATIONS,
@@ -41,7 +45,6 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { UniversalSearch } from "@/components/UniversalSearch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,8 +56,11 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/hooks/useTheme";
+import { useToast } from "@/components/ui/use-toast";
 import { formatEntityType } from "@/utils/entityTypeFormatter";
 import { cn } from "@/lib/utils";
+import { getSchemaIcon, fetchSchemaMetadataBatch, type SchemaMetadata } from "@/utils/schemaIcons";
+import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface MenuItem {
   path: string;
@@ -67,7 +73,7 @@ interface AppNavigationSidebarProps {
   menuItems: MenuItem[];
   accountEmail?: string;
   footerActions?: React.ReactNode;
-  /** When provided, sidebar header shows UniversalSearch instead of siteName */
+  /** When provided, sidebar shows Search menu item */
   onSearch?: ((query: string) => void) | null;
   onSignOut?: () => void;
 }
@@ -98,88 +104,130 @@ export function AppNavigationSidebar({
   const { isMobile, setOpen, open, state, toggleSidebar } = useSidebar();
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [entityCounts, setEntityCounts] = useState<Map<string, number>>(new Map());
+  const [schemaMetadata, setSchemaMetadata] = useState<Map<string, SchemaMetadata>>(new Map());
   const [loading, setLoading] = useState(true);
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null);
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { user, sessionToken } = useAuth();
+  const { user, sessionToken, resetGuestAuth } = useAuth();
   const { theme, setTheme } = useTheme();
+  const { subscribe } = useRealtime();
+  const { toast } = useToast();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
-  // Fetch entity types from API - only show types where user has entities
+  // Helper function to fetch entity types
+  const fetchEntityTypes = useCallback(async () => {
+    if (!user?.id) return;
+
+    setLoading(true);
+    try {
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (bearerToken) {
+        headers["Authorization"] = `Bearer ${bearerToken}`;
+      }
+
+      // Fetch all entities for the user to get entity types they actually have
+      const entitiesResponse = await fetch("/api/entities/query", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          limit: 1000,
+          user_id: user.id,
+        }),
+      });
+
+      if (!entitiesResponse.ok) {
+        throw new Error(`HTTP ${entitiesResponse.status}: ${entitiesResponse.statusText}`);
+      }
+
+      const entitiesData = await entitiesResponse.json();
+      const entities = entitiesData.entities || [];
+
+      // Count entities per type
+      const counts = new Map<string, number>();
+      for (const entity of entities) {
+        const type = entity.entity_type;
+        counts.set(type, (counts.get(type) || 0) + 1);
+      }
+
+      // Get unique entity types sorted
+      const userEntityTypes = Array.from(counts.keys()).sort();
+
+      // Fetch schema metadata for these entity types (including icons)
+      if (bearerToken) {
+        try {
+          const metadata = await fetchSchemaMetadataBatch(
+            userEntityTypes,
+            bearerToken,
+            user.id
+          );
+          setSchemaMetadata(metadata);
+        } catch (error) {
+          console.error("Failed to fetch schema metadata:", error);
+        }
+      }
+
+      // Only show entity types where user has at least one entity
+      setEntityTypes(userEntityTypes);
+      setEntityCounts(counts);
+    } catch (error) {
+      console.error("Failed to fetch entity types:", error);
+      setEntityTypes([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [bearerToken, user?.id]);
+
+  // Initial fetch
   useEffect(() => {
     if (keysLoading && !sessionToken && !settings.bearerToken) {
       return;
     }
 
     if (!user?.id) {
-      // Wait for user to be available
       return;
     }
 
-    async function fetchEntityTypes() {
-      setLoading(true);
-      try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        // Fetch all entities for the user to get entity types they actually have
-        const entitiesResponse = await fetch("/api/entities/query", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
-            limit: 1000,
-            user_id: user.id,
-          }),
-        });
-
-        if (!entitiesResponse.ok) {
-          throw new Error(`HTTP ${entitiesResponse.status}: ${entitiesResponse.statusText}`);
-        }
-
-        const entitiesData = await entitiesResponse.json();
-        const entities = entitiesData.entities || [];
-
-        // Count entities per type
-        const counts = new Map<string, number>();
-        for (const entity of entities) {
-          const type = entity.entity_type;
-          counts.set(type, (counts.get(type) || 0) + 1);
-        }
-
-        // Get unique entity types sorted
-        const userEntityTypes = Array.from(counts.keys()).sort();
-
-        // Only show entity types where user has at least one entity
-        setEntityTypes(userEntityTypes);
-        setEntityCounts(counts);
-      } catch (error) {
-        console.error("Failed to fetch entity types:", error);
-        // On error, set empty array so no types are shown
-        setEntityTypes([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     fetchEntityTypes();
-  }, [bearerToken, keysLoading, sessionToken, settings.bearerToken, user?.id]);
+  }, [fetchEntityTypes, keysLoading, sessionToken, settings.bearerToken, user?.id]);
 
-  // Extract entity type from URL if on entities page with filter
+  // Add real-time subscription to refetch when entities change
   useEffect(() => {
-    if (location.pathname === "/entities") {
-      // Check if there's a query param for entity type
-      const params = new URLSearchParams(location.search);
-      const typeParam = params.get("type");
-      setSelectedEntityType(typeParam);
+    if (!user) return;
+
+    const unsubscribe = subscribe({
+      table: "entities",
+      event: "*",
+      filter: `user_id=eq.${user.id}`,
+      callback: () => {
+        fetchEntityTypes();
+      },
+    });
+
+    return unsubscribe;
+  }, [user, subscribe, fetchEntityTypes]);
+
+  // Extract entity type from URL path segment
+  useEffect(() => {
+    const pathMatch = location.pathname.match(/^\/entities\/([^/]+)$/);
+    if (pathMatch) {
+      const segment = pathMatch[1];
+      // Check if it's an entity type (not an entity ID - entity IDs start with "ent_" or are UUIDs)
+      // Entity types are short strings like "task", "invoice", etc.
+      // Entity IDs are long hashes starting with "ent_" or UUIDs
+      if (!segment.startsWith("ent_") && segment.length < 50 && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(segment)) {
+        setSelectedEntityType(segment);
+      } else {
+        setSelectedEntityType(null);
+      }
+    } else if (location.pathname === "/entities") {
+      setSelectedEntityType(null);
     } else {
       setSelectedEntityType(null);
     }
@@ -192,15 +240,28 @@ export function AppNavigationSidebar({
     return location.pathname.startsWith(path);
   };
 
-  const handleLinkClick = () => {
+  const handleLinkClick = (event?: React.MouseEvent) => {
+    if (event && (event.metaKey || event.ctrlKey || event.button === 1)) {
+      return;
+    }
     if (isMobile) {
       setOpen(false);
     }
   };
 
-  const handleEntityTypeClick = (entityType: string) => {
-    // Navigate to entities page with type filter
-    navigate(`/entities?type=${encodeURIComponent(entityType)}`);
+  const openInNewTab = (href: string) => {
+    if (typeof window === "undefined") return;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const handleEntityTypeClick = (event: React.MouseEvent, entityType: string) => {
+    const href = `/entities/${encodeURIComponent(entityType)}`;
+    if (event.metaKey || event.ctrlKey) {
+      openInNewTab(href);
+      return;
+    }
+    // Navigate to entities page with type filter using path segment
+    navigate(href);
     if (isMobile) {
       setOpen(false);
     }
@@ -239,46 +300,80 @@ export function AppNavigationSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {onSearch && state !== "collapsed" && (
+        {/* Search - in group without header */}
+        {onSearch && (
           <SidebarGroup>
             <SidebarGroupContent>
-              <div className="px-2 pt-1">
-                <UniversalSearch fullWidth className="min-w-0" />
-              </div>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/search")}>
+                    <Link to="/search" onClick={handleLinkClick}>
+                      <Search className="size-4" />
+                      <span>Search</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
-        {/* Data Section */}
+
+        {/* Entities Section */}
+        {(loading || entityTypes.length > 0) && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Entities</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {loading ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : (
+                  entityTypes.map((entityType) => {
+                    const count = entityCounts.get(entityType) || 0;
+                    const metadata = schemaMetadata.get(entityType);
+                    const Icon = getSchemaIcon(entityType, metadata);
+
+                    return (
+                      <SidebarMenuItem key={entityType}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={selectedEntityType === entityType}
+                          className="peer/menu-button"
+                        >
+                          <button
+                            onClick={(event) => handleEntityTypeClick(event, entityType)}
+                            onMouseDown={(event) => {
+                              if (event.button === 1) {
+                                event.preventDefault();
+                                openInNewTab(`/entities/${encodeURIComponent(entityType)}`);
+                              }
+                            }}
+                            className="w-full flex items-center justify-between"
+                          >
+                            <div className="flex items-center gap-2">
+                              {Icon && <Icon className="size-4 shrink-0" />}
+                              <span className="truncate">
+                                {formatEntityType(entityType)}
+                              </span>
+                            </div>
+                          </button>
+                        </SidebarMenuButton>
+                        {count > 0 && <SidebarMenuBadge>{count}</SidebarMenuBadge>}
+                      </SidebarMenuItem>
+                    );
+                  })
+                )}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Related Data Section */}
         <SidebarGroup>
-          <SidebarGroupLabel>Data</SidebarGroupLabel>
+          <SidebarGroupLabel>Related data</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {loading ? (
-                <div className="flex items-center justify-center p-4">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                </div>
-              ) : (
-                entityTypes.map((entityType) => {
-                  const count = entityCounts.get(entityType) || 0;
-                  return (
-                    <SidebarMenuItem key={entityType}>
-                      <SidebarMenuButton
-                        asChild
-                        isActive={selectedEntityType === entityType}
-                        className="peer/menu-button"
-                      >
-                        <button
-                          onClick={() => handleEntityTypeClick(entityType)}
-                          className="w-full flex items-center justify-between"
-                        >
-                          <span className="truncate">{formatEntityType(entityType)}</span>
-                        </button>
-                      </SidebarMenuButton>
-                      {count > 0 && <SidebarMenuBadge>{count}</SidebarMenuBadge>}
-                    </SidebarMenuItem>
-                  );
-                })
-              )}
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/sources")}>
                   <Link to="/sources" onClick={handleLinkClick}>
@@ -360,6 +455,14 @@ export function AppNavigationSidebar({
           <SidebarGroupLabel>Development</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={isActive("/docs")}>
+                  <Link to="/docs" onClick={handleLinkClick}>
+                    <BookOpen className="size-4" />
+                    <span>Documentation</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild isActive={isActive("/schemas")}>
                   <Link to="/schemas" onClick={handleLinkClick}>
@@ -443,14 +546,62 @@ export function AppNavigationSidebar({
               <span>System</span>
               {theme === "system" && <Check className="h-4 w-4 ml-auto" />}
             </DropdownMenuItem>
-            {onSignOut && (
+            {user?.is_anonymous ? (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onSignOut} className="cursor-pointer">
+                <DropdownMenuItem
+                  onClick={() => navigate("/signin")}
+                  className="cursor-pointer"
+                >
+                  <LogIn className="h-4 w-4 mr-2" />
+                  <span>Sign in</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => navigate("/signup")}
+                  className="cursor-pointer"
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  <span>Create account</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    // Show toast immediately before auth state changes
+                    toast({
+                      title: "Signed out",
+                      description: "You are now using a guest account",
+                    });
+                    // Small delay to ensure toast renders
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await resetGuestAuth();
+                  }}
+                  className="cursor-pointer"
+                >
                   <LogOut className="h-4 w-4 mr-2" />
-                  <span>Sign Out</span>
+                  <span>Sign out</span>
                 </DropdownMenuItem>
               </>
+            ) : (
+              onSignOut && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={async () => {
+                      // Show toast immediately before auth state changes
+                      toast({
+                        title: "Signed out",
+                        description: "You are now using a guest account",
+                      });
+                      // Small delay to ensure toast renders
+                      await new Promise(resolve => setTimeout(resolve, 100));
+                      await onSignOut();
+                    }} 
+                    className="cursor-pointer"
+                  >
+                    <LogOut className="h-4 w-4 mr-2" />
+                    <span>Sign out</span>
+                  </DropdownMenuItem>
+                </>
+              )
             )}
           </DropdownMenuContent>
         </DropdownMenu>

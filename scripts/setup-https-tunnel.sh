@@ -88,14 +88,15 @@ echo "   Local URL: http://localhost:${HTTP_PORT}"
 echo ""
 echo "🔧 Next steps:"
 echo ""
-echo "1. Set API_BASE_URL environment variable:"
+echo "1. Set MCP_PROXY_URL and API_BASE_URL (Add to Cursor uses MCP_PROXY_URL):"
+echo "   export MCP_PROXY_URL=${NGROK_URL}"
 echo "   export API_BASE_URL=${NGROK_URL}"
 echo ""
 echo "2. Restart the MCP server (if running):"
 echo "   # Stop current server (Ctrl+C), then:"
-echo "   API_BASE_URL=${NGROK_URL} npm run dev:mcp"
+echo "   MCP_PROXY_URL=${NGROK_URL} API_BASE_URL=${NGROK_URL} npm run dev:mcp"
 echo ""
-echo "3. Update .cursor/mcp.json to use HTTPS URL:"
+echo "3. Update .cursor/mcp.json to use HTTPS URL, or use Add to Cursor in the Neotoma UI."
 echo "   {"
 echo "     \"mcpServers\": {"
 echo "       \"neotoma\": {"
@@ -106,7 +107,7 @@ echo "   }"
 echo ""
 echo "4. Restart Cursor to load the new configuration"
 echo ""
-echo "⚠️  Keep this terminal open to maintain the tunnel"
+echo "⚠️  Keep this terminal open to maintain the tunnel. Free-tier URLs change each run."
 echo "   Press Ctrl+C to stop ngrok"
 echo ""
 
@@ -115,6 +116,6 @@ echo "$NGROK_PID" > /tmp/ngrok-mcp.pid
 echo "$NGROK_URL" > /tmp/ngrok-mcp-url.txt
 
 # Wait for user interrupt
-trap "echo ''; echo '🛑 Stopping ngrok tunnel...'; kill $NGROK_PID 2>/dev/null || true; rm -f /tmp/ngrok-mcp.pid /tmp/ngrok-mcp-url.txt; exit 0" INT TERM
+trap 'echo ""; echo "🛑 Stopping ngrok tunnel..."; kill "$(cat /tmp/ngrok-mcp.pid 2>/dev/null)" 2>/dev/null || true; rm -f /tmp/ngrok-mcp.pid /tmp/ngrok-mcp-url.txt; exit 0' INT TERM
 
 wait $NGROK_PID

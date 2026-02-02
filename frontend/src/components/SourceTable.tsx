@@ -20,6 +20,7 @@ import { Loader2, Plus } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeSources } from "@/hooks/useRealtimeSources";
 
 export interface Source {
   id: string;
@@ -41,7 +42,7 @@ interface SourceTableProps {
 }
 
 export function SourceTable({ onSourceClick, onFileUpload, searchQuery: externalSearchQuery }: SourceTableProps) {
-  const [sources, setSources] = useState<Source[]>([]);
+  const [fetchedSources, setFetchedSources] = useState<Source[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedMimeType, setSelectedMimeType] = useState("");
@@ -53,8 +54,8 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
-  
+  const { user, sessionToken } = useAuth();
+
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
@@ -90,7 +91,11 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
         if (selectedMimeType) {
           params.append("mime_type", selectedMimeType);
         }
-        
+
+        if (user?.id) {
+          params.append("user_id", user.id);
+        }
+
         // Use relative URL to go through Vite proxy (which routes to correct backend port)
         // The Vite proxy in vite.config.ts handles /api -> http://localhost:${HTTP_PORT}
         const response = await fetch(`/api/sources?${params}`, { headers });
@@ -104,7 +109,7 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
         
         const data = await response.json();
         
-        setSources(data.sources || []);
+        setFetchedSources(data.sources || []);
         setTotalCount(data.total || 0);
       } catch (error) {
         console.error("Failed to fetch sources:", error);
@@ -114,7 +119,14 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
     }
 
     fetchSources();
-  }, [searchQuery, selectedMimeType, offset, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+  }, [searchQuery, selectedMimeType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription
+  const sources = useRealtimeSources(fetchedSources, {
+    onInsert: (source) => {
+      console.log("New source added:", source);
+    },
+  });
 
   // Get unique mime types for filter
   const mimeTypes = Array.from(new Set(sources.map(s => s.mime_type))).sort();

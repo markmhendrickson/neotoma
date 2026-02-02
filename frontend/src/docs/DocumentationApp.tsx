@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DocumentationLayout } from './DocumentationLayout';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { DocumentationPage } from './DocumentationPage';
 import { MarkdownContent } from './MarkdownContent';
 
@@ -18,44 +18,25 @@ Welcome to the Neotoma documentation.
 
 Neotoma is a personal knowledge management system that stores, organizes, and retrieves information from various sources.
 
-Use the sidebar to navigate through the documentation sections.`;
+Use the directory on the left to navigate through the documentation sections.`;
 
 export function DocumentationApp() {
-  // Initialize currentPath from window location
-  const getInitialPath = () => {
-    const path = window.location.pathname;
-    // If we're on /docs or /docs/, show welcome
-    if (path === '/docs' || path === '/docs/') {
-      return '/docs/';
-    }
-    // Otherwise use the current path
-    return path;
-  };
-
-  const [currentPath, setCurrentPath] = useState(getInitialPath());
+  const location = useLocation();
+  const navigate = useNavigate();
   const [content, setContent] = useState(WELCOME_CONTENT);
   const [loading, setLoading] = useState(false);
 
   // Load content on mount and when path changes
   useEffect(() => {
+    const path = location.pathname;
     // Skip loading for root/welcome path
-    if (currentPath === '/docs/' || currentPath === '/docs') {
+    if (path === '/docs' || path === '/docs/') {
       setContent(WELCOME_CONTENT);
       setLoading(false);
       return;
     }
-    loadDocumentation(currentPath);
-  }, [currentPath]);
-
-  // Handle browser back/forward navigation
-  useEffect(() => {
-    const handlePopState = () => {
-      const path = window.location.pathname;
-      setCurrentPath(path);
-    };
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+    loadDocumentation(path);
+  }, [location.pathname]);
 
   const loadDocumentation = async (path: string) => {
     setLoading(true);
@@ -95,21 +76,8 @@ export function DocumentationApp() {
   };
 
   const handleNavigate = (href: string) => {
-    // If navigating to main app, do full page navigation
-    if (href === '/') {
-      window.location.href = '/';
-      return;
-    }
-    // Update path and push to history
-    setCurrentPath(href);
-    window.history.pushState({}, '', href);
-    // Load content for the new path
-    if (href === '/docs/' || href === '/docs') {
-      setContent(WELCOME_CONTENT);
-      setLoading(false);
-    } else {
-      loadDocumentation(href);
-    }
+    // Use React Router navigation
+    navigate(href);
   };
 
   const handleSearch = (query: string) => {
@@ -119,17 +87,15 @@ export function DocumentationApp() {
   };
 
   return (
-    <DocumentationLayout currentPath={currentPath} onNavigate={handleNavigate}>
-      <DocumentationPage onSearch={handleSearch}>
-        {loading ? (
-          <div className="flex items-center justify-center min-h-[400px]">
-            <p className="text-[hsl(var(--doc-secondary))]">Loading documentation...</p>
-          </div>
-        ) : (
-          <MarkdownContent content={content} />
-        )}
-      </DocumentationPage>
-    </DocumentationLayout>
+    <DocumentationPage onSearch={handleSearch} onNavigate={handleNavigate}>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-muted-foreground">Loading documentation...</p>
+        </div>
+      ) : (
+        <MarkdownContent content={content} onNavigate={handleNavigate} />
+      )}
+    </DocumentationPage>
   );
 }
 

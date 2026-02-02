@@ -4,7 +4,7 @@
  * Tests for orphan detection and cycle detection across all node types.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { supabase } from "../db.js";
 import {
   detectOrphanNodes,
@@ -139,10 +139,12 @@ describe("Graph Builder Service", () => {
       });
 
       const orphansBefore = await detectOrphanNodes();
-      const orphanEntitiesBefore = orphansBefore.orphanEntities;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _orphanEntitiesBefore = orphansBefore.orphanEntities;
 
       // Entity should not be an orphan
-      const { data: allEntities } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { data: _allEntities } = await supabase
         .from("entities")
         .select("id");
       const { data: entityEdges } = await supabase

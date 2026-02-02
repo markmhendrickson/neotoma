@@ -8,8 +8,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle, Mail } from "lucide-react";
 import { extractErrorMessage, logError } from "@/utils/errorUtils";
 
 interface PasswordResetProps {
@@ -64,81 +63,75 @@ export function PasswordReset({ onSuccess, onBack }: PasswordResetProps) {
 
   if (success) {
     return (
-      <Card className="w-[400px] max-h-[90vh] flex flex-col overflow-hidden">
-        <CardHeader className="flex-shrink-0">
-          <CardTitle>Check Your Email</CardTitle>
-          <CardDescription>
-            We&apos;ve sent you a password reset link
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+      <div className="space-y-6 max-w-md">
+        <div className="space-y-4 p-6 border rounded-lg bg-muted/50">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Check your email</h2>
+          </div>
+          <div className="flex items-center space-x-2 text-sm">
+            <Mail className="h-4 w-4 text-primary" />
+            <span>We&apos;ve sent you a password reset link</span>
+          </div>
           <p className="text-sm text-muted-foreground">
             Check your email for a link to reset your password. If it doesn&apos;t appear within a few minutes, check your spam folder.
           </p>
           {onBack && (
             <Button
               variant="outline"
-              className="w-full mt-4"
-              onClick={onBack}
-            >
-              Back to sign in
-            </Button>
-          )}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="w-[400px] max-h-[90vh] flex flex-col overflow-hidden">
-      <CardHeader className="flex-shrink-0">
-        <CardTitle>Reset Password</CardTitle>
-        <CardDescription>
-          Enter your email and we&apos;ll send you a reset link
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-            />
-          </div>
-
-          {error && (
-            <div className="text-sm text-destructive">{error}</div>
-          )}
-
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Sending reset link...
-              </>
-            ) : (
-              "Send Reset Link"
-            )}
-          </Button>
-
-          {onBack && (
-            <Button
-              type="button"
-              variant="ghost"
               className="w-full"
               onClick={onBack}
             >
               Back to sign in
             </Button>
           )}
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-md">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
+
+        {error && (
+          <div className="text-sm text-destructive">{error}</div>
+        )}
+
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Sending reset link...
+            </>
+          ) : (
+            "Send reset link"
+          )}
+        </Button>
+
+        {onBack && (
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={onBack}
+          >
+            Back to sign in
+          </Button>
+        )}
+      </form>
+    </div>
   );
 }
