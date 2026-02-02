@@ -9,7 +9,7 @@ This document defines the complete specification for Neotoma's Model Context Pro
 ## Scope
 
 This document covers:
-- Complete catalog of MCP actions (17 MVP actions)
+- Complete catalog of MCP actions (18 MVP actions)
 - Request/response schemas for each action
 - Error envelopes and error codes
 - Consistency guarantees per action
@@ -230,7 +230,15 @@ flowchart LR
 
 **Note:** These actions enable AI agents to work with [entities](../vocabulary/canonical_terms.md#entity), [observations](../vocabulary/canonical_terms.md#observation), and [entity snapshots](../vocabulary/canonical_terms.md#entity-snapshot), the core of Neotoma's three-layer truth model. See [`docs/architecture/architectural_decisions.md`](../architecture/architectural_decisions.md) for architectural rationale.
 
-### 2.5 Correction and Re-[interpretation](../vocabulary/canonical_terms.md#interpretation) Operations
+### 2.5 Authentication Operations
+
+| Action          | Purpose                                    | Consistency | Deterministic | MVP Status |
+| --------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
+| `get_authenticated_user` | Get the authenticated user ID for the current MCP session | Strong      | Yes           | MVP     |
+
+**Note:** Returns the `user_id` that is automatically used for all authenticated actions. This is useful for debugging, logging, or when you need to explicitly reference the authenticated user.
+
+### 2.6 Correction and Re-[interpretation](../vocabulary/canonical_terms.md#interpretation) Operations
 
 | Action          | Purpose                                    | Consistency | Deterministic | MVP Status |
 | --------------- | ------------------------------------------ | ----------- | ------------- | ---------- |
@@ -1605,6 +1613,41 @@ This enables full explainability: for any fact in the system, you can trace it b
 - Register new schema versions with breaking changes
 - Create user-specific schema variants
 - Explicitly control schema versioning
+
+### 3.22 `get_authenticated_user`
+
+**Purpose:** Get the authenticated user ID for the current MCP session. Returns the `user_id` that is automatically used for all authenticated actions.
+
+**Request Schema:**
+```typescript
+{
+  // No parameters required
+}
+```
+
+**Response Schema:**
+```typescript
+{
+  user_id: string; // UUID of the authenticated user
+  authenticated: boolean; // Always true if action succeeds
+}
+```
+
+**Errors:**
+| Code | HTTP | Meaning | Retry? |
+| ---- | ---- | ------- | ------ |
+| `InvalidRequest` | 400 | Authentication required. Set NEOTOMA_CONNECTION_ID in mcp.json env | No |
+
+**Consistency:** Strong (authentication state is consistent)
+**Determinism:** Yes (same session → same user_id)
+
+**When to Use:**
+- Debugging authentication issues
+- Logging user context
+- Explicitly referencing the authenticated user in logs or responses
+- Verifying which user account is connected to the MCP session
+
+**Note:** This action is primarily for debugging and logging purposes. Most actions automatically use the authenticated user_id without requiring it to be passed explicitly.
 
 ## 4. Error Envelope Standard
 

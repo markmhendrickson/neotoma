@@ -8,8 +8,9 @@ let testApp: Application;
 
 const createBearerToken = () => Buffer.from(randomBytes(32)).toString("base64url");
 
-// Mock OpenAI for embedding and comparison tests
-const mockOpenAI = {
+// Mock OpenAI for embedding and comparison tests (reserved for future use)
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _mockOpenAI = {
   embeddings: {
     create: vi.fn(),
   },
@@ -295,7 +296,8 @@ describe("HTTP actions endpoints", () => {
 
       // Mock the OpenAI embeddings.create method
       const embeddingsModule = await import("./embeddings.js");
-      const originalGenerate = embeddingsModule.generateEmbedding;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _originalGenerate = embeddingsModule.generateEmbedding;
 
       vi.spyOn(embeddingsModule, "generateEmbedding").mockResolvedValue(mockEmbedding);
 
@@ -416,7 +418,8 @@ describe("HTTP actions endpoints", () => {
 
       // Mock the record comparison service
       const comparisonModule = await import("./services/record_comparison.js");
-      const originalGenerate = comparisonModule.generateRecordComparisonInsight;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const _originalGenerate = comparisonModule.generateRecordComparisonInsight;
 
       vi.spyOn(comparisonModule, "generateRecordComparisonInsight").mockResolvedValue(mockAnalysis);
 

@@ -55,12 +55,10 @@ export function MCPClaudePage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
               <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
               <li>Open Claude Desktop settings</li>
@@ -75,15 +73,11 @@ export function MCPClaudePage() {
               <li>Restart Claude Desktop</li>
               <li>Test connection by asking Claude to use Neotoma tools</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuration File Example</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-2">
+          <div>
+            <h2 className="text-xl font-semibold">Configuration File Example</h2>
+            <p className="text-sm text-muted-foreground mb-2 mt-2">
               Your <code className="bg-muted px-1 py-0.5 rounded">claude_desktop_config.json</code> should look like:
             </p>
             <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
@@ -95,25 +89,23 @@ export function MCPClaudePage() {
   }
 }`}
             </pre>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://github.com/yourusername/neotoma/blob/main/docs/developer/mcp_claude_code_setup.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              View complete setup guide
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://github.com/yourusername/neotoma/blob/main/docs/developer/mcp_claude_code_setup.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                View complete setup guide
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

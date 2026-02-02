@@ -47,7 +47,6 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
   const appRoutes = [
     { path: "/", label: "Dashboard" },
     { path: "/sources", label: "Sources" },
-    { path: "/entities", label: "Entities" },
     { path: "/interpretations", label: "Interpretations" },
     { path: "/observations", label: "Observations" },
     { path: "/schemas", label: "Schemas" },
@@ -151,7 +150,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
               type: "entity" as const,
               title: e.canonical_name || e.entity_type,
               subtitle: e.entity_type,
-              href: `/entities/${e.id}`,
+              href: `/entity/${e.id}`,
             }));
             allResults.push(...entities);
           }
@@ -262,15 +261,43 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
     }
   }
 
-  const handleResultClick = (href: string) => {
+  const openInNewTab = (href: string) => {
+    if (typeof window === "undefined") return;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const handleResultClick = (event: React.MouseEvent, href: string) => {
+    if (event.metaKey || event.ctrlKey) {
+      openInNewTab(href);
+      return;
+    }
     setOpen(false);
     setQuery("");
     navigate(href);
   };
 
-  const handleViewAll = () => {
+  const handleResultMouseDown = (event: React.MouseEvent, href: string) => {
+    if (event.button === 1) {
+      event.preventDefault();
+      openInNewTab(href);
+    }
+  };
+
+  const handleViewAll = (event?: React.MouseEvent) => {
+    const href = `/search?q=${encodeURIComponent(query)}`;
+    if (event && (event.metaKey || event.ctrlKey)) {
+      openInNewTab(href);
+      return;
+    }
     setOpen(false);
-    navigate(`/search?q=${encodeURIComponent(query)}`);
+    navigate(href);
+  };
+
+  const handleViewAllMouseDown = (event: React.MouseEvent) => {
+    if (event.button === 1) {
+      event.preventDefault();
+      openInNewTab(`/search?q=${encodeURIComponent(query)}`);
+    }
   };
 
   const getIcon = (type: SearchResult["type"]) => {
@@ -343,7 +370,8 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
                 {results.map((result) => (
                   <button
                     key={`${result.type}-${result.id}`}
-                    onClick={() => handleResultClick(result.href)}
+                    onClick={(event) => handleResultClick(event, result.href)}
+                    onMouseDown={(event) => handleResultMouseDown(event, result.href)}
                     className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
                   >
                     <div className="flex-shrink-0 text-muted-foreground">
@@ -365,6 +393,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
               <div className="border-t">
                 <button
                   onClick={handleViewAll}
+                  onMouseDown={handleViewAllMouseDown}
                   className="w-full px-4 py-2 text-sm text-primary hover:bg-muted/50 transition-colors text-center"
                 >
                   View all results

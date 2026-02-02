@@ -1,0 +1,18 @@
+-- Migration: Enable Anonymous Sign-Ins for Local Supabase (Tests)
+-- Created: 2026-01-27
+-- Description: Reminder migration for enabling anonymous authentication
+--              Required for E2E tests that use guest authentication
+--              
+-- NOTE: Anonymous sign-ins must be enabled manually via Supabase Studio:
+--       1. Open http://localhost:54323 (local Supabase Studio)
+--       2. Go to Authentication → Providers
+--       3. Find "Anonymous" provider
+--       4. Click "Enable"
+--
+--       This cannot be done via SQL migration due to auth schema restrictions.
+--       The Playwright global setup will check if anonymous sign-ins are enabled
+--       and provide instructions if they're not.
+
+-- This migration serves as documentation only
+-- No SQL operations are performed as anonymous sign-in enablement
+-- must be done via Supabase Studio UI or Management API

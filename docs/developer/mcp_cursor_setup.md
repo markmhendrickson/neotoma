@@ -110,6 +110,17 @@ DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 - Cursor's fixed redirect URI (`cursor://anysphere.cursor-mcp/oauth/callback`) is supported; no Supabase redirect change needed (we receive the callback and redirect to Cursor)
 - No manual configuration needed when using Connect
 
+**Using a tunnel or proxy (ngrok, cloudflared):**
+
+When exposing the API via a tunnel, set `MCP_PROXY_URL` so the "Add to Cursor" button uses the proxy URL instead of localhost:
+
+```bash
+# .env
+MCP_PROXY_URL="https://your-tunnel.ngrok-free.dev"
+```
+
+The `/api/server-info` endpoint returns `mcpUrl` from `MCP_PROXY_URL` when set; the Add to Cursor widget uses that. Cursor then connects to `https://your-tunnel.ngrok-free.dev/mcp` instead of `http://localhost:8080/mcp`, which avoids ECONNREFUSED when Cursor expects HTTPS. See [`mcp_oauth_redirect_uri_config.md`](mcp_oauth_redirect_uri_config.md) for OAuth redirect vs API base URL.
+
 ### Method 2: Manual Configuration via `.cursor/mcp.json`
 
 Cursor should automatically detect the `mcp.json` file at `.cursor/mcp.json` in your project root. Create or update this file:

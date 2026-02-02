@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeTimeline } from "@/hooks/useRealtimeTimeline";
 
 interface TimelineEvent {
   id: string;
@@ -40,7 +41,7 @@ interface TimelineViewProps {
 }
 
 export function TimelineView({ onNavigateToSource, onNavigateToEntity }: TimelineViewProps) {
-  const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [fetchedEvents, setFetchedEvents] = useState<TimelineEvent[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,8 +53,8 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
-  const { sessionToken } = useAuth();
-  
+  const { user, sessionToken } = useAuth();
+
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
@@ -92,7 +93,11 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
         if (selectedEventType) {
           params.append("event_type", selectedEventType);
         }
-        
+
+        if (user?.id) {
+          params.append("user_id", user.id);
+        }
+
         // Use relative URL to go through Vite proxy
         const response = await fetch(`/api/timeline?${params}`, { headers });
         
@@ -105,7 +110,7 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
         
         const data = await response.json();
         
-        setEvents(data.events || []);
+        setFetchedEvents(data.events || []);
         setTotalCount(data.total || 0);
         
         // Extract unique event types
@@ -121,7 +126,14 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
     }
 
     fetchTimeline();
-  }, [startDate, endDate, selectedEventType, offset, bearerToken, keysLoading, sessionToken, settings.bearerToken]);
+  }, [startDate, endDate, selectedEventType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription
+  const events = useRealtimeTimeline(fetchedEvents, {
+    onInsert: (event) => {
+      console.log("New timeline event:", event);
+    },
+  });
 
   return (
     <div className="flex flex-col h-full gap-4 p-4">

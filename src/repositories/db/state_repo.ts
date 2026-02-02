@@ -5,7 +5,7 @@
  */
 
 import { supabase } from "../../db.js";
-import { getRecordAtTimestamp, replayEvents } from "../../events/replay.js";
+import { getRecordAtTimestamp } from "../../events/replay.js";
 import type { StateRepository } from "../interfaces.js";
 import type { NeotomaRecord } from "../../db.js";
 

@@ -116,6 +116,9 @@ export function AppSidebar({
 
   const handleNavigate = (href: string, e?: React.MouseEvent<HTMLAnchorElement>) => {
     if (e) {
+      if (e.metaKey || e.ctrlKey || e.button === 1) {
+        return;
+      }
       e.preventDefault();
     }
 

@@ -5,7 +5,7 @@
  */
 
 import { useState, useRef, useCallback } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, Upload, CheckCircle, XCircle, FileText } from "lucide-react";
@@ -193,15 +193,15 @@ export function FileUploadView({ onUploadComplete, hideTitle = false }: FileUplo
 
         {/* Upload Progress */}
         {uploads.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Upload Progress</CardTitle>
-              <CardDescription>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">Upload Progress</h2>
+              <p className="text-sm text-muted-foreground">
                 {successCount}/{totalFiles} completed
                 {errorCount > 0 && `, ${errorCount} failed`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </p>
+            </div>
+            <div className="space-y-4">
               {uploads.map((upload, index) => (
                 <div key={index} className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -246,8 +246,8 @@ export function FileUploadView({ onUploadComplete, hideTitle = false }: FileUplo
                   )}
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>

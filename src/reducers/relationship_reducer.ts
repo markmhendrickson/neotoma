@@ -5,7 +5,6 @@
  * Mirrors the entity observation reducer but works with relationships.
  */
 
-import { supabase } from "../db.js";
 
 export interface RelationshipObservation {
   id: string;

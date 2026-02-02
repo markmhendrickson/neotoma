@@ -1,0 +1,96 @@
+{
+  "entity_type": "agent_message",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-29T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "message_id": {
+        "type": "string",
+        "required": true,
+        "description": "Unique identifier for this message/turn"
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": true,
+        "description": "Links to parent conversation entity"
+      },
+      "turn_number": {
+        "type": "number",
+        "required": true,
+        "description": "Sequential turn number in conversation"
+      },
+      "timestamp": {
+        "type": "date",
+        "required": true,
+        "description": "When this turn occurred"
+      },
+      "role_user": {
+        "type": "string",
+        "required": true,
+        "description": "User's message/query text"
+      },
+      "role_agent": {
+        "type": "string",
+        "required": true,
+        "description": "Agent's response text"
+      },
+      "neotoma_operations": {
+        "type": "array",
+        "required": false,
+        "description": "List of Neotoma MCP operations performed during this turn"
+      },
+      "files_modified": {
+        "type": "array",
+        "required": false,
+        "description": "List of file paths created, modified, or read"
+      },
+      "tools_used": {
+        "type": "array",
+        "required": false,
+        "description": "List of tools/actions used by agent"
+      },
+      "platform": {
+        "type": "string",
+        "required": false,
+        "description": "Platform where message occurred (cursor, chatgpt, claude)"
+      },
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "Model used for agent response (claude-sonnet-4, gpt-4, etc)"
+      },
+      "notes": {
+        "type": "string",
+        "required": false,
+        "description": "Additional context about this turn"
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "role_user": {
+        "strategy": "highest_priority"
+      },
+      "role_agent": {
+        "strategy": "highest_priority"
+      },
+      "neotoma_operations": {
+        "strategy": "merge_array"
+      },
+      "files_modified": {
+        "strategy": "merge_array"
+      },
+      "tools_used": {
+        "strategy": "merge_array"
+      },
+      "timestamp": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

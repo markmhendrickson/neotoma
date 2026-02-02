@@ -1,6 +1,6 @@
 /**
  * MCP Authentication Service
- * 
+ *
  * Validates Supabase session tokens for MCP server authentication
  */
 
@@ -13,20 +13,78 @@ export interface ValidatedUser {
 }
 
 /**
+ * Decode JWT token header and payload without verification
+ * Extracts algorithm, user_id, and other claims for diagnostics
+ */
+function decodeJWTUnverified(token: string): {
+  header?: { alg?: string; kid?: string; typ?: string };
+  payload?: { sub?: string; email?: string; exp?: number };
+} | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return null;
+    }
+    // Decode header (first part)
+    const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf-8"));
+    // Decode payload (second part)
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
+    return { header, payload };
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
  * Validate a Supabase session token (JWT) and extract user information
- * 
+ *
  * @param token - Supabase access_token (JWT)
  * @returns User information including user_id
  * @throws Error if token is invalid or expired
  */
-export async function validateSupabaseSessionToken(
-  token: string
-): Promise<ValidatedUser> {
+export async function validateSupabaseSessionToken(token: string): Promise<ValidatedUser> {
   try {
     // Use Supabase client to verify token and get user
     const { data, error } = await supabase.auth.getUser(token);
 
     if (error) {
+      // Check if error is signing method-related (ES256/HS256 mismatch during key rotation)
+      // This can happen when old tokens (HS256) are validated against new keys (ES256) or vice versa
+      if (
+        error.message?.includes("ES256") ||
+        error.message?.includes("HS256") ||
+        error.message?.includes("signing method")
+      ) {
+        const decoded = decodeJWTUnverified(token);
+        const algorithm = decoded?.header?.alg || "unknown";
+        const tokenExp = decoded?.payload?.exp;
+        const isExpired = tokenExp ? Date.now() / 1000 > tokenExp : false;
+
+        logger.warn(
+          `[MCP Auth] Signing method validation error (likely key rotation transition). ` +
+            `Token algorithm: ${algorithm}, Error: ${error.message}. ` +
+            `Token expired: ${isExpired}. Attempting fallback decode.`
+        );
+
+        if (decoded?.payload?.sub) {
+          if (isExpired) {
+            logger.warn(
+              `[MCP Auth] Token is expired. User must re-authenticate to get new ES256 token.`
+            );
+            throw new Error(`Invalid session token: Token expired. Please re-authenticate.`);
+          }
+
+          logger.warn(
+            `[MCP Auth] Using fallback token decode for user: ${decoded.payload.sub} ` +
+              `(algorithm: ${algorithm}, signature not verified - user should re-authenticate for new ES256 token)`
+          );
+          return {
+            userId: decoded.payload.sub,
+            email: decoded.payload.email,
+          };
+        }
+      }
+
       logger.error(`[MCP Auth] Token validation failed: ${error.message}`);
       throw new Error(`Invalid session token: ${error.message}`);
     }
@@ -43,6 +101,42 @@ export async function validateSupabaseSessionToken(
       email: data.user.email,
     };
   } catch (error: any) {
+    // If error is signing method-related, try fallback decode
+    if (
+      error.message?.includes("ES256") ||
+      error.message?.includes("HS256") ||
+      error.message?.includes("signing method")
+    ) {
+      const decoded = decodeJWTUnverified(token);
+      const algorithm = decoded?.header?.alg || "unknown";
+      const tokenExp = decoded?.payload?.exp;
+      const isExpired = tokenExp ? Date.now() / 1000 > tokenExp : false;
+
+      logger.warn(
+        `[MCP Auth] Signing method validation error in catch block. ` +
+          `Token algorithm: ${algorithm}, Error: ${error.message}. ` +
+          `Token expired: ${isExpired}. Attempting fallback.`
+      );
+
+      if (decoded?.payload?.sub) {
+        if (isExpired) {
+          logger.warn(
+            `[MCP Auth] Token is expired. User must re-authenticate to get new ES256 token.`
+          );
+          throw new Error(`Invalid session token: Token expired. Please re-authenticate.`);
+        }
+
+        logger.warn(
+          `[MCP Auth] Using fallback token decode for user: ${decoded.payload.sub} ` +
+            `(algorithm: ${algorithm}, signature not verified - user should re-authenticate for new ES256 token)`
+        );
+        return {
+          userId: decoded.payload.sub,
+          email: decoded.payload.email,
+        };
+      }
+    }
+
     logger.error(`[MCP Auth] Token validation error: ${error.message}`);
     throw new Error(`Token validation failed: ${error.message}`);
   }

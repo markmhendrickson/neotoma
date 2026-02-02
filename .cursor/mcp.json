@@ -1,7 +1,7 @@
 {
   "mcpServers": {
-    "neotoma": {
-      "url": "https://melissia-introrse-correspondently.ngrok-free.dev/mcp"
+    "dev-neotoma": {
+      "url": "https://dev.neotoma.io/mcp"
     },
     "web-scraper": {
       "command": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh",

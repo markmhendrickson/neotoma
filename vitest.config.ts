@@ -24,19 +24,10 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "playwright/tests/**/*"],
     testTimeout: 60000, // Increased timeout for integration tests
     hookTimeout: 30000,
-    // Run integration tests sequentially to avoid database conflicts
-    // Use threads pool with single thread for sequential execution
-    pool: "threads",
-    poolOptions: {
-      threads: {
-        minThreads: 1,
-        maxThreads: 1, // Force single thread for sequential execution
-      },
-    },
-    // Sequential execution for integration tests
+    // Sequential execution for integration tests (avoid DB conflicts)
     sequence: {
-      concurrent: false, // Disable concurrent test execution
-      shuffle: false, // Maintain test order
+      concurrent: false,
+      shuffle: false,
     },
     // Coverage configuration
     coverage: {

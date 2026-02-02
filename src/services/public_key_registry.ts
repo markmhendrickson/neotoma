@@ -55,6 +55,14 @@ export function isBearerTokenValid(bearerToken: string): boolean {
 }
 
 /**
+ * Get userId for a registered bearer token (if it was registered with userId)
+ */
+export function getUserIdFromBearerToken(bearerToken: string): string | undefined {
+  const entry = publicKeyRegistry.get(bearerToken);
+  return entry?.userId;
+}
+
+/**
  * Auto-register public key if not exists (for first-time users)
  * Returns true if registration succeeded, false if token format is invalid
  */

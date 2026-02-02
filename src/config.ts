@@ -66,6 +66,14 @@ export const config = {
   apiBase: process.env.API_BASE_URL || (env === "production" ? "https://neotoma.fly.dev" : `http://localhost:${httpPort}`),
   mcpTokenEncryptionKey: process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
   oauthClientId: process.env.SUPABASE_OAUTH_CLIENT_ID || "",
+  
+  // Icon generation settings
+  iconGeneration: {
+    enabled: process.env.ICON_GENERATION_ENABLED !== "false", // Enabled by default
+    confidenceThreshold: parseFloat(process.env.ICON_MATCH_CONFIDENCE_THRESHOLD || "0.8"),
+    model: process.env.ICON_GENERATION_MODEL || "gpt-4o",
+    cacheTTL: parseInt(process.env.ICON_CACHE_TTL || "86400", 10), // 24 hours default
+  },
 };
 
 if (!config.supabaseUrl || !config.supabaseKey) {

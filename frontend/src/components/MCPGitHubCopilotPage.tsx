@@ -55,12 +55,10 @@ export function MCPGitHubCopilotPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Install GitHub Copilot extension in VS Code</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
               <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
@@ -70,38 +68,32 @@ export function MCPGitHubCopilotPage() {
               <li>Restart VS Code</li>
               <li>Test connection by asking Copilot Chat to use Neotoma tools</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Requirements</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside">
+          <div>
+            <h2 className="text-xl font-semibold">Requirements</h2>
+            <ul className="text-sm text-muted-foreground space-y-2 list-disc list-inside mt-2">
               <li>VS Code version 1.99 or later</li>
               <li>GitHub Copilot subscription (Free, Pro, Business, or Enterprise)</li>
               <li>MCP access enabled (may require organizational policy for Business/Enterprise)</li>
             </ul>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://docs.github.com/en/copilot/customizing-copilot/extending-copilot-chat-with-mcp"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              GitHub Copilot MCP Documentation
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://docs.github.com/en/copilot/customizing-copilot/extending-copilot-chat-with-mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                GitHub Copilot MCP Documentation
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

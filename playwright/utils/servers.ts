@@ -233,6 +233,7 @@ const LOCAL_SUPABASE_API_URL = 'http://127.0.0.1:54321';
 const LOCAL_SUPABASE_START_TIMEOUT_MS = 120_000;
 const LOCAL_SUPABASE_HEALTH_POLL_MS = 30_000;
 const LOCAL_SUPABASE_HEALTH_CHECK_MS = 3_000;
+const LOCAL_SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
 
 /**
  * Returns true if local Supabase API (Kong at 54321) responds.
@@ -261,9 +262,14 @@ export async function ensureLocalSupabase(): Promise<void> {
   if (process.env.USE_LOCAL_SUPABASE !== '1' || process.env.PLAYWRIGHT_START_SUPABASE !== '1') {
     return;
   }
-  if (await isLocalSupabaseUp()) {
+  const wasAlreadyRunning = await isLocalSupabaseUp();
+  if (wasAlreadyRunning) {
+    // Supabase is already running - check if anonymous sign-ins are enabled
+    await ensureAnonymousSignInsEnabled();
     return;
   }
+  
+  // Supabase is not running - start it
   const supabaseCmd = process.platform === 'win32' ? 'supabase.cmd' : 'supabase';
   await new Promise<void>((resolve, reject) => {
     const child = spawn(supabaseCmd, ['start'], {
@@ -302,6 +308,237 @@ export async function ensureLocalSupabase(): Promise<void> {
     intervalMs: 2_000,
     expectedStatus: (s) => s === 200 || s === 404,
   });
+  
+  // Check and enable anonymous sign-ins if needed
+  await ensureAnonymousSignInsEnabled();
+}
+
+/**
+ * Ensures anonymous sign-ins are enabled in local Supabase.
+ * For local Supabase, this is controlled by config.toml.
+ * If disabled, attempts to enable via API, or restarts Supabase if needed.
+ */
+async function ensureAnonymousSignInsEnabled(): Promise<void> {
+  // Wait a bit for Supabase to be fully ready
+  await delay(2_000);
+  
+  try {
+    // Test if anonymous sign-ins are enabled
+    const testResponse = await fetch(`${LOCAL_SUPABASE_API_URL}/auth/v1/signup`, {
+      method: 'POST',
+      headers: {
+        'apikey': LOCAL_SUPABASE_SERVICE_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+    
+    if (testResponse.status === 200) {
+      // Anonymous sign-ins are enabled
+      return;
+    }
+    
+    if (testResponse.status === 422) {
+      const error = await testResponse.json().catch(() => ({}));
+      if (error.code === 'anonymous_provider_disabled') {
+        // Try to enable via API first
+        await enableAnonymousSignInsViaAPI();
+        
+        // Test again after enabling
+        await delay(2_000);
+        const retryResponse = await fetch(`${LOCAL_SUPABASE_API_URL}/auth/v1/signup`, {
+          method: 'POST',
+          headers: {
+            'apikey': LOCAL_SUPABASE_SERVICE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        
+        if (retryResponse.status === 200) {
+          console.log('✅ Anonymous sign-ins enabled via API');
+          return;
+        }
+        
+        // API method didn't work - config.toml should have the setting
+        // but Supabase may need to be restarted to pick it up
+        console.warn('\n⚠️  WARNING: Anonymous sign-ins are disabled in local Supabase.');
+        console.warn('   Config has enable_anonymous_sign_ins = true, but Supabase may need restart.');
+        console.warn('   Attempting to restart Supabase to apply config...');
+        
+        // Restart Supabase to pick up config.toml changes
+        await restartLocalSupabase();
+        
+        // Test again after restart
+        await delay(5_000); // Wait for restart
+        const finalResponse = await fetch(`${LOCAL_SUPABASE_API_URL}/auth/v1/signup`, {
+          method: 'POST',
+          headers: {
+            'apikey': LOCAL_SUPABASE_SERVICE_KEY,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        
+        if (finalResponse.status === 200) {
+          console.log('✅ Anonymous sign-ins enabled after restart');
+          return;
+        }
+        
+        console.warn('   Restart did not enable anonymous sign-ins.');
+        console.warn('   Please enable manually:');
+        console.warn('   1. Open http://localhost:54323 (Supabase Studio)');
+        console.warn('   2. Go to Authentication → Providers');
+        console.warn('   3. Find "Anonymous" provider and click "Enable"\n');
+      }
+    }
+  } catch (error) {
+    // Ignore check failures - this is just a warning
+    console.warn('⚠️  Could not verify anonymous sign-ins status:', error instanceof Error ? error.message : String(error));
+  }
+}
+
+/**
+ * Restarts local Supabase to pick up config.toml changes.
+ */
+async function restartLocalSupabase(): Promise<void> {
+  const supabaseCmd = process.platform === 'win32' ? 'supabase.cmd' : 'supabase';
+  
+  try {
+    // Stop Supabase
+    await new Promise<void>((resolve, reject) => {
+      const stopChild = spawn(supabaseCmd, ['stop'], {
+        cwd: repoRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      });
+      
+      stopChild.on('close', (code) => {
+        if (code === 0 || code === null) {
+          resolve();
+        } else {
+          reject(new Error(`supabase stop exited with code ${code}`));
+        }
+      });
+      
+      stopChild.on('error', reject);
+      
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        stopChild.kill('SIGTERM');
+        reject(new Error('supabase stop timed out'));
+      }, 30_000);
+    });
+    
+    // Wait a moment
+    await delay(2_000);
+    
+    // Start Supabase again
+    await new Promise<void>((resolve, reject) => {
+      const startChild = spawn(supabaseCmd, ['start'], {
+        cwd: repoRoot,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: process.platform === 'win32',
+      });
+      
+      const timeout = setTimeout(() => {
+        startChild.kill('SIGTERM');
+        reject(new Error('supabase start timed out during restart'));
+      }, LOCAL_SUPABASE_START_TIMEOUT_MS);
+      
+      startChild.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`supabase start exited with code ${code}`));
+        }
+      });
+      
+      startChild.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+    
+    // Wait for Supabase to be ready
+    await waitForHttp(`${LOCAL_SUPABASE_API_URL}/`, {
+      timeoutMs: LOCAL_SUPABASE_HEALTH_POLL_MS,
+      intervalMs: 2_000,
+      expectedStatus: (s) => s === 200 || s === 404,
+    });
+    
+    console.log('✅ Supabase restarted');
+  } catch (error) {
+    console.warn('⚠️  Could not restart Supabase:', error instanceof Error ? error.message : String(error));
+    console.warn('   Please restart manually: supabase stop && supabase start');
+  }
+}
+
+/**
+ * Attempts to enable anonymous sign-ins via API.
+ * For local Supabase, this may not work if the setting is only in config.toml.
+ */
+async function enableAnonymousSignInsViaAPI(): Promise<void> {
+  try {
+    // Method 1: Try via GoTrue admin API (if available)
+    const goTrueResponse = await fetch(`${LOCAL_SUPABASE_API_URL}/auth/v1/admin/settings`, {
+      method: 'PUT',
+      headers: {
+        'apikey': LOCAL_SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${LOCAL_SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        enable_anonymous_sign_ins: true,
+      }),
+    });
+    
+    if (goTrueResponse.ok) {
+      console.log('✅ Enabled anonymous sign-ins via GoTrue admin API');
+      return;
+    }
+  } catch {
+    // GoTrue admin API may not be available
+  }
+  
+  try {
+    // Method 2: Try via SQL update (if exec_sql function exists)
+    const sqlResponse = await fetch(`${LOCAL_SUPABASE_API_URL}/rest/v1/rpc/exec_sql`, {
+      method: 'POST',
+      headers: {
+        'apikey': LOCAL_SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer ${LOCAL_SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sql_text: `
+          -- Attempt to enable anonymous sign-ins via auth.config
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1 FROM information_schema.tables 
+              WHERE table_schema = 'auth' AND table_name = 'config'
+            ) THEN
+              INSERT INTO auth.config (key, value)
+              VALUES ('enable_anonymous_sign_ins', 'true')
+              ON CONFLICT (key) DO UPDATE SET value = 'true';
+            END IF;
+          EXCEPTION
+            WHEN OTHERS THEN
+              -- Table may not exist or have different structure
+              NULL;
+          END $$;
+        `,
+      }),
+    });
+    
+    if (sqlResponse.ok) {
+      console.log('✅ Attempted to enable via SQL (may require restart)');
+    }
+  } catch {
+    // SQL method may not work
+  }
 }
 
 export async function waitForHttp(

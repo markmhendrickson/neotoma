@@ -1,61 +1,54 @@
 # MCP HTTPS Tunnel Status
 
 **Date:** 2026-01-27  
-**Tunnel URL:** `https://melissia-introrse-correspondently.ngrok-free.dev`
+**Example URL:** `https://melissia-introrse-correspondently.ngrok-free.dev` (free tier gives a **new URL each run**; that one only worked while that tunnel was active)
 
 ## Current Status
 
-### ✅ Working Components
+### When the tunnel is running
 
-1. **ngrok Tunnel:**
-   - Status: Active and running
-   - Process ID: Stored in `/tmp/ngrok-mcp.pid`
-   - Configuration: Forwarding `https://melissia-introrse-correspondently.ngrok-free.dev` → `http://localhost:8080`
-   - Web Interface: `http://localhost:4040`
+1. **ngrok tunnel:** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS → `http://localhost:8080`, UI at `http://localhost:4040`
+2. **Local MCP server:** Port 8080, `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`
+3. **Config:** `MCP_PROXY_URL` and `API_BASE_URL` set to the **current** tunnel URL; Add to Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`
 
-2. **Local MCP Server:**
-   - Status: Running on port 8080
-   - Response: Returns 401 Unauthorized (expected for unauthenticated requests)
-   - Discovery endpoints: Working correctly
+### "Connection refused" or "refuses to connect"
 
-3. **Configuration:**
-   - `.cursor/mcp.json`: Updated with HTTPS URL
-   - `.env`: `API_BASE_URL` set to HTTPS URL
-   - ngrok authtoken: Configured
+**Symptom:** `https://...ngrok-free.dev/mcp` (or the tunnel URL) refuses to connect (browser ERR_CONNECTION_REFUSED, Cursor fetch failed, `curl` HTTP 000).
 
-### ⚠️ Connection Issue
+**Most likely cause: tunnel not running.** The ngrok URL only works while the tunnel is active. Free-tier URLs change every time you start ngrok.
 
-**Symptom:** Browser shows "ERR_CONNECTION_REFUSED" when accessing ngrok URL
+**Causes and fixes:**
 
-**Possible Causes:**
-
-1. **ngrok Free Tier Warning Page:**
-   - ngrok free tier requires visiting the URL in a browser first
-   - May need to accept warning page before connections work
-   - Try: Visit `https://melissia-introrse-correspondently.ngrok-free.dev` in browser first
-
-2. **Network/Firewall:**
-   - Local firewall blocking ngrok connections
-   - Network configuration preventing external access
-   - VPN or proxy interfering
-
-3. **ngrok Session:**
-   - Tunnel may need a moment to fully establish
-   - Try waiting 10-30 seconds after tunnel starts
+1. **Tunnel not running** – You stopped the terminal running `npm run tunnel:https` or ngrok died. **Fix:** Start the tunnel again and use the **new** URL it prints.
+2. **Stale URL** – You’re still using an old URL from a previous run. **Fix:** Run `npm run tunnel:https`, copy the current HTTPS URL, update `MCP_PROXY_URL`, `API_BASE_URL`, and Cursor.
+3. **ngrok free-tier warning** – Open the tunnel URL in a browser, accept "Visit Site" if shown, then retry.
+4. **Network/firewall** – VPN or firewall blocking ngrok.
+5. **Tunnel still starting** – Wait 10–30 seconds after starting ngrok.
+6. **ngrok domain resolves to 127.0.0.1** – `curl -v` shows `IPv4: 127.0.0.1` and connection refused to localhost:443. A local DNS override (AdGuard, Pi-hole, NextDNS app, VPN, etc.) or stale cache is mapping the ngrok host to localhost. **Fix:** Flush DNS (`sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder`), then check for apps that override DNS and disable or exclude `*.ngrok-free.dev`. Confirm with `dscacheutil -q host -a name <tunnel-host>`; IPv4 should be a public IP (e.g. 3.125.x.x), not 127.0.0.1.
 
 ## Troubleshooting Steps
 
-### Step 1: Verify Tunnel is Active
+### Step 0: Start the tunnel
+
+The tunnel must be running for the HTTPS URL to work.
 
 ```bash
-# Check ngrok web interface
-open http://localhost:4040
-
-# Check tunnel status
-curl http://localhost:4040/api/tunnels | python3 -m json.tool
+npm run dev:mcp
+# In another terminal:
+npm run tunnel:https
 ```
 
-### Step 2: Test Local Server
+Use the URL the script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `MCP_PROXY_URL` and `API_BASE_URL` to it, restart the MCP server if needed, update Cursor config.
+
+### Step 1: Verify tunnel is active
+
+```bash
+curl -s http://localhost:4040/api/tunnels | python3 -m json.tool
+# If this fails, tunnel is not running
+open http://localhost:4040
+```
+
+### Step 2: Test local server
 
 ```bash
 # Verify local server responds
@@ -64,36 +57,39 @@ curl http://localhost:8080/.well-known/oauth-authorization-server
 # Should return JSON with OAuth endpoints
 ```
 
-### Step 3: Accept ngrok Warning Page
+### Step 3: Accept ngrok warning page (free tier)
 
-1. **Open ngrok URL in browser:**
-   ```
-   https://melissia-introrse-correspondently.ngrok-free.dev
-   ```
+1. Open the **current** tunnel URL in a browser (from `npm run tunnel:https` or `cat /tmp/ngrok-mcp-url.txt`).
+2. Accept "Visit Site" if shown.
+3. Retry Cursor or `curl` to the tunnel URL.
 
-2. **Accept warning page** (if shown)
-   - Click "Visit Site" or similar button
-   - This may be required for free tier
+### Step 4: ngrok resolves to 127.0.0.1
 
-3. **Test discovery endpoint:**
-   ```
-   https://melissia-introrse-correspondently.ngrok-free.dev/.well-known/oauth-authorization-server
-   ```
-
-### Step 4: Test from External Network
-
-If local testing fails, try from a different network:
-- Use mobile hotspot
-- Test from another device
-- Use online tools (e.g., `curl` from external server)
-
-### Step 5: Check ngrok Logs
+If `curl -v` shows `IPv4: 127.0.0.1` for the tunnel host:
 
 ```bash
-# View real-time logs
-tail -f /tmp/ngrok.log
+# Flush DNS cache
+sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder
 
-# Check for errors
+# Check resolution (IPv4 should be a public IP, not 127.0.0.1)
+dscacheutil -q host -a name melissia-introrse-correspondently.ngrok-free.dev
+```
+
+If IPv4 is still 127.0.0.1, a local DNS override (AdGuard, Pi-hole, VPN, etc.) is redirecting the ngrok domain. Disable or exclude `*.ngrok-free.dev` in that app. As a quick check, force the real IP:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -4 \
+  --resolve "melissia-introrse-correspondently.ngrok-free.dev:443:3.125.223.134" \
+  -H "ngrok-skip-browser-warning: 1" \
+  "https://melissia-introrse-correspondently.ngrok-free.dev/mcp"
+```
+
+Expect 401. Use your tunnel's actual IP from `nslookup <tunnel-host>` if different.
+
+### Step 5: Check ngrok logs
+
+```bash
+tail -f /tmp/ngrok.log
 grep -i error /tmp/ngrok.log
 ```
 
@@ -111,36 +107,33 @@ If free tier continues to have issues:
    cloudflared tunnel --url http://localhost:8080
    ```
 
-## Current Configuration
+## Configuration (use current tunnel URL)
 
-- **Tunnel URL:** `https://melissia-introrse-correspondently.ngrok-free.dev`
-- **MCP Endpoint:** `https://melissia-introrse-correspondently.ngrok-free.dev/mcp`
-- **Local Server:** `http://localhost:8080`
-- **API_BASE_URL:** Set in `.env` to HTTPS URL
-- **Cursor Config:** Updated in `.cursor/mcp.json`
+- **Tunnel URL:** From `npm run tunnel:https` output or `cat /tmp/ngrok-mcp-url.txt`
+- **MCP endpoint:** `https://<your-tunnel-url>/mcp`
+- **Local server:** `http://localhost:8080`
+- **Env:** `MCP_PROXY_URL` and `API_BASE_URL` set to tunnel URL
+- **Cursor:** `url` in config = `https://<your-tunnel-url>/mcp`
 
-## Next Steps
+## Next steps
 
-1. **Visit ngrok URL in browser** to accept warning page (if required)
-2. **Restart MCP server** to load `API_BASE_URL` from `.env`
-3. **Restart Cursor** to load new MCP configuration
-4. **Test Connect button** in Cursor
+1. **Start tunnel** → copy URL → set `MCP_PROXY_URL` and `API_BASE_URL` → restart MCP server.
+2. **Visit tunnel URL in browser** to accept warning page (free tier) if needed.
+3. **Restart Cursor** and test Connect.
 
-## Verification Commands
+## Verification commands
 
 ```bash
-# Check tunnel status
-curl http://localhost:4040/api/tunnels | python3 -m json.tool
+# Tunnel status (fails if tunnel not running)
+curl -s http://localhost:4040/api/tunnels | python3 -m json.tool
 
-# Test local server
-curl http://localhost:8080/.well-known/oauth-authorization-server
+# Local server
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp   # expect 401
 
-# Test through tunnel (may require browser visit first)
-curl https://melissia-introrse-correspondently.ngrok-free.dev/.well-known/oauth-authorization-server
+# Through tunnel (replace with your current URL)
+curl -s -H "ngrok-skip-browser-warning: 1" "https://YOUR-TUNNEL-URL/.well-known/oauth-authorization-server"
 
-# Check server is running
+# Processes
 lsof -i :8080
-
-# Check ngrok is running
 ps aux | grep "[n]grok http"
 ```

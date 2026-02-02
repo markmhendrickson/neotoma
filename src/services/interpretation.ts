@@ -73,13 +73,15 @@ export interface InterpretationResult {
   }>;
 }
 
-interface ValidatedField {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+interface _ValidatedField {
   field: string;
   value: unknown;
   valid: boolean;
 }
 
-interface EntityData {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+interface _EntityData {
   entityType: string;
   fields: Record<string, unknown>;
   observedAt: Date;
@@ -416,7 +418,8 @@ export async function runInterpretation(
           `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
-        const { canonical_hash, ...observationDataWithoutHash } = observationData;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { canonical_hash: _canonical_hash, ...observationDataWithoutHash } = observationData;
         ({ error: obsError } = await supabase
           .from("observations")
           .insert(observationDataWithoutHash));
@@ -724,7 +727,8 @@ export async function createRelationshipObservations(
           `Migration may need to be applied or schema cache refreshed.`
         );
         // Retry without canonical_hash
-        const { canonical_hash, ...relationshipObsDataWithoutHash } = relationshipObsData;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } = relationshipObsData;
         ({ error: obsError } = await supabase
           .from("relationship_observations")
           .insert(relationshipObsDataWithoutHash));

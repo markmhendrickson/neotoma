@@ -6,12 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import { appendEvent } from "./event_log.js";
-import {
-  StateEvent,
-  RecordCreatedEvent,
-  RecordUpdatedEvent,
-  RecordDeletedEvent,
-} from "./event_schema.js";
+import { StateEvent } from "./event_schema.js";
 import type { NeotomaRecord } from "../db.js";
 
 /**

@@ -281,12 +281,10 @@ export function MCPCursorPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Setup Steps</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Setup Steps</h2>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>
                 Build the MCP server:{" "}
                 <code className="bg-muted px-1 py-0.5 rounded">npm run build</code>
@@ -298,15 +296,12 @@ export function MCPCursorPage() {
               <li>Restart Cursor to detect the new MCP server</li>
               <li>Test connection by asking Cursor to use Neotoma actions</li>
             </ol>
-          </CardContent>
-        </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Troubleshooting</CardTitle>
-            <CardDescription>Common errors when using Add to Cursor</CardDescription>
-          </CardHeader>
-          <CardContent>
+          <div>
+            <h2 className="text-xl font-semibold">Troubleshooting</h2>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">Common errors when using Add to Cursor</p>
+            <div>
             <details className="group">
               <summary className="text-sm font-medium cursor-pointer list-none flex items-center gap-2 [&::-webkit-details-marker]:hidden">
                 <span className="transition group-open:rotate-90">▸</span>
@@ -360,25 +355,24 @@ export function MCPCursorPage() {
                 </ol>
               </div>
             </details>
-          </CardContent>
-        </Card>
+            </div>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Documentation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <a
-              href="https://github.com/yourusername/neotoma/blob/main/docs/developer/mcp_cursor_setup.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-primary hover:underline flex items-center gap-1"
-            >
-              View complete setup guide
-              <ExternalLink className="h-3 w-3" />
-            </a>
-          </CardContent>
-        </Card>
+          <div>
+            <h2 className="text-xl font-semibold">Documentation</h2>
+            <div className="mt-2">
+              <a
+                href="https://github.com/yourusername/neotoma/blob/main/docs/developer/mcp_cursor_setup.md"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline flex items-center gap-1"
+              >
+                View complete setup guide
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

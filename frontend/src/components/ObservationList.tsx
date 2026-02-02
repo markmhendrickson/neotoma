@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtimeObservations } from "@/hooks/useRealtimeObservations";
 
 export interface Observation {
   id: string;
@@ -46,7 +47,7 @@ export function ObservationList({
   onNavigateToEntity,
   searchQuery: externalSearchQuery 
 }: ObservationListProps) {
-  const [observations, setObservations] = useState<Observation[]>([]);
+  const [fetchedObservations, setFetchedObservations] = useState<Observation[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [entityTypes, setEntityTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,7 +119,7 @@ export function ObservationList({
           );
         }
         
-        setObservations(filteredObservations);
+        setFetchedObservations(filteredObservations);
         setTotalCount(data.total || 0);
         
         // Extract unique entity types
@@ -135,6 +136,13 @@ export function ObservationList({
 
     fetchObservations();
   }, [searchQuery, selectedEntityType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscription
+  const observations = useRealtimeObservations(fetchedObservations, {
+    onInsert: (observation) => {
+      console.log("New observation added:", observation);
+    },
+  });
 
   const handleSourceClick = (e: React.MouseEvent, sourceId: string) => {
     e.stopPropagation();
@@ -229,7 +237,7 @@ export function ObservationList({
                       : JSON.stringify(observation.fragment_value)}
                   </TableCell>
                   <TableCell>
-                    {onNavigateToEntity ? (
+                    {onNavigateToEntity && observation.entity_id ? (
                       <button
                         onClick={(e) => handleEntityClick(e, observation.entity_id)}
                         className="text-primary hover:underline"
@@ -237,11 +245,11 @@ export function ObservationList({
                         <code className="text-xs">{observation.entity_id.substring(0, 16)}...</code>
                       </button>
                     ) : (
-                      <code className="text-xs">{observation.entity_id.substring(0, 16)}...</code>
+                      <code className="text-xs">{observation.entity_id ? `${observation.entity_id.substring(0, 16)}...` : "—"}</code>
                     )}
                   </TableCell>
                   <TableCell>
-                    {onNavigateToSource ? (
+                    {onNavigateToSource && observation.source_id ? (
                       <button
                         onClick={(e) => handleSourceClick(e, observation.source_id)}
                         className="text-primary hover:underline"
@@ -249,7 +257,7 @@ export function ObservationList({
                         <code className="text-xs">{observation.source_id.substring(0, 16)}...</code>
                       </button>
                     ) : (
-                      <code className="text-xs">{observation.source_id.substring(0, 16)}...</code>
+                      <code className="text-xs">{observation.source_id ? `${observation.source_id.substring(0, 16)}...` : "—"}</code>
                     )}
                   </TableCell>
                   <TableCell>

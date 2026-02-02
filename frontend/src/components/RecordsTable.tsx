@@ -1727,7 +1727,7 @@ export function RecordsTable({
                   </EmptyPlaceholder.Icon>
                   <EmptyPlaceholder.Title>No records yet</EmptyPlaceholder.Title>
                   <EmptyPlaceholder.Description>
-                    Get started by uploading a file or connecting an app.
+                    Upload a file or connect an app to create records.
                   </EmptyPlaceholder.Description>
                   <EmptyPlaceholder.Actions>
                     <div className="flex flex-wrap justify-center gap-3">

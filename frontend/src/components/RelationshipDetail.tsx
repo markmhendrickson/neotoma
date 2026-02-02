@@ -5,7 +5,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, Network } from "lucide-react";
@@ -127,42 +126,36 @@ export function RelationshipDetail({
         <Badge variant="secondary">{relationship.relationship_type}</Badge>
       </div>
 
-      <div className="flex-1 overflow-auto space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>Relationship Information</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Relationship Type</p>
-                <p className="text-sm">{relationship.relationship_type}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Observation Count</p>
-                <p className="text-sm">{relationship.observation_count}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Last Observation</p>
-                <p className="text-sm">
-                  {new Date(relationship.last_observation_at).toLocaleString()}
-                </p>
-              </div>
-              {relationship.created_at && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Created</p>
-                  <p className="text-sm">{new Date(relationship.created_at).toLocaleDateString()}</p>
-                </div>
-              )}
+      <div className="flex-1 overflow-auto space-y-6">
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Relationship Information</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Relationship Type</p>
+              <p className="text-sm">{relationship.relationship_type}</p>
             </div>
-          </CardContent>
-        </Card>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Observation Count</p>
+              <p className="text-sm">{relationship.observation_count}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Last Observation</p>
+              <p className="text-sm">
+                {new Date(relationship.last_observation_at).toLocaleString()}
+              </p>
+            </div>
+            {relationship.created_at && (
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Created</p>
+                <p className="text-sm">{new Date(relationship.created_at).toLocaleDateString()}</p>
+              </div>
+            )}
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Source Entity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Source Entity</h2>
+          <div className="space-y-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Entity ID</p>
               {onNavigateToEntity ? (
@@ -188,14 +181,12 @@ export function RelationshipDetail({
                 <Badge variant="outline">{relationship.source_entity_type}</Badge>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Target Entity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Target Entity</h2>
+          <div className="space-y-2">
             <div>
               <p className="text-sm font-medium text-muted-foreground">Entity ID</p>
               {onNavigateToEntity ? (
@@ -221,21 +212,19 @@ export function RelationshipDetail({
                 <Badge variant="outline">{relationship.target_entity_type}</Badge>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {relationship.metadata && Object.keys(relationship.metadata).length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Metadata</CardTitle>
-              <CardDescription>Additional relationship metadata</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <pre className="text-sm bg-muted p-4 rounded-md overflow-auto">
-                {JSON.stringify(relationship.metadata, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-xl font-semibold">Metadata</h2>
+              <p className="text-sm text-muted-foreground">Additional relationship metadata</p>
+            </div>
+            <pre className="text-sm bg-muted p-4 rounded-md overflow-auto">
+              {JSON.stringify(relationship.metadata, null, 2)}
+            </pre>
+          </div>
         )}
       </div>
     </div>

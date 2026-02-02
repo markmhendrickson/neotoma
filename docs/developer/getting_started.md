@@ -41,7 +41,22 @@ If `type-check` passes, dependencies are installed correctly.
 5. Choose a region close to you
 6. Click **"Create new project"**
 7. Wait ~2 minutes for provisioning
-## Step 3: Run Database Schema
+## Step 3: Enable Anonymous Sign-Ins (Required for Guest Users)
+
+The app automatically signs in users as guests when they load without authentication. This requires anonymous sign-ins to be enabled:
+
+**For Remote Supabase:**
+1. In Supabase dashboard, go to **Authentication** → **Settings**
+2. Find **"Enable anonymous sign-ins"** toggle
+3. **Enable** it
+
+**For Local Supabase:**
+1. Open Supabase Studio: `http://localhost:54323`
+2. Go to **Authentication** → **Providers**
+3. Find **Anonymous** provider
+4. Click **Enable**
+
+## Step 4: Run Database Schema
 1. In Supabase dashboard, open **"SQL Editor"**
 2. Click **"New Query"**
 3. Open `supabase/schema.sql` from the project

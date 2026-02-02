@@ -252,15 +252,17 @@ export async function getEntityWithProvenance(
     return getEntityWithProvenance(entity.merged_to_entity_id);
   }
 
-  // Get snapshot
+  // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
   const { data: snapshot, error: snapshotError } = await supabase
     .from("entity_snapshots")
     .select("*")
     .eq("entity_id", entityId)
     .single();
 
+  let effectiveSnapshot: typeof snapshot = snapshot;
   if (snapshotError && snapshotError.code !== "PGRST116") {
-    throw new Error(`Failed to get snapshot: ${snapshotError.message}`);
+    console.warn(`Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`);
+    effectiveSnapshot = null;
   }
 
   // Get raw_fragments for this entity
@@ -318,7 +320,7 @@ export async function getEntityWithProvenance(
       }
 
       // Convert to plain object, excluding fields already in snapshot
-      const snapshotFields = new Set(Object.keys(snapshot?.snapshot || {}));
+      const snapshotFields = new Set(Object.keys(effectiveSnapshot?.snapshot || {}));
       for (const [key, { value }] of fragmentMap.entries()) {
         // Only include if not already in snapshot (avoid duplicates)
         if (!snapshotFields.has(key)) {
@@ -332,13 +334,13 @@ export async function getEntityWithProvenance(
     entity_id: entity.id,
     entity_type: entity.entity_type,
     canonical_name: entity.canonical_name,
-    schema_version: snapshot?.schema_version || "1.0",
-    snapshot: snapshot?.snapshot || {},
+    schema_version: effectiveSnapshot?.schema_version || "1.0",
+    snapshot: effectiveSnapshot?.snapshot || {},
     raw_fragments: Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
-    observation_count: snapshot?.observation_count || 0,
-    last_observation_at: snapshot?.last_observation_at || entity.created_at,
-    provenance: snapshot?.provenance || {},
-    computed_at: snapshot?.computed_at || entity.created_at,
+    observation_count: effectiveSnapshot?.observation_count || 0,
+    last_observation_at: effectiveSnapshot?.last_observation_at || entity.created_at,
+    provenance: effectiveSnapshot?.provenance || {},
+    computed_at: effectiveSnapshot?.computed_at || entity.created_at,
     merged_to_entity_id: entity.merged_to_entity_id,
     merged_at: entity.merged_at,
   };

@@ -4,16 +4,19 @@
  * Browse entities with filtering and search
  */
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Loader2, ArrowUpDown } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSidebar } from "@/components/ui/sidebar";
+import { getEntityDisplayName } from "@/utils/entityDisplay";
+import { formatEntityType } from "@/utils/entityTypeFormatter";
+import { useRealtimeEntities } from "@/hooks/useRealtimeEntities";
+import { ColumnDef, SortingState, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
 
 export interface Entity {
   entity_id?: string;
@@ -49,13 +52,15 @@ interface SchemaInfo {
 }
 
 export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: EntityListProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [entities, setEntities] = useState<Entity[]>([]);
+  const params = useParams<{ type?: string }>();
+  const [fetchedEntities, setFetchedEntities] = useState<Entity[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [schemas, setSchemas] = useState<Map<string, SchemaInfo>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [showAllProperties, setShowAllProperties] = useState(false);
   const limit = 50;
   
   // Use external search query from header or empty string
@@ -78,8 +83,8 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
     return "var(--sidebar-width, 16rem)";
   };
   
-  // Get selected type from URL query params
-  const selectedType = searchParams.get("type") || "";
+  // Get selected type from URL path segment
+  const selectedType = params.type || "";
 
   // Fetch entities from API
   useEffect(() => {
@@ -125,49 +130,45 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
         }
         
         const data = await response.json();
-        const fetchedEntities = data.entities || [];
-        setEntities(fetchedEntities);
+        const entities = data.entities || [];
+        setFetchedEntities(entities);
         setTotalCount(data.total || 0);
 
-        // Fetch schemas for all unique entity types
-        const uniqueTypes = Array.from(new Set(fetchedEntities.map((e: Entity) => e.entity_type)));
+        // Fetch schemas once, then map to entity types
+        const uniqueTypes = Array.from(new Set(entities.map((e: Entity) => e.entity_type)));
         const schemaMap = new Map<string, SchemaInfo>();
-        
-        for (const entityType of uniqueTypes) {
-          try {
-            const schemaResponse = await fetch(`/api/schemas/${encodeURIComponent(entityType)}`, { headers });
-            if (schemaResponse.ok) {
-              const schemaData = await schemaResponse.json();
-              const schemaDef = schemaData.schema_definition || {};
-              const fields = schemaDef.fields || {};
-              const fieldNames = Object.keys(fields);
-              const fieldSummary: Record<string, { type: string; required: boolean }> = {};
-              
-              for (const [fieldName, fieldDef] of Object.entries(fields)) {
-                const def = fieldDef as any;
-                fieldSummary[fieldName] = {
-                  type: def.type || "string",
-                  required: def.required || false,
-                };
-              }
-              
-              schemaMap.set(entityType, {
-                entity_type: entityType,
-                field_names: fieldNames,
-                field_summary: fieldSummary,
-              });
-            }
-          } catch (error) {
-            console.error(`Failed to fetch schema for ${entityType}:`, error);
+
+        try {
+          const schemaParams = new URLSearchParams();
+          if (userId) {
+            schemaParams.append("user_id", userId);
           }
+          const schemaUrl = `/api/schemas${schemaParams.toString() ? `?${schemaParams.toString()}` : ""}`;
+          const schemaResponse = await fetch(schemaUrl, { headers });
+          if (schemaResponse.ok) {
+            const schemaData = await schemaResponse.json();
+            const schemasList = schemaData.schemas || [];
+            const schemasByType = new Map(
+              schemasList.map((schema: SchemaInfo) => [schema.entity_type, schema])
+            );
+
+            for (const entityType of uniqueTypes) {
+              const schemaInfo = schemasByType.get(entityType);
+              if (schemaInfo) {
+                schemaMap.set(entityType, schemaInfo);
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch schema list:", error);
         }
-        
+
         setSchemas(schemaMap);
       } catch (error) {
         console.error("Failed to fetch entities:", error);
         const errorMessage = error instanceof Error ? error.message : "Failed to fetch entities";
         setError(errorMessage);
-        setEntities([]);
+        setFetchedEntities([]);
       } finally {
         setLoading(false);
       }
@@ -176,12 +177,148 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
     fetchEntities();
   }, [searchQuery, selectedType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
 
+  // Add real-time subscription
+  const entities = useRealtimeEntities(fetchedEntities, {
+    entityType: selectedType,
+    onInsert: (entity) => {
+      console.log("New entity added:", entity);
+    },
+  });
+
+  const allFieldNames = useMemo(() => {
+    const allFields = new Set<string>();
+    entities.forEach((entity) => {
+      const schema = schemas.get(entity.entity_type);
+      if (schema) {
+        schema.field_names.forEach((field) => allFields.add(field));
+      } else {
+        Object.keys(entity.snapshot || {}).forEach((key) => allFields.add(key));
+      }
+    });
+    return Array.from(allFields).sort();
+  }, [entities, schemas]);
+
+  const visibleFieldNames = useMemo(() => {
+    return showAllProperties ? allFieldNames : allFieldNames.slice(0, 5);
+  }, [allFieldNames, showAllProperties]);
+
+  const hasMoreProperties = allFieldNames.length > 5;
+
+  const pageTitle = useMemo(() => {
+    if (!selectedType) return "Entities";
+    return `${formatEntityType(selectedType)} entities`;
+  }, [selectedType]);
+
+  const formatValueForSort = useCallback((value: unknown) => {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    if (typeof value === "object") {
+      return JSON.stringify(value);
+    }
+    return String(value);
+  }, []);
+
+  const renderSortableHeader = useCallback((label: string, column: { toggleSorting: (desc?: boolean) => void; getIsSorted: () => false | "asc" | "desc" }) => {
+    return (
+      <Button
+        variant="ghost"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        className="h-8 px-2"
+        aria-label={`Sort by ${label}`}
+      >
+        <span>{label}</span>
+        <ArrowUpDown className="ml-2 h-4 w-4" />
+      </Button>
+    );
+  }, []);
+
+  const columns = useMemo<ColumnDef<Entity>[]>(() => {
+    const fieldColumns = visibleFieldNames.map((fieldName) => {
+      const label = fieldName
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+      return {
+        id: fieldName,
+        header: ({ column }) => renderSortableHeader(label, column),
+        accessorFn: (entity) => formatValueForSort(entity.snapshot?.[fieldName]),
+        cell: ({ row }) => {
+          const value = row.original.snapshot?.[fieldName];
+          if (value === null || value === undefined) {
+            return <span className="text-muted-foreground">—</span>;
+          }
+          if (typeof value === "object") {
+            return <code className="text-xs">{JSON.stringify(value)}</code>;
+          }
+          return String(value);
+        },
+      } satisfies ColumnDef<Entity>;
+    });
+
+    return [
+      {
+        id: "canonical_name",
+        header: ({ column }) => renderSortableHeader("Canonical name", column),
+        accessorFn: (entity) => getEntityDisplayName(entity),
+        cell: ({ row }) => <span className="font-medium">{getEntityDisplayName(row.original)}</span>,
+      },
+      ...fieldColumns,
+      {
+        id: "entity_id",
+        header: ({ column }) => renderSortableHeader("Entity ID", column),
+        accessorFn: (entity) => entity.entity_id || entity.id || "",
+        cell: ({ row }) => {
+          const entityId = row.original.entity_id || row.original.id;
+          return (
+            <code className="text-xs">
+              {entityId && typeof entityId === "string" ? `${entityId.substring(0, 16)}...` : "—"}
+            </code>
+          );
+        },
+      },
+      {
+        id: "created",
+        header: ({ column }) => renderSortableHeader("Created", column),
+        accessorFn: (entity) => entity.last_observation_at || entity.computed_at || "",
+        cell: ({ row }) => {
+          const value = row.original.last_observation_at || row.original.computed_at;
+          return value ? new Date(value).toLocaleDateString() : "—";
+        },
+      },
+    ];
+  }, [formatValueForSort, renderSortableHeader, visibleFieldNames]);
+
+  const table = useReactTable({
+    data: entities,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
+    state: {
+      sorting,
+    },
+  });
+
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="flex justify-between items-center">
-        <div className="text-sm text-muted-foreground">
-          {totalCount} entit{totalCount === 1 ? "y" : "ies"}
+        <div>
+          <h1 className="text-xl font-semibold">{pageTitle}</h1>
+          <div className="text-sm text-muted-foreground">
+            {totalCount} entit{totalCount === 1 ? "y" : "ies"}
+          </div>
         </div>
+        {hasMoreProperties && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-sm text-muted-foreground"
+            onClick={() => setShowAllProperties((prev) => !prev)}
+          >
+            {showAllProperties ? "Show fewer properties" : "Show all properties"}
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 rounded-md border overflow-auto">
@@ -207,82 +344,40 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
         ) : (
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Canonical name</TableHead>
-                {entities.length > 0 && (() => {
-                  // Get all unique field names across all entities
-                  const allFields = new Set<string>();
-                  entities.forEach((entity) => {
-                    const schema = schemas.get(entity.entity_type);
-                    if (schema) {
-                      schema.field_names.forEach(field => allFields.add(field));
-                    } else {
-                      // If no schema, use snapshot keys
-                      Object.keys(entity.snapshot || {}).forEach(key => allFields.add(key));
-                    }
-                  });
-                  return Array.from(allFields).sort().map((fieldName) => (
-                    <TableHead key={fieldName}>
-                      {fieldName.split("_").map(word => 
-                        word.charAt(0).toUpperCase() + word.slice(1)
-                      ).join(" ")}
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <TableHead key={header.id}>
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
-                  ));
-                })()}
-                <TableHead>Entity ID</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
+                  ))}
+                </TableRow>
+              ))}
             </TableHeader>
             <TableBody>
-              {entities.map((entity) => {
-                const entityId = entity.entity_id || entity.id || "unknown";
-                const schema = schemas.get(entity.entity_type);
-                const allFields = new Set<string>();
-                if (schema) {
-                  schema.field_names.forEach(field => allFields.add(field));
-                } else {
-                  Object.keys(entity.snapshot || {}).forEach(key => allFields.add(key));
-                }
-                const sortedFields = Array.from(allFields).sort();
-                
-                return (
+              {table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
                   <TableRow
-                    key={entityId}
-                    onClick={() => onEntityClick(entity)}
+                    key={row.id}
+                    onClick={() => onEntityClick(row.original)}
                     className="cursor-pointer hover:bg-muted/50"
                   >
-                    <TableCell className="font-medium">
-                      {entity.canonical_name || "—"}
-                    </TableCell>
-                    {sortedFields.map((fieldName) => {
-                      const value = entity.snapshot?.[fieldName];
-                      return (
-                        <TableCell key={fieldName}>
-                          {value === null || value === undefined ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : typeof value === "object" ? (
-                            <code className="text-xs">{JSON.stringify(value)}</code>
-                          ) : (
-                            String(value)
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                    <TableCell>
-                      <code className="text-xs">
-                        {entityId && typeof entityId === "string" 
-                          ? `${entityId.substring(0, 16)}...` 
-                          : "—"}
-                      </code>
-                    </TableCell>
-                    <TableCell>
-                      {entity.last_observation_at || entity.computed_at 
-                        ? new Date(entity.last_observation_at || entity.computed_at || "").toLocaleDateString()
-                        : "—"}
-                    </TableCell>
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                );
-              })}
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center text-muted-foreground">
+                    No entities found
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         )}

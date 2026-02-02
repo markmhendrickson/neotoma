@@ -4,7 +4,7 @@
  * Historical replay functionality to reconstruct state from events.
  */
 
-import { getEventsByRecordId, getEventsByTimestampRange } from "./event_log.js";
+import { getEventsByRecordId } from "./event_log.js";
 import { StateEvent } from "./event_schema.js";
 import { applyVersionedReducer } from "../reducers/reducer_registry.js";
 import type { NeotomaRecord } from "../db.js";

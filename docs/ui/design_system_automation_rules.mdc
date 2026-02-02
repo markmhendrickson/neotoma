@@ -25,6 +25,7 @@ Automatically apply design system changes from browser preview CSS modifications
 3. **Update component implementations** if design system changes affect component styles
 4. **Update StyleGuide documentation** to reflect new values
 5. **Verify consistency** across all design system consumers
+6. **Assess design system impact** when users request specific UI changes and apply improvements as needed
 
 ## When to Apply
 
@@ -35,6 +36,7 @@ Automatically apply design system changes from browser preview CSS modifications
 5. **After updating typography** - Update font sizes, weights, line heights in CSS
 6. **After updating spacing scale** - Update spacing values if changed
 7. **After updating component styles** - Update component implementations to match new styles
+8. **When users request specific UI changes** - Assess design system impact and apply improvements to tokens, documentation, and component styles
 
 ## Implementation
 
@@ -242,6 +244,7 @@ When component styles change in design system:
 
 - **MUST** automatically apply browser preview CSS changes to source files without user request
 - **MUST** automatically apply StyleGuide.tsx changes to CSS variables, component implementations, and design system doc without user request
+- **MUST** assess design system impact for user requested UI changes and apply improvements as needed
 - **MUST** update CSS variables when color palette changes (from any source: browser preview, design system doc, or StyleGuide.tsx)
 - **MUST** update CSS base styles when typography changes in StyleGuide.tsx
 - **MUST** update component implementations when component styles change in StyleGuide.tsx

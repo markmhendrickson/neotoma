@@ -1,0 +1,102 @@
+{
+  "entity_type": "conversation",
+  "schema_version": "1.0",
+  "active": true,
+  "created_at": "2026-01-29T00:00:00.000Z",
+  "schema_definition": {
+    "fields": {
+      "schema_version": {
+        "type": "string",
+        "required": true
+      },
+      "conversation_id": {
+        "type": "string",
+        "required": true,
+        "description": "Unique identifier linking all turns in this conversation"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "Auto-generated conversation title based on topics"
+      },
+      "turn_count": {
+        "type": "number",
+        "required": true,
+        "description": "Total number of turns in conversation"
+      },
+      "start_timestamp": {
+        "type": "date",
+        "required": true,
+        "description": "When conversation started (first turn)"
+      },
+      "last_updated": {
+        "type": "date",
+        "required": true,
+        "description": "When conversation was last updated (most recent turn)"
+      },
+      "topics": {
+        "type": "array",
+        "required": false,
+        "description": "Extracted topics discussed in conversation"
+      },
+      "decisions": {
+        "type": "array",
+        "required": false,
+        "description": "Key decisions made during conversation"
+      },
+      "action_items": {
+        "type": "array",
+        "required": false,
+        "description": "Action items identified during conversation"
+      },
+      "platform": {
+        "type": "string",
+        "required": false,
+        "description": "Platform where conversation occurred (cursor, chatgpt, claude)"
+      },
+      "summary": {
+        "type": "string",
+        "required": false,
+        "description": "Brief summary of conversation content and outcomes"
+      },
+      "status": {
+        "type": "string",
+        "required": false,
+        "description": "Conversation status (active, archived)"
+      },
+      "notes": {
+        "type": "string",
+        "required": false,
+        "description": "Additional context and data operations summary"
+      }
+    }
+  },
+  "reducer_config": {
+    "merge_policies": {
+      "turn_count": {
+        "strategy": "last_write"
+      },
+      "last_updated": {
+        "strategy": "last_write"
+      },
+      "title": {
+        "strategy": "last_write"
+      },
+      "topics": {
+        "strategy": "merge_array"
+      },
+      "decisions": {
+        "strategy": "merge_array"
+      },
+      "action_items": {
+        "strategy": "merge_array"
+      },
+      "summary": {
+        "strategy": "last_write"
+      },
+      "status": {
+        "strategy": "last_write"
+      }
+    }
+  }
+}

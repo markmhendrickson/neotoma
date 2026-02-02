@@ -4,7 +4,7 @@
  * Overview stats for main objects (sources, entities, observations, events)
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, FileText, Users, Eye, Calendar, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface DashboardStats {
   sources_count: number;
@@ -39,61 +40,105 @@ export function Dashboard({
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
+  const { subscribe } = useRealtime();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
-  useEffect(() => {
-    async function fetchStats() {
-      setLoading(true);
-      try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        
-        // Include bearer token if available
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        // Use relative URL to go through Vite proxy (which routes to correct backend port)
-        // The Vite proxy in vite.config.ts handles /api -> http://localhost:${HTTP_PORT}
-        const userId = user?.id;
-        const url = userId 
-          ? `/api/stats?user_id=${userId}`
-          : `/api/stats`;
-
-        const response = await fetch(url, {
-          headers,
-        });
-
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Unauthorized - check your Bearer Token");
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        setStats(data);
-      } catch (error) {
-        console.error("Failed to fetch dashboard stats:", error);
-      } finally {
-        setLoading(false);
+  // Helper function to fetch stats (using useCallback for reuse in subscriptions)
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    try {
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+      
+      // Include bearer token if available
+      if (bearerToken) {
+        headers["Authorization"] = `Bearer ${bearerToken}`;
       }
-    }
 
+      // Use relative URL to go through Vite proxy (which routes to correct backend port)
+      const userId = user?.id;
+      const url = userId 
+        ? `/api/stats?user_id=${userId}`
+        : `/api/stats`;
+
+      const response = await fetch(url, {
+        headers,
+      });
+
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Unauthorized - check your Bearer Token");
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error("Failed to fetch dashboard stats:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [bearerToken, user?.id]);
+
+  // Initial fetch
+  useEffect(() => {
     // Wait for keys to load before making request (if using keys)
     if (keysLoading && !sessionToken && !settings.bearerToken) {
       return;
     }
     
     fetchStats();
+  }, [fetchStats, keysLoading, sessionToken, settings.bearerToken]);
+
+  // Add real-time subscriptions to refetch stats when data changes (with debouncing)
+  useEffect(() => {
+    if (!user) return;
+
+    const filter = `user_id=eq.${user.id}`;
     
-    // Refresh stats every 30 seconds
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
-  }, [bearerToken, settings.apiBase, user?.id, keysLoading, sessionToken]);
+    // Subscribe to entities changes with debouncing
+    const unsubscribeEntities = subscribe({
+      table: "entities",
+      event: "*",
+      filter,
+      debounceMs: 1000,
+      callback: () => {
+        fetchStats();
+      },
+    });
+
+    // Subscribe to sources changes with debouncing
+    const unsubscribeSources = subscribe({
+      table: "sources",
+      event: "*",
+      filter,
+      debounceMs: 1000,
+      callback: () => {
+        fetchStats();
+      },
+    });
+
+    // Subscribe to timeline events changes with debouncing
+    const unsubscribeTimeline = subscribe({
+      table: "timeline_events",
+      event: "*",
+      filter,
+      debounceMs: 1000,
+      callback: () => {
+        fetchStats();
+      },
+    });
+
+    return () => {
+      unsubscribeEntities();
+      unsubscribeSources();
+      unsubscribeTimeline();
+    };
+  }, [user, subscribe, fetchStats]);
 
   if (loading || !stats) {
     return (

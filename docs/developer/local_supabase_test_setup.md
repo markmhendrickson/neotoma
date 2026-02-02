@@ -15,17 +15,17 @@ You do **not** need to run `npm run dev:full` or a separate dev server for E2E t
 
 ## Does Playwright start local Supabase?
 
-By default, no. You can start it yourself (`supabase start`) or enable **auto-start** (see below). Playwright only configures the **spawned** backend and frontend to use local or remote Supabase via environment variables. When `USE_LOCAL_SUPABASE=1` is set (or the E2E script sets it), the fixture passes local Supabase URL and anon key into the frontend and backend env so the app talks to `http://127.0.0.1:54321` instead of a remote project.
+**Yes, by default.** The E2E test scripts (`npm run test:e2e` and `npm run test:e2e:headed`) automatically start local Supabase if it's not already running. The Playwright global setup checks whether local Supabase is reachable at `http://127.0.0.1:54321`. If not, it runs `supabase start` from the repo root and waits until the API responds (up to 2 minutes for `supabase start`, then up to 30 seconds for health). Requires Docker and Supabase CLI. First run can be slow.
 
-**Why did tests use remote Supabase even when "the server" was running?** The server E2E uses is always the one **Playwright starts** (backend + frontend), not a manually started `dev:full`. The Supabase target for those spawned processes comes from the **Playwright process** environment when the fixture runs. If `USE_LOCAL_SUPABASE` was unset and `DEV_SUPABASE_URL` / `VITE_SUPABASE_URL` did not point at 127.0.0.1, `buildBackendEnv` / `buildFrontendEnv` in `playwright/utils/servers.ts` used remote (e.g. `DEV_SUPABASE_PROJECT_ID` → `https://<id>.supabase.co`), so the app hit remote and could get rate limits (e.g. 429). The E2E npm scripts now set `USE_LOCAL_SUPABASE=1` by default so the spawned app uses local Supabase when you have run `supabase start`.
+Playwright also configures the **spawned** backend and frontend to use local Supabase via environment variables. When `USE_LOCAL_SUPABASE=1` is set (which the E2E scripts do by default), the fixture passes local Supabase URL and anon key into the frontend and backend env so the app talks to `http://127.0.0.1:54321` instead of a remote project.
 
-**Auto-start (optional):** If you set `PLAYWRIGHT_START_SUPABASE=1` in addition to `USE_LOCAL_SUPABASE=1`, the Playwright global setup will check whether local Supabase is reachable at `http://127.0.0.1:54321`. If not, it runs `supabase start` from the repo root and waits until the API responds (up to 2 minutes for `supabase start`, then up to 30 seconds for health). Requires Docker and Supabase CLI. First run can be slow. To use:
+**Why did tests use remote Supabase even when "the server" was running?** The server E2E uses is always the one **Playwright starts** (backend + frontend), not a manually started `dev:full`. The Supabase target for those spawned processes comes from the **Playwright process** environment when the fixture runs. If `USE_LOCAL_SUPABASE` was unset and `DEV_SUPABASE_URL` / `VITE_SUPABASE_URL` did not point at 127.0.0.1, `buildBackendEnv` / `buildFrontendEnv` in `playwright/utils/servers.ts` used remote (e.g. `DEV_SUPABASE_PROJECT_ID` → `https://<id>.supabase.co`), so the app hit remote and could get rate limits (e.g. 429). The E2E npm scripts now set `USE_LOCAL_SUPABASE=1` and `PLAYWRIGHT_START_SUPABASE=1` by default so the spawned app uses local Supabase and it's automatically started if needed.
+
+**Disabling auto-start:** If you want to manually start Supabase yourself or skip auto-start (e.g., in CI or environments without Docker), you can override the default:
 
 ```bash
-PLAYWRIGHT_START_SUPABASE=1 npm run test:e2e
+PLAYWRIGHT_START_SUPABASE=0 npm run test:e2e
 ```
-
-(or add `PLAYWRIGHT_START_SUPABASE=1` to your env). Auto-start is opt-in so CI or environments without Docker can skip it.
 
 ## Prerequisites
 
@@ -34,16 +34,16 @@ PLAYWRIGHT_START_SUPABASE=1 npm run test:e2e
 
 ## Setup
 
-### 1. Start Local Supabase (or use auto-start)
+### 1. Start Local Supabase (or let tests auto-start)
 
-Either start it yourself:
+The E2E tests will automatically start local Supabase if it's not running. You can also start it manually:
 
 ```bash
 cd /Users/markmhendrickson/repos/neotoma
 supabase start
 ```
 
-Or run E2E with auto-start: `PLAYWRIGHT_START_SUPABASE=1 npm run test:e2e` (see Auto-start above).
+If you prefer to start it manually, the tests will detect it's already running and skip the auto-start.
 
 Running `supabase start` will:
 - Download and start all Supabase services (PostgreSQL, Auth, API, Storage, etc.)
@@ -69,7 +69,7 @@ This shows:
 
 ### 3. Run Tests
 
-The E2E npm scripts default to local Supabase (`USE_LOCAL_SUPABASE=1`), so with `supabase start` running you can use:
+The E2E npm scripts automatically use and start local Supabase (`USE_LOCAL_SUPABASE=1` and `PLAYWRIGHT_START_SUPABASE=1`), so you can simply run:
 
 ```bash
 # Headless
@@ -145,7 +145,19 @@ If Docker isn't running, start Docker Desktop.
 
 ### 422 "Anonymous sign-ins are disabled"
 
-The E2E app is using local Supabase but anonymous sign-in is disabled. Enable it in Studio: **Authentication** → **Providers** → **Anonymous** → Enable.
+**For Local Supabase:**
+The E2E app is using local Supabase but anonymous sign-in is disabled. Enable it in Studio:
+1. Open Supabase Studio: `http://localhost:54323` (or your local Supabase URL)
+2. Go to **Authentication** → **Providers**
+3. Find **Anonymous** provider
+4. Click **Enable**
+
+**For Remote/Production Supabase:**
+1. Go to Supabase Dashboard → **Authentication** → **Settings**
+2. Find **Enable anonymous sign-ins** toggle
+3. Enable it
+
+**Note:** Anonymous sign-ins are required for the guest user feature. After enabling, the app will automatically sign in users as guests when they load the app without authentication.
 
 ### 504 Outdated Optimize Dep (Vite)
 

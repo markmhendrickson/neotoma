@@ -4,11 +4,8 @@
  * Deterministic snapshot computation from observations with merge strategies.
  */
 
-import { supabase } from "../db.js";
 import {
   schemaRegistry,
-  type SchemaDefinition,
-  type ReducerConfig,
   type FieldDefinition,
 } from "../services/schema_registry.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";

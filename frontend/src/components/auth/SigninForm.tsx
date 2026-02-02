@@ -1,15 +1,15 @@
 /**
  * Signin Form Component (FU-700)
  * 
- * User signin with email/password via Supabase Auth
+ * User signin with email/password or magic link via Supabase Auth
  */
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
+import { Loader2, Mail, CheckCircle } from "lucide-react";
 import { extractErrorMessage, logError } from "@/utils/errorUtils";
 
 interface SigninFormProps {
@@ -23,6 +23,9 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [useMagicLink, setUseMagicLink] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const { toast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,60 +35,113 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
     try {
       const { supabase } = await import("@/lib/supabase");
       
-      const { data, error: signinError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (signinError) {
-        // Log full error details to console for debugging
-        logError(signinError, "Supabase Sign In");
+      if (useMagicLink) {
+        // Send magic link
+        const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
         
-        // Extract the exact error message from Supabase (prioritizes error field which contains backend details)
-        const errorMessage = extractErrorMessage(signinError, "Sign in failed");
+        if (magicLinkError) {
+          logError(magicLinkError, "Supabase Magic Link");
+          const errorMessage = extractErrorMessage(magicLinkError, "Failed to send magic link");
+          console.error("[Magic Link Error] Extracted message:", errorMessage);
+          throw new Error(errorMessage);
+        }
         
-        // Log the extracted message for verification
-        console.error("[Sign In Error] Extracted message:", errorMessage);
+        // Success - show confirmation message
+        setMagicLinkSent(true);
+      } else {
+        // Sign in with password
+        const { data, error: signinError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
         
-        throw new Error(errorMessage);
-      }
-      
-      if (data?.user) {
-        if (onSuccess) {
-          onSuccess();
+        if (signinError) {
+          logError(signinError, "Supabase Sign In");
+          const errorMessage = extractErrorMessage(signinError, "Sign in failed");
+          console.error("[Sign In Error] Extracted message:", errorMessage);
+          throw new Error(errorMessage);
+        }
+        
+        if (data?.user) {
+          toast({
+            title: "Signed in successfully",
+            description: `Welcome back${data.user.email ? `, ${data.user.email}` : ""}`,
+          });
+          if (onSuccess) {
+            onSuccess();
+          }
         }
       }
     } catch (err) {
-      // Always extract and show the actual error message
       logError(err, "Sign In");
-      const errorMessage = extractErrorMessage(err, "Sign in failed");
+      const errorMessage = extractErrorMessage(err, useMagicLink ? "Failed to send magic link" : "Sign in failed");
       setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <Card className="w-[400px] max-h-[90vh] flex flex-col overflow-hidden">
-      <CardHeader className="flex-shrink-0">
-        <CardTitle>Sign In</CardTitle>
-        <CardDescription>Enter your credentials to access your account</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              disabled={loading}
-            />
+  // If magic link was sent, show success message
+  if (magicLinkSent) {
+    return (
+      <div className="space-y-6 max-w-md">
+        <div className="space-y-4 p-6 border rounded-lg bg-muted/50">
+          <div className="flex items-center space-x-2">
+            <CheckCircle className="h-5 w-5 text-primary" />
+            <h2 className="text-xl font-semibold">Check your email</h2>
           </div>
+          <div className="flex items-center space-x-2 text-sm">
+            <Mail className="h-4 w-4 text-primary" />
+            <span>A sign in link was sent to <strong>{email}</strong></span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Click the link in your email to complete sign in. You can close this page.
+          </p>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              setMagicLinkSent(false);
+              setEmail("");
+            }}
+          >
+            Back to sign in
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
+  return (
+    <div className="max-w-md">
+      <div className="mb-6">
+        <p className="text-muted-foreground">
+          {useMagicLink 
+            ? "Enter your email to receive a magic link" 
+            : "Enter your credentials to access your account"}
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            disabled={loading}
+          />
+        </div>
+
+        {!useMagicLink && (
           <div className="space-y-2">
             <div className="flex justify-between items-center">
               <Label htmlFor="password">Password</Label>
@@ -110,21 +166,42 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
               disabled={loading}
             />
           </div>
+        )}
 
-          {error && (
-            <div className="text-sm text-destructive">{error}</div>
+        {error && (
+          <div className="text-sm text-destructive">{error}</div>
+        )}
+
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {useMagicLink ? "Sending magic link..." : "Signing in..."}
+            </>
+          ) : (
+            <>
+              {useMagicLink && <Mail className="mr-2 h-4 w-4" />}
+              {useMagicLink ? "Send magic link" : "Sign in"}
+            </>
           )}
+        </Button>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Signing in...
-              </>
-            ) : (
-              "Sign In"
-            )}
+        <div className="text-center">
+          <Button
+            type="button"
+            variant="link"
+            className="p-0 h-auto text-sm"
+            onClick={() => {
+              setUseMagicLink(!useMagicLink);
+              setError(null);
+            }}
+            disabled={loading}
+          >
+            {useMagicLink 
+              ? "Sign in with password instead" 
+              : "Send me a magic link instead"}
           </Button>
+        </div>
 
           {onSwitchToSignup && (
             <div className="text-center text-sm text-muted-foreground">
@@ -135,12 +212,11 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
                 className="p-0 h-auto"
                 onClick={onSwitchToSignup}
               >
-                Sign up
+                Create account
               </Button>
             </div>
           )}
-        </form>
-      </CardContent>
-    </Card>
+      </form>
+    </div>
   );
 }

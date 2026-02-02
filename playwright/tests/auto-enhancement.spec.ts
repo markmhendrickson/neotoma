@@ -17,7 +17,8 @@ import {
 import { supabase } from "../../src/db.js";
 
 test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => {
-  const testUserId = "test-user-auto-enhancement";
+  // Use null for user_id to test global schemas, or generate a valid UUID if user-specific schemas are needed
+  const testUserId: string | null = null; // Global schema (user_id can be null)
   const testEntityType = "test_enhancement_type";
   const createdSourceIds: string[] = [];
   const createdSchemaIds: string[] = [];
@@ -83,7 +84,12 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
             title: { type: "string", required: false },
           },
         },
-        is_active: true,
+        reducer_config: {
+          merge_policies: {
+            title: { strategy: "last_write" },
+          },
+        },
+        active: true,
       })
       .select()
       .single();
@@ -119,17 +125,21 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     const { data: fragments, error: fragmentsError } = await supabase
       .from("raw_fragments")
       .select("*")
-      .eq("fragment_type", testEntityType)
-      .eq("user_id", testUserId);
+      .eq("entity_type", testEntityType);
+    
+    // Filter by user_id if provided, otherwise get all for this entity type
+    const filteredFragments = testUserId 
+      ? fragments?.filter(f => f.user_id === testUserId) 
+      : fragments;
     
     expect(fragmentsError).toBeNull();
-    expect(fragments).toBeDefined();
+    expect(filteredFragments).toBeDefined();
     
-    if (fragments && fragments.length > 0) {
-      expect(fragments.length).toBeGreaterThan(0);
+    if (filteredFragments && filteredFragments.length > 0) {
+      expect(filteredFragments.length).toBeGreaterThan(0);
       
       // Should have fragments for description, status, amount
-      const fragmentKeys = fragments.map(f => f.fragment_key);
+      const fragmentKeys = filteredFragments.map(f => f.fragment_key);
       expect(fragmentKeys).toContain("description");
       expect(fragmentKeys).toContain("status");
       expect(fragmentKeys).toContain("amount");
@@ -139,15 +149,19 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     const { data: queueItems, error: queueError } = await supabase
       .from("auto_enhancement_queue")
       .select("*")
-      .eq("entity_type", testEntityType)
-      .eq("user_id", testUserId);
+      .eq("entity_type", testEntityType);
+    
+    // Filter by user_id if provided
+    const filteredQueueItems = testUserId 
+      ? queueItems?.filter(q => q.user_id === testUserId) 
+      : queueItems;
     
     expect(queueError).toBeNull();
-    expect(queueItems).toBeDefined();
+    expect(filteredQueueItems).toBeDefined();
     
-    if (queueItems && queueItems.length > 0) {
-      expect(queueItems.length).toBeGreaterThan(0);
-      expect(queueItems[0].status).toBe("pending");
+    if (filteredQueueItems && filteredQueueItems.length > 0) {
+      expect(filteredQueueItems.length).toBeGreaterThan(0);
+      expect(filteredQueueItems[0].status).toBe("pending");
     }
   });
 
@@ -174,7 +188,12 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
             title: { type: "string", required: false },
           },
         },
-        is_active: true,
+        reducer_config: {
+          merge_policies: {
+            title: { strategy: "last_write" },
+          },
+        },
+        active: true,
       })
       .select()
       .single();
@@ -218,14 +237,18 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
       const { data: recommendations } = await supabase
         .from("schema_recommendations")
         .select("*")
-        .eq("entity_type", testEntityType)
-        .eq("user_id", testUserId);
+        .eq("entity_type", testEntityType);
       
-      if (recommendations && recommendations.length > 0) {
-        expect(recommendations[0].new_fields).toBeDefined();
-        expect(recommendations[0].status).toBeDefined();
+      // Filter by user_id if provided
+      const filteredRecommendations = testUserId 
+        ? recommendations?.filter(r => r.user_id === testUserId) 
+        : recommendations;
+      
+      if (filteredRecommendations && filteredRecommendations.length > 0) {
+        expect(filteredRecommendations[0].new_fields).toBeDefined();
+        expect(filteredRecommendations[0].status).toBeDefined();
         
-        for (const rec of recommendations) {
+        for (const rec of filteredRecommendations) {
           createdRecommendationIds.push(rec.id);
         }
       }
@@ -255,7 +278,12 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
             title: { type: "string", required: false },
           },
         },
-        is_active: true,
+        reducer_config: {
+          merge_policies: {
+            title: { strategy: "last_write" },
+          },
+        },
+        active: true,
       })
       .select()
       .single();
@@ -293,27 +321,38 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     const { data: recommendations } = await supabase
       .from("schema_recommendations")
       .select("*")
-      .eq("entity_type", testEntityType)
-      .eq("user_id", testUserId);
+      .eq("entity_type", testEntityType);
     
-    if (recommendations && recommendations.length > 0) {
-      for (const rec of recommendations) {
+    // Filter by user_id if provided
+    const filteredRecommendations = testUserId 
+      ? recommendations?.filter(r => r.user_id === testUserId) 
+      : recommendations;
+    
+    if (filteredRecommendations && filteredRecommendations.length > 0) {
+      for (const rec of filteredRecommendations) {
         createdRecommendationIds.push(rec.id);
       }
       
       // Check if any were auto-applied
-      const autoApplied = recommendations.filter(r => r.status === "auto_applied");
+      const autoApplied = filteredRecommendations.filter(r => r.status === "auto_applied");
       
       if (autoApplied.length > 0) {
         // Verify schema was updated
-        const { data: updatedSchemas } = await supabase
+        let query = supabase
           .from("schema_registry")
           .select("*")
           .eq("entity_type", testEntityType)
-          .eq("user_id", testUserId)
-          .eq("is_active", true)
+          .eq("active", true)
           .order("created_at", { ascending: false })
           .limit(1);
+        
+        if (testUserId !== null) {
+          query = query.eq("user_id", testUserId);
+        } else {
+          query = query.is("user_id", null);
+        }
+        
+        const { data: updatedSchemas } = await query;
         
         if (updatedSchemas && updatedSchemas.length > 0) {
           const latestSchema = updatedSchemas[0];

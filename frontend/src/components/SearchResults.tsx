@@ -7,8 +7,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, FileText, Eye, Layers, Users } from "lucide-react";
+import { Loader2, FileText, Eye, Layers, Users, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,8 +24,9 @@ interface SearchResult {
 }
 
 export function SearchResults() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
+  const [searchInput, setSearchInput] = useState(query);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -34,6 +36,11 @@ export function SearchResults() {
   const { user, sessionToken } = useAuth();
   const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
 
+  // Sync search input with URL query param
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
   useEffect(() => {
     if (!query.trim() || query.length < 2) {
       setResults([]);
@@ -42,6 +49,17 @@ export function SearchResults() {
 
     performSearch(query.trim());
   }, [query, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchInput.trim()) {
+      setSearchParams({ q: searchInput.trim() });
+    }
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value);
+  };
 
   async function performSearch(searchQuery: string) {
     if (!bearerToken || keysLoading) {
@@ -77,7 +95,7 @@ export function SearchResults() {
             type: "entity" as const,
             title: e.canonical_name || e.entity_type,
             subtitle: e.entity_type,
-            href: `/entities/${e.id}`,
+            href: `/entity/${e.id}`,
             metadata: e,
           }));
           allResults.push(...entities);
@@ -182,8 +200,24 @@ export function SearchResults() {
     }
   }
 
-  const handleResultClick = (href: string) => {
+  const openInNewTab = (href: string) => {
+    if (typeof window === "undefined") return;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const handleResultClick = (event: React.MouseEvent, href: string) => {
+    if (event.metaKey || event.ctrlKey) {
+      openInNewTab(href);
+      return;
+    }
     navigate(href);
+  };
+
+  const handleResultMouseDown = (event: React.MouseEvent, href: string) => {
+    if (event.button === 1) {
+      event.preventDefault();
+      openInNewTab(href);
+    }
   };
 
   const getIcon = (type: SearchResult["type"]) => {
@@ -212,26 +246,39 @@ export function SearchResults() {
     }
   };
 
-  if (!query.trim() || query.length < 2) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center text-muted-foreground">
-          <p>Enter a search query to see results</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full gap-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold">
-          Search results for "{query}"
-        </h1>
-        <div className="text-sm text-muted-foreground">
-          {loading ? "Searching..." : `${results.length} result${results.length === 1 ? "" : "s"}`}
-        </div>
+      <div className="flex flex-col gap-4">
+        <h1 className="text-2xl font-semibold">Search</h1>
+        <form onSubmit={handleSearchSubmit} className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
+          <Input
+            type="text"
+            placeholder="Search entities, sources, observations, and interpretations..."
+            value={searchInput}
+            onChange={handleSearchChange}
+            className="pl-9"
+          />
+        </form>
       </div>
+
+      {!query.trim() || query.length < 2 ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center text-muted-foreground">
+            <p>Enter a search query to see results</p>
+            <p className="text-sm mt-2">Search requires at least 2 characters</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-medium">
+              Search results for "{query}"
+            </h2>
+            <div className="text-sm text-muted-foreground">
+              {loading ? "Searching..." : `${results.length} result${results.length === 1 ? "" : "s"}`}
+            </div>
+          </div>
 
       <div className="flex-1 rounded-md border overflow-auto">
         {loading ? (
@@ -259,7 +306,8 @@ export function SearchResults() {
               {results.map((result) => (
                 <TableRow
                   key={`${result.type}-${result.id}`}
-                  onClick={() => handleResultClick(result.href)}
+                  onClick={(event) => handleResultClick(event, result.href)}
+                  onMouseDown={(event) => handleResultMouseDown(event, result.href)}
                   className="cursor-pointer hover:bg-muted/50"
                 >
                   <TableCell>
@@ -285,6 +333,8 @@ export function SearchResults() {
           </Table>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

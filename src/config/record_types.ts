@@ -29,7 +29,7 @@ function deriveDefinitionsFromSchemas(): ReadonlyArray<RecordTypeDefinition> {
       category: schema.metadata!.category,
       primaryProperties: schema.metadata!.primaryProperties || 
         Object.entries(schema.schema_definition.fields)
-          .filter(([_, def]) => def.required)
+          .filter(([, def]) => def.required)
           .map(([key]) => key),
       aliases: schema.metadata!.aliases || [],
     }));
@@ -39,6 +39,7 @@ const definitions: ReadonlyArray<RecordTypeDefinition> = deriveDefinitionsFromSc
 
 // Legacy static definitions (kept for reference, no longer used)
 // These are now derived from ENTITY_SCHEMAS in schema_definitions.ts
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const _legacyDefinitions: ReadonlyArray<RecordTypeDefinition> = [
   {
     id: "account",
