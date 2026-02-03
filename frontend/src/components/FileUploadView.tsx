@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiClient } from "@/lib/api_client";
 
 interface UploadProgress {
   file: File;
@@ -37,7 +38,7 @@ export function FileUploadView({ onUploadComplete, hideTitle = false }: FileUplo
   const { sessionToken, user } = useAuth();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const handleFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files);
@@ -68,24 +69,14 @@ export function FileUploadView({ onUploadComplete, hideTitle = false }: FileUplo
         formData.append("file", file);
         formData.append("user_id", user?.id || "00000000-0000-0000-0000-000000000000");
 
-        // Prepare headers
-        const headers: HeadersInit = {};
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        // Upload via API - use relative URL to go through Vite proxy
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          headers,
+        const api = getApiClient(bearerToken);
+        const { data, error } = await api.POST("/upload_file", {
           body: formData,
         });
 
-        if (!response.ok) {
-          throw new Error(`Upload failed: ${response.statusText}`);
+        if (error || !data) {
+          throw new Error("Upload failed");
         }
-
-        const data = await response.json();
         const sourceId = data.source_id || data.id;
         
         completedSourceIds.push(sourceId);

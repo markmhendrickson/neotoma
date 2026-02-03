@@ -1,7 +1,7 @@
 ## Release v1.0.0 — Post-Launch Marketing Plan
 
 ### Purpose
-This document defines post-launch marketing activities for v1.0.0, **deferred until after dogfooding validation** (Week 12+). Marketing activities will only proceed if dogfooding validates the product works for ateles integration.
+This document defines post-preview marketing activities for v1.0.0, deferred until after developer preview validation and stabilization. Marketing activities proceed only if dogfooding and external feedback are sufficient, otherwise discovery is scheduled first.
 
 **Related Documents:**
 - `marketing_plan.md` — Marketing overview and coordination
@@ -13,20 +13,20 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
 - `approach_comparison.md` — Discovery-first vs. dogfooding-first comparative analysis
 
 ### 1. Post-Launch Overview
-- **Timeline**: **Deferred until Week 12+** (after dogfooding validation)
-- **Conditional**: Only proceed if dogfooding validates product works for ateles integration
+- **Timeline**: Deferred until after developer preview validation and stabilization
+- **Conditional**: Proceed if dogfooding and external feedback are sufficient, otherwise schedule discovery
 - **Strategy**: Organic only (no paid acquisition for MVP)
 - **Goals**: Maximize signups, build waitlist, build organic growth, reengage users
-- **Prerequisite**: Product must work for ateles integration before external marketing
-### 2. Launch Announcement (Post-Dogfooding)
+- **Prerequisite**: Product must work for ateles integration and preview signals must be strong
+### 2. Launch Announcement (Post-Preview Stabilization)
 
 #### 2.1 Timeline and Channels
-- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
-- **Conditional**: Only if dogfooding validates product works
+- **Timeline**: After preview stabilization and any required discovery
+- **Conditional**: Only if preview signals are sufficient
 - **Channels**: Product Hunt, Hacker News, Twitter, Indie Hacker, Email, Blog
 - **Platform Priority**: P0 platforms (Twitter, Indie Hackers, Product Hunt, Hacker News) prioritized for launch day maximum reach
 
-#### 2.2 Launch Sequence (Post-Dogfooding)
+#### 2.2 Launch Sequence (Post-Preview)
 - **00:01 PST**: Product Hunt launch — **Use personal maker account**
 - **06:00 PST**: Hacker News Show HN post — **Use personal account**
 - **08:00 PST**: Twitter announcement thread — **Use personal account**
@@ -48,15 +48,15 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
 | Hacker News points   | 50 (modest goal)            | HN thread score                 |
 | Press mentions       | 2 (blogs, newsletters)      | Manual tracking + Google Alerts |
 | Social shares        | 100                         | Twitter shares, retweets        |
-### 3. Waitlist Building and Conversion (Post-Dogfooding)
+### 3. Waitlist Building and Conversion (Post-Preview)
 
 #### 3.1 Timeline and Target
-- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
-- **Conditional**: Only if dogfooding validates product works
+- **Timeline**: After preview stabilization and any required discovery
+- **Conditional**: Only if preview signals are sufficient
 - **Target**: Build waitlist, then convert (targets TBD after dogfooding validation)
 
-#### 3.2 Waitlist Building (Post-Dogfooding)
-- **Week 12+**: Launch waitlist (now that product is validated)
+#### 3.2 Waitlist Building (Post-Preview)
+- **After preview stabilization**: Launch waitlist (now that product is validated)
 - **Channels**: Twitter, LinkedIn, blog, Indie Hackers, Hacker News
 - **Message**: "I've been dogfooding Neotoma in my ateles integration. It works. Here's what I built..."
 
@@ -72,11 +72,11 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
 | ------------------------ | ---------------------------- | -------------------------------------- |
 | Waitlist conversion rate | 40% (waitlist → signup)      | Email opens, clicks, signups by source |
 | Waitlist activation rate | 60% (signups → first upload) | Usage analytics                        |
-### 4. Organic Growth (Post-Dogfooding)
+### 4. Organic Growth (Post-Preview)
 
 #### 4.1 Timeline and Channels
-- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
-- **Conditional**: Only if dogfooding validates product works
+- **Timeline**: After preview stabilization and any required discovery
+- **Conditional**: Only if preview signals are sufficient
 - **Channels**: Twitter, blog, community, word of mouth
 - **Platform Priority**: P0 platforms (Twitter) for sustained engagement; P1 platforms (LinkedIn, Reddit, Discord) added for growth
 #### 4.2 Activities
@@ -130,11 +130,11 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
 | Content to signup rate      | 3% (blog/twitter → signup) | UTM tracking                              |
 | Organic search traffic      | 500 (visits from Google)   | Google Analytics                          |
 | Competitor outreach signups | 20 (from Section 4.3)      | UTM tracking (competitor-outreach source) |
-### 5. Partnership Outreach (Post-Dogfooding)
+### 5. Partnership Outreach (Post-Preview)
 
 #### 5.1 Timeline and Targets
-- **Timeline**: **Week 12+** (after dogfooding validation, if proceeding)
-- **Conditional**: Only if dogfooding validates product works
+- **Timeline**: After preview stabilization and any required discovery
+- **Conditional**: Only if preview signals are sufficient
 - **Targets**:
   - **MCP Directories** (Primary):
     - [Model Context Protocol Directory](https://model-context-protocol.com/) — Official MCP directory
@@ -159,8 +159,8 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
   - **Indie Hacker Resources**:
     - Indie hacker podcasts
     - Indie hacker newsletters
-#### 5.2 Submission Strategy (Post-Dogfooding)
-**Week 12+** (After dogfooding validation):
+#### 5.2 Submission Strategy (Post-Preview)
+**After preview stabilization**:
 - Submit to MCP directories (now that product is validated)
 - Update MCP directory listings with working product information
 - Submit to AI tool directories (There's An AI For That, Future Tools, AI Tools)
@@ -222,11 +222,11 @@ This document defines post-launch marketing activities for v1.0.0, **deferred un
 | ----------------------- | -------------------------------- | --------------- |
 | Email open rate         | 35%                              | Email analytics |
 | Tip to feature adoption | 20% (users who try featured tip) | Usage analytics |
-### 7. Success Criteria (Post-Dogfooding)
+### 7. Success Criteria (Post-Preview)
 
-**Prerequisite**: Product must work for ateles integration (dogfooding validation)
+**Prerequisite**: Product must work for ateles integration and preview signals must be strong
 
-**Post-Dogfooding Marketing** (If proceeding):
+**Post-Preview Marketing** (If proceeding):
 - Success criteria TBD after dogfooding validation
 - Typical targets (to be confirmed):
   - ≥50 signups Day 1

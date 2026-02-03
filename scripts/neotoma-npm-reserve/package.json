@@ -1,0 +1,10 @@
+{
+  "name": "neotoma",
+  "version": "0.0.1",
+  "description": "Reserved namespace for Neotoma (Truth Layer). See https://github.com/markmhendrickson/neotoma or @neotoma/* scoped packages.",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git"
+  }
+}

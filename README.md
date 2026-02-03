@@ -118,6 +118,8 @@ ChatGPT, Claude, and Gemini offer conversation-only memory. Neotoma provides str
 **Version:** v0.2.15  
 **Status:** Implemented (pending database migration application)
 
+**Developer preview**: Planned during dogfooding once core invariants are stable. Discovery will be scheduled only if preview validation is insufficient.
+
 Neotoma is in active development with a clear roadmap toward v1.0.0 MVP. The system currently supports:
 
 - ✅ Sources-first storing architecture with content-addressed storage
@@ -155,6 +157,9 @@ See [`docs/releases/`](docs/releases/) for complete release documentation.
 **Getting Started:**
 
 - **[Getting Started Guide](docs/developer/getting_started.md)**: Development setup
+- **[CLI setup](docs/developer/getting_started.md#cli-setup)**: CLI install and auth
+- **[CLI overview](docs/developer/cli_overview.md)**: CLI workflows and usage
+- **[MCP overview](docs/developer/mcp_overview.md)**: MCP entry points and setup links
 - **[MVP Overview](docs/specs/MVP_OVERVIEW.md)**: Product specification
 - **[Architecture](docs/architecture/architecture.md)**: System design
 
@@ -171,8 +176,8 @@ See [`docs/releases/`](docs/releases/) for complete release documentation.
 **Development:**
 
 - **[Development Workflow](docs/developer/development_workflow.md)**: Git, branches, PRs
+- **[Automated test catalog](docs/testing/automated_test_catalog.md)**: File level test inventory and suite commands
 - **[Testing Standard](docs/testing/testing_standard.md)**: Test types and coverage
-- **[Integration Setup](docs/integrations/)**: Gmail, Plaid configuration
 
 ## Interactive Prototype
 
@@ -296,8 +301,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 **Developer Resources:**
 
 - **Developer** (`docs/developer/`): Getting started, development workflow, MCP setup, troubleshooting
-- **Testing** (`docs/testing/`): Testing standards, fixtures, coverage requirements
-- **Integrations** (`docs/integrations/`): External provider setup (Gmail, Plaid), provider configuration
+- **Testing** (`docs/testing/`): Automated test catalog, testing standards, fixtures, coverage requirements
 - **Infrastructure** (`docs/infrastructure/`): Deployment guides, hosting configuration
 - **Operations** (`docs/operations/`): Troubleshooting guides, operational procedures
 - **Observability** (`docs/observability/`): Logging, metrics, tracing standards
@@ -312,6 +316,7 @@ To use the Neotoma MCP server from a different workspace/repository, see the det
 **Additional Resources:**
 
 - **Conventions** (`docs/conventions/`): Documentation standards, README generation framework, native browser debugging rule
+- **Proposals** (`docs/proposals/`): Future work proposals migrated from plans
 - **Legal** (`docs/legal/`): Compliance, privacy policy, terms of service, changelogs
 - **Migration** (`docs/migration/`): Migration guides, breaking changes
 - **Templates** (`docs/templates/`): Issue templates, PR templates
@@ -344,7 +349,7 @@ Neotoma uses comprehensive testing across multiple layers:
 - **E2E Tests**: Full user flows via Playwright
 - **Property-Based Tests**: Invariant verification
 
-See [`docs/testing/testing_standard.md`](docs/testing/testing_standard.md) for complete testing requirements.
+See [`docs/testing/automated_test_catalog.md`](docs/testing/automated_test_catalog.md) for the full test inventory. See [`docs/testing/testing_standard.md`](docs/testing/testing_standard.md) for complete testing requirements.
 
 ## Contributing
 

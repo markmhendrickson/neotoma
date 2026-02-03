@@ -613,7 +613,6 @@ The codebase has successfully migrated to sources-first architecture across pre-
 - Each attachment requires explicit user action
 
 **Files to Update:**
-- `docs/integrations/gmail_setup.md` — Update workflow to require per-attachment approval
 - Gmail integration implementation (when built) — Add approval UI for each attachment
 
 **Estimated:** Design change (implementation TBD when Gmail integration is built)

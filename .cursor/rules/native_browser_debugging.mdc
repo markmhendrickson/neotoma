@@ -1,0 +1,60 @@
+# Native Browser Debugging Rule
+
+## Purpose
+
+Ensure debugging and verification use the native browser for UI flows.
+
+## Trigger Patterns
+
+When investigating or verifying UI issues, OAuth flows, or frontend behavior.
+
+## Agent Actions
+
+1. Use the native browser tools for reproduction and verification.
+2. **Check browser console for errors** when making UI changes:
+   - Use browser MCP tools (`browser_console_messages`) to check for console errors
+   - Verify no `Uncaught SyntaxError`, `Uncaught TypeError`, or missing export errors
+   - Fix all console errors before marking UI changes complete
+3. Capture runtime evidence in the native browser before claiming resolution.
+4. Use Playwright only as supplemental coverage, not as the primary confirmation step.
+
+## Constraints
+
+- MUST use the native browser to reproduce UI issues when possible.
+- MUST use the native browser to confirm fixes for UI flows.
+- **MUST check browser console for errors** when making UI-impacting changes.
+- **MUST fix all console errors** (import/export errors, runtime errors) before marking UI changes complete.
+- MUST NOT claim UI fixes without native browser confirmation.
+- **MUST NOT mark UI changes complete** if console errors exist.
+
+## Agent Instructions
+
+### When to Load This Document
+
+Load when debugging UI flows or confirming UI fixes.
+
+### Required Co-Loaded Documents
+
+- Repository documentation standards
+
+### Constraints Agents Must Enforce
+
+1. Use native browser tooling for UI debugging and verification.
+2. Collect runtime evidence from the native browser before concluding resolution.
+3. Check browser console for errors after all UI changes.
+4. Fix all console errors before marking UI work complete.
+
+### Forbidden Patterns
+
+- Declaring UI bugs fixed without native browser verification.
+- Relying only on headless tests for UI verification.
+- Ignoring console errors in the browser.
+- Marking UI changes complete with console errors present.
+
+### Validation Checklist
+
+- [ ] Native browser used to reproduce the issue
+- [ ] Native browser used to confirm the fix
+- [ ] **Browser console checked for errors** (using `browser_console_messages` MCP tool)
+- [ ] **No console errors present** (no import/export errors, no runtime errors)
+- [ ] Runtime evidence captured during reproduction and verification

@@ -57,7 +57,7 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
   const { user, sessionToken } = useAuth();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch sources from API
   useEffect(() => {

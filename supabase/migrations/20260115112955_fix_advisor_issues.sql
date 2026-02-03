@@ -153,6 +153,7 @@ END $$;
 -- Consider using a SECURITY DEFINER function that caches the auth value:
 -- CREATE FUNCTION auth_uid() RETURNS UUID
 -- LANGUAGE SQL SECURITY DEFINER STABLE
+-- SET search_path = public, pg_catalog
 -- AS $$ SELECT auth.uid() $$;
 -- Then use auth_uid() in policies instead of auth.uid().
 

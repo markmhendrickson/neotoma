@@ -9,27 +9,31 @@ npm run type-check || exit 1
 echo "Running linter..."
 npm run lint || exit 1
 
-# Unit tests (MANDATORY - catches logic errors)
-echo "Running unit tests..."
-npm test || exit 1
+if [ "$SKIP_TESTS" = "1" ] || [ "$NEOTOMA_SKIP_TESTS" = "1" ]; then
+  echo "Skipping tests (SKIP_TESTS=1 or NEOTOMA_SKIP_TESTS=1)"
+else
+  # Unit tests (MANDATORY - catches logic errors)
+  echo "Running unit tests..."
+  npm test || exit 1
 
-# Integration tests (if backend/DB files changed)
-if git diff --cached --name-only | grep -E "(src/|tests/integration|supabase/migrations)" > /dev/null; then
-  echo "Running integration tests..."
-  npm run test:integration || exit 1
+  # Integration tests (if backend/DB files changed)
+  if git diff --cached --name-only | grep -E "(src/|tests/integration|supabase/migrations)" > /dev/null; then
+    echo "Running integration tests..."
+    npm run test:integration || exit 1
+  fi
+
+  # E2E tests (if frontend/UI files changed)
+  if git diff --cached --name-only | grep -E "(frontend/|playwright/)" > /dev/null; then
+    echo "Running E2E tests..."
+    npm run test:e2e || exit 1
+  fi
+
+  # Validate Playwright coverage map
+  npm run validate:coverage
+
+  # Check Playwright test coverage for UI changes
+  npm run check:pw-coverage
 fi
-
-# E2E tests (if frontend/UI files changed)
-if git diff --cached --name-only | grep -E "(frontend/|playwright/)" > /dev/null; then
-  echo "Running E2E tests..."
-  npm run test:e2e || exit 1
-fi
-
-# Validate Playwright coverage map
-npm run validate:coverage
-
-# Check Playwright test coverage for UI changes
-npm run check:pw-coverage
 
 # Validate documentation dependencies for modified docs
 npm run validate:doc-deps

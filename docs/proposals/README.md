@@ -7,6 +7,10 @@ This directory contains future work proposals that have been migrated from `.cur
 - `*.md` - Active proposals for future implementation
 - `archived/` - Completed proposals that have been implemented
 
+## Current proposals
+
+- `mcp-cli-action-items.md` - MCP and CLI action items proposal
+
 ## Proposal Format
 
 Each proposal follows this structure:

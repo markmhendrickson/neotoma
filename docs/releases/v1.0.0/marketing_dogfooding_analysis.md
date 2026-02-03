@@ -12,6 +12,7 @@
 - Technical credibility
 - Community engagement
 - Future marketing foundation
+**Additional Constraint**: Developer preview will ship during dogfooding, and discovery is deferred unless preview validation is insufficient.
 
 ---
 
@@ -148,10 +149,10 @@
 - Screenshots, demos
 - **No CTA**: Just sharing journey, not asking for signups
 
-**4. Hacker News "Show HN" (After Dogfooding)**
-- Post after dogfooding validation
+**4. Hacker News "Show HN" (Developer Preview)**
+- Post once developer preview is ready during dogfooding
 - "Show HN: Neotoma - Privacy-first truth layer I built for my ateles integration"
-- **Timing**: After dogfooding, not before
+- **Timing**: During dogfooding with precision disclaimers
 
 **Time Investment**: ~10-15 hours (vs. 35 hours for pre-launch marketing)  
 **Focus**: Technical content, not marketing
@@ -166,23 +167,24 @@
 - Build MVP for ateles integration
 - Dogfooding: Real usage, real validation
 - **Build-in-Public Content**: Share progress, learnings (optional, low time investment)
-- **No Pre-Launch Marketing**: No waitlist, no beta, no formal marketing
+- **Developer Preview**: Release during dogfooding once core invariants are stable
+- **No Pre-Launch Marketing**: No waitlist, no beta promises, no formal marketing
 
-**Phase 2: Post-Dogfooding Validation (Week 12-13)**
+**Phase 2: Preview Validation Checkpoint (Week 8-12)**
 - Assess: Does product work for ateles integration?
-- Decision: Proceed to external launch or iterate?
+- Evaluate: Dependence signal and external feedback quality
+- Decision: Stabilize and expand, or schedule discovery if signals are weak
 
-**Phase 3: Discovery (Week 13-16) - If Proceeding**
-- Conduct discovery with working product
-- Validate market fit, pricing, competitive positioning
+**Phase 3: Conditional Discovery (If Needed)**
+- Conduct discovery only if preview validation is insufficient
+- Validate market fit, pricing, competitive positioning with working product
 - **Advantage**: Can show working product in interviews
 
-**Phase 4: Marketing Launch (Week 16-20) - If Proceeding**
-- Launch waitlist (now that product is validated)
-- Launch beta (now that product works)
-- Launch announcement (now that you have confidence)
+**Phase 4: Post-Preview Marketing (If Proceeding)**
+- Launch waitlist after preview stabilization
+- Launch announcement with developer preview framing
 
-**Total Timeline**: ~20 weeks (vs. 15-16 weeks for discovery-first)
+**Total Timeline**: Variable based on preview validation signals
 
 ### 4.2 Build-in-Public Content During Dogfooding
 
@@ -191,6 +193,7 @@
 - **Blog posts**: Technical deep-dives (2-3 hours/month)
 - **Indie Hackers**: Weekly progress updates (1 hour/week)
 - **No waitlist/beta**: Just sharing, not marketing
+- **Developer preview release**: Announce during dogfooding with precision disclaimers
 
 **Benefits:**
 - ✅ Authentic storytelling
@@ -241,11 +244,13 @@
   - Technical threads on Twitter (share learnings)
   - Blog posts (technical deep-dives)
   - Indie Hackers progress updates
-  - **No waitlist/beta CTAs** - just sharing
-- **Post-Dogfooding Marketing** (after validation):
-  - Launch waitlist (now that product is validated)
-  - Launch beta (now that product works)
-  - Launch announcement (now that you have confidence)
+  - **No waitlist/beta CTAs**: just sharing
+- **Developer Preview During Dogfooding**:
+  - Release once core invariants are stable
+  - Use precision disclaimers and explicit mutation guarantees
+- **Post-Preview Marketing** (after stabilization):
+  - Launch waitlist after preview validation
+  - Launch announcement with developer preview framing
 
 ### Build-in-Public Content Strategy:
 
@@ -256,9 +261,9 @@
 - **Message**: "Building for my own use (ateles integration), here's what I'm learning"
 - **No CTA**: Just sharing, not marketing
 
-**Week 12+ (After Dogfooding):**
-- If product works: Proceed to discovery + marketing
-- If product doesn't work: Iterate, continue building in public
+**After Preview Validation:**
+- If signals are strong: Stabilize and proceed to post-preview marketing
+- If signals are weak: Schedule discovery and iterate
 
 **Time Investment**: ~5-10 hours/month (vs. 35 hours for pre-launch marketing)
 
@@ -278,12 +283,13 @@
 **Pre-Launch Marketing for Dogfooding-First:**
 - ❌ **Doesn't make sense**: Timing mismatch, premature expectations, resource diversion
 - ✅ **Build-in-Public makes sense**: Authentic storytelling, technical credibility, low time investment
-- ✅ **Post-Dogfooding Marketing makes sense**: After validation, with working product
+- ✅ **Post-Preview Marketing makes sense**: After preview validation and stabilization
 
 **Recommended Approach:**
 1. **Build + Dogfooding** (Week 0-12): Build-in-public content (optional, low time investment)
-2. **Post-Dogfooding Validation** (Week 12-13): Assess if product works
-3. **Discovery** (Week 13-16): If proceeding, validate market fit with working product
-4. **Marketing Launch** (Week 16-20): If proceeding, launch waitlist/beta/announcement
+2. **Developer Preview** (during dogfooding): Release once core invariants are stable
+3. **Preview Validation** (Week 8-12): Assess dependence and external feedback quality
+4. **Discovery** (conditional): Only if preview signals are weak or ambiguous
+5. **Post-Preview Marketing**: Launch waitlist and announcement after stabilization
 
 **Key Principle**: Don't create external expectations until you've validated the product works for yourself.

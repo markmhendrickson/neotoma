@@ -5,12 +5,13 @@
 
 ## Executive Summary
 
-**Risk Assessment**: **Medium-High** — Missing visibility windows during 12-week build phase is a real risk.
+**Risk Assessment**: **Medium-High**. Missing visibility windows during 12-week build phase is a real risk.
 
-**Solution**: **Strategic build-in-public content** can actually capture MORE visibility during industry announcements than traditional pre-launch marketing, because it's:
+**Solution**: **Strategic build-in-public content** can capture more visibility during industry announcements than traditional pre-launch marketing, because it is:
 - Authentic and timely (responds to industry news)
 - Thought leadership (positions you as expert, not just product)
 - No premature commitments (can pivot based on learnings)
+**Timing Principle**: Prioritize first credible articulation over first-mover speed. Developer preview during dogfooding lets you enter conversations early without overstating guarantees.
 
 ---
 

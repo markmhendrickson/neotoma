@@ -1,0 +1,133 @@
+# Content Style Enforcement Rule
+
+**Reference:** `foundation/conventions/writing_style_guide.md` — Writing style guide
+
+Ensures all content (essays, articles, posts, documentation) always follows anti-AI patterns and authentic human voice standards.
+
+## Trigger Patterns
+
+When creating or editing ANY content:
+- Essays, articles, blog posts
+- Social media content
+- Documentation
+- Marketing copy
+- Technical writing
+- Any written content for publication
+
+## Agent Actions
+
+### Step 1: Load Style Guide
+
+Before finalizing any content:
+1. Load `foundation/conventions/writing_style_guide.md`
+2. Review prohibited patterns
+3. Apply all style rules
+
+### Step 2: Apply Anti-AI Patterns
+
+Before finalizing any content, MUST remove all AI-generated language patterns per the writing style guide:
+
+**Generic AI Phrases to Remove:**
+- "Furthermore", "Moreover", "In addition"
+- "leverage" → use "use" or "draw on"
+- "empower" → use "enable" or "let"
+- "cutting-edge" → use specific technical terms
+- "revolutionary", "game-changing", "seamless" → remove marketing hype
+
+**Corporate Speak to Reduce:**
+- "solution" → use specific description
+- "platform" → use "tool" or "system" where appropriate
+- "ecosystem" → use only when necessary, prefer specific names
+
+**Language Simplification:**
+- "utilize" → "use"
+- "facilitate" → "enable" or "help"
+- "remembrances" → "memories"
+- "structural foundation" → "foundation"
+- Passive voice → Active voice ("it was found" → "I found")
+
+**Punctuation Patterns (AI-Generated Tendencies):**
+- NEVER use em dashes (—) or en dashes (–)
+- Use commas for appositives and lists
+- Use periods to separate ideas
+- Use colons to introduce lists or explanations
+- Use standard hyphens (-) for compound words and ranges
+
+**Conversational Transitions (AI-Generated Tendencies):**
+- NEVER use: "Now, let's...", "So, you might...", "Interestingly...", "As you can see...", "Keep in mind that..."
+- Use direct statements without transition words
+- Start with the subject directly
+
+**Soft Questions and Offers (AI-Generated Tendencies):**
+- NEVER use: "Would you like to...?", "Have you considered...?", "Want to try...?", "Need help with...?"
+- Use direct instructions: "Use the `store_record` action to..."
+- Use declarative statements: "The system supports..."
+
+**Motivational Language (AI-Generated Tendencies):**
+- NEVER use: "Get started!", "Try it now!", "You're all set!", "Ready to go!", "Let's dive in!"
+- Use neutral completion statements: "Setup is complete."
+- Use direct next steps: "Next, configure environment variables."
+
+**Excessive Parentheticals (AI-Generated Tendencies):**
+- NEVER use multiple parenthetical asides in one sentence
+- NEVER use long explanatory parentheticals that break flow
+- Use separate sentences for explanations
+- Use commas for brief clarifications
+
+**Redundant Qualifiers (AI-Generated Tendencies):**
+- NEVER use: "very", "quite", "rather", "somewhat", "pretty", "incredibly", "extremely", "highly"
+- Use direct adjectives: "fast" not "very fast"
+- Use specific measurements when available: "processes 100 files/second" not "very quickly"
+
+**Complex Sentence Structures (AI-Generated Tendencies):**
+- NEVER use overly nested clauses
+- NEVER use multiple dependent clauses in one sentence
+- NEVER use sentences over 25 words
+- Use simple, short sentences (15-20 words)
+- Use one idea per sentence
+- Break complex thoughts into multiple sentences
+
+### Step 3: Verify Authentic Human Voice
+
+Content MUST have:
+- Conversational but professional tone
+- First person where appropriate ("I built this", "When I use...")
+- Personal insights and examples
+- Natural language flow (contractions, varied sentence length)
+- Active voice preferred
+- Direct, clear statements
+- Simple, declarative sentences
+
+### Step 4: Quality Check
+
+Before completing content work:
+1. Scan for AI phrases listed above
+2. Replace with natural alternatives
+3. Verify active voice throughout
+4. Check for personal insights/examples
+5. Read aloud to verify natural flow
+6. Search for em dashes (—) and en dashes (–) and replace
+7. Remove conversational transitions
+8. Remove soft questions and motivational language
+9. Simplify complex sentences
+10. Remove redundant qualifiers
+
+## Constraints
+
+- MUST apply anti-AI patterns to ALL content before finalizing
+- MUST NOT skip style enforcement to save time
+- MUST verify authentic human voice in every piece
+- MUST remove generic AI phrases even if content is AI-generated initially
+- MUST use active voice unless passive is clearly better
+- MUST NOT use em dashes (—) or en dashes (–)
+- MUST NOT use conversational transitions ("Now, let's...", "So, you might...")
+- MUST NOT use soft questions ("Would you like to...?", "Have you considered...?")
+- MUST NOT use motivational language ("Get started!", "Try it now!")
+- MUST NOT use excessive parentheticals
+- MUST NOT use redundant qualifiers ("very", "quite", "rather")
+- MUST use simple, declarative sentences (15-20 words, one idea per sentence)
+
+## Related Documents
+
+- `foundation/conventions/writing_style_guide.md` - Complete writing style guide
+- `foundation/conventions/documentation_standards.md` - Documentation structure and format

@@ -1,0 +1,336 @@
+# Test-First Workflow Rules
+
+**Reference:** Repository testing standards
+
+## Purpose
+
+Enforces test-first (TDD) or test-alongside development workflow to catch bugs early and ensure comprehensive test coverage.
+
+## Scope
+
+This document covers:
+- Test-first workflow requirements
+- Test writing alongside implementation
+- Test execution before implementation verification
+- Test coverage verification
+
+This document does NOT cover:
+- Test execution after implementation (see `agent_test_execution.mdc`)
+- Test quality standards (see repository test quality rules)
+
+## Trigger Patterns
+
+Agents MUST follow test-first workflow when:
+
+- Implementing new features
+- Adding new functions or methods
+- Creating new API endpoints
+- Building new UI components
+- Adding new database operations
+
+## Test-First Workflow
+
+### Option 1: Pure TDD (Test-Driven Development)
+
+**For new features or significant changes:**
+
+1. **Write test cases FIRST**
+   - Create test file before implementation file
+   - Write test cases covering:
+     - Happy path
+     - Edge cases (null, empty, invalid values)
+     - Error cases
+     - Boundary conditions
+
+2. **Run tests to verify they fail (RED)**
+   - Tests should fail because implementation doesn't exist
+   - This confirms tests are actually testing something
+
+3. **Implement feature to make tests pass (GREEN)**
+   - Write minimal code to make tests pass
+   - Don't over-engineer
+
+4. **Refactor if needed (REFACTOR)**
+   - Improve code quality while keeping tests green
+   - Verify tests still pass after refactoring
+
+### Option 2: Test-Alongside Development
+
+**For smaller changes or when TDD is impractical:**
+
+1. **Write test cases alongside implementation**
+   - Create test file at same time as implementation
+   - Write tests for each function as you implement it
+   - Don't defer test writing
+
+2. **Run tests frequently**
+   - Run tests after each function implementation
+   - Fix failures immediately
+   - Verify tests pass before moving on
+
+3. **Ensure comprehensive coverage**
+   - Test happy path
+   - Test edge cases
+   - Test error cases
+   - Verify all code paths covered
+
+## Test Writing Requirements
+
+### For New Functions
+
+When implementing a new function, write tests that cover:
+
+1. **Happy path:**
+   ```typescript
+   it("should process valid input correctly", () => {
+     const result = newFunction(validInput);
+     expect(result).toEqual(expectedOutput);
+   });
+   ```
+
+2. **Edge cases:**
+   ```typescript
+   it("should handle null input", () => {
+     const result = newFunction(null);
+     expect(result).toBeNull();
+   });
+
+   it("should handle empty input", () => {
+     const result = newFunction("");
+     expect(result).toEqual(defaultValue);
+   });
+   ```
+
+3. **Error cases:**
+   ```typescript
+   it("should throw error for invalid input", () => {
+     expect(() => newFunction(invalidInput)).toThrow();
+   });
+   ```
+
+4. **Boundary conditions:**
+   ```typescript
+   it("should handle maximum value", () => {
+     const result = newFunction(MAX_VALUE);
+     expect(result).toBeDefined();
+   });
+   ```
+
+### For Database Operations
+
+When implementing database operations, write integration tests that:
+
+1. **Test real database operations** (not mocks)
+2. **Verify database state after operations**
+3. **Test foreign key constraints**
+4. **Test user_id handling** (null, default values, real values)
+5. **Clean up test data**
+
+See repository test quality rules for detailed patterns.
+
+### For UI Components
+
+When implementing UI components, write E2E tests that:
+
+1. **Test user interactions** (clicks, form submissions)
+2. **Test error states and edge cases**
+3. **Test responsive behavior**
+4. **Verify data persistence after actions**
+5. **Test loading states and async operations**
+
+See repository UI test requirements for detailed patterns.
+
+## Test Execution During Development
+
+### During TDD Workflow
+
+1. **After writing tests:**
+   ```bash
+   npm test -- newFunction
+   # Expected: Tests fail (RED)
+   ```
+
+2. **After implementing feature:**
+   ```bash
+   npm test -- newFunction
+   # Expected: Tests pass (GREEN)
+   ```
+
+3. **After refactoring:**
+   ```bash
+   npm test -- newFunction
+   # Expected: Tests still pass
+   ```
+
+### During Test-Alongside Workflow
+
+1. **After each function:**
+   ```bash
+   npm test -- functionName
+   # Verify: Tests pass
+   ```
+
+2. **After completing feature:**
+   ```bash
+   npm test
+   npm run test:integration
+   # Verify: All tests pass
+   ```
+
+## Coverage Verification
+
+After implementing feature and tests:
+
+1. **Run coverage check:**
+   ```bash
+   npm run test:coverage
+   ```
+
+2. **Verify coverage meets requirements:**
+   - Domain logic: >85% lines, >85% branches
+   - Application layer: >80% lines, >80% branches
+   - UI components: >75% lines, >75% branches
+
+3. **Add missing tests if coverage is insufficient:**
+   - Identify uncovered code paths
+   - Write tests for uncovered paths
+   - Re-run coverage check
+
+## Integration with Feature Unit Workflow
+
+When implementing Feature Units (if repository uses feature units):
+
+1. **Planning phase:**
+   - Identify test cases needed
+   - Plan test structure
+   - Identify edge cases to test
+
+2. **Implementation phase:**
+   - Write tests first (TDD) or alongside (test-alongside)
+   - Run tests frequently
+   - Fix failures immediately
+
+3. **Completion phase:**
+   - Verify all tests pass
+   - Check coverage meets requirements
+   - Document test results
+
+## Constraints
+
+Agents MUST:
+- Write tests before or alongside implementation
+- Run tests frequently during development
+- Fix test failures immediately
+- Verify coverage meets requirements
+- Test edge cases and error paths
+
+Agents MUST NOT:
+- Defer test writing to "later"
+- Write tests only after implementation is complete
+- Skip edge case testing
+- Mark implementation complete without tests
+- Assume code works without running tests
+
+## Examples
+
+### ✅ Correct: TDD Workflow
+
+```typescript
+// Step 1: Write test first
+describe("newFeature", () => {
+  it("should process valid input", () => {
+    const result = newFeature(validInput);
+    expect(result).toEqual(expectedOutput);
+  });
+});
+
+// Step 2: Run test (fails - RED)
+// npm test → ❌ newFeature is not defined
+
+// Step 3: Implement feature
+export function newFeature(input: Input): Output {
+  // Implementation
+}
+
+// Step 4: Run test (passes - GREEN)
+// npm test → ✅ All tests passed
+```
+
+### ❌ Incorrect: Implementation First
+
+```typescript
+// Step 1: Implement feature first
+export function newFeature(input: Input): Output {
+  // Implementation
+}
+
+// Step 2: Write tests later (or never)
+// Tests may not catch bugs because implementation is already done
+```
+
+### ✅ Correct: Test-Alongside
+
+```typescript
+// Step 1: Write function signature and test together
+export function newFeature(input: Input): Output {
+  // TODO: Implementation
+}
+
+describe("newFeature", () => {
+  it("should process valid input", () => {
+    const result = newFeature(validInput);
+    expect(result).toEqual(expectedOutput);
+  });
+});
+
+// Step 2: Implement and test together
+// Run tests after each change
+```
+
+## Related Documents
+
+- Repository testing standards
+- `agent_test_execution.mdc` — Mandatory test execution
+- Repository UI test requirements
+- Repository test quality rules
+
+## Agent Instructions
+
+### When to Load This Document
+
+Load this document when:
+- Starting new feature implementation
+- Planning test strategy
+- Reviewing test coverage
+
+### Required Co-Loaded Documents
+
+- Repository testing standards
+- `agent_test_execution.mdc` — Test execution workflow
+
+### Constraints Agents Must Enforce
+
+1. **MANDATORY test writing** before or alongside implementation
+2. **MANDATORY test execution** during development
+3. **MANDATORY coverage verification** before completion
+4. **MANDATORY edge case testing** for all functions
+
+### Forbidden Patterns
+
+- Deferring test writing to "later"
+- Writing tests only after implementation
+- Skipping edge case testing
+- Marking implementation complete without tests
+- Assuming code works without running tests
+
+### Validation Checklist
+
+Before marking implementation complete:
+- [ ] Tests written before or alongside implementation
+- [ ] Tests cover happy path, edge cases, and error cases
+- [ ] All tests pass
+- [ ] Coverage meets requirements
+- [ ] Edge cases tested (null, empty, invalid values)
+- [ ] Error paths tested
+- [ ] Database state verified (for DB operations)
+- [ ] UI interactions tested (for UI components)

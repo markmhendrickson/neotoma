@@ -3,20 +3,22 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { DocumentationPage } from './DocumentationPage';
 import { MarkdownContent } from './MarkdownContent';
 
-const WELCOME_CONTENT = `# Neotoma Documentation
+const WELCOME_CONTENT = `# Neotoma documentation
 
 Welcome to the Neotoma documentation.
 
-## Quick Links
+## Quick links
 
-- **[Getting Started](/docs/developer/getting_started.md)** - Setup and configuration
-- **[Architecture Overview](/docs/architecture/architecture.md)** - System design and structure
-- **[API Reference](/docs/specs/MCP_SPEC.md)** - MCP and REST API documentation
-- **[Developer Guides](/docs/developer/)** - Development workflows and setup
+- **[Getting started](/docs/developer/getting_started.md)** - Setup and configuration
+- **[Automated test catalog](/docs/testing/automated_test_catalog.md)** - File level test inventory and suite commands
+- **[CLI overview](/docs/developer/cli_overview.md)** - CLI installation, auth, and common workflows
+- **[MCP overview](/docs/developer/mcp_overview.md)** - MCP entry points and setup guides
+- **[Architecture overview](/docs/architecture/architecture.md)** - System design and structure
+- **[API reference](/docs/specs/MCP_SPEC.md)** - MCP and REST API documentation
 
 ## Overview
 
-Neotoma is a personal knowledge management system that stores, organizes, and retrieves information from various sources.
+Neotoma is a Truth Layer that stores, structures, and exposes personal data for AI tools via MCP.
 
 Use the directory on the left to navigate through the documentation sections.`;
 

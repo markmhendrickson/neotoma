@@ -1372,28 +1372,6 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
               </div>
-              <Separator />
-              <div>
-                <Label className="mb-3 block">Connected Integrations</Label>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-3 border rounded-md">
-                    <div>
-                      <div className="font-medium text-sm">Gmail</div>
-                      <div className="text-xs text-muted-foreground">Last synced: 2 hours ago</div>
-                    </div>
-                    <Badge className="bg-success/10 text-success">Connected</Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border rounded-md">
-                    <div>
-                      <div className="font-medium text-sm">Plaid</div>
-                      <div className="text-xs text-muted-foreground">Not connected</div>
-                    </div>
-                    <Button variant="outline" size="sm">
-                      Connect
-                    </Button>
-                  </div>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </section>

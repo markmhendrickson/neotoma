@@ -138,8 +138,7 @@ The sidebar is organized into sections:
 - **Overview**: Getting Started, What It Does, Core Workflow
 - **API Reference**: MCP Actions, REST API
 - **Architecture**: Overview, Data Models, Entity Resolution
-- **Developer Guides**: Development Workflow, MCP Setup
-- **Integration Guides**: Plaid Setup, Gmail Setup
+- **Developer Guides**: Development Workflow, CLI Overview, CLI Reference, MCP Overview, MCP Setup
 - **Troubleshooting**: Common Issues
 
 Update navigation in `DocumentationSidebar.tsx` by modifying the `navigationSections` array.

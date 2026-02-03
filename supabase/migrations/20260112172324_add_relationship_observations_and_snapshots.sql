@@ -37,9 +37,11 @@ CREATE INDEX IF NOT EXISTS idx_relationship_observations_observed_at ON relation
 -- RLS for relationship_observations
 ALTER TABLE relationship_observations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users read own relationship_observations" ON relationship_observations;
 CREATE POLICY "Users read own relationship_observations" ON relationship_observations
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Service role full access to relationship_observations" ON relationship_observations;
 CREATE POLICY "Service role full access to relationship_observations" ON relationship_observations
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -71,9 +73,11 @@ CREATE INDEX IF NOT EXISTS idx_relationship_snapshots_snapshot ON relationship_s
 -- RLS for relationship_snapshots
 ALTER TABLE relationship_snapshots ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users read own relationship_snapshots" ON relationship_snapshots;
 CREATE POLICY "Users read own relationship_snapshots" ON relationship_snapshots
   FOR SELECT USING (user_id = auth.uid());
 
+DROP POLICY IF EXISTS "Service role full access to relationship_snapshots" ON relationship_snapshots;
 CREATE POLICY "Service role full access to relationship_snapshots" ON relationship_snapshots
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 

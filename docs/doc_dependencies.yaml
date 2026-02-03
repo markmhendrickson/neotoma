@@ -16,6 +16,51 @@
 #   - restates: Document restates information from upstream
 
 # Foundation Layer (root dependencies)
+docs/NEOTOMA_MANIFEST.md:
+  downstream:
+    - path: docs/specs/*.md
+      type: restates
+      reason: Specifications reference manifest constraints
+    - path: docs/architecture/*.md
+      type: implicit
+      reason: Architecture aligns with manifest invariants
+    - path: docs/subsystems/*.md
+      type: implicit
+      reason: Subsystems reference manifest constraints
+    - path: docs/subsystems/ingestion/*.md
+      type: implicit
+      reason: Ingestion aligns with manifest constraints
+    - path: docs/feature_units/standards/*.md
+      type: explicit
+      reason: Feature unit standards reference manifest
+    - path: docs/feature_units/completed/*/*.md
+      type: explicit
+      reason: Feature unit specs reference manifest
+    - path: docs/releases/*/release_plan.md
+      type: explicit
+      reason: Release plans reference manifest
+    - path: docs/ui/**/*.md
+      type: implicit
+      reason: UI docs reference Truth Layer constraints
+    - path: docs/developer/*.md
+      type: implicit
+      reason: Developer guides reference manifest
+    - path: docs/migration/*.md
+      type: implicit
+      reason: Migration docs reference manifest
+    - path: docs/conventions/documentation_standards.md
+      type: explicit
+      reason: Documentation standards require manifest alignment
+    - path: docs/conventions/writing_style_guide.md
+      type: implicit
+      reason: Writing style guide references manifest
+    - path: docs/templates/pr_template.md
+      type: implicit
+      reason: PR template references manifest
+    - path: README.md
+      type: restates
+      reason: README restates manifest principles
+
 docs/foundation/core_identity.md:
   downstream:
     - path: docs/architecture/architecture.md
@@ -30,6 +75,21 @@ docs/foundation/core_identity.md:
     - path: README.md
       type: restates
       reason: Restates core identity in overview
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: implicit
+      reason: Proposal references Truth Layer constraints and core identity
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: implicit
+      reason: Report references Truth Layer constraints and core identity
+
+docs/private/governance/00_GENERATION.md:
+  downstream:
+    - path: docs/conventions/documentation_standards.md
+      type: explicit
+      reason: Documentation standards reference generation requirements
+    - path: docs/context/index_rules.mdc
+      type: explicit
+      reason: Index rules reference generation requirements
 
 docs/foundation/philosophy.md:
   downstream:
@@ -130,6 +190,12 @@ docs/architecture/determinism.md:
     - path: docs/testing/testing_standard.md
       type: implicit
       reason: Testing must ensure determinism
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: implicit
+      reason: Proposal references determinism requirements for MCP and CLI
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: implicit
+      reason: Report references determinism requirements for MCP and CLI
 
 # Specifications Layer
 docs/specs/MVP_OVERVIEW.md:
@@ -164,6 +230,15 @@ docs/specs/MCP_SPEC.md:
     - path: README.md
       type: restates
       reason: Restates MCP integration information
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: explicit
+      reason: Proposal references MCP specification for tool alignment
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: explicit
+      reason: Report references MCP specification for tool alignment
+    - path: docs/developer/mcp_overview.md
+      type: explicit
+      reason: MCP overview links to the MCP specification
 
 docs/specs/DATA_MODELS.md:
   downstream:
@@ -193,6 +268,24 @@ docs/testing/testing_standard.md:
       type: restates
       reason: Restates testing information
 
+docs/testing/automated_test_catalog.md:
+  downstream:
+    - path: docs/testing/testing_standard.md
+      type: explicit
+      reason: Testing standard links to the automated test catalog
+    - path: README.md
+      type: restates
+      reason: README lists the automated test catalog
+
+docs/testing/fixtures_standard.md:
+  downstream:
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: explicit
+      reason: Proposal references fixture standards for replayable outputs
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: explicit
+      reason: Report references fixture standards for replayable outputs
+
 docs/conventions/documentation_standards.md:
   downstream:
     - path: .cursor/rules/downstream_doc_updates.md
@@ -220,12 +313,15 @@ docs/subsystems/ingestion/ingestion.md:
     - path: docs/developer/getting_started.md
       type: explicit
       reason: Developer docs reference ingestion
-    - path: docs/integrations/*/*.md
-      type: implicit
-      reason: Integration guides may reference ingestion
     - path: README.md
       type: restates
       reason: Restates ingestion workflow
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: explicit
+      reason: Proposal references ingestion pipeline and walkthrough
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: explicit
+      reason: Report evaluates ingestion alignment
 
 docs/subsystems/schema_registry.md:
   downstream:
@@ -271,6 +367,15 @@ docs/subsystems/relationships.md:
     - path: docs/feature_units/completed/*/FU-*_spec.md
       type: implicit
       reason: Feature units may implement relationship features
+
+docs/subsystems/errors.md:
+  downstream:
+    - path: docs/proposals/mcp-cli-action-items.md
+      type: explicit
+      reason: Proposal references error taxonomy requirements
+    - path: docs/reports/mcp_cli_action_items_fidelity_report.md
+      type: explicit
+      reason: Report references error taxonomy requirements
 
 docs/subsystems/events.md:
   downstream:

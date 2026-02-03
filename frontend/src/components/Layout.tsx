@@ -226,7 +226,7 @@ export function Layout({
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
   const scrollPositions = useRef(new Map<string, number>());
   const previousPathname = useRef(location.pathname);
   const isRestoringRef = useRef(false);

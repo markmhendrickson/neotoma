@@ -21,6 +21,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+import { getApiClient } from "@/lib/api_client";
 
 interface ContactDialogProps {
   open: boolean;
@@ -39,7 +40,7 @@ export function ContactDialog({ open, onClose, onSave }: ContactDialogProps) {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken } = useKeys();
   const { sessionToken, user } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,13 +57,6 @@ export function ContactDialog({ open, onClose, onSave }: ContactDialogProps) {
     setLoading(true);
 
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-      if (bearerToken) {
-        headers["Authorization"] = `Bearer ${bearerToken}`;
-      }
-
       const contactData: Record<string, unknown> = {
         entity_type: "contact",
         name,
@@ -72,20 +66,17 @@ export function ContactDialog({ open, onClose, onSave }: ContactDialogProps) {
       if (company) contactData.company = company;
       if (phone) contactData.phone = phone;
 
-      const response = await fetch("/api/store", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
+      const api = getApiClient(bearerToken);
+      const { data, error } = await api.POST("/api/store", {
+        body: {
           entities: [contactData],
           user_id: user?.id,
-        }),
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to save contact: ${response.statusText}`);
+      if (error || !data) {
+        throw new Error("Failed to save contact");
       }
-
-      const data = await response.json();
       const entityId = data.entities?.[0]?.entity_id;
 
       toast({

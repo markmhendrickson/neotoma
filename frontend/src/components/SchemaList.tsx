@@ -42,7 +42,7 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
   const { subscribe } = useRealtime();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const sortSchemas = useCallback((items: Schema[]) => {
     return [...items].sort((left, right) => {

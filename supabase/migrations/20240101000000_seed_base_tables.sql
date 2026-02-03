@@ -73,6 +73,12 @@ CREATE TABLE IF NOT EXISTS interpretations (
   interpretation_id UUID -- Self-reference for versioning (nullable)
 );
 
+-- Ensure archived_at exists when interpretations table pre-exists
+ALTER TABLE interpretations
+  ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+ALTER TABLE interpretations
+  ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ;
+
 CREATE INDEX IF NOT EXISTS idx_interpretations_source ON interpretations(source_id);
 CREATE INDEX IF NOT EXISTS idx_interpretations_status ON interpretations(status);
 CREATE INDEX IF NOT EXISTS idx_interpretations_user ON interpretations(user_id);
@@ -296,18 +302,63 @@ CREATE TABLE IF NOT EXISTS timeline_events (
   user_id UUID NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_timeline_events_entity ON timeline_events(entity_id);
-CREATE INDEX IF NOT EXISTS idx_timeline_events_record ON timeline_events(record_id);
-CREATE INDEX IF NOT EXISTS idx_timeline_events_source ON timeline_events(source_id);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'entity_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_entity ON timeline_events(entity_id);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'record_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_record ON timeline_events(record_id);
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'source_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_source ON timeline_events(source_id);
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_timeline_events_type ON timeline_events(event_type);
-CREATE INDEX IF NOT EXISTS idx_timeline_events_occurred_at ON timeline_events(occurred_at DESC);
-CREATE INDEX IF NOT EXISTS idx_timeline_events_user ON timeline_events(user_id);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'occurred_at'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_occurred_at
+      ON timeline_events(occurred_at DESC);
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'user_id'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_timeline_events_user ON timeline_events(user_id);
+  END IF;
+END $$;
 
 ALTER TABLE timeline_events ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Users read own timeline_events" ON timeline_events;
-CREATE POLICY "Users read own timeline_events" ON timeline_events
-  FOR SELECT USING (user_id = auth.uid());
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'timeline_events' AND column_name = 'user_id'
+  ) THEN
+    DROP POLICY IF EXISTS "Users read own timeline_events" ON timeline_events;
+    CREATE POLICY "Users read own timeline_events" ON timeline_events
+      FOR SELECT USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 DROP POLICY IF EXISTS "Service role full access - timeline_events" ON timeline_events;
 CREATE POLICY "Service role full access - timeline_events" ON timeline_events

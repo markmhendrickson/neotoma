@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiClient } from "@/lib/api_client";
 
 interface SearchResult {
   id: string;
@@ -34,7 +35,7 @@ export function SearchResults() {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Sync search input with URL query param
   useEffect(() => {
@@ -68,125 +69,102 @@ export function SearchResults() {
 
     setLoading(true);
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${bearerToken}`,
-      };
+      const api = getApiClient(bearerToken);
 
       const userId = user?.id;
       const allResults: SearchResult[] = [];
 
       // Search entities
       try {
-        const entitiesResponse = await fetch("/api/entities/query", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
+        const { data: entitiesData } = await api.POST("/api/entities/query", {
+          body: {
             search: searchQuery,
             limit: 100,
             user_id: userId,
-          }),
+          },
         });
-
-        if (entitiesResponse.ok) {
-          const entitiesData = await entitiesResponse.json();
-          const entities = (entitiesData.entities || []).map((e: any) => ({
-            id: e.id,
-            type: "entity" as const,
-            title: e.canonical_name || e.entity_type,
-            subtitle: e.entity_type,
-            href: `/entity/${e.id}`,
-            metadata: e,
-          }));
-          allResults.push(...entities);
-        }
+        const entities = (entitiesData?.entities || []).map((e: any) => ({
+          id: e.id,
+          type: "entity" as const,
+          title: e.canonical_name || e.entity_type,
+          subtitle: e.entity_type,
+          href: `/entity/${e.id}`,
+          metadata: e,
+        }));
+        allResults.push(...entities);
       } catch (error) {
         console.error("Failed to search entities:", error);
       }
 
       // Search sources
       try {
-        const sourcesResponse = await fetch("/api/sources", {
-          headers,
+        const { data: sourcesData } = await api.GET("/api/sources", {
+          params: { query: userId ? { user_id: userId } : {} },
         });
-
-        if (sourcesResponse.ok) {
-          const sourcesData = await sourcesResponse.json();
-          const sources = (sourcesData.sources || [])
-            .filter((s: any) => 
-              s.original_filename?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              s.id.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-            .map((s: any) => ({
-              id: s.id,
-              type: "source" as const,
-              title: s.original_filename || s.id.substring(0, 16) + "...",
-              subtitle: "Source",
-              href: `/sources/${s.id}`,
-              metadata: s,
-            }));
-          allResults.push(...sources);
-        }
+        const sources = (sourcesData?.sources || [])
+          .filter((s: any) => 
+            s.original_filename?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            s.id.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+          .map((s: any) => ({
+            id: s.id,
+            type: "source" as const,
+            title: s.original_filename || s.id.substring(0, 16) + "...",
+            subtitle: "Source",
+            href: `/sources/${s.id}`,
+            metadata: s,
+          }));
+        allResults.push(...sources);
       } catch (error) {
         console.error("Failed to search sources:", error);
       }
 
       // Search observations
       try {
-        const observationsResponse = await fetch("/api/observations/query", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
+        const { data: observationsData } = await api.POST("/api/observations/query", {
+          body: {
             limit: 100,
             user_id: userId,
-          }),
+          },
         });
-
-        if (observationsResponse.ok) {
-          const observationsData = await observationsResponse.json();
-          const observations = (observationsData.observations || [])
-            .filter((o: any) =>
-              o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              o.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              o.fragment_key?.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-            .map((o: any) => ({
-              id: o.id,
-              type: "observation" as const,
-              title: o.fragment_key || o.id.substring(0, 16) + "...",
-              subtitle: "Observation",
-              href: `/observations?entity=${o.entity_id}`,
-              metadata: o,
-            }));
-          allResults.push(...observations);
-        }
+        const observations = (observationsData?.observations || [])
+          .filter((o: any) =>
+            o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            o.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            o.fragment_key?.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+          .map((o: any) => ({
+            id: o.id,
+            type: "observation" as const,
+            title: o.fragment_key || o.id.substring(0, 16) + "...",
+            subtitle: "Observation",
+            href: `/observations?entity=${o.entity_id}`,
+            metadata: o,
+          }));
+        allResults.push(...observations);
       } catch (error) {
         console.error("Failed to search observations:", error);
       }
 
       // Search interpretations
       try {
-        const interpretationsResponse = await fetch("/api/interpretations", {
-          headers,
+        const { data: interpretationsData } = await api.GET("/api/interpretations", {
+          params: { query: userId ? { user_id: userId } : {} },
         });
-
-        if (interpretationsResponse.ok) {
-          const interpretationsData = await interpretationsResponse.json();
-          const interpretations = (interpretationsData.interpretations || [])
-            .filter((i: any) =>
-              i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              i.source_id.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-            .map((i: any) => ({
-              id: i.id,
-              type: "interpretation" as const,
-              title: i.id.substring(0, 16) + "...",
-              subtitle: "Interpretation",
-              href: `/sources/${i.source_id}`,
-              metadata: i,
-            }));
-          allResults.push(...interpretations);
-        }
+        const interpretations = (interpretationsData?.interpretations || [])
+          .filter((i: any) =>
+            i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            i.source_id.toLowerCase().includes(searchQuery.toLowerCase())
+          )
+          .map((i: any) => ({
+            id: i.id,
+            type: "interpretation" as const,
+            title: i.id.substring(0, 16) + "...",
+            subtitle: "Interpretation",
+            href: `/sources/${i.source_id}`,
+            metadata: i,
+          }));
+        allResults.push(...interpretations);
       } catch (error) {
         console.error("Failed to search interpretations:", error);
       }

@@ -11,9 +11,14 @@
 - Market-driven feature prioritization
 
 **Dogfooding-First Approach:**
-- Build for personal use (ateles integration) → Validate through usage → Then consider marketing
+- Build for personal use (ateles integration) → Release developer preview during dogfooding → Validate through usage → Discovery only if signals are weak
 - Internal validation through real usage
 - Use-case-driven feature prioritization
+
+**Capacity-Constrained Sequence (Recommended When Discovery Is Not Feasible):**
+- Build + dogfood with developer preview release during dogfooding
+- Use preview validation to assess dependence and feedback quality
+- Schedule discovery only if validation is insufficient
 
 ---
 

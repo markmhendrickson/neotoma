@@ -48,7 +48,7 @@ export function InterpretationList({
   const { subscribe } = useRealtime();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Helper function to fetch interpretations
   const fetchInterpretations = useCallback(async () => {

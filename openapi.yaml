@@ -6,6 +6,8 @@ info:
 servers:
   - url: https://dev.neotoma.io
     description: Cloudflare Tunnel URL
+  - url: http://localhost:8080
+    description: Local development server
 security:
   - bearerAuth: []
 components:
@@ -13,11 +15,11 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: base64url
+      bearerFormat: JWT or base64url
       description: |
-        Bearer token is a base64url-encoded Ed25519 public key.
-        The corresponding private key is used by the client to decrypt responses.
-        For ChatGPT Actions, use the public key (base64url-encoded) as the bearer token.
+        Supported bearer tokens:
+        - Supabase access token (JWT) from MCP OAuth flow (recommended for CLI and web clients)
+        - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
     RetrieveRecordsRequest:
@@ -153,6 +155,257 @@ components:
                 type: object
                 additionalProperties: true
           description: Function calls made during the conversation (if any)
+    ErrorEnvelope:
+      type: object
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        trace_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    Entity:
+      type: object
+      properties:
+        id:
+          type: string
+        entity_type:
+          type: string
+        canonical_name:
+          type: string
+        user_id:
+          type: string
+        merged_to_entity_id:
+          type: string
+          nullable: true
+        merged_at:
+          type: string
+          format: date-time
+          nullable: true
+    EntitySnapshot:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        snapshot:
+          type: object
+          additionalProperties: true
+        raw_fragments:
+          type: object
+          additionalProperties: true
+        provenance:
+          type: object
+          additionalProperties: true
+        computed_at:
+          type: string
+          format: date-time
+        observation_count:
+          type: integer
+        last_observation_at:
+          type: string
+          format: date-time
+    Source:
+      type: object
+      properties:
+        id:
+          type: string
+        content_hash:
+          type: string
+        mime_type:
+          type: string
+        storage_url:
+          type: string
+        file_size:
+          type: integer
+        original_filename:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+    Observation:
+      type: object
+      properties:
+        id:
+          type: string
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        source_id:
+          type: string
+          nullable: true
+        interpretation_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        specificity_score:
+          type: number
+        source_priority:
+          type: integer
+        fields:
+          type: object
+          additionalProperties: true
+        user_id:
+          type: string
+    RelationshipSnapshot:
+      type: object
+      properties:
+        relationship_key:
+          type: string
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        schema_version:
+          type: string
+        snapshot:
+          type: object
+          additionalProperties: true
+        computed_at:
+          type: string
+          format: date-time
+        observation_count:
+          type: integer
+        last_observation_at:
+          type: string
+          format: date-time
+        provenance:
+          type: object
+          additionalProperties: true
+        user_id:
+          type: string
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        event_type:
+          type: string
+        event_timestamp:
+          type: string
+          format: date-time
+        source_id:
+          type: string
+        entity_ids:
+          type: array
+          items:
+            type: string
+        properties:
+          type: object
+          additionalProperties: true
+    EntitySchema:
+      type: object
+      properties:
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        field_names:
+          type: array
+          items:
+            type: string
+        field_summary:
+          type: object
+          additionalProperties: true
+    Interpretation:
+      type: object
+      properties:
+        id:
+          type: string
+        source_id:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    Stats:
+      type: object
+      properties:
+        entities:
+          type: integer
+        sources:
+          type: integer
+        observations:
+          type: integer
+        relationships:
+          type: integer
+        timeline_events:
+          type: integer
+    StoreStructuredRequest:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        source_priority:
+          type: integer
+        user_id:
+          type: string
+    StoreStructuredResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        entities:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_id:
+                type: string
+              entity_type:
+                type: string
+              observation_id:
+                type: string
+    OAuthInitiateRequest:
+      type: object
+      required: [connection_id]
+      properties:
+        connection_id:
+          type: string
+        client_name:
+          type: string
+    OAuthInitiateResponse:
+      type: object
+      properties:
+        auth_url:
+          type: string
+        connection_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    OAuthStatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        connection_id:
+          type: string
 paths:
   /types:
     get:
@@ -349,6 +602,864 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+
+  /openapi.yaml:
+    get:
+      summary: Get OpenAPI specification
+      operationId: getOpenApiSpec
+      security: []
+      responses:
+        '200':
+          description: OpenAPI specification in YAML
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  /api/server-info:
+    get:
+      summary: Get server info
+      operationId: getServerInfo
+      responses:
+        '200':
+          description: Server info
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/mcp/oauth/initiate:
+    post:
+      summary: Initiate MCP OAuth flow
+      operationId: mcpOAuthInitiate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OAuthInitiateRequest' }
+      responses:
+        '200':
+          description: OAuth initiation result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthInitiateResponse' }
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/mcp/oauth/authorize:
+    get:
+      summary: OAuth authorization endpoint
+      operationId: mcpOAuthAuthorize
+      parameters:
+        - in: query
+          name: redirect_uri
+          required: true
+          schema: { type: string }
+        - in: query
+          name: state
+          required: true
+          schema: { type: string }
+        - in: query
+          name: code_challenge
+          required: true
+          schema: { type: string }
+        - in: query
+          name: code_challenge_method
+          required: true
+          schema: { type: string }
+        - in: query
+          name: client_id
+          required: false
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect to authorization URL
+
+  /api/mcp/oauth/token:
+    post:
+      summary: OAuth token exchange
+      operationId: mcpOAuthToken
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                grant_type:
+                  type: string
+                code:
+                  type: string
+      responses:
+        '200':
+          description: OAuth token response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  token_type:
+                    type: string
+                  expires_in:
+                    type: integer
+        '400':
+          description: Token exchange error
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/mcp/oauth/status:
+    get:
+      summary: Get OAuth connection status
+      operationId: mcpOAuthStatus
+      parameters:
+        - in: query
+          name: connection_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Connection status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthStatusResponse' }
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/mcp/oauth/connections:
+    get:
+      summary: List OAuth connections
+      operationId: mcpOAuthListConnections
+      responses:
+        '200':
+          description: Connection list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/mcp/oauth/connections/{connection_id}:
+    delete:
+      summary: Revoke OAuth connection
+      operationId: mcpOAuthRevokeConnection
+      parameters:
+        - in: path
+          name: connection_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+
+  /api/entities/query:
+    post:
+      summary: Query entities
+      operationId: queryEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_type:
+                  type: string
+                search:
+                  type: string
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+                include_merged:
+                  type: boolean
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EntitySnapshot'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/entities/{id}:
+    get:
+      summary: Get entity by ID
+      operationId: getEntityById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Entity
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitySnapshot' }
+        '404':
+          description: Entity not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /api/entities/{id}/observations:
+    get:
+      summary: List observations for entity
+      operationId: getEntityObservations
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+
+  /api/entities/{id}/relationships:
+    get:
+      summary: List relationships for entity
+      operationId: getEntityRelationships
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+
+  /api/entities/merge:
+    post:
+      summary: Merge duplicate entities
+      operationId: mergeEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from_entity_id:
+                  type: string
+                to_entity_id:
+                  type: string
+                merge_reason:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Merge result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations_moved:
+                    type: integer
+                  merged_at:
+                    type: string
+                    format: date-time
+
+  /api/sources:
+    get:
+      summary: List sources
+      operationId: listSources
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: search
+          required: false
+          schema: { type: string }
+        - in: query
+          name: mime_type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: source_type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Sources
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Source'
+
+  /api/sources/{id}:
+    get:
+      summary: Get source by ID
+      operationId: getSourceById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Source
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Source' }
+
+  /api/observations:
+    get:
+      summary: List observations
+      operationId: listObservations
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: source_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: entity_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+
+  /api/observations/query:
+    post:
+      summary: Query observations
+      operationId: queryObservations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /api/observations/create:
+    post:
+      summary: Create observation
+      operationId: createObservation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Observation created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /api/relationships:
+    get:
+      summary: List relationships
+      operationId: listRelationships
+      responses:
+        '200':
+          description: Relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+
+  /api/relationships/{id}:
+    get:
+      summary: Get relationship by ID
+      operationId: getRelationshipById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Relationship
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
+
+  /api/timeline:
+    get:
+      summary: List timeline events
+      operationId: listTimeline
+      parameters:
+        - in: query
+          name: start_date
+          required: false
+          schema: { type: string }
+        - in: query
+          name: end_date
+          required: false
+          schema: { type: string }
+        - in: query
+          name: event_type
+          required: false
+          schema: { type: string }
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimelineEvent'
+
+  /api/schemas:
+    get:
+      summary: List entity schemas
+      operationId: listSchemas
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Schemas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EntitySchema'
+
+  /api/schemas/{entity_type}:
+    get:
+      summary: Get schema by entity type
+      operationId: getSchemaByEntityType
+      parameters:
+        - in: path
+          name: entity_type
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Schema
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitySchema' }
+
+  /api/interpretations:
+    get:
+      summary: List interpretations
+      operationId: listInterpretations
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: source_id
+          required: false
+          schema: { type: string }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Interpretations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  interpretations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Interpretation'
+
+  /api/stats:
+    get:
+      summary: Get dashboard stats
+      operationId: getStats
+      parameters:
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Stats
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Stats' }
+
+  /api/store:
+    post:
+      summary: Store structured entities
+      operationId: storeStructured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreStructuredRequest' }
+      responses:
+        '200':
+          description: Store result
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreStructuredResponse' }
+
+  /api/records/{id}:
+    get:
+      summary: Get record by ID
+      operationId: getRecordById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Record
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Record' }
+
+  /api/records/{id}/history:
+    get:
+      summary: Get record history
+      operationId: getRecordHistory
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Record history
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /get_entity_snapshot:
+    post:
+      summary: Get entity snapshot with provenance
+      operationId: getEntitySnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity snapshot
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntitySnapshot' }
+
+  /list_observations:
+    post:
+      summary: List observations for entity
+      operationId: listObservationsForEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+
+  /get_field_provenance:
+    post:
+      summary: Get field provenance
+      operationId: getFieldProvenance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+                field:
+                  type: string
+      responses:
+        '200':
+          description: Provenance
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /create_relationship:
+    post:
+      summary: Create relationship
+      operationId: createRelationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Relationship created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
+
+  /list_relationships:
+    post:
+      summary: List relationships
+      operationId: listRelationshipsForEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+
+  /record_comparison:
+    post:
+      summary: Compare records
+      operationId: recordComparison
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /generate_embedding:
+    post:
+      summary: Generate embedding
+      operationId: generateEmbedding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Embedding result
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
 
 
 

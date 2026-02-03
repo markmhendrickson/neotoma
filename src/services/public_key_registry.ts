@@ -16,12 +16,20 @@ const publicKeyRegistry = new Map<
   }
 >();
 
+/** Ed25519 public key size in bytes (RFC 8032) */
+const ED25519_PUBLIC_KEY_BYTES = 32;
+
 /**
- * Register a public key (derived from bearer token)
+ * Register a public key (derived from bearer token).
+ * Only accepts tokens that decode to exactly 32 bytes (Ed25519 public key);
+ * rejects JWTs and other non-key tokens so they are validated as Supabase session tokens.
  */
 export function registerPublicKey(bearerToken: string, userId?: string): void {
   try {
     const publicKey = parseBearerToken(bearerToken);
+    if (publicKey.length !== ED25519_PUBLIC_KEY_BYTES) {
+      throw new Error("Invalid key length");
+    }
     publicKeyRegistry.set(bearerToken, {
       publicKey,
       userId,

@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useRealtimeTimeline } from "@/hooks/useRealtimeTimeline";
+import { getApiClient } from "@/lib/api_client";
 
 interface TimelineEvent {
   id: string;
@@ -37,7 +38,7 @@ export function RecentActivityFeed({ refreshKey }: RecentActivityFeedProps) {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
     // Wait for keys to load before making request (if using keys)
@@ -51,28 +52,17 @@ export function RecentActivityFeed({ refreshKey }: RecentActivityFeedProps) {
   const fetchRecentActivity = async () => {
     setLoading(true);
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
+      const api = getApiClient(bearerToken);
+      const { data, error } = await api.GET("/api/timeline", {
+        params: { query: { limit: 10 } },
+      });
 
-      if (bearerToken) {
-        headers["Authorization"] = `Bearer ${bearerToken}`;
+      if (error) {
+        setFetchedActivities([]);
+        return;
       }
 
-      // Fetch recent timeline events (last 10)
-      const response = await fetch("/api/timeline?limit=10", { headers });
-
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          // Not authenticated - show empty state
-          setFetchedActivities([]);
-          return;
-        }
-        throw new Error(`Failed to fetch timeline: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      setFetchedActivities(data.events || []);
+      setFetchedActivities(data?.events || []);
     } catch (error) {
       console.error("Failed to fetch recent activity:", error);
       setFetchedActivities([]);

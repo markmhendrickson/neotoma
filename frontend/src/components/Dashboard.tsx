@@ -42,8 +42,8 @@ export function Dashboard({
   const { user, sessionToken } = useAuth();
   const { subscribe } = useRealtime();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  // Prefer Supabase session token, fallback to keys token, then settings
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Helper function to fetch stats (using useCallback for reuse in subscriptions)
   const fetchStats = useCallback(async () => {

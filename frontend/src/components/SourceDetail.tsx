@@ -73,7 +73,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
   const { sessionToken } = useAuth();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
     // Wait for keys to load before making request (if using keys)
