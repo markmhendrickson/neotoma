@@ -209,6 +209,7 @@ These documents are the **root of truth** for all Neotoma work:
 
 | Document                                                  | Purpose                                                      | Load When                             |
 | --------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| [`automated_test_catalog.md`](../testing/automated_test_catalog.md) | File level inventory of automated tests and suite commands | Adding, removing, or moving tests     |
 | [`testing_standard.md`](../testing/testing_standard.md)   | Test types, required tests per Feature Unit, coverage rules  | Writing tests, planning test strategy |
 | [`fixtures_standard.md`](../testing/fixtures_standard.md) | Fixture categories, naming, multi-language, privacy handling | Creating test fixtures or test data   |
 
@@ -252,18 +253,11 @@ These documents are the **root of truth** for all Neotoma work:
 | ----------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
 | [`getting_started.md`](../developer/getting_started.md)           | Local environment setup, first contribution | Setting up development environment, onboarding new developers |
 | [`development_workflow.md`](../developer/development_workflow.md) | Git workflow, branch strategy, PR process   | Creating feature branches, preparing pull requests            |
+| [`cli_overview.md`](../developer/cli_overview.md)                 | CLI usage overview and common workflows     | Using or documenting the Neotoma CLI                          |
+| [`cli_reference.md`](../developer/cli_reference.md)               | CLI command reference and config details    | Updating CLI commands or configuration                         |
+| [`mcp_overview.md`](../developer/mcp_overview.md)                 | MCP entry point and canonical links         | Navigating MCP setup and specification                         |
 
-### 2.11 Integration Documentation
-
-**Directory:** `docs/integrations/`
-
-| Document                                                         | Purpose                                      | Load When                                           |
-| ---------------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------- |
-| [`gmail_setup.md`](../integrations/gmail_setup.md)               | Gmail OAuth setup, attachment import         | Setting up Gmail integration, troubleshooting OAuth |
-| [`plaid_setup.md`](../integrations/plaid_setup.md)               | Plaid sandbox setup, bank connection         | Setting up Plaid integration, testing transactions  |
-| [`external_providers.md`](../integrations/external_providers.md) | Post-MVP provider setup (X, Instagram, etc.) | Setting up post-MVP external provider integrations  |
-
-### 2.12 Operations and Infrastructure
+### 2.11 Operations and Infrastructure
 
 **Directory:** `docs/operations/` and `docs/infrastructure/`
 
@@ -272,7 +266,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`troubleshooting.md`](../operations/troubleshooting.md) | Common issues and solutions  | Debugging setup or runtime issues                           |
 | [`deployment.md`](../infrastructure/deployment.md)       | Fly.io deployment procedures | Deploying to production, configuring production environment |
 
-### 2.13 Legal and Compliance
+### 2.12 Legal and Compliance
 
 **Directory:** `docs/legal/`
 
@@ -283,7 +277,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`terms_of_service.md`](../legal/terms_of_service.md) | Terms of Service template                             | Updating terms of service, legal review                                   |
 | [`README.md`](../legal/README.md)                     | Legal documentation index                             | Navigating legal documentation                                            |
 
-### 2.14 API Documentation
+### 2.13 API Documentation
 
 **Directory:** `docs/api/` and `docs/reference/`
 
@@ -292,7 +286,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`rest_api.md`](../api/rest_api.md)             | REST API endpoint reference | Implementing frontend API calls, integrating external clients |
 | [`error_codes.md`](../reference/error_codes.md) | Complete error code catalog | Implementing error handling, debugging API errors             |
 
-### 2.15 Vocabulary and Templates
+### 2.14 Vocabulary and Templates
 
 **Directory:** `docs/vocabulary/` and `docs/templates/`
 
@@ -353,6 +347,7 @@ graph TD
     %% Testing & Observability
     TestStandard[testing/testing_standard.md]
     Fixtures[testing/fixtures_standard.md]
+    AutomatedTestCatalog[testing/automated_test_catalog.md]
     Metrics[observability/metrics_standard.md]
     Logging[observability/logging.md]
     Tracing[observability/tracing.md]
@@ -435,6 +430,7 @@ graph TD
     Determinism --> TestStandard
     Architecture --> TestStandard
     TestStandard --> Fixtures
+    TestStandard --> AutomatedTestCatalog
     Privacy --> Fixtures
 
     %% Dependencies: Observability
@@ -588,8 +584,9 @@ graph TD
 
 1. `docs/architecture/determinism.md` — Deterministic test requirements
 2. `docs/testing/testing_standard.md` — Test types and coverage
-3. `docs/testing/fixtures_standard.md` — Fixture creation and usage
-4. Relevant subsystem docs for domain logic
+3. `docs/testing/automated_test_catalog.md` — File level test inventory and suite commands
+4. `docs/testing/fixtures_standard.md` — Fixture creation and usage
+5. Relevant subsystem docs for domain logic
 
 ### 4.13 Creating Documentation
 

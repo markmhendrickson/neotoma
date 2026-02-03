@@ -1,0 +1,237 @@
+# Git Remote Sync Rule
+
+## Purpose
+
+Ensures agents always pull and merge remote changes before pushing, maintaining repository synchronization and preventing push rejections.
+
+## Trigger Patterns
+
+When any of the following occur, agents MUST pull and merge before pushing:
+
+- Push is rejected with "non-fast-forward" or "diverged branches" error
+- `git status` shows "Your branch and 'origin/main' have diverged"
+- `git status` shows "Your branch is behind 'origin/main'"
+- Remote changes detected during commit workflow
+- Push command is about to execute
+- Any git operation that would modify remote state
+
+## Agent Actions
+
+### Step 1: Detect Remote Changes
+
+Before pushing or when push fails:
+
+1. **Check if remote is ahead:**
+   ```bash
+   git fetch origin
+   LOCAL=$(git rev-parse @)
+   REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "")
+   
+   if [ -z "$REMOTE" ]; then
+     # No upstream set - proceed with push
+     exit 0
+   fi
+   
+   BASE=$(git merge-base @ @{u})
+   
+   if [ "$LOCAL" = "$REMOTE" ]; then
+     # Already in sync
+     exit 0
+   elif [ "$REMOTE" = "$BASE" ]; then
+     # Local is ahead - safe to push
+     exit 0
+   elif [ "$LOCAL" = "$BASE" ] || [ "$LOCAL" != "$REMOTE" ] && [ "$REMOTE" != "$BASE" ]; then
+     # Remote is ahead or branches have diverged - MUST pull and merge
+     PULL_NEEDED=true
+   fi
+   ```
+
+2. **If push was rejected, check error message:**
+   ```bash
+   # If push fails with "non-fast-forward" or "diverged"
+   # Immediately proceed to pull and merge workflow
+   ```
+
+### Step 2: Pull and Merge
+
+If remote changes detected:
+
+1. **Pull with merge strategy:**
+   ```bash
+   CURRENT_BRANCH=$(git branch --show-current)
+   git pull origin "$CURRENT_BRANCH" --no-rebase --no-edit
+   ```
+
+2. **Handle merge conflicts:**
+   - If conflicts occur, resolve them immediately
+   - Stage resolved files: `git add <resolved-files>`
+   - Complete merge: `git commit --no-edit` (or with merge message if needed)
+   - DO NOT abort merge unless user explicitly requests
+
+3. **Verify merge completed:**
+   ```bash
+   if git status | grep -q "Unmerged paths"; then
+     echo "❌ Merge conflicts still exist - resolve before proceeding"
+     exit 1
+   fi
+   ```
+
+### Step 3: Push After Merge
+
+After successful merge:
+
+1. **Push merged changes:**
+   ```bash
+   git push origin HEAD
+   ```
+
+2. **Verify push succeeded:**
+   ```bash
+   if [ $? -eq 0 ]; then
+     echo "✅ Successfully pushed after merging remote changes"
+   else
+     echo "❌ Push failed after merge - investigate"
+     exit 1
+   fi
+   ```
+
+## Workflow Integration
+
+### During Commit Workflow
+
+When executing commit command:
+
+1. **Before staging:** Check for remote changes
+2. **If remote changes exist:** Pull and merge first, then proceed with commit
+3. **After commit:** Push (which will succeed since we're now in sync)
+
+### During Push Operations
+
+When push is requested:
+
+1. **Before push:** Always check for remote changes
+2. **If remote changes exist:** Pull and merge first
+3. **Then push:** Execute push after merge completes
+
+### During Submodule Operations
+
+When committing/pushing submodules:
+
+1. **For each submodule:** Check remote status
+2. **If remote changes:** Pull and merge in submodule
+3. **Then push:** Push submodule after merge
+4. **Update main repo:** Update submodule reference in main repo
+
+## Constraints
+
+- MUST pull and merge before pushing when remote changes detected
+- MUST NOT skip pull step even if it seems unnecessary
+- MUST resolve merge conflicts immediately (do not leave in conflicted state)
+- MUST verify merge completed successfully before pushing
+- MUST NOT force push to override remote changes
+- MUST handle submodules with same pull-merge-push workflow
+
+## Error Handling
+
+### Merge Conflicts
+
+If merge conflicts occur:
+
+1. **List conflicted files:**
+   ```bash
+   git status | grep "both modified\|both added\|deleted by them\|deleted by us"
+   ```
+
+2. **Resolve conflicts:**
+   - Read conflicted files
+   - Resolve using appropriate strategy (keep local, keep remote, or merge)
+   - Stage resolved files: `git add <file>`
+
+3. **Complete merge:**
+   ```bash
+   git commit --no-edit
+   ```
+
+### Push Still Fails After Merge
+
+If push fails after merge:
+
+1. **Re-check remote status:**
+   ```bash
+   git fetch origin
+   git status
+   ```
+
+2. **Verify local is ahead or in sync:**
+   ```bash
+   LOCAL=$(git rev-parse @)
+   REMOTE=$(git rev-parse @{u})
+   BASE=$(git merge-base @ @{u})
+   
+   if [ "$REMOTE" = "$BASE" ]; then
+     # Local is ahead - push should work
+     git push origin HEAD
+   else
+     # Still diverged - pull again
+     git pull origin "$CURRENT_BRANCH" --no-rebase
+   fi
+   ```
+
+## Configuration
+
+No configuration required - this rule applies universally to all git operations.
+
+## Examples
+
+### Example 1: Push Rejected
+
+```bash
+$ git push origin HEAD
+! [rejected]        HEAD -> main (non-fast-forward)
+error: failed to push some refs
+
+# Agent automatically:
+1. git fetch origin
+2. git pull origin main --no-rebase --no-edit
+3. Resolve conflicts if any
+4. git push origin HEAD
+```
+
+### Example 2: Pre-Push Check
+
+```bash
+# Before pushing, agent checks:
+$ git fetch origin
+$ git status
+Your branch and 'origin/main' have diverged
+
+# Agent automatically:
+1. git pull origin main --no-rebase --no-edit
+2. Resolve conflicts if any
+3. git push origin HEAD
+```
+
+### Example 3: Submodule Sync
+
+```bash
+# Committing foundation submodule
+$ cd foundation
+$ git push origin HEAD
+! [rejected]        HEAD -> main (non-fast-forward)
+
+# Agent automatically:
+1. git pull origin main --no-rebase --no-edit
+2. Resolve conflicts if any
+3. git push origin HEAD
+4. cd ..
+5. git add foundation
+6. git commit -m "Update foundation submodule"
+```
+
+## Related Documents
+
+- `foundation/agent_instructions/cursor_commands/pull.md` - Pull command workflow
+- `foundation/agent_instructions/cursor_commands/commit.md` - Commit command workflow
+- `foundation/development/workflow.md` - Git workflow documentation
+
+

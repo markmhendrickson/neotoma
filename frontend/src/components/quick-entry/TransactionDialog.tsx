@@ -21,6 +21,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+import { getApiClient } from "@/lib/api_client";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -40,7 +41,7 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken } = useKeys();
   const { sessionToken, user } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,17 +58,9 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
     setLoading(true);
 
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-      if (bearerToken) {
-        headers["Authorization"] = `Bearer ${bearerToken}`;
-      }
-
-      const response = await fetch("/api/store", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
+      const api = getApiClient(bearerToken);
+      const { data, error } = await api.POST("/api/store", {
+        body: {
           entities: [{
             entity_type: "transaction",
             amount: parseFloat(amount),
@@ -77,14 +70,12 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
             description: description || undefined,
           }],
           user_id: user?.id,
-        }),
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to save transaction: ${response.statusText}`);
+      if (error || !data) {
+        throw new Error("Failed to save transaction");
       }
-
-      const data = await response.json();
       const entityId = data.entities?.[0]?.entity_id;
 
       toast({

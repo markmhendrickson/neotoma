@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiClient } from "@/lib/api_client";
 
 interface SearchResult {
   id: string;
@@ -41,7 +42,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // App routes configuration
   const appRoutes = [
@@ -125,35 +126,28 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
     }
 
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${bearerToken}`,
-      };
+      const api = getApiClient(bearerToken);
 
       // Search entities (if we have space)
       if (allResults.length < 3) {
         try {
-          const entitiesResponse = await fetch("/api/entities/query", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
+          const { data: entitiesData } = await api.POST("/api/entities/query", {
+            body: {
               search: searchQuery,
               limit: 3 - allResults.length,
               user_id: userId,
-            }),
+            },
           });
-
-          if (entitiesResponse.ok) {
-            const entitiesData = await entitiesResponse.json();
-            const entities = (entitiesData.entities || []).slice(0, 3 - allResults.length).map((e: any) => ({
+          const entities = (entitiesData?.entities || [])
+            .slice(0, 3 - allResults.length)
+            .map((e: any) => ({
               id: e.id,
               type: "entity" as const,
               title: e.canonical_name || e.entity_type,
               subtitle: e.entity_type,
               href: `/entity/${e.id}`,
             }));
-            allResults.push(...entities);
-          }
+          allResults.push(...entities);
         } catch (error) {
           console.error("Failed to search entities:", error);
         }
@@ -162,27 +156,23 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search sources (if we have space)
       if (allResults.length < 3) {
         try {
-          const sourcesResponse = await fetch("/api/sources", {
-            headers,
+          const { data: sourcesData } = await api.GET("/api/sources", {
+            params: { query: userId ? { user_id: userId } : {} },
           });
-
-          if (sourcesResponse.ok) {
-            const sourcesData = await sourcesResponse.json();
-            const sources = (sourcesData.sources || [])
-              .filter((s: any) => 
-                s.original_filename?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                s.id.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .slice(0, 3 - allResults.length)
-              .map((s: any) => ({
-                id: s.id,
-                type: "source" as const,
-                title: s.original_filename || s.id.substring(0, 16) + "...",
-                subtitle: "Source",
-                href: `/sources/${s.id}`,
-              }));
-            allResults.push(...sources);
-          }
+          const sources = (sourcesData?.sources || [])
+            .filter((s: any) => 
+              s.original_filename?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              s.id.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            .slice(0, 3 - allResults.length)
+            .map((s: any) => ({
+              id: s.id,
+              type: "source" as const,
+              title: s.original_filename || s.id.substring(0, 16) + "...",
+              subtitle: "Source",
+              href: `/sources/${s.id}`,
+            }));
+          allResults.push(...sources);
         } catch (error) {
           console.error("Failed to search sources:", error);
         }
@@ -191,33 +181,27 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search observations (if we have space)
       if (allResults.length < 3) {
         try {
-          const observationsResponse = await fetch("/api/observations/query", {
-            method: "POST",
-            headers,
-            body: JSON.stringify({
+          const { data: observationsData } = await api.POST("/api/observations/query", {
+            body: {
               limit: 3 - allResults.length,
               user_id: userId,
-            }),
+            },
           });
-
-          if (observationsResponse.ok) {
-            const observationsData = await observationsResponse.json();
-            const observations = (observationsData.observations || [])
-              .filter((o: any) =>
-                o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                o.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                o.fragment_key?.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .slice(0, 3 - allResults.length)
-              .map((o: any) => ({
-                id: o.id,
-                type: "observation" as const,
-                title: o.fragment_key || o.id.substring(0, 16) + "...",
-                subtitle: "Observation",
-                href: `/observations?entity=${o.entity_id}`,
-              }));
-            allResults.push(...observations);
-          }
+          const observations = (observationsData?.observations || [])
+            .filter((o: any) =>
+              o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              o.entity_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              o.fragment_key?.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            .slice(0, 3 - allResults.length)
+            .map((o: any) => ({
+              id: o.id,
+              type: "observation" as const,
+              title: o.fragment_key || o.id.substring(0, 16) + "...",
+              subtitle: "Observation",
+              href: `/observations?entity=${o.entity_id}`,
+            }));
+          allResults.push(...observations);
         } catch (error) {
           console.error("Failed to search observations:", error);
         }
@@ -226,27 +210,23 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search interpretations (if we have space)
       if (allResults.length < 3) {
         try {
-          const interpretationsResponse = await fetch("/api/interpretations", {
-            headers,
+          const { data: interpretationsData } = await api.GET("/api/interpretations", {
+            params: { query: userId ? { user_id: userId } : {} },
           });
-
-          if (interpretationsResponse.ok) {
-            const interpretationsData = await interpretationsResponse.json();
-            const interpretations = (interpretationsData.interpretations || [])
-              .filter((i: any) =>
-                i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                i.source_id.toLowerCase().includes(searchQuery.toLowerCase())
-              )
-              .slice(0, 3 - allResults.length)
-              .map((i: any) => ({
-                id: i.id,
-                type: "interpretation" as const,
-                title: i.id.substring(0, 16) + "...",
-                subtitle: "Interpretation",
-                href: `/sources/${i.source_id}`,
-              }));
-            allResults.push(...interpretations);
-          }
+          const interpretations = (interpretationsData?.interpretations || [])
+            .filter((i: any) =>
+              i.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              i.source_id.toLowerCase().includes(searchQuery.toLowerCase())
+            )
+            .slice(0, 3 - allResults.length)
+            .map((i: any) => ({
+              id: i.id,
+              type: "interpretation" as const,
+              title: i.id.substring(0, 16) + "...",
+              subtitle: "Interpretation",
+              href: `/sources/${i.source_id}`,
+            }));
+          allResults.push(...interpretations);
         } catch (error) {
           console.error("Failed to search interpretations:", error);
         }

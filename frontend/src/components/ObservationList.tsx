@@ -21,6 +21,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeObservations } from "@/hooks/useRealtimeObservations";
+import { getApiClient } from "@/lib/api_client";
 
 export interface Observation {
   id: string;
@@ -63,7 +64,7 @@ export function ObservationList({
   const { user, sessionToken } = useAuth();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch observations from API
   useEffect(() => {
@@ -75,36 +76,19 @@ export function ObservationList({
     async function fetchObservations() {
       setLoading(true);
       try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        
-        // Include bearer token if available
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        // Use POST endpoint for querying observations
+        const api = getApiClient(bearerToken);
         const userId = user?.id;
-        const response = await fetch("/api/observations/query", {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
+        const { data, error } = await api.POST("/api/observations/query", {
+          body: {
             entity_type: selectedEntityType || undefined,
             limit,
             offset,
             user_id: userId,
-          }),
+          },
         });
-        
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Unauthorized - check your Bearer Token");
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        if (error || !data) {
+          throw new Error("Failed to fetch observations");
         }
-        
-        const data = await response.json();
         let filteredObservations = data.observations || [];
         
         // Client-side search filtering

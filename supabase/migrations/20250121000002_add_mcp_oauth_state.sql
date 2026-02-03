@@ -7,14 +7,7 @@
 -- ============================================================================
 
 -- Temporarily disable event trigger to avoid double schema prefix issue
--- Only disable if it exists (may not exist in fresh local instances)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
-    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table DISABLE;
-  END IF;
-END $$;
-
+ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table DISABLE;
 CREATE TABLE IF NOT EXISTS mcp_oauth_state (
   state TEXT PRIMARY KEY,
   connection_id TEXT NOT NULL,
@@ -23,7 +16,6 @@ CREATE TABLE IF NOT EXISTS mcp_oauth_state (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   expires_at TIMESTAMPTZ NOT NULL
 );
-
 -- Add table comment
 COMMENT ON TABLE mcp_oauth_state IS 'Temporary storage for OAuth PKCE state (expires after 10 minutes)';
 COMMENT ON COLUMN mcp_oauth_state.state IS 'Random state token for CSRF protection';
@@ -31,17 +23,14 @@ COMMENT ON COLUMN mcp_oauth_state.connection_id IS 'Connection ID being authoriz
 COMMENT ON COLUMN mcp_oauth_state.code_verifier IS 'PKCE code verifier (used to exchange authorization code for tokens)';
 COMMENT ON COLUMN mcp_oauth_state.redirect_uri IS 'OAuth callback redirect URI';
 COMMENT ON COLUMN mcp_oauth_state.expires_at IS 'When this state expires (10 minutes from creation)';
-
 -- ============================================================================
 -- Indexes
 -- ============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_state_expires 
   ON mcp_oauth_state(expires_at);
-
 CREATE INDEX IF NOT EXISTS idx_mcp_oauth_state_connection 
   ON mcp_oauth_state(connection_id);
-
 -- ============================================================================
 -- Row Level Security (RLS)
 -- ============================================================================
@@ -53,7 +42,6 @@ CREATE INDEX IF NOT EXISTS idx_mcp_oauth_state_connection
 DROP POLICY IF EXISTS "Service role full access - mcp_oauth_state" ON mcp_oauth_state;
 CREATE POLICY "Service role full access - mcp_oauth_state" ON mcp_oauth_state
   FOR ALL TO service_role USING (true) WITH CHECK (true);
-
 -- ============================================================================
 -- Cleanup Function
 -- ============================================================================
@@ -69,16 +57,8 @@ BEGIN
   RETURN deleted_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
 COMMENT ON FUNCTION cleanup_expired_mcp_oauth_states IS 'Deletes expired OAuth states (call periodically or on access)';
-
--- Re-enable event trigger (if it exists)
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_event_trigger WHERE evtname = 'trigger_auto_enable_rls_on_table') THEN
-    ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table ENABLE;
-  END IF;
-END $$;
-
+-- Re-enable event trigger
+ALTER EVENT TRIGGER trigger_auto_enable_rls_on_table ENABLE;
 -- Ensure RLS is enabled (in case event trigger was disabled)
 ALTER TABLE mcp_oauth_state ENABLE ROW LEVEL SECURITY;

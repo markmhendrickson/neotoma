@@ -7,27 +7,21 @@ This document defines the metrics for v1.0.0 marketing activities, including acq
 - `post_launch_marketing_plan.md` — Post-launch marketing activities
 - `marketing_segments_plan.md` — User segment definitions
 ### 1. Acquisition Metrics
-#### 1.1 Pre-Launch Metrics
+#### 1.1 Developer Preview Metrics
 **Metrics:**
-1. **Waitlist signups**
-   - **Tracking**: Landing page email capture
-   - **Target**: 100
-2. **Waitlist cost (time investment)**
-   - **Tracking**: Time investment / signups
-   - **Target**: $0 (organic only)
-3. **Beta participants**
-   - **Tracking**: Beta signup confirmations
-   - **Target**: 25
-4. **Beta activation rate**
-   - **Tracking**: Usage analytics
-   - **Target**: 70% (beta users who upload ≥1 document)
-5. **Content views**
+1. **Dependence signal**
+   - **Tracking**: Weekly self-assessment notes
+   - **Target**: Clear dependence on Neotoma for ateles integration
+2. **Preview feedback items**
+   - **Tracking**: Manual issue and feedback log
+   - **Target**: 10 actionable items
+3. **Preview inquiry messages**
+   - **Tracking**: Manual tracking from replies and DMs
+   - **Target**: 20 inquiries
+4. **Content views**
    - **Tracking**: Blog analytics, Twitter analytics, YouTube
    - **Target**: 2000 (across all content)
-6. **Content to waitlist rate**
-   - **Tracking**: UTM tracking from content → landing page
-   - **Target**: 5% (content viewers who join waitlist)
-#### 1.2 Post-Launch Metrics
+#### 1.2 Post-Preview Metrics
 **Metrics:**
 1. **Day 1 signups**
    - **Tracking**: Signup analytics by channel
@@ -99,21 +93,19 @@ This document defines the metrics for v1.0.0 marketing activities, including acq
 - Medium: organic, social, referral
 - Campaign: waitlist_building, launch_announcement, content_teaser, etc.
 ### 5. Reporting Schedule
-**Pre-Launch Reporting:**
-- **Weekly**: Waitlist signups, content performance
-- **Bi-weekly**: Beta participant progress, activation rates
-**Post-Launch Reporting:**
+**Developer Preview Reporting:**
+- **Weekly**: Dependence signal notes, content performance, preview feedback items
+- **Bi-weekly**: External feedback quality review
+**Post-Preview Reporting:**
 - **Daily** (Week 1): Signups, activation, channel performance
 - **Weekly** (Week 2-4): Signups, activation, retention, reengagement metrics
 - **Monthly**: Comprehensive metrics review and efficacy comparison
 ### 6. Success Criteria Summary
-**Pre-Launch:**
-- ≥100 waitlist signups
-- ≥25 beta participants
-- ≥70% beta activation rate
+**Developer Preview:**
+- Clear dependence signal for ateles integration
+- ≥10 actionable feedback items
 - ≥2000 content views
-- ≥5% content to waitlist conversion rate
-**Post-Launch:**
+**Post-Preview:**
 - ≥50 signups Day 1
 - ≥200 signups Week 1
 - ≥40% waitlist conversion rate

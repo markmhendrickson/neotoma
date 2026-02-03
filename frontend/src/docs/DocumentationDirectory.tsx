@@ -7,7 +7,6 @@ import {
   Code,
   Building2,
   Settings,
-  Plug,
   HelpCircle,
 } from 'lucide-react';
 import { LucideIcon } from 'lucide-react';
@@ -54,16 +53,22 @@ const navigationSections: NavSection[] = [
     title: 'Developer Guides',
     items: [
       { label: 'Development Workflow', href: '/docs/developer/development_workflow.md', icon: Settings },
+      { label: 'CLI overview', href: '/docs/developer/cli_overview.md', icon: Code },
+      { label: 'CLI reference', href: '/docs/developer/cli_reference.md', icon: Code },
+      { label: 'MCP overview', href: '/docs/developer/mcp_overview.md', icon: Code },
       { label: 'MCP Setup (Cursor)', href: '/docs/developer/mcp_cursor_setup.md', icon: Code },
       { label: 'MCP Setup (ChatGPT)', href: '/docs/developer/mcp_chatgpt_setup.md', icon: Code },
       { label: 'MCP Setup (Claude)', href: '/docs/developer/mcp_claude_code_setup.md', icon: Code },
     ],
   },
   {
-    title: 'Integration Guides',
+    title: "Testing",
     items: [
-      { label: 'Gmail Setup', href: '/docs/integrations/gmail_setup.md', icon: Plug },
-      { label: 'External Providers', href: '/docs/integrations/external_providers.md', icon: Plug },
+      { label: "Automated test catalog", href: "/docs/testing/automated_test_catalog.md", icon: FileText },
+      { label: "Testing standard", href: "/docs/testing/testing_standard.md", icon: FileText },
+      { label: "Test environment configuration", href: "/docs/testing/test_environment_configuration.md", icon: Settings },
+      { label: "Route coverage rules", href: "/docs/testing/full_route_coverage_rules.md", icon: FileText },
+      { label: "Fixture standards", href: "/docs/testing/fixtures_standard.md", icon: FileText },
     ],
   },
   {

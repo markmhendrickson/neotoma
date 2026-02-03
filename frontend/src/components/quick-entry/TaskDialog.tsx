@@ -29,6 +29,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
+import { getApiClient } from "@/lib/api_client";
 
 interface TaskDialogProps {
   open: boolean;
@@ -48,7 +49,7 @@ export function TaskDialog({ open, onClose, onSave }: TaskDialogProps) {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken } = useKeys();
   const { sessionToken, user } = useAuth();
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,13 +66,6 @@ export function TaskDialog({ open, onClose, onSave }: TaskDialogProps) {
     setLoading(true);
 
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-      if (bearerToken) {
-        headers["Authorization"] = `Bearer ${bearerToken}`;
-      }
-
       const taskData: Record<string, unknown> = {
         entity_type: "task",
         title,
@@ -82,20 +76,17 @@ export function TaskDialog({ open, onClose, onSave }: TaskDialogProps) {
       if (description) taskData.description = description;
       if (dueDate) taskData.due_date = dueDate;
 
-      const response = await fetch("/api/store", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
+      const api = getApiClient(bearerToken);
+      const { data, error } = await api.POST("/api/store", {
+        body: {
           entities: [taskData],
           user_id: user?.id,
-        }),
+        },
       });
 
-      if (!response.ok) {
-        throw new Error(`Failed to save task: ${response.statusText}`);
+      if (error || !data) {
+        throw new Error("Failed to save task");
       }
-
-      const data = await response.json();
       const entityId = data.entities?.[0]?.entity_id;
 
       toast({

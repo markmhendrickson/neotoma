@@ -1,11 +1,12 @@
 ## Release v1.0.0 — Build-in-Public Content Plan
 
 ### Purpose
-This document defines build-in-public content activities for v1.0.0 during the build phase (dogfooding-first approach). Focus is on technical thought leadership, community engagement, and reactive content to industry announcements—not traditional pre-launch marketing (no waitlist/beta).
+This document defines build-in-public content activities for v1.0.0 during the build phase (dogfooding-first approach). Focus is on technical thought leadership, community engagement, and reactive content to industry announcements, plus a developer preview release during dogfooding with precision disclaimers.
 
 **Key Changes from Original Pre-Launch Marketing Plan:**
 - ❌ **Removed**: Waitlist building, early access beta, formal pre-launch marketing
 - ✅ **Added**: Build-in-public content, reactive content to industry announcements, MCP ecosystem engagement
+- ✅ **Added**: Developer preview release during dogfooding with precision disclaimers
 - ✅ **Reframed**: Technical thought leadership instead of product marketing
 - ✅ **Timeline**: Week 0-12 (during build), not Week -4 to Week 0 (before build)
 - ✅ **Approach**: Building for personal use (ateles integration), sharing learnings
@@ -22,7 +23,8 @@ This document defines build-in-public content activities for v1.0.0 during the b
 - **Timeline**: Week 0-12 (during build + dogfooding)
 - **Strategy**: Strategic build-in-public content (technical thought leadership, not product marketing)
 - **Goals**: Technical credibility, thought leadership positioning, community engagement, visibility during industry announcements
-- **No Waitlist/Beta**: Just sharing learnings, not marketing
+- **Developer Preview**: Release during dogfooding once core invariants are stable
+- **No Waitlist or Beta**: Just sharing learnings and preview access, not marketing
 - **Approach**: Building for personal use (ateles integration), sharing what I'm learning
 ### 2. Build-in-Public Content Strategy
 
@@ -147,7 +149,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
 - **Thought leadership**: "Why Privacy-First Architecture Matters for AI Tools"
 - **Build-in-public**: "What I'm Learning Building Neotoma for My Ateles Integration"
 - **Architecture insights**: "MCP Integration Patterns I'm Discovering"
-- **No beta/launch announcements**: Just sharing learnings
+- **No beta or waitlist announcements**: Developer preview release is the only announcement during dogfooding
 **Post Format**:
 - Professional tone
 - 300-500 words
@@ -202,7 +204,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
 - Share insights on MCP, deterministic extraction (from building experience)
 - Answer questions authentically (not promotional)
 - Build reputation as helpful community member
-- **No "Show HN" yet**: Defer until after dogfooding validation (see `post_launch_marketing_plan.md`)
+- **Show HN when developer preview is ready**: Post during dogfooding with precision disclaimers
 **Comment Strategy**:
 - Provide value, not promotion
 - Share technical insights when relevant (from building experience)
@@ -247,16 +249,17 @@ This document defines build-in-public content activities for v1.0.0 during the b
 - Consistent voice and tone
 **Note**: All social media activities use personal accounts (see `marketing_plan.md` Section 2.6 for personal vs. company account strategy)
 #### 2.3 Goals
-- Waitlist signups
-- Awareness building
-- Early adopter identification
+- Technical credibility
+- Community engagement
+- Developer preview framing and expectation setting
+- Actionable feedback from preview users
 #### 2.4 Metrics
-| Metric                   | Target            | Tracking                          |
-| ------------------------ | ----------------- | --------------------------------- |
-| Waitlist signups         | 100               | Landing page email capture        |
-| Cost per waitlist signup | $0 (organic only) | Time investment / signups         |
-| Social engagement rate   | 3%                | Twitter analytics, blog analytics |
-| Demo video views         | 500               | YouTube/Twitter video views       |
+| Metric                    | Target | Tracking                          |
+| ------------------------- | ------ | --------------------------------- |
+| Social engagement rate    | 3%     | Twitter analytics, blog analytics |
+| Demo video views          | 500    | YouTube/Twitter video views       |
+| Preview feedback items    | 10     | Manual tracking                   |
+| Preview inquiry messages  | 20     | Manual tracking                   |
 ### 3. Reactive Content to Industry Announcements
 
 #### 3.1 Overview
@@ -573,7 +576,8 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - "Building a Truth Layer: Neotoma's Architecture" (architectural decisions)
 - "Privacy-First AI Memory: Why User Control Matters" (thought leadership)
 - "MCP Integration Patterns: Lessons from Building Neotoma" (technical insights)
-- **No launch posts**: Just technical content, not marketing
+- **Developer Preview Announcement**: Short announcement with precision disclaimers and explicit mutation guarantees
+- **Why Neotoma Exists**: Separate post that frames the problem and constraints, no feature list
 
 **Demo Videos** (Optional, if time permits):
 - **Title**: "Building Neotoma: Ateles Integration Progress"

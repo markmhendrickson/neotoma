@@ -34,6 +34,21 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
+import {
+  CreateRelationshipRequestSchema,
+  EntitiesQueryRequestSchema,
+  EntitySnapshotRequestSchema,
+  FieldProvenanceRequestSchema,
+  ListObservationsRequestSchema,
+  ListRelationshipsRequestSchema,
+  MergeEntitiesRequestSchema,
+  ObservationsQueryRequestSchema,
+  StoreStructuredRequestSchema,
+} from "./shared/action_schemas.js";
+import {
+  filterEntitiesBySearch,
+  queryEntitiesWithCount,
+} from "./shared/action_handlers/entity_handlers.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 export const app = express();
@@ -1065,15 +1080,7 @@ app.get("/types", async (req, res) => {
 // POST /api/entities/query - Query entities with filters
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
 app.post("/api/entities/query", async (req, res) => {
-  const schema = z.object({
-    entity_type: z.string().optional(),
-    search: z.string().optional(),
-    limit: z.number().optional().default(100),
-    offset: z.number().optional().default(0),
-    user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id if not provided
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = EntitiesQueryRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
       issues: parsed.error.issues,
@@ -1085,33 +1092,20 @@ app.post("/api/entities/query", async (req, res) => {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entity_type, search, limit, offset } = parsed.data;
+    const { entity_type, search, limit, offset, include_merged } = parsed.data;
+    const { entities, total } = await queryEntitiesWithCount({
+      userId,
+      entityType: entity_type,
+      includeMerged: include_merged,
+      limit,
+      offset,
+    });
 
-    // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase.from("entities").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
-
-    if (entity_type) {
-      query = query.eq("entity_type", entity_type);
-    }
-
-    // Exclude merged entities
-    query = query.is("merged_to_entity_id", null);
-
-    // Apply search if provided
-    if (search) {
-      query = query.ilike("canonical_name", `%${search}%`);
-    }
-
-    // Apply pagination
-    query = query.range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
-
-    if (error) throw error;
+    const filtered = filterEntitiesBySearch(entities, search);
 
     return res.json({
-      entities: data || [],
-      total: count || 0,
+      entities: filtered,
+      total: search ? filtered.length : total,
       limit,
       offset,
     });
@@ -1904,13 +1898,7 @@ app.post("/api/observations/create", async (req, res) => {
 
 // POST /api/store - Store structured entities (for quick-entry forms)
 app.post("/api/store", async (req, res) => {
-  const schema = z.object({
-    entities: z.array(z.record(z.unknown())),
-    source_priority: z.number().optional().default(100),
-    user_id: z.string().uuid().optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = StoreStructuredRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:store", req, {
       issues: parsed.error.issues,
@@ -1994,15 +1982,7 @@ app.post("/api/store", async (req, res) => {
 
 // POST /api/observations/query - Query observations
 app.post("/api/observations/query", async (req, res) => {
-  const schema = z.object({
-    entity_id: z.string().optional(),
-    entity_type: z.string().optional(),
-    limit: z.number().optional().default(100),
-    offset: z.number().optional().default(0),
-    user_id: z.string().uuid().optional(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = ObservationsQueryRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:observations_query", req, {
       issues: parsed.error.issues,
@@ -2052,14 +2032,7 @@ app.post("/api/observations/query", async (req, res) => {
 // POST /api/entities/merge - Merge duplicate entities
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user and entities belong to user
 app.post("/api/entities/merge", async (req, res) => {
-  const schema = z.object({
-    from_entity_id: z.string(),
-    to_entity_id: z.string(),
-    merge_reason: z.string().optional(),
-    user_id: z.string().uuid(),
-  });
-
-  const parsed = schema.safeParse(req.body);
+  const parsed = MergeEntitiesRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:entities_merge", req, {
       issues: parsed.error.issues,
@@ -2071,12 +2044,12 @@ app.post("/api/entities/merge", async (req, res) => {
     // Get authenticated user_id and validate it matches provided user_id
     const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { from_entity_id, to_entity_id, merge_reason, user_id } = parsed.data;
+    const { from_entity_id, to_entity_id, merge_reason, user_id: providedUserId } = parsed.data;
+    const user_id = providedUserId || authenticatedUserId;
 
-    // SECURITY: Ensure provided user_id matches authenticated user
-    if (user_id !== authenticatedUserId) {
+    if (providedUserId && providedUserId !== authenticatedUserId) {
       return res.status(403).json({
-        error: `user_id parameter (${user_id}) does not match authenticated user (${authenticatedUserId})`,
+        error: `user_id parameter (${providedUserId}) does not match authenticated user (${authenticatedUserId})`,
       });
     }
 
@@ -2599,8 +2572,7 @@ app.get("/api/records/:id", async (req, res) => {
 
 // Get entity snapshot with provenance
 app.post("/get_entity_snapshot", async (req, res) => {
-  const schema = z.object({ entity_id: z.string() });
-  const parsed = schema.safeParse(req.body);
+  const parsed = EntitySnapshotRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:get_entity_snapshot", req, {
       issues: parsed.error.issues,
@@ -2630,12 +2602,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
 // List observations for entity
 app.post("/list_observations", async (req, res) => {
-  const schema = z.object({
-    entity_id: z.string(),
-    limit: z.number().optional(),
-    offset: z.number().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = ListObservationsRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:list_observations", req, {
       issues: parsed.error.issues,
@@ -2668,11 +2635,7 @@ app.post("/list_observations", async (req, res) => {
 
 // Get field provenance (trace field to source documents)
 app.post("/get_field_provenance", async (req, res) => {
-  const schema = z.object({
-    entity_id: z.string(),
-    field: z.string(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = FieldProvenanceRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:get_field_provenance", req, {
       issues: parsed.error.issues,
@@ -2737,22 +2700,7 @@ app.post("/get_field_provenance", async (req, res) => {
 
 // Create relationship
 app.post("/create_relationship", async (req, res) => {
-  const schema = z.object({
-    relationship_type: z.enum([
-      "PART_OF",
-      "CORRECTS",
-      "REFERS_TO",
-      "SETTLES",
-      "DUPLICATE_OF",
-      "DEPENDS_ON",
-      "SUPERSEDES",
-    ]),
-    source_entity_id: z.string(),
-    target_entity_id: z.string(),
-    source_record_id: z.string().uuid().optional(),
-    metadata: z.record(z.unknown()).optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = CreateRelationshipRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:create_relationship", req, {
       issues: parsed.error.issues,
@@ -2791,12 +2739,7 @@ app.post("/create_relationship", async (req, res) => {
 
 // List relationships
 app.post("/list_relationships", async (req, res) => {
-  const schema = z.object({
-    entity_id: z.string(),
-    direction: z.enum(["outgoing", "incoming", "both"]).optional(),
-    relationship_type: z.string().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
+  const parsed = ListRelationshipsRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:list_relationships", req, {
       issues: parsed.error.issues,
@@ -2805,6 +2748,12 @@ app.post("/list_relationships", async (req, res) => {
   }
 
   const { entity_id, direction = "both", relationship_type } = parsed.data;
+  const normalizedDirection =
+    direction === "incoming" || direction === "inbound"
+      ? "incoming"
+      : direction === "outgoing" || direction === "outbound"
+        ? "outgoing"
+        : "both";
 
   const { relationshipsService } = await import("./services/relationships.js");
 
@@ -2817,7 +2766,10 @@ app.post("/list_relationships", async (req, res) => {
         (rel) => rel.source_entity_id === entity_id || rel.target_entity_id === entity_id
       );
     } else {
-      relationships = await relationshipsService.getRelationshipsForEntity(entity_id, direction);
+      relationships = await relationshipsService.getRelationshipsForEntity(
+        entity_id,
+        normalizedDirection
+      );
     }
 
     logDebug("Success:list_relationships", req, {

@@ -201,6 +201,24 @@ npm run build
 - Verify project is active (not paused)
 - Check region matches your location
 - Verify firewall/network allows outbound HTTPS
+## CLI setup
+Use the Neotoma CLI for HTTP access to the API surface.
+### Build and install
+```bash
+npm run build
+npm link
+```
+### Authenticate
+```bash
+neotoma auth login --base-url http://localhost:8080
+```
+Credentials are stored at `~/.config/neotoma/config.json`.
+### Example commands
+```bash
+neotoma entities list
+neotoma sources list
+neotoma timeline list --limit 10
+```
 ## Next Steps
 After setup is complete:
 1. **Read foundational docs:**

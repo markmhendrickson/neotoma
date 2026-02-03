@@ -116,6 +116,9 @@ test('entity ID is always same length', () => {
 ## Test Fixtures
 See `docs/testing/fixtures_standard.md`.
 
+## Automated test catalog
+See `docs/testing/automated_test_catalog.md` for a full, file level inventory of automated tests and suite commands.
+
 ## Integration Test Quality
 
 **See `foundation/conventions/testing_conventions.md` for generic principles.**

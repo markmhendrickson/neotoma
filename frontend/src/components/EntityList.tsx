@@ -17,6 +17,7 @@ import { getEntityDisplayName } from "@/utils/entityDisplay";
 import { formatEntityType } from "@/utils/entityTypeFormatter";
 import { useRealtimeEntities } from "@/hooks/useRealtimeEntities";
 import { ColumnDef, SortingState, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from "@tanstack/react-table";
+import { getApiClient } from "@/lib/api_client";
 
 export interface Entity {
   entity_id?: string;
@@ -72,7 +73,7 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
   const { open, state } = useSidebar();
   
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
   
   // Calculate left offset for pagination based on sidebar state
   const getLeftOffset = () => {
@@ -96,40 +97,29 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
     async function fetchEntities() {
       setLoading(true);
       try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        
-        // Include bearer token if available
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        // Use relative URL to go through Vite proxy (which routes to correct backend port)
-        // The Vite proxy in vite.config.ts handles /api -> http://localhost:${HTTP_PORT}
+        const api = getApiClient(bearerToken);
         const userId = user?.id;
-        const url = `/api/entities/query`;
-        
-        const response = await fetch(url, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({
+        const { data, error: apiError } = await api.POST("/api/entities/query", {
+          body: {
             entity_type: selectedType || undefined,
             search: searchQuery || undefined,
             limit,
             offset,
             user_id: userId,
-          }),
+          },
         });
-        
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Unauthorized - check your Bearer Token");
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        if (apiError) {
+          throw new Error(
+            typeof apiError === "object" && apiError && "error" in apiError
+              ? String(apiError.error)
+              : "Failed to fetch entities"
+          );
         }
-        
-        const data = await response.json();
+
+        if (!data) {
+          throw new Error("Empty response from entities query");
+        }
         const entities = data.entities || [];
         setFetchedEntities(entities);
         setTotalCount(data.total || 0);
@@ -139,24 +129,20 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
         const schemaMap = new Map<string, SchemaInfo>();
 
         try {
-          const schemaParams = new URLSearchParams();
-          if (userId) {
-            schemaParams.append("user_id", userId);
-          }
-          const schemaUrl = `/api/schemas${schemaParams.toString() ? `?${schemaParams.toString()}` : ""}`;
-          const schemaResponse = await fetch(schemaUrl, { headers });
-          if (schemaResponse.ok) {
-            const schemaData = await schemaResponse.json();
-            const schemasList = schemaData.schemas || [];
-            const schemasByType = new Map(
-              schemasList.map((schema: SchemaInfo) => [schema.entity_type, schema])
-            );
+          const { data: schemaData } = await api.GET("/api/schemas", {
+            params: {
+              query: userId ? { user_id: userId } : {},
+            },
+          });
+          const schemasList = schemaData?.schemas || [];
+          const schemasByType = new Map(
+            schemasList.map((schema: SchemaInfo) => [schema.entity_type, schema])
+          );
 
-            for (const entityType of uniqueTypes) {
-              const schemaInfo = schemasByType.get(entityType);
-              if (schemaInfo) {
-                schemaMap.set(entityType, schemaInfo);
-              }
+          for (const entityType of uniqueTypes) {
+            const schemaInfo = schemasByType.get(entityType);
+            if (schemaInfo) {
+              schemaMap.set(entityType, schemaInfo);
             }
           }
         } catch (error) {

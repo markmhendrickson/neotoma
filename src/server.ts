@@ -15,6 +15,29 @@ import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
+import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
+import {
+  AnalyzeSchemaCandidatesRequestSchema,
+  CorrectEntityRequestSchema,
+  CreateRelationshipRequestSchema,
+  EntitySnapshotRequestSchema,
+  FieldProvenanceRequestSchema,
+  GetSchemaRecommendationsRequestSchema,
+  ListEntityTypesRequestSchema,
+  ListObservationsRequestSchema,
+  ListRelationshipsRequestSchema,
+  MergeEntitiesRequestSchema,
+  ReinterpretRequestSchema,
+  RelationshipSnapshotRequestSchema,
+  RetrieveEntitiesRequestSchema,
+  RetrieveEntityByIdentifierSchema,
+  RetrieveGraphNeighborhoodSchema,
+  RetrieveRelatedEntitiesSchema,
+  TimelineEventsRequestSchema,
+  UpdateSchemaIncrementalRequestSchema,
+  RegisterSchemaRequestSchema,
+} from "./shared/action_schemas.js";
 import {
   normalizeEntityValue,
   generateEntityId,
@@ -1146,6 +1169,9 @@ export class NeotomaServer {
       try {
         const { name, arguments: args } = request.params;
 
+        const cliEquivalent = buildCliEquivalentInvocation(name, args);
+        logger.info(`[MCP Server] CLI equivalent: ${cliEquivalent}`);
+
         // Check if this is an encrypted request wrapper
         if (name === "encrypted_request" && (args as any)?.encryptedPayload) {
           // Blind routing - return encrypted payload as-is
@@ -1599,11 +1625,7 @@ export class NeotomaServer {
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const { observationReducer } = await import("./reducers/observation_reducer.js");
 
-    const schema = z.object({
-      entity_id: z.string(),
-      at: z.string().optional(), // ISO 8601 timestamp for historical snapshot
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = EntitySnapshotRequestSchema.parse(args ?? {});
 
     // Get entity first to check if it exists and handle merged entity redirection
     const entity = await getEntityWithProvenance(parsed.entity_id);
@@ -1710,12 +1732,7 @@ export class NeotomaServer {
   private async listObservations(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_id: z.string(),
-      limit: z.number().int().positive().default(100),
-      offset: z.number().int().nonnegative().default(0),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = ListObservationsRequestSchema.parse(args ?? {});
 
     const { data: observations, error } = await supabase
       .from("observations")
@@ -1739,11 +1756,7 @@ export class NeotomaServer {
   private async retrieveFieldProvenance(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_id: z.string(),
-      field: z.string(),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
 
     // Get the snapshot to extract provenance
     const { data: snapshot, error: snapshotError } = await supabase
@@ -1828,23 +1841,7 @@ export class NeotomaServer {
   private async createRelationship(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const relationshipTypeEnum = z.enum([
-      "PART_OF",
-      "CORRECTS",
-      "REFERS_TO",
-      "SETTLES",
-      "DUPLICATE_OF",
-      "DEPENDS_ON",
-      "SUPERSEDES",
-    ]);
-
-    const schema = z.object({
-      relationship_type: relationshipTypeEnum,
-      source_entity_id: z.string(),
-      target_entity_id: z.string(),
-      metadata: z.record(z.unknown()).optional(),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = CreateRelationshipRequestSchema.parse(args ?? {});
 
     // Check if relationship would create a cycle
     // Get all relationships to build the graph
@@ -1942,19 +1939,18 @@ export class NeotomaServer {
   private async listRelationships(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_id: z.string(),
-      direction: z.enum(["inbound", "outbound", "both"]).default("both"),
-      relationship_type: z.string().optional(),
-      limit: z.number().int().positive().default(100),
-      offset: z.number().int().nonnegative().default(0),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = ListRelationshipsRequestSchema.parse(args ?? {});
+    const normalizedDirection =
+      parsed.direction === "incoming" || parsed.direction === "inbound"
+        ? "inbound"
+        : parsed.direction === "outgoing" || parsed.direction === "outbound"
+          ? "outbound"
+          : "both";
 
     const relationships: any[] = [];
 
     // Query relationship_snapshots instead of relationships table
-    if (parsed.direction === "outbound" || parsed.direction === "both") {
+    if (normalizedDirection === "outbound" || normalizedDirection === "both") {
       let outboundQuery = supabase
         .from("relationship_snapshots")
         .select("*")
@@ -1981,7 +1977,7 @@ export class NeotomaServer {
       }
     }
 
-    if (parsed.direction === "inbound" || parsed.direction === "both") {
+    if (normalizedDirection === "inbound" || normalizedDirection === "both") {
       let inboundQuery = supabase
         .from("relationship_snapshots")
         .select("*")
@@ -2028,22 +2024,7 @@ export class NeotomaServer {
   private async getRelationshipSnapshot(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const relationshipTypeEnum = z.enum([
-      "PART_OF",
-      "CORRECTS",
-      "REFERS_TO",
-      "SETTLES",
-      "DUPLICATE_OF",
-      "DEPENDS_ON",
-      "SUPERSEDES",
-    ]);
-
-    const schema = z.object({
-      relationship_type: relationshipTypeEnum,
-      source_entity_id: z.string(),
-      target_entity_id: z.string(),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = RelationshipSnapshotRequestSchema.parse(args ?? {});
 
     const userId = "00000000-0000-0000-0000-000000000000"; // Default for v0.1.0 single-user
 
@@ -2084,72 +2065,30 @@ export class NeotomaServer {
   private async retrieveEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const { queryEntities } = await import("./services/entity_queries.js");
-
-    const schema = z.object({
-      user_id: z.string().uuid().optional(),
-      entity_type: z.string().optional(),
-      limit: z.number().int().positive().default(100),
-      offset: z.number().int().nonnegative().default(0),
-      include_snapshots: z.boolean().default(true),
-      include_merged: z.boolean().default(false),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = RetrieveEntitiesRequestSchema.parse(args ?? {});
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    // Use new query service that excludes merged entities by default
-    const entities = await queryEntities({
-      userId: userId,
+    const { entities, total, excluded_merged } = await queryEntitiesWithCount({
+      userId,
       entityType: parsed.entity_type,
       includeMerged: parsed.include_merged,
       limit: parsed.limit,
       offset: parsed.offset,
     });
 
-    // Get total count (excluding merged entities unless requested)
-    let countQuery = supabase.from("entities").select("*", { count: "exact", head: true });
-
-    if (userId) {
-      countQuery = countQuery.eq("user_id", userId);
-    }
-
-    if (parsed.entity_type) {
-      countQuery = countQuery.eq("entity_type", parsed.entity_type);
-    }
-
-    if (!parsed.include_merged) {
-      countQuery = countQuery.is("merged_to_entity_id", null);
-    }
-
-    const { count, error: countError } = await countQuery;
-    if (countError) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to count entities: ${countError.message}`
-      );
-    }
-
     return this.buildTextResponse({
       entities,
-      total: count || 0,
-      excluded_merged: !parsed.include_merged,
+      total,
+      excluded_merged,
     });
   }
 
   private async listTimelineEvents(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      event_type: z.string().optional(),
-      after_date: z.string().optional(),
-      before_date: z.string().optional(),
-      source_id: z.string().optional(),
-      limit: z.number().int().positive().default(100),
-      offset: z.number().int().nonnegative().default(0),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = TimelineEventsRequestSchema.parse(args ?? {});
 
     let query = supabase.from("timeline_events").select("*");
 
@@ -2221,11 +2160,7 @@ export class NeotomaServer {
   private async retrieveEntityByIdentifier(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      identifier: z.string(),
-      entity_type: z.string().optional(),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
 
     // Normalize the identifier
     const normalized = parsed.entity_type
@@ -2292,14 +2227,7 @@ export class NeotomaServer {
   private async retrieveRelatedEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_id: z.string(),
-      relationship_types: z.array(z.string()).optional(),
-      direction: z.enum(["inbound", "outbound", "both"]).default("both"),
-      max_hops: z.number().int().positive().default(1),
-      include_entities: z.boolean().default(true),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -2405,15 +2333,7 @@ export class NeotomaServer {
   private async retrieveGraphNeighborhood(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      node_id: z.string(),
-      node_type: z.enum(["entity", "source"]).default("entity"),
-      include_relationships: z.boolean().default(true),
-      include_sources: z.boolean().default(true),
-      include_events: z.boolean().default(true),
-      include_observations: z.boolean().default(false),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = RetrieveGraphNeighborhoodSchema.parse(args ?? {});
 
     const includeSources = parsed.include_sources;
 
@@ -2600,11 +2520,7 @@ export class NeotomaServer {
   private async listEntityTypes(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      keyword: z.string().optional(),
-      summary: z.boolean().optional().default(false),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = ListEntityTypesRequestSchema.parse(args ?? {});
 
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
@@ -2651,13 +2567,7 @@ export class NeotomaServer {
   private async analyzeSchemaCandidates(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_type: z.string().optional(),
-      user_id: z.string().uuid().optional(),
-      min_frequency: z.number().default(5),
-      min_confidence: z.number().default(0.8),
-    });
-    const parsed = schema.parse(args ?? {});
+    const parsed = AnalyzeSchemaCandidatesRequestSchema.parse(args ?? {});
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -2693,13 +2603,7 @@ export class NeotomaServer {
   private async getSchemaRecommendations(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_type: z.string(),
-      user_id: z.string().uuid().optional(),
-      source: z.enum(["raw_fragments", "agent", "inference", "all"]).optional(),
-      status: z.enum(["pending", "approved", "rejected"]).optional(),
-    });
-    const parsed = schema.parse(args);
+    const parsed = GetSchemaRecommendationsRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -2735,25 +2639,7 @@ export class NeotomaServer {
   private async updateSchemaIncremental(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_type: z.string(),
-      fields_to_add: z.array(
-        z.object({
-          field_name: z.string(),
-          field_type: z.enum(["string", "number", "date", "boolean", "array", "object"]),
-          required: z.boolean().default(false),
-          reducer_strategy: z
-            .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
-            .optional(),
-        })
-      ),
-      schema_version: z.string().optional(),
-      user_specific: z.boolean().default(false),
-      user_id: z.string().uuid().optional(),
-      activate: z.boolean().default(true),
-      migrate_existing: z.boolean().default(false),
-    });
-    const parsed = schema.parse(args);
+    const parsed = UpdateSchemaIncrementalRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -2795,16 +2681,7 @@ export class NeotomaServer {
   private async registerSchema(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      entity_type: z.string(),
-      schema_definition: z.record(z.unknown()),
-      reducer_config: z.record(z.unknown()),
-      schema_version: z.string().default("1.0"),
-      user_specific: z.boolean().default(false),
-      user_id: z.string().uuid().optional(),
-      activate: z.boolean().default(false),
-    });
-    const parsed = schema.parse(args);
+    const parsed = RegisterSchemaRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -3806,12 +3683,7 @@ export class NeotomaServer {
       await import("./services/interpretation.js");
     const { analyzeFileForRecord } = await import("./services/file_analysis.js");
 
-    const schema = z.object({
-      source_id: z.string().uuid(),
-      interpretation_config: z.record(z.unknown()),
-    });
-
-    const parsed = schema.parse(args);
+    const parsed = ReinterpretRequestSchema.parse(args);
 
     // Get source metadata
     const source = await getSourceMetadata(parsed.source_id);
@@ -3869,15 +3741,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { schemaRegistry } = await import("./services/schema_registry.js");
 
-    const schema = z.object({
-      user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id
-      entity_id: z.string(),
-      entity_type: z.string(),
-      field: z.string(),
-      value: z.unknown(),
-    });
-
-    const parsed = schema.parse(args);
+    const parsed = CorrectEntityRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -3950,14 +3814,7 @@ export class NeotomaServer {
   private async mergeEntities(
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
-    const schema = z.object({
-      user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id
-      from_entity_id: z.string(),
-      to_entity_id: z.string(),
-      merge_reason: z.string().optional(),
-    });
-
-    const parsed = schema.parse(args);
+    const parsed = MergeEntitiesRequestSchema.parse(args);
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);

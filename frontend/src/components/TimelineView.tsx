@@ -23,6 +23,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimeTimeline } from "@/hooks/useRealtimeTimeline";
+import { getApiClient } from "@/lib/api_client";
 
 interface TimelineEvent {
   id: string;
@@ -55,8 +56,8 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  // Prefer Supabase session token, fallback to keys token, then settings
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch timeline events
   useEffect(() => {
@@ -68,47 +69,23 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
     async function fetchTimeline() {
       setLoading(true);
       try {
-        const headers: HeadersInit = {
-          "Content-Type": "application/json",
-        };
-        
-        // Include bearer token if available
-        if (bearerToken) {
-          headers["Authorization"] = `Bearer ${bearerToken}`;
-        }
-
-        const params = new URLSearchParams({
-          limit: limit.toString(),
-          offset: offset.toString(),
+        const api = getApiClient(bearerToken);
+        const { data, error } = await api.GET("/api/timeline", {
+          params: {
+            query: {
+              limit,
+              offset,
+              start_date: startDate || undefined,
+              end_date: endDate || undefined,
+              event_type: selectedEventType || undefined,
+              user_id: user?.id || undefined,
+            },
+          },
         });
-        
-        if (startDate) {
-          params.append("start_date", startDate);
-        }
-        
-        if (endDate) {
-          params.append("end_date", endDate);
-        }
-        
-        if (selectedEventType) {
-          params.append("event_type", selectedEventType);
-        }
 
-        if (user?.id) {
-          params.append("user_id", user.id);
+        if (error) {
+          throw new Error("Failed to fetch timeline events");
         }
-
-        // Use relative URL to go through Vite proxy
-        const response = await fetch(`/api/timeline?${params}`, { headers });
-        
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error("Unauthorized - check your Bearer Token");
-          }
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
         
         setFetchedEvents(data.events || []);
         setTotalCount(data.total || 0);

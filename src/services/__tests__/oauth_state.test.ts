@@ -8,7 +8,7 @@ describe("oauth_state service", () => {
 
   it("creates entries and consumes them once", () => {
     const { state, codeChallenge } = createOAuthState({
-      provider: "gmail",
+      provider: "example",
       bearerToken: "test-token",
     });
 
@@ -17,7 +17,7 @@ describe("oauth_state service", () => {
 
     const entry = consumeOAuthState(state);
     expect(entry).not.toBeNull();
-    expect(entry?.provider).toBe("gmail");
+    expect(entry?.provider).toBe("example");
     expect(entry?.bearerToken).toBe("test-token");
 
     const replay = consumeOAuthState(state);
@@ -28,7 +28,7 @@ describe("oauth_state service", () => {
     vi.useFakeTimers();
 
     const { state } = createOAuthState({
-      provider: "gmail",
+      provider: "example",
       bearerToken: "token",
     });
 

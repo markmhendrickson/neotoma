@@ -1,0 +1,140 @@
+# Cursor Rules Sync Requirement Rule
+
+## Purpose
+
+Ensures agents ALWAYS run `/setup_cursor_copies` immediately after updating any rule or command file, ensuring changes are synced to `.cursor/` directory in the same conversation/workflow.
+
+## Scope
+
+This document covers:
+- Mandatory requirement to run `/setup_cursor_copies` after rule/command updates
+- When this requirement applies
+- Validation requirements
+
+This document does NOT cover:
+- How to edit rules (see `cursor_rules_editing.mdc`)
+- Foundation vs repository rule locations (see `cursor_rules_editing.mdc`)
+
+## Trigger Patterns
+
+Agents MUST run `/setup_cursor_copies` immediately after:
+
+- Editing any file in `docs/` that is a rule source (files matching `*_rules.mdc` or `*_rules.md`)
+- Editing any file in `docs/` that is a command source (files matching `*_command.md`)
+- Editing any file in `foundation/agent_instructions/cursor_rules/`
+- Editing any file in `foundation/agent_instructions/cursor_commands/`
+- Updating rule documentation
+- Creating new rule files
+- Modifying existing rule files
+
+## Mandatory Requirement
+
+**MANDATORY:** After editing ANY rule or command source file, agents MUST:
+
+1. **Immediately run `/setup_cursor_copies`** in the same conversation/workflow
+2. **Do NOT defer this step** to a later conversation
+3. **Do NOT mark rule updates complete** without running `/setup_cursor_copies`
+4. **Verify the sync succeeded** by checking script output
+
+## Agent Actions
+
+### Step 1: Edit Source File
+
+1. Identify the source file location:
+   - Repository rules: `docs/{subdirectory}/{name}_rules.mdc` or `docs/{subdirectory}/{name}_rules.md`
+   - Foundation rules: `foundation/agent_instructions/cursor_rules/{name}.mdc`
+   - Commands: `docs/{subdirectory}/{name}_command.md` or `foundation/agent_instructions/cursor_commands/{name}.md`
+
+2. Edit the source file directly (never edit `.cursor/` copies)
+
+### Step 2: Run Setup Script (MANDATORY)
+
+**MUST run immediately after editing:**
+
+```bash
+./foundation/scripts/setup_cursor_copies.sh
+```
+
+Or if foundation is in parent directory:
+
+```bash
+../foundation/scripts/setup_cursor_copies.sh
+```
+
+**Verify success:**
+- Check script output for "✅ Cursor rules setup complete!"
+- Verify no errors in script output
+- Confirm files were copied/updated
+
+### Step 3: Verify Sync
+
+1. Check that `.cursor/rules/` or `.cursor/commands/` contains updated files
+2. Verify header comments in copied files reference correct source
+3. Confirm changes are reflected in copied files
+
+## Constraints
+
+- **MUST ALWAYS run `/setup_cursor_copies`** after editing any rule or command source file
+- **MUST run in the same conversation/workflow** as the rule update
+- **MUST NOT defer** this step to a later conversation
+- **MUST NOT mark rule updates complete** without running `/setup_cursor_copies`
+- **MUST verify sync succeeded** before completing the workflow
+
+## Forbidden Patterns
+
+- Editing rule/command source files without running `/setup_cursor_copies`
+- Deferring `/setup_cursor_copies` to a later conversation
+- Marking rule updates complete without running `/setup_cursor_copies`
+- Assuming changes will sync automatically (they won't)
+- Skipping sync verification
+
+## Validation Checklist
+
+Before marking rule/command updates complete:
+- [ ] Source file edited (in `docs/` or `foundation/agent_instructions/`)
+- [ ] **`/setup_cursor_copies` run immediately after editing** (MANDATORY)
+- [ ] Script output shows "✅ Cursor rules setup complete!"
+- [ ] No errors in script output
+- [ ] Changes verified in `.cursor/rules/` or `.cursor/commands/` copies
+- [ ] Rule update workflow complete (edit → sync → verify)
+
+## Related Documents
+
+- `cursor_rules_editing.mdc` - How to edit rules and commands
+- Repository setup_cursor_copies command documentation
+
+## Agent Instructions
+
+### When to Load This Document
+
+Load this document when:
+- Editing any rule or command file
+- Creating new rule or command files
+- Updating rule documentation
+
+### Required Co-Loaded Documents
+
+- `cursor_rules_editing.mdc` - Rule editing guidelines
+
+### Constraints Agents Must Enforce
+
+1. **MANDATORY:** Always run `/setup_cursor_copies` immediately after editing any rule or command
+2. **MANDATORY:** Run sync in the same conversation/workflow as the edit
+3. **MANDATORY:** Verify sync succeeded before marking updates complete
+4. **FORBIDDEN:** Deferring sync to a later conversation
+5. **FORBIDDEN:** Marking rule updates complete without running sync
+
+### Forbidden Patterns
+
+- Editing rules without running `/setup_cursor_copies`
+- Deferring sync to later conversations
+- Marking updates complete without sync
+- Assuming automatic sync (doesn't exist)
+
+### Validation Checklist
+
+- [ ] Source file edited
+- [ ] `/setup_cursor_copies` run immediately (same conversation)
+- [ ] Sync verified successful
+- [ ] Changes confirmed in `.cursor/` copies
+- [ ] Workflow complete

@@ -9,18 +9,19 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 ### 1. Acquisition Target Segments
 #### 1.1 AI-Native Individual Operators (P0)
 **Priority**: P0 (highest priority)
-**Definition**: Solo operators who use AI tools daily for work/life (Claude, ChatGPT, etc.)
+**Definition**: Solo operators who use AI tools daily for work/life (Claude, ChatGPT, etc.) and are comfortable with CLI-first workflows and developer preview constraints
 **Channels**:
 - Twitter
 - Indie Hacker
 - Product Hunt
 - Hacker News
-**Messaging**: "Privacy-first deterministic memory for AI tools. User-controlled, cross-platform via MCP (ChatGPT, Claude, Cursor)."
+**Messaging**: "Privacy-first deterministic memory for AI tools. User-controlled, cross-platform via MCP (ChatGPT, Claude, Cursor). Developer preview with explicit guarantees."
 **Characteristics**:
 - Use Claude/ChatGPT daily or weekly
 - Manage personal data (contracts, receipts, financial records)
 - Value deterministic, structured data access
 - Interested in MCP (Model Context Protocol) integrations
+- Comfortable with preview constraints and explicit mutation guarantees
 #### 1.2 High-Context Knowledge Workers (P1)
 **Priority**: P1 (secondary priority)
 **Definition**: Professionals managing complex documents/data (consultants, researchers, analysts)
@@ -28,7 +29,7 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - LinkedIn
 - Content marketing
 - Productivity communities
-**Messaging**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access."
+**Messaging**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access. Preview access for technical operators."
 **Characteristics**:
 - Manage multiple document types
 - Need reliable document retrieval
@@ -86,6 +87,10 @@ This document defines the user segments for v1.0.0 marketing activities, includi
 - **For AI-Native Operators**: "Privacy-first memory for ChatGPT, Claude, and Cursor. User-controlled, cross-platform via MCP."
 - **For Knowledge Workers**: "Privacy-first structured memory with deterministic extraction. User-controlled, no provider access."
 - **For Privacy-Conscious Users**: "User-controlled memory that's never used for training. You own your data."
+**Preview Audience Constraints:**
+- CLI-comfortable developers and agent builders
+- Users who accept breaking changes and precision disclaimers
+- Not for UI-first or reliability-first expectations yet
 **Key Messages (Defensible Differentiators First):**
 1. **Privacy-first architecture** — User-controlled, no provider access, never used for training (vs. provider-controlled memory)
 2. **Deterministic extraction** — Same input → same output, always; reproducible, explainable (vs. ML-based probabilistic)

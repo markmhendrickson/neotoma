@@ -4,6 +4,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowUp } from 'lucide-react';
 import { useSettings } from '@/hooks/useSettings';
 import { useKeys } from '@/hooks/useKeys';
+import { useAuth } from '@/contexts/AuthContext';
 import type { DatastoreAPI } from '@/hooks/useDatastore';
 import { uploadFile, sendChatMessage, analyzeFile, generateEmbedding } from '@/lib/api';
 import { processFileLocally } from '@/utils/file_processing';
@@ -526,8 +527,9 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, x25519, ed25519, loading: keysLoading } = useKeys();
-  // Use bearer token from keys hook if available, fallback to settings
-  const bearerToken = keysBearerToken || settings.bearerToken;
+  const { sessionToken } = useAuth();
+  // Prefer Supabase session token, fallback to keys token, then settings
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
   const keyIdentifier = useMemo(() => hashPrivateKey(ed25519?.privateKey ?? null), [ed25519?.privateKey]);
   const CHAT_PANEL_WIDTH_KEY = 'chatPanelWidth';
   const DEFAULT_CHAT_WIDTH = 420;

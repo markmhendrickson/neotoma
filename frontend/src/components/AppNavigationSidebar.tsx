@@ -61,6 +61,7 @@ import { formatEntityType } from "@/utils/entityTypeFormatter";
 import { cn } from "@/lib/utils";
 import { getSchemaIcon, fetchSchemaMetadataBatch, type SchemaMetadata } from "@/utils/schemaIcons";
 import { useRealtime } from "@/contexts/RealtimeContext";
+import { getApiClient } from "@/lib/api_client";
 
 interface MenuItem {
   path: string;
@@ -116,7 +117,7 @@ export function AppNavigationSidebar({
   const { toast } = useToast();
 
   // Prefer bearer token from keys, fallback to Supabase session token, then settings
-  const bearerToken = keysBearerToken || sessionToken || settings.bearerToken;
+  const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Helper function to fetch entity types
   const fetchEntityTypes = useCallback(async () => {
@@ -124,30 +125,18 @@ export function AppNavigationSidebar({
 
     setLoading(true);
     try {
-      const headers: HeadersInit = {
-        "Content-Type": "application/json",
-      };
-
-      if (bearerToken) {
-        headers["Authorization"] = `Bearer ${bearerToken}`;
-      }
-
       // Fetch all entities for the user to get entity types they actually have
-      const entitiesResponse = await fetch("/api/entities/query", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
+      const api = getApiClient(bearerToken);
+      const { data, error } = await api.POST("/api/entities/query", {
+        body: {
           limit: 1000,
           user_id: user.id,
-        }),
+        },
       });
-
-      if (!entitiesResponse.ok) {
-        throw new Error(`HTTP ${entitiesResponse.status}: ${entitiesResponse.statusText}`);
+      if (error || !data) {
+        throw new Error("Failed to fetch entities");
       }
-
-      const entitiesData = await entitiesResponse.json();
-      const entities = entitiesData.entities || [];
+      const entities = data.entities || [];
 
       // Count entities per type
       const counts = new Map<string, number>();

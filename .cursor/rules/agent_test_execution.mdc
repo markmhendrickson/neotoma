@@ -1,0 +1,351 @@
+# Agent Test Execution Rules
+
+**Reference:** Testing standards documentation (repository-specific)
+
+## Purpose
+
+Ensures agents automatically run tests after implementing code changes and fix any failures before proceeding. This prevents bugs from being discovered only during manual testing.
+
+## Scope
+
+This document covers:
+- Mandatory test execution after code changes
+- Test execution commands and workflows
+- Failure handling and remediation
+- Test result verification
+
+This document does NOT cover:
+- Test quality standards (see repository test quality rules)
+- Test writing patterns (see repository testing standards)
+- Test-first workflow (see `test_first_workflow.mdc`)
+
+## Trigger Patterns
+
+Agents MUST run tests immediately after:
+
+- Implementing new features or functions
+- Modifying existing code
+- Adding or updating tests
+- Changing database schemas or migrations
+- Updating API endpoints or contracts
+- Modifying UI components
+- Before marking any implementation as complete
+
+## Mandatory Test Execution
+
+### Step 1: Run Relevant Test Suite
+
+After ANY code change, agents MUST run the appropriate test suite:
+
+**For backend/domain changes:**
+```bash
+# Type check first
+npm run type-check
+
+# Run unit tests
+npm test
+
+# Run integration tests
+npm run test:integration
+```
+
+**For frontend/UI changes:**
+```bash
+# Type check
+npm run type-check
+
+# Run unit tests
+npm test
+
+# Run E2E tests (Playwright)
+npm run test:e2e
+```
+
+**For database/schema changes:**
+```bash
+# Run migrations
+npm run migrate
+
+# Run integration tests (includes DB operations)
+npm run test:integration
+
+# Check schema advisors (if available)
+npm run check:advisors
+```
+
+**For all changes:**
+```bash
+# Lint check
+npm run lint
+```
+
+### Step 2: Verify Test Results
+
+After running tests, agents MUST:
+
+1. **Check exit codes:** All test commands must exit with code 0
+2. **Review test output:** Verify all tests passed (not just "some tests passed")
+3. **Check coverage:** Verify coverage meets requirements (if coverage check is enabled)
+4. **Review failures:** If any tests fail, identify root cause
+
+### Step 3: Fix Failing Tests
+
+If tests fail, agents MUST:
+
+1. **STOP all work immediately** — Do not proceed with other tasks
+2. **Read test failure messages** — Understand what failed and why
+3. **Fix the failing tests** — Either fix the code or fix the test (if test is wrong)
+4. **Re-run tests** — Verify fixes work
+5. **Repeat until all tests pass** — Do not mark implementation complete until all tests pass
+6. **Always retry after fixes** — After fixing any failing test, immediately re-run the test suite to verify the fix worked
+
+### Step 3a: Fix Migration Issues Automatically
+
+**MANDATORY:** When database migrations fail (e.g., during local database setup), agents MUST automatically resolve the issues:
+
+1. **Identify the root cause:**
+   - Missing base tables
+   - Missing dependencies (foreign key references)
+   - Duplicate migration timestamps
+   - Syntax errors in migrations
+
+2. **Fix immediately:**
+   - Create seed migration for base tables if missing
+   - Fix duplicate migration timestamps (rename to unique timestamps)
+   - Make migrations conditional if they depend on tables that may not exist
+   - Fix syntax errors in migration SQL
+
+3. **Re-run migrations:**
+   - After fixes, immediately re-run migration command
+   - Verify all migrations apply successfully
+   - Do not proceed until migrations complete without errors
+
+4. **Document fixes:**
+   - Note what was fixed and why
+   - Update migration files with proper conditional logic
+   - Ensure seed migration creates all required base tables
+
+### Step 4: Document Test Results
+
+Agents MUST document test execution in status updates:
+
+```markdown
+## Test Execution Results
+
+- Type check: ✅ Passed
+- Unit tests: ✅ Passed (45/45)
+- Integration tests: ✅ Passed (12/12)
+- E2E tests: ✅ Passed (8/8)
+- Lint: ✅ Passed
+- Coverage: ✅ 87% (meets requirement)
+```
+
+## Test Execution Commands
+
+### Standard Commands
+
+| Command | Purpose | When to Run |
+|---------|---------|-------------|
+| `npm run type-check` | TypeScript compilation check | Always (before tests) |
+| `npm test` | Unit tests | After code changes |
+| `npm run test:integration` | Integration tests | After backend/DB changes |
+| `npm run test:e2e` | E2E tests (Playwright, headless) | After UI/frontend changes |
+| `npm run test:e2e:headed` | E2E tests with visible browser | When visually debugging UI tests |
+| `npm run lint` | Code style check | Always |
+| `npm run test:coverage` | Coverage report | Before marking complete |
+| `npm run migrate` | Database migrations | After schema changes |
+| `npm run check:advisors` | Schema validation | After migrations (if available) |
+
+### Coverage Requirements
+
+When running coverage checks, verify:
+
+- **Domain logic:** >85% lines, >85% branches, 100% critical paths
+- **Application layer:** >80% lines, >80% branches, 100% critical paths
+- **UI components:** >75% lines, >75% branches
+
+See repository testing standards for complete coverage requirements.
+
+## Failure Behavior
+
+### If Tests Fail
+
+**MANDATORY:** Agents MUST NOT proceed until all tests pass.
+
+1. **Stop immediately** — Do not continue with other tasks
+2. **Analyze failure** — Read error messages, stack traces, test output
+3. **Fix root cause** — Fix the code or test (whichever is wrong)
+4. **Re-run tests** — Verify fix works
+5. **Document fix** — Note what was fixed and why
+
+### If Type Check Fails
+
+**MANDATORY:** Fix type errors before running tests.
+
+1. Run `npm run type-check` to see all type errors
+2. Fix type errors (mismatched interfaces, incorrect types, etc.)
+3. Re-run type check until it passes
+4. Then run tests
+
+### If Lint Fails
+
+**MANDATORY:** Fix lint errors (warnings are acceptable but should be reviewed).
+
+1. Run `npm run lint` to see all lint errors
+2. Fix lint errors (code style, unused variables, etc.)
+3. Re-run lint until it passes
+4. Then run tests
+
+### If Coverage Fails
+
+**MANDATORY:** Add missing tests to meet coverage requirements.
+
+1. Run `npm run test:coverage` to see coverage gaps
+2. Identify uncovered code paths
+3. Add tests for uncovered paths
+4. Re-run coverage check until requirements are met
+
+## Integration with Feature Unit Workflow
+
+When implementing Feature Units (if repository uses feature units):
+
+1. **After each implementation step:**
+   - Run relevant tests
+   - Fix any failures
+   - Verify tests pass
+
+2. **Before marking FU complete:**
+   - Run full test suite
+   - Verify all tests pass
+   - Check coverage meets requirements
+   - Document test results in status file
+
+3. **In status updates:**
+   ```json
+   {
+     "tests": {
+       "unit": { "passed": true, "count": 45 },
+       "integration": { "passed": true, "count": 12 },
+       "e2e": { "passed": true, "count": 8 },
+       "coverage": { "lines": 87, "branches": 85 }
+     }
+   }
+   ```
+
+## Constraints
+
+Agents MUST:
+- Run tests after EVERY code change
+- **ALWAYS fix failing tests and retry** — When encountering failing tests, immediately fix them and re-run the test suite to verify the fix
+- Verify all tests pass before marking implementation complete
+- Document test results in status updates
+- Run type check and lint before tests
+- **Retry tests after fixes** — After fixing any failing test, immediately re-run the test suite to confirm the fix worked
+
+Agents MUST NOT:
+- Skip test execution to save time
+- Mark implementation complete if tests fail
+- Proceed with other tasks while tests are failing
+- Assume tests will pass without running them
+- Defer test execution to "later"
+- **Leave failing tests unfixed** — All failing tests must be fixed and verified before proceeding
+
+## Examples
+
+### ✅ Correct: Run Tests After Implementation
+
+```typescript
+// Agent implements feature
+export function newFeature(data: Data): Result {
+  // Implementation
+}
+
+// Agent immediately runs tests
+// Command: npm test
+// Result: ✅ All tests passed
+
+// Agent marks implementation complete
+```
+
+### ❌ Incorrect: Skip Test Execution
+
+```typescript
+// Agent implements feature
+export function newFeature(data: Data): Result {
+  // Implementation
+}
+
+// Agent marks implementation complete WITHOUT running tests
+// Result: Bugs discovered during manual testing
+```
+
+### ✅ Correct: Fix Tests Before Proceeding
+
+```typescript
+// Agent runs tests
+// Result: ❌ 2 tests failed
+
+// Agent stops work, fixes failing tests
+// Agent re-runs tests
+// Result: ✅ All tests passed
+
+// Agent marks implementation complete
+```
+
+### ❌ Incorrect: Proceed Despite Test Failures
+
+```typescript
+// Agent runs tests
+// Result: ❌ 2 tests failed
+
+// Agent marks implementation complete anyway
+// Result: Bugs in production
+```
+
+## Related Documents
+
+- Repository testing standards documentation
+- Repository test quality enforcement rules
+- `test_first_workflow.mdc` — Test-first workflow
+- Repository UI test requirements (if applicable)
+- Repository feature unit execution workflow (if applicable)
+
+## Agent Instructions
+
+### When to Load This Document
+
+Load this document when:
+- Implementing new features or code changes
+- Reviewing agent test execution behavior
+- Setting up automated test workflows
+
+### Required Co-Loaded Documents
+
+- Repository testing standards
+- Repository test quality enforcement rules
+
+### Constraints Agents Must Enforce
+
+1. **MANDATORY test execution** after every code change
+2. **MANDATORY test fixes** before proceeding if tests fail
+3. **MANDATORY test verification** before marking implementation complete
+4. **MANDATORY test documentation** in status updates
+
+### Forbidden Patterns
+
+- Skipping test execution
+- Marking implementation complete with failing tests
+- Proceeding with other tasks while tests fail
+- Assuming tests pass without running them
+- Deferring test execution
+
+### Validation Checklist
+
+Before marking any implementation complete:
+- [ ] Type check passed (`npm run type-check`)
+- [ ] Lint passed (`npm run lint`)
+- [ ] Unit tests passed (`npm test`)
+- [ ] Integration tests passed (`npm run test:integration`) — if backend/DB changes
+- [ ] E2E tests passed (`npm run test:e2e`) — if UI changes
+- [ ] Coverage meets requirements (`npm run test:coverage`) — if enabled
+- [ ] Test results documented in status update
