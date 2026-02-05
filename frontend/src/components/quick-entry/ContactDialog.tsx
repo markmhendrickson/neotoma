@@ -22,6 +22,7 @@ import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { getApiClient } from "@/lib/api_client";
+import { createIdempotencyKey } from "@/lib/idempotency";
 
 interface ContactDialogProps {
   open: boolean;
@@ -67,9 +68,15 @@ export function ContactDialog({ open, onClose, onSave }: ContactDialogProps) {
       if (phone) contactData.phone = phone;
 
       const api = getApiClient(bearerToken);
+      const idempotencyKey = await createIdempotencyKey({
+        entities: [contactData],
+        source_priority: 100,
+        user_id: user?.id,
+      });
       const { data, error } = await api.POST("/api/store", {
         body: {
           entities: [contactData],
+          idempotency_key: idempotencyKey,
           user_id: user?.id,
         },
       });

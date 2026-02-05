@@ -22,139 +22,17 @@ components:
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
-    RetrieveRecordsRequest:
-      type: object
-      properties:
-        type:
-          type: string
-          description: Filter by record type
-        properties:
-          type: object
-          additionalProperties: true
-          minProperties: 0
-          properties: {}
-          description: Filter by property values (simple top-level key matching)
-        limit:
-          type: integer
-          description: Maximum number of results (default 100, max 500)
-        search:
-          type: array
-          items: { type: string }
-          description: Search terms for fuzzy/semantic matching (requires query_embedding for semantic mode)
-        search_mode:
-          type: string
-          enum: [semantic, keyword, both]
-          default: both
-          description: Search mode - semantic uses vector embeddings, keyword uses text matching, both combines results
-        similarity_threshold:
-          type: number
-          minimum: 0
-          maximum: 1
-          default: 0.3
-          description: Minimum cosine similarity score for semantic search (0 = no similarity, 1 = identical). Typical scores range 0.3-0.5 for related content.
-        query_embedding:
-          type: array
-          items: { type: number }
-          description: |
-            RECOMMENDED: Generate 1536-dimensional embedding client-side using OpenAI text-embedding-3-small from search terms.
-            - Generate from: search.join with space separator or search array elements combined
-            - If you generate and include this field, must be non-empty array of exactly 1536 numbers.
-            - Do NOT send empty array. Omit field entirely if not generating client-side.
-            - Server will auto-generate if omitted (requires OPENAI_API_KEY on server).
-            Generation example: Use OpenAI embeddings.create with model text-embedding-3-small and input search.join with space separator
-        include_total_count:
-          type: boolean
-          description: >
-            When true, response includes a {records,total_count} object instead of a bare array so callers know the full number of matches.
-    UploadFileRequest:
-      type: object
-      required: [file]
-      properties:
-        record_id:
-          type: string
-          description: Existing record ID to attach the file to. Omit to create a new record.
-        bucket:
-          type: string
-          description: Storage bucket name (optional, defaults to 'files').
-        properties:
-          type: string
-          description: "Optional JSON object to use as properties when creating a new record. If provided, automatic analysis is skipped."
-        csv_row_records:
-          type: boolean
-          description: "Optional flag for CSV uploads. Defaults to true. Set to false to skip creating per-row records linked to the dataset."
-        file:
-          type: string
-          format: binary
-          description: File to upload
     FileUrlResponse:
       type: object
       properties:
         url:
           type: string
           description: Signed URL for accessing the file
-    Record:
-      type: object
-      properties:
-        id:
-          type: string
-        type:
-          type: string
-        properties:
-          type: object
-          additionalProperties: true
-          minProperties: 0
-          properties: {}
-          description: Arbitrary key/value properties stored in JSONB
-        file_urls:
-          type: array
-          items: { type: string }
-        embedding:
-          type: array
-          items: { type: number }
-          description: "1536-dimensional embedding vector (if provided). Note: Embeddings are excluded from responses to reduce payload size."
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
     Error:
       type: object
       properties:
         error:
           type: string
-    AnalyzeFileResponse:
-      type: object
-      properties:
-        type:
-          type: string
-          description: Inferred canonical record type
-        properties:
-          type: object
-          additionalProperties: true
-          description: Structured fields extracted from the file
-        summary:
-          type: string
-          description: Human-readable summary of the file contents
-        records_queried:
-          type: array
-          items:
-            $ref: '#/components/schemas/Record'
-          description: Records that were queried during the conversation (if any)
-        records_total_count:
-          type: integer
-          description: Exact number of records in the final retrieve_records call when available
-        function_calls:
-          type: array
-          items:
-            type: object
-            properties:
-              name:
-                type: string
-              arguments:
-                type: object
-                additionalProperties: true
-          description: Function calls made during the conversation (if any)
     ErrorEnvelope:
       type: object
       properties:
@@ -355,6 +233,7 @@ components:
           type: integer
     StoreStructuredRequest:
       type: object
+      required: [entities, idempotency_key]
       properties:
         entities:
           type: array
@@ -363,6 +242,8 @@ components:
             additionalProperties: true
         source_priority:
           type: integer
+        idempotency_key:
+          type: string
         user_id:
           type: string
     StoreStructuredResponse:
@@ -389,6 +270,8 @@ components:
           type: string
         client_name:
           type: string
+        redirect_uri:
+          type: string
     OAuthInitiateResponse:
       type: object
       properties:
@@ -407,174 +290,10 @@ components:
         connection_id:
           type: string
 paths:
-  /types:
-    get:
-      summary: List existing record types
-      operationId: listTypes
-      responses:
-        '200':
-          description: Distinct record types
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  types:
-                    type: array
-                    items: { type: string }
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-  /retrieve_records:
-    post:
-      summary: Retrieve records with optional semantic search
-      description: >
-        Filter by type and/or match property values. RECOMMENDED: Generate query_embedding client-side from search terms using OpenAI text-embedding-3-small before calling.
-        Server auto-generates if omitted. Use search_mode to control semantic vs keyword matching.
-      operationId: retrieveRecords
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RetrieveRecordsRequest'
-            examples:
-              client_provides_embedding:
-                summary: Client generates embedding (recommended for production)
-                description: Generate query_embedding client-side for better control and cost management
-                value:
-                  type: note
-                  search: ["workout", "exercise"]
-                  search_mode: semantic
-                  query_embedding: [0.012, -0.034, 0.056]
-                  similarity_threshold: 0.7
-                  limit: 10
-              server_generates_embedding:
-                summary: Server generates embedding (requires OPENAI_API_KEY)
-                description: Omit query_embedding to let server generate it automatically
-                value:
-                  type: note
-                  search: ["workout", "exercise"]
-                  search_mode: semantic
-                  similarity_threshold: 0.7
-                  limit: 10
-      responses:
-        '200':
-          description: Records (optionally with total_count metadata)
-          content:
-            application/json:
-              schema:
-                oneOf:
-                  - type: array
-                    items:
-                      $ref: '#/components/schemas/Record'
-                  - type: object
-                    properties:
-                      records:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Record'
-                      total_count:
-                        type: integer
-                        description: Exact number of matching records
-        '400':
-          description: Invalid payload
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-  /upload_file:
-    post:
-      summary: Upload file and attach or create record
-      description: |
-        Send multipart/form-data with field `file` and optional `record_id`.
-        If `record_id` is provided, the file is appended to the existing record's `file_urls`.
-        When `record_id` is omitted, the server analyzes the file (via OpenAI when available) to infer `type` and `properties`,
-        creates a new record, and associates the uploaded file. Provide an optional `properties` JSON field to bypass analysis
-        and supply record properties manually. CSV uploads default to creating one record per row (set `csv_row_records=false`
-        to skip) plus relationships back to the originating dataset record.
-      operationId: uploadFile
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UploadFileRequest'
-      responses:
-        '200':
-          description: Updated record after attaching the file
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Record'
-        '201':
-          description: Newly created record derived from uploaded file
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Record'
-        '400':
-          description: Invalid payload
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-  /analyze_file:
-    post:
-      summary: Analyze a file without storing it to infer type, summary, and properties
-      operationId: analyzeFile
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              properties:
-                file:
-                  type: string
-                  format: binary
-                  description: File to analyze
-              required: [file]
-      responses:
-        '200':
-          description: Analysis result describing the inferred record type and metadata
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AnalyzeFileResponse' }
-        '400':
-          description: Missing file or invalid payload
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '401':
-          description: Missing or invalid bearer token
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '500':
-          description: Analysis service failure
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
-        '404':
-          description: Record not found
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Error' }
   /get_file_url:
     get:
       summary: Get signed file URL
-      description: Provide a storage path like "files/<record_id>/<filename>".
+      description: Provide a storage path like "files/<source_id>/<filename>".
       operationId: getFileUrl
       parameters:
         - in: query
@@ -691,6 +410,10 @@ paths:
           name: client_id
           required: false
           schema: { type: string }
+        - in: query
+          name: dev_stub
+          required: false
+          schema: { type: string }
       responses:
         '302':
           description: Redirect to authorization URL
@@ -731,6 +454,28 @@ paths:
               schema:
                 type: object
                 additionalProperties: true
+
+  /api/me:
+    get:
+      summary: Get current authenticated user
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  email:
+                    type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /api/mcp/oauth/status:
     get:
@@ -1271,40 +1016,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StoreStructuredResponse' }
 
-  /api/records/{id}:
-    get:
-      summary: Get record by ID
-      operationId: getRecordById
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Record
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Record' }
-
-  /api/records/{id}/history:
-    get:
-      summary: Get record history
-      operationId: getRecordHistory
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema: { type: string }
-      responses:
-        '200':
-          description: Record history
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
   /get_entity_snapshot:
     post:
       summary: Get entity snapshot with provenance
@@ -1420,47 +1131,4 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
-
-  /record_comparison:
-    post:
-      summary: Compare records
-      operationId: recordComparison
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: Comparison result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
-  /generate_embedding:
-    post:
-      summary: Generate embedding
-      operationId: generateEmbedding
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: Embedding result
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-
-
-
 

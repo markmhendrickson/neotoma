@@ -12,34 +12,6 @@ export interface OpenApiOperationMapping {
 
 export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
   {
-    operationId: "listTypes",
-    method: "get",
-    path: "/types",
-    adapter: "cli",
-    cliCommand: "request --operation listTypes",
-  },
-  {
-    operationId: "retrieveRecords",
-    method: "post",
-    path: "/retrieve_records",
-    adapter: "cli",
-    cliCommand: "request --operation retrieveRecords",
-  },
-  {
-    operationId: "uploadFile",
-    method: "post",
-    path: "/upload_file",
-    adapter: "cli",
-    cliCommand: "upload",
-  },
-  {
-    operationId: "analyzeFile",
-    method: "post",
-    path: "/analyze_file",
-    adapter: "cli",
-    cliCommand: "analyze",
-  },
-  {
     operationId: "getFileUrl",
     method: "get",
     path: "/get_file_url",
@@ -323,6 +295,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   list_entity_types: "listSchemas",
   merge_entities: "mergeEntities",
   store: "storeStructured",
+  store_structured: "storeStructured",
 };
 
 export const MCP_ONLY_TOOLS: string[] = [
@@ -338,7 +311,24 @@ export const MCP_ONLY_TOOLS: string[] = [
   "register_schema",
   "reinterpret",
   "correct",
+  "store_unstructured",
 ];
+
+export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
+  get_authenticated_user: "mcp-only --tool get_authenticated_user",
+  health_check_snapshots: "mcp-only --tool health_check_snapshots",
+  retrieve_entity_by_identifier: "mcp-only --tool retrieve_entity_by_identifier",
+  retrieve_related_entities: "mcp-only --tool retrieve_related_entities",
+  retrieve_graph_neighborhood: "mcp-only --tool retrieve_graph_neighborhood",
+  get_relationship_snapshot: "mcp-only --tool get_relationship_snapshot",
+  analyze_schema_candidates: "mcp-only --tool analyze_schema_candidates",
+  get_schema_recommendations: "mcp-only --tool get_schema_recommendations",
+  update_schema_incremental: "mcp-only --tool update_schema_incremental",
+  register_schema: "mcp-only --tool register_schema",
+  reinterpret: "mcp-only --tool reinterpret",
+  correct: "mcp-only --tool correct",
+  store_unstructured: "mcp-only --tool store_unstructured",
+};
 
 export function getOpenApiOperationMapping(
   operationId: string
@@ -409,6 +399,16 @@ function sanitizeCliArgs(args: unknown): Record<string, unknown> {
 export function buildCliEquivalentInvocation(toolName: string, args: unknown): string {
   const operationId = MCP_TOOL_TO_OPERATION_ID[toolName];
   if (!operationId) {
+    const cliCommand = MCP_TOOL_TO_CLI_COMMAND[toolName];
+    if (cliCommand) {
+      const sanitized = sanitizeCliArgs(args);
+      const userId =
+        args && typeof args === "object" && typeof (args as Record<string, unknown>).user_id === "string"
+          ? (args as Record<string, unknown>).user_id
+          : "<user_id>";
+      const payload = stableStringify({ args: sanitized });
+      return `neotoma ${cliCommand} --user-id ${userId} --args '${payload}' --json`;
+    }
     return `neotoma mcp-only --tool ${toolName}`;
   }
   const operation = getOpenApiOperationMapping(operationId);

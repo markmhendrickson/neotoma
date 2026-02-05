@@ -17,6 +17,7 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 
 ## Canonical MCP documentation
 - **MCP specification**: `docs/specs/MCP_SPEC.md`
+- **MCP server instructions** (loaded at runtime): `docs/developer/mcp/` — `instructions.md`, `unauthenticated.md`, `tool_descriptions.yaml`
 - **Cursor setup**: `docs/developer/mcp_cursor_setup.md`
 - **ChatGPT setup**: `docs/developer/mcp_chatgpt_setup.md`
 - **Claude Code setup**: `docs/developer/mcp_claude_code_setup.md`
@@ -67,6 +68,27 @@ flowchart TD
 ## Testing requirements
 1. Verify MCP actions conform to `docs/specs/MCP_SPEC.md`.
 2. Validate OAuth setup using the relevant setup guide.
+
+## Agent MCP behavior tests
+Use the agent MCP behavior suite to validate that MCP instructions trigger the expected tool calls and stored entities.
+
+**Fixture matrix:** `tests/fixtures/agent_mcp_cases.json`  
+**Test entrypoint:** `tests/agent/mcp_instruction_behavior.test.ts`  
+**Command:** `npm run test:agent-mcp`
+
+**Required environment for headless runners:**
+- `AGENT_TEST_ENABLED=true` to enable the suite
+- `AGENT_TEST_RUNNER=claude_code` (default) or `cursor_cli`
+- `AGENT_CLI_COMMAND` pointing to a wrapper command that reads:
+  - `AGENT_PROMPT_PATH` (prompt file)
+  - `AGENT_ATTACHMENTS_PATH` (JSON attachments list)
+  - `AGENT_TRACE_PATH` (write NDJSON tool-call trace)
+
+**Trace format:**
+Each NDJSON line must be JSON with at least:
+```json
+{"tool":"store","arguments":{...},"result":{...}}
+```
 
 ## Agent Instructions
 ### When to Load This Document

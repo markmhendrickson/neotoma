@@ -24,7 +24,6 @@ export interface Relationship {
   relationship_type: RelationshipType;
   source_entity_id: string;
   target_entity_id: string;
-  source_record_id?: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   user_id: string;
@@ -65,7 +64,7 @@ export class RelationshipsService {
     relationship_type: RelationshipType;
     source_entity_id: string;
     target_entity_id: string;
-    source_record_id?: string | null;
+    source_id?: string | null;
     metadata?: Record<string, unknown>;
     user_id: string;
   }): Promise<RelationshipSnapshot> {
@@ -74,7 +73,7 @@ export class RelationshipsService {
     }
 
     const relationshipKey = `${params.relationship_type}:${params.source_entity_id}:${params.target_entity_id}`;
-    let sourceId = params.source_record_id || null;
+    let sourceId = params.source_id || null;
 
     if (!sourceId || sourceId === "00000000-0000-0000-0000-000000000000") {
       const metadataString = stableStringify(params.metadata || {});
@@ -168,16 +167,6 @@ export class RelationshipsService {
         params.user_id,
       );
     }
-
-    // Also create in relationships table for backward compatibility (deprecated)
-    await supabase.from("relationships").insert({
-      relationship_type: params.relationship_type,
-      source_entity_id: params.source_entity_id,
-      target_entity_id: params.target_entity_id,
-      source_record_id: sourceId,
-      metadata: params.metadata || {},
-      user_id: params.user_id,
-    });
 
     return snapshot;
   }

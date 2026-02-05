@@ -12,7 +12,7 @@ async function analyzeField(fieldName: string) {
   const { data: fragments } = await supabase
     .from('raw_fragments')
     .select('fragment_value, frequency_count')
-    .eq('fragment_type', 'task')
+    .eq('entity_type', 'task')
     .eq('fragment_key', fieldName)
     .or('user_id.is.null,user_id.eq.00000000-0000-0000-0000-000000000000')
     .limit(50);

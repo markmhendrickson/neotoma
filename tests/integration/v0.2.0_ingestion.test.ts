@@ -18,7 +18,7 @@ describe("v0.2.0 Integration Tests", () => {
     // Clean up test data
     await supabase.from("observations").delete().eq("user_id", TEST_USER_ID);
     await supabase.from("entity_merges").delete().eq("user_id", TEST_USER_ID);
-    await supabase.from("interpretation_runs").delete().eq("user_id", TEST_USER_ID);
+    await supabase.from("interpretations").delete().eq("user_id", TEST_USER_ID);
     await supabase.from("sources").delete().eq("user_id", TEST_USER_ID);
     await supabase.from("entities").delete().eq("user_id", TEST_USER_ID);
   });
@@ -96,7 +96,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(observations).toBeDefined();
       expect(observations!.length).toBeGreaterThan(0);
       expect(observations![0].source_id).toBe(storageResult.sourceId);
-      expect(observations![0].interpretation_run).toBe(
+      expect(observations![0].interpretation_id).toBe(
         interpretationResult.interpretationId
       );
     });
@@ -159,7 +159,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs1 } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run", run1.interpretationId);
+        .eq("interpretation_id", run1.interpretationId);
 
       const obs1Count = obs1?.length || 0;
 
@@ -181,7 +181,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs1After } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run", run1.interpretationId);
+        .eq("interpretation_id", run1.interpretationId);
 
       expect(obs1After?.length).toBe(obs1Count);
 
@@ -189,7 +189,7 @@ describe("v0.2.0 Integration Tests", () => {
       const { data: obs2 } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run", run2.interpretationId);
+        .eq("interpretation_id", run2.interpretationId);
 
       expect(obs2).toBeDefined();
       expect(obs2!.length).toBeGreaterThan(0);
@@ -451,18 +451,18 @@ describe("v0.2.0 Integration Tests", () => {
         },
       });
 
-      // Verify provenance chain: source → interpretation_run → observation
+      // Verify provenance chain: source → interpretation → observation
       const { data: observations } = await supabase
         .from("observations")
         .select("*")
-        .eq("interpretation_run", interpretationResult.interpretationId);
+        .eq("interpretation_id", interpretationResult.interpretationId);
 
       expect(observations).toBeDefined();
       expect(observations!.length).toBeGreaterThan(0);
 
       const obs = observations![0];
       expect(obs.source_id).toBe(storageResult.sourceId);
-      expect(obs.interpretation_run).toBe(interpretationResult.interpretationId);
+      expect(obs.interpretation_id).toBe(interpretationResult.interpretationId);
 
       // Verify source metadata
       const { data: source } = await supabase
@@ -476,7 +476,7 @@ describe("v0.2.0 Integration Tests", () => {
 
       // Verify interpretation run metadata
       const { data: run } = await supabase
-        .from("interpretation_runs")
+        .from("interpretations")
         .select("*")
         .eq("id", interpretationResult.interpretationId)
         .single();

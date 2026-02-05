@@ -17,10 +17,35 @@ Provide a concise, user-facing guide to the Neotoma CLI for interacting with the
 - **Config file**: Local file storing CLI connection settings and tokens.
 
 ## Installation and setup
-1. Install dependencies and build the repo as described in `docs/developer/getting_started.md`.
-2. Authenticate with OAuth:
+
+### Running the CLI
+
+From the project root, you can run the CLI without installing globally:
+
+```bash
+# Run built CLI
+npm run cli
+
+# Run in dev mode (TypeScript; source changes picked up immediately)
+npm run cli:dev
+```
+
+To use the `neotoma` command from any directory:
+
+```bash
+npm run setup:cli   # Build and link in one step (recommended)
+# Or manually:
+npm run build
+npm install -g .    # Or: npm link (for development)
+```
+
+If `neotoma` is not found after install or link, add the npm global bin to your PATH. See [CLI setup](getting_started.md#cli-setup) in the getting started guide for the fix and diagnostic commands.
+
+### Authentication
+
+1. Authenticate with OAuth:
    - `neotoma auth login`
-3. Verify auth status:
+2. Verify auth status:
    - `neotoma auth status`
 
 ## Core workflows
@@ -49,6 +74,13 @@ neotoma upload ./fixtures/invoice.pdf
 neotoma analyze ./fixtures/invoice.pdf
 ```
 
+### Run developer scripts
+```
+neotoma dev list
+neotoma dev dev:server
+neotoma dev test:unit -- --reporter=dot
+```
+
 ## Output modes
 The CLI supports deterministic output formats:
 - `--json` for machine readable output.
@@ -59,8 +91,8 @@ Example:
 neotoma entities list --type company --json
 ```
 
-## Configuration
-The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format.
+## Configuration and storage
+The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`.
 
 ## Diagrams
 ```mermaid

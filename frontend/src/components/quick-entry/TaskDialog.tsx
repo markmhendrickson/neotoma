@@ -30,6 +30,7 @@ import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { getApiClient } from "@/lib/api_client";
+import { createIdempotencyKey } from "@/lib/idempotency";
 
 interface TaskDialogProps {
   open: boolean;
@@ -77,9 +78,15 @@ export function TaskDialog({ open, onClose, onSave }: TaskDialogProps) {
       if (dueDate) taskData.due_date = dueDate;
 
       const api = getApiClient(bearerToken);
+      const idempotencyKey = await createIdempotencyKey({
+        entities: [taskData],
+        source_priority: 100,
+        user_id: user?.id,
+      });
       const { data, error } = await api.POST("/api/store", {
         body: {
           entities: [taskData],
+          idempotency_key: idempotencyKey,
           user_id: user?.id,
         },
       });

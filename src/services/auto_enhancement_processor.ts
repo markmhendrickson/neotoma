@@ -186,7 +186,7 @@ export async function processAutoEnhancementQueue(): Promise<{
  * Start the auto-enhancement processor (runs continuously)
  */
 export function startAutoEnhancementProcessor(intervalMs: number = 30000) {
-  logger.error(
+  logger.info(
     `[AUTO_ENHANCE_QUEUE] Starting processor (interval: ${intervalMs}ms)`,
   );
 

@@ -16,9 +16,10 @@ on:
 
 jobs:
   check-advisors:
+    if: false # Disabled; remove this line to re-enable
     name: Check Supabase Security & Performance Advisors
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

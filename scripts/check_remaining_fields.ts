@@ -5,7 +5,7 @@ async function checkRemaining() {
   const { data: fragments } = await supabase
     .from('raw_fragments')
     .select('fragment_key, frequency_count')
-    .eq('fragment_type', 'task')
+    .eq('entity_type', 'task')
     .or('user_id.is.null,user_id.eq.00000000-0000-0000-0000-000000000000');
 
   if (!fragments) {

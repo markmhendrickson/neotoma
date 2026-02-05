@@ -4,20 +4,12 @@ export type TestSettings = {
   apiBase: string;
   bearerToken: string;
   cloudStorageEnabled: boolean;
-  csvRowRecordsEnabled: boolean;
-};
-
-export const SAMPLE_RECORD_STORAGE_KEY = 'neotoma.sampleSeeded';
-
-type WindowWithSeeds = Window & {
-  seedNeotomaSamples?: (options?: { force?: boolean }) => Promise<void>;
 };
 
 const DEFAULT_SETTINGS: TestSettings = {
   apiBase: '',
   bearerToken: '',
   cloudStorageEnabled: false,
-  csvRowRecordsEnabled: true,
 };
 
 const NAV_RETRY_ATTEMPTS = 10;
@@ -81,33 +73,11 @@ export async function primeLocalSettings(
       localStorage.setItem('bearerToken', settings.bearerToken);
       localStorage.setItem('cloudStorageEnabled', String(settings.cloudStorageEnabled));
       localStorage.setItem('apiSyncEnabled', String(settings.cloudStorageEnabled));
-      localStorage.setItem('csvRowRecordsEnabled', String(settings.csvRowRecordsEnabled));
-      localStorage.removeItem('chatPanelMessages');
       localStorage.removeItem('neotoma_keys');
     } catch {
       // Ignore storage failures in headless mode
     }
   }, payload);
-}
-
-export async function seedSampleRecordsInApp(
-  page: Page,
-  { force = true }: { force?: boolean } = {},
-): Promise<void> {
-  await page.waitForFunction(
-    () => typeof (window as WindowWithSeeds).seedNeotomaSamples === 'function',
-    undefined,
-    { timeout: 30_000 },
-  );
-  await page.evaluate(
-    async ({ shouldForce }) => {
-      const win = window as WindowWithSeeds;
-      if (typeof win.seedNeotomaSamples === 'function') {
-        await win.seedNeotomaSamples({ force: shouldForce });
-      }
-    },
-    { shouldForce: force },
-  );
 }
 
 export async function readLocalStorageValue(page: Page, key: string): Promise<string | null> {
@@ -120,28 +90,9 @@ export async function readLocalStorageValue(page: Page, key: string): Promise<st
   }, key);
 }
 
-export async function uploadFileFromRecordsTable(page: Page, filePath: string): Promise<void> {
-  const uploadButton = page.getByTestId('records-table-upload-button');
-  const [chooser] = await Promise.all([
-    page.waitForEvent('filechooser'),
-    uploadButton.click(),
-  ]);
-  await chooser.setFiles(filePath);
-}
-
 export async function getToastMessages(page: Page): Promise<string[]> {
   const locator = page.locator('[data-sonner-toast]');
   return locator.allTextContents();
-}
-
-export async function waitForRecordsToRender(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const chatPanel = document.querySelector('[data-chat-ready]');
-    if (chatPanel instanceof HTMLElement) {
-      chatPanel.style.display = 'none';
-    }
-  });
-  await page.locator('[data-record-summary]').first().waitFor({ timeout: 30_000, state: 'attached' });
 }
 
 export function attachBrowserLogging(page: Page): void {

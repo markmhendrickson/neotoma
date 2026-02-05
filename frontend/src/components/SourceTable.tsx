@@ -2,7 +2,7 @@
  * Source Table (FU-301)
  * 
  * Displays list of sources from sources table
- * Replaces deprecated RecordsTable (which uses records table)
+ * Replaces deprecated record-based table views
  */
 
 import { useEffect, useState } from "react";

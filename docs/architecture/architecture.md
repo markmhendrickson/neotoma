@@ -352,8 +352,8 @@ flowchart TD
 - MCP client connections (from ChatGPT, Claude, Cursor)
 - Gmail API for attachment retrieval
 - OpenAI API for embeddings (deterministic, not extraction)
-- Supabase PostgreSQL database
-- File storage (local or S3)
+- Local SQLite database by default, Supabase PostgreSQL when configured
+- File storage (local by default, Supabase Storage or S3 when configured)
 **Constraints:**
 - MUST NOT contain business logic
 - MUST be swappable (abstracted by Infrastructure layer)

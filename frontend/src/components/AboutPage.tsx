@@ -44,7 +44,7 @@ export function AboutPage() {
               <li>• Schema-first field extraction with reproducible results</li>
               <li>• Same input always produces same output</li>
               <li>• Full provenance: every field traces to its source</li>
-              <li>• Hash-based entity IDs ensure tamper-evident records</li>
+              <li>• Hash-based entity IDs ensure tamper-evident entities</li>
             </ul>
           </div>
 

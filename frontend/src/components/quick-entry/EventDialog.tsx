@@ -23,6 +23,7 @@ import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { getApiClient } from "@/lib/api_client";
+import { createIdempotencyKey } from "@/lib/idempotency";
 
 interface EventDialogProps {
   open: boolean;
@@ -75,9 +76,15 @@ export function EventDialog({ open, onClose, onSave }: EventDialogProps) {
       if (notes) eventData.notes = notes;
 
       const api = getApiClient(bearerToken);
+      const idempotencyKey = await createIdempotencyKey({
+        entities: [eventData],
+        source_priority: 100,
+        user_id: user?.id,
+      });
       const { data, error } = await api.POST("/api/store", {
         body: {
           entities: [eventData],
+          idempotency_key: idempotencyKey,
           user_id: user?.id,
         },
       });

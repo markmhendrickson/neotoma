@@ -1259,7 +1259,7 @@ export function StyleGuide({ onClose }: StyleGuideProps) {
                   </CardHeader>
                   <CardContent>
                     <ul className="text-sm space-y-2 mb-4">
-                      <li>• Unlimited records</li>
+                      <li>• Unlimited entities</li>
                       <li>• All extraction types</li>
                       <li>• AI queries</li>
                     </ul>

@@ -30,15 +30,14 @@
 
 ### Step 0: Start the tunnel
 
-The tunnel must be running for the HTTPS URL to work.
+The tunnel must be running for the HTTPS URL to work. **`npm run dev:mcp` and `npm run dev:api` start both the server and the tunnel** in one terminal (tunnel and API/MCP run together; Ctrl+C stops both).
 
 ```bash
 npm run dev:mcp
-# In another terminal:
-npm run tunnel:https
+# Or: npm run dev:api
 ```
 
-Use the URL the script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `MCP_PROXY_URL` and `API_BASE_URL` to it, restart the MCP server if needed, update Cursor config.
+Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `MCP_PROXY_URL` and `API_BASE_URL` to it, then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.
 
 ### Step 1: Verify tunnel is active
 

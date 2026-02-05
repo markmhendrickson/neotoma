@@ -16,6 +16,32 @@ import {
 } from "../mcp_oauth.js";
 import { OAuthError } from "../mcp_oauth_errors.js";
 import { randomBytes } from "node:crypto";
+import path from "path";
+import { rmSync } from "fs";
+
+async function loadLocalOAuthModule(tempDir: string) {
+  process.env.NEOTOMA_STORAGE_BACKEND = "local";
+  process.env.NEOTOMA_DATA_DIR = tempDir;
+  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
+  process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
+  process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  const moduleUrl = new URL("../mcp_oauth.js", import.meta.url).href;
+  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
+  return await import(cacheBustUrl);
+}
+
+async function loadLocalAuthModule(tempDir: string) {
+  process.env.NEOTOMA_STORAGE_BACKEND = "local";
+  process.env.NEOTOMA_DATA_DIR = tempDir;
+  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
+  process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
+  process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+  const moduleUrl = new URL("../local_auth.js", import.meta.url).href;
+  const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
+  return await import(cacheBustUrl);
+}
 
 describe("MCP OAuth Service", () => {
   describe("generatePKCE", () => {
@@ -149,6 +175,40 @@ describe("MCP OAuth Service", () => {
       
       // Should use the configured client_id from environment
       expect(parsedUrl.searchParams.get("client_id")).toBe("test-client-id");
+    });
+  });
+
+  describe("local backend OAuth flow", () => {
+    it("creates local authorization state and completes login", async () => {
+      const tempDir = path.join(process.cwd(), "tmp", `neotoma-oauth-${Date.now()}`);
+      const oauth = await loadLocalOAuthModule(tempDir);
+      const localAuth = await loadLocalAuthModule(tempDir);
+      localAuth.createLocalAuthUser("local@example.com", "password123");
+      const user = localAuth.getLocalAuthUserByEmail("local@example.com");
+      if (!user) {
+        throw new Error("Local auth user not found in test");
+      }
+
+      const connectionId = "cursor-local-123";
+      const request = await oauth.createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: "cursor://oauth",
+        clientState: "client-state",
+        codeChallenge: "test-challenge",
+      });
+
+      expect(request.state).toBeTruthy();
+
+      const callback = await oauth.completeLocalAuthorization(request.state, user.id);
+      expect(callback.connectionId).toBe(connectionId);
+
+      const status = await oauth.getConnectionStatus(connectionId);
+      expect(status).toBe("active");
+
+      const tokenResponse = await oauth.getTokenResponseForConnection(connectionId);
+      expect(tokenResponse.access_token).toMatch(/^local_access_/);
+
+      rmSync(tempDir, { recursive: true, force: true });
     });
   });
 

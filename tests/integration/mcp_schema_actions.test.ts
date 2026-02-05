@@ -118,7 +118,6 @@ describe("MCP Schema Actions - Integration", () => {
             fragment_value: "value1",
             frequency_count: 5,
             user_id: testUserId,
-            record_id: "test-record-1",
             source_id: "test-source-1",
           },
           {
@@ -127,7 +126,6 @@ describe("MCP Schema Actions - Integration", () => {
             fragment_value: "value2",
             frequency_count: 3,
             user_id: testUserId,
-            record_id: "test-record-2",
             source_id: "test-source-2",
           },
         ])
@@ -505,7 +503,6 @@ describe("MCP Schema Actions - Integration", () => {
             fragment_value: "value1",
             frequency_count: 5,
             user_id: testUserId,
-            record_id: "workflow-record-1",
             source_id: "workflow-source-1",
           },
           {
@@ -514,7 +511,6 @@ describe("MCP Schema Actions - Integration", () => {
             fragment_value: "value2",
             frequency_count: 3,
             user_id: testUserId,
-            record_id: "workflow-record-2",
             source_id: "workflow-source-2",
           },
         ])

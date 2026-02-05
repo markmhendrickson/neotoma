@@ -15,7 +15,7 @@ export interface Observation {
   entity_id: string;
   entity_type: string;
   schema_version: string;
-  source_record_id: string;
+  source_id: string;
   observed_at: string;
   specificity_score: number | null;
   source_priority: number;

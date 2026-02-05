@@ -1,124 +1,77 @@
-release:
-  id: v0.3.0
-  name: Operational Hardening
-  type: "not_marketed"
-  priority: P1
-  status: planning
-  target_ship_date: null # After v0.2.0 is validated
-  owner: Mark Hendrickson
-  marketing_required: false
-  gate: "v0.2.0 must be validated with real usage before starting"
-  guiding_principle: "Don't optimize throughput and robustness before confirming adoption"
+release_id: "v0.3.0"
+version: "0.3.0"
+status: "completed"
+priority: "p0"
+risk_level: "low"
+release_type: "internal"
+marketed: false
 
-dependencies:
-  - v0.2.0 # Minimal Ingestion + Correction Loop
+metadata:
+  title: "Reconciliation Release"
+  description: "Documentation-only release establishing baseline between documented releases and actual codebase state"
+  created_at: "2025-02-05"
+  completed_at: "2025-02-05"
+  deployment_status: "production"
 
-feature_units:
-  # Storage Infrastructure (deferred from v0.2.0)
-  - id: FU-112
-    name: Storage Infrastructure
-    priority: P0
-    status: not_started
-    dependencies: []
-    phase: 1
-    description: upload_queue table, storage_usage table, quota enforcement
-
-  # Background Workers (deferred from v0.2.0)
-  - id: FU-130
-    name: Upload Queue Processor
-    priority: P0
-    status: not_started
-    dependencies: [FU-112]
-    phase: 2
-    description: Async retry for failed uploads (every 5 min)
-
-  - id: FU-131
-    name: Stale Interpretation Cleanup
-    priority: P0
-    status: not_started
-    dependencies: []
-    phase: 2
-    description: Timeout handling for hung jobs (every 5 min)
-
-  # Interpretation Enhancements
-  - id: FU-135
-    name: Interpretation Timeout Columns
-    priority: P0
-    status: not_started
-    dependencies: []
-    phase: 1
-    description: Add timeout_at, heartbeat_at to interpretation_runs
-
-  - id: FU-136
-    name: Strict Quota Enforcement
-    priority: P0
-    status: not_started
-    dependencies: [FU-112]
-    phase: 2
-    description: Reject on quota exceed, billing month reset
-
-deferred_to_v040:
-  - id: FU-132
-    name: Archival Job
-    description: Old interpretation run archival
-    reason: Only valuable with volume/diversity of data
-
-  - id: FU-133
-    name: Duplicate Detection Worker
-    description: Heuristic duplicate flagging
-    reason: Heuristics need data to justify
-
-  - name: Schema Discovery/Promotion
-    description: Automated promotion from raw_fragments
-    reason: Requires analytics pipeline
+purpose: |
+  Reconciliation release documenting actual current state of codebase after period of 
+  untracked development. Establishes clean baseline for future release planning.
 
 scope:
-  included:
-    - FU-112: Storage Infrastructure (upload_queue, storage_usage)
-    - FU-130: Upload Queue Processor
-    - FU-131: Stale Interpretation Cleanup
-    - FU-135: Interpretation Timeout Columns
-    - FU-136: Strict Quota Enforcement
+  - Document actual implemented features
+  - Archive aspirational releases
+  - Create accurate baseline for future planning
+  - Acknowledge technical debt
 
-  deferred_v040:
-    - FU-132: Archival Job
-    - FU-133: Duplicate Detection Worker
-    - Schema discovery/promotion from raw_fragments
+actual_implementation:
+  - Schema registry system
+  - Sources-first architecture
+  - Observations architecture
+  - Entity system with resolution
+  - Auto-enhancement system
+  - MCP integration with OAuth
+  - React frontend with design system
+  - Neotoma CLI
+  - Foundation submodule integration
+  - Comprehensive documentation
 
-  excluded:
-    - Semantic search integration (v1.x)
-    - Model-selection UI (v1.x)
-    - Multi-user organization features (v1.x)
+not_implemented:
+  - Chat transcript CLI
+  - Operational hardening (originally planned v0.3.0)
+  - Vector search optimization (HNSW)
+  - Advanced query capabilities
+  - Full MVP feature set
+  - Multi-user collaboration
 
-acceptance_criteria:
-  product:
-    - Storage uploads that fail are retried automatically
-    - Long-running interpretations are cleaned up
-    - Quota limits are enforced with clear errors
-    - Users understand their usage via storage_usage
+archived_releases:
+  - v0.4.0
+  - v0.5.0
+  - v0.9.0
+  - v1.0.0
+  - v2.0.0
+  - v2.1.0
+  - v2.2.0
 
-  technical:
-    - upload_queue table with retry logic
-    - storage_usage table with per-user tracking
-    - interpretation_runs timeout columns added
-    - Upload Queue Processor worker functional
-    - Stale Interpretation Cleanup worker functional
-    - Quota enforcement tested
+technical_debt:
+  - Feature Unit tracking incomplete
+  - Test coverage needs audit
+  - Documentation sync needed
+  - Migration state verification needed
+  - 262 uncommitted changes to review
 
-  business:
-    - Operational reliability enables production-grade usage
-    - Clear quota feedback improves UX
-    - Resilience reduces support burden
+next_steps:
+  immediate:
+    - Review and commit/clean uncommitted changes
+    - Apply pending migrations
+    - Audit test suite
+    - Update documentation accuracy
+  near_term:
+    - Plan v0.4.0 realistically based on v0.3.0 baseline
+    - Establish release discipline
+    - Prioritize technical debt
 
-success_criteria:
-  - All new tables created
-  - Background workers functional
-  - Quota enforcement verified
-  - Integration tests passing
-  - Monitoring metrics for queue depth, timeouts
-
-release_spacing:
-  v020: "Minimal ingestion + correction loop (prerequisite)"
-  v030: "Operational hardening (this release)"
-  v040: "Intelligence + housekeeping (next)"
-  v1x: "Experience + growth (future)"
+lessons_learned:
+  - Release discipline is critical even in rapid development
+  - Commit early and often (avoid large uncommitted changesets)
+  - Documentation as you go is easier than retroactive
+  - Feature Unit workflow prevents drift when followed

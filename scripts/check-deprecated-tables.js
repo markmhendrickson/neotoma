@@ -22,40 +22,55 @@ const EXPECTED_TABLES = [
   // Core source
   "sources",
   "interpretations",
-  
+
   // Entities and observations
   "entities",
   "observations",
   "entity_snapshots",
   "raw_fragments",
-  
+
+  // Relationships
+  "relationship_observations",
+  "relationship_snapshots",
+
   // Graph edges (source-based, canonical)
   "source_entity_edges",
   "source_event_edges",
-  
-  // Relationships
-  "relationships",
-  
+
   // Events
   "timeline_events",
-  
+
   // Entity operations
   "entity_merges",
-  
-  
-  // Schema registry
+
+  // Schema registry and recommendations
   "schema_registry",
-  
-  // Legacy (still used but may be deprecated)
-  "records", // Legacy - should be removed in v0.3.0
-  "record_relationships", // Legacy - should be removed in v0.3.0
-  "payload_submissions", // Legacy - may be removed
+  "schema_recommendations",
+
+  // Automation and controls
+  "auto_enhancement_queue",
+  "field_blacklist",
+
+  // MCP OAuth
+  "mcp_oauth_state",
+  "mcp_oauth_connections",
+  "mcp_oauth_client_state",
+
+  // Auth tables (Supabase auth schema mirrors)
+  "auth_users",
+  "auth_sessions",
 ];
 
 // Deprecated tables (should be removed)
 const DEPRECATED_TABLES = [
+  "records",
+  "record_relationships",
   "record_entity_edges", // Replaced by source_entity_edges
   "record_event_edges", // Replaced by source_event_edges
+  "entity_event_edges",
+  "state_events",
+  "relationships",
+  "payload_submissions",
   "interpretation_runs", // Renamed to interpretations
 ];
 
@@ -175,8 +190,14 @@ async function checkTables() {
   if (foundDeprecated.length > 0) {
     foundDeprecated.forEach(t => {
       let replacement = "";
+      if (t === "records") replacement = " → replaced by sources + observations";
+      if (t === "record_relationships") replacement = " → replaced by relationship_observations";
       if (t === "record_entity_edges") replacement = " → replaced by source_entity_edges";
       if (t === "record_event_edges") replacement = " → replaced by source_event_edges";
+      if (t === "entity_event_edges") replacement = " → replaced by source_event_edges";
+      if (t === "state_events") replacement = " → replaced by timeline_events";
+      if (t === "relationships") replacement = " → replaced by relationship_snapshots";
+      if (t === "payload_submissions") replacement = " → replaced by interpretations";
       if (t === "interpretation_runs") replacement = " → renamed to interpretations";
       console.log(`   ⚠️  ${t}${replacement}`);
     });

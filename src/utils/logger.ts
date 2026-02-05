@@ -7,12 +7,34 @@
  *
  * This logger suppresses all console output in MCP mode to avoid interference.
  * Use NEOTOMA_MCP_ENABLE_LOGGING=1 to enable logging in MCP mode (for debugging).
+ *
+ * In HTTP mode, each level is prefixed with an emoji for quick scanning:
+ * - error: ❌
+ * - warn:  ⚠️
+ * - info:  ℹ️
+ * - debug: 🔍
  */
 
 const isMCPMode = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
 const enableLogging = process.env.NEOTOMA_MCP_ENABLE_LOGGING === "1";
 
 const shouldLog = !isMCPMode || enableLogging;
+
+const PREFIX = {
+  error: "❌ ",
+  warn: "⚠️  ",
+  info: "ℹ️  ",
+  debug: "🔍  ",
+} as const;
+
+function formatArgs(level: keyof typeof PREFIX, args: unknown[]): unknown[] {
+  if (args.length === 0) return args;
+  const first = args[0];
+  if (typeof first === "string") {
+    return [PREFIX[level] + first, ...args.slice(1)];
+  }
+  return [PREFIX[level], ...args];
+}
 
 /**
  * Logger that conditionally outputs based on execution mode
@@ -21,57 +43,55 @@ export const logger = {
   /**
    * Log error messages
    * In MCP mode: suppressed by default (set NEOTOMA_MCP_ENABLE_LOGGING=1 to enable)
-   * In HTTP mode: written to stderr
+   * In HTTP mode: written to stderr with ❌ prefix
    */
   error(...args: unknown[]): void {
     if (shouldLog) {
-      console.error(...args);
+      console.error(...formatArgs("error", args));
     }
-    // In MCP mode, errors are suppressed to avoid protocol interference
-    // Enable with NEOTOMA_MCP_ENABLE_LOGGING=1 for debugging
   },
 
   /**
    * Log warning messages
    * In MCP mode: suppressed by default
-   * In HTTP mode: written to stderr
+   * In HTTP mode: written to stderr with ⚠️ prefix
    */
   warn(...args: unknown[]): void {
     if (shouldLog) {
-      console.warn(...args);
+      console.warn(...formatArgs("warn", args));
     }
   },
 
   /**
    * Log info messages
    * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout
+   * In HTTP mode: written to stdout with ℹ️ prefix
    */
   info(...args: unknown[]): void {
     if (shouldLog) {
-      console.info(...args);
+      console.info(...formatArgs("info", args));
     }
   },
 
   /**
    * Log debug messages
    * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout
+   * In HTTP mode: written to stdout with 🔍 prefix
    */
   debug(...args: unknown[]): void {
     if (shouldLog) {
-      console.debug(...args);
+      console.debug(...formatArgs("debug", args));
     }
   },
 
   /**
    * Log general messages
    * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout
+   * In HTTP mode: written to stdout with ℹ️ prefix
    */
   log(...args: unknown[]): void {
     if (shouldLog) {
-      console.log(...args);
+      console.log(...formatArgs("info", args));
     }
   },
 };

@@ -4,6 +4,7 @@ import yaml from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
   MCP_ONLY_TOOLS,
+  MCP_TOOL_TO_CLI_COMMAND,
   MCP_TOOL_TO_OPERATION_ID,
   OPENAPI_OPERATION_MAPPINGS,
 } from "../../src/shared/contract_mappings.js";
@@ -60,6 +61,16 @@ describe("contract mappings", () => {
     const mcpOnlySet = new Set(MCP_ONLY_TOOLS);
     for (const toolName of Object.keys(MCP_TOOL_TO_OPERATION_ID)) {
       expect(mcpOnlySet.has(toolName)).toBe(false);
+    }
+  });
+
+  it("maps MCP tools to OpenAPI or CLI commands", () => {
+    const mappedToolSet = new Set(Object.keys(MCP_TOOL_TO_OPERATION_ID));
+    for (const toolName of MCP_ONLY_TOOLS) {
+      if (mappedToolSet.has(toolName)) {
+        continue;
+      }
+      expect(MCP_TOOL_TO_CLI_COMMAND[toolName]).toBeTruthy();
     }
   });
 });

@@ -243,13 +243,12 @@ describe("Schema Recommendation Service - Integration", () => {
     });
 
     it("should use correct column names in queries", async () => {
-      // This test verifies the fragment_type column is used (not entity_type)
-      // Bug from AUTO_ENHANCEMENT_TEST_COVERAGE_GAPS.md line 29-34
+      // This test verifies the entity_type column is used
 
       const { data: fragment } = await supabase
         .from("raw_fragments")
         .insert({
-          fragment_type: testEntityType, // Correct column name
+          entity_type: testEntityType, // Correct column name
           fragment_key: "column_test_field",
           fragment_value: "test",
           user_id: testUserId,

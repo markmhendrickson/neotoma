@@ -31,6 +31,15 @@ interface ErrorEnvelope {
 | `DB_CONNECTION_FAILED` | Cannot connect to DB | 503 | Yes |
 | `DB_QUERY_FAILED` | Query execution failed | 500 | Yes |
 | `DB_CONSTRAINT_VIOLATION` | Unique constraint violated | 409 | No |
+### Validation Errors
+| Code | Meaning | HTTP | Retry? |
+|------|---------|------|--------|
+| `VALIDATION_MISSING_FIELD` | Required field missing | 400 | No |
+| `VALIDATION_INVALID_FORMAT` | Invalid field format | 400 | No |
+### Resource Errors
+| Code | Meaning | HTTP | Retry? |
+|------|---------|------|--------|
+| `RESOURCE_NOT_FOUND` | Resource not found | 404 | No |
 ## Error Propagation
 Errors propagate **up** the layer stack:
 ```

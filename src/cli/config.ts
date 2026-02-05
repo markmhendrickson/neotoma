@@ -13,6 +13,12 @@ export type Config = {
 export const DEFAULT_BASE_URL = "http://localhost:8080";
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "neotoma");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
+/** Directory for API server logs when started with `neotoma api start --background`. */
+export const API_LOGS_DIR = path.join(CONFIG_DIR, "logs");
+/** Log file for API server when started with `neotoma api start --background`. */
+export const API_LOG_PATH = path.join(API_LOGS_DIR, "api.log");
+/** PID file for background API server process. */
+export const API_PID_PATH = path.join(CONFIG_DIR, "api.pid");
 
 export async function readConfig(): Promise<Config> {
   try {

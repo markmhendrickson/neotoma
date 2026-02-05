@@ -1,5 +1,9 @@
-import { supabase } from '../src/db.js';
-import { observationReducer } from '../src/reducers/observation_reducer.js';
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { supabase } from "../src/db.js";
+import { observationReducer } from "../src/reducers/observation_reducer.js";
+
+const __filename = fileURLToPath(import.meta.url);
 
 /**
  * Background job to monitor and fix stale snapshots
@@ -141,8 +145,11 @@ async function monitorAndFixSnapshots() {
   };
 }
 
-// Run if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Run if executed directly (argv[1] may be relative or absolute)
+const isMain =
+  process.argv[1] &&
+  resolve(process.argv[1]) === resolve(__filename);
+if (isMain) {
   monitorAndFixSnapshots()
     .then((result) => {
       if (result && result.errors > 0) {

@@ -86,7 +86,7 @@ describe("SchemaRecommendationService", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         data: [
-          { fragment_value: "value1", frequency_count: 1, source_id: "src1", record_id: "rec1" },
+          { fragment_value: "value1", frequency_count: 1, source_id: "src1" },
         ],
       };
 
@@ -118,8 +118,8 @@ describe("SchemaRecommendationService", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         data: [
-          { fragment_value: "2024-01-01", frequency_count: 2, source_id: "src1", record_id: "rec1" },
-          { fragment_value: "2024-01-02", frequency_count: 2, source_id: "src2", record_id: "rec2" },
+          { fragment_value: "2024-01-01", frequency_count: 2, source_id: "src1" },
+          { fragment_value: "2024-01-02", frequency_count: 2, source_id: "src2" },
         ],
       };
 
@@ -160,8 +160,8 @@ describe("SchemaRecommendationService", () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         data: [
-          { fragment_value: "value1", frequency_count: 5, source_id: "src1", record_id: "rec1" },
-          { fragment_value: "value2", frequency_count: 5, source_id: "src1", record_id: "rec2" },
+          { fragment_value: "value1", frequency_count: 5, source_id: "src1" },
+          { fragment_value: "value2", frequency_count: 5, source_id: "src1" },
         ],
       };
 

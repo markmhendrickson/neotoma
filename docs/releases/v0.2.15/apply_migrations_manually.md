@@ -211,7 +211,7 @@ ORDER BY table_name, column_name;
 
 ```bash
 # Start backend
-npm run dev:http
+npm run dev:server
 
 # In another terminal, test endpoint
 curl -X POST http://localhost:8080/api/entities/query \

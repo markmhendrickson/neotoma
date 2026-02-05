@@ -33,6 +33,7 @@ This document covers:
 1. **File Upload via `ingest()`**: Users explicitly upload PDFs, images, or text files through the UI or `ingest` MCP action. Files are [stored](#storing) in `sources`, undergo [interpretation](#interpretation), and [observations](#observation) are created.
 2. **Structured [Source](#source) via `ingest()`**: Agents provide pre-structured data with explicit [entity types](#entity-type). Bypasses AI [interpretation](#interpretation); creates [observations](#observation) directly with priority=100.
 3. **Corrections via `correct()`**: Users or agents correct [extracted](#extraction) values. Creates priority-1000 [observations](#observation) that override AI [extraction](#extraction).
+All `ingest()` and `correct()` requests MUST include an `idempotency_key`. Reuse with a different payload returns a validation error.
 All paths feed into the same truth model (Sources → [Interpretations](#interpretation) → [Observations](#observation) → [Entity Snapshots](#entity-snapshot)), ensuring unified memory regardless of [storing](#storing) source.
 This document does NOT cover:
 - UI implementation (see `docs/ui/`)
@@ -82,7 +83,7 @@ flowchart TD
 ### 1.2 Key Differences from Legacy Pipeline
 | Aspect | Legacy | Sources-First |
 |--------|--------|-------------------------|
-| Storage | Direct to records | Sources → Interpretation Runs → Observations |
+| Storage | Direct to sources | Sources → Interpretations → Observations |
 | Deduplication | Via external_hash | Content-addressed via SHA-256 per user |
 | Interpretation | Implicit | Explicit runs with config logging |
 | Reinterpretation | Not supported | Creates new run, new observations |
@@ -125,7 +126,7 @@ flowchart TD
 - PDF (`.pdf`)
 - Images (`.jpg`, `.jpeg`, `.png`)
 - Text (`.txt`)
-- CSV/Spreadsheet (`.csv`, `.xlsx`) — row-level record creation
+- CSV/Spreadsheet (`.csv`, `.xlsx`) — row-level observation creation
 **Future:**
 - Office docs (`.docx`)
 - Email (`.eml`, `.msg`)
@@ -133,7 +134,7 @@ flowchart TD
 **Special Case: Chat Transcripts**
 Chat transcripts (e.g., logs exported from LLM apps like ChatGPT) require **non-deterministic interpretation** that violates the Truth Layer's determinism constraints. Per `docs/specs/GENERAL_REQUIREMENTS.md`:
 - MVP provides a **separate CLI tool** (outside the ingestion pipeline) that can:
-  - Non-deterministically convert raw chat exports into well-structured JSON files (one record per JSON object with explicit schema types and properties)
+  - Non-deterministically convert raw chat exports into well-structured JSON files (one observation per JSON object with explicit entity types and fields)
   - Feed the resulting JSON files into the standard deterministic ingestion path
 - Neotoma's Truth Layer ingestion pipeline never performs non-deterministic interpretation of chat content
 - See `docs/specs/MVP_FEATURE_UNITS.md` for chat-to-JSON CLI feature unit details
@@ -342,7 +343,7 @@ The paper discusses various approaches to neural networks.
 ### 5.3 Schema Registry
 **Location:** `src/config/record_types.ts`
 **Two-Tier System:**
-- **Application types** (this list): Used in code, database (`records.type`), MCP actions
+- **Application types** (this list): Used in code, database (`observations.entity_type`), MCP actions
 - **Schema families** (`Financial`, `Productivity`, etc.): Used for documentation only
 **Tier 1 ICP-aligned application types:**
 ```typescript
@@ -586,14 +587,14 @@ See [`docs/subsystems/entity_merge.md`](../entity_merge.md) for merge mechanism.
    - Set specificity_score based on field confidence
    - Set source_priority based on document source
    - Reference schema_version for deterministic replay
-   - Link to source_record_id
+   - Link to source_id
 5. **Trigger Reducer:** Call reducer engine to compute entity snapshot using merge policies from schema registry
 6. **Store Snapshot:** Reducer produces entity snapshot with provenance tracking
 **Schema Registry Integration:** Observations reference the schema version from schema registry, enabling deterministic replay if schemas evolve. Reducers use merge policies configured in schema registry to resolve conflicts between multiple observations.
 **Example:**
 ```typescript
 async function createObservations(
-  recordId: string,
+  sourceId: string,
   entities: Entity[],
   extractedFields: any,
   schemaType: string,
@@ -608,7 +609,7 @@ async function createObservations(
   // Store raw fragments for unknown fields
   for (const [key, value] of Object.entries(unknownFields)) {
     await rawFragmentRepo.create({
-      record_id: recordId,
+      source_id: sourceId,
       fragment_key: key,
       fragment_value: value,
       fragment_envelope: { type: typeof value, confidence: "medium" },
@@ -620,10 +621,10 @@ async function createObservations(
       entity_id: entity.id,
       entity_type: entity.type,
       schema_version: schemaVersion,
-      source_record_id: recordId,
+      source_id: sourceId,
       observed_at: new Date(),
       specificity_score: calculateSpecificity(entity, knownFields),
-      source_priority: calculatePriority(recordId),
+      source_priority: calculatePriority(sourceId),
       fields: extractEntityFields(knownFields, entity),
     });
     // Trigger reducer to compute snapshot
@@ -641,22 +642,22 @@ async function createObservations(
 **Events:** Timeline events derived from date fields.
 ```typescript
 function generateEvents(
-  recordId: string,
-  properties: any,
+  sourceId: string,
+  fields: any,
   schemaType: string
 ): Event[] {
   const events: Event[] = [];
   const dateFields = getDateFields(schemaType);
   for (const fieldName of dateFields.sort()) {
-    const dateValue = properties[fieldName];
+    const dateValue = fields[fieldName];
     if (!dateValue) continue;
     const eventType = mapFieldToEventType(fieldName, schemaType);
-    const eventId = generateEventId(recordId, fieldName, dateValue);
+    const eventId = generateEventId(sourceId, fieldName, dateValue);
     events.push({
       id: eventId,
       event_type: eventType,
       event_timestamp: dateValue,
-      source_record_id: recordId,
+      source_id: sourceId,
       source_field: fieldName,
     });
   }
@@ -678,31 +679,31 @@ function mapFieldToEventType(fieldName: string, schemaType: string): string {
 ## 9. Step 8: Graph Insertion
 ### 9.1 Transactional Insert
 ```typescript
-async function insertRecordAndGraph(
-  record: Record,
+async function insertSourceAndGraph(
+  source: Source,
   entities: Entity[],
   events: Event[]
 ): Promise<string> {
   return await db.transaction(async (tx) => {
-    // Insert record
-    const recordId = await tx.insert("records", record);
+    // Insert source
+    const sourceId = await tx.insert("sources", source);
     // Insert entities (if not exist)
     for (const entity of entities) {
       await tx.upsert("entities", entity);
-      await tx.insert("record_entity_edges", {
-        record_id: recordId,
+      await tx.insert("source_entity_edges", {
+        source_id: sourceId,
         entity_id: entity.id,
       });
     }
     // Insert events
     for (const event of events) {
-      await tx.insert("events", event);
-      await tx.insert("record_event_edges", {
-        record_id: recordId,
+      await tx.insert("timeline_events", event);
+      await tx.insert("source_event_edges", {
+        source_id: sourceId,
         event_id: event.id,
       });
     }
-    return recordId;
+    return sourceId;
   });
 }
 ```

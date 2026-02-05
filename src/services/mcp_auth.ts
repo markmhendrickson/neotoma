@@ -6,6 +6,9 @@
 
 import { supabase } from "../db.js";
 import { logger } from "../utils/logger.js";
+import { config } from "../config.js";
+import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import { getLocalAuthUserById } from "./local_auth.js";
 
 export interface ValidatedUser {
   userId: string;
@@ -43,6 +46,32 @@ function decodeJWTUnverified(token: string): {
  * @throws Error if token is invalid or expired
  */
 export async function validateSupabaseSessionToken(token: string): Promise<ValidatedUser> {
+  if (config.storageBackend === "local") {
+    const db = getSqliteDb();
+    const connection = db
+      .prepare(
+        "SELECT user_id, access_token_expires_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+      )
+      .get(token) as { user_id?: string; access_token_expires_at?: string } | undefined;
+
+    if (!connection?.user_id) {
+      throw new Error("Invalid local session token");
+    }
+
+    if (
+      connection.access_token_expires_at &&
+      new Date(connection.access_token_expires_at).getTime() < Date.now()
+    ) {
+      throw new Error("Local session token expired");
+    }
+
+    const user = getLocalAuthUserById(connection.user_id);
+    return {
+      userId: connection.user_id,
+      email: user?.email,
+    };
+  }
+
   try {
     // Use Supabase client to verify token and get user
     const { data, error } = await supabase.auth.getUser(token);
@@ -89,7 +118,7 @@ export async function validateSupabaseSessionToken(token: string): Promise<Valid
       throw new Error(`Invalid session token: ${error.message}`);
     }
 
-    if (!data.user) {
+    if (!data?.user) {
       logger.error("[MCP Auth] No user found in token");
       throw new Error("Invalid session token: No user found");
     }
@@ -98,7 +127,7 @@ export async function validateSupabaseSessionToken(token: string): Promise<Valid
 
     return {
       userId: data.user.id,
-      email: data.user.email,
+      email: data.user.email ?? undefined,
     };
   } catch (error: any) {
     // If error is signing method-related, try fallback decode

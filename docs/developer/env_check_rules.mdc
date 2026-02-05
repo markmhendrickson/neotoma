@@ -1,0 +1,52 @@
+---
+description: "When facing environment variables as a need, always check .env for relevant variables"
+globs: ["**/*"]
+alwaysApply: true
+---
+# Check .env for Relevant Environment Variables
+
+## Purpose
+
+Ensures agents consult the project `.env` (or configured env file) whenever environment variables are relevant to the task, so configuration is accurate and existing variables are reused.
+
+## Scope
+
+This rule covers:
+- Implementing or debugging code that uses environment variables
+- Troubleshooting failures that may be caused by missing or wrong env configuration
+- Documenting or suggesting environment variables
+- Scripts or tooling that depend on env vars
+
+## Trigger Patterns
+
+Agents MUST check `.env` when:
+- Implementing a feature that reads `process.env.*` or equivalent
+- Debugging runtime or startup errors that could be config-related
+- Adding or changing configuration (e.g., API URLs, keys, feature flags)
+- Writing or updating docs that reference env variables
+- User mentions env vars, `.env`, or configuration problems
+
+## Agent Actions
+
+1. **When env variables are needed:**
+   - Read the project `.env` (repo root; see worktree rule for worktrees) to see which variables exist and how they are named.
+   - Prefer reusing existing variable names and patterns (e.g., `DEV_*`, `API_BASE_URL`) instead of introducing new ones without reason.
+   - If adding a new variable, add it to `.env.example` or documented env list; do not commit `.env` (it is gitignored).
+
+2. **When troubleshooting:**
+   - If the issue might be config-related, check `.env` for presence and value of relevant variables before assuming code bugs.
+   - Respect that `.env` may be absent in some environments (e.g., CI); use `.env.example` or docs for required variables.
+
+3. **When documenting:**
+   - When documenting env vars, cross-check with `.env.example` and `docs/developer/environment/` so names and purpose stay consistent.
+
+## Constraints
+
+- MUST check `.env` (or the env file in use) when implementing or debugging anything that depends on environment variables.
+- MUST NOT commit `.env` or put secrets in versioned files.
+- MUST NOT invent env variable names without checking existing usage in `.env.example` or `docs/developer/environment/`.
+
+## Related Documents
+
+- `docs/developer/environment/README.md` — Environment variable management
+- Foundation rule `worktree_env.mdc` — Where env files live and worktree copy behavior

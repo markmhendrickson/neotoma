@@ -1,0 +1,19 @@
+{
+  "entity_id": "ent_test_contact",
+  "entity_type": "contact",
+  "schema_version": "1.0",
+  "snapshot": {
+    "name": "Jane Doe",
+    "email": "jane@example.com",
+    "phone": "555-0100"
+  },
+  "computed_at": "2024-02-01T00:00:00.000Z",
+  "observation_count": 2,
+  "last_observation_at": "2024-01-02T00:00:00Z",
+  "provenance": {
+    "name": "obs_20240102",
+    "email": "obs_20240102",
+    "phone": "obs_20240101"
+  },
+  "user_id": "usr_test"
+}

@@ -65,7 +65,7 @@ VITE_SUPABASE_ANON_KEY=${frontendEnv.VITE_SUPABASE_ANON_KEY || ''}
     'utf8'
   );
 
-  const backend = spawn(npmCommand, ['run', 'dev:http'], {
+  const backend = spawn(npmCommand, ['run', 'dev:server'], {
     cwd: repoRoot,
     env: backendEnv,
     stdio: ['ignore', 'pipe', 'pipe'],

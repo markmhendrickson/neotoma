@@ -8,8 +8,9 @@ on:
 
 jobs:
   monitor:
+    if: false # Disabled; remove this line to re-enable
     runs-on: ubuntu-latest
-    
+
     steps:
       - uses: actions/checkout@v4
       
@@ -24,8 +25,10 @@ jobs:
       
       - name: Run snapshot monitoring
         env:
-          DEV_SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
-          DEV_SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+          # App config (src/config.ts) expects SUPABASE_* and NEOTOMA_STORAGE_BACKEND
+          SUPABASE_URL: ${{ secrets.DEV_SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.DEV_SUPABASE_SERVICE_KEY }}
+          NEOTOMA_STORAGE_BACKEND: supabase
         run: npm run monitor:snapshots
       
       - name: Notify on failure

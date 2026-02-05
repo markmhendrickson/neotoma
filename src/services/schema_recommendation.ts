@@ -187,7 +187,7 @@ export class SchemaRecommendationService {
 
     // 6. Sum frequency counts
     const totalFrequency = fragments.reduce(
-      (sum, f) => sum + (f.frequency_count || 1),
+      (sum: number, f: { frequency_count?: number }) => sum + (f.frequency_count || 1),
       0,
     );
 
@@ -223,7 +223,7 @@ export class SchemaRecommendationService {
     // This allows structured files (parquet, CSV, JSON arrays) with multiple rows to trigger enhancement
     // while still requiring multiple sources for single-row file types
     
-    const uniqueSources = new Set(fragments.map((f) => f.source_id)).size;
+    const uniqueSources = new Set(fragments.map((f: { source_id?: string }) => f.source_id)).size;
     
     // For row diversity: count unique observations per source
     // Each observation represents a row in the structured file
@@ -487,7 +487,7 @@ export class SchemaRecommendationService {
     }
 
     // Collect all sample values
-    const samples = fragments.map((f) => f.fragment_value);
+    const samples = fragments.map((f: { fragment_value?: unknown }) => f.fragment_value);
 
     // Multi-pass type detection
     const typeAnalysis = this.analyzeTypes(samples);

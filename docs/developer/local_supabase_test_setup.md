@@ -8,7 +8,7 @@ Using a local Supabase instance for E2E tests eliminates rate limiting issues, i
 
 Yes. The Playwright fixture (`playwright/fixtures/servers.ts`) automatically starts:
 
-- **Backend**: `npm run dev:http` (HTTP API + health)
+- **Backend**: `npm run dev:server` (API + health)
 - **Frontend**: `npm run dev:ui` (Vite dev server)
 
 You do **not** need to run `npm run dev:full` or a separate dev server for E2E tests. The fixture starts backend and frontend per worker and tears them down after tests.
