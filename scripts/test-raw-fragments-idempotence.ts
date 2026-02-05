@@ -44,11 +44,10 @@ async function testRawFragmentsIdempotence() {
     .from("raw_fragments")
     .insert({
       id: fragmentId1,
-      record_id: null,
       source_id: sourceId,
       interpretation_id: null,
       user_id: userId,
-      fragment_type: "task",
+      entity_type: "task",
       fragment_key: testFragmentKey,
       fragment_value: { test: "value1" },
       fragment_envelope: {
@@ -85,11 +84,10 @@ async function testRawFragmentsIdempotence() {
     .from("raw_fragments")
     .insert({
       id: fragmentId2,
-      record_id: null,
       source_id: sourceId,
       interpretation_id: null,
       user_id: userId,
-      fragment_type: "task",
+      entity_type: "task",
       fragment_key: testFragmentKey,
       fragment_value: { test: "value2" },
       fragment_envelope: {

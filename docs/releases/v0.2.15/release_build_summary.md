@@ -189,7 +189,7 @@
 
 **Development:**
 ```bash
-npm run dev:http  # HTTP API on port 8080
+npm run dev:server  # HTTP API on port 8080
 npm run dev:ui    # Frontend dev server
 npm run dev       # MCP server (stdio)
 ```
@@ -296,7 +296,7 @@ npm run build:ui
 **Start Services:**
 ```bash
 npm start        # MCP server
-npm run dev:http # HTTP API (background)
+npm run dev:server # HTTP API (background)
 # Deploy public/ to static hosting
 ```
 

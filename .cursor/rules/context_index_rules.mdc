@@ -15,6 +15,7 @@ alwaysApply: true
 #
 # This file will be overwritten when running setup_cursor_copies.
 
+
 # Neotoma Documentation System — Index and Navigation Guide
 
 _(Primary Entrypoint for All AI Agents and Developers)_
@@ -59,7 +60,6 @@ This index does NOT cover:
 These documents are the **root of truth** for all Neotoma work:
 
 1. **Foundation Documents** (`docs/foundation/`)
-
    - **Core Identity:** [`docs/foundation/core_identity.md`](../foundation/core_identity.md) — What Neotoma is and is not
    - **Philosophy:** [`docs/foundation/philosophy.md`](../foundation/philosophy.md) — Core principles and architectural invariants
    - **Layered Architecture:** [`docs/foundation/layered_architecture.md`](../foundation/layered_architecture.md) — Truth Layer, Strategy Layer, Execution Layer
@@ -84,7 +84,6 @@ These documents are the **root of truth** for all Neotoma work:
 ### 1.2 Documentation Conventions
 
 4. **[`docs/conventions/documentation_standards.md`](../conventions/documentation_standards.md)**
-
    - Shared formatting, structure, and style rules
    - Mermaid diagram standards
    - Example formatting requirements
@@ -153,7 +152,7 @@ These documents are the **root of truth** for all Neotoma work:
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | [`schema.md`](../subsystems/schema.md)                                     | DB tables, JSONB structures, schema evolution                     | Modifying database schema, adding fields, migrations                     |
 | [`record_types.md`](../subsystems/record_types.md)                         | Canonical application type catalog, field mappings, extract rules | Working with record types, schema detection, extraction, entities/events |
-| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model   | Understanding observation layer, entity snapshot computation, provenance        |
+| [`observation_architecture.md`](../subsystems/observation_architecture.md) | Complete overview of observation architecture, four-layer model   | Understanding observation layer, entity snapshot computation, provenance |
 | [`reducer.md`](../subsystems/reducer.md)                                   | Reducer engine patterns, merge strategies, determinism            | Implementing reducers, configuring merge policies, testing snapshots     |
 | [`relationships.md`](../subsystems/relationships.md)                       | Relationship types, graph patterns, query patterns                | Creating relationships, graph traversal, relationship metadata           |
 
@@ -175,7 +174,7 @@ These documents are the **root of truth** for all Neotoma work:
 
 | Document                                             | Purpose                                                       | Load When                                                 |
 | ---------------------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------------- |
-| [`auth.md`](../subsystems/auth.md)                   | Authentication flows, permissions, access control             | Implementing auth, adding permissions, securing endpoints |
+| [`auth.md`](../subsystems/auth.md)                   | Authentication flows, local auth, permissions, access control | Implementing auth, adding permissions, securing endpoints |
 | [`i18n.md`](../subsystems/i18n.md)                   | Locale vs content language, formatting, cross-language search | Handling locales, translations, or multi-language content |
 | [`accessibility.md`](../subsystems/accessibility.md) | Semantic HTML, keyboard nav, ARIA, focus management           | Building UI components, forms, or interactive elements    |
 | [`privacy.md`](../subsystems/privacy.md)             | PII categories, logging restrictions, retention, erasure      | Handling user data, logging, or implementing deletion     |
@@ -188,7 +187,7 @@ These documents are the **root of truth** for all Neotoma work:
 
 | Document                                                                            | Purpose                                                                                   | Load When                                                  |
 | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [`release_workflow.md`](../../foundation/development/release_workflow.md)             | **Release orchestration workflow** (multi-FU coordination, batching, integration testing) | **Planning/executing releases** (MVP = first release)      |
+| [`release_workflow.md`](../../foundation/development/release_workflow.md)           | **Release orchestration workflow** (multi-FU coordination, batching, integration testing) | **Planning/executing releases** (MVP = first release)      |
 | [`creating_feature_units.md`](../feature_units/standards/creating_feature_units.md) | **Complete workflow for creating new Feature Units** (4 checkpoints)                      | **Starting a new Feature Unit** — primary reference        |
 | [`feature_unit_spec.md`](../feature_units/standards/feature_unit_spec.md)           | Feature Unit definition, spec template, examples                                          | Planning a new feature or reviewing Feature Unit structure |
 | [`manifest_template.yaml`](../feature_units/standards/manifest_template.yaml)       | YAML schema for manifests, i18n, A11y, metrics fields                                     | Creating a Feature Unit manifest                           |
@@ -206,24 +205,24 @@ These documents are the **root of truth** for all Neotoma work:
 
 **UI Patterns:** `docs/ui/patterns/`
 
-| Document                                      | Purpose                                               | Load When                              |
-| --------------------------------------------- | ----------------------------------------------------- | -------------------------------------- |
-| [`list.md`](../ui/patterns/list.md)           | List view pattern (tables, grids, filters)            | Building list/table views              |
-| [`detail.md`](../ui/patterns/detail.md)       | Detail view pattern (single item, metadata, actions)  | Building detail/single-item views      |
-| [`dashboard.md`](../ui/patterns/dashboard.md) | Dashboard pattern (widgets, metrics, summaries)       | Building dashboard or overview pages   |
-| [`wizard.md`](../ui/patterns/wizard.md)       | Wizard/multi-step pattern (onboarding, complex forms) | Building multi-step flows              |
-| [`settings.md`](../ui/patterns/settings.md)   | Settings pattern (preferences, configuration)         | Building settings or configuration UIs |
-| [`navigation.md`](../ui/patterns/navigation.md) | Navigation pattern (sidebar, entity types, search) | Building navigation sidebars and menus |
+| Document                                        | Purpose                                               | Load When                              |
+| ----------------------------------------------- | ----------------------------------------------------- | -------------------------------------- |
+| [`list.md`](../ui/patterns/list.md)             | List view pattern (tables, grids, filters)            | Building list/table views              |
+| [`detail.md`](../ui/patterns/detail.md)         | Detail view pattern (single item, metadata, actions)  | Building detail/single-item views      |
+| [`dashboard.md`](../ui/patterns/dashboard.md)   | Dashboard pattern (widgets, metrics, summaries)       | Building dashboard or overview pages   |
+| [`wizard.md`](../ui/patterns/wizard.md)         | Wizard/multi-step pattern (onboarding, complex forms) | Building multi-step flows              |
+| [`settings.md`](../ui/patterns/settings.md)     | Settings pattern (preferences, configuration)         | Building settings or configuration UIs |
+| [`navigation.md`](../ui/patterns/navigation.md) | Navigation pattern (sidebar, entity types, search)    | Building navigation sidebars and menus |
 
 ### 2.6 Testing and Quality
 
 **Directory:** `docs/testing/`
 
-| Document                                                  | Purpose                                                      | Load When                             |
-| --------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
-| [`automated_test_catalog.md`](../testing/automated_test_catalog.md) | File level inventory of automated tests and suite commands | Adding, removing, or moving tests     |
-| [`testing_standard.md`](../testing/testing_standard.md)   | Test types, required tests per Feature Unit, coverage rules  | Writing tests, planning test strategy |
-| [`fixtures_standard.md`](../testing/fixtures_standard.md) | Fixture categories, naming, multi-language, privacy handling | Creating test fixtures or test data   |
+| Document                                                            | Purpose                                                      | Load When                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| [`automated_test_catalog.md`](../testing/automated_test_catalog.md) | File level inventory of automated tests and suite commands   | Adding, removing, or moving tests     |
+| [`testing_standard.md`](../testing/testing_standard.md)             | Test types, required tests per Feature Unit, coverage rules  | Writing tests, planning test strategy |
+| [`fixtures_standard.md`](../testing/fixtures_standard.md)           | Fixture categories, naming, multi-language, privacy handling | Creating test fixtures or test data   |
 
 ### 2.7 Observability
 
@@ -261,13 +260,13 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/developer/`
 
-| Document                                                          | Purpose                                     | Load When                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
-| [`getting_started.md`](../developer/getting_started.md)           | Local environment setup, first contribution | Setting up development environment, onboarding new developers |
-| [`development_workflow.md`](../developer/development_workflow.md) | Git workflow, branch strategy, PR process   | Creating feature branches, preparing pull requests            |
-| [`cli_overview.md`](../developer/cli_overview.md)                 | CLI usage overview and common workflows     | Using or documenting the Neotoma CLI                          |
-| [`cli_reference.md`](../developer/cli_reference.md)               | CLI command reference and config details    | Updating CLI commands or configuration                         |
-| [`mcp_overview.md`](../developer/mcp_overview.md)                 | MCP entry point and canonical links         | Navigating MCP setup and specification                         |
+| Document                                                          | Purpose                                        | Load When                                                     |
+| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| [`getting_started.md`](../developer/getting_started.md)           | Local environment setup, first contribution    | Setting up development environment, onboarding new developers |
+| [`development_workflow.md`](../developer/development_workflow.md) | Git workflow, branch strategy, PR process      | Creating feature branches, preparing pull requests            |
+| [`cli_overview.md`](../developer/cli_overview.md)                 | CLI usage overview and common workflows        | Using or documenting the Neotoma CLI                          |
+| [`cli_reference.md`](../developer/cli_reference.md)               | CLI command reference, config, and dev scripts | Updating CLI commands or configuration                        |
+| [`mcp_overview.md`](../developer/mcp_overview.md)                 | MCP entry point and canonical links            | Navigating MCP setup and specification                        |
 
 ### 2.11 Operations and Infrastructure
 
@@ -574,7 +573,7 @@ graph TD
 
 1. `docs/architecture/architectural_decisions.md` — Open ontology via relationships
 2. `docs/subsystems/relationships.md` — Relationship types, graph patterns
-3. `docs/subsystems/schema.md` — Relationships table
+3. `docs/subsystems/schema.md` — Relationship observations and snapshots tables
 4. `docs/foundation/entity_resolution.md` — Entity resolution patterns
 
 ### 4.11 Working with Four-Layer Truth Model

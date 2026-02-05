@@ -22,6 +22,7 @@ import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2 } from "lucide-react";
 import { getApiClient } from "@/lib/api_client";
+import { createIdempotencyKey } from "@/lib/idempotency";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -59,16 +60,23 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
 
     try {
       const api = getApiClient(bearerToken);
+      const transactionData = {
+        entity_type: "transaction",
+        amount: parseFloat(amount),
+        merchant,
+        category: category || "uncategorized",
+        transaction_date: date,
+        description: description || undefined,
+      };
+      const idempotencyKey = await createIdempotencyKey({
+        entities: [transactionData],
+        source_priority: 100,
+        user_id: user?.id,
+      });
       const { data, error } = await api.POST("/api/store", {
         body: {
-          entities: [{
-            entity_type: "transaction",
-            amount: parseFloat(amount),
-            merchant,
-            category: category || "uncategorized",
-            transaction_date: date,
-            description: description || undefined,
-          }],
+          entities: [transactionData],
+          idempotency_key: idempotencyKey,
           user_id: user?.id,
         },
       });
@@ -109,7 +117,7 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
         <DialogHeader>
           <DialogTitle>Add Transaction</DialogTitle>
           <DialogDescription>
-            Quickly add a financial transaction to your records
+            Quickly add a financial transaction to your timeline
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>

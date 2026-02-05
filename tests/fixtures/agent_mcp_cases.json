@@ -1,0 +1,137 @@
+[
+  {
+    "id": "ownership_preference_device",
+    "prompt": "I own a MacBook and I prefer dark mode.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["list_entity_types"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["device", "asset", "possession", "note"],
+        "required_fields_any_of": ["name", "description", "model", "item"]
+      },
+      {
+        "entity_type_any_of": ["preference", "note"],
+        "required_fields_any_of": ["preference", "value", "mode"]
+      }
+    ],
+    "expected_relationships": []
+  },
+  {
+    "id": "friend_birthday_gift_intent",
+    "prompt": "My friend Sarah has her birthday on June 3rd and I want to buy her a gift. She loves rock climbing.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["create_relationship", "list_entity_types"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["person"],
+        "required_fields_any_of": ["name", "birthday", "interest"]
+      },
+      {
+        "entity_type_any_of": ["task", "event", "reminder", "note"],
+        "required_fields_any_of": ["title", "due_date", "date", "description"]
+      }
+    ],
+    "expected_relationships": [
+      {
+        "mode": "either",
+        "relationship_type_any_of": ["FRIEND_OF", "KNOWS", "RELATED_TO", "FOR"],
+        "source_entity_type_any_of": ["person"],
+        "target_entity_type_any_of": ["person", "task", "event", "reminder", "note"]
+      }
+    ]
+  },
+  {
+    "id": "appointment_event",
+    "prompt": "I have a dentist appointment on March 5th at 2pm.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["list_entity_types"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["event", "task", "appointment", "reminder", "note"],
+        "required_fields_any_of": ["date", "time", "title", "description"]
+      }
+    ],
+    "expected_relationships": []
+  },
+  {
+    "id": "reminder_commitment",
+    "prompt": "Please remind me to renew my passport next month.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["list_entity_types"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["task", "reminder", "note"],
+        "required_fields_any_of": ["title", "due_date", "date", "description"]
+      }
+    ],
+    "expected_relationships": []
+  },
+  {
+    "id": "family_relationship_location",
+    "prompt": "My sister Emily lives in Seattle.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["create_relationship"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["person"],
+        "required_fields_any_of": ["name", "location", "city"]
+      }
+    ],
+    "expected_relationships": [
+      {
+        "mode": "either",
+        "relationship_type_any_of": ["SIBLING_OF", "RELATED_TO", "FAMILY"],
+        "source_entity_type_any_of": ["person"],
+        "target_entity_type_any_of": ["person"]
+      }
+    ]
+  },
+  {
+    "id": "unstructured_attachment",
+    "prompt": "Attached is my insurance policy.",
+    "attachments": [
+      {
+        "type": "file_path",
+        "path": "tests/fixtures/agent_mcp/insurance_policy.txt",
+        "mime_type": "text/plain"
+      }
+    ],
+    "required_actions": ["store"],
+    "optional_actions": [],
+    "expected_entities": [],
+    "expected_relationships": []
+  },
+  {
+    "id": "transaction_statement",
+    "prompt": "I paid $45 at Whole Foods yesterday.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": [],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["transaction", "receipt", "note"],
+        "required_fields_any_of": ["amount", "merchant", "date", "description"]
+      }
+    ],
+    "expected_relationships": []
+  },
+  {
+    "id": "vehicle_asset",
+    "prompt": "My car is a 2012 Honda Civic.",
+    "attachments": [],
+    "required_actions": ["store"],
+    "optional_actions": ["list_entity_types"],
+    "expected_entities": [
+      {
+        "entity_type_any_of": ["vehicle", "asset", "possession", "device", "note"],
+        "required_fields_any_of": ["model", "year", "name", "description"]
+      }
+    ],
+    "expected_relationships": []
+  }
+]

@@ -24,8 +24,10 @@ npm run build
 This compiles TypeScript to JavaScript in the `dist/` directory. The `.cursor/mcp.json` configuration file references `dist/index.js`.
 **Running MCP in development:**
 
-- **HTTP (recommended for Cursor with `url` in mcp.json):**  
-  `npm run dev:mcp` — starts the server that serves `/mcp` with hot reload (default port 8080).
+- **HTTP with tunnel (remote access):**  
+  `npm run dev:api` or `npm run dev:mcp` — starts the API/MCP server and an HTTPS tunnel (ngrok) so the server is reachable remotely. Use the printed tunnel URL for `MCP_PROXY_URL`, `API_BASE_URL`, and Cursor. Ctrl+C stops both.
+- **HTTP server only (no tunnel):**  
+  `npm run dev:server` — starts the API server only (no UI; serves `/mcp` and REST API) with hot reload (default port 8080).
 - **Stdio (for `command` + `args` in mcp.json):**  
   `npm run dev:mcp:stdio` — runs the stdio MCP server with hot reload.
 - **Compile only (watch):**  

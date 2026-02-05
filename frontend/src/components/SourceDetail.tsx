@@ -4,7 +4,7 @@
  * Displays source with four-layer truth model:
  * Source → Interpretations → Observations → Entities
  * 
- * Replaces deprecated RecordDetailsPanel (which uses records table)
+ * Replaces deprecated record-based detail views
  */
 
 import { useEffect, useState } from "react";

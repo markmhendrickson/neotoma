@@ -1,0 +1,5 @@
+Provider: Northwind Insurance
+Policy Number: POL-12345
+Insured: Jamie Lee
+Effective Date: 2025-01-01
+Coverage: Personal liability

@@ -10,6 +10,7 @@ export interface RawStorageOptions {
   mimeType: string;
   originalFilename?: string;
   provenance?: Record<string, unknown>;
+  idempotencyKey?: string;
 }
 
 export interface RawStorageResult {
@@ -18,6 +19,7 @@ export interface RawStorageResult {
   storageUrl: string;
   fileSize: number;
   deduplicated: boolean;
+  idempotencyKey?: string;
 }
 
 /**
@@ -28,24 +30,56 @@ export function computeContentHash(buffer: Buffer): string {
 }
 
 /**
- * Store raw file content with content-addressed deduplication
- * 
+ * Store raw file content with content-addressed deduplication.
+ * Idempotent: second calls with the same content return the existing source
+ * (or claim the existing file in DB) instead of throwing "file already exists".
+ *
  * Storage path: sources/{user_id}/{content_hash}
  * Deduplication: Per-user uniqueness on (user_id, content_hash)
  */
 export async function storeRawContent(
   options: RawStorageOptions
 ): Promise<RawStorageResult> {
-  const { userId, fileBuffer, mimeType, originalFilename, provenance = {} } = options;
+  const { userId, fileBuffer, mimeType, originalFilename, provenance = {}, idempotencyKey } = options;
 
   // Compute content hash
   const contentHash = computeContentHash(fileBuffer);
   const fileSize = fileBuffer.length;
 
+  if (idempotencyKey) {
+    const { data: existingByKey, error: existingByKeyError } = await supabase
+      .from("sources")
+      .select("id, storage_url, content_hash, file_size, idempotency_key")
+      .eq("user_id", userId)
+      .eq("idempotency_key", idempotencyKey)
+      .maybeSingle();
+
+    if (existingByKeyError) {
+      throw new Error(`Failed to check idempotency key: ${existingByKeyError.message}`);
+    }
+
+    if (existingByKey) {
+      if (existingByKey.content_hash !== contentHash) {
+        throw new Error(
+          "Idempotency key reuse detected with different content. Use a new idempotency_key."
+        );
+      }
+
+      return {
+        sourceId: existingByKey.id,
+        contentHash,
+        storageUrl: existingByKey.storage_url,
+        fileSize: existingByKey.file_size,
+        deduplicated: true,
+        idempotencyKey,
+      };
+    }
+  }
+
   // Check for existing source (deduplication)
   const { data: existing, error: checkError } = await supabase
     .from("sources")
-    .select("id, storage_url")
+    .select("id, storage_url, idempotency_key")
     .eq("user_id", userId)
     .eq("content_hash", contentHash)
     .maybeSingle();
@@ -56,12 +90,24 @@ export async function storeRawContent(
 
   // If already exists, return existing source
   if (existing) {
+    if (idempotencyKey && !existing.idempotency_key) {
+      const { error: updateError } = await supabase
+        .from("sources")
+        .update({ idempotency_key: idempotencyKey })
+        .eq("id", existing.id);
+
+      if (updateError) {
+        throw new Error(`Failed to set idempotency key: ${updateError.message}`);
+      }
+    }
+
     return {
       sourceId: existing.id,
       contentHash,
       storageUrl: existing.storage_url,
       fileSize,
       deduplicated: true,
+      idempotencyKey,
     };
   }
 
@@ -81,7 +127,30 @@ export async function storeRawContent(
       });
 
     if (uploadError) {
-      throw new Error(`Failed to upload to storage: ${uploadError.message}`);
+      const isAlreadyExists =
+        uploadError.message?.toLowerCase().includes("already exists") ||
+        uploadError.message?.toLowerCase().includes("file already exists") ||
+        (uploadError as { code?: string }).code === "STORAGE_FILE_EXISTS";
+      if (isAlreadyExists) {
+        const { data: existingAfterUpload, error: recheckError } = await supabase
+          .from("sources")
+          .select("id, storage_url")
+          .eq("user_id", userId)
+          .eq("content_hash", contentHash)
+          .maybeSingle();
+        if (!recheckError && existingAfterUpload) {
+          return {
+            sourceId: existingAfterUpload.id,
+            contentHash,
+            storageUrl: existingAfterUpload.storage_url,
+            fileSize,
+            deduplicated: true,
+          };
+        }
+        // File on storage but no source row (e.g. previous insert failed). Insert to claim it.
+      } else {
+        throw new Error(`Failed to upload to storage: ${uploadError.message}`);
+      }
     }
   }
 
@@ -95,6 +164,7 @@ export async function storeRawContent(
       storage_url: storagePath,
       file_size: fileSize,
       original_filename: originalFilename,
+      idempotency_key: idempotencyKey,
       provenance: {
         ...provenance,
         uploaded_at: new Date().toISOString(),
@@ -104,6 +174,27 @@ export async function storeRawContent(
     .single();
 
   if (insertError) {
+    const isDuplicate =
+      insertError.message?.toLowerCase().includes("duplicate") ||
+      insertError.message?.toLowerCase().includes("unique") ||
+      (insertError as { code?: string }).code === "23505";
+    if (isDuplicate) {
+      const { data: existingSource, error: recheckError } = await supabase
+        .from("sources")
+        .select("id, storage_url")
+        .eq("user_id", userId)
+        .eq("content_hash", contentHash)
+        .maybeSingle();
+      if (!recheckError && existingSource) {
+        return {
+          sourceId: existingSource.id,
+          contentHash,
+          storageUrl: existingSource.storage_url,
+          fileSize,
+          deduplicated: true,
+        };
+      }
+    }
     throw new Error(`Failed to create source record: ${insertError.message}`);
   }
 
@@ -113,6 +204,7 @@ export async function storeRawContent(
     storageUrl: storagePath,
     fileSize,
     deduplicated: false,
+    idempotencyKey,
   };
 }
 

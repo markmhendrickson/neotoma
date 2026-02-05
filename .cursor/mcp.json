@@ -1,7 +1,9 @@
 {
   "mcpServers": {
-    "dev-neotoma": {
-      "url": "https://dev.neotoma.io/mcp"
+    "neotoma": {
+      "command": "npm",
+      "args": ["run", "dev:mcp:stdio"],
+      "cwd": "/Users/markmhendrickson/repos/neotoma"
     },
     "web-scraper": {
       "command": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh",

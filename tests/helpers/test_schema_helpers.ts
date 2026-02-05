@@ -110,7 +110,7 @@ export async function cleanupTestRawFragments(entityType: string, userId?: strin
   const query = supabase
     .from("raw_fragments")
     .delete()
-    .or(`fragment_type.eq.${entityType},entity_type.eq.${entityType}`);
+    .eq("entity_type", entityType);
   
   if (userId !== undefined) {
     query.eq("user_id", userId);
@@ -206,15 +206,13 @@ export async function verifyObservationExists(observationId: string): Promise<bo
 
 /**
  * Count raw_fragments for entity type
- * Note: raw_fragments uses fragment_type to store entity_type for structured data
  */
 export async function countRawFragments(entityType: string, userId?: string): Promise<number> {
-  // Query by fragment_type (structured data stores entity_type here)
-  // Also check entity_type column if it exists (for unstructured data)
+  // Query by entity_type
   let query = supabase
     .from("raw_fragments")
     .select("id", { count: "exact", head: true })
-    .or(`fragment_type.eq.${entityType},entity_type.eq.${entityType}`);
+    .eq("entity_type", entityType);
   
   if (userId !== undefined) {
     query = query.eq("user_id", userId);

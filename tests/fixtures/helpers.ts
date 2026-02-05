@@ -1,7 +1,7 @@
 /**
  * Fixture Helper Functions
  *
- * Provides helper functions to generate fixture records for all record types
+ * Provides helper functions to generate fixture data for entity types
  * with sensible defaults and override support.
  */
 

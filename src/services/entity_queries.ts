@@ -26,6 +26,18 @@ export interface EntityWithProvenance {
   merged_at?: string | null;
 }
 
+/** Row shape from entity_snapshots table (select *). */
+interface EntitySnapshotRow {
+  entity_id: string;
+  schema_version?: string;
+  snapshot?: Record<string, unknown>;
+  observation_count?: number;
+  last_observation_at?: string;
+  provenance?: Record<string, unknown>;
+  computed_at?: string;
+  [key: string]: unknown;
+}
+
 /**
  * Query entities with merged entity exclusion
  */
@@ -84,8 +96,8 @@ export async function queryEntities(
   }
 
   // Combine entities with snapshots
-  const snapshotMap = new Map(
-    (snapshots || []).map((s: any) => [s.entity_id, s])
+  const snapshotMap = new Map<string, EntitySnapshotRow>(
+    (snapshots || []).map((s: EntitySnapshotRow) => [s.entity_id, s])
   );
 
   // Get raw_fragments for all entities (batch query)
@@ -259,7 +271,7 @@ export async function getEntityWithProvenance(
     .eq("entity_id", entityId)
     .single();
 
-  let effectiveSnapshot: typeof snapshot = snapshot;
+  let effectiveSnapshot: EntitySnapshotRow | null = snapshot as EntitySnapshotRow | null;
   if (snapshotError && snapshotError.code !== "PGRST116") {
     console.warn(`Entity ${entityId}: snapshot query failed (${snapshotError.code}): ${snapshotError.message}. Returning entity without snapshot.`);
     effectiveSnapshot = null;
@@ -277,8 +289,8 @@ export async function getEntityWithProvenance(
   const rawFragments: Record<string, unknown> = {};
   if (observations && observations.length > 0) {
     // Get unique source_ids and user_ids
-    const sourceIds = [...new Set(observations.map((o: any) => o.source_id).filter(Boolean))];
-    const userIds = [...new Set(observations.map((o: any) => o.user_id).filter(Boolean))];
+    const sourceIds = [...new Set(observations.map((o: { source_id?: string }) => o.source_id).filter(Boolean))] as string[];
+    const userIds = [...new Set(observations.map((o: { user_id?: string }) => o.user_id).filter((u: string | undefined): u is string => Boolean(u)))];
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
 
     // Query raw_fragments for these sources with matching entity_type
@@ -290,7 +302,7 @@ export async function getEntityWithProvenance(
 
     // Handle user_id: check both provided user_ids and default UUID
     if (userIds.length > 0) {
-      const userIdFilters = userIds.map((uid: string) => 
+      const userIdFilters = userIds.map((uid) => 
         uid === defaultUserId ? `user_id.eq.${defaultUserId},user_id.is.null` : `user_id.eq.${uid}`
       );
       fragmentQuery = fragmentQuery.or(userIdFilters.join(","));

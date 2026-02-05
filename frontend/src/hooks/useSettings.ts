@@ -3,8 +3,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 export interface Settings {
   apiBase: string;
   bearerToken: string; // Derived from Ed25519 public key
-  cloudStorageEnabled: boolean; // Whether to store files/records in Supabase
-  csvRowRecordsEnabled: boolean; // Whether CSV uploads expand to per-row records
+  cloudStorageEnabled: boolean; // Whether to store files in Supabase
 }
 
 function getStorage(): Storage | null {
@@ -23,7 +22,6 @@ function readSettingsFromStorage(): Settings {
   try {
     const cloudStorageEnabledValue = storage?.getItem('cloudStorageEnabled');
     const legacyApiSyncEnabled = storage?.getItem('apiSyncEnabled');
-    const csvRowRecordsEnabled = storage?.getItem('csvRowRecordsEnabled');
     const storedApiBase = storage?.getItem('apiBase');
     const defaultApiBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
     const resolvedCloudSetting = cloudStorageEnabledValue ?? legacyApiSyncEnabled;
@@ -31,14 +29,12 @@ function readSettingsFromStorage(): Settings {
       apiBase: storedApiBase || defaultApiBase,
       bearerToken: storage?.getItem('bearerToken') || '',
       cloudStorageEnabled: resolvedCloudSetting !== null ? resolvedCloudSetting === 'true' : false,
-      csvRowRecordsEnabled: csvRowRecordsEnabled !== null ? csvRowRecordsEnabled === 'true' : true,
     };
   } catch {
     return {
       apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080',
       bearerToken: '',
       cloudStorageEnabled: false,
-      csvRowRecordsEnabled: true,
     };
   }
 }
@@ -64,9 +60,6 @@ function persistSettings(partial: Partial<Settings>) {
       storage.setItem('cloudStorageEnabled', String(partial.cloudStorageEnabled));
       // Keep legacy key in sync for older builds that still read apiSyncEnabled
       storage.setItem('apiSyncEnabled', String(partial.cloudStorageEnabled));
-    }
-    if (partial.csvRowRecordsEnabled !== undefined) {
-      storage.setItem('csvRowRecordsEnabled', String(partial.csvRowRecordsEnabled));
     }
   } catch (error) {
     console.warn('Failed to persist settings', error);

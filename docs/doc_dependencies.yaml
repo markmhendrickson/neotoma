@@ -51,9 +51,15 @@ docs/NEOTOMA_MANIFEST.md:
     - path: docs/conventions/documentation_standards.md
       type: explicit
       reason: Documentation standards require manifest alignment
+    - path: docs/conventions/plan_format_rules.md
+      type: implicit
+      reason: Plan format rules must align with manifest constraints
     - path: docs/conventions/writing_style_guide.md
       type: implicit
       reason: Writing style guide references manifest
+    - path: docs/reports/*.md
+      type: implicit
+      reason: Reports reference Truth Layer constraints and canonical error codes
     - path: docs/templates/pr_template.md
       type: implicit
       reason: PR template references manifest
@@ -145,6 +151,9 @@ docs/foundation/entity_resolution.md:
 # Architecture Layer
 docs/architecture/architecture.md:
   downstream:
+    - path: docs/subsystems/schema.md
+      type: explicit
+      reason: Schema tables implement architecture layers and boundaries
     - path: docs/subsystems/ingestion/ingestion.md
       type: explicit
       reason: References architecture layers
@@ -251,6 +260,22 @@ docs/specs/DATA_MODELS.md:
     - path: docs/subsystems/schema_registry.md
       type: explicit
       reason: Implements data model patterns
+
+# Developer Documentation
+docs/developer/cli_reference.md:
+  downstream:
+    - path: docs/developer/cli_overview.md
+      type: explicit
+      reason: Overview links to CLI reference for command details
+    - path: README.md
+      type: implicit
+      reason: README links to CLI reference
+
+docs/developer/mcp_overview.md:
+  downstream:
+    - path: tests/fixtures/agent_mcp_cases.json
+      type: explicit
+      reason: Agent MCP behavior tests are referenced in MCP overview
 
 # Standards Layer
 docs/testing/testing_standard.md:
@@ -399,10 +424,10 @@ docs/subsystems/auth.md:
   downstream:
     - path: docs/legal/compliance.md
       type: explicit
-      reason: References auth subsystem
+      reason: References auth subsystem and local auth requirements
     - path: docs/architecture/architecture.md
       type: implicit
-      reason: Architecture must align with auth requirements
+      reason: Architecture must align with auth and local mode requirements
 
 # Feature Unit Standards
 docs/feature_units/standards/feature_unit_spec.md:

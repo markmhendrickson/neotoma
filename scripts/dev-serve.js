@@ -35,7 +35,7 @@ const tasks = [
   {
     name: 'actions',
     description: 'HTTP Actions server',
-    script: 'dev:http',
+    script: 'dev:server',
     readyPattern: /HTTP Actions listening on/i,
   },
   {

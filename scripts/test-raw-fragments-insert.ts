@@ -34,11 +34,10 @@ async function testRawFragmentsInsert() {
   // Test insert
   const testFragment = {
     id: randomUUID(),
-    record_id: null,
     source_id: sourceId,
     interpretation_id: null,
     user_id: userId,
-    fragment_type: "task",
+    entity_type: "task",
     fragment_key: "test_field",
     fragment_value: { test: "value" },
     fragment_envelope: {

@@ -5,65 +5,6 @@
  * Enables multi-backend support (file, DB, blockchain) for future decentralization.
  */
 
-import { StateEvent } from "../events/event_schema.js";
-import type { NeotomaRecord } from "../db.js";
-
-/**
- * EventRepository interface for event log operations
- */
-export interface EventRepository {
-  /**
-   * Append event to event log (append-only)
-   */
-  appendEvent(event: Omit<StateEvent, "created_at">): Promise<StateEvent>;
-
-  /**
-   * Get all events for a record (chronological order)
-   */
-  getEventsByRecordId(recordId: string): Promise<StateEvent[]>;
-
-  /**
-   * Get events by timestamp range
-   */
-  getEventsByTimestampRange(
-    startTimestamp: string,
-    endTimestamp: string,
-  ): Promise<StateEvent[]>;
-
-  /**
-   * Get all events (for testing/debugging)
-   */
-  getAllEvents(limit?: number): Promise<StateEvent[]>;
-}
-
-/**
- * StateRepository interface for state operations
- */
-export interface StateRepository {
-  /**
-   * Get current state for a record
-   */
-  getState(recordId: string): Promise<NeotomaRecord | null>;
-
-  /**
-   * Get state at specific timestamp (requires event replay)
-   */
-  getStateAtTimestamp(
-    recordId: string,
-    timestamp: string,
-  ): Promise<NeotomaRecord | null>;
-
-  /**
-   * Save state (for materialized views/snapshots)
-   */
-  saveState(record: NeotomaRecord): Promise<void>;
-
-  /**
-   * Get multiple states by record IDs
-   */
-  getStates(recordIds: string[]): Promise<Map<string, NeotomaRecord | null>>;
-}
-
 /**
  * ObservationRepository interface for observation operations (FU-055)
  */
@@ -75,7 +16,7 @@ export interface ObservationRepository {
     entity_id: string;
     entity_type: string;
     schema_version: string;
-    source_record_id: string;
+    source_id: string;
     observed_at: string;
     specificity_score?: number | null;
     source_priority?: number;
@@ -86,7 +27,7 @@ export interface ObservationRepository {
     entity_id: string;
     entity_type: string;
     schema_version: string;
-    source_record_id: string;
+    source_id: string;
     observed_at: string;
     specificity_score: number | null;
     source_priority: number;
@@ -104,7 +45,7 @@ export interface ObservationRepository {
       entity_id: string;
       entity_type: string;
       schema_version: string;
-      source_record_id: string;
+      source_id: string;
       observed_at: string;
       specificity_score: number | null;
       source_priority: number;

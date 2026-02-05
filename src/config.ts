@@ -55,8 +55,18 @@ function getOpenAIConfig() {
 }
 
 const httpPort = parseInt(process.env.HTTP_PORT || "8080", 10);
+const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
+const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
+const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, "events");
 
 export const config = {
+  projectRoot,
+  storageBackend,
+  dataDir,
+  sqlitePath: process.env.NEOTOMA_SQLITE_PATH || join(dataDir, "neotoma.db"),
+  rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, "sources"),
+  eventLogDir,
+  eventLogMirrorEnabled: process.env.NEOTOMA_EVENT_LOG_MIRROR === "true",
   supabaseUrl: supabaseConfig.url,
   supabaseKey: supabaseConfig.key,
   openaiApiKey: getOpenAIConfig(),
@@ -76,7 +86,7 @@ export const config = {
   },
 };
 
-if (!config.supabaseUrl || !config.supabaseKey) {
+if (config.storageBackend === "supabase" && (!config.supabaseUrl || !config.supabaseKey)) {
   const envFile = env === "production" ? ".env.production" : ".env";
   if (env === "production") {
     throw new Error(

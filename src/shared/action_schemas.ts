@@ -34,7 +34,7 @@ export const CreateRelationshipRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
   source_entity_id: z.string(),
   target_entity_id: z.string(),
-  source_record_id: z.string().uuid().optional(),
+  source_id: z.string().uuid().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -87,6 +87,7 @@ export const ObservationsQueryRequestSchema = z.object({
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
   source_priority: z.number().optional().default(100),
+  idempotency_key: z.string().min(1),
   user_id: z.string().uuid().optional(),
 });
 
@@ -102,6 +103,7 @@ export const CorrectEntityRequestSchema = z.object({
   entity_type: z.string(),
   field: z.string(),
   value: z.unknown(),
+  idempotency_key: z.string().min(1),
   user_id: z.string().uuid().optional(),
 });
 

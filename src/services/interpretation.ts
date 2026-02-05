@@ -16,32 +16,6 @@ import {
 } from "./observation_identity.js";
 import { validateFieldsWithConverters } from "./field_validation.js";
 
-// Migration compatibility: Resolve table name (interpretations vs interpretation_runs)
-let interpretationsTableName: string | null = null;
-
-async function getInterpretationsTableName(): Promise<string> {
-  if (interpretationsTableName) {
-    return interpretationsTableName;
-  }
-
-  // Try interpretations first (new table name)
-  const { error: newError } = await supabase.from("interpretations").select("id").limit(1);
-  if (!newError || (newError.code !== "PGRST116" && newError.code !== "PGRST205")) {
-    interpretationsTableName = "interpretations";
-    return interpretationsTableName;
-  }
-
-  // Fallback to interpretation_runs (legacy table name)
-  const { error: oldError } = await supabase.from("interpretation_runs").select("id").limit(1);
-  if (!oldError) {
-    interpretationsTableName = "interpretation_runs";
-    return interpretationsTableName;
-  }
-
-  // Neither exists - use new name (will fail with clearer error)
-  interpretationsTableName = "interpretations";
-  return interpretationsTableName;
-}
 
 export interface InterpretationConfig {
   provider: string;
@@ -114,9 +88,8 @@ export async function runInterpretation(
   const { userId, sourceId, extractedData, config } = options;
 
   // Create interpretation
-  const tableName = await getInterpretationsTableName();
   const { data: run, error: runError } = await supabase
-    .from(tableName)
+    .from("interpretations")
     .insert({
       user_id: userId,
       source_id: sourceId,
@@ -302,7 +275,6 @@ export async function runInterpretation(
           const fragmentId = randomUUID();
           const { error: insertError } = await supabase.from("raw_fragments").insert({
             id: fragmentId,
-            record_id: null,
             source_id: sourceId,
             interpretation_id: interpretationId,
             user_id: userId,
@@ -392,7 +364,6 @@ export async function runInterpretation(
         entity_id: entityId,
         entity_type: entityType,
         schema_version: schema.schema_version,
-        source_payload_id: null, // Not using payload_submissions in v0.2.0
         source_id: sourceId,
         interpretation_id: interpretationId,
         observed_at: new Date().toISOString(),
@@ -490,9 +461,8 @@ export async function runInterpretation(
     }
 
     // Mark interpretation as completed
-    const tableNameCompleted = await getInterpretationsTableName();
     await supabase
-      .from(tableNameCompleted)
+      .from("interpretations")
       .update({
         status: "completed",
         completed_at: new Date().toISOString(),
@@ -509,9 +479,8 @@ export async function runInterpretation(
     };
   } catch (error) {
     // Mark interpretation as failed
-    const tableNameFailed = await getInterpretationsTableName();
     await supabase
-      .from(tableNameFailed)
+      .from("interpretations")
       .update({
         status: "failed",
         completed_at: new Date().toISOString(),
@@ -600,9 +569,8 @@ export async function checkInterpretationQuota(
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const tableNameQuota = await getInterpretationsTableName();
   const { count, error } = await supabase
-    .from(tableNameQuota)
+    .from("interpretations")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
     .gte("created_at", thirtyDaysAgo.toISOString());

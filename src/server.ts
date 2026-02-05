@@ -14,9 +14,13 @@ import { supabase } from "./db.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import * as yaml from "js-yaml";
 import { config } from "./config.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import { buildCliEquivalentInvocation } from "./shared/contract_mappings.js";
+import { getOpenApiInputSchemaOrThrow } from "./shared/openapi_schema.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
@@ -43,6 +47,7 @@ import {
   generateEntityId,
   type Entity,
 } from "./services/entity_resolution.js";
+import { detectSchemaType, extractFields } from "./services/extraction/rules.js";
 
 /**
  * Get MIME type from file extension
@@ -74,12 +79,63 @@ function getMimeTypeFromExtension(ext: string): string | null {
   return mimeTypes[ext] || null;
 }
 
+async function extractTextFromBuffer(
+  buffer: Buffer,
+  mimeType?: string,
+  fileName?: string
+): Promise<string> {
+  const lowerName = fileName?.toLowerCase() || "";
+  const lowerMime = mimeType?.toLowerCase() || "";
+
+  if (lowerMime.includes("pdf") || lowerName.endsWith(".pdf")) {
+    try {
+      const module = await import("pdf-parse");
+      const PdfParse =
+        (
+          module as {
+            PDFParse?: new (options: { data: Buffer }) => { getText(): Promise<{ text?: string }> };
+          }
+        ).PDFParse ?? (module as any).default;
+      if (!PdfParse) {
+        return "";
+      }
+      const parser = new PdfParse({ data: buffer });
+      const { text } = await parser.getText();
+      return text || "";
+    } catch (error) {
+      logger.warn("Failed to parse PDF for extraction:", error);
+      return "";
+    }
+  }
+
+  if (lowerMime.startsWith("text/") || lowerMime.includes("json") || lowerMime.includes("xml")) {
+    return buffer.toString("utf8");
+  }
+
+  if (
+    lowerName.endsWith(".txt") ||
+    lowerName.endsWith(".csv") ||
+    lowerName.endsWith(".json") ||
+    lowerName.endsWith(".md")
+  ) {
+    return buffer.toString("utf8");
+  }
+
+  return "";
+}
+
+const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
+
 export class NeotomaServer {
   private server: Server;
   private autoEnhancementCleanup?: () => void;
   private authenticatedUserId: string | null = null;
   private sessionToken: string | null = null;
   private requestAuth: Map<string, { userId: string; token: string }> = new Map();
+  /** Connection ID set from HTTP layer so handlers get auth even when SDK does not pass requestInfo */
+  private sessionConnectionId: string | null = null;
+  /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
+  private toolDescriptions: Map<string, string> = new Map();
 
   constructor() {
     this.server = new Server(
@@ -95,10 +151,79 @@ export class NeotomaServer {
       }
     );
 
+    this.toolDescriptions = this.loadToolDescriptionsMap();
     this.setupInitializeHandler();
     this.setupToolHandlers();
     this.setupResourceHandlers();
     this.setupErrorHandler();
+  }
+
+  private mcpDocsPath(): string {
+    return join(config.projectRoot, ...MCP_DOCS_SUBDIR);
+  }
+
+  private getMcpInteractionInstructions(): string {
+    const fallback = [
+      "Use MCP actions proactively. Store and retrieve without waiting for explicit requests.",
+      "Always store when the user states relevant information, even in conversational contexts. Store first, then respond. Do not skip store because the user did not explicitly ask to save.",
+      "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
+      "Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). Create relationships when implied (e.g. friend of, task for person, event attendee) using create_relationship or relationship fields per schema.",
+      "Proactively create a task when the user expresses intent, obligation, debt, or a future action (e.g. “I need to”, “I have to”, “I owe”, “I should”, “I want to buy”, “remind me”, or any deadline). Unless the user explicitly says no reminders or no tasks, create a task with due date if available and relate it to the relevant person or entity.",
+      "When entity type is not in the known list, use list_entity_types with a keyword (e.g. \"device\", \"asset\", \"preference\", \"gift\", \"reminder\") or store with a descriptive entity_type; the system will infer or create schema from the data. Be proactive about storing any type of relevant entity, including types not yet registered.",
+      "Example entity types (use when they fit; more may exist via list_entity_types or neotoma://entity_types): contact, person, company, task, invoice, transaction, receipt, note, contract, event, feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision. For any other concept, use a descriptive type (e.g. device, asset, preference, gift) or discover via list_entity_types.",
+      "Avoid calling get_authenticated_user unless required by the intended follow-up action. If the next actions do not require it, skip get_authenticated_user.",
+      "Check for existing records before storing to avoid duplicates.",
+      "Include all fields from source data when storing entities. Unknown fields must be included.",
+      "Omit user_id. It is inferred from authentication.",
+      "After any MCP action, summarize entities and relationships with all snapshot fields.",
+      "If the prompt ends with \"via mcp\", use MCP actions only and do not read or write local files.",
+    ].join("\n");
+    const instructionsPath = join(this.mcpDocsPath(), "instructions.md");
+    try {
+      const raw = readFileSync(instructionsPath, "utf-8");
+      const match = raw.match(/```\s*\n?([\s\S]*?)```/);
+      if (match && match[1]) {
+        const text = match[1].trim();
+        return text || fallback;
+      }
+    } catch {
+      // File missing or unreadable (e.g. packaged app); use fallback
+    }
+    return fallback;
+  }
+
+  private getUnauthenticatedInstructions(): { instructions: string; serverInfoDescription: string } {
+    const fallback = {
+      instructions: "Authentication needed. Use the Connect button to sign in.",
+      serverInfoDescription: "Authentication needed. Use the Connect button to sign in and access tools.",
+    };
+    const path = join(this.mcpDocsPath(), "unauthenticated.md");
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const blocks = raw.match(/```\s*\n?([\s\S]*?)```/g);
+      if (blocks && blocks.length >= 2) {
+        const a = blocks[0].replace(/^```\s*\n?|```$/g, "").trim();
+        const b = blocks[1].replace(/^```\s*\n?|```$/g, "").trim();
+        if (a && b) return { instructions: a, serverInfoDescription: b };
+      }
+    } catch {
+      // File missing or unreadable; use fallback
+    }
+    return fallback;
+  }
+
+  private loadToolDescriptionsMap(): Map<string, string> {
+    const path = join(this.mcpDocsPath(), "tool_descriptions.yaml");
+    try {
+      const raw = readFileSync(path, "utf-8");
+      const data = yaml.load(raw) as { tools?: Record<string, string> } | undefined;
+      if (data?.tools && typeof data.tools === "object") {
+        return new Map(Object.entries(data.tools));
+      }
+    } catch {
+      // File missing or invalid; use empty Map so tools keep inline descriptions
+    }
+    return new Map();
   }
 
   /**
@@ -113,10 +238,11 @@ export class NeotomaServer {
       // Detect transport type: HTTP has requestInfo, stdio does not
       const isHTTPTransport = !!extra?.requestInfo;
 
-      // Extract connection_id from HTTP headers, authInfo, or env vars (env vars only for stdio)
+      // Extract connection_id: prefer HTTP-layer value (set by actions.ts) so auth works when SDK does not pass requestInfo
       const allHeaders = (extra?.requestInfo as any)?.headers || {};
       const authHeader = allHeaders["authorization"] || allHeaders["Authorization"];
       let connectionId =
+        this.sessionConnectionId ||
         (extra?.authInfo as any)?.connectionId ||
         allHeaders["x-connection-id"] ||
         allHeaders["X-Connection-Id"] ||
@@ -135,7 +261,7 @@ export class NeotomaServer {
           const { connectionId: resolvedConnectionId } =
             await validateTokenAndGetConnectionId(token);
           connectionId = resolvedConnectionId;
-          logger.error(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
+          logger.info(`[MCP Server] Resolved connection ID from Bearer token: ${connectionId}`);
         } catch (error: any) {
           logger.error(
             `[MCP Server] Failed to resolve connection ID from Bearer token: ${error.message}`
@@ -143,7 +269,7 @@ export class NeotomaServer {
         }
       }
 
-      logger.error(
+      logger.info(
         `[MCP Server] Initialize: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
       );
 
@@ -159,7 +285,7 @@ export class NeotomaServer {
             token: "test-bypass-token",
           });
 
-          logger.error(
+          logger.info(
             `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
           );
 
@@ -173,10 +299,11 @@ export class NeotomaServer {
               name: "neotoma",
               version: "1.0.0",
             },
+            instructions: this.getMcpInteractionInstructions(),
           };
         }
 
-        // OAuth flow
+        // OAuth flow - check if connection ID is valid
         try {
           const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
           const { accessToken, userId } = await getAccessTokenForConnection(connectionId);
@@ -186,7 +313,7 @@ export class NeotomaServer {
           this.authenticatedUserId = userId;
           this.sessionToken = accessToken;
 
-          logger.error(
+          logger.info(
             `[MCP Server] Initialized with OAuth connection: ${connectionId} (user: ${userId})`
           );
           return {
@@ -199,10 +326,26 @@ export class NeotomaServer {
               name: "neotoma",
               version: "1.0.0",
             },
+            instructions: this.getMcpInteractionInstructions(),
           };
         } catch (error: any) {
-          logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
-          // Don't throw - return with auth requirements so Cursor can show Connect button
+          const isConnectionNotFound =
+            error.message?.includes("Connection not found") ||
+            error.message?.includes("connection_id") ||
+            error.code === "OAUTH_CONNECTION_NOT_FOUND";
+
+          if (isConnectionNotFound) {
+            logger.error(
+              `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. Clearing connection ID and returning unauthenticated response.`
+            );
+            // Clear the invalid connection ID so we don't keep trying to use it
+            this.sessionConnectionId = null;
+            // Return unauthenticated response with invalid connection message
+            return this.getUnauthenticatedResponse(true);
+          } else {
+            logger.error(`[MCP Server] OAuth initialization failed: ${error.message}`);
+          }
+          // For other auth failures, return with auth requirements so Cursor can show Connect button
           return this.getUnauthenticatedResponse();
         }
       }
@@ -217,7 +360,7 @@ export class NeotomaServer {
    * Returns initialize response when authentication is missing
    * Declares OAuth capabilities so Cursor shows "Connect" button and "Authentication needed" message
    */
-  private getUnauthenticatedResponse() {
+  private getUnauthenticatedResponse(invalidConnection?: boolean) {
     const authStrategy = {
       id: "oauth2-neotoma",
       type: "oauth2",
@@ -227,6 +370,15 @@ export class NeotomaServer {
       scopes: ["openid", "email"],
       pkce: true,
     };
+    
+    const instructions = invalidConnection
+      ? "Invalid or expired connection. Remove X-Connection-Id from mcp.json and use Connect button."
+      : this.getUnauthenticatedInstructions().instructions;
+    
+    const description = invalidConnection
+      ? "Your X-Connection-Id is invalid or expired. Remove it from your .cursor/mcp.json configuration and click Connect to authenticate again."
+      : this.getUnauthenticatedInstructions().serverInfoDescription;
+    
     return {
       protocolVersion: "2025-11-25",
       capabilities: {
@@ -242,14 +394,22 @@ export class NeotomaServer {
       serverInfo: {
         name: "neotoma",
         version: "1.0.0",
-        title: "Authentication needed",
-        description: "Authentication needed. Use the Connect button to sign in and access tools.",
+        title: invalidConnection ? "Invalid connection" : "Authentication needed",
+        description,
         // Add authenticationStrategies array (used by SDK-based servers like oauth-ping)
         // Cursor may require this in addition to capabilities.authentication
         authenticationStrategies: [authStrategy],
       },
-      instructions: "Authentication needed. Use the Connect button to sign in.",
+      instructions,
     };
+  }
+
+  /**
+   * Set connection ID for this session from the HTTP layer.
+   * Ensures listTools/listResources get auth when the SDK does not pass requestInfo to handlers.
+   */
+  setSessionConnectionId(connectionId: string): void {
+    this.sessionConnectionId = connectionId;
   }
 
   /**
@@ -450,31 +610,40 @@ export class NeotomaServer {
       // This handles cases where authentication happens in initialize but instance state isn't preserved
       let userId = this.authenticatedUserId;
 
-      // If instance-level userId isn't set, try to get it from request context (HTTP transport)
-      if (!userId && extra?.requestInfo) {
-        const allHeaders = (extra.requestInfo as any)?.headers || {};
+      // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
+      if (!userId) {
         const connectionId =
-          (extra?.authInfo as any)?.connectionId ||
-          allHeaders["x-connection-id"] ||
-          allHeaders["X-Connection-Id"];
-
-        logger.error(
-          `[MCP Server] listTools fallback: connectionId=${connectionId}, hasRequestInfo=${!!extra?.requestInfo}, headers=${JSON.stringify(Object.keys(allHeaders))}`
-        );
+          this.sessionConnectionId ||
+          (extra?.requestInfo &&
+            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
+              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
           try {
             const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
             const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
             userId = resolvedUserId;
-            // Cache it for this instance
             this.authenticatedUserId = userId;
-            logger.error(`[MCP Server] listTools fallback resolved userId: ${userId}`);
+            logger.info(`[MCP Server] listTools fallback resolved userId: ${userId}`);
           } catch (error: any) {
-            logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+            // Check if error is a connection not found error (invalid/expired X-Connection-Id)
+            const isInvalidConnection =
+              error.message?.includes("Connection not found") ||
+              error.message?.includes("connection_id") ||
+              error.code === "OAUTH_CONNECTION_NOT_FOUND";
+
+            if (isInvalidConnection) {
+              logger.error(
+                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+              );
+              // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
+              // The invalid connection was already handled in initialize by throwing an error there
+              // This is a fallback case if listTools is called somehow
+            } else {
+              logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+            }
           }
-        } else {
-          logger.error(`[MCP Server] listTools fallback: no connectionId found in headers`);
         }
       }
 
@@ -487,149 +656,44 @@ export class NeotomaServer {
         return { tools: [] };
       }
 
-      logger.error(`[MCP Server] listTools called for authenticated user: ${userId}`);
+      logger.info(`[MCP Server] listTools called for authenticated user: ${userId}`);
 
       return {
         tools: [
           {
             name: "retrieve_file_url",
-            description: "Retrieve a signed URL for accessing a file",
-            inputSchema: {
-              type: "object",
-              properties: {
-                file_path: {
-                  type: "string",
-                  description: "Path to file in storage",
-                },
-                expires_in: {
-                  type: "number",
-                  description: "URL expiration in seconds",
-                },
-              },
-              required: ["file_path"],
-            },
+            description: this.toolDescriptions.get("retrieve_file_url") ?? "Retrieve a signed URL for accessing a file",
+            inputSchema: getOpenApiInputSchemaOrThrow("retrieve_file_url"),
           },
           {
             name: "retrieve_entity_snapshot",
             description:
-              "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                entity_id: {
-                  type: "string",
-                  description: "Entity ID to retrieve snapshot for",
-                },
-                at: {
-                  type: "string",
-                  description: "Optional ISO 8601 timestamp to get historical snapshot state",
-                },
-              },
-              required: ["entity_id"],
-            },
+              this.toolDescriptions.get("retrieve_entity_snapshot") ?? "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter.",
+            inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entity_snapshot"),
           },
           {
             name: "list_observations",
-            description: "List all observations for a given entity",
-            inputSchema: {
-              type: "object",
-              properties: {
-                entity_id: {
-                  type: "string",
-                  description: "Entity ID to list observations for",
-                },
-                limit: {
-                  type: "number",
-                  description: "Maximum number of observations to return",
-                  default: 100,
-                },
-                offset: {
-                  type: "number",
-                  description: "Offset for pagination",
-                  default: 0,
-                },
-              },
-              required: ["entity_id"],
-            },
+            description: this.toolDescriptions.get("list_observations") ?? "List all observations for a given entity",
+            inputSchema: getOpenApiInputSchemaOrThrow("list_observations"),
           },
           {
             name: "retrieve_field_provenance",
-            description: "Retrieve the provenance chain for a specific field in an entity snapshot",
-            inputSchema: {
-              type: "object",
-              properties: {
-                entity_id: { type: "string", description: "Entity ID" },
-                field: {
-                  type: "string",
-                  description: "Field name to trace provenance for",
-                },
-              },
-              required: ["entity_id", "field"],
-            },
+            description: this.toolDescriptions.get("retrieve_field_provenance") ?? "Retrieve the provenance chain for a specific field in an entity snapshot",
+            inputSchema: getOpenApiInputSchemaOrThrow("retrieve_field_provenance"),
           },
           {
             name: "create_relationship",
-            description: "Create a typed relationship between two entities",
-            inputSchema: {
-              type: "object",
-              properties: {
-                relationship_type: {
-                  type: "string",
-                  description: "Type of relationship (e.g., PART_OF, CORRECTS, SETTLES)",
-                },
-                source_entity_id: {
-                  type: "string",
-                  description: "Source entity ID",
-                },
-                target_entity_id: {
-                  type: "string",
-                  description: "Target entity ID",
-                },
-                metadata: {
-                  type: "object",
-                  description: "Optional metadata for the relationship",
-                },
-              },
-              required: ["relationship_type", "source_entity_id", "target_entity_id"],
-            },
+            description: this.toolDescriptions.get("create_relationship") ?? "Create a typed relationship between two entities",
+            inputSchema: getOpenApiInputSchemaOrThrow("create_relationship"),
           },
           {
             name: "list_relationships",
-            description: "List relationships for an entity",
-            inputSchema: {
-              type: "object",
-              properties: {
-                entity_id: {
-                  type: "string",
-                  description: "Entity ID to list relationships for",
-                },
-                direction: {
-                  type: "string",
-                  enum: ["inbound", "outbound", "both"],
-                  description: "Direction of relationships to list",
-                  default: "both",
-                },
-                relationship_type: {
-                  type: "string",
-                  description: "Optional: Filter by relationship type",
-                },
-                limit: {
-                  type: "number",
-                  description: "Maximum number of relationships to return",
-                  default: 100,
-                },
-                offset: {
-                  type: "number",
-                  description: "Offset for pagination",
-                  default: 0,
-                },
-              },
-              required: ["entity_id"],
-            },
+            description: this.toolDescriptions.get("list_relationships") ?? "List relationships for an entity",
+            inputSchema: getOpenApiInputSchemaOrThrow("list_relationships"),
           },
           {
             name: "get_relationship_snapshot",
-            description: "Get the current snapshot of a specific relationship with provenance",
+            description: this.toolDescriptions.get("get_relationship_snapshot") ?? "Get the current snapshot of a specific relationship with provenance",
             inputSchema: {
               type: "object",
               properties: {
@@ -661,74 +725,19 @@ export class NeotomaServer {
           {
             name: "retrieve_entities",
             description:
-              "Query entities with filters (type, pagination). Returns entities with their snapshots.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                entity_type: {
-                  type: "string",
-                  description: "Filter by entity type (e.g., 'company', 'person')",
-                },
-                limit: {
-                  type: "number",
-                  description: "Maximum number of entities to return",
-                  default: 100,
-                },
-                offset: {
-                  type: "number",
-                  description: "Offset for pagination",
-                  default: 0,
-                },
-                include_snapshots: {
-                  type: "boolean",
-                  description: "Whether to include entity snapshots in response",
-                  default: true,
-                },
-              },
-              required: [],
-            },
+              this.toolDescriptions.get("retrieve_entities") ?? "Query entities with filters (type, pagination). Returns entities with their snapshots.",
+            inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entities"),
           },
           {
             name: "list_timeline_events",
             description:
               "Query timeline events with filters (type, date range, source). Returns chronological events derived from date fields in sources.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                event_type: {
-                  type: "string",
-                  description: "Filter by event type (e.g., 'InvoiceIssued', 'FlightDeparture')",
-                },
-                after_date: {
-                  type: "string",
-                  description: "Filter events after this date (ISO 8601)",
-                },
-                before_date: {
-                  type: "string",
-                  description: "Filter events before this date (ISO 8601)",
-                },
-                source_id: {
-                  type: "string",
-                  description: "Filter by source ID (references sources table)",
-                },
-                limit: {
-                  type: "number",
-                  description: "Maximum number of events to return",
-                  default: 100,
-                },
-                offset: {
-                  type: "number",
-                  description: "Offset for pagination",
-                  default: 0,
-                },
-              },
-              required: [],
-            },
+            inputSchema: getOpenApiInputSchemaOrThrow("list_timeline_events"),
           },
           {
             name: "retrieve_entity_by_identifier",
             description:
-              "Retrieve entity by identifier (name, email, etc.) across entity types or specific type.",
+              this.toolDescriptions.get("retrieve_entity_by_identifier") ?? "Retrieve entity by identifier (name, email, etc.) across entity types or specific type.",
             inputSchema: {
               type: "object",
               properties: {
@@ -749,7 +758,7 @@ export class NeotomaServer {
           {
             name: "retrieve_related_entities",
             description:
-              "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal.",
+              this.toolDescriptions.get("retrieve_related_entities") ?? "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal.",
             inputSchema: {
               type: "object",
               properties: {
@@ -786,7 +795,7 @@ export class NeotomaServer {
           {
             name: "retrieve_graph_neighborhood",
             description:
-              "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events.",
+              this.toolDescriptions.get("retrieve_graph_neighborhood") ?? "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events.",
             inputSchema: {
               type: "object",
               properties: {
@@ -827,75 +836,106 @@ export class NeotomaServer {
           {
             name: "store",
             description:
-              "Unified storing for both unstructured and structured sources. For unstructured (files): provide EITHER file_content (base64-encoded) + mime_type OR file_path (local file path). For structured (entities): provide entities array. Content-addressed storage with SHA-256 deduplication per user. IMPORTANT FOR UNSTRUCTURED FILES: Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw file_content (base64-encoded) and mime_type, OR provide file_path for local files. The server will automatically handle file analysis and interpretation if interpret=true (default). Do NOT read file contents to extract entities or fields - pass the file as-is. IMPORTANT FOR STRUCTURED DATA: When storing structured data with an unregistered entity_type, the system will automatically infer and create a user-specific schema from the data structure (parquet schema or JSON field types). Agents do NOT need to pre-register schemas - they are created on-demand. Before storing structured sources with a known entity_type, agents can optionally use list_entity_types to discover available entity types and their field schemas. Only set entity_type directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself. CRITICAL: When storing structured entities, agents MUST include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments (preserved for future schema expansion). This ensures zero data loss - never filter or exclude fields based on schema compatibility. The system automatically validates and routes fields appropriately.",
+              this.toolDescriptions.get("store") ?? "Unified storing for both unstructured and structured sources. For unstructured (files): provide EITHER file_content (base64-encoded) + mime_type OR file_path (local file path). For structured (entities): provide entities array. Content-addressed storage with SHA-256 deduplication per user. IMPORTANT FOR UNSTRUCTURED FILES: Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw file_content (base64-encoded) and mime_type, OR provide file_path for local files. The server will automatically handle file analysis and interpretation if interpret=true (default). Do NOT read file contents to extract entities or fields - pass the file as-is. IMPORTANT FOR STRUCTURED DATA: When storing structured data with an unregistered entity_type, the system will automatically infer and create a user-specific schema from the data structure (parquet schema or JSON field types). Agents do NOT need to pre-register schemas - they are created on-demand. Entity type: When the type is one of the common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) and the user's intent is clear, set entity_type directly and skip list_entity_types. For other types or when field schemas are needed, use list_entity_types or read resource neotoma://entity_types first. CRITICAL: When storing structured entities, agents MUST include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments (preserved for future schema expansion). This ensures zero data loss - never filter or exclude fields based on schema compatibility. The system automatically validates and routes fields appropriately.",
+            inputSchema: (() => {
+              const baseSchema = getOpenApiInputSchemaOrThrow("store");
+              const baseProperties = (baseSchema.properties ?? {}) as Record<string, unknown>;
+              return {
+                ...baseSchema,
+                type: "object",
+                properties: {
+                  ...baseProperties,
+                  // Unstructured source - EITHER file_content OR file_path
+                  file_content: {
+                    type: "string",
+                    description:
+                      "Base64-encoded file content (for unstructured storage). IMPORTANT: Do NOT interpret or extract data from the file before storing - provide the raw file content. The server handles interpretation automatically. Use file_path for local files instead of base64 encoding.",
+                  },
+                  file_path: {
+                    type: "string",
+                    description:
+                      "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+                  },
+                  mime_type: {
+                    type: "string",
+                    description:
+                      "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+                  },
+                  original_filename: {
+                    type: "string",
+                    description:
+                      "Original filename (optional, auto-detected from file_path if not provided)",
+                  },
+                  interpret: {
+                    type: "boolean",
+                    description:
+                      "Whether to run AI interpretation immediately (for unstructured). Default: true. Set to false to defer interpretation (e.g., when approaching quota limits, for batch processing, or to interpret later with different config via reinterpret). Note: Interpretation is automatically skipped for deduplicated files only if observations already exist from that source. If a file is deduplicated but has no observations, interpretation will run if interpret=true.",
+                    default: true,
+                  },
+                  interpretation_config: {
+                    type: "object",
+                    description: "AI interpretation configuration (provider, model, etc.)",
+                  },
+                },
+              };
+            })(),
+          },
+          {
+            name: "store_structured",
+            description:
+              this.toolDescriptions.get("store_structured") ??
+              "Store structured entities only. Use this when you already have entity objects and do not need file ingestion.",
+            inputSchema: getOpenApiInputSchemaOrThrow("store_structured"),
+          },
+          {
+            name: "store_unstructured",
+            description:
+              this.toolDescriptions.get("store_unstructured") ??
+              "Store raw files only. Provide file_content (base64) + mime_type or file_path. Use when you only have unstructured files.",
             inputSchema: {
               type: "object",
               properties: {
-                user_id: {
+                idempotency_key: {
                   type: "string",
-                  description: "User ID (UUID)",
+                  description: "Required. Client-provided idempotency key for replay-safe storing.",
                 },
-                // Unstructured source - EITHER file_content OR file_path
                 file_content: {
                   type: "string",
                   description:
-                    "Base64-encoded file content (for unstructured storage). IMPORTANT: Do NOT interpret or extract data from the file before storing - provide the raw file content. The server handles interpretation automatically. Use file_path for local files instead of base64 encoding.",
+                    "Base64-encoded file content (for unstructured storage). Use file_path for local files instead of base64 encoding.",
                 },
                 file_path: {
                   type: "string",
                   description:
-                    "Local file path (alternative to file_content). If provided, file will be read from filesystem. MIME type will be auto-detected from extension if not provided. Works in local environments (Cursor, Claude Code) where MCP server has filesystem access. Does NOT work in web-based environments (claude.ai, chatgpt.com) - use file_content for those.",
+                    "Local file path (alternative to file_content). If provided, file will be read from filesystem.",
                 },
                 mime_type: {
                   type: "string",
                   description:
-                    "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path (auto-detected from extension)",
+                    "MIME type (e.g., 'application/pdf', 'text/csv') - required with file_content, optional with file_path",
                 },
                 original_filename: {
                   type: "string",
-                  description:
-                    "Original filename (optional, auto-detected from file_path if not provided)",
+                  description: "Original filename (optional, auto-detected from file_path if not provided)",
                 },
                 interpret: {
                   type: "boolean",
                   description:
-                    "Whether to run AI interpretation immediately (for unstructured). Default: true. Set to false to defer interpretation (e.g., when approaching quota limits, for batch processing, or to interpret later with different config via reinterpret). Note: Interpretation is automatically skipped for deduplicated files only if observations already exist from that source. If a file is deduplicated but has no observations, interpretation will run if interpret=true.",
+                    "Whether to run AI interpretation immediately (for unstructured). Default: true.",
                   default: true,
                 },
                 interpretation_config: {
                   type: "object",
                   description: "AI interpretation configuration (provider, model, etc.)",
                 },
-                // Structured source
-                entities: {
-                  type: "array",
-                  description:
-                    "Array of entity data objects (for structured storage). Each entity must include entity_type. IMPORTANT: Before setting entity_type, use list_entity_types (optionally with a keyword) to discover available entity types and their field schemas. This helps determine the correct entity_type for your data and avoids unnecessary interpretation. Only set entity_type directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself. CRITICAL: Include ALL fields from source data in each entity object - both schema fields AND non-schema fields. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments (preserved for future schema expansion). Never filter or exclude fields - the system automatically validates and routes them. Example: If source has 40 fields but schema defines 15, include all 40 fields. The response includes unknown_fields_count indicating how many fields were stored in raw_fragments (this is expected and desired).",
-                  items: {
-                    type: "object",
-                    properties: {
-                      entity_type: {
-                        type: "string",
-                        description:
-                          "Entity type (e.g., 'invoice', 'note', 'person', 'company'). MUST be determined via existing actions (retrieve_entities, retrieve_entity_by_identifier) when possible to avoid unnecessary interpretation. Only set directly when: (1) determinable from existing data in Neotoma, (2) explicitly provided by user, or (3) unambiguous from data structure.",
-                      },
-                    },
-                    required: ["entity_type"],
-                  },
-                },
-                source_priority: {
-                  type: "number",
-                  description: "Source priority for structured data (default: 100)",
-                  default: 100,
-                },
               },
-              required: ["user_id"],
+              required: ["idempotency_key"],
             },
           },
           {
             name: "reinterpret",
             description:
-              "Re-run AI interpretation on an existing source with new config. Creates new observations without modifying existing ones.",
+              this.toolDescriptions.get("reinterpret") ?? "Re-run AI interpretation on an existing source with new config. Creates new observations without modifying existing ones.",
             inputSchema: {
               type: "object",
               properties: {
@@ -920,7 +960,7 @@ export class NeotomaServer {
               properties: {
                 user_id: {
                   type: "string",
-                  description: "User ID (UUID)",
+                  description: "Optional. Inferred from authentication if omitted.",
                 },
                 entity_id: {
                   type: "string",
@@ -937,63 +977,30 @@ export class NeotomaServer {
                 value: {
                   description: "Corrected value",
                 },
+                idempotency_key: {
+                  type: "string",
+                  description: "Required. Client-provided idempotency key for replay-safe corrections.",
+                },
               },
-              required: ["user_id", "entity_id", "entity_type", "field", "value"],
+              required: ["entity_id", "entity_type", "field", "value", "idempotency_key"],
             },
           },
           {
             name: "merge_entities",
             description:
-              "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                user_id: {
-                  type: "string",
-                  description: "User ID (UUID)",
-                },
-                from_entity_id: {
-                  type: "string",
-                  description: "Source entity ID to merge from",
-                },
-                to_entity_id: {
-                  type: "string",
-                  description: "Target entity ID to merge into",
-                },
-                merge_reason: {
-                  type: "string",
-                  description: "Optional reason for merge",
-                },
-              },
-              required: ["user_id", "from_entity_id", "to_entity_id"],
-            },
+              this.toolDescriptions.get("merge_entities") ?? "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged.",
+            inputSchema: getOpenApiInputSchemaOrThrow("merge_entities"),
           },
           {
             name: "list_entity_types",
             description:
-              "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type.",
-            inputSchema: {
-              type: "object",
-              properties: {
-                keyword: {
-                  type: "string",
-                  description:
-                    "Optional keyword to filter entity types. Uses hybrid search: (1) keyword matching on entity type names and field names (deterministic, fast), (2) if no good matches, falls back to vector semantic search for semantic similarity. Examples: 'food' finds 'meal', 'recipe'; 'payment' finds 'transaction', 'invoice', 'receipt'; 'person' finds 'contact', 'person', 'company'.",
-                },
-                summary: {
-                  type: "boolean",
-                  description:
-                    "If true, return only entity type names and field counts (no full field definitions). Useful for quick discovery. Default: false (returns full schemas).",
-                  default: false,
-                },
-              },
-              required: [],
-            },
+              this.toolDescriptions.get("list_entity_types") ?? "List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type.",
+            inputSchema: getOpenApiInputSchemaOrThrow("list_entity_types"),
           },
           {
             name: "analyze_schema_candidates",
             description:
-              "Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.",
+              this.toolDescriptions.get("analyze_schema_candidates") ?? "Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1051,7 +1058,7 @@ export class NeotomaServer {
           {
             name: "update_schema_incremental",
             description:
-              "Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.",
+              this.toolDescriptions.get("update_schema_incremental") ?? "Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1111,7 +1118,7 @@ export class NeotomaServer {
           {
             name: "register_schema",
             description:
-              "Register a new schema or schema version. Supports both global and user-specific schemas.",
+              this.toolDescriptions.get("register_schema") ?? "Register a new schema or schema version. Supports both global and user-specific schemas.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1148,7 +1155,7 @@ export class NeotomaServer {
           {
             name: "health_check_snapshots",
             description:
-              "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots.",
+              this.toolDescriptions.get("health_check_snapshots") ?? "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1187,56 +1194,7 @@ export class NeotomaServer {
           };
         }
 
-        switch (name) {
-          case "retrieve_file_url":
-            return await this.retrieveFileUrl(args);
-          case "retrieve_entity_snapshot":
-            return await this.retrieveEntitySnapshot(args);
-          case "list_observations":
-            return await this.listObservations(args);
-          case "retrieve_field_provenance":
-            return await this.retrieveFieldProvenance(args);
-          case "create_relationship":
-            return await this.createRelationship(args);
-          case "list_relationships":
-            return await this.listRelationships(args);
-          case "get_relationship_snapshot":
-            return await this.getRelationshipSnapshot(args);
-          case "retrieve_entities":
-            return await this.retrieveEntities(args);
-          case "list_timeline_events":
-            return await this.listTimelineEvents(args);
-          case "retrieve_entity_by_identifier":
-            return await this.retrieveEntityByIdentifier(args);
-          case "retrieve_related_entities":
-            return await this.retrieveRelatedEntities(args);
-          case "retrieve_graph_neighborhood":
-            return await this.retrieveGraphNeighborhood(args);
-          case "list_entity_types":
-            return await this.listEntityTypes(args);
-          case "analyze_schema_candidates":
-            return await this.analyzeSchemaCandidates(args);
-          case "get_schema_recommendations":
-            return await this.getSchemaRecommendations(args);
-          case "update_schema_incremental":
-            return await this.updateSchemaIncremental(args);
-          case "register_schema":
-            return await this.registerSchema(args);
-          case "store":
-            return await this.store(args);
-          case "reinterpret":
-            return await this.reinterpret(args);
-          case "correct":
-            return await this.correct(args);
-          case "merge_entities":
-            return await this.mergeEntities(args);
-          case "get_authenticated_user":
-            return await this.getAuthenticatedUser(args);
-          case "health_check_snapshots":
-            return await this.healthCheckSnapshots(args);
-          default:
-            throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
-        }
+        return await this.executeTool(name, args);
       } catch (error) {
         if (error instanceof McpError) {
           throw error;
@@ -1265,6 +1223,75 @@ export class NeotomaServer {
     });
   }
 
+  public async executeToolForCli(
+    name: string,
+    args: unknown,
+    userId: string
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    this.authenticatedUserId = userId;
+    return this.executeTool(name, args);
+  }
+
+  private async executeTool(
+    name: string,
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    switch (name) {
+      case "retrieve_file_url":
+        return await this.retrieveFileUrl(args);
+      case "retrieve_entity_snapshot":
+        return await this.retrieveEntitySnapshot(args);
+      case "list_observations":
+        return await this.listObservations(args);
+      case "retrieve_field_provenance":
+        return await this.retrieveFieldProvenance(args);
+      case "create_relationship":
+        return await this.createRelationship(args);
+      case "list_relationships":
+        return await this.listRelationships(args);
+      case "get_relationship_snapshot":
+        return await this.getRelationshipSnapshot(args);
+      case "retrieve_entities":
+        return await this.retrieveEntities(args);
+      case "list_timeline_events":
+        return await this.listTimelineEvents(args);
+      case "retrieve_entity_by_identifier":
+        return await this.retrieveEntityByIdentifier(args);
+      case "retrieve_related_entities":
+        return await this.retrieveRelatedEntities(args);
+      case "retrieve_graph_neighborhood":
+        return await this.retrieveGraphNeighborhood(args);
+      case "list_entity_types":
+        return await this.listEntityTypes(args);
+      case "analyze_schema_candidates":
+        return await this.analyzeSchemaCandidates(args);
+      case "get_schema_recommendations":
+        return await this.getSchemaRecommendations(args);
+      case "update_schema_incremental":
+        return await this.updateSchemaIncremental(args);
+      case "register_schema":
+        return await this.registerSchema(args);
+      case "store":
+        return await this.store(args);
+      case "store_structured":
+        return await this.store(args);
+      case "store_unstructured":
+        return await this.store(args);
+      case "reinterpret":
+        return await this.reinterpret(args);
+      case "correct":
+        return await this.correct(args);
+      case "merge_entities":
+        return await this.mergeEntities(args);
+      case "get_authenticated_user":
+        return await this.getAuthenticatedUser(args);
+      case "health_check_snapshots":
+        return await this.healthCheckSnapshots(args);
+      default:
+        throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    }
+  }
+
   /**
    * Setup resource handlers for MCP resources capability
    */
@@ -1274,31 +1301,40 @@ export class NeotomaServer {
       // Check authentication - try to get userId from request context if instance-level isn't set
       let userId = this.authenticatedUserId;
 
-      // If instance-level userId isn't set, try to get it from request context (HTTP transport)
-      if (!userId && extra?.requestInfo) {
-        const allHeaders = (extra.requestInfo as any)?.headers || {};
+      // If instance-level userId isn't set, try session connection ID (set by HTTP layer) or request context
+      if (!userId) {
         const connectionId =
-          (extra?.authInfo as any)?.connectionId ||
-          allHeaders["x-connection-id"] ||
-          allHeaders["X-Connection-Id"];
-
-        logger.error(
-          `[MCP Server] listResources fallback: connectionId=${connectionId}, hasRequestInfo=${!!extra?.requestInfo}, headers=${JSON.stringify(Object.keys(allHeaders))}`
-        );
+          this.sessionConnectionId ||
+          (extra?.requestInfo &&
+            ((extra.requestInfo as any)?.headers?.["x-connection-id"] ??
+              (extra.requestInfo as any)?.headers?.["X-Connection-Id"])) ||
+          (extra?.authInfo as any)?.connectionId;
 
         if (connectionId) {
           try {
             const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
             const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
             userId = resolvedUserId;
-            // Cache it for this instance
             this.authenticatedUserId = userId;
-            logger.error(`[MCP Server] listResources fallback resolved userId: ${userId}`);
+            logger.info(`[MCP Server] listResources fallback resolved userId: ${userId}`);
           } catch (error: any) {
-            logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+            // Check if error is a connection not found error (invalid/expired X-Connection-Id)
+            const isInvalidConnection =
+              error.message?.includes("Connection not found") ||
+              error.message?.includes("connection_id") ||
+              error.code === "OAUTH_CONNECTION_NOT_FOUND";
+
+            if (isInvalidConnection) {
+              logger.error(
+                `[MCP Server] Invalid or expired X-Connection-Id: ${connectionId}. User needs to remove header and reconnect.`
+              );
+              // Don't throw - throwing causes "Error - Show Output" instead of triggering reconnection
+              // The invalid connection was already handled in initialize by throwing an error there
+              // This is a fallback case if listResources is called somehow
+            } else {
+              logger.error(`[MCP Server] Failed to resolve userId from connection: ${error.message}`);
+            }
           }
-        } else {
-          logger.error(`[MCP Server] listResources fallback: no connectionId found in headers`);
         }
       }
 
@@ -1309,7 +1345,7 @@ export class NeotomaServer {
         return { resources: [] };
       }
 
-      logger.error(`[MCP Server] listResources called for authenticated user: ${userId}`);
+      logger.info(`[MCP Server] listResources called for authenticated user: ${userId}`);
 
       try {
         const resources: Array<{
@@ -1351,7 +1387,7 @@ export class NeotomaServer {
 
             // Add year resources with counts
             for (const year of Array.from(uniqueYears).sort().reverse()) {
-              const yearEvents = years.filter((e) => {
+              const yearEvents = years.filter((e: { event_timestamp?: string | null }) => {
                 if (!e.event_timestamp) return false;
                 return new Date(e.event_timestamp).getFullYear().toString() === year;
               });
@@ -1370,7 +1406,7 @@ export class NeotomaServer {
                 "default",
                 { month: "long" }
               );
-              const monthEvents = years.filter((e) => {
+              const monthEvents = years.filter((e: { event_timestamp?: string | null }) => {
                 if (!e.event_timestamp) return false;
                 const date = new Date(e.event_timestamp);
                 return (
@@ -1399,7 +1435,7 @@ export class NeotomaServer {
           .is("merged_to_entity_id", null);
 
         const { count: relationshipCount } = await supabase
-          .from("relationships")
+          .from("relationship_snapshots")
           .select("*", { count: "exact", head: true });
 
         const { count: sourceCount } = await supabase
@@ -1446,14 +1482,14 @@ export class NeotomaServer {
         // Get available relationship types
         try {
           const { data: relationshipTypes, error: rtError } = await supabase
-            .from("relationships")
+            .from("relationship_snapshots")
             .select("relationship_type")
             .order("relationship_type");
 
           if (!rtError && relationshipTypes && relationshipTypes.length > 0) {
             // Extract unique relationship types
             const uniqueTypes = new Set<string>();
-            for (const rt of relationshipTypes) {
+            for (const rt of relationshipTypes as Array<{ relationship_type?: string }>) {
               if (rt.relationship_type) {
                 uniqueTypes.add(rt.relationship_type);
               }
@@ -1468,7 +1504,7 @@ export class NeotomaServer {
                 .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
                 .join(" ");
               const typeCount = relationshipTypes.filter(
-                (rt) => rt.relationship_type === relType
+                (rt: { relationship_type?: string }) => rt.relationship_type === relType
               ).length;
               resources.push({
                 uri: `neotoma://relationships/${relType}`,
@@ -1585,7 +1621,7 @@ export class NeotomaServer {
     const expiresIn = expires_in || 3600;
     const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
 
-    if (error) throw error;
+    if (error || !data?.signedUrl) throw error ?? new Error("Failed to create signed URL");
 
     // Calculate expiration timestamp
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
@@ -1675,15 +1711,13 @@ export class NeotomaServer {
           });
         }
 
-        // Map database observations to reducer's expected format
         // Map observations to reducer's expected format
-        // Note: reducer interface uses source_record_id field name, but we map from canonical source_id
         const mappedObservations = observations.map((obs: any) => ({
           id: obs.id,
           entity_id: obs.entity_id,
           entity_type: obs.entity_type,
           schema_version: obs.schema_version,
-          source_record_id: obs.source_id || "", // Map from canonical source_id
+          source_id: obs.source_id || "",
           observed_at: obs.observed_at,
           specificity_score: obs.specificity_score,
           source_priority: obs.source_priority,
@@ -1846,7 +1880,7 @@ export class NeotomaServer {
     // Check if relationship would create a cycle
     // Get all relationships to build the graph
     const { data: allRelationships } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("source_entity_id, target_entity_id");
 
     // Build graph from existing relationships
@@ -1912,7 +1946,7 @@ export class NeotomaServer {
         relationship_type: parsed.relationship_type,
         source_entity_id: parsed.source_entity_id,
         target_entity_id: parsed.target_entity_id,
-        source_record_id: source.id,
+        source_id: source.id,
         metadata: parsed.metadata || {},
         user_id: userId,
       });
@@ -1964,7 +1998,7 @@ export class NeotomaServer {
 
       if (!outboundError && outbound) {
         relationships.push(
-          ...outbound.map((r) => ({
+          ...outbound.map((r: { relationship_key: string; snapshot?: unknown; last_observation_at?: string }) => ({
             ...r,
             id: r.relationship_key, // Add id field for backward compatibility
             direction: "outbound",
@@ -1991,7 +2025,7 @@ export class NeotomaServer {
 
       if (!inboundError && inbound) {
         relationships.push(
-          ...inbound.map((r) => ({
+          ...inbound.map((r: { relationship_key: string; snapshot?: unknown; last_observation_at?: string }) => ({
             ...r,
             id: r.relationship_key, // Add id field for backward compatibility
             direction: "inbound",
@@ -2210,7 +2244,7 @@ export class NeotomaServer {
         .in("entity_id", entityIds);
 
       if (!snapError && snapshots) {
-        const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+        const snapshotMap = new Map(snapshots.map((s: { entity_id: string }) => [s.entity_id, s]));
         entitiesWithSnapshots = entitiesWithSnapshots.map((entity: Entity) => ({
           ...entity,
           snapshot: snapshotMap.get(entity.id) || null,
@@ -2242,7 +2276,7 @@ export class NeotomaServer {
         // Get outbound relationships
         if (parsed.direction === "outbound" || parsed.direction === "both") {
           let outboundQuery = supabase
-            .from("relationships")
+            .from("relationship_snapshots")
             .select("*")
             .eq("source_entity_id", entityId);
 
@@ -2267,7 +2301,7 @@ export class NeotomaServer {
         // Get inbound relationships
         if (parsed.direction === "inbound" || parsed.direction === "both") {
           let inboundQuery = supabase
-            .from("relationships")
+            .from("relationship_snapshots")
             .select("*")
             .eq("target_entity_id", entityId);
 
@@ -2312,7 +2346,7 @@ export class NeotomaServer {
           .in("entity_id", Array.from(relatedEntityIds));
 
         if (!snapError && snapshots) {
-          const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+          const snapshotMap = new Map(snapshots.map((s: { entity_id: string }) => [s.entity_id, s]));
           entities = entities.map((entity) => ({
             ...entity,
             snapshot: snapshotMap.get(entity.id) || null,
@@ -2370,14 +2404,14 @@ export class NeotomaServer {
       // Get relationships
       if (parsed.include_relationships) {
         const { data: relationships, error: relError } = await supabase
-          .from("relationships")
+          .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`);
 
         if (!relError && relationships) {
           result.relationships = relationships;
           const relatedEntityIds = new Set<string>();
-          relationships.forEach((rel) => {
+          relationships.forEach((rel: { source_entity_id: string; target_entity_id: string }) => {
             if (rel.source_entity_id !== parsed.node_id) {
               relatedEntityIds.add(rel.source_entity_id);
             }
@@ -2494,7 +2528,7 @@ export class NeotomaServer {
               // Get relationships for these entities
               if (parsed.include_relationships && entities.length > 0) {
                 const { data: relationships, error: relError } = await supabase
-                  .from("relationships")
+                  .from("relationship_snapshots")
                   .select("*")
                   .or(
                     `source_entity_id.in.(${entityIds.join(
@@ -2719,12 +2753,12 @@ export class NeotomaServer {
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { runInterpretation, runInterpretationWithFixedPoint, checkInterpretationQuota } =
       await import("./services/interpretation.js");
-    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
 
     // Unified schema: accepts EITHER file_content (unstructured) OR file_path OR entities (structured)
     const schema = z
       .object({
         user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id
+        idempotency_key: z.string().min(1),
         // Unstructured source - EITHER file_content OR file_path
         file_content: z.string().optional(),
         file_path: z.string().optional(),
@@ -2751,16 +2785,62 @@ export class NeotomaServer {
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const idempotencyKey = parsed.idempotency_key;
 
     // Handle structured source (entities array)
     if (parsed.entities) {
-      return await this.storeStructuredInternal(userId, parsed.entities, parsed.source_priority);
+      return await this.storeStructuredInternal(
+        userId,
+        parsed.entities,
+        parsed.source_priority,
+        idempotencyKey
+      );
     }
 
     // Handle unstructured source (file content OR file path)
     let fileBuffer: Buffer;
     let detectedMimeType: string;
     let detectedFilename: string;
+
+    if (idempotencyKey) {
+      const { data: existingSource, error: existingSourceError } = await supabase
+        .from("sources")
+        .select("id, content_hash, file_size")
+        .eq("user_id", userId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+
+      if (existingSourceError) {
+        throw new Error(`Failed to check idempotency key: ${existingSourceError.message}`);
+      }
+
+      if (existingSource) {
+        const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
+        const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+        return this.buildTextResponse({
+          source_id: existingSource.id,
+          content_hash: existingSource.content_hash,
+          file_size: existingSource.file_size,
+          deduplicated: true,
+          interpretation: parsed.interpret
+            ? {
+                skipped: true,
+                reason: "idempotency_key",
+                existing_observations_count: existingEntityIds.length,
+              }
+            : { skipped: true, reason: "interpret_false" },
+          interpretation_debug: {
+            interpret_requested: parsed.interpret,
+            deduplicated: true,
+            existing_observations_count: existingEntityIds.length,
+            should_run: false,
+            reason: "idempotency_key",
+          },
+          related_entities: relatedData.entities,
+          related_relationships: relatedData.relationships,
+        });
+      }
+    }
 
     if (parsed.file_path) {
       // Read file from filesystem
@@ -2828,7 +2908,8 @@ export class NeotomaServer {
           return await this.storeStructuredInternal(
             userId,
             parquetResult.entities,
-            parsed.source_priority
+            parsed.source_priority,
+            idempotencyKey
           );
         } catch (error: any) {
           // Safely extract error message, handling potential BigInt values
@@ -2888,6 +2969,7 @@ export class NeotomaServer {
       fileBuffer,
       mimeType: detectedMimeType,
       originalFilename: detectedFilename,
+      idempotencyKey,
       provenance: {
         upload_method: "mcp_store",
         client: "mcp",
@@ -2939,26 +3021,15 @@ export class NeotomaServer {
           });
         }
 
-        // Determine model for extraction (use from config if provided, otherwise default)
-        // GPT-4o is recommended for document extraction (98.99% accuracy vs 91.84% for mini)
-        const extractionModelId =
-          (parsed.interpretation_config?.model_id as string | undefined) ||
-          (config.openaiApiKey ? "gpt-4o" : undefined);
+        // Extract data from file for deterministic interpretation
+        const rawText = await extractTextFromBuffer(fileBuffer, detectedMimeType, detectedFilename);
+        const schemaType = detectSchemaType(rawText, detectedFilename);
+        const extractedFields = extractFields(rawText, schemaType);
 
-        // Extract data from file with retry loop for idempotence
-        const analysis = await analyzeFileForRecord({
-          buffer: fileBuffer,
-          fileName: detectedFilename,
-          mimeType: detectedMimeType,
-          modelId: extractionModelId,
-          useRetry: true, // Enable retry loop with schema validation
-        });
-
-        // Convert FileAnalysisResult to entity format for interpretation
         const extractedData = [
           {
-            entity_type: analysis.type,
-            ...analysis.properties,
+            entity_type: schemaType,
+            ...extractedFields,
           },
         ];
 
@@ -3078,7 +3149,7 @@ export class NeotomaServer {
             .in("entity_id", validEntityIds);
 
           if (!snapError && snapshots) {
-            const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+            const snapshotMap = new Map(snapshots.map((s: { entity_id: string }) => [s.entity_id, s]));
             entities = entities.map((entity) => ({
               ...entity,
               snapshot: snapshotMap.get(entity.id) || null,
@@ -3125,12 +3196,19 @@ export class NeotomaServer {
     // Debug: log observation details
     logger.error(
       `Found ${observations.length} observation(s) for source ${sourceId}:`,
-      observations.map((obs: any) => ({ obs_id: obs.id, entity_id: obs.entity_id }))
+      observations.map((obs: { id: string; entity_id: string | null }) => ({
+        obs_id: obs.id,
+        entity_id: obs.entity_id,
+      }))
     );
 
     // Get unique entity IDs, filtering out null/undefined
-    const entityIds = Array.from(
-      new Set(observations.map((obs: any) => obs.entity_id).filter((id: any) => id != null))
+    const entityIds: string[] = Array.from(
+      new Set(
+        observations
+          .map((obs: { entity_id?: string | null }) => obs.entity_id)
+          .filter((id: string | null | undefined): id is string => id != null)
+      )
     );
 
     logger.error(`Extracted ${entityIds.length} entity ID(s):`, entityIds);
@@ -3150,7 +3228,7 @@ export class NeotomaServer {
 
     // Get all relationships for the stored entities
     const { data: outboundRels, error: outError } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("*")
       .in("source_entity_id", entityIds);
 
@@ -3162,7 +3240,7 @@ export class NeotomaServer {
     }
 
     const { data: inboundRels, error: inError } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("*")
       .in("target_entity_id", entityIds);
 
@@ -3191,7 +3269,7 @@ export class NeotomaServer {
           .in("entity_id", Array.from(relatedEntityIds));
 
         if (!snapError && snapshots) {
-          const snapshotMap = new Map(snapshots.map((s) => [s.entity_id, s]));
+          const snapshotMap = new Map(snapshots.map((s: { entity_id: string }) => [s.entity_id, s]));
           entities = entities.map((entity) => ({
             ...entity,
             snapshot: snapshotMap.get(entity.id) || null,
@@ -3207,7 +3285,8 @@ export class NeotomaServer {
   private async storeStructuredInternal(
     userId: string,
     entities: Record<string, unknown>[],
-    sourcePriority: number = 100
+    sourcePriority: number = 100,
+    idempotencyKey?: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { resolveEntity } = await import("./services/entity_resolution.js");
@@ -3215,6 +3294,57 @@ export class NeotomaServer {
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
     const { randomUUID } = await import("crypto");
     const { supabase } = await import("./db.js");
+
+    if (idempotencyKey) {
+      const { data: existingSource, error: existingSourceError } = await supabase
+        .from("sources")
+        .select("id")
+        .eq("user_id", userId)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+
+      if (existingSourceError) {
+        throw new Error(`Failed to check idempotency key: ${existingSourceError.message}`);
+      }
+
+      if (existingSource) {
+        const { data: existingObservations, error: obsError } = await supabase
+          .from("observations")
+          .select("id, entity_id, entity_type")
+          .eq("source_id", existingSource.id)
+          .eq("user_id", userId);
+
+        if (obsError) {
+          throw new Error(`Failed to fetch existing observations: ${obsError.message}`);
+        }
+
+        const existingEntityIds =
+          existingObservations?.map(
+            (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
+          ) ?? [];
+        const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+        const { count: unknownFieldsCount } = await supabase
+          .from("raw_fragments")
+          .select("id", { count: "exact", head: true })
+          .eq("source_id", existingSource.id)
+          .eq("user_id", userId);
+
+        return this.buildTextResponse({
+          source_id: existingSource.id,
+          entities:
+            existingObservations?.map(
+              (obs: { id: string; entity_id: string; entity_type: string }) => ({
+                entity_id: obs.entity_id,
+                entity_type: obs.entity_type,
+                observation_id: obs.id,
+              })
+            ) ?? [],
+          unknown_fields_count: unknownFieldsCount || 0,
+          related_entities: relatedData.entities,
+          related_relationships: relatedData.relationships,
+        });
+      }
+    }
 
     // Store structured data as JSON source
     // Use replacer to handle BigInt values (convert to number)
@@ -3235,6 +3365,7 @@ export class NeotomaServer {
       fileBuffer,
       mimeType: "application/json",
       originalFilename: "structured_data.json",
+      idempotencyKey,
       provenance: {
         upload_method: "mcp_store",
         client: "mcp",
@@ -3276,7 +3407,8 @@ export class NeotomaServer {
         const isDefaultUser = userId === defaultUserId;
 
         // Check if this is a test schema (by entity_type pattern)
-        const isTestEntityType = /^test$/i.test(entityType) ||
+        const isTestEntityType =
+          /^test$/i.test(entityType) ||
           /^test_/i.test(entityType) ||
           /_test$/i.test(entityType) ||
           /^test\d+$/i.test(entityType) ||
@@ -3568,7 +3700,6 @@ export class NeotomaServer {
         entity_id: entityId,
         entity_type: entityType,
         schema_version: schema?.schema_version || "1.0",
-        source_payload_id: null,
         source_id: storageResult.sourceId,
         interpretation_id: null, // No interpretation run for structured data
         observed_at: new Date().toISOString(),
@@ -3615,7 +3746,7 @@ export class NeotomaServer {
             entity_id: obs.entity_id,
             entity_type: obs.entity_type,
             schema_version: obs.schema_version,
-            source_record_id: obs.source_id || "",
+            source_id: obs.source_id || "",
             observed_at: obs.observed_at,
             specificity_score: obs.specificity_score,
             source_priority: obs.source_priority,
@@ -3681,7 +3812,6 @@ export class NeotomaServer {
     const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
     const { runInterpretation, checkInterpretationQuota } =
       await import("./services/interpretation.js");
-    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
 
     const parsed = ReinterpretRequestSchema.parse(args);
 
@@ -3699,17 +3829,18 @@ export class NeotomaServer {
 
     // Download and re-analyze
     const fileBuffer = await downloadRawContent(source.storage_url);
-    const analysis = await analyzeFileForRecord({
-      buffer: fileBuffer,
-      fileName: source.original_filename || "file",
-      mimeType: source.mime_type,
-    });
+    const rawText = await extractTextFromBuffer(
+      fileBuffer,
+      source.mime_type,
+      source.original_filename || "file"
+    );
+    const schemaType = detectSchemaType(rawText, source.original_filename || "file");
+    const extractedFields = extractFields(rawText, schemaType);
 
-    // Convert FileAnalysisResult to entity format for interpretation
     const extractedData = [
       {
-        entity_type: analysis.type,
-        ...analysis.properties,
+        entity_type: schemaType,
+        ...extractedFields,
       },
     ];
 
@@ -3745,6 +3876,46 @@ export class NeotomaServer {
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
+
+    const { data: existingObservation, error: existingObservationError } = await supabase
+      .from("observations")
+      .select("id, entity_id, entity_type, fields")
+      .eq("user_id", userId)
+      .eq("idempotency_key", parsed.idempotency_key)
+      .maybeSingle();
+
+    if (existingObservationError) {
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to check idempotency key: ${existingObservationError.message}`
+      );
+    }
+
+    if (existingObservation) {
+      const existingFields = existingObservation.fields as Record<string, unknown> | null;
+      const existingValue = existingFields ? existingFields[parsed.field] : undefined;
+      const existingValueJson = JSON.stringify(existingValue);
+      const incomingValueJson = JSON.stringify(parsed.value);
+
+      if (
+        existingObservation.entity_id !== parsed.entity_id ||
+        existingObservation.entity_type !== parsed.entity_type ||
+        existingValueJson !== incomingValueJson
+      ) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Idempotency key reuse detected with different correction payload."
+        );
+      }
+
+      return this.buildTextResponse({
+        observation_id: existingObservation.id,
+        entity_id: parsed.entity_id,
+        field: parsed.field,
+        value: parsed.value,
+        message: "Correction already applied for this idempotency key",
+      });
+    }
 
     // Validate entity ownership
     const { data: entity, error: entityError } = await supabase
@@ -3784,7 +3955,6 @@ export class NeotomaServer {
       entity_id: parsed.entity_id,
       entity_type: parsed.entity_type,
       schema_version: schemaEntry.schema_version,
-      source_payload_id: null,
       source_id: null, // Corrections don't have a source
       interpretation_id: null,
       observed_at: new Date().toISOString(),
@@ -3792,6 +3962,7 @@ export class NeotomaServer {
       source_priority: 1000, // Corrections have highest priority
       fields: { [parsed.field]: parsed.value },
       user_id: userId,
+      idempotency_key: parsed.idempotency_key,
     });
 
     if (obsError) {
@@ -4344,7 +4515,7 @@ export class NeotomaServer {
   private async handleEntityRelationships(entityId: string): Promise<any> {
     // Get outbound relationships
     const { data: outbound, error: outError } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("*")
       .eq("source_entity_id", entityId);
 
@@ -4357,7 +4528,7 @@ export class NeotomaServer {
 
     // Get inbound relationships
     const { data: inbound, error: inError } = await supabase
-      .from("relationships")
+      .from("relationship_snapshots")
       .select("*")
       .eq("target_entity_id", entityId);
 
@@ -4715,7 +4886,7 @@ export class NeotomaServer {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
-      const sortField = queryParams?.sort || "created_at";
+      const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
       const relationshipTypeFilter = queryParams?.relationship_type;
       const userId = queryParams?.user_id;
@@ -4746,8 +4917,8 @@ export class NeotomaServer {
       }
 
       let query = supabase
-        .from("relationships")
-        .select("id, relationship_type, source_entity_id, target_entity_id, metadata, created_at");
+        .from("relationship_snapshots")
+        .select("relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at");
 
       if (relationshipTypeFilter) {
         query = query.eq("relationship_type", relationshipTypeFilter);
@@ -4775,7 +4946,9 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = supabase.from("relationships").select("*", { count: "exact", head: true });
+      let countQuery = supabase
+        .from("relationship_snapshots")
+        .select("*", { count: "exact", head: true });
 
       if (relationshipTypeFilter) {
         countQuery = countQuery.eq("relationship_type", relationshipTypeFilter);
@@ -4802,7 +4975,7 @@ export class NeotomaServer {
         has_more: (count || 0) > (relationships || []).length,
         last_updated:
           relationships && relationships.length > 0
-            ? relationships[0].created_at
+            ? relationships[0].computed_at
             : new Date().toISOString(),
         uri: "neotoma://relationships",
       };
@@ -4838,7 +5011,7 @@ export class NeotomaServer {
       // Apply query parameters
       const limit = queryParams?.limit || 100;
       const offset = queryParams?.offset || 0;
-      const sortField = queryParams?.sort || "created_at";
+      const sortField = queryParams?.sort || "last_observation_at";
       const sortOrder = queryParams?.order === "asc";
       const userId = queryParams?.user_id;
 
@@ -4869,8 +5042,8 @@ export class NeotomaServer {
       }
 
       let query = supabase
-        .from("relationships")
-        .select("id, relationship_type, source_entity_id, target_entity_id, metadata, created_at")
+        .from("relationship_snapshots")
+        .select("relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at")
         .eq("relationship_type", relationshipType);
 
       // Filter by user_id through entities
@@ -4896,7 +5069,7 @@ export class NeotomaServer {
 
       // Get total count for this type
       let countQuery = supabase
-        .from("relationships")
+        .from("relationship_snapshots")
         .select("*", { count: "exact", head: true })
         .eq("relationship_type", relationshipType);
 
@@ -4922,7 +5095,7 @@ export class NeotomaServer {
         has_more: (count || 0) > (relationships || []).length,
         last_updated:
           relationships && relationships.length > 0
-            ? relationships[0].created_at
+            ? relationships[0].computed_at
             : new Date().toISOString(),
         uri: `neotoma://relationships/${relationshipType}`,
       };
@@ -4993,7 +5166,7 @@ export class NeotomaServer {
   async run(): Promise<void> {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    logger.error("[Neotoma MCP] Server running on stdio");
+    logger.info("[Neotoma MCP] Server running on stdio");
 
     await this.startAutoEnhancement();
   }
@@ -5004,7 +5177,7 @@ export class NeotomaServer {
    */
   async runHTTP(transport: StreamableHTTPServerTransport): Promise<void> {
     await this.server.connect(transport);
-    logger.error("[Neotoma MCP] Server running on StreamableHTTP");
+    logger.info("[Neotoma MCP] Server running on StreamableHTTP");
 
     await this.startAutoEnhancement();
   }
@@ -5018,7 +5191,7 @@ export class NeotomaServer {
       const { startAutoEnhancementProcessor } =
         await import("./services/auto_enhancement_processor.js");
       this.autoEnhancementCleanup = startAutoEnhancementProcessor(30000);
-      logger.error("[Neotoma MCP] Auto-enhancement processor started");
+      logger.info("[Neotoma MCP] Auto-enhancement processor started");
     } catch (error: any) {
       // Don't fail server startup if processor fails - log and continue
       logger.error(`[Neotoma MCP] Failed to start auto-enhancement processor: ${error.message}`);

@@ -2,19 +2,13 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
-import multer from "multer";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
 import { supabase } from "./db.js";
 import { config } from "./config.js";
-import { listCanonicalRecordTypes, normalizeRecordType } from "./config/record_types.js";
-import { generateEmbedding, getRecordText } from "./embeddings.js";
 import fs from "fs";
 import path from "path";
-import { normalizeRow } from "./normalize.js";
-import { createRecordFromUploadedFile } from "./services/file_analysis.js";
-import { generateRecordComparisonInsight } from "./services/record_comparison.js";
 import {
   ensurePublicKeyRegistered,
   getPublicKey,
@@ -24,16 +18,14 @@ import {
 import { verifyRequest, parseAuthHeader } from "./crypto/auth.js";
 import { encryptResponseMiddleware } from "./middleware/encrypt_response.js";
 import { initServerKeys } from "./services/encryption_service.js";
-import { isCsvLike, parseCsvRows } from "./utils/csv.js";
-import { emitRecordCreated } from "./events/event_emitter.js";
-import { getEventsByRecordId } from "./events/event_log.js";
-import { getRecordAtTimestamp } from "./events/replay.js";
-import { rankSearchResults, sortRecordsDeterministically } from "./services/search.js";
+import { storeRawContent } from "./services/raw_storage.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
+import { authenticateLocalUser, countLocalAuthUsers, ensureLocalDevUser } from "./services/local_auth.js";
+import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import {
   CreateRelationshipRequestSchema,
   EntitiesQueryRequestSchema,
@@ -50,6 +42,14 @@ import {
   queryEntitiesWithCount,
 } from "./shared/action_handlers/entity_handlers.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
+
+type ErrorEnvelope = {
+  error_code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  trace_id?: string;
+  timestamp: string;
+};
 
 export const app = express();
 // Trust proxy headers (required for express-rate-limit when X-Forwarded-For is present)
@@ -85,36 +85,38 @@ app.use(express.json({ limit: "10mb" }));
 app.use(morgan("dev"));
 
 // Rate limiters for OAuth endpoints
-const oauthInitiateLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // 5 requests per minute
-  message: "Too many OAuth initiation requests, please try again later",
+// validate.trustProxy: false — we use trust proxy behind one proxy; skip strict IP check
+const rateLimitOptions = {
   standardHeaders: true,
   legacyHeaders: false,
+  validate: { trustProxy: false } as const,
+};
+const oauthInitiateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 5,
+  message: "Too many OAuth initiation requests, please try again later",
+  ...rateLimitOptions,
 });
 
 const oauthCallbackLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute
+  windowMs: 60 * 1000,
+  max: 10,
   message: "Too many OAuth callback requests, please try again later",
-  standardHeaders: true,
-  legacyHeaders: false,
+  ...rateLimitOptions,
 });
 
 const oauthTokenLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 20, // 20 requests per minute
+  windowMs: 60 * 1000,
+  max: 20,
   message: "Too many token requests, please try again later",
-  standardHeaders: true,
-  legacyHeaders: false,
+  ...rateLimitOptions,
 });
 
 const oauthRegisterLimit = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 registrations per minute
+  windowMs: 60 * 1000,
+  max: 10,
   message: "Too many registration requests, please try again later",
-  standardHeaders: true,
-  legacyHeaders: false,
+  ...rateLimitOptions,
 });
 
 // Favicon (no-auth) to avoid 401 noise when not present on disk
@@ -238,6 +240,10 @@ app.all("/mcp", async (req, res) => {
       // Create new server instance for each session to ensure clean auth state
       // This ensures OAuth flow is required for each new connection
       const serverInstance = new NeotomaServer();
+      const connectionIdFromReq = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as string | undefined;
+      if (connectionIdFromReq) {
+        serverInstance.setSessionConnectionId(connectionIdFromReq);
+      }
 
       // Create new transport for initialization
       transport = new StreamableHTTPServerTransport({
@@ -247,7 +253,7 @@ app.all("/mcp", async (req, res) => {
             mcpTransports.set(sid, transport);
             // Store server instance by session ID to preserve authentication state
             mcpServerInstances.set(sid, serverInstance);
-            logger.error(`[MCP HTTP] Session initialized: ${sid}, server instance stored`);
+            logger.info(`[MCP HTTP] Session initialized: ${sid}, server instance stored`);
           }
         },
       });
@@ -303,8 +309,6 @@ const SENSITIVE_FIELDS = new Set([
   "Authorization",
 ]);
 
-const CANONICAL_RECORD_TYPES = listCanonicalRecordTypes();
-const CANONICAL_RECORD_TYPE_IDS = CANONICAL_RECORD_TYPES.map((def) => def.id);
 
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...headers } as Record<string, unknown>;
@@ -382,6 +386,42 @@ function logError(
   console.error(`[ERROR] ${event}`, payload);
 }
 
+function buildErrorEnvelope(
+  errorCode: string,
+  message: string,
+  details?: Record<string, unknown>,
+  traceId?: string
+): ErrorEnvelope {
+  return {
+    error_code: errorCode,
+    message,
+    details,
+    trace_id: traceId,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function sendError(
+  res: express.Response,
+  status: number,
+  errorCode: string,
+  message: string,
+  details?: Record<string, unknown>
+): express.Response {
+  return res.status(status).json(buildErrorEnvelope(errorCode, message, details));
+}
+
+function sendValidationError(
+  res: express.Response,
+  issues: unknown
+): express.Response {
+  return res.status(400).json(
+    buildErrorEnvelope("VALIDATION_INVALID_FORMAT", "Invalid request payload.", {
+      issues,
+    })
+  );
+}
+
 // Public health endpoint (no auth)
 app.get("/health", (_req, res) => {
   return res.json({ ok: true });
@@ -394,17 +434,24 @@ app.get("/health", (_req, res) => {
 // Initiate MCP OAuth flow
 app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
   try {
-    const { connection_id, client_name } = req.body;
+    const { connection_id, client_name, redirect_uri } = req.body;
 
     if (!connection_id || typeof connection_id !== "string") {
-      return res.status(400).json({ error: "connection_id is required" });
+      return sendError(res, 400, "VALIDATION_MISSING_FIELD", "connection_id is required");
     }
 
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
+    const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+    const finalRedirectUri =
+      typeof redirect_uri === "string" && redirect_uri.length > 0
+        ? redirect_uri
+        : config.storageBackend === "local"
+          ? `${frontendBase}/oauth`
+          : `${config.apiBase}/api/mcp/oauth/callback`;
     const result = await initiateOAuthFlow(
       connection_id,
       client_name,
-      `${config.apiBase}/api/mcp/oauth/callback`
+      finalRedirectUri
     );
 
     return res.json(result);
@@ -455,6 +502,12 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
 // OAuth callback endpoint
 app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
   try {
+    if (config.storageBackend === "local") {
+      return res
+        .status(400)
+        .send("Local OAuth callback is disabled. Use /api/mcp/oauth/local-login.");
+    }
+
     const { code, state } = req.query;
 
     if (!code || !state || typeof code !== "string" || typeof state !== "string") {
@@ -464,14 +517,15 @@ app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
     const { handleOAuthCallback } = await import("./services/mcp_oauth.js");
     const { connectionId, redirectUri, clientState } = await handleOAuthCallback(code, state);
 
-    // If client used Cursor (or other protocol) redirect_uri, return code+state there
-    if (redirectUri && redirectUri.startsWith("cursor://")) {
+    // If client provided a redirect_uri (Cursor, CLI, or other), send code+state there
+    const isLocalCallback =
+      redirectUri &&
+      (redirectUri.startsWith("cursor://") ||
+        redirectUri.startsWith("http://127.0.0.1") ||
+        redirectUri.startsWith("http://localhost"));
+    if (isLocalCallback) {
       const params = new URLSearchParams({ code: connectionId, state: clientState ?? state });
       const redirectUrl = `${redirectUri}?${params.toString()}`;
-      // Log for debugging - connection is now active and ready
-      console.log(
-        `[MCP OAuth] Redirecting to Cursor: ${redirectUrl} (connection ${connectionId} is active)`
-      );
       return res.redirect(redirectUrl);
     }
 
@@ -517,6 +571,7 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
     const code_challenge = req.query.code_challenge as string | undefined;
     const code_challenge_method = req.query.code_challenge_method as string | undefined;
     const client_id = req.query.client_id as string | undefined;
+    const dev_stub = req.query.dev_stub as string | undefined;
 
     if (!redirect_uri) {
       return res.status(400).send("redirect_uri is required");
@@ -528,15 +583,37 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
       return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
     }
 
+    if (config.storageBackend === "local") {
+      const { randomUUID } = await import("node:crypto");
+      const connectionId = randomUUID();
+      const { createLocalAuthorizationRequest, completeLocalAuthorization } = await import(
+        "./services/mcp_oauth.js"
+      );
+
+      const authRequest = await createLocalAuthorizationRequest({
+        connectionId,
+        redirectUri: redirect_uri,
+        clientState: state,
+        codeChallenge: code_challenge,
+      });
+
+      if (dev_stub === "1" || dev_stub === "true") {
+        const devUser = ensureLocalDevUser();
+        const completion = await completeLocalAuthorization(authRequest.state, devUser.id, client_id);
+        const params = new URLSearchParams({
+          code: completion.connectionId,
+          state: completion.clientState ?? state,
+        });
+        return res.redirect(`${redirect_uri}?${params.toString()}`);
+      }
+
+      return res.redirect(authRequest.authUrl);
+    }
+
     const { randomUUID } = await import("node:crypto");
     const connectionId = randomUUID();
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
-    const result = await initiateOAuthFlow(
-      connectionId,
-      client_id ?? undefined,
-      redirect_uri,
-      state
-    );
+    const result = await initiateOAuthFlow(connectionId, client_id ?? undefined, redirect_uri, state);
 
     return res.redirect(result.authUrl);
   } catch (error: any) {
@@ -544,6 +621,148 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
     return res.status(500).send(error.message ?? "Authorization failed");
   }
 });
+
+// Escape for HTML attribute value to avoid broken state and XSS
+function escapeHtmlAttr(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Local OAuth login page (local backend only)
+app.get("/api/mcp/oauth/local-login", async (req, res) => {
+  if (config.storageBackend !== "local") {
+    return res.status(404).send("Not found");
+  }
+
+  const state = (req.query.state as string | undefined)?.trim();
+  if (!state) {
+    return res.status(400).send("state is required");
+  }
+
+  const devStub = req.query.dev_stub as string | undefined;
+  if (devStub === "1" || devStub === "true") {
+    try {
+      const devUser = ensureLocalDevUser();
+      const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
+      const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+        state,
+        devUser.id
+      );
+      const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+      const frontendOauth = `${frontendBase}/oauth`;
+      if (redirectUri) {
+        if (!clientState && redirectUri.startsWith(frontendOauth)) {
+          const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+          return res.redirect(successUrl);
+        }
+        const params = new URLSearchParams({
+          code: connectionId,
+          state: clientState ?? "",
+        });
+        return res.redirect(`${redirectUri}?${params.toString()}`);
+      }
+      return res.redirect(`${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`);
+    } catch (error: any) {
+      logError("MCPLocalLoginDevStub", req, error);
+      const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
+      return res.status(status).send(error.message ?? "Dev account authorization failed");
+    }
+  }
+
+  const hasUsers = countLocalAuthUsers() > 0;
+  const heading = hasUsers ? "Local sign in" : "Create local account";
+  const helper = hasUsers
+    ? "Enter your local credentials to authorize this connection."
+    : "Create the first local account to authorize this connection.";
+  const whyCopy =
+    "Local mode does not use Supabase. Email and password create (or sign into) a local account so this connection is tied to an identity.";
+  const devStubUrl = `/api/mcp/oauth/local-login?state=${encodeURIComponent(state)}&dev_stub=1`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>${escapeHtmlAttr(heading)}</title>
+  </head>
+  <body>
+    <h1>${escapeHtmlAttr(heading)}</h1>
+    <p>${escapeHtmlAttr(helper)}</p>
+    <p><small>${escapeHtmlAttr(whyCopy)}</small></p>
+    <form method="post" action="/api/mcp/oauth/local-login">
+      <input type="hidden" name="state" value="${escapeHtmlAttr(state)}" />
+      <label>
+        Email
+        <input type="email" name="email" required />
+      </label>
+      <br />
+      <label>
+        Password
+        <input type="password" name="password" required />
+      </label>
+      <br />
+      <button type="submit">Continue</button>
+    </form>
+    <p><small><a href="${escapeHtmlAttr(devStubUrl)}">Use dev account (no password)</a></small></p>
+  </body>
+</html>`);
+});
+
+app.post(
+  "/api/mcp/oauth/local-login",
+  express.urlencoded({ extended: true }),
+  async (req, res) => {
+    if (config.storageBackend !== "local") {
+      return res.status(404).send("Not found");
+    }
+
+    const { state, email, password } = req.body as {
+      state?: string;
+      email?: string;
+      password?: string;
+    };
+
+    if (!state || !email || !password) {
+      return res.status(400).send("state, email, and password are required");
+    }
+
+    try {
+      const allowBootstrap = countLocalAuthUsers() === 0;
+      const user = authenticateLocalUser(email, password, allowBootstrap);
+      const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
+      const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+        state,
+        user.id
+      );
+
+      const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+      const frontendOauth = `${frontendBase}/oauth`;
+
+      if (redirectUri) {
+        if (!clientState && redirectUri.startsWith(frontendOauth)) {
+          const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+          return res.redirect(successUrl);
+        }
+
+        const params = new URLSearchParams({
+          code: connectionId,
+          state: clientState ?? "",
+        });
+        return res.redirect(`${redirectUri}?${params.toString()}`);
+      }
+
+      const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+      return res.redirect(successUrl);
+    } catch (error: any) {
+      logError("MCPLocalLogin", req, error);
+      const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
+      return res.status(status).send(error.message ?? "Local authentication failed");
+    }
+  }
+);
 
 // RFC 8414 token endpoint (POST) for Cursor and other OAuth clients
 app.post(
@@ -629,7 +848,7 @@ app.get("/api/mcp/oauth/status", async (req, res) => {
     const { connection_id } = req.query;
 
     if (!connection_id || typeof connection_id !== "string") {
-      return res.status(400).json({ error: "connection_id is required" });
+      return sendError(res, 400, "VALIDATION_MISSING_FIELD", "connection_id is required");
     }
 
     const { getConnectionStatus } = await import("./services/mcp_oauth.js");
@@ -638,7 +857,7 @@ app.get("/api/mcp/oauth/status", async (req, res) => {
     return res.json({ status, connection_id });
   } catch (error: any) {
     logError("MCPOAuthStatus", req, error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 });
 
@@ -648,7 +867,7 @@ app.get("/api/mcp/oauth/connections", async (req, res) => {
     // Extract bearer token
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authorization header required" });
+      return sendError(res, 401, "AUTH_REQUIRED", "Authorization header required");
     }
 
     const token = authHeader.substring(7);
@@ -664,7 +883,7 @@ app.get("/api/mcp/oauth/connections", async (req, res) => {
     return res.json({ connections });
   } catch (error: any) {
     logError("MCPOAuthListConnections", req, error);
-    return res.status(401).json({ error: "Invalid or expired token" });
+    return sendError(res, 401, "AUTH_INVALID", "Invalid or expired token");
   }
 });
 
@@ -674,7 +893,7 @@ app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
     // Extract bearer token
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authorization header required" });
+      return sendError(res, 401, "AUTH_REQUIRED", "Authorization header required");
     }
 
     const token = authHeader.substring(7);
@@ -691,7 +910,7 @@ app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
     return res.json({ success: true });
   } catch (error: any) {
     logError("MCPOAuthRevokeConnection", req, error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 });
 
@@ -705,19 +924,41 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
     // Extract bearer token
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authorization header required" });
+      return sendError(res, 401, "AUTH_REQUIRED", "Authorization header required");
     }
 
     const token = authHeader.substring(7);
     const { authorization_id } = req.query;
 
     if (!authorization_id || typeof authorization_id !== "string") {
-      return res.status(400).json({ error: "authorization_id is required" });
+      return sendError(res, 400, "VALIDATION_MISSING_FIELD", "authorization_id is required");
     }
 
     // Validate token and get user (ensures user is authenticated)
     const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
     await validateSupabaseSessionToken(token);
+
+    if (config.storageBackend === "local") {
+      const db = getSqliteDb();
+      const stateData = db
+        .prepare("SELECT redirect_uri FROM mcp_oauth_state WHERE state = ?")
+        .get(authorization_id) as { redirect_uri?: string } | undefined;
+
+      if (!stateData?.redirect_uri) {
+        return res.status(404).json({
+          error: "Authorization not found",
+          error_description:
+            "The authorization_id has expired or is invalid. Please try the OAuth flow again.",
+        });
+      }
+
+      return res.json({
+        id: authorization_id,
+        status: "approved",
+        client_id: "local_mcp_oauth_client",
+        redirect_uri: stateData.redirect_uri,
+      });
+    }
 
     // Proxy request to Supabase OAuth 2.1 Server
     // Use /auth/v1/oauth/authorizations/ endpoint (matches Supabase client library)
@@ -760,7 +1001,7 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
     return res.json(details);
   } catch (error: any) {
     logError("MCPOAuthAuthorizationDetails", req, error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 });
 
@@ -768,13 +1009,21 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
 app.post("/api/auth/dev-signin", async (req, res) => {
   // Only allow in development mode
   if (config.environment !== "development") {
-    return res.status(403).json({ error: "Dev signin only available in development mode" });
+    return sendError(
+      res,
+      403,
+      "FORBIDDEN",
+      "Dev signin only available in development mode"
+    );
+  }
+  if (config.storageBackend === "local") {
+    return sendError(res, 403, "FORBIDDEN", "Dev signin is disabled in local mode");
   }
 
   const { userId } = req.body;
 
   if (!userId || typeof userId !== "string") {
-    return res.status(400).json({ error: "userId is required" });
+    return sendError(res, 400, "VALIDATION_MISSING_FIELD", "userId is required");
   }
 
   // Check if userId is nil UUID - Supabase doesn't allow nil UUIDs
@@ -787,11 +1036,12 @@ app.post("/api/auth/dev-signin", async (req, res) => {
     // Check if user exists (only if not nil UUID, as nil UUID lookup will fail)
     if (!isNilUuid) {
       const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+      const existingUser = userData?.user;
 
-      if (!userError && userData.user) {
+      if (!userError && existingUser) {
         // User exists, use it
-        targetUserId = userData.user.id;
-        userEmail = userData.user.email || userEmail;
+        targetUserId = existingUser.id;
+        userEmail = existingUser.email || userEmail;
       } else {
         // User doesn't exist, create them with specified ID
         const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
@@ -807,6 +1057,14 @@ app.post("/api/auth/dev-signin", async (req, res) => {
             .json({ error: `Failed to create dev user: ${createError.message}` });
         }
 
+        if (!newUser?.user) {
+          return sendError(
+            res,
+            500,
+            "DB_QUERY_FAILED",
+            "Failed to create dev user: no user returned"
+          );
+        }
         targetUserId = newUser.user.id;
         userEmail = newUser.user.email || userEmail;
       }
@@ -836,6 +1094,14 @@ app.post("/api/auth/dev-signin", async (req, res) => {
             .json({ error: `Failed to create dev user: ${createError.message}` });
         }
 
+        if (!newUser?.user) {
+          return sendError(
+            res,
+            500,
+            "DB_QUERY_FAILED",
+            "Failed to create dev user: no user returned"
+          );
+        }
         targetUserId = newUser.user.id;
         userEmail = newUser.user.email || userEmail;
       }
@@ -850,20 +1116,27 @@ app.post("/api/auth/dev-signin", async (req, res) => {
       },
     });
 
-    if (linkError) {
+    const actionLink = linkData?.properties?.action_link;
+    if (linkError || !actionLink) {
       logError("DevSigninGenerateLink", req, linkError);
-      return res.status(500).json({ error: `Failed to generate link: ${linkError.message}` });
+      return res.status(500).json({
+        error: `Failed to generate link: ${linkError?.message ?? "no link data"}`,
+      });
     }
 
     // Extract access token from the magic link URL
-    const magicLink = linkData.properties.action_link;
-    const url = new URL(magicLink);
+    const url = new URL(actionLink);
     const accessToken = url.hash.includes("access_token=")
       ? url.hash.split("access_token=")[1]?.split("&")[0]
       : url.searchParams.get("access_token");
 
     if (!accessToken) {
-      return res.status(500).json({ error: "Could not extract access token from magic link" });
+      return sendError(
+        res,
+        500,
+        "DB_QUERY_FAILED",
+        "Could not extract access token from magic link"
+      );
     }
 
     // Get refresh token from URL as well
@@ -901,7 +1174,7 @@ app.use(async (req, res, next) => {
 
   if (!headerAuth.startsWith("Bearer ")) {
     logWarn("AuthMissingBearer", req);
-    return res.status(401).json({ error: "Missing Bearer token" });
+    return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token");
   }
 
   const bearerToken = headerAuth.slice("Bearer ".length).trim();
@@ -918,7 +1191,7 @@ app.use(async (req, res, next) => {
       const isValid = verifyRequest(bodyString, signature, bearerToken);
       if (!isValid) {
         logWarn("AuthInvalidSignature", req);
-        return res.status(403).json({ error: "Invalid request signature" });
+        return sendError(res, 403, "AUTH_INVALID", "Invalid request signature");
       }
     }
 
@@ -935,15 +1208,21 @@ app.use(async (req, res, next) => {
     try {
       const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
       const validated = await validateSupabaseSessionToken(bearerToken);
-      // Attach user_id to request for user-scoped queries
+      // Attach user_id and email to request for user-scoped queries and /api/me
       (req as any).authenticatedUserId = validated.userId;
+      (req as any).authenticatedUserEmail = validated.email;
       (req as any).bearerToken = bearerToken;
     } catch (authError) {
       // Not a valid token
       logWarn("AuthInvalidToken", req, {
         error: authError instanceof Error ? authError.message : String(authError),
       });
-      return res.status(401).json({ error: "Unauthorized - invalid authentication token" });
+      return sendError(
+        res,
+        401,
+        "AUTH_INVALID",
+        "Unauthorized - invalid authentication token"
+      );
     }
   }
 
@@ -952,6 +1231,21 @@ app.use(async (req, res, next) => {
 
 // Response encryption middleware (applies to all authenticated routes)
 app.use(encryptResponseMiddleware);
+
+// Current session (authenticated user details)
+app.get("/api/me", async (req, res) => {
+  try {
+    const userId = (req as any).authenticatedUserId;
+    const email = (req as any).authenticatedUserEmail;
+    if (!userId) {
+      return sendError(res, 401, "AUTH_REQUIRED", "Not authenticated");
+    }
+    return res.json({ user_id: userId, email: email ?? undefined });
+  } catch (error: any) {
+    logError("GetMe", req, error);
+    return sendError(res, 401, "AUTH_REQUIRED", error.message ?? "Not authenticated");
+  }
+});
 
 /**
  * Helper to extract authenticated user_id from request
@@ -1000,78 +1294,29 @@ function handleApiError(
   res: express.Response,
   error: unknown,
   defaultMessage: string,
+  errorCode: string = "DB_QUERY_FAILED",
   logContext?: string
 ): express.Response {
   if (error instanceof Error && error.message.includes("Not authenticated")) {
-    return res.status(401).json({ error: error.message });
+    return res.status(401).json(
+      buildErrorEnvelope("AUTH_REQUIRED", "Authentication required.", {
+        detail: error.message,
+      })
+    );
   }
   if (error instanceof Error && error.message.includes("user_id parameter")) {
-    return res.status(403).json({ error: error.message });
+    return res.status(403).json(
+      buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user.", {
+        detail: error.message,
+      })
+    );
   }
   logError(logContext || "APIError", req, error);
   const message = error instanceof Error ? error.message : defaultMessage;
-  return res.status(500).json({ error: message });
+  return res.status(500).json(buildErrorEnvelope(errorCode, message));
 }
 
 // Schemas
-const StoreSchema = z.object({
-  type: z.string(),
-  properties: z.record(z.unknown()).default({}),
-  file_urls: z.array(z.string()).optional(),
-  embedding: z.array(z.number()).optional(),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _UpdateSchema = z.object({
-  id: z.string(),
-  type: z.string().optional(),
-  properties: z.record(z.unknown()).optional(),
-  file_urls: z.array(z.string()).optional(),
-  embedding: z.array(z.number()).optional(),
-});
-
-const RetrieveSchema = z.object({
-  type: z.string().optional(),
-  properties: z.record(z.unknown()).optional(),
-  limit: z.number().int().positive().max(500).optional(),
-  search: z.array(z.string()).optional(),
-  search_mode: z.enum(["semantic", "keyword", "both"]).optional().default("both"),
-  similarity_threshold: z.number().min(0).max(1).optional().default(0.3),
-  query_embedding: z.array(z.number()).optional(),
-  ids: z.array(z.string().uuid()).min(1).max(100).optional(),
-  include_total_count: z.boolean().optional(),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _StoreRecordsSchema = z.object({
-  records: z.array(StoreSchema).min(1).max(100),
-});
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _DeleteRecordsSchema = z.object({
-  ids: z.array(z.string()).min(1).max(100),
-});
-
-// Endpoints
-app.get("/types", async (req, res) => {
-  const { data, error } = await supabase.from("records").select("type").limit(1000);
-  if (error) {
-    logError("SupabaseError:types", req, error);
-    return res.status(500).json({ error: error.message });
-  }
-  const set = new Set<string>();
-  (data || []).forEach((r: any) => {
-    if (r.type) set.add(r.type);
-  });
-  const custom = Array.from(set)
-    .filter((type) => !CANONICAL_RECORD_TYPE_IDS.includes(type))
-    .sort();
-  return res.json({
-    types: [...CANONICAL_RECORD_TYPE_IDS, ...custom],
-    canonical: CANONICAL_RECORD_TYPES,
-    custom,
-  });
-});
 
 // ============================================================================
 // v0.2.15 Entity-Based HTTP API Endpoints
@@ -1085,7 +1330,7 @@ app.post("/api/entities/query", async (req, res) => {
     logWarn("ValidationError:entities_query", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   try {
@@ -1110,7 +1355,14 @@ app.post("/api/entities/query", async (req, res) => {
       offset,
     });
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to query entities", "APIError:entities_query");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to query entities",
+      "DB_QUERY_FAILED",
+      "APIError:entities_query"
+    );
   }
 });
 
@@ -1132,24 +1384,24 @@ app.get("/api/entities/:id", async (req, res) => {
       .single();
 
     if (entityError || !entity) {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     const { getEntityWithProvenance } = await import("./services/entity_queries.js");
     const entityWithProvenance = await getEntityWithProvenance(entityId);
 
     if (!entityWithProvenance) {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     return res.json(entityWithProvenance);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return res.status(401).json({ error: error.message });
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:entity_detail", req, error);
     const message = error instanceof Error ? error.message : "Failed to get entity";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1171,7 +1423,7 @@ app.get("/api/entities/:id/observations", async (req, res) => {
       .single();
 
     if (entityError || !entity) {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     const limit = parseInt(req.query.limit as string) || 100;
@@ -1196,11 +1448,11 @@ app.get("/api/entities/:id/observations", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return res.status(401).json({ error: error.message });
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:entity_observations", req, error);
     const message = error instanceof Error ? error.message : "Failed to get observations";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1222,7 +1474,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
       .single();
 
     if (entityError || !entity) {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     // Get relationships where this entity is the source - filter by user_id
@@ -1257,7 +1509,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
   } catch (error) {
     logError("APIError:entity_relationships", req, error);
     const message = error instanceof Error ? error.message : "Failed to get relationships";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1303,8 +1555,8 @@ app.get("/api/schemas", async (req, res) => {
 
     // Filter out test schemas (marked with metadata.test === true)
     const productionSchemas = enrichedSchemas.filter((schema) => {
-      const metadata = schema.metadata || {};
-      return metadata.test !== true;
+      const metadata = (schema.metadata || {}) as Record<string, unknown>;
+      return metadata["test"] !== true;
     });
 
     return res.json({
@@ -1312,7 +1564,14 @@ app.get("/api/schemas", async (req, res) => {
       total: productionSchemas.length,
     });
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to list schemas", "APIError:schemas_list");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to list schemas",
+      "DB_QUERY_FAILED",
+      "APIError:schemas_list"
+    );
   }
 });
 
@@ -1350,14 +1609,14 @@ app.get("/api/schemas/:entity_type", async (req, res) => {
     const schema = await schemaRegistry.loadActiveSchema(entityType, userId);
 
     if (!schema) {
-      return res.status(404).json({ error: `Schema not found: ${entityType}` });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", `Schema not found: ${entityType}`);
     }
 
     return res.json(schema);
   } catch (error) {
     logError("APIError:schema_detail", req, error);
     const message = error instanceof Error ? error.message : "Failed to get schema";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1449,6 +1708,7 @@ app.get("/api/relationships", async (req, res) => {
       res,
       error,
       "Failed to list relationships",
+      "DB_QUERY_FAILED",
       "APIError:relationships_list"
     );
   }
@@ -1474,7 +1734,12 @@ app.get("/api/relationships/:id", async (req, res) => {
 
     if (error) {
       if (error.code === "PGRST116") {
-        return res.status(404).json({ error: `Relationship not found: ${relationshipKey}` });
+        return sendError(
+          res,
+          404,
+          "RESOURCE_NOT_FOUND",
+          `Relationship not found: ${relationshipKey}`
+        );
       }
       throw error;
     }
@@ -1509,6 +1774,7 @@ app.get("/api/relationships/:id", async (req, res) => {
       res,
       error,
       "Failed to get relationship",
+      "DB_QUERY_FAILED",
       "APIError:relationship_detail"
     );
   }
@@ -1575,23 +1841,28 @@ app.get("/api/timeline", async (req, res) => {
     const { data, error, count } = await query;
 
     if (error) {
-      // Log detailed error information
+      const err = error as { code?: string; message?: string };
+      const errorDetails =
+        typeof error === "object" && error && "details" in error
+          ? (error as { details?: string }).details
+          : undefined;
+      const errorHint =
+        typeof error === "object" && error && "hint" in error
+          ? (error as { hint?: string }).hint
+          : undefined;
+
       logError("APIError:timeline_query", req, error, {
-        errorCode: error.code,
-        errorMessage: error.message,
-        errorDetails: error.details,
-        errorHint: error.hint,
+        errorCode: err.code,
+        errorMessage: err.message,
+        errorDetails,
+        errorHint,
         userId: userId || "none",
       });
 
-      // Return more detailed error to help with debugging
-      return res.status(500).json({
-        error: "Failed to query timeline events",
-        details: {
-          code: error.code,
-          message: error.message,
-          hint: error.hint,
-        },
+      return sendError(res, 500, "DB_QUERY_FAILED", "Failed to query timeline events", {
+        code: err.code,
+        message: err.message,
+        hint: errorHint,
       });
     }
 
@@ -1603,14 +1874,14 @@ app.get("/api/timeline", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return res.status(401).json({ error: error.message });
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:timeline", req, error);
     const message = error instanceof Error ? error.message : "Failed to get timeline";
     // Include error code if available (for Supabase errors)
     const errorCode = (error as any)?.code;
     const errorDetails = errorCode ? { code: errorCode, message } : { message };
-    return res.status(500).json({ error: errorDetails });
+    return sendError(res, 500, "DB_QUERY_FAILED", message, errorDetails);
   }
 });
 
@@ -1661,7 +1932,14 @@ app.get("/api/sources", async (req, res) => {
       offset,
     });
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to get sources", "APIError:sources_list");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get sources",
+      "DB_QUERY_FAILED",
+      "APIError:sources_list"
+    );
   }
 });
 
@@ -1684,18 +1962,25 @@ app.get("/api/sources/:id", async (req, res) => {
 
     if (error) {
       if (error.code === "PGRST116") {
-        return res.status(404).json({ error: "Source not found" });
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
       }
       throw error;
     }
 
     if (!source) {
-      return res.status(404).json({ error: "Source not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
     }
 
     return res.json(source);
   } catch (error) {
-    return handleApiError(req, res, error, "Failed to get source", "APIError:source_detail");
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get source",
+      "DB_QUERY_FAILED",
+      "APIError:source_detail"
+    );
   }
 });
 
@@ -1736,7 +2021,7 @@ app.get("/api/interpretations", async (req, res) => {
   } catch (error) {
     logError("APIError:interpretations_list", req, error);
     const message = error instanceof Error ? error.message : "Failed to get interpretations";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1782,6 +2067,7 @@ app.get("/api/observations", async (req, res) => {
       res,
       error,
       "Failed to get observations",
+      "DB_QUERY_FAILED",
       "APIError:observations_list"
     );
   }
@@ -1804,6 +2090,7 @@ app.get("/api/stats", async (req, res) => {
       res,
       error,
       "Failed to get dashboard stats",
+      "DB_QUERY_FAILED",
       "APIError:dashboard_stats"
     );
   }
@@ -1825,7 +2112,7 @@ app.post("/api/observations/create", async (req, res) => {
     logWarn("ValidationError:observations_create", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   try {
@@ -1836,9 +2123,9 @@ app.post("/api/observations/create", async (req, res) => {
 
     // SECURITY: Ensure provided user_id matches authenticated user
     if (user_id !== authenticatedUserId) {
-      return res.status(403).json({
-        error: `user_id parameter (${user_id}) does not match authenticated user (${authenticatedUserId})`,
-      });
+      return res.status(403).json(
+        buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user.")
+      );
     }
 
     // Use the ingestStructuredInternal helper from the MCP server
@@ -1892,7 +2179,7 @@ app.post("/api/observations/create", async (req, res) => {
   } catch (error) {
     logError("APIError:observations_create", req, error);
     const message = error instanceof Error ? error.message : "Failed to create observation";
-    return res.status(500).json({ error: message });
+    return res.status(500).json(buildErrorEnvelope("DB_QUERY_FAILED", message));
   }
 });
 
@@ -1903,17 +2190,67 @@ app.post("/api/store", async (req, res) => {
     logWarn("ValidationError:store", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entities, source_priority } = parsed.data;
+    const { entities, source_priority, idempotency_key } = parsed.data;
 
     // Import entity resolution service
     const { resolveEntity } = await import("./services/entity_resolution.js");
+
+    const { data: existingSource, error: existingSourceError } = await supabase
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("idempotency_key", idempotency_key)
+      .maybeSingle();
+
+    if (existingSourceError) {
+      throw existingSourceError;
+    }
+
+    if (existingSource) {
+      const { data: existingObservations, error: obsError } = await supabase
+        .from("observations")
+        .select("id, entity_id, entity_type")
+        .eq("source_id", existingSource.id)
+        .eq("user_id", userId);
+
+      if (obsError) throw obsError;
+
+      return res.json({
+        success: true,
+        entities:
+          existingObservations?.map((obs: { id: string; entity_id: string; entity_type: string }) => ({
+            entity_id: obs.entity_id,
+            entity_type: obs.entity_type,
+            observation_id: obs.id,
+          })) ?? [],
+      });
+    }
+
+    const jsonContent = JSON.stringify(entities, (key, value) => {
+      if (typeof value === "bigint") {
+        return Number(value);
+      }
+      return value;
+    });
+    const storageResult = await storeRawContent({
+      userId,
+      fileBuffer: Buffer.from(jsonContent, "utf-8"),
+      mimeType: "application/json",
+      originalFilename: "structured_data.json",
+      idempotencyKey: idempotency_key,
+      provenance: {
+        upload_method: "api_store",
+        client: "api",
+        source_priority,
+      },
+    });
 
     const createdEntities = [];
 
@@ -1941,7 +2278,7 @@ app.post("/api/store", async (req, res) => {
         entity_id,
         entity_type,
         schema_version: "1.0",
-        source_id: null, // No source for direct API creation
+        source_id: storageResult.sourceId,
         interpretation_id: null,
         observed_at: new Date().toISOString(),
         specificity_score: 1.0,
@@ -1972,11 +2309,11 @@ app.post("/api/store", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return res.status(401).json({ error: error.message });
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store entities";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -1987,7 +2324,7 @@ app.post("/api/observations/query", async (req, res) => {
     logWarn("ValidationError:observations_query", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   try {
@@ -2021,11 +2358,11 @@ app.post("/api/observations/query", async (req, res) => {
     });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
-      return res.status(401).json({ error: error.message });
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:observations_query", req, error);
     const message = error instanceof Error ? error.message : "Failed to query observations";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
@@ -2037,7 +2374,7 @@ app.post("/api/entities/merge", async (req, res) => {
     logWarn("ValidationError:entities_merge", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   try {
@@ -2048,9 +2385,7 @@ app.post("/api/entities/merge", async (req, res) => {
     const user_id = providedUserId || authenticatedUserId;
 
     if (providedUserId && providedUserId !== authenticatedUserId) {
-      return res.status(403).json({
-        error: `user_id parameter (${providedUserId}) does not match authenticated user (${authenticatedUserId})`,
-      });
+      return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
     }
 
     // Validate both entities exist and belong to authenticated user
@@ -2069,15 +2404,15 @@ app.post("/api/entities/merge", async (req, res) => {
       .single();
 
     if (!fromEntity || !toEntity) {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
 
     if (fromEntity.merged_to_entity_id) {
-      return res.status(400).json({ error: "Source entity already merged" });
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "Source entity already merged");
     }
 
     if (toEntity.merged_to_entity_id) {
-      return res.status(400).json({ error: "Target entity already merged" });
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "Target entity already merged");
     }
 
     // Rewrite observations
@@ -2130,443 +2465,10 @@ app.post("/api/entities/merge", async (req, res) => {
   } catch (error) {
     logError("APIError:entities_merge", req, error);
     const message = error instanceof Error ? error.message : "Failed to merge entities";
-    return res.status(500).json({ error: message });
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
-// ============================================================================
-// Legacy Record-Based HTTP API Endpoints (Deprecated in v0.2.15)
-// ============================================================================
-// REMOVED: Legacy endpoints violate Truth Layer architecture by directly mutating state
-// State updates must flow through: Domain Events → Reducers → State Updates
-// Use [storing](#storing) via MCP actions (store, correct, merge_entities) instead
-
-// Historical API endpoints for event-sourcing (FU-050)
-
-app.post("/retrieve_records", async (req, res) => {
-  const parsed = RetrieveSchema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:retrieve_records", req, {
-      issues: parsed.error.issues,
-    });
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-  const {
-    type,
-    properties,
-    limit,
-    search,
-    search_mode,
-    similarity_threshold,
-    query_embedding: providedQueryEmbedding,
-    ids,
-    include_total_count,
-  } = parsed.data;
-  const normalizedType = type ? normalizeRecordType(type).type : undefined;
-  const includeTotalCount = include_total_count === true;
-
-  const resultMap = new Map<string, any>();
-  const appendResults = (records: any[]) => {
-    for (const record of records) {
-      const id = record?.id;
-      if (!id || resultMap.has(id)) continue;
-      resultMap.set(id, record);
-    }
-  };
-  const finalLimit = limit ?? 100;
-  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
-  let totalCount: number | null = null;
-
-  if (hasIdFilter) {
-    try {
-      const idMatches = await fetchRecordsByIds(ids, normalizedType);
-      appendResults(idMatches);
-    } catch (error) {
-      logError("SupabaseError:retrieve_records:ids", req, error);
-      return res.status(500).json({ error: (error as any)?.message || "Database error" });
-    }
-  }
-
-  // Semantic search (vector similarity)
-  if (search && (search_mode === "semantic" || search_mode === "both")) {
-    // Generate query_embedding from search terms if not provided
-    let query_embedding: number[] | undefined = providedQueryEmbedding;
-    if (!query_embedding && config.openaiApiKey) {
-      const searchText = search.join(" ");
-      const generated = await generateEmbedding(searchText);
-      query_embedding = generated || undefined;
-      if (!query_embedding) {
-        logWarn("EmbeddingGeneration:retrieve_records", req, {
-          message: "Failed to generate query embedding",
-        });
-        // Fall back to keyword search only
-        if (search_mode === "semantic") {
-          // Switch to keyword mode if semantic was required
-          const keywordQuery = supabase.from("records").select("*");
-          if (normalizedType) keywordQuery.eq("type", normalizedType);
-          const { data: keywordCandidates } = await keywordQuery.limit(finalLimit * 2);
-          const searchTextLower = search.join(" ").toLowerCase();
-          const keywordMatches = (keywordCandidates || [])
-            .filter((rec: any) => {
-              const typeMatch = rec.type?.toLowerCase().includes(searchTextLower);
-              const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
-              return typeMatch || propsText.includes(searchTextLower);
-            })
-            .slice(0, finalLimit);
-          logDebug("Success:retrieve_records", req, {
-            count: keywordMatches.length,
-            search_mode: "keyword (fallback)",
-          });
-          return res.json(keywordMatches);
-        }
-      }
-    }
-
-    if (!query_embedding) {
-      if (search_mode === "semantic") {
-        logWarn("ValidationError:retrieve_records:no_embedding", req, {
-          message:
-            "query_embedding required for semantic search or OPENAI_API_KEY must be configured",
-        });
-        return res.status(400).json({
-          error:
-            "query_embedding required for semantic search, or configure OPENAI_API_KEY for automatic generation",
-        });
-      }
-      // If both mode, just skip semantic and do keyword only
-    } else if (query_embedding.length !== 1536) {
-      logWarn("ValidationError:retrieve_records:embedding_dim", req, {
-        received: query_embedding.length,
-      });
-      return res.status(400).json({
-        error: "query_embedding must be 1536-dimensional (OpenAI text-embedding-3-small)",
-      });
-    }
-
-    if (query_embedding) {
-      // Fetch records with embeddings for similarity calculation
-      // Note: For better performance at scale, create a PostgreSQL function using pgvector operators
-      let embeddingQuery = supabase.from("records").select("*").not("embedding", "is", null);
-
-      if (normalizedType) {
-        embeddingQuery = embeddingQuery.eq("type", normalizedType);
-      }
-
-      // Fetch more candidates than limit to filter by similarity
-      const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
-
-      if (fetchError) {
-        logError("SupabaseError:retrieve_records:semantic:fetch", req, fetchError);
-      } else if (candidates) {
-        // Debug: Check embedding format of first candidate
-        const sampleEmbedding = candidates[0]?.embedding;
-        const embeddingInfo = sampleEmbedding
-          ? {
-              type: typeof sampleEmbedding,
-              isArray: Array.isArray(sampleEmbedding),
-              length: Array.isArray(sampleEmbedding) ? sampleEmbedding.length : "N/A",
-              preview:
-                typeof sampleEmbedding === "string"
-                  ? sampleEmbedding.substring(0, 50)
-                  : Array.isArray(sampleEmbedding)
-                    ? `[${sampleEmbedding.slice(0, 3).join(", ")}, ...]`
-                    : JSON.stringify(sampleEmbedding).substring(0, 50),
-            }
-          : null;
-
-        logDebug("SemanticSearch:retrieve_records", req, {
-          candidates_count: candidates.length,
-          similarity_threshold,
-          type_filter: normalizedType || "all",
-          sample_embedding: embeddingInfo,
-        });
-
-        // Calculate cosine similarity for each record
-        const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
-
-        const scoredCandidates = candidates
-          .map((rec: any) => {
-            let recEmbedding = rec.embedding;
-
-            // Handle Supabase vector format - it might be stored as string or array
-            if (!recEmbedding) {
-              return null;
-            }
-
-            // Convert string to array if needed (Supabase might return JSON string)
-            if (typeof recEmbedding === "string") {
-              try {
-                recEmbedding = JSON.parse(recEmbedding);
-              } catch (e) {
-                logWarn("SemanticSearch:embedding_parse_error", req, {
-                  rec_id: rec.id?.substring(0, 8),
-                  error: e,
-                });
-                return null;
-              }
-            }
-
-            // Ensure it's an array with correct dimensions
-            if (!Array.isArray(recEmbedding) || recEmbedding.length !== 1536) {
-              logWarn("SemanticSearch:embedding_format_error", req, {
-                rec_id: rec.id?.substring(0, 8),
-                embedding_type: typeof recEmbedding,
-                embedding_length: Array.isArray(recEmbedding) ? recEmbedding.length : "not-array",
-              });
-              return null;
-            }
-
-            const dotProduct = query_embedding.reduce(
-              (sum, val, i) => sum + val * recEmbedding[i],
-              0
-            );
-            const recNorm = Math.sqrt(
-              recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
-            );
-            const similarity = dotProduct / (queryNorm * recNorm);
-
-            return { ...rec, similarity };
-          })
-          .filter((rec: any) => rec !== null)
-          .sort((a: any, b: any) => b.similarity - a.similarity);
-
-        // Log top 5 similarity scores for debugging
-        const topScores = scoredCandidates.slice(0, 5).map((rec: any) => ({
-          id: rec.id?.substring(0, 8),
-          type: rec.type,
-          similarity: rec.similarity?.toFixed(4),
-        }));
-
-        logDebug("SemanticSearch:similarity_scores", req, {
-          top_5_scores: topScores,
-          threshold: similarity_threshold,
-          candidates_scored: scoredCandidates.length,
-        });
-
-        const semanticMatches = scoredCandidates
-          .filter((rec: any) => rec.similarity >= similarity_threshold)
-          .slice(0, finalLimit);
-
-        logDebug("SemanticSearch:results", req, {
-          matches_count: semanticMatches.length,
-          top_similarity: scoredCandidates[0]?.similarity?.toFixed(4) || "N/A",
-          threshold: similarity_threshold,
-        });
-
-        appendResults(semanticMatches);
-      }
-    }
-  }
-
-  // Keyword search (ILIKE pattern matching)
-  if (search && (search_mode === "keyword" || search_mode === "both")) {
-    let keywordQuery = supabase.from("records").select("*");
-
-    if (normalizedType) {
-      keywordQuery = keywordQuery.eq("type", normalizedType);
-    }
-
-    // Fetch candidates and filter by keyword match
-    const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(
-      finalLimit * 2
-    );
-
-    if (keywordError) {
-      logError("SupabaseError:retrieve_records:keyword", req, keywordError);
-    } else if (keywordCandidates) {
-      const searchText = search.join(" ").toLowerCase();
-      const keywordMatches = keywordCandidates
-        .filter((rec: any) => {
-          const typeMatch = rec.type?.toLowerCase().includes(searchText);
-          const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
-          const propsMatch = propsText.includes(searchText);
-          return typeMatch || propsMatch;
-        })
-        .slice(0, finalLimit);
-
-      appendResults(keywordMatches);
-    }
-  }
-
-  // No search mode: use existing logic
-  if (!search && !hasIdFilter) {
-    let query = supabase.from("records").select("*");
-    if (normalizedType) query = query.eq("type", normalizedType);
-    // Use deterministic ordering: created_at DESC, then id ASC for tiebreaker
-    query = query
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: true })
-      .limit(finalLimit);
-
-    const { data, error } = await query;
-    if (error) {
-      logError("SupabaseError:retrieve_records", req, error, {
-        code: (error as any).code,
-      });
-      return res.status(500).json({ error: error.message });
-    }
-    appendResults(data || []);
-  }
-
-  let results = Array.from(resultMap.values());
-  // Filter by exact property matches (if specified)
-  if (properties) {
-    results = results.filter((rec: any) => {
-      return Object.entries(properties).every(([key, value]) => {
-        const recValue = (rec.properties as Record<string, unknown>)?.[key];
-        return recValue === value;
-      });
-    });
-  }
-
-  // Apply deterministic ranking (FU-105)
-  if (search && search.length > 0) {
-    const searchText = search.join(" ");
-    results = rankSearchResults(results, searchText);
-  } else if (hasIdFilter && !properties && ids) {
-    // When only IDs are provided (no search, no properties), preserve order from ids array
-    const orderMap = new Map(ids.map((id, index) => [id, index]));
-    const idResults: any[] = [];
-    const otherResults: any[] = [];
-    for (const rec of results) {
-      if (orderMap.has(rec.id)) {
-        idResults.push(rec);
-      } else {
-        otherResults.push(rec);
-      }
-    }
-    idResults.sort((a, b) => {
-      const aIndex = orderMap.get(a.id) ?? Infinity;
-      const bIndex = orderMap.get(b.id) ?? Infinity;
-      return aIndex - bIndex;
-    });
-    results = [...idResults, ...otherResults];
-  } else {
-    // No search query - sort deterministically
-    results = sortRecordsDeterministically(results);
-  }
-
-  results = results.slice(0, finalLimit);
-
-  // Remove embeddings from response to reduce size (ChatGPT Actions has response size limits)
-  const resultsWithoutEmbeddings = results.map((rec: any) => {
-    const { embedding, ...rest } = rec;
-    void embedding;
-    return rest;
-  });
-
-  if (includeTotalCount) {
-    if (!search && !hasIdFilter && !properties) {
-      try {
-        const countOptions: {
-          count: "exact";
-          head: true;
-          eq?: [string, string];
-        } = {
-          count: "exact",
-          head: true,
-        };
-        let countQuery = supabase.from("records").select("id", countOptions);
-        if (normalizedType) {
-          countQuery = countQuery.eq("type", normalizedType);
-        }
-        const { count, error: countError } = await countQuery;
-        if (countError) {
-          logError("SupabaseError:retrieve_records:count", req, countError);
-        } else if (typeof count === "number") {
-          totalCount = count;
-        }
-      } catch (countError) {
-        logError("SupabaseError:retrieve_records:count", req, countError);
-      }
-    } else if (hasIdFilter && ids) {
-      totalCount = ids.length;
-    }
-  }
-
-  const payload = includeTotalCount
-    ? {
-        records: resultsWithoutEmbeddings,
-        total_count: totalCount ?? resultsWithoutEmbeddings.length,
-      }
-    : resultsWithoutEmbeddings;
-
-  logDebug("Success:retrieve_records", req, {
-    count: resultsWithoutEmbeddings.length,
-    total_count: includeTotalCount ? (totalCount ?? resultsWithoutEmbeddings.length) : undefined,
-    search_mode,
-    has_search: !!search,
-  });
-  return res.json(payload);
-});
-
-// Historical API endpoints for event-sourcing (FU-050)
-app.get("/api/records/:id/history", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const events = await getEventsByRecordId(id);
-
-    // Format events for response (exclude internal fields if needed)
-    const formattedEvents = events.map((event) => ({
-      id: event.id,
-      event_type: event.event_type,
-      payload: event.payload,
-      timestamp: event.timestamp,
-      record_id: event.record_id,
-      reducer_version: event.reducer_version,
-      created_at: event.created_at,
-    }));
-
-    return res.json({ events: formattedEvents });
-  } catch (error) {
-    logError("HistoricalAPIError:history", req, error);
-    const message = error instanceof Error ? error.message : "Failed to retrieve event history";
-    return res.status(500).json({ error: message });
-  }
-});
-
-app.get("/api/records/:id", async (req, res) => {
-  const { id } = req.params;
-  const { at } = req.query;
-
-  // If "at" query parameter is provided, use historical replay
-  if (at && typeof at === "string") {
-    try {
-      const record = await getRecordAtTimestamp(id, at);
-
-      if (!record) {
-        return res.status(404).json({ error: "Record not found at specified timestamp" });
-      }
-
-      return res.json(record);
-    } catch (error) {
-      logError("HistoricalAPIError:at_timestamp", req, error);
-      const message =
-        error instanceof Error ? error.message : "Failed to retrieve record at timestamp";
-
-      if (message.includes("Invalid timestamp")) {
-        return res.status(400).json({ error: message });
-      }
-
-      return res.status(500).json({ error: message });
-    }
-  }
-
-  // Otherwise, return current state from records table
-  const { data, error } = await supabase.from("records").select("*").eq("id", id).single();
-
-  if (error) {
-    logError("SupabaseError:get_record", req, error);
-    return res.status(500).json({ error: error.message });
-  }
-
-  if (!data) {
-    return res.status(404).json({ error: "Record not found" });
-  }
-
-  return res.json(data);
-});
 
 // MCP Actions for Observation Architecture (FU-061)
 
@@ -2577,7 +2479,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
     logWarn("ValidationError:get_entity_snapshot", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   const { entity_id } = parsed.data;
@@ -2590,10 +2492,10 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
   if (error) {
     if (error.code === "PGRST116") {
-      return res.status(404).json({ error: "Entity not found" });
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
     logError("SupabaseError:get_entity_snapshot", req, error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 
   logDebug("Success:get_entity_snapshot", req, { entity_id });
@@ -2607,7 +2509,7 @@ app.post("/list_observations", async (req, res) => {
     logWarn("ValidationError:list_observations", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   const { entity_id, limit = 100, offset = 0 } = parsed.data;
@@ -2623,7 +2525,7 @@ app.post("/list_observations", async (req, res) => {
 
   if (error) {
     logError("SupabaseError:list_observations", req, error);
-    return res.status(500).json({ error: error.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 
   logDebug("Success:list_observations", req, {
@@ -2640,7 +2542,7 @@ app.post("/get_field_provenance", async (req, res) => {
     logWarn("ValidationError:get_field_provenance", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   const { entity_id, field } = parsed.data;
@@ -2653,14 +2555,14 @@ app.post("/get_field_provenance", async (req, res) => {
     .single();
 
   if (!snapshot || !snapshot.provenance) {
-    return res.status(404).json({ error: "Entity or field not found" });
+    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity or field not found");
   }
 
   const provenance = snapshot.provenance as Record<string, string>;
   const observationId = provenance[field];
 
   if (!observationId) {
-    return res.status(404).json({ error: "Field not found in provenance" });
+    return sendError(res, 404, "RESOURCE_NOT_FOUND", "Field not found in provenance");
   }
 
   // Get observation(s) - may be comma-separated for merge_array
@@ -2668,24 +2570,26 @@ app.post("/get_field_provenance", async (req, res) => {
 
   const { data: observations, error: obsError } = await supabase
     .from("observations")
-    .select("*, source_record_id")
+    .select("*, source_id")
     .in("id", observationIds);
 
   if (obsError) {
     logError("SupabaseError:get_field_provenance", req, obsError);
-    return res.status(500).json({ error: obsError.message });
+    return sendError(res, 500, "DB_QUERY_FAILED", obsError.message);
   }
 
-  // Get source records
-  const recordIds = observations?.map((obs) => obs.source_record_id).filter(Boolean) || [];
+  // Get sources for provenance
+  const sourceIds = (observations || [])
+    .map((obs: { source_id?: string }) => obs.source_id)
+    .filter((sourceId: string | undefined): sourceId is string => Boolean(sourceId));
 
-  const { data: records, error: recordError } = await supabase
-    .from("records")
-    .select("id, type, properties, file_urls, created_at")
-    .in("id", recordIds);
+  const { data: sources, error: sourceError } = await supabase
+    .from("sources")
+    .select("id, content_hash, mime_type, storage_url, file_name, created_at")
+    .in("id", sourceIds);
 
-  if (recordError) {
-    logError("SupabaseError:get_field_provenance:records", req, recordError);
+  if (sourceError) {
+    logError("SupabaseError:get_field_provenance:sources", req, sourceError);
   }
 
   logDebug("Success:get_field_provenance", req, { entity_id, field });
@@ -2694,7 +2598,7 @@ app.post("/get_field_provenance", async (req, res) => {
     entity_id,
     observation_ids: observationIds,
     observations: observations || [],
-    source_records: records || [],
+    sources: sources || [],
   });
 });
 
@@ -2705,10 +2609,10 @@ app.post("/create_relationship", async (req, res) => {
     logWarn("ValidationError:create_relationship", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
-  const { relationship_type, source_entity_id, target_entity_id, source_record_id, metadata } =
+  const { relationship_type, source_entity_id, target_entity_id, source_id, metadata } =
     parsed.data;
 
   const userId = "00000000-0000-0000-0000-000000000000"; // v0.1.0 single-user
@@ -2720,7 +2624,7 @@ app.post("/create_relationship", async (req, res) => {
       relationship_type,
       source_entity_id,
       target_entity_id,
-      source_record_id: source_record_id || null,
+      source_id: source_id || null,
       metadata: metadata || {},
       user_id: userId,
     });
@@ -2731,9 +2635,12 @@ app.post("/create_relationship", async (req, res) => {
     return res.json(relationship);
   } catch (error) {
     logError("RelationshipCreationError:create_relationship", req, error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to create relationship",
-    });
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      error instanceof Error ? error.message : "Failed to create relationship"
+    );
   }
 });
 
@@ -2744,7 +2651,7 @@ app.post("/list_relationships", async (req, res) => {
     logWarn("ValidationError:list_relationships", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
 
   const { entity_id, direction = "both", relationship_type } = parsed.data;
@@ -2779,467 +2686,15 @@ app.post("/list_relationships", async (req, res) => {
     return res.json({ relationships });
   } catch (error) {
     logError("RelationshipQueryError:list_relationships", req, error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to query relationships",
-    });
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      error instanceof Error ? error.message : "Failed to query relationships"
+    );
   }
 });
 
-type NormalizedCsvRowResult = ReturnType<typeof normalizeRow>;
-
-interface PreparedCsvRow {
-  normalized: NormalizedCsvRowResult;
-  rowIndex: number;
-}
-
-async function persistCsvRowRecords(
-  rows: PreparedCsvRow[],
-  parentRecordId: string,
-  filePath: string,
-  userId: string = "00000000-0000-0000-0000-000000000000" // v0.1.0 single-user default
-): Promise<Array<{ id: string; row_index: number }>> {
-  if (!rows.length) {
-    return [];
-  }
-
-  const preparedEntries = rows.map(({ normalized, rowIndex }) => {
-    const canonicalType = normalizeRecordType(normalized.type).type;
-    const rowId = randomUUID();
-    const baseProperties = (normalized.properties ?? {}) as Record<string, unknown>;
-    const properties = {
-      ...baseProperties,
-      csv_origin: {
-        parent_record_id: parentRecordId,
-        row_index: rowIndex,
-        file_url: filePath,
-      },
-    };
-    return {
-      payload: {
-        id: rowId,
-        type: canonicalType,
-        properties,
-        file_urls: [filePath],
-        user_id: userId, // FU-701: Set user_id for RLS
-      },
-      rowIndex,
-    };
-  });
-
-  const created: Array<{ id: string; row_index: number }> = [];
-  for (let i = 0; i < preparedEntries.length; i += 25) {
-    const chunk = preparedEntries.slice(i, i + 25);
-    const insertPayload = chunk.map((entry) => entry.payload);
-    const { error } = await supabase.from("records").insert(insertPayload);
-    if (error) {
-      throw error;
-    }
-    chunk.forEach((entry) => {
-      created.push({
-        id: entry.payload.id as string,
-        row_index: entry.rowIndex,
-      });
-    });
-  }
-
-  return created;
-}
-
-// File endpoints
-const upload = multer({ dest: "/tmp" });
-app.post("/upload_file", upload.single("file"), async (req, res) => {
-  const schema = z.object({
-    record_id: z.string().uuid().optional(),
-    bucket: z.string().optional(),
-    properties: z.union([z.string(), z.record(z.unknown())]).optional(),
-    csv_row_records: z.coerce.boolean().optional(),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:upload_file", req, {
-      issues: parsed.error.issues,
-    });
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-
-  const { record_id, bucket, properties } = parsed.data;
-  const csvRowsPreference = parsed.data.csv_row_records ?? true;
-
-  let overrideProperties: Record<string, unknown> | undefined;
-  if (typeof properties === "string") {
-    if (properties.trim().length === 0) {
-      logWarn("ValidationError:upload_file:properties_empty", req);
-      return res.status(400).json({ error: "properties must be valid JSON object when provided" });
-    }
-    try {
-      const parsedProperties = JSON.parse(properties);
-      if (
-        !parsedProperties ||
-        typeof parsedProperties !== "object" ||
-        Array.isArray(parsedProperties)
-      ) {
-        logWarn("ValidationError:upload_file:properties_shape", req, {
-          properties: parsedProperties,
-        });
-        return res.status(400).json({ error: "properties must be a JSON object" });
-      }
-      overrideProperties = parsedProperties as Record<string, unknown>;
-    } catch (error) {
-      logWarn("ValidationError:upload_file:properties_parse", req, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return res.status(400).json({ error: "properties must be valid JSON" });
-    }
-  } else if (properties && typeof properties === "object" && !Array.isArray(properties)) {
-    overrideProperties = properties as Record<string, unknown>;
-  }
-
-  let existingFileUrls: string[] = [];
-
-  const bucketName = bucket || "files";
-  const tmpPath = req.file?.path;
-  if (!tmpPath) {
-    logWarn("ValidationError:upload_file:missing_file", req);
-    return res.status(400).json({ error: "Missing file" });
-  }
-
-  const fileBuffer = fs.readFileSync(tmpPath);
-  fs.unlinkSync(tmpPath);
-
-  const originalName = req.file?.originalname || "upload.bin";
-  const mimeType = req.file?.mimetype || "application/octet-stream";
-  const fileSize = req.file?.size ?? fileBuffer.length;
-
-  const recordId = record_id ?? randomUUID();
-
-  const isCsvFileUpload = isCsvLike(originalName, mimeType);
-  const shouldGenerateCsvRows = isCsvFileUpload && csvRowsPreference;
-  let preparedCsvRows: PreparedCsvRow[] = [];
-  let csvRowsMeta: { truncated: boolean } | null = null;
-  const csvRowWarnings: string[] = [];
-
-  if (shouldGenerateCsvRows) {
-    try {
-      const parsedCsv = parseCsvRows(fileBuffer);
-      if (parsedCsv.rows.length === 0) {
-        logWarn("UploadFile:csv_rows_empty", req, { file: originalName });
-      } else {
-        const { data: typeRows, error: typeFetchError } = await supabase
-          .from("records")
-          .select("type")
-          .limit(1000);
-        if (typeFetchError) {
-          logError("SupabaseError:upload_file:csv_types", req, typeFetchError);
-        } else {
-          const existingTypes = Array.from(
-            new Set(
-              ((typeRows || []) as Array<{ type: string | null }>)
-                .map((row) => row.type)
-                .filter(Boolean)
-            )
-          ) as string[];
-          csvRowsMeta = { truncated: parsedCsv.truncated };
-          preparedCsvRows = parsedCsv.rows.map((row, index) => {
-            const normalized = normalizeRow(row, existingTypes);
-            if (csvRowWarnings.length < 10 && normalized.warnings.length > 0) {
-              const remainingSlots = 10 - csvRowWarnings.length;
-              normalized.warnings.slice(0, remainingSlots).forEach((warning) => {
-                csvRowWarnings.push(`Row ${index + 1}: ${warning}`);
-              });
-            }
-            return { normalized, rowIndex: index };
-          });
-        }
-      }
-    } catch (error) {
-      logError("UploadFile:csv_parse_failed", req, error, {
-        file: originalName,
-      });
-    }
-  }
-
-  if (csvRowWarnings.length) {
-    logWarn("UploadFile:csv_row_warnings", req, { warnings: csvRowWarnings });
-  }
-
-  const safeBase =
-    path
-      .basename(originalName)
-      .replace(/[^a-zA-Z0-9._-]+/g, "-")
-      .slice(0, 100) || "file";
-  const ext = path.extname(safeBase) || ".bin";
-  const baseName = safeBase.endsWith(ext)
-    ? safeBase.slice(0, safeBase.length - ext.length)
-    : safeBase;
-  const fileName = `${recordId}/${Date.now()}-${baseName.replace(/\.+/g, "-")}${ext}`;
-
-  if (record_id) {
-    const { data: recordData, error: fetchError } = await supabase
-      .from("records")
-      .select("file_urls")
-      .eq("id", record_id)
-      .single();
-    if (fetchError || !recordData) {
-      logWarn("NotFound:upload_file", req, { record_id, fetchError });
-      return res.status(404).json({ error: "Record not found" });
-    }
-    existingFileUrls = Array.isArray(recordData.file_urls)
-      ? (recordData.file_urls as string[])
-      : [];
-  }
-
-  // Allow tests to skip storage upload (bucket might not exist)
-  const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
-  let uploadData: { path: string } | null = null;
-
-  if (!isTestEnv) {
-    const { data, error: uploadError } = await supabase.storage
-      .from(bucketName)
-      .upload(fileName, fileBuffer, { upsert: false });
-
-    if (uploadError) {
-      logError("SupabaseStorageError:upload_file", req, uploadError, {
-        bucket: bucketName,
-        fileName,
-      });
-      return res.status(500).json({ error: uploadError.message });
-    }
-    uploadData = data;
-  } else {
-    // In test environment, create a mock file path
-    // fileName already includes recordId/, so just use it directly with test/ prefix
-    uploadData = { path: `test/${fileName}` };
-  }
-
-  const filePath = uploadData.path;
-
-  if (record_id) {
-    const updatedFileUrls = [...existingFileUrls, filePath];
-
-    const { data: updated, error: updateError } = await supabase
-      .from("records")
-      .update({ file_urls: updatedFileUrls })
-      .eq("id", record_id)
-      .select()
-      .single();
-
-    if (updateError) {
-      logError("SupabaseError:upload_file:update_row", req, updateError);
-      return res.status(500).json({ error: updateError.message });
-    }
-
-    logDebug("Success:upload_file", req, { record_id, filePath });
-    return res.json(updated);
-  }
-
-  try {
-    const created = await createRecordFromUploadedFile({
-      recordId,
-      buffer: fileBuffer,
-      fileName: originalName,
-      mimeType,
-      fileSize,
-      fileUrl: filePath,
-      overrideProperties,
-    });
-    let responseRecord = created;
-
-    if (shouldGenerateCsvRows && preparedCsvRows.length > 0) {
-      try {
-        const insertedRows = await persistCsvRowRecords(preparedCsvRows, created.id, filePath);
-        if (insertedRows.length > 0) {
-          const relationshipPayload = insertedRows.map((row) => ({
-            source_id: created.id,
-            target_id: row.id,
-            relationship: "contains_row",
-            metadata: { row_index: row.row_index },
-          }));
-          const { error: relationshipError } = await supabase
-            .from("record_relationships")
-            .insert(relationshipPayload);
-          if (relationshipError) {
-            logError("SupabaseError:upload_file:relationships", req, relationshipError);
-          }
-
-          const mergedProperties = {
-            ...(created.properties as Record<string, unknown>),
-            csv_rows: {
-              linked_records: insertedRows.length,
-              truncated: csvRowsMeta?.truncated ?? false,
-              relationship: "contains_row",
-            },
-          };
-
-          const { data: updatedDataset, error: datasetUpdateError } = await supabase
-            .from("records")
-            .update({ properties: mergedProperties })
-            .eq("id", created.id)
-            .select()
-            .single();
-
-          if (datasetUpdateError) {
-            logError("SupabaseError:upload_file:update_csv_summary", req, datasetUpdateError);
-            responseRecord = { ...created, properties: mergedProperties };
-          } else if (updatedDataset) {
-            responseRecord = updatedDataset as typeof created;
-          }
-
-          logDebug("Success:upload_file:csv_rows", req, {
-            parent_record_id: created.id,
-            row_count: insertedRows.length,
-            truncated: csvRowsMeta?.truncated ?? false,
-          });
-        }
-      } catch (csvRowError) {
-        logError("SupabaseError:upload_file:csv_rows", req, csvRowError);
-      }
-    }
-
-    // Emit RecordCreated event (event-sourcing foundation - FU-050)
-    try {
-      await emitRecordCreated(responseRecord as any);
-    } catch (eventError) {
-      // Log event emission error but don't fail the request
-      logError("EventEmissionError:upload_file", req, eventError);
-    }
-
-    logDebug("Success:upload_file:create", req, {
-      record_id: created.id,
-      filePath,
-    });
-    return res.status(201).json(responseRecord);
-  } catch (error) {
-    logError("SupabaseError:upload_file:create_record", req, error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to create record from file",
-    });
-  }
-});
-
-app.post("/analyze_file", upload.single("file"), async (req, res) => {
-  const tmpPath = req.file?.path;
-  if (!tmpPath) {
-    logWarn("ValidationError:analyze_file:missing_file", req);
-    return res.status(400).json({ error: "Missing file" });
-  }
-
-  const fileBuffer = fs.readFileSync(tmpPath);
-  fs.unlinkSync(tmpPath);
-
-  const originalName = req.file?.originalname || "upload.bin";
-  const mimeType = req.file?.mimetype || "application/octet-stream";
-  const fileSize = req.file?.size ?? fileBuffer.length;
-
-  try {
-    const { analyzeFileForRecord } = await import("./services/file_analysis.js");
-    const analysis = await analyzeFileForRecord({
-      buffer: fileBuffer,
-      fileName: originalName,
-      mimeType,
-      fileSize,
-    });
-
-    logDebug("Success:analyze_file", req, {
-      fileName: originalName,
-      type: analysis.type,
-    });
-    return res.json(analysis);
-  } catch (error) {
-    logError("Error:analyze_file", req, error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to analyze file",
-    });
-  }
-});
-
-app.post("/record_comparison", async (req, res) => {
-  const metricsSchema = z
-    .object({
-      amount: z.number().optional(),
-      currency: z.string().max(16).optional(),
-      repetitions: z.number().optional(),
-      load: z.number().optional(),
-      duration_minutes: z.number().optional(),
-      date: z.string().optional(),
-      recipient: z.string().optional(),
-      merchant: z.string().optional(),
-      category: z.string().optional(),
-      location: z.string().optional(),
-      label: z.string().optional(),
-    })
-    .strict()
-    .partial();
-
-  const recordSchema = z.object({
-    id: z.string(),
-    type: z.string(),
-    summary: z.string().nullable().optional(),
-    properties: z.record(z.unknown()).optional(),
-    metrics: metricsSchema.optional(),
-  });
-
-  const schema = z.object({
-    new_record: recordSchema,
-    similar_records: z.array(recordSchema).min(1).max(10),
-  });
-
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:record_comparison", req, {
-      issues: parsed.error.issues,
-    });
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-
-  if (!config.openaiApiKey) {
-    logWarn("RecordComparison:openai_unconfigured", req);
-    return res.status(503).json({ error: "OpenAI API key is not configured on the server" });
-  }
-
-  try {
-    const analysis = await generateRecordComparisonInsight(parsed.data);
-    return res.json({ analysis });
-  } catch (error) {
-    logError("RecordComparison:failure", req, error);
-    return res.status(500).json({ error: "Failed to generate record comparison" });
-  }
-});
-
-app.post("/generate_embedding", async (req, res) => {
-  const schema = z.object({
-    type: z.string(),
-    properties: z.record(z.unknown()),
-  });
-  const parsed = schema.safeParse(req.body);
-  if (!parsed.success) {
-    logWarn("ValidationError:generate_embedding", req, {
-      issues: parsed.error.issues,
-    });
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-
-  if (!config.openaiApiKey) {
-    logWarn("GenerateEmbedding:openai_unconfigured", req);
-    return res.status(503).json({ error: "OpenAI API key is not configured on the server" });
-  }
-
-  try {
-    const { type, properties } = parsed.data;
-    const normalizedType = normalizeRecordType(type).type;
-    const recordText = getRecordText(normalizedType, properties);
-    const embedding = await generateEmbedding(recordText);
-
-    if (!embedding) {
-      return res.status(500).json({ error: "Failed to generate embedding" });
-    }
-
-    logDebug("Success:generate_embedding", req, { type: normalizedType });
-    return res.json({ embedding });
-  } catch (error) {
-    logError("GenerateEmbedding:failure", req, error);
-    return res.status(500).json({ error: "Failed to generate embedding" });
-  }
-});
 
 app.get("/get_file_url", async (req, res) => {
   const schema = z.object({
@@ -3251,7 +2706,7 @@ app.get("/get_file_url", async (req, res) => {
     logWarn("ValidationError:get_file_url", req, {
       issues: parsed.error.issues,
     });
-    return res.status(400).json({ error: parsed.error.flatten() });
+    return sendValidationError(res, parsed.error.issues);
   }
   const { file_path, expires_in } = parsed.data;
 
@@ -3262,426 +2717,19 @@ app.get("/get_file_url", async (req, res) => {
   const { data, error } = await supabase.storage
     .from(bucket)
     .createSignedUrl(path, expires_in || 3600);
-  if (error) {
+  if (error || !data?.signedUrl) {
     logError("SupabaseStorageError:get_file_url", req, error, { bucket, path });
-    return res.status(500).json({ error: error.message });
+    return sendError(
+      res,
+      500,
+      "DB_QUERY_FAILED",
+      error?.message ?? "Failed to create signed URL"
+    );
   }
 
   logDebug("Success:get_file_url", req, { path: file_path });
   return res.json({ url: data.signedUrl });
 });
-
-async function fetchRecordsByIds(ids: string[], type?: string): Promise<any[]> {
-  if (!ids.length) {
-    return [];
-  }
-  let query = supabase.from("records").select("*").in("id", ids);
-  if (type) {
-    query = query.eq("type", type);
-  }
-  const { data, error } = await query;
-  if (error) {
-    throw error;
-  }
-  const orderMap = new Map(ids.map((id, index) => [id, index]));
-  return (data ?? []).sort((a, b) => {
-    const aIndex = orderMap.get(a.id) ?? 0;
-    const bIndex = orderMap.get(b.id) ?? 0;
-    return aIndex - bIndex;
-  });
-} // eslint-disable-line @typescript-eslint/no-unused-vars
-
-// Helper function to execute retrieve_records logic (reusable for chat endpoint)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _executeRetrieveRecords(params: {
-  type?: string;
-  properties?: Record<string, unknown>;
-  limit?: number;
-  search?: string[];
-  search_mode?: "semantic" | "keyword" | "both";
-  similarity_threshold?: number;
-  query_embedding?: number[];
-  ids?: string[];
-  include_total_count?: boolean;
-}): Promise<{ records: any[]; totalCount?: number }> {
-  const {
-    type,
-    properties,
-    limit,
-    search,
-    search_mode = "both",
-    similarity_threshold = 0.3,
-    query_embedding: providedQueryEmbedding,
-    ids,
-    include_total_count,
-  } = params;
-
-  const resultMap = new Map<string, any>();
-  const appendResults = (records: any[]) => {
-    for (const record of records) {
-      const id = record?.id;
-      if (!id || resultMap.has(id)) continue;
-      resultMap.set(id, record);
-    }
-  };
-
-  const finalLimit = limit ?? 100;
-  const includeTotalCount = include_total_count === true;
-  const normalizedType = type ? normalizeRecordType(type).type : undefined;
-  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
-  const hasSearch = Array.isArray(search) && search.length > 0;
-  let totalCount: number | null = null;
-
-  if (hasIdFilter) {
-    const idMatches = await fetchRecordsByIds(ids, normalizedType);
-    appendResults(idMatches);
-    if (includeTotalCount) {
-      totalCount = ids.length;
-    }
-  }
-
-  // Semantic search (vector similarity)
-  if (hasSearch && (search_mode === "semantic" || search_mode === "both")) {
-    let query_embedding: number[] | undefined = providedQueryEmbedding;
-    if (!query_embedding && config.openaiApiKey) {
-      const searchText = search.join(" ");
-      const generated = await generateEmbedding(searchText);
-      query_embedding = generated || undefined;
-    }
-
-    if (query_embedding && query_embedding.length === 1536) {
-      let embeddingQuery = supabase.from("records").select("*").not("embedding", "is", null);
-
-      if (normalizedType) {
-        embeddingQuery = embeddingQuery.eq("type", normalizedType);
-      }
-
-      const { data: candidates, error: fetchError } = await embeddingQuery.limit(finalLimit * 10);
-
-      if (!fetchError && candidates) {
-        const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
-
-        const scoredCandidates = candidates
-          .map((rec: any) => {
-            let recEmbedding = rec.embedding;
-
-            if (!recEmbedding) return null;
-
-            if (typeof recEmbedding === "string") {
-              try {
-                recEmbedding = JSON.parse(recEmbedding);
-              } catch {
-                return null;
-              }
-            }
-
-            if (!Array.isArray(recEmbedding) || recEmbedding.length !== 1536) {
-              return null;
-            }
-
-            const dotProduct = query_embedding.reduce(
-              (sum, val, i) => sum + val * recEmbedding[i],
-              0
-            );
-            const recNorm = Math.sqrt(
-              recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
-            );
-            const similarity = dotProduct / (queryNorm * recNorm);
-
-            return { ...rec, similarity };
-          })
-          .filter((rec: any) => rec !== null)
-          .sort((a: any, b: any) => b.similarity - a.similarity);
-
-        const semanticMatches = scoredCandidates
-          .filter((rec: any) => rec.similarity >= similarity_threshold)
-          .slice(0, finalLimit);
-        appendResults(semanticMatches);
-      }
-    }
-  }
-
-  // Keyword search
-  if (hasSearch && (search_mode === "keyword" || search_mode === "both")) {
-    let keywordQuery = supabase.from("records").select("*");
-
-    if (normalizedType) {
-      keywordQuery = keywordQuery.eq("type", normalizedType);
-    }
-
-    const { data: keywordCandidates, error: keywordError } = await keywordQuery.limit(
-      finalLimit * 2
-    );
-
-    if (!keywordError && keywordCandidates) {
-      const searchText = search.join(" ").toLowerCase();
-      const keywordMatches = keywordCandidates
-        .filter((rec: any) => {
-          const typeMatch = rec.type?.toLowerCase().includes(searchText);
-          const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
-          const propsMatch = propsText.includes(searchText);
-          return typeMatch || propsMatch;
-        })
-        .slice(0, finalLimit);
-      appendResults(keywordMatches);
-    }
-  }
-
-  // No search mode
-  if (!hasSearch && !hasIdFilter) {
-    let query = supabase.from("records").select("*");
-    if (normalizedType) query = query.eq("type", normalizedType);
-    // Use deterministic ordering: created_at DESC, then id ASC for tiebreaker
-    query = query
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: true })
-      .limit(finalLimit);
-
-    const { data, error } = await query;
-    if (!error && data) {
-      appendResults(data);
-    }
-  } // eslint-disable-line @typescript-eslint/no-unused-vars
-
-  // Filter by exact property matches
-  let results = Array.from(resultMap.values());
-  if (properties) {
-    results = results.filter((rec: any) => {
-      return Object.entries(properties).every(([key, value]) => {
-        const recValue = (rec.properties as Record<string, unknown>)?.[key];
-        return recValue === value;
-      });
-    });
-  }
-
-  // Apply deterministic sorting if no search was performed
-  if (!hasSearch) {
-    results = sortRecordsDeterministically(results);
-  }
-
-  results = results.slice(0, finalLimit);
-
-  // Remove embeddings from response
-  const sanitized = results.map((rec: any) => {
-    const { embedding, ...rest } = rec;
-    void embedding;
-    return rest;
-  });
-
-  if (includeTotalCount && totalCount === null && !hasSearch && !properties) {
-    try {
-      let countQuery = supabase.from("records").select("id", { count: "exact", head: true });
-      if (normalizedType) {
-        countQuery = countQuery.eq("type", normalizedType);
-      }
-      const { count } = await countQuery;
-      if (typeof count === "number") {
-        totalCount = count;
-      }
-    } catch {
-      totalCount = null;
-    }
-  }
-
-  return {
-    records: sanitized,
-    totalCount: includeTotalCount ? (totalCount ?? sanitized.length) : undefined,
-  };
-}
-
-// Local-only version of executeRetrieveRecords that works with in-memory records
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function _executeRetrieveRecordsLocal(
-  localRecords: any[],
-  params: {
-    type?: string;
-    properties?: Record<string, unknown>;
-    limit?: number;
-    search?: string[];
-    search_mode?: "semantic" | "keyword" | "both";
-    similarity_threshold?: number;
-    query_embedding?: number[];
-    ids?: string[];
-    include_total_count?: boolean;
-  }
-): Promise<{ records: any[]; totalCount?: number }> {
-  const {
-    type,
-    properties,
-    limit,
-    search,
-    search_mode = "both",
-    similarity_threshold = 0.3,
-    query_embedding: providedQueryEmbedding,
-    ids,
-    include_total_count,
-  } = params;
-
-  const resultMap = new Map<string, any>();
-  const appendResults = (records: any[]) => {
-    for (const record of records) {
-      const id = record?.id;
-      if (!id || resultMap.has(id)) continue;
-      resultMap.set(id, record);
-    }
-  };
-
-  const finalLimit = limit ?? 100;
-  const includeTotalCount = include_total_count === true;
-  const normalizedType = type ? normalizeRecordType(type).type : undefined;
-  const hasIdFilter = Array.isArray(ids) && ids.length > 0;
-  const hasSearch = Array.isArray(search) && search.length > 0;
-  let totalCount: number | null = null;
-
-  // Start with all local records
-  let candidates = [...localRecords];
-
-  // Filter by type if specified
-  if (normalizedType) {
-    candidates = candidates.filter((rec: any) => rec.type === normalizedType);
-  }
-
-  // Filter by IDs if specified
-  if (hasIdFilter) {
-    const idMatches = candidates.filter((rec: any) => ids.includes(rec.id));
-    appendResults(idMatches);
-    if (includeTotalCount) {
-      totalCount = idMatches.length;
-    }
-  }
-
-  // Semantic search (vector similarity)
-  if (hasSearch && (search_mode === "semantic" || search_mode === "both")) {
-    let query_embedding: number[] | undefined = providedQueryEmbedding;
-    if (!query_embedding && config.openaiApiKey) {
-      const searchText = search.join(" ");
-      const generated = await generateEmbedding(searchText);
-      query_embedding = generated || undefined;
-    }
-
-    if (query_embedding && Array.isArray(query_embedding) && query_embedding.length === 1536) {
-      const recordsWithEmbeddings = candidates.filter((rec: any) => {
-        if (!rec.embedding) return false;
-        let recEmbedding = rec.embedding;
-        if (typeof recEmbedding === "string") {
-          try {
-            recEmbedding = JSON.parse(recEmbedding);
-          } catch {
-            return false;
-          }
-        }
-        return Array.isArray(recEmbedding) && recEmbedding.length === 1536;
-      });
-
-      const queryNorm = Math.sqrt(query_embedding.reduce((sum, val) => sum + val * val, 0));
-
-      const scoredCandidates = recordsWithEmbeddings
-        .map((rec: any) => {
-          let recEmbedding = rec.embedding;
-          if (typeof recEmbedding === "string") {
-            try {
-              recEmbedding = JSON.parse(recEmbedding);
-            } catch {
-              return null;
-            }
-          }
-
-          if (!Array.isArray(recEmbedding) || recEmbedding.length !== 1536) {
-            return null;
-          }
-
-          const dotProduct = query_embedding.reduce(
-            (sum, val, i) => sum + val * recEmbedding[i],
-            0
-          );
-          const recNorm = Math.sqrt(
-            recEmbedding.reduce((sum: number, val: number) => sum + val * val, 0)
-          );
-          const similarity = dotProduct / (queryNorm * recNorm);
-
-          return { ...rec, similarity };
-        })
-        .filter((rec: any) => rec !== null)
-        .sort((a: any, b: any) => b.similarity - a.similarity);
-
-      const semanticMatches = scoredCandidates
-        .filter((rec: any) => rec.similarity >= similarity_threshold)
-        .slice(0, finalLimit);
-      appendResults(semanticMatches);
-    }
-  }
-
-  // Keyword search
-  if (hasSearch && (search_mode === "keyword" || search_mode === "both")) {
-    const searchText = search.join(" ").toLowerCase();
-    const keywordMatches = candidates
-      .filter((rec: any) => {
-        const typeMatch = rec.type?.toLowerCase().includes(searchText);
-        const summaryMatch = rec.summary?.toLowerCase().includes(searchText);
-        const propsText = JSON.stringify(rec.properties || {}).toLowerCase();
-        const propsMatch = propsText.includes(searchText);
-        return typeMatch || summaryMatch || propsMatch;
-      })
-      .slice(0, finalLimit);
-    appendResults(keywordMatches);
-  }
-
-  // No search mode - just return records
-  if (!hasSearch && !hasIdFilter) {
-    const sorted = candidates
-      .sort((a: any, b: any) => {
-        const timeA = new Date(a.created_at || 0).getTime();
-        const timeB = new Date(b.created_at || 0).getTime();
-        return timeB - timeA;
-      })
-      .slice(0, finalLimit);
-    appendResults(sorted);
-  }
-
-  // Filter by exact property matches
-  let results = Array.from(resultMap.values());
-  if (properties) {
-    results = results.filter((rec: any) => {
-      return Object.entries(properties).every(([key, value]) => {
-        const recValue = (rec.properties as Record<string, unknown>)?.[key];
-        return recValue === value;
-      });
-    });
-  }
-
-  // Apply deterministic sorting if no search was performed
-  if (!hasSearch) {
-    results = sortRecordsDeterministically(results);
-  }
-
-  results = results.slice(0, finalLimit);
-
-  // Remove embeddings from response
-  const sanitized = results.map((rec: any) => {
-    const { embedding, ...rest } = rec;
-    void embedding;
-    return rest;
-  });
-
-  // Calculate total count if requested
-  if (includeTotalCount && totalCount === null && !hasSearch && !properties) {
-    totalCount = normalizedType
-      ? candidates.filter((rec: any) => rec.type === normalizedType).length
-      : candidates.length;
-  }
-
-  return {
-    records: sanitized,
-    totalCount: includeTotalCount ? (totalCount ?? sanitized.length) : undefined,
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function _extractUUIDs(text: string): string[] {
-  const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-  const matches = text.match(uuidRegex);
-  return matches ? Array.from(new Set(matches)) : [];
-}
 
 // Chat endpoint removed - violates Application Layer constraint "MUST NOT contain conversational logic"
 // Conversational interactions should be externalized to MCP-compatible agents per architecture
@@ -3727,18 +2775,3 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
   });
 }
 
-/**
- * Check if a record matches keyword search terms
- */
-export function recordMatchesKeywordSearch(
-  record: import("./db.js").NeotomaRecord,
-  searchTerms: string[]
-): boolean {
-  const recordText = JSON.stringify(record.properties || {}).toLowerCase();
-  const recordType = record.type.toLowerCase();
-
-  return searchTerms.some((term) => {
-    const termLower = term.toLowerCase();
-    return recordText.includes(termLower) || recordType.includes(termLower);
-  });
-}

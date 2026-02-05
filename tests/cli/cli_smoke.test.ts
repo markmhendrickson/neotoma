@@ -6,6 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 type CliModule = {
   runCli: (argv: string[]) => Promise<void>;
+  buildOAuthAuthorizeUrl: (params: {
+    baseUrl: string;
+    redirectUri: string;
+    state: string;
+    codeChallenge: string;
+    clientId: string;
+    devStub?: boolean;
+  }) => string;
 };
 
 async function withTempHome<T>(callback: (homeDir: string) => Promise<T>): Promise<T> {
@@ -50,6 +58,20 @@ describe("cli smoke tests", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("includes dev_stub in OAuth URL when requested", async () => {
+    const { buildOAuthAuthorizeUrl } = await loadCli();
+    const url = buildOAuthAuthorizeUrl({
+      baseUrl: "http://localhost:8080",
+      redirectUri: "http://127.0.0.1:12345/callback",
+      state: "state-token",
+      codeChallenge: "challenge",
+      clientId: "neotoma-cli",
+      devStub: true,
+    });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.get("dev_stub")).toBe("1");
   });
 
   it("prints auth status when not authenticated", async () => {

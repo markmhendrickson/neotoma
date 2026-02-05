@@ -16,7 +16,6 @@ interface KeyManagementDialogProps {
   onImport: (keyExports: { x25519: any; ed25519: any }) => Promise<boolean>;
   onExport: () => Promise<{ x25519: any; ed25519: any } | null>;
   onRegenerate: (clearDataCallback?: () => Promise<void>) => Promise<boolean>;
-  onBeforeRegenerate?: () => Promise<void>;
   trigger?: ReactNode;
 }
 
@@ -26,7 +25,6 @@ export function KeyManagementDialog({
   onImport,
   onExport,
   onRegenerate,
-  onBeforeRegenerate,
   trigger,
 }: KeyManagementDialogProps) {
   const { toast } = useToast();
@@ -123,16 +121,7 @@ export function KeyManagementDialog({
       return;
     }
 
-    // Clear data before regenerating keys
-    if (onBeforeRegenerate) {
-      try {
-        await onBeforeRegenerate();
-      } catch (error) {
-        console.warn('Error clearing data before key regeneration:', error);
-      }
-    }
-
-    const success = await onRegenerate(onBeforeRegenerate);
+    const success = await onRegenerate();
     if (success) {
       toast({
         title: 'Keys regenerated',
@@ -163,7 +152,7 @@ export function KeyManagementDialog({
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
         <p id="settings-description" className="sr-only">
-          Manage settings: enable/disable API sync, view keys, export/import keys, or regenerate new keys.
+          Manage settings: configure cloud storage, view keys, export/import keys, or regenerate keys.
         </p>
         <div className="space-y-4">
           <div>
@@ -180,24 +169,7 @@ export function KeyManagementDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground ml-6">
-              When enabled, uploads are stored securely in Supabase after local encryption. Disable this to keep files and records confined to the browser (local-only mode).
-            </p>
-          </div>
-          <div>
-            <div className="flex items-center space-x-2 mb-2">
-              <input
-                type="checkbox"
-                id="csvRowRecordsEnabled"
-                checked={settings.csvRowRecordsEnabled}
-                onChange={(e) => saveSettings({ csvRowRecordsEnabled: e.target.checked })}
-                className="h-4 w-4"
-              />
-              <Label htmlFor="csvRowRecordsEnabled" className="font-normal cursor-pointer">
-                Create per-row records for CSV uploads
-              </Label>
-            </div>
-            <p className="text-xs text-muted-foreground ml-6">
-              When enabled, CSV uploads create one record per row plus relationships linking them to the source file.
+              When enabled, uploads are stored securely in Supabase after local encryption. Disable this to keep files confined to the browser.
             </p>
           </div>
           <div>
@@ -217,7 +189,7 @@ export function KeyManagementDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Copies the full Ed25519 private key (base64url). Keep it secret—anyone with this key can access your vault.
+              Copies the full Ed25519 private key (base64url). Keep it secret. Anyone with this key can access your vault.
             </p>
           </div>
           <div>

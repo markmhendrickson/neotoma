@@ -4,12 +4,13 @@
  * Handles OAuth 2.0 Authorization Code flow with PKCE for MCP authentication
  */
 
-import { randomBytes, createHash, createCipheriv, createDecipheriv } from "node:crypto";
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { supabase } from "../db.js";
+import { randomBytes, createHash, createCipheriv, createDecipheriv, randomUUID } from "node:crypto";
+import { SupabaseClient } from "@supabase/supabase-js";
+import { getServiceRoleClient, supabase } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
+import { clearSqliteCache, getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
 
 // Cached service role client instance
 let cachedServiceRoleClient: SupabaseClient | null = null;
@@ -22,14 +23,9 @@ let cachedServiceRoleClient: SupabaseClient | null = null;
  * - mcp_oauth_connections operations (bypasses RLS)
  * - Dynamic OAuth client registration
  */
-function getServiceRoleClient(): SupabaseClient {
+function getServiceRoleSupabaseClient(): SupabaseClient {
   if (!cachedServiceRoleClient) {
-    cachedServiceRoleClient = createClient(config.supabaseUrl, config.supabaseKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    cachedServiceRoleClient = getServiceRoleClient() as SupabaseClient;
   }
   return cachedServiceRoleClient;
 }
@@ -70,6 +66,182 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expir
 
 // Encryption key for refresh tokens (use environment variable or config)
 const ENCRYPTION_KEY = process.env.MCP_TOKEN_ENCRYPTION_KEY || config.mcpTokenEncryptionKey;
+const isLocalBackend = config.storageBackend === "local";
+
+interface LocalOAuthStateRow {
+  id: string;
+  state: string;
+  code_verifier: string;
+  code_challenge: string | null;
+  connection_id: string;
+  redirect_uri: string;
+  client_state: string | null;
+  created_at: string;
+  expires_at: string;
+  final_redirect_uri: string | null;
+}
+
+interface LocalConnectionRow {
+  id: string;
+  user_id: string;
+  connection_id: string;
+  refresh_token: string;
+  access_token: string | null;
+  access_token_expires_at: string | null;
+  client_name: string | null;
+  last_used_at: string | null;
+  created_at: string;
+  revoked_at: string | null;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function generateLocalToken(prefix: string): string {
+  return `${prefix}_${randomBytes(16).toString("hex")}`;
+}
+
+function getLocalOAuthState(state: string): LocalOAuthStateRow | null {
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE state = ?"
+    )
+    .get(state);
+  return row ? (row as LocalOAuthStateRow) : null;
+}
+
+function getLocalOAuthStateForConnection(connectionId: string): LocalOAuthStateRow | null {
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri FROM mcp_oauth_state WHERE connection_id = ?"
+    )
+    .get(connectionId);
+  return row ? (row as LocalOAuthStateRow) : null;
+}
+
+function deleteLocalOAuthState(state: string): void {
+  const db = getSqliteDb();
+  db.prepare("DELETE FROM mcp_oauth_state WHERE state = ?").run(state);
+}
+
+function cleanupExpiredLocalStates(): void {
+  try {
+    const db = getSqliteDb();
+    db.prepare("DELETE FROM mcp_oauth_state WHERE expires_at < ?").run(nowIso());
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      `[MCP OAuth] Local state cleanup failed (sqlitePath=${config.sqlitePath}): ${msg}. Clearing DB cache so next use will recreate the file if missing.`
+    );
+    clearSqliteCache();
+  }
+}
+
+function insertLocalOAuthState(payload: {
+  state: string;
+  codeVerifier: string;
+  codeChallenge: string | null;
+  connectionId: string;
+  redirectUri: string;
+  clientState?: string | null;
+  finalRedirectUri?: string | null;
+  expiresAt: string;
+}): void {
+  const db = getSqliteDb();
+  const id = randomUUID();
+  db.prepare(
+    "INSERT INTO mcp_oauth_state (id, state, code_verifier, code_challenge, connection_id, redirect_uri, client_state, created_at, expires_at, final_redirect_uri) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    id,
+    payload.state,
+    payload.codeVerifier,
+    payload.codeChallenge,
+    payload.connectionId,
+    payload.redirectUri,
+    payload.clientState ?? null,
+    nowIso(),
+    payload.expiresAt,
+    payload.finalRedirectUri ?? null
+  );
+}
+
+function getLocalConnectionById(connectionId: string): LocalConnectionRow | null {
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE connection_id = ? AND revoked_at IS NULL"
+    )
+    .get(connectionId);
+  return row ? (row as LocalConnectionRow) : null;
+}
+
+function getLocalConnectionByAccessToken(accessToken: string): LocalConnectionRow | null {
+  const db = getSqliteDb();
+  const row = db
+    .prepare(
+      "SELECT id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at FROM mcp_oauth_connections WHERE access_token = ? AND revoked_at IS NULL"
+    )
+    .get(accessToken);
+  return row ? (row as LocalConnectionRow) : null;
+}
+
+function upsertLocalConnection(payload: {
+  userId: string;
+  connectionId: string;
+  refreshToken: string;
+  accessToken: string;
+  accessTokenExpiresAt: string;
+  clientName?: string | null;
+}): void {
+  const db = getSqliteDb();
+  const existing = getLocalConnectionById(payload.connectionId);
+  if (existing) {
+    db.prepare(
+      "UPDATE mcp_oauth_connections SET user_id = ?, refresh_token = ?, access_token = ?, access_token_expires_at = ?, client_name = ?, last_used_at = ?, revoked_at = NULL WHERE connection_id = ?"
+    ).run(
+      payload.userId,
+      payload.refreshToken,
+      payload.accessToken,
+      payload.accessTokenExpiresAt,
+      payload.clientName ?? null,
+      nowIso(),
+      payload.connectionId
+    );
+    return;
+  }
+  db.prepare(
+    "INSERT INTO mcp_oauth_connections (id, user_id, connection_id, refresh_token, access_token, access_token_expires_at, client_name, last_used_at, created_at, revoked_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    randomUUID(),
+    payload.userId,
+    payload.connectionId,
+    payload.refreshToken,
+    payload.accessToken,
+    payload.accessTokenExpiresAt,
+    payload.clientName ?? null,
+    nowIso(),
+    nowIso(),
+    null
+  );
+}
+
+function updateLocalConnectionLastUsed(connectionId: string): void {
+  const db = getSqliteDb();
+  db.prepare("UPDATE mcp_oauth_connections SET last_used_at = ? WHERE connection_id = ?").run(
+    nowIso(),
+    connectionId
+  );
+}
+
+function revokeLocalConnection(connectionId: string, userId: string): void {
+  const db = getSqliteDb();
+  db.prepare(
+    "UPDATE mcp_oauth_connections SET revoked_at = ? WHERE connection_id = ? AND user_id = ?"
+  ).run(nowIso(), connectionId, userId);
+}
 
 /**
  * Validate connection_id format
@@ -254,6 +426,22 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
   // Start registration
   clientRegistrationPromise = (async (): Promise<string> => {
     try {
+      if (isLocalBackend) {
+        const localClientId = "local_mcp_oauth_client";
+        const db = getSqliteDb();
+        const existing = db
+          .prepare("SELECT id, client_id FROM mcp_oauth_client_state WHERE client_id = ?")
+          .get(localClientId);
+        if (!existing) {
+          db.prepare(
+            "INSERT INTO mcp_oauth_client_state (id, client_id, redirect_uri, created_at) VALUES (?, ?, ?, ?)"
+          ).run(randomUUID(), localClientId, redirectUri, nowIso());
+        }
+        cachedClientId = localClientId;
+        cachedRedirectUri = redirectUri;
+        return localClientId;
+      }
+
       const clientName = "Neotoma MCP Client";
       const supabaseUrl = config.supabaseUrl;
       const serviceKey = config.supabaseKey;
@@ -265,7 +453,7 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
       }
 
       // Try JavaScript client method first (if available)
-      const adminClient = getServiceRoleClient();
+      const adminClient = getServiceRoleSupabaseClient();
       const adminApi = adminClient.auth.admin as any;
 
       if (typeof adminApi.createOAuthClient === "function") {
@@ -475,6 +663,12 @@ export async function createAuthUrl(
   validateState(state);
   validateRedirectUri(redirectUri);
 
+  if (isLocalBackend) {
+    const localAuthUrl = new URL(`${config.apiBase}/api/mcp/oauth/local-login`);
+    localAuthUrl.searchParams.set("state", state);
+    return localAuthUrl.toString();
+  }
+
   // Use config.supabaseUrl instead of process.env directly
   const supabaseUrl = config.supabaseUrl;
 
@@ -504,8 +698,13 @@ export async function createAuthUrl(
  */
 async function cleanupExpiredStates(): Promise<void> {
   try {
+    if (isLocalBackend) {
+      cleanupExpiredLocalStates();
+      return;
+    }
+
     // Use service role client to bypass RLS (mcp_oauth_state only allows service_role)
-    const { error, count } = await getServiceRoleClient()
+    const { error, count } = await getServiceRoleSupabaseClient()
       .from("mcp_oauth_state")
       .delete()
       .lt("expires_at", new Date().toISOString());
@@ -640,6 +839,35 @@ export async function initiateOAuthFlow(
   const { codeVerifier, codeChallenge } = generatePKCE();
   const state = generateState();
 
+  const expiresAt = new Date(Date.now() + STATE_TTL_MS);
+  const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+  const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
+
+  if (isLocalBackend) {
+    insertLocalOAuthState({
+      state,
+      codeVerifier,
+      codeChallenge,
+      connectionId,
+      redirectUri: finalRedirectUri,
+      finalRedirectUri,
+      clientState: clientState ?? null,
+      expiresAt: expiresAt.toISOString(),
+    });
+    const authUrl = await createAuthUrl(state, codeChallenge, finalRedirectUri);
+    logger.info(`[MCP OAuth] Initiated local OAuth flow for connection: ${connectionId}`);
+    auditLog("oauth_flow_initiated", {
+      connectionId,
+      clientName,
+      success: true,
+    });
+    return {
+      authUrl,
+      connectionId,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
   // Supabase always redirects to our callback; we then redirect to finalRedirectUri (e.g. cursor://) if set
   // IMPORTANT: OAuth redirect URI must match what's registered in Supabase exactly
   // Use OAuth-specific redirect URI that defaults to localhost:8080, independent of API_BASE_URL
@@ -648,12 +876,7 @@ export async function initiateOAuthFlow(
     process.env.OAUTH_REDIRECT_BASE_URL || `http://localhost:${config.httpPort}`;
   const supabaseRedirectUri = `${oauthRedirectBase}/api/mcp/oauth/callback`;
 
-  // Store the supabaseRedirectUri in state (must match what's used in authorization URL)
-  // finalRedirectUri is for client-side redirect after callback (e.g., cursor://), not for OAuth
-  const finalRedirectUri = redirectUri; // Optional client-side redirect (e.g., cursor://)
-  const expiresAt = new Date(Date.now() + STATE_TTL_MS);
-
-  const { error } = await getServiceRoleClient()
+  const { error } = await getServiceRoleSupabaseClient()
     .from("mcp_oauth_state")
     .insert({
       state,
@@ -699,6 +922,97 @@ export async function initiateOAuthFlow(
   };
 }
 
+export async function createLocalAuthorizationRequest(params: {
+  connectionId: string;
+  redirectUri: string;
+  clientState?: string;
+  codeChallenge: string;
+}): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
+  if (!isLocalBackend) {
+    throw createOAuthError.stateInvalid("Local authorization requests require local storage backend");
+  }
+
+  validateConnectionId(params.connectionId);
+  validateRedirectUri(params.redirectUri);
+
+  const state = generateState();
+  const expiresAt = new Date(Date.now() + STATE_TTL_MS);
+  const codeVerifier = generatePKCE().codeVerifier;
+
+  insertLocalOAuthState({
+    state,
+    codeVerifier,
+    codeChallenge: params.codeChallenge,
+    connectionId: params.connectionId,
+    redirectUri: params.redirectUri,
+    finalRedirectUri: params.redirectUri,
+    clientState: params.clientState ?? null,
+    expiresAt: expiresAt.toISOString(),
+  });
+
+  const authUrl = await createAuthUrl(state, params.codeChallenge, params.redirectUri);
+  return {
+    authUrl,
+    connectionId: params.connectionId,
+    state,
+    expiresAt: expiresAt.toISOString(),
+  };
+}
+
+export async function completeLocalAuthorization(
+  state: string,
+  userId: string,
+  clientName?: string | null
+): Promise<{ connectionId: string; redirectUri?: string; clientState?: string }> {
+  if (!isLocalBackend) {
+    throw createOAuthError.stateInvalid("Local authorization completion requires local backend");
+  }
+
+  validateState(state);
+  const stateData = getLocalOAuthState(state);
+  if (!stateData) {
+    throw createOAuthError.stateInvalid(
+      "This authorization link has expired or was already used. If you have not used it before, more than one server instance may be running and state was stored on a different instance. Use a single instance or enable sticky sessions for /api/mcp/oauth so the same instance handles the full flow. Otherwise, click Connect again in Cursor to start a new authorization."
+    );
+  }
+
+  deleteLocalOAuthState(state);
+
+  if (new Date(stateData.expires_at) < new Date()) {
+    throw createOAuthError.stateExpired(state);
+  }
+
+  const tokens = {
+    accessToken: generateLocalToken("local_access"),
+    refreshToken: generateLocalToken("local_refresh"),
+    expiresIn: 3600,
+  };
+
+  const encryptedRefreshToken = encryptRefreshToken(tokens.refreshToken);
+  const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
+
+  upsertLocalConnection({
+    userId,
+    connectionId: stateData.connection_id,
+    refreshToken: encryptedRefreshToken,
+    accessToken: tokens.accessToken,
+    accessTokenExpiresAt: expiresAt.toISOString(),
+    clientName: clientName ?? null,
+  });
+
+  auditLog("oauth_callback_success", {
+    connectionId: stateData.connection_id,
+    userId,
+    success: true,
+  });
+
+  return {
+    connectionId: stateData.connection_id,
+    redirectUri: stateData.final_redirect_uri ?? stateData.redirect_uri ?? undefined,
+    clientState: stateData.client_state ?? undefined,
+  };
+}
+
 /**
  * Exchange authorization code for tokens using OAuth 2.1 Server token endpoint with PKCE
  */
@@ -708,6 +1022,12 @@ async function exchangeCodeForTokens(
   redirectUri: string,
   clientId: string
 ): Promise<OAuthTokens> {
+  if (isLocalBackend) {
+    throw createOAuthError.tokenExchangeFailed(
+      "Local OAuth callback is disabled. Use /api/mcp/oauth/local-login for local auth."
+    );
+  }
+
   try {
     // Use OAuth 2.1 Server token endpoint with PKCE
     const tokenUrl = `${config.supabaseUrl}/auth/v1/oauth/token`;
@@ -799,6 +1119,11 @@ export async function handleOAuthCallback(
   redirectUri?: string;
   clientState?: string;
 }> {
+  if (isLocalBackend) {
+    throw createOAuthError.stateInvalid(
+      "Local OAuth callback is disabled. Use /api/mcp/oauth/local-login."
+    );
+  }
   // Validate inputs
   validateState(state);
 
@@ -807,7 +1132,7 @@ export async function handleOAuthCallback(
 
   // Get and consume OAuth state
   // Use service role client to ensure we bypass RLS (mcp_oauth_state only allows service_role)
-  const { data: stateData, error: stateError } = await getServiceRoleClient()
+  const { data: stateData, error: stateError } = await getServiceRoleSupabaseClient()
     .from("mcp_oauth_state")
     .select("*")
     .eq("state", state)
@@ -820,7 +1145,7 @@ export async function handleOAuthCallback(
 
   // Delete state (consume it)
   // Use service role client to ensure we bypass RLS
-  await getServiceRoleClient().from("mcp_oauth_state").delete().eq("state", state);
+  await getServiceRoleSupabaseClient().from("mcp_oauth_state").delete().eq("state", state);
 
   // Check if state is expired
   if (new Date(stateData.expires_at) < new Date()) {
@@ -844,10 +1169,11 @@ export async function handleOAuthCallback(
   // Get user info from access token
   const { data: userData, error: userError } = await supabase.auth.getUser(tokens.accessToken);
 
-  if (userError || !userData.user) {
+  if (userError || !userData?.user) {
     logger.error(`[MCP OAuth] Failed to get user from token: ${userError?.message}`);
     throw createOAuthError.userInfoFailed(userError?.message || "No user found");
   }
+  const userId = userData.user.id;
 
   // Encrypt refresh token
   const encryptedRefreshToken = encryptRefreshToken(tokens.refreshToken);
@@ -856,7 +1182,7 @@ export async function handleOAuthCallback(
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
   const { error: insertError } = await supabase.from("mcp_oauth_connections").insert({
-    user_id: userData.user.id,
+    user_id: userId,
     connection_id: stateData.connection_id,
     refresh_token: encryptedRefreshToken,
     access_token: tokens.accessToken,
@@ -871,19 +1197,19 @@ export async function handleOAuthCallback(
   }
 
   logger.info(
-    `[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userData.user.id}`
+    `[MCP OAuth] Connection created: ${stateData.connection_id} for user: ${userId}`
   );
 
   // Audit log
   auditLog("oauth_callback_success", {
     connectionId: stateData.connection_id,
-    userId: userData.user.id,
+    userId,
     success: true,
   });
 
   return {
     connectionId: stateData.connection_id,
-    userId: userData.user.id,
+    userId,
     redirectUri: stateData.final_redirect_uri ?? stateData.redirect_uri ?? undefined,
     clientState: stateData.client_state ?? undefined,
   };
@@ -908,6 +1234,51 @@ export async function getAccessTokenForConnection(
   // Validate input
   validateConnectionId(connectionId);
 
+  if (isLocalBackend) {
+    const connection = getLocalConnectionById(connectionId);
+    if (!connection) {
+      logger.error(
+        `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+      );
+      throw createOAuthError.connectionNotFound(connectionId);
+    }
+
+    if (
+      connection.access_token &&
+      connection.access_token_expires_at &&
+      new Date(connection.access_token_expires_at).getTime() - Date.now() > TOKEN_REFRESH_BUFFER_MS
+    ) {
+      updateLocalConnectionLastUsed(connectionId);
+      return {
+        accessToken: connection.access_token,
+        userId: connection.user_id,
+      };
+    }
+
+    logger.info(`[MCP OAuth] Refreshing local access token for connection: ${connectionId}`);
+    auditLog("token_refresh_initiated", {
+      connectionId,
+      userId: connection.user_id,
+      success: true,
+    });
+
+    const accessToken = generateLocalToken("local_access");
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+    upsertLocalConnection({
+      userId: connection.user_id,
+      connectionId,
+      refreshToken: connection.refresh_token,
+      accessToken,
+      accessTokenExpiresAt: expiresAt.toISOString(),
+      clientName: connection.client_name,
+    });
+
+    return {
+      accessToken,
+      userId: connection.user_id,
+    };
+  }
+
   // Get connection from database
   const { data: connection, error } = await supabase
     .from("mcp_oauth_connections")
@@ -917,7 +1288,9 @@ export async function getAccessTokenForConnection(
     .single();
 
   if (error || !connection) {
-    logger.error(`[MCP OAuth] Connection not found: ${connectionId}`);
+    logger.error(
+      `[MCP OAuth] Connection not found: ${connectionId} (storage: ${config.storageBackend}). Re-run neotoma auth login to create a connection for this backend.`
+    );
     throw createOAuthError.connectionNotFound(connectionId);
   }
 
@@ -955,7 +1328,7 @@ export async function getAccessTokenForConnection(
     refresh_token: decryptedRefreshToken,
   });
 
-  if (refreshError || !refreshData.session) {
+  if (refreshError || !refreshData?.session) {
     logger.error(`[MCP OAuth] Failed to refresh token: ${refreshError?.message}`);
 
     // Audit log
@@ -972,21 +1345,22 @@ export async function getAccessTokenForConnection(
     );
   }
 
+  const session = refreshData.session;
   // Update connection with new tokens
-  const newExpiresAt = new Date(Date.now() + (refreshData.session.expires_in || 3600) * 1000);
+  const newExpiresAt = new Date(Date.now() + (session.expires_in || 3600) * 1000);
 
   await supabase
     .from("mcp_oauth_connections")
     .update({
-      access_token: refreshData.session.access_token,
+      access_token: session.access_token,
       access_token_expires_at: newExpiresAt.toISOString(),
-      refresh_token: encryptRefreshToken(refreshData.session.refresh_token),
+      refresh_token: encryptRefreshToken(session.refresh_token),
       last_used_at: new Date().toISOString(),
     })
     .eq("connection_id", connectionId);
 
   return {
-    accessToken: refreshData.session.access_token,
+    accessToken: session.access_token,
     userId: connection.user_id,
   };
 }
@@ -1015,6 +1389,19 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
   validateConnectionId(connectionId);
 
   const { accessToken } = await getAccessTokenForConnection(connectionId);
+  if (isLocalBackend) {
+    const connection = getLocalConnectionById(connectionId);
+    const expiresAt = connection?.access_token_expires_at
+      ? new Date(connection.access_token_expires_at).getTime()
+      : Date.now() + 3600 * 1000;
+    const expires_in = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    return {
+      access_token: accessToken,
+      token_type: "Bearer",
+      expires_in,
+    };
+  }
+
   const { data: row } = await supabase
     .from("mcp_oauth_connections")
     .select("access_token_expires_at")
@@ -1046,6 +1433,17 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
 export async function validateTokenAndGetConnectionId(
   accessToken: string
 ): Promise<{ connectionId: string; userId: string }> {
+  if (isLocalBackend) {
+    const connection = getLocalConnectionByAccessToken(accessToken);
+    if (!connection) {
+      throw createOAuthError.connectionNotFound("Connection not found for access token");
+    }
+    return {
+      connectionId: connection.connection_id,
+      userId: connection.user_id,
+    };
+  }
+
   // Query mcp_oauth_connections for the access token
   const { data: connection, error } = await supabase
     .from("mcp_oauth_connections")
@@ -1081,6 +1479,18 @@ export async function getConnectionStatus(
   // Validate input
   validateConnectionId(connectionId);
 
+  if (isLocalBackend) {
+    const connection = getLocalConnectionById(connectionId);
+    if (connection) {
+      return connection.revoked_at ? "expired" : "active";
+    }
+    const state = getLocalOAuthStateForConnection(connectionId);
+    if (state) {
+      return new Date(state.expires_at) > new Date() ? "pending" : "expired";
+    }
+    return "expired";
+  }
+
   // Check if connection exists
   const { data: connection, error } = await supabase
     .from("mcp_oauth_connections")
@@ -1091,7 +1501,7 @@ export async function getConnectionStatus(
   if (error || !connection) {
     // Check if pending in OAuth state
     // Use service role client to ensure we bypass RLS (mcp_oauth_state only allows service_role)
-    const { data: state } = await getServiceRoleClient()
+    const { data: state } = await getServiceRoleSupabaseClient()
       .from("mcp_oauth_state")
       .select("expires_at")
       .eq("connection_id", connectionId)
@@ -1131,6 +1541,21 @@ export async function listConnections(userId: string): Promise<
     lastUsedAt: string | null;
   }>
 > {
+  if (isLocalBackend) {
+    const db = getSqliteDb();
+    const rows = db
+      .prepare(
+        "SELECT connection_id, client_name, created_at, last_used_at FROM mcp_oauth_connections WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC"
+      )
+      .all(userId);
+    return (rows || []).map((conn: any) => ({
+      connectionId: conn.connection_id,
+      clientName: conn.client_name,
+      createdAt: conn.created_at,
+      lastUsedAt: conn.last_used_at,
+    }));
+  }
+
   const { data: connections, error } = await supabase
     .from("mcp_oauth_connections")
     .select("connection_id, client_name, created_at, last_used_at")
@@ -1143,7 +1568,7 @@ export async function listConnections(userId: string): Promise<
     throw createOAuthError.connectionNotFound("Failed to list MCP connections");
   }
 
-  return (connections || []).map((conn) => ({
+  return (connections || []).map((conn: { connection_id: string; client_name: string | null; created_at: string; last_used_at: string | null }) => ({
     connectionId: conn.connection_id,
     clientName: conn.client_name,
     createdAt: conn.created_at,
@@ -1167,6 +1592,17 @@ export async function listConnections(userId: string): Promise<
 export async function revokeConnection(connectionId: string, userId: string): Promise<void> {
   // Validate inputs
   validateConnectionId(connectionId);
+
+  if (isLocalBackend) {
+    revokeLocalConnection(connectionId, userId);
+    logger.info(`[MCP OAuth] Connection revoked: ${connectionId}`);
+    auditLog("connection_revoked", {
+      connectionId,
+      userId,
+      success: true,
+    });
+    return;
+  }
 
   const { error } = await supabase
     .from("mcp_oauth_connections")

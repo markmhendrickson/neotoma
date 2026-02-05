@@ -15,6 +15,10 @@ Provide a complete CLI command reference and developer context for Neotoma CLI b
 - **Config path**: The file path where CLI stores connection settings.
 - **PKCE**: OAuth Proof Key for Code Exchange used for login.
 
+## Running the CLI
+
+Run via npm scripts: `npm run cli` or `npm run cli:dev` (dev mode with immediate source changes). For global `neotoma` command: `npm run setup:cli` (build and link in one step), or manually `npm run build` then `npm install -g .` or `npm link`. If `neotoma` is not found, add `$(npm config get prefix)/bin` to PATH. See [CLI setup](getting_started.md#cli-setup) and [CLI overview](cli_overview.md#installation-and-setup) for full installation and troubleshooting details.
+
 ## Command reference
 ### Global options
 - `--base-url <url>`: Override API base URL.
@@ -23,6 +27,7 @@ Provide a complete CLI command reference and developer context for Neotoma CLI b
 
 ### Authentication
 - `neotoma auth login`: Start OAuth PKCE flow in browser.
+  - `--dev-stub`: Use local dev stub authentication (local backend only).
 - `neotoma auth status`: Show stored auth status.
 - `neotoma auth logout`: Clear stored credentials.
 
@@ -79,6 +84,18 @@ Provide a complete CLI command reference and developer context for Neotoma CLI b
 ### Stats
 - `neotoma stats`
 
+### Storage
+- `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).
+  - With local backend (`NEOTOMA_STORAGE_BACKEND=local` or unset): prints `data_dir`, `sqlite_db` (e.g. `data/neotoma.db`), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
+  - With Supabase backend: notes that data is in Supabase (Postgres + Storage bucket `sources`).
+
+### Developer scripts
+- `neotoma dev list`: List available npm scripts from `package.json`.
+- `neotoma dev <script>`: Run a script from `package.json` (equivalent to `npm run <script>`).
+- `neotoma dev run <script>`: Run a script by name (same as `neotoma dev <script>`).
+- Use `-- <args>` to pass through extra arguments to the npm script.
+- Commands must be run from the Neotoma repo root (package.json name must be `neotoma`).
+
 ### OpenAPI request
 - `neotoma request --operation <id>`:
   - `--params <json>`: JSON object with `{ path, query, body }`.
@@ -87,9 +104,12 @@ Provide a complete CLI command reference and developer context for Neotoma CLI b
   - `--path <json>`: JSON path override.
   - `--skip-auth`: Skip auth token for public endpoints.
 
-## Configuration
+## Configuration and storage paths
 The CLI stores configuration in:
 - `~/.config/neotoma/config.json`
+
+To see where server data is stored (SQLite path, raw sources dir, etc.), run:
+- `neotoma storage info`
 
 Fields:
 ```

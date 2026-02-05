@@ -81,7 +81,7 @@ export const createOAuthError = {
   connectionNotFound: (connectionId: string) =>
     new OAuthError(
       OAuthErrorCode.CONNECTION_NOT_FOUND,
-      "MCP connection not found or revoked",
+      "MCP connection not found or revoked. If you switched between local and remote storage, re-run `neotoma auth login` to create a connection for the current backend.",
       404,
       false,
       { connectionId }

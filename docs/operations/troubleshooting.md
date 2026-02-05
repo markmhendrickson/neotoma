@@ -76,7 +76,7 @@ netstat -an | grep 8080
    ```
 2. **Or use different port:**
    ```bash
-   HTTP_PORT=8081 npm run dev:http
+   HTTP_PORT=8081 npm run dev:server
    ```
 3. **Or use branch-aware ports** (automatic port selection):
    ```bash
@@ -328,7 +328,7 @@ ORDER BY created_at DESC LIMIT 10;
 ### Check Logs
 ```bash
 # Development server logs
-npm run dev:http  # Check console output
+npm run dev:server  # Check console output
 # Test output
 npm test  # Check test results
 # Type check output

@@ -19,7 +19,7 @@ These principles MUST be maintained across all schema changes:
 4. **Explainability:** All fields map to extraction source
 5. **Flexibility:** JSONB for schema-specific `properties`
 6. **Strong typing:** Core fields are strongly typed SQL columns
-7. **No orphans:** All records have provenance; all relationships have valid endpoints
+7. **No orphans:** All sources and observations have provenance; all relationships have valid endpoints
 ### 1.2 Schema Evolution Rules
 **Additive Changes (Allowed):**
 - ✅ Add new optional JSONB keys
@@ -36,86 +36,7 @@ These principles MUST be maintained across all schema changes:
 - All migrations MUST preserve existing data
 - All migrations MUST be tested on production-like data
 ## 2. Core Tables
-### 2.1 `records` Table
-**Purpose:** Central table storing all ingested user documents and their extracted truth.
-**Schema:**
-```sql
-CREATE TABLE records (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  type TEXT NOT NULL,                              -- Application type (e.g., 'invoice', 'receipt', 'contract')
-  properties JSONB NOT NULL DEFAULT '{}',          -- Extracted fields (type-specific)
-  file_urls JSONB DEFAULT '[]',                    -- Array of file storage URLs
-  external_source TEXT,                            -- Source system (e.g., 'gmail', 'upload')
-  external_id TEXT,                                -- ID in external system
-  external_hash TEXT,                              -- Content hash for deduplication
-  summary TEXT,                                    -- Optional human-readable summary
-  embedding vector(1536),                          -- OpenAI ada-002 embedding (eventual)
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Field Definitions:**
-| Field             | Type         | Purpose                                    | Mutable | Indexed         |
-| ----------------- | ------------ | ------------------------------------------ | ------- | --------------- |
-| `id`              | UUID         | Unique record identifier                   | No      | Primary key     |
-| `type`            | TEXT         | Schema type (e.g., `FinancialRecord`)      | No      | Yes (GIN)       |
-| `properties`      | JSONB        | Extracted fields per schema                | No\*    | Yes (GIN)       |
-| `file_urls`       | JSONB        | Array of file URLs                         | No      | No              |
-| `external_source` | TEXT         | Source system (`gmail`, `upload`) | No      | Yes (composite) |
-| `external_id`     | TEXT         | ID in external system                      | No      | Yes (composite) |
-| `external_hash`   | TEXT         | SHA-256 of file content                    | No      | Yes             |
-| `summary`         | TEXT         | Optional summary text                      | Yes\*\* | No              |
-| `embedding`       | vector(1536) | Embeddings for similarity search           | Yes\*\* | Yes (ivfflat)   |
-| `created_at`      | TIMESTAMPTZ  | Record creation timestamp                  | No      | Yes (DESC)      |
-| `updated_at`      | TIMESTAMPTZ  | Last update timestamp                      | Yes     | No              |
-**Notes:**
-- \*`properties` is technically mutable but SHOULD NOT be changed post-ingestion (metadata only)
-- \*\*`summary` and `embedding` are computed asynchronously (bounded eventual consistency)
-**Indexes:**
-```sql
-CREATE INDEX idx_records_type ON records(type);
-CREATE INDEX idx_records_properties ON records USING GIN(properties);
-CREATE INDEX idx_records_embedding ON records USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
-CREATE INDEX idx_records_created_at ON records(created_at DESC);
-CREATE INDEX idx_records_external_id ON records ((properties->>'external_id'));
-CREATE UNIQUE INDEX idx_records_external_source_id_unique
-  ON records (external_source, external_id)
-  WHERE external_source IS NOT NULL AND external_id IS NOT NULL;
-CREATE INDEX idx_records_external_hash ON records (external_hash)
-  WHERE external_hash IS NOT NULL;
-```
-### 2.2 `record_relationships` Table
-**Purpose:** Graph edges between records (e.g., "Contract mentions Invoice").
-**Schema:**
-```sql
-CREATE TABLE record_relationships (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
-  target_id UUID NOT NULL REFERENCES records(id) ON DELETE CASCADE,
-  relationship TEXT NOT NULL,                      -- Type of relationship
-  metadata JSONB NOT NULL DEFAULT '{}',            -- Additional context
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-```
-**Field Definitions:**
-| Field          | Type        | Purpose                                              | Mutable | Indexed     |
-| -------------- | ----------- | ---------------------------------------------------- | ------- | ----------- |
-| `id`           | UUID        | Unique relationship ID                               | No      | Primary key |
-| `source_id`    | UUID        | Source record                                        | No      | Yes         |
-| `target_id`    | UUID        | Target record                                        | No      | Yes         |
-| `relationship` | TEXT        | Relationship type (e.g., `mentions`, `derives_from`) | No      | No          |
-| `metadata`     | JSONB       | Additional context                                   | No      | No          |
-| `created_at`   | TIMESTAMPTZ | When relationship created                            | No      | No          |
-**Indexes:**
-```sql
-CREATE INDEX idx_record_relationships_source ON record_relationships(source_id);
-CREATE INDEX idx_record_relationships_target ON record_relationships(target_id);
-```
-**Example Relationships:**
-- `source → mentions → target`: Source record mentions entity in target record
-- `source → derives_from → target`: Source was extracted from target (e.g., transaction from bank statement)
-- `source → supersedes → target`: Source replaces target (e.g., updated contract)
-### 2.3 `observations` Table
+### 2.1 `observations` Table
 **Purpose:** Store granular, source-specific facts extracted from documents. Observations are the intermediate layer between documents and entity snapshots. Links to sources and interpretations for full provenance.
 **Schema:**
 ```sql
@@ -124,15 +45,15 @@ CREATE TABLE observations (
   entity_id TEXT NOT NULL,
   entity_type TEXT NOT NULL,
   schema_version TEXT NOT NULL,
-  source_record_id UUID REFERENCES records(id),
   source_id UUID REFERENCES sources(id),
-  interpretation_run UUID REFERENCES interpretations(id),
+  interpretation_id UUID REFERENCES interpretations(id),
   observed_at TIMESTAMPTZ NOT NULL,
   specificity_score NUMERIC(3,2) CHECK (specificity_score BETWEEN 0 AND 1),
   source_priority INTEGER DEFAULT 0,
   fields JSONB NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
-  user_id UUID NOT NULL
+  user_id UUID NOT NULL,
+  idempotency_key TEXT
 );
 ```
 **Field Definitions:**
@@ -142,15 +63,15 @@ CREATE TABLE observations (
 | `entity_id`             | TEXT        | Target entity ID (hash-based)                     | No      | Yes         |
 | `entity_type`           | TEXT        | Entity type (person, company, invoice, etc.)      | No      | Yes         |
 | `schema_version`        | TEXT        | Schema version used for extraction                | No      | No          |
-| `source_record_id`      | UUID        | Source document/record (legacy)                   | No      | Yes         |
 | `source_id`             | UUID        | Source that produced this observation             | No      | Yes         |
-| `interpretation_run` | UUID        | Interpretation that created this                  | No      | Yes         |
+| `interpretation_id`     | UUID        | Interpretation that created this                  | No      | Yes         |
 | `observed_at`           | TIMESTAMPTZ | Timestamp when observation was made               | No      | Yes         |
 | `specificity_score`     | NUMERIC     | How specific this observation is (0-1)            | No      | No          |
 | `source_priority`       | INTEGER     | Priority of source (higher = more trusted)        | No      | No          |
 | `fields`                | JSONB       | Granular facts extracted from document            | No      | No          |
 | `created_at`            | TIMESTAMPTZ | Observation creation timestamp                    | No      | No          |
 | `user_id`               | UUID        | User who owns this observation                    | No      | Yes         |
+| `idempotency_key`       | TEXT        | Client-provided key for correction idempotency    | No      | Yes         |
 **Source Priority Levels:**
 | Source | Priority | Use Case |
 |--------|----------|----------|
@@ -160,10 +81,11 @@ CREATE TABLE observations (
 **Indexes:**
 ```sql
 CREATE INDEX idx_observations_entity ON observations(entity_id, observed_at DESC);
-CREATE INDEX idx_observations_record ON observations(source_record_id);
 CREATE INDEX idx_observations_source ON observations(source_id) WHERE source_id IS NOT NULL;
-CREATE INDEX idx_observations_run ON observations(interpretation_run) WHERE interpretation_run IS NOT NULL;
+CREATE INDEX idx_observations_interpretation ON observations(interpretation_id) WHERE interpretation_id IS NOT NULL;
 CREATE INDEX idx_observations_user ON observations(user_id);
+CREATE INDEX idx_observations_idempotency_key ON observations(user_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 ```
 **RLS Policies:**
 ```sql
@@ -177,7 +99,7 @@ CREATE POLICY "Service role full access" ON observations
 - Observations are immutable once created
 - Multiple observations can exist for the same entity from different sources
 - Reducers merge observations into entity snapshots deterministically
-- `source_id` and `interpretation_run` provide full provenance chain
+- `source_id` and `interpretation_id` provide full provenance chain
 - Corrections use `source_priority = 1000` to override AI extraction
 - See [`docs/subsystems/observation_architecture.md`](./observation_architecture.md) for details
 - See [`docs/subsystems/sources.md`](./sources.md) for sources-first architecture
@@ -270,7 +192,8 @@ CREATE TABLE raw_fragments (
   frequency_count INTEGER DEFAULT 1,
   first_seen TIMESTAMPTZ DEFAULT NOW(),
   last_seen TIMESTAMPTZ DEFAULT NOW(),
-  user_id UUID NOT NULL
+  user_id UUID NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
 **Field Definitions:**
@@ -287,9 +210,9 @@ CREATE TABLE raw_fragments (
 | `first_seen`            | TIMESTAMPTZ | When fragment first appeared                           | No      | No          |
 | `last_seen`             | TIMESTAMPTZ | When fragment last appeared                            | Yes     | No          |
 | `user_id`               | UUID        | User who owns this fragment                            | No      | Yes         |
+| `created_at`            | TIMESTAMPTZ | When this fragment row was recorded                    | No      | No          |
 **Indexes:**
 ```sql
-CREATE INDEX idx_fragments_record ON raw_fragments(record_id);
 CREATE INDEX idx_fragments_source ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
 CREATE INDEX idx_fragments_run ON raw_fragments(interpretation_run) WHERE interpretation_run IS NOT NULL;
 CREATE INDEX idx_fragments_frequency ON raw_fragments(fragment_key, frequency_count DESC);
@@ -317,6 +240,7 @@ CREATE POLICY "Service role full access" ON raw_fragments
 CREATE TABLE sources (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   content_hash TEXT NOT NULL,
+  idempotency_key TEXT,
   storage_url TEXT NOT NULL,
   storage_status TEXT NOT NULL DEFAULT 'uploaded',
   mime_type TEXT NOT NULL,
@@ -335,6 +259,7 @@ CREATE TABLE sources (
 | ----------------- | ----------- | ----------------------------------------------- | ------- | ----------- |
 | `id`              | UUID        | Unique source ID                                | No      | Primary key |
 | `content_hash`    | TEXT        | SHA-256 hash of content                         | No      | Yes         |
+| `idempotency_key` | TEXT        | Client-provided key for ingest idempotency      | No      | Yes         |
 | `storage_url`     | TEXT        | URL in object storage                           | No      | No          |
 | `storage_status`  | TEXT        | 'uploaded', 'pending', 'failed'                 | Yes     | Yes         |
 | `mime_type`       | TEXT        | MIME type of content                            | No      | No          |
@@ -350,6 +275,8 @@ CREATE TABLE sources (
 CREATE INDEX idx_sources_hash ON sources(content_hash);
 CREATE INDEX idx_sources_user ON sources(user_id);
 CREATE INDEX idx_sources_created ON sources(created_at DESC);
+CREATE INDEX idx_sources_idempotency_key ON sources(user_id, idempotency_key)
+  WHERE idempotency_key IS NOT NULL;
 ```
 **RLS Policies:**
 ```sql
@@ -540,54 +467,7 @@ CREATE POLICY "Service role full access" ON entity_merges
 - Unique constraint on `(user_id, from_entity_id)` prevents merge chains
 - Merge rewrites observations, not the original entity record
 - See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for merge semantics
-### 2.16 `relationships` Table
-**Purpose:** Store first-class typed relationships between entities. Enables flexible graph modeling without hard-coded hierarchies.
-**Schema:**
-```sql
-CREATE TABLE relationships (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  relationship_type TEXT NOT NULL,
-  source_entity_id TEXT NOT NULL,
-  target_entity_id TEXT NOT NULL,
-  source_record_id UUID REFERENCES records(id),
-  metadata JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  user_id UUID NOT NULL
-);
-```
-**Field Definitions:**
-| Field               | Type        | Purpose                                                | Mutable | Indexed     |
-| ------------------- | ----------- | ------------------------------------------------------ | ------- | ----------- |
-| `id`                | UUID        | Unique relationship ID                                 | No      | Primary key |
-| `relationship_type` | TEXT        | Relationship type (PART_OF, CORRECTS, REFERS_TO, etc.) | No      | Yes         |
-| `source_entity_id`  | TEXT        | Source entity ID                                       | No      | Yes         |
-| `target_entity_id`  | TEXT        | Target entity ID                                       | No      | Yes         |
-| `source_record_id`  | UUID        | Document that created this relationship                | No      | No          |
-| `metadata`          | JSONB       | Relationship-specific metadata                         | No      | No          |
-| `created_at`        | TIMESTAMPTZ | When relationship was created                          | No      | No          |
-| `user_id`           | UUID        | User who owns this relationship                        | No      | Yes         |
-**Indexes:**
-```sql
-CREATE INDEX idx_relationships_source ON relationships(source_entity_id);
-CREATE INDEX idx_relationships_target ON relationships(target_entity_id);
-CREATE INDEX idx_relationships_type ON relationships(relationship_type);
-```
-**Relationship Types:**
-- `PART_OF` — hierarchical relationships (invoice line item part of invoice)
-- `CORRECTS` — correction relationships (corrected invoice corrects original)
-- `REFERS_TO` — reference relationships (invoice refers to contract)
-- `SETTLES` — settlement relationships (payment settles invoice)
-- `DUPLICATE_OF` — duplicate detection (duplicate record)
-- `DEPENDS_ON` — dependency relationships
-- `SUPERSEDES` — version relationships
-**Notes:**
-- Relationships are first-class records, not hard-coded foreign keys
-- Multiple relationship types can exist between same entities
-- Graph queries traverse relationships dynamically
-- **DEPRECATED**: This table is being phased out in favor of `relationship_observations` and `relationship_snapshots`
-- See [`docs/subsystems/relationships.md`](./relationships.md) for details
-
-### 2.17 `relationship_observations` Table
+### 2.16 `relationship_observations` Table
 **Purpose:** Store observations about relationships from multiple sources. Enables deterministic merging and provenance tracking for relationships.
 
 **Schema:**
@@ -701,8 +581,6 @@ CREATE INDEX idx_relationship_snapshots_snapshot ON relationship_snapshots USING
 ## 3. JSONB `fields` Schema (Observations)
 ### 3.1 Overview
 The `fields` JSONB field in `observations` stores [entity schema](#entity-schema)-specific [extracted](#extraction) fields. Each [entity type](#entity-type) (e.g., `invoice`) has a well-defined `fields` structure based on its [entity schema](#entity-schema).
-
-**Note:** This section documents the current observations-based architecture. For legacy `records` table documentation, see historical release notes.
 
 **Design Principles:**
 - **[Entity schema](#entity-schema)-driven:** Structure defined by [entity type](#entity-type) and [entity schema](#entity-schema)
@@ -915,7 +793,6 @@ WHERE entity_type = 'flight'
   AND (fields->>'departure_datetime')::timestamptz BETWEEN NOW() AND NOW() + INTERVAL '7 days';
 ```
 
-**Note:** Legacy queries using `records` table are documented for historical reference. Current architecture uses `observations` table with `fields` JSONB column.
 ### 3.11 [Extraction](#extraction) Metadata Structure
 Unknown fields and validation warnings are stored in the `raw_fragments` table. This is part of the **three-layer storage model** that preserves all [extracted](#extraction) data while maintaining [entity schema](#entity-schema) compliance in observation `fields`.
 
@@ -924,10 +801,9 @@ Unknown fields and validation warnings are stored in the `raw_fragments` table. 
 - `fields`: [Entity schema](#entity-schema)-compliant fields only (deterministic, queryable) in [observations](#observation)
 - `raw_fragments`: Unknown fields, warnings, quality indicators (preservation layer)
 
-**Note:** Legacy `extraction_metadata` in `records` table is documented for historical reference. Current architecture uses `raw_fragments` table for unknown fields.
 **Purpose:**
 - Preserve all extracted data (zero data loss)
-- Maintain schema compliance in `properties` for deterministic queries
+- Maintain schema compliance in `fields` for deterministic queries
 - Provide extraction quality metrics for debugging and schema evolution
 - Enable future automatic schema expansion based on patterns in `unknown_fields`
 **Structure:**
@@ -975,9 +851,9 @@ interface ExtractionMetadata {
 }
 ```
 **Key Paths (for indexing and queries):**
-- `extraction_metadata->'unknown_fields'` — Query records with unknown fields
-- `extraction_metadata->'warnings'` — Query records with extraction issues
-- `extraction_metadata->'extraction_quality'->'fields_extracted_count'` — Quality metrics
+- `fragment_key` — Unknown field name
+- `fragment_value` — Unknown field value
+- `fragment_envelope->'reason'` — Classification for raw fragment
 **Usage Patterns:**
 **Find [observations](#observation) with [extraction](#extraction) warnings:**
 ```sql
@@ -1005,7 +881,6 @@ GROUP BY fragment_key
 HAVING COUNT(*) > 3;
 ```
 
-**Note:** Legacy queries using `records.extraction_metadata` are documented for historical reference. Current architecture uses `raw_fragments` table.
 **Indexes:**
 ```sql
 -- Index for querying raw_fragments (unknown fields)
@@ -1016,7 +891,6 @@ CREATE INDEX idx_raw_fragments_source
   ON raw_fragments(source_id) WHERE fragment_type = 'unknown_field';
 ```
 
-**Note:** Legacy indexes on `records.extraction_metadata` are documented for historical reference. Current architecture uses `raw_fragments` table indexes.
 **Related Documentation:**
 - Layered storage model: `docs/architecture/schema_handling.md`
 - Field validation patterns: See [entity schema](#entity-schema) definitions in `docs/subsystems/schema_registry.md`
@@ -1065,22 +939,23 @@ CREATE POLICY "Service role full access - entities" ON entities
 - Merged entities have `merged_to_entity_id` set to target entity
 - Default queries should exclude merged entities: `WHERE merged_to_entity_id IS NULL`
 - See [`docs/subsystems/entity_merge.md`](./entity_merge.md) for complete merge behavior
-### 4.2 `events` Table
+### 4.2 `timeline_events` Table
 ```sql
-CREATE TABLE events (
-  id TEXT PRIMARY KEY,                             -- Deterministic hash-based ID
+CREATE TABLE timeline_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type TEXT NOT NULL,                        -- 'InvoiceIssued', 'FlightBooked'
   event_timestamp TIMESTAMP WITH TIME ZONE NOT NULL,
-  source_record_id UUID REFERENCES records(id),
+  source_id UUID REFERENCES sources(id),
   source_field TEXT,                               -- Field that generated event
-  entities JSONB DEFAULT '[]',                     -- Array of entity IDs
+  entity_ids JSONB DEFAULT '[]',                   -- Array of entity IDs
   metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  user_id UUID NOT NULL
 );
 ```
 **Graph Edges:**
-- `record → entity`: Which entities are mentioned in a record
-- `record → event`: Which events are derived from a record
+- `source → entity`: Which entities are mentioned in a source
+- `source → event`: Which events are derived from a source
 - `event → entity`: Which entities are involved in an event
 ## 5. Row-Level Security (RLS)
 ### 5.1 RLS Architecture
@@ -1092,40 +967,24 @@ All user-owned tables have RLS enabled with user isolation. The security model i
 The following tables are user-scoped with RLS policies:
 | Table | User Column | RLS Policy |
 |-------|-------------|------------|
-| `sources` | `user_id` | SELECT for own records |
-| `interpretation_runs` | `user_id` | SELECT for own records |
-| `observations` | `user_id` | SELECT for own records |
-| `entity_snapshots` | `user_id` | SELECT for own records |
-| `entities` | `user_id` | SELECT for own records |
-| `raw_fragments` | `user_id` | SELECT for own records |
-| `entity_merges` | `user_id` | SELECT for own records |
+| `sources` | `user_id` | SELECT for own data |
+| `interpretations` | `user_id` | SELECT for own data |
+| `observations` | `user_id` | SELECT for own data |
+| `entity_snapshots` | `user_id` | SELECT for own data |
+| `entities` | `user_id` | SELECT for own data |
+| `raw_fragments` | `user_id` | SELECT for own data |
+| `entity_merges` | `user_id` | SELECT for own data |
 **Standard RLS Policy Pattern:**
 ```sql
 ALTER TABLE <table_name> ENABLE ROW LEVEL SECURITY;
--- Users can only read their own records
+-- Users can only read their own data
 CREATE POLICY "Users read own <table_name>" ON <table_name>
   FOR SELECT USING (user_id = auth.uid());
 -- Service role has full access for mutations
 CREATE POLICY "Service role full access" ON <table_name>
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
-### 5.3 Records Table (Legacy)
-**Service Role (Full Access):**
-```sql
-CREATE POLICY "Service role full access" ON records
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-```
-**Authenticated Users (Read/Write):**
-```sql
-CREATE POLICY "public write" ON records
-  FOR ALL
-  USING      ( auth.role() = 'authenticated' )
-  WITH CHECK ( auth.role() = 'authenticated' );
-```
-### 5.4 Entity Snapshots RLS
+### 5.3 Entity Snapshots RLS
 ```sql
 ALTER TABLE entity_snapshots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users read own snapshots" ON entity_snapshots
@@ -1142,20 +1001,20 @@ CREATE POLICY "Service role full access" ON entity_snapshots
 ### 6.1 Migration File Structure
 **Location:** `supabase/migrations/`
 **Naming:** `YYYYMMDDHHMMSS_description.sql`
-**Example:** `20240115103000_add_summary_column.sql`
+**Example:** `20240115103000_add_file_name_to_sources.sql`
 **Template:**
 ```sql
--- Migration: Add summary column to records
+-- Migration: Add file_name column to sources
 -- Date: 2024-01-15
 -- Author: System
 -- UP Migration
-ALTER TABLE records ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE sources ADD COLUMN IF NOT EXISTS file_name TEXT;
 -- Create index (if needed)
--- CREATE INDEX idx_records_summary ON records USING GIN(to_tsvector('english', summary));
+-- CREATE INDEX idx_sources_file_name ON sources(file_name);
 -- Backfill (if needed, deterministic only)
--- UPDATE records SET summary = ... WHERE summary IS NULL;
+-- UPDATE sources SET file_name = ... WHERE file_name IS NULL;
 -- DOWN Migration (commented, for reference)
--- ALTER TABLE records DROP COLUMN IF EXISTS summary;
+-- ALTER TABLE sources DROP COLUMN IF EXISTS file_name;
 ```
 ### 6.2 Migration Safety Rules
 **MUST:**
@@ -1275,35 +1134,36 @@ test("FinancialRecord properties are valid", () => {
 });
 ```
 ### 9.2 Integration Tests
-**Test Record CRUD:**
+**Test Source Insert/Fetch:**
 ```typescript
-test("insert and fetch record", async () => {
-  const record = await insertRecord({
-    type: "FinancialRecord",
-    properties: { invoice_number: "INV-001", amount: 1500 },
+test("insert and fetch source", async () => {
+  const source = await insertSource({
+    content_hash: "hash_123",
+    mime_type: "text/plain",
+    storage_url: "file:///tmp/source.txt",
   });
-  const fetched = await fetchRecord(record.id);
-  expect(fetched.properties.invoice_number).toBe("INV-001");
+  const fetched = await fetchSource(source.id);
+  expect(fetched.content_hash).toBe("hash_123");
 });
 ```
 ### 9.3 Migration Tests
 **Test Up/Down Migrations:**
 ```typescript
-test("migration adds summary column", async () => {
-  await runMigration("20240115_add_summary.sql");
-  const columns = await getTableColumns("records");
-  expect(columns).toContain("summary");
-  await rollbackMigration("20240115_add_summary.sql");
-  const columnsAfter = await getTableColumns("records");
-  expect(columnsAfter).not.toContain("summary");
+test("migration adds file_name column", async () => {
+  await runMigration("20240115_add_file_name_to_sources.sql");
+  const columns = await getTableColumns("sources");
+  expect(columns).toContain("file_name");
+  await rollbackMigration("20240115_add_file_name_to_sources.sql");
+  const columnsAfter = await getTableColumns("sources");
+  expect(columnsAfter).not.toContain("file_name");
 });
 ```
 ## 10. Schema Invariants (MUST/MUST NOT)
 ### MUST
-1. **All records MUST have `id`, `type`, `properties`**
-2. **`properties` MUST be valid JSON**
-3. **`type` MUST map to a known schema**
-4. **All foreign keys MUST reference valid records** (no orphans)
+1. **All sources MUST have `id`, `content_hash`, `created_at`**
+2. **All observations MUST have `entity_id`, `entity_type`, `fields`**
+3. **`entity_type` MUST map to a known schema**
+4. **All foreign keys MUST reference valid sources/entities** (no orphans)
 5. **Migrations MUST be reversible**
 6. **Migrations MUST preserve existing data**
 7. **JSONB schemas MUST include `schema_version`**
@@ -1325,7 +1185,7 @@ Load `docs/subsystems/schema.md` when:
 - Modifying database schema (adding tables, columns, indexes)
 - Working with `properties` JSONB fields
 - Creating or running migrations
-- Querying records with complex JSONB filters
+- Querying observations with complex JSONB filters
 - Planning data model changes
 - Debugging schema-related issues
 ### Required Co-Loaded Documents

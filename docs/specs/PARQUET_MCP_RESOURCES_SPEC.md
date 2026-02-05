@@ -22,11 +22,13 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
 **Description**: Access all rows from a specific data type's parquet file
 
 **Examples**:
+
 - `parquet://data_types/task` - All task rows
 - `parquet://data_types/invoice` - All invoice rows
 - `parquet://data_types/transaction` - All transaction rows
 
 **Implementation**:
+
 - List all available data types via `list_data_types` tool
 - For each data type, create resource: `parquet://data_types/{data_type}`
 - When reading resource, use `read_parquet` with `data_type` parameter
@@ -40,6 +42,7 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
 **Description**: List all available data types
 
 **Implementation**:
+
 - Call `list_data_types` tool
 - Return list of data types with metadata (row counts, file sizes if available)
 
@@ -50,10 +53,12 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
 **Description**: Get schema information for a specific data type
 
 **Examples**:
+
 - `parquet://schemas/task` - Task schema
 - `parquet://schemas/invoice` - Invoice schema
 
 **Implementation**:
+
 - Call `get_schema` tool with `data_type` parameter
 - Return schema information (column names, types, nullable flags)
 
@@ -64,10 +69,12 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
 **Description**: Access parquet file by filename (if file-based access is supported)
 
 **Examples**:
+
 - `parquet://files/task.parquet`
 - `parquet://files/tasks/tasks.parquet` (if subdirectory structure)
 
 **Implementation**:
+
 - List all parquet files in DATA_DIR
 - For each file, create resource: `parquet://files/{relative_path}`
 - When reading, use file path to read parquet file
@@ -113,12 +120,14 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
 **Implementation Steps**:
 
 1. **Get all data types**:
+
    ```python
    # Use existing list_data_types tool logic
    data_types = list_data_types()
    ```
 
 2. **Create data type collection resources**:
+
    ```python
    for data_type in data_types:
        resources.append({
@@ -130,6 +139,7 @@ All resource URIs follow the pattern: `parquet://{resource_type}/{identifier}`
    ```
 
 3. **Create schema resources**:
+
    ```python
    for data_type in data_types:
        resources.append({
@@ -165,15 +175,15 @@ def parse_resource_uri(uri: str) -> dict:
     """Parse parquet resource URI into components."""
     if not uri.startswith("parquet://"):
         raise ValueError(f"Invalid URI scheme: {uri}")
-    
+
     path = uri[10:]  # Remove "parquet://" prefix
     segments = [s for s in path.split("/") if s]
-    
+
     if len(segments) == 0:
         raise ValueError("Empty resource path")
-    
+
     resource_type = segments[0]
-    
+
     if resource_type == "data_types":
         if len(segments) == 1:
             return {"type": "data_types_list"}
@@ -181,20 +191,20 @@ def parse_resource_uri(uri: str) -> dict:
             return {"type": "data_type_collection", "data_type": segments[1]}
         else:
             raise ValueError(f"Invalid data_types path: {uri}")
-    
+
     elif resource_type == "schemas":
         if len(segments) == 2:
             return {"type": "schema", "data_type": segments[1]}
         else:
             raise ValueError(f"Invalid schemas path: {uri}")
-    
+
     elif resource_type == "files":
         if len(segments) >= 2:
             filename = "/".join(segments[1:])
             return {"type": "file", "filename": filename}
         else:
             raise ValueError(f"Invalid files path: {uri}")
-    
+
     else:
         raise ValueError(f"Unknown resource type: {resource_type}")
 ```
@@ -205,7 +215,7 @@ def parse_resource_uri(uri: str) -> dict:
 async def handle_read_resource(uri: str) -> dict:
     """Handle read_resource request."""
     parsed = parse_resource_uri(uri)
-    
+
     if parsed["type"] == "data_types_list":
         # Return list of all data types
         data_types = list_data_types()
@@ -214,7 +224,7 @@ async def handle_read_resource(uri: str) -> dict:
             "data_types": data_types,
             "count": len(data_types)
         }
-    
+
     elif parsed["type"] == "data_type_collection":
         # Read parquet data (limit to 100 rows for resource browsing)
         data_type = parsed["data_type"]
@@ -231,7 +241,7 @@ async def handle_read_resource(uri: str) -> dict:
             "returned": len(result["data"]),
             "note": "Limited to 100 rows. Use read_parquet tool for full dataset or pagination."
         }
-    
+
     elif parsed["type"] == "schema":
         # Get schema information
         data_type = parsed["data_type"]
@@ -241,14 +251,14 @@ async def handle_read_resource(uri: str) -> dict:
             "data_type": data_type,
             "schema": schema
         }
-    
+
     elif parsed["type"] == "file":
         # Read file by filename
         filename = parsed["filename"]
         # Implementation depends on file access pattern
         # Could use read_parquet with file_path if supported
         raise NotImplementedError("File resources not yet implemented")
-    
+
     else:
         raise ValueError(f"Unknown resource type: {parsed['type']}")
 ```
@@ -315,5 +325,4 @@ Resources should complement existing tools:
 ## Related Documents
 
 - [`docs/specs/MCP_SPEC.md`](../specs/MCP_SPEC.md) - Complete MCP action specification
-- [`docs/conventions/mcp_interaction_rules.mdc`](../conventions/mcp_interaction_rules.mdc) - MCP interaction patterns
 - [`src/server.ts`](../../src/server.ts) - Neotoma MCP resource implementation (reference)

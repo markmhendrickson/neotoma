@@ -18,7 +18,7 @@ The Neotoma HTTP server exposes REST endpoints that ChatGPT can call as Actions.
    ```
 2. **Start the HTTP server:**
    ```bash
-   npm run dev:http
+   npm run dev:server
    ```
    Should see: `HTTP Actions listening on :8080`
 3. **Create a tunnel** to expose localhost (required for ChatGPT to access):
@@ -127,7 +127,7 @@ The OpenAPI schema includes these actions:
 | -------------- | ---------------------------- | ---------------------- |
 | Protocol       | stdio (JSON-RPC)             | HTTP REST (OpenAPI)    |
 | Transport      | stdin/stdout                 | HTTPS                  |
-| Server mode    | `npm run dev` or `npm start` | `npm run dev:http`     |
+| Server mode    | `npm run dev` or `npm start` | `npm run dev:server`     |
 | Schema         | MCP tool definitions         | OpenAPI 3.1.0          |
 | Authentication | N/A (local process)          | Bearer token required  |
 | Deployment     | Local only                   | Local or production    |
@@ -139,7 +139,7 @@ For other MCP integrations, see:
 # Build server
 npm run build
 # Start HTTP server
-npm run dev:http
+npm run dev:server
 # Set environment variables
 export SUPABASE_URL="https://your-project-id.supabase.co"
 export SUPABASE_SERVICE_KEY="your-service-role-key-here"

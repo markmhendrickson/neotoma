@@ -351,3 +351,83 @@ export const ALL_ERROR_CODES = [
   ...SERVER_ERROR_CODES,
   ...SPECIFIC_ERROR_CODES,
 ];
+
+export type AgentToolCall = {
+  tool: string;
+  arguments: Record<string, unknown> | null;
+  result?: unknown;
+};
+
+export type ExpectedEntitySpec = {
+  entity_type_any_of: string[];
+  required_fields_any_of: string[];
+};
+
+export type ExpectedRelationshipSpec = {
+  mode: "create_relationship" | "store_fields" | "either";
+  relationship_type_any_of: string[];
+  source_entity_type_any_of: string[];
+  target_entity_type_any_of: string[];
+};
+
+export function extractStoredEntities(toolCalls: AgentToolCall[]): Record<string, unknown>[] {
+  const entities: Record<string, unknown>[] = [];
+  for (const call of toolCalls) {
+    if (call.tool !== "store") continue;
+    const args = call.arguments;
+    if (!args || typeof args !== "object") continue;
+    const rawEntities = (args as { entities?: unknown }).entities;
+    if (!Array.isArray(rawEntities)) continue;
+    for (const entity of rawEntities) {
+      if (entity && typeof entity === "object") {
+        entities.push(entity as Record<string, unknown>);
+      }
+    }
+  }
+  return entities;
+}
+
+export function validateToolCallsInclude(toolCalls: AgentToolCall[], requiredActions: string[]) {
+  const names = toolCalls.map((call) => call.tool);
+  for (const requiredAction of requiredActions) {
+    expect(names).toContain(requiredAction);
+  }
+}
+
+export function validateStoredEntities(toolCalls: AgentToolCall[], specs: ExpectedEntitySpec[]) {
+  if (specs.length === 0) return;
+  const entities = extractStoredEntities(toolCalls);
+  expect(entities.length).toBeGreaterThan(0);
+  for (const spec of specs) {
+    const match = entities.find((entity) => {
+      const entityType = String(entity.entity_type || "").toLowerCase();
+      const typeOk = spec.entity_type_any_of.some((type) => entityType === type.toLowerCase());
+      if (!typeOk) return false;
+      return spec.required_fields_any_of.some((field) => field in entity);
+    });
+    expect(match).toBeDefined();
+  }
+}
+
+export function validateRelationshipSignals(
+  toolCalls: AgentToolCall[],
+  specs: ExpectedRelationshipSpec[]
+) {
+  if (specs.length === 0) return;
+  const relationshipCalls = toolCalls.filter((call) => call.tool === "create_relationship");
+  const hasRelationshipCall = relationshipCalls.length > 0;
+  const hasStoreRelationshipFields = extractStoredEntities(toolCalls).some((entity) =>
+    Object.keys(entity).some((key) => key.includes("relationship") || key.includes("related"))
+  );
+  for (const spec of specs) {
+    if (spec.mode === "create_relationship") {
+      expect(hasRelationshipCall).toBe(true);
+      continue;
+    }
+    if (spec.mode === "store_fields") {
+      expect(hasStoreRelationshipFields).toBe(true);
+      continue;
+    }
+    expect(hasRelationshipCall || hasStoreRelationshipFields).toBe(true);
+  }
+}

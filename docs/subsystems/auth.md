@@ -65,6 +65,36 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 - OAuth state expires after 10 minutes
 - All tokens validated via Supabase Auth
 
+### Local Auth (Local Backend)
+
+Local mode uses a built-in auth provider and does not call Supabase. OAuth endpoints remain the same, but the authorization step is handled by a local login page.
+
+**Local flow summary:**
+
+1. Client opens `GET /api/mcp/oauth/authorize` with PKCE parameters.
+2. Neotoma shows `GET /api/mcp/oauth/local-login` and collects local credentials.
+3. On successful login, Neotoma creates a local OAuth connection and redirects to the client redirect URI with `code` and `state`.
+4. Client exchanges `code` at `POST /api/mcp/oauth/token` and uses the returned access token.
+
+**Local users:**
+
+- Stored in SQLite (`local_auth_users` table)
+- First successful login bootstraps the initial local user
+- Subsequent logins require valid local credentials
+
+**Dev-only stub:**
+
+- Disabled by default
+- Enabled only via CLI: `neotoma auth login --dev-stub`
+
+**Base URL when running locally:**
+
+The redirect to the local login page uses `API_BASE_URL` (or the default `http://localhost:8080` in development). If your `.env` has `API_BASE_URL=https://dev.neotoma.io`, the browser will open dev.neotoma.io for login even when the API process is running on your machine. For local-only use, set `API_BASE_URL=http://localhost:8080` or leave it unset, and point Cursor at `http://localhost:8080/mcp`.
+
+**Deployment with multiple instances (local backend):**
+
+OAuth state for the local login flow is stored in SQLite. If more than one API instance is running (e.g. multiple pods or processes behind a load balancer), the instance that serves `/api/mcp/oauth/authorize` may not be the one that serves `/api/mcp/oauth/local-login`. The second instance has no record of the state, so the user sees "authorization link expired or already used" even on first use. Fix: run a single API instance for the local backend, or configure sticky sessions so that all requests under `/api/mcp/oauth` are routed to the same instance for the duration of the flow.
+
 ### Session Token Flow (Deprecated)
 
 **Will be removed in a future version. Use OAuth instead.**

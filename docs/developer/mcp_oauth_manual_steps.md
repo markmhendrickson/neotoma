@@ -121,7 +121,7 @@ Restart backend server to load new configuration:
 npm run dev
 
 # Or if running HTTP actions server
-npm run dev:http
+npm run dev:server
 ```
 
 ## Step 5: Test OAuth Flow

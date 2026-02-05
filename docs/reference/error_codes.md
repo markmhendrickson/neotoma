@@ -55,6 +55,11 @@ interface ErrorEnvelope {
 | `DB_CONSTRAINT_VIOLATION` | 409 | No | Unique constraint violated (duplicate record) |
 | `DB_TRANSACTION_FAILED` | 500 | Yes | Transaction rollback failed |
 | `DB_TIMEOUT` | 504 | Yes | Database query timed out |
+
+### Resource Errors
+| Code | HTTP | Retry? | Meaning |
+|------|------|--------|---------|
+| `RESOURCE_NOT_FOUND` | 404 | No | Requested resource does not exist |
 **Common Causes:**
 - `DB_CONNECTION_FAILED`: Supabase project paused or network issue
 - `DB_CONSTRAINT_VIOLATION`: Attempting to create duplicate record

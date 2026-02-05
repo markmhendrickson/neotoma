@@ -4,85 +4,6 @@
  */
 
 export interface paths {
-    "/types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List existing record types */
-        get: operations["listTypes"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/retrieve_records": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retrieve records with optional semantic search
-         * @description Filter by type and/or match property values. RECOMMENDED: Generate query_embedding client-side from search terms using OpenAI text-embedding-3-small before calling. Server auto-generates if omitted. Use search_mode to control semantic vs keyword matching.
-         */
-        post: operations["retrieveRecords"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/upload_file": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Upload file and attach or create record
-         * @description Send multipart/form-data with field `file` and optional `record_id`.
-         *     If `record_id` is provided, the file is appended to the existing record's `file_urls`.
-         *     When `record_id` is omitted, the server analyzes the file (via OpenAI when available) to infer `type` and `properties`,
-         *     creates a new record, and associates the uploaded file. Provide an optional `properties` JSON field to bypass analysis
-         *     and supply record properties manually. CSV uploads default to creating one record per row (set `csv_row_records=false`
-         *     to skip) plus relationships back to the originating dataset record.
-         */
-        post: operations["uploadFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/analyze_file": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Analyze a file without storing it to infer type, summary, and properties */
-        post: operations["analyzeFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/get_file_url": {
         parameters: {
             query?: never;
@@ -92,7 +13,7 @@ export interface paths {
         };
         /**
          * Get signed file URL
-         * @description Provide a storage path like "files/<record_id>/<filename>".
+         * @description Provide a storage path like "files/<source_id>/<filename>".
          */
         get: operations["getFileUrl"];
         put?: never;
@@ -562,40 +483,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/records/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get record by ID */
-        get: operations["getRecordById"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/records/{id}/history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get record history */
-        get: operations["getRecordHistory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/get_entity_snapshot": {
         parameters: {
             query?: never;
@@ -681,135 +568,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/record_comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Compare records */
-        post: operations["recordComparison"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/generate_embedding": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Generate embedding */
-        post: operations["generateEmbedding"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        RetrieveRecordsRequest: {
-            /** @description Filter by record type */
-            type?: string;
-            /** @description Filter by property values (simple top-level key matching) */
-            properties?: {
-                [key: string]: unknown;
-            };
-            /** @description Maximum number of results (default 100, max 500) */
-            limit?: number;
-            /** @description Search terms for fuzzy/semantic matching (requires query_embedding for semantic mode) */
-            search?: string[];
-            /**
-             * @description Search mode - semantic uses vector embeddings, keyword uses text matching, both combines results
-             * @default both
-             * @enum {string}
-             */
-            search_mode: "semantic" | "keyword" | "both";
-            /**
-             * @description Minimum cosine similarity score for semantic search (0 = no similarity, 1 = identical). Typical scores range 0.3-0.5 for related content.
-             * @default 0.3
-             */
-            similarity_threshold: number;
-            /**
-             * @description RECOMMENDED: Generate 1536-dimensional embedding client-side using OpenAI text-embedding-3-small from search terms.
-             *     - Generate from: search.join with space separator or search array elements combined
-             *     - If you generate and include this field, must be non-empty array of exactly 1536 numbers.
-             *     - Do NOT send empty array. Omit field entirely if not generating client-side.
-             *     - Server will auto-generate if omitted (requires OPENAI_API_KEY on server).
-             *     Generation example: Use OpenAI embeddings.create with model text-embedding-3-small and input search.join with space separator
-             */
-            query_embedding?: number[];
-            /** @description When true, response includes a {records,total_count} object instead of a bare array so callers know the full number of matches. */
-            include_total_count?: boolean;
-        };
-        UploadFileRequest: {
-            /** @description Existing record ID to attach the file to. Omit to create a new record. */
-            record_id?: string;
-            /** @description Storage bucket name (optional, defaults to 'files'). */
-            bucket?: string;
-            /** @description Optional JSON object to use as properties when creating a new record. If provided, automatic analysis is skipped. */
-            properties?: string;
-            /** @description Optional flag for CSV uploads. Defaults to true. Set to false to skip creating per-row records linked to the dataset. */
-            csv_row_records?: boolean;
-            /**
-             * Format: binary
-             * @description File to upload
-             */
-            file: string;
-        };
         FileUrlResponse: {
             /** @description Signed URL for accessing the file */
             url?: string;
         };
-        Record: {
-            id?: string;
-            type?: string;
-            /** @description Arbitrary key/value properties stored in JSONB */
-            properties?: {
-                [key: string]: unknown;
-            };
-            file_urls?: string[];
-            /** @description 1536-dimensional embedding vector (if provided). Note: Embeddings are excluded from responses to reduce payload size. */
-            embedding?: number[];
-            /** Format: date-time */
-            created_at?: string;
-            /** Format: date-time */
-            updated_at?: string;
-        };
         Error: {
             error?: string;
-        };
-        AnalyzeFileResponse: {
-            /** @description Inferred canonical record type */
-            type?: string;
-            /** @description Structured fields extracted from the file */
-            properties?: {
-                [key: string]: unknown;
-            };
-            /** @description Human-readable summary of the file contents */
-            summary?: string;
-            /** @description Records that were queried during the conversation (if any) */
-            records_queried?: components["schemas"]["Record"][];
-            /** @description Exact number of records in the final retrieve_records call when available */
-            records_total_count?: number;
-            /** @description Function calls made during the conversation (if any) */
-            function_calls?: {
-                name?: string;
-                arguments?: {
-                    [key: string]: unknown;
-                };
-            }[];
         };
         ErrorEnvelope: {
             error_code?: string;
@@ -935,6 +703,7 @@ export interface components {
                 [key: string]: unknown;
             }[];
             source_priority?: number;
+            idempotency_key: string;
             user_id?: string;
         };
         StoreStructuredResponse: {
@@ -968,200 +737,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listTypes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Distinct record types */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        types?: string[];
-                    };
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    retrieveRecords: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RetrieveRecordsRequest"];
-            };
-        };
-        responses: {
-            /** @description Records (optionally with total_count metadata) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Record"][] | {
-                        records?: components["schemas"]["Record"][];
-                        /** @description Exact number of matching records */
-                        total_count?: number;
-                    };
-                };
-            };
-            /** @description Invalid payload */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    uploadFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["UploadFileRequest"];
-            };
-        };
-        responses: {
-            /** @description Updated record after attaching the file */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Record"];
-                };
-            };
-            /** @description Newly created record derived from uploaded file */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Record"];
-                };
-            };
-            /** @description Invalid payload */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    analyzeFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    /**
-                     * Format: binary
-                     * @description File to analyze
-                     */
-                    file: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Analysis result describing the inferred record type and metadata */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalyzeFileResponse"];
-                };
-            };
-            /** @description Missing file or invalid payload */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Record not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Analysis service failure */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     getFileUrl: {
         parameters: {
             query: {
@@ -1936,52 +1511,6 @@ export interface operations {
             };
         };
     };
-    getRecordById: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Record */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Record"];
-                };
-            };
-        };
-    };
-    getRecordHistory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Record history */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
     getEntitySnapshot: {
         parameters: {
             query?: never;
@@ -2116,62 +1645,6 @@ export interface operations {
                 content: {
                     "application/json": {
                         relationships?: components["schemas"]["RelationshipSnapshot"][];
-                    };
-                };
-            };
-        };
-    };
-    recordComparison: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Comparison result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    generateEmbedding: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
-            };
-        };
-        responses: {
-            /** @description Embedding result */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
                     };
                 };
             };

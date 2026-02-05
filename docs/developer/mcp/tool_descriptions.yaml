@@ -1,0 +1,34 @@
+# Per-tool descriptions for MCP ListTools response.
+# Loaded at runtime by src/server.ts. Edit here to change tool copy without code changes.
+# Keys must match tool names in server.ts. Parameter descriptions remain in code.
+
+tools:
+  retrieve_file_url: "Retrieve a signed URL for accessing a file"
+  retrieve_entity_snapshot: "Retrieve the current snapshot of an entity with provenance information. Supports historical snapshots via 'at' parameter."
+  list_observations: "List all observations for a given entity"
+  retrieve_field_provenance: "Retrieve the provenance chain for a specific field in an entity snapshot"
+  create_relationship: "Create a typed relationship between two entities"
+  list_relationships: "List relationships for an entity"
+  get_relationship_snapshot: "Get the current snapshot of a specific relationship with provenance"
+  retrieve_entities: "Query entities with filters (type, pagination). Returns entities with their snapshots."
+  list_timeline_events: "Query timeline events with filters (type, date range, source). Returns chronological events derived from date fields in sources."
+  retrieve_entity_by_identifier: "Retrieve entity by identifier (name, email, etc.) across entity types or specific type."
+  retrieve_related_entities: "Retrieve entities connected to a given entity via relationships. Supports n-hop traversal."
+  retrieve_graph_neighborhood: "Retrieve complete graph neighborhood around a node (entity or source): related entities, relationships, sources, and events."
+  store: |
+    Unified storing for both unstructured and structured sources. For unstructured (files): provide EITHER file_content (base64-encoded) + mime_type OR file_path (local file path). For structured (entities): provide entities array. Content-addressed storage with SHA-256 deduplication per user. IMPORTANT FOR UNSTRUCTURED FILES: Agents MUST NOT attempt to interpret, extract, or infer structured data from unstructured files before storing. Simply provide the raw file_content (base64-encoded) and mime_type, OR provide file_path for local files. The server will automatically handle file analysis and interpretation if interpret=true (default). Do NOT read file contents to extract entities or fields - pass the file as-is. IMPORTANT FOR STRUCTURED DATA: When storing structured data with an unregistered entity_type, the system will automatically infer and create a user-specific schema from the data structure (parquet schema or JSON field types). Agents do NOT need to pre-register schemas - they are created on-demand. Entity type: When the type is one of the common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) and the user's intent is clear, set entity_type directly and skip list_entity_types. For other types or when field schemas are needed, use list_entity_types or read resource neotoma://entity_types first. CRITICAL: When storing structured entities, agents MUST include ALL fields from the source data, not just fields that match the entity schema. Schema fields are stored in observations (validated), while non-schema fields are automatically stored in raw_fragments (preserved for future schema expansion). This ensures zero data loss - never filter or exclude fields based on schema compatibility. The system automatically validates and routes fields appropriately.
+  store_structured: "Store structured entities only. Use when you already have entity objects and do not need file ingestion."
+  store_unstructured: "Store raw files only. Provide file_content (base64) + mime_type or file_path."
+  reinterpret: "Re-run AI interpretation on an existing source with new config. Creates new observations without modifying existing ones."
+  correct: "Create high-priority correction observation to override AI-extracted fields. Corrections always win in snapshot computation."
+  merge_entities: "Merge duplicate entities. Rewrites observations from source entity to target entity and marks source as merged."
+  list_entity_types: |
+    List all available entity types with their schema information. Optionally filter by keyword to find entity types relevant to your data. Uses hybrid search: keyword matching first (deterministic), then vector semantic search (semantic similarity). Use this action before storing structured data to determine the correct entity_type.
+  analyze_schema_candidates: |
+    Analyze raw_fragments to identify fields that should be promoted to schema fields. Returns recommendations with confidence scores based on frequency and type consistency.
+  get_schema_recommendations: "Get schema update recommendations for an entity type from raw_fragments analysis, agent suggestions, or inference."
+  update_schema_incremental: |
+    Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.
+  register_schema: "Register a new schema or schema version. Supports both global and user-specific schemas."
+  get_authenticated_user: "Get the authenticated user ID for the current MCP session. Returns the user_id that is automatically used for all authenticated actions."
+  health_check_snapshots: "Check for stale entity snapshots (snapshots with observation_count=0 but observations exist). Returns health status and count of stale snapshots."

@@ -278,7 +278,7 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 **For Structured [Source](../vocabulary/canonical_terms.md#source):**
 ```typescript
 {
-  user_id: string;                    // Required: User ID (UUID)
+  user_id?: string;                   // Optional: Inferred from authentication if omitted
   entities: Array<{                   // Required: Array of entity data
     entity_type: string;              // Required: Entity type (e.g., "invoice", "note")
     // ... entity-specific fields (schema fields)
@@ -296,16 +296,16 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 2. **Structured [source](../vocabulary/canonical_terms.md#source)?** → Use `store` with `entities` array containing `entity_type`
 
 **Important: Entity Type Determination**
-Before storing structured [source](../vocabulary/canonical_terms.md#source) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` for the data and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when:
+Common [entity types](../vocabulary/canonical_terms.md#entity-type) are exposed in MCP server instructions so agents can set `entity_type` directly when user intent is clear, avoiding an extra `list_entity_types` call. **Common types (set directly when intent is clear):** `contact`, `person`, `company`, `task`, `invoice`, `transaction`, `receipt`, `note`, `contract`, `event`. For other types or when field schemas are needed, agents MUST use `list_entity_types` (optionally with a keyword) or the `neotoma://entity_types` resource. Also set `entity_type` directly when:
 - The entity type can be determined from existing data in Neotoma
 - The entity type is explicitly provided by the user
 - The entity type is unambiguous from the data structure itself
 
-This minimizes reliance on [interpretation](../vocabulary/canonical_terms.md#interpretation) and ensures deterministic entity type assignment when possible.
+This minimizes round-trips for common cases and keeps discovery for ambiguous or schema-heavy use cases.
 
-**[Entity Types](../vocabulary/canonical_terms.md#entity-type) Available:**
+**[Entity Types](../vocabulary/canonical_terms.md#entity-type) Available (common set; more may exist via schema registry):**
 - `invoice`, `transaction`, `receipt`, `contract`, `note`
-- `person`, `company`, `contact`, `task`
+- `person`, `company`, `contact`, `task`, `event`
 - Plus codebase types (v0.2.3+): `feature_unit`, `release`, `agent_decision`, `agent_session`, `validation_result`, `codebase_entity`, `architectural_decision`
 
 ### 2.7 Schema Management Operations
@@ -521,14 +521,19 @@ Clients can subscribe to resource updates:
 
 ## 3. Action Specifications
 
+**Contract authority:** OpenAPI is the source of truth for mapped tool schemas. MCP tool input schemas are derived from OpenAPI for tools that map to OpenAPI operations. MCP-only tools define schemas in `src/server.ts`.
+
 ### 3.1 `store` (Unified)
 
 **Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
+
+**Atomic alternatives:** Prefer `store_structured` for structured entities and `store_unstructured` for raw files when you do not need the unified tool.
 
 **Request Schema (Unstructured - Base64):**
 ```typescript
 {
   user_id?: string;                   // Optional: User ID (UUID) - inferred from authentication if omitted
+  idempotency_key: string;            // Required: Client-provided idempotency key
   file_content: string;               // Required: Base64-encoded file content
   mime_type: string;                  // Required: MIME type (e.g., "application/pdf", "image/jpeg")
   original_filename?: string;          // Optional: Original filename
@@ -546,7 +551,8 @@ Clients can subscribe to resource updates:
 **Request Schema (Unstructured - File Path):**
 ```typescript
 {
-  user_id: string;                    // Required: User ID (UUID)
+  user_id?: string;                   // Optional: Inferred from authentication if omitted
+  idempotency_key: string;            // Required: Client-provided idempotency key
   file_path: string;                   // Required: Local file path (alternative to file_content)
   mime_type?: string;                  // Optional: MIME type (auto-detected from extension if not provided)
   original_filename?: string;           // Optional: Original filename (defaults to basename of file_path)
@@ -594,6 +600,7 @@ The server handles all interpretation automatically. Agents should only pass the
 ```typescript
 {
   user_id?: string;                   // Optional: User ID (UUID) - inferred from authentication if omitted
+  idempotency_key: string;            // Required: Client-provided idempotency key
   entities: Array<{                   // Required: Array of entity data
     entity_type: string;              // Required: Entity type (e.g., "invoice", "note")
     // ... entity-specific fields per entity schema
@@ -660,7 +667,7 @@ store({
 **Response includes `unknown_fields_count`** indicating how many fields were stored in `raw_fragments`. This is expected and desired - it means all data was preserved.
 
 **Note on Entity Type Determination:**
-Agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas before setting `entity_type` directly. This helps determine the correct `entity_type` for the data and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself.
+When the type is one of the common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) and user intent is clear, set `entity_type` directly and skip `list_entity_types`. For other types or when field schemas are needed, use `list_entity_types` or the `neotoma://entity_types` resource. Also set directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure.
 
 **Response Schema:**
 ```typescript
@@ -712,7 +719,7 @@ Agents MUST use `list_entity_types` (optionally with a keyword matching the data
 
 ### 3.2 `list_entity_types`
 
-**Purpose:** List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with their [entity schema](../vocabulary/canonical_terms.md#entity-schema) information. Optionally filter by keyword to find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data. Use this action before storing structured [source](../vocabulary/canonical_terms.md#source) to determine the correct `entity_type`.
+**Purpose:** List all available [entity types](../vocabulary/canonical_terms.md#entity-type) with their [entity schema](../vocabulary/canonical_terms.md#entity-schema) information. Optionally filter by keyword to find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data. Use this action when the entity type is not one of the common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) or when field schemas are needed before storing; for common types with clear user intent, set `entity_type` directly.
 
 **Request Schema:**
 ```typescript
@@ -770,8 +777,8 @@ list_entity_types({ keyword: "date" })
 | `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
 
 **When to Use:**
-- Before storing structured [source](../vocabulary/canonical_terms.md#source) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type)
-- To understand what fields are expected for a specific [entity type](../vocabulary/canonical_terms.md#entity-type)
+- When the entity type is not in the common set (contact, person, company, task, invoice, transaction, receipt, note, contract, event) or user intent is ambiguous
+- To understand what fields are expected for a specific [entity type](../vocabulary/canonical_terms.md#entity-type) before storing
 - To find [entity types](../vocabulary/canonical_terms.md#entity-type) relevant to specific data by keyword matching
 
 **Consistency:** 
@@ -1178,6 +1185,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   entity_type: string;                 // Required: Entity type
   field: string;                       // Required: Field name to correct
   value: unknown;                      // Required: Corrected value
+  idempotency_key: string;             // Required: Client-provided idempotency key
 }
 ```
 
@@ -1888,7 +1896,7 @@ Load when:
 6. All deterministic actions MUST be testable for determinism
 7. Backward compatibility MUST be maintained
 8. No PII in error messages or logs
-9. **Entity Type Determination:** Before storing structured [source](../vocabulary/canonical_terms.md#source) with an `entity_type` value set, agents MUST use `list_entity_types` (optionally with a keyword matching the data) to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas. This helps determine the correct `entity_type` and avoids unnecessary [interpretation](../vocabulary/canonical_terms.md#interpretation). Only set `entity_type` directly when it can be determined from existing data, is explicitly provided by the user, or is unambiguous from the data structure itself.
+9. **Entity Type Determination:** For common types (contact, person, company, task, invoice, transaction, receipt, note, contract, event) when user intent is clear, set `entity_type` directly. For other types or when field schemas are needed, use `list_entity_types` or `neotoma://entity_types`. Also set directly when determinable from existing data, explicitly provided by the user, or unambiguous from the data structure.
 
 ### Forbidden Patterns
 
@@ -1898,7 +1906,7 @@ Load when:
 - Nondeterministic ranking without documentation
 - PII in error details
 - Unbounded queries (no limit parameter)
-- Setting `entity_type` directly without first using `list_entity_types` to discover available [entity types](../vocabulary/canonical_terms.md#entity-type) and their field schemas
+- Setting a non-common `entity_type` directly without using `list_entity_types` or `neotoma://entity_types` when the type is ambiguous or field schemas are needed (common types: contact, person, company, task, invoice, transaction, receipt, note, contract, event)
 
 ### Validation Checklist
 

@@ -65,7 +65,7 @@ interface TimelineEvent {
   id: string;
   event_type: string;
   event_timestamp: string;
-  source_record_id?: string;
+  source_id?: string;
   entity_ids?: string[];
 }
 
@@ -259,8 +259,8 @@ export function EntityDetail({
                 if (event.entity_ids && Array.isArray(event.entity_ids) && event.entity_ids.includes(entityId)) {
                   return true;
                 }
-                // Check if event's source_record_id matches any source that has observations for this entity
-                if (event.source_record_id && observationSourceIds.includes(event.source_record_id)) {
+                // Check if event's source_id matches any source that has observations for this entity
+                if (event.source_id && observationSourceIds.includes(event.source_id)) {
                   return true;
                 }
                 return false;
@@ -635,10 +635,10 @@ export function EntityDetail({
                     </Badge>
                   </div>
                   <div className="space-y-1 text-sm">
-                    {event.source_record_id && (
+                    {event.source_id && (
                       <div>
                         <span className="text-muted-foreground">Source:</span>{" "}
-                        <code className="text-xs">{event.source_record_id.substring(0, 16)}...</code>
+                        <code className="text-xs">{event.source_id.substring(0, 16)}...</code>
                       </div>
                     )}
                     {event.entity_ids && event.entity_ids.length > 0 && (
