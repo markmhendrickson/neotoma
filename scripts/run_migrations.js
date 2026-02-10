@@ -27,42 +27,74 @@ import { createClient } from "@supabase/supabase-js";
 
 const execAsync = promisify(exec);
 
-// Load environment variables
-const env = process.env.NODE_ENV || "development";
-dotenv.config(); // Load .env
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..");
 
-// Get Supabase config from environment
+// Load .env from project root (same as app) so migrate sees the same vars
+dotenv.config({ path: join(PROJECT_ROOT, ".env") });
+dotenv.config({ path: join(PROJECT_ROOT, ".env.development"), override: false });
+
+// Get Supabase config from environment.
+// Local mode: use DEV_SUPABASE_* when set (e.g. DEV_SUPABASE_URL=http://127.0.0.1:54321)
+// so that migrate only affects the local DB when you're running against local Supabase.
+// Otherwise use SUPABASE_* (1Password / production).
 function getSupabaseConfig() {
   const buildUrl = (projectId, fallbackUrl) => {
     if (projectId) return `https://${projectId}.supabase.co`;
     return fallbackUrl || "";
   };
 
-  // Use single variable names (set by 1Password sync based on ENVIRONMENT variable)
-  const projectId = process.env.SUPABASE_PROJECT_ID;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  const url = process.env.SUPABASE_URL;
+  const devProjectId = process.env.DEV_SUPABASE_PROJECT_ID;
+  const devUrl = process.env.DEV_SUPABASE_URL;
+  const devKey = process.env.DEV_SUPABASE_SERVICE_KEY;
 
+  const projectId = process.env.SUPABASE_PROJECT_ID;
+  const url = process.env.SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+
+  // Prefer DEV_* when set (local/dev mode: only affects that target)
+  if (devUrl || devProjectId || devKey) {
+    const resolvedUrl = buildUrl(devProjectId, devUrl);
+    if (resolvedUrl && devKey) {
+      return { url: resolvedUrl, key: devKey, isLocal: isLocalUrl(resolvedUrl) };
+    }
+  }
+
+  const resolvedUrl = buildUrl(projectId, url);
   return {
-    url: buildUrl(projectId, url),
+    url: resolvedUrl,
     key: serviceKey || "",
+    isLocal: resolvedUrl ? isLocalUrl(resolvedUrl) : false,
   };
+}
+
+function isLocalUrl(url) {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    const host = (u.hostname || "").toLowerCase();
+    return host === "127.0.0.1" || host === "localhost";
+  } catch {
+    return false;
+  }
 }
 
 const supabaseConfig = getSupabaseConfig();
 
 if (!supabaseConfig.url || !supabaseConfig.key) {
-  console.error("[ERROR] Missing Supabase URL or service key");
-  console.error(
-    "[ERROR] Set SUPABASE_PROJECT_ID (or SUPABASE_URL) and SUPABASE_SERVICE_KEY"
+  console.log(
+    "[INFO] No Supabase env (DEV_SUPABASE_* or SUPABASE_*). Skipping migrations."
   );
-  process.exit(1);
+  process.exit(0);
+}
+
+if (supabaseConfig.isLocal) {
+  console.log("[INFO] Target is local Supabase; migrations will only affect this local database.");
 }
 
 const supabase = createClient(supabaseConfig.url, supabaseConfig.key);
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const MIGRATIONS_DIR = join(__dirname, "../supabase/migrations");
+const MIGRATIONS_DIR = join(PROJECT_ROOT, "supabase/migrations");
 
 // Track applied migrations in a table
 const MIGRATIONS_TABLE = "schema_migrations";
@@ -85,7 +117,7 @@ async function checkSupabaseCLI() {
 async function ensureSupabaseLinked() {
   try {
     // Check if already linked by looking for project_id in config.toml
-    const configPath = join(__dirname, "../supabase/config.toml");
+    const configPath = join(PROJECT_ROOT, "supabase/config.toml");
     try {
       const configContent = await readFile(configPath, "utf-8");
       if (configContent.includes("project_id")) {
@@ -109,7 +141,7 @@ async function ensureSupabaseLinked() {
     const { stdout, stderr } = await execAsync(
       `npx supabase link --project-ref ${projectRef}`,
       {
-        cwd: join(__dirname, ".."),
+        cwd: PROJECT_ROOT,
       }
     );
 
@@ -151,7 +183,7 @@ async function executeMigrationsViaCLI(dryRun = false) {
 
     console.log("[INFO] Using Supabase CLI to apply migrations...");
     const { stdout, stderr } = await execAsync("npx supabase db push", {
-      cwd: join(__dirname, ".."),
+      cwd: PROJECT_ROOT,
     });
 
     if (stderr && !stderr.includes("INFO") && !stderr.includes("Applying")) {

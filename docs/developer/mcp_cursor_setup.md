@@ -409,6 +409,18 @@ This error means the environment variables aren't being passed to the MCP server
 3. Verify the MCP server is running (check process: `ps aux | grep "node.*dist/index.js"`)
 4. Try rebuilding: `npm run build`
 
+### Issue: MCP server shows "Error" after sleep or long idle
+
+Stdio MCP servers (neotoma-prod, neotoma-dev, web-scraper) talk to Cursor over stdin/stdout. When the machine sleeps, that pipe can break and Cursor marks the server as Error.
+
+**What to do:**
+
+1. In Cursor, open MCP settings (e.g. the MCP panel where servers are listed).
+2. Turn the affected server **off** (toggle), then turn it **on** again. Cursor will spawn a new process and reconnect.
+3. Or reload the window: Command Palette → "Developer: Reload Window".
+
+The server process exits cleanly when the pipe breaks so Cursor can restart it; if you still see Error, use the toggle or reload above.
+
 ### Issue: "spawn node ENOENT" error
 
 This means Cursor can't find the `node` executable. This often happens when Node.js is installed via nvm or other version managers.

@@ -25,7 +25,11 @@ const SCHEMA_STATEMENTS = [
     status TEXT,
     started_at TEXT,
     completed_at TEXT,
-    observations_created INTEGER
+    observations_created INTEGER,
+    user_id TEXT,
+    created_at TEXT,
+    error_message TEXT,
+    unknown_fields_count INTEGER
   )`,
   `CREATE TABLE IF NOT EXISTS observations (
     id TEXT PRIMARY KEY,
@@ -40,7 +44,8 @@ const SCHEMA_STATEMENTS = [
     fields TEXT,
     created_at TEXT,
     user_id TEXT,
-    idempotency_key TEXT
+    idempotency_key TEXT,
+    canonical_hash TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS entity_snapshots (
     entity_id TEXT PRIMARY KEY,
@@ -70,6 +75,7 @@ const SCHEMA_STATEMENTS = [
     event_timestamp TEXT NOT NULL,
     source_id TEXT,
     source_field TEXT,
+    entity_id TEXT,
     created_at TEXT,
     user_id TEXT
   )`,
@@ -287,9 +293,15 @@ function ensureSchema(db: Database.Database): void {
       db.prepare(statement).run();
     }
 
-    // Add idempotency_key to sources/observations if missing (existing DBs created before this column existed)
+    // Add columns if missing (existing DBs created before these columns existed)
     addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
     addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
+    addColumnIfMissing(db, "interpretations", "user_id", "TEXT");
+    addColumnIfMissing(db, "interpretations", "created_at", "TEXT");
+    addColumnIfMissing(db, "interpretations", "error_message", "TEXT");
+    addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
+    addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
+    addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
   });
   transaction();
 }
