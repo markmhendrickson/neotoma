@@ -3479,6 +3479,15 @@ export class NeotomaServer {
       const unknownFields = validationResult.unknownFields;
       const originalValues = validationResult.originalValues;
 
+      // Include date-like unknown fields in the observation so they flow into the snapshot
+      // and timeline derivation, even when not yet in the entity schema.
+      const { getDateLikeFields } = await import("./services/timeline_events.js");
+      const dateLikeUnknowns = getDateLikeFields(unknownFields);
+      const fieldsForObservation =
+        Object.keys(dateLikeUnknowns).length > 0
+          ? { ...validFields, ...dateLikeUnknowns }
+          : validFields;
+
       // Store original values in raw_fragments for converted fields (preserves zero data loss)
       for (const [key, value] of Object.entries(originalValues)) {
         // Skip null or undefined values (database constraint)
@@ -3722,8 +3731,9 @@ export class NeotomaServer {
         userId,
       });
 
-      // Create observation directly (no interpretation_id)
-      // Generate observation ID early so we can use it for raw_fragments row tracking
+      // Create observation directly (no interpretation_id).
+      // Use fieldsForObservation so date-like unknowns are in the observation and thus
+      // in the snapshot and timeline, even when not in the schema yet.
       const observationId = randomUUID();
       const { error: obsError } = await supabase.from("observations").insert({
         id: observationId,
@@ -3735,7 +3745,7 @@ export class NeotomaServer {
         observed_at: new Date().toISOString(),
         specificity_score: 1.0, // Structured data has high specificity
         source_priority: sourcePriority, // Use provided priority (default 100)
-        fields: validFields,
+        fields: fieldsForObservation,
         user_id: userId,
       });
 
@@ -3808,6 +3818,71 @@ export class NeotomaServer {
               onConflict: "entity_id",
             }
           );
+
+          // Derive and insert timeline events from date fields in snapshot
+          const {
+            deriveTimelineEventsFromSnapshot,
+            deriveTimelineEventsFromRawFragments,
+          } = await import("./services/timeline_events.js");
+          const snapshotFields =
+            (snapshot.snapshot as Record<string, unknown>) || {};
+          let timelineRows = deriveTimelineEventsFromSnapshot(
+            snapshot.entity_type,
+            snapshot.entity_id,
+            storageResult.sourceId,
+            snapshot.user_id || userId,
+            snapshotFields
+          );
+
+          // Fallback: when exactly one entity of this type in this batch, also derive from
+          // raw_fragments so date fields that didn't make it into the observation still get events.
+          const sameTypeInBatch = createdEntities.filter(
+            (e) => e.entityType === createdEntity.entityType
+          ).length;
+          if (sameTypeInBatch === 1) {
+            const { data: fragments } = await supabase
+              .from("raw_fragments")
+              .select("fragment_key, fragment_value")
+              .eq("source_id", storageResult.sourceId)
+              .eq("entity_type", createdEntity.entityType)
+              .eq("user_id", userId);
+            if (fragments && fragments.length > 0) {
+              const snapshotKeys = new Set(Object.keys(snapshotFields));
+              const fromFragments = deriveTimelineEventsFromRawFragments(
+                fragments,
+                snapshot.entity_type,
+                snapshot.entity_id,
+                storageResult.sourceId,
+                snapshot.user_id || userId,
+                snapshotKeys
+              );
+              timelineRows = timelineRows.concat(fromFragments);
+            }
+          }
+
+          for (const row of timelineRows) {
+            const { error: evtError } = await supabase
+              .from("timeline_events")
+              .upsert(
+                {
+                  id: row.id,
+                  event_type: row.event_type,
+                  event_timestamp: row.event_timestamp,
+                  source_id: row.source_id,
+                  source_field: row.source_field,
+                  entity_id: row.entity_id,
+                  created_at: row.created_at,
+                  user_id: row.user_id,
+                },
+                { onConflict: "id" }
+              );
+            if (evtError) {
+              logger.warn(
+                `Failed to upsert timeline event ${row.id}:`,
+                evtError.message
+              );
+            }
+          }
         }
       } catch (error) {
         logger.error(
@@ -5189,6 +5264,12 @@ export class NeotomaServer {
 
     process.on("SIGINT", async () => {
       await this.server.close();
+      process.exit(0);
+    });
+
+    // Exit cleanly when stdio pipe breaks (e.g. machine sleep/wake; Cursor closes the pipe).
+    // Allows Cursor to show a clean disconnect and restart the server.
+    process.on("SIGPIPE", () => {
       process.exit(0);
     });
   }

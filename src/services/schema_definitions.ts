@@ -1450,7 +1450,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     schema_version: "1.0",
     metadata: {
       label: "Research",
-      description: "Research summaries and notes from articles, podcasts, papers, and other sources.",
+      description:
+        "Research summaries and notes from articles, podcasts, papers, and other sources.",
       category: "knowledge",
       aliases: ["research_note", "study", "article_summary"],
     },
