@@ -246,6 +246,11 @@ components:
           type: string
         user_id:
           type: string
+        original_filename:
+          type: string
+          description: |
+            Optional. For agent-provided structured data, omit so the source has no filename (null).
+            Pass only when mirroring a real file name or when a display label is desired.
     StoreStructuredResponse:
       type: object
       properties:

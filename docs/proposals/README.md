@@ -10,6 +10,7 @@ This directory contains future work proposals that have been migrated from `.cur
 ## Current proposals
 
 - `mcp-cli-action-items.md` - MCP and CLI action items proposal
+- `llm_sampling_parameters_interpretation_config.md` - Add top-K and top-P to interpretation config for LLM auditability and repetition mitigation
 
 ## Proposal Format
 

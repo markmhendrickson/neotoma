@@ -9,3 +9,5 @@ export * from "./envelope.js";
 export * from "./signature.js";
 export * from "./auth.js";
 export * from "./export.js";
+export * from "./key_derivation.js";
+export * from "./column_encryption.js";

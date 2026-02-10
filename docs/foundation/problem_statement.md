@@ -19,6 +19,8 @@ LLMs have conversation-only memory (ChatGPT Memory, Claude Memory, Gemini Person
 - Cross-data relationships (can't link entities across documents and conversations)
 - Cross-platform memory (locked to specific provider or OS)
 **Provider memory is conversation-only. Neotoma provides structured personal data memory.**
+
+Agentic and multi-agent systems lack a shared, deterministic memory layer: agents and toolchains have no single source of truth for context, provenance, or cross-session state. Neotoma provides that substrate.
 ## 6.3 Neotoma Provides the Missing Substrate
 Neotoma gives AI structured personal data memory built on three defensible architectural choices that provider memory cannot offer:
 **Defensible Architectural Choices (Competitors Cannot Pursue):**

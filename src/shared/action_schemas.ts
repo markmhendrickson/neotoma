@@ -89,6 +89,7 @@ export const StoreStructuredRequestSchema = z.object({
   source_priority: z.number().optional().default(100),
   idempotency_key: z.string().min(1),
   user_id: z.string().uuid().optional(),
+  original_filename: z.string().optional(),
 });
 
 export const MergeEntitiesRequestSchema = z.object({

@@ -43,10 +43,16 @@ If `neotoma` is not found after install or link, add the npm global bin to your 
 
 ### Authentication
 
-1. Authenticate with OAuth:
-   - `neotoma auth login`
-2. Verify auth status:
-   - `neotoma auth status`
+CLI auth aligns with MCP and REST API (same patterns across all interfaces):
+
+**When encryption is off (default):** No login needed. CLI works immediately. Commands like `entities list`, `sources list`, and `watch` authenticate automatically as the local dev user.
+
+**When encryption is on:** Set `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`. The CLI derives the auth token from your key (same as MCP).
+
+**Auth commands:**
+- `neotoma auth status`: Show current auth mode (none, dev-token, or key-derived) and user details.
+- `neotoma auth login`: For MCP Connect (Cursor) setup only. Not required for CLI usage.
+- `neotoma auth logout`: Clear stored OAuth credentials (affects MCP Connect, not CLI API calls).
 
 ## Core workflows
 ### List entities
@@ -74,6 +80,12 @@ neotoma upload ./fixtures/invoice.pdf
 neotoma analyze ./fixtures/invoice.pdf
 ```
 
+### Watch record changes (local backend)
+```
+neotoma watch       # works when encryption is off (no login needed)
+neotoma watch --tail --human
+```
+
 ### Run developer scripts
 ```
 neotoma dev list
@@ -95,6 +107,9 @@ neotoma entities list --type company --json
 The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`.
 
 ## Diagrams
+
+Auth flow for `neotoma auth login` (MCP Connect setup only; CLI API usage does not require this):
+
 ```mermaid
 flowchart TD
     cli[CLI] -->|"Open OAuth URL"| browser[Browser]
@@ -104,9 +119,8 @@ flowchart TD
 ```
 
 ## Examples
-### Authenticate and list entities
+### List entities (works immediately when encryption is off)
 ```
-neotoma auth login
 neotoma entities list --type company --limit 5 --pretty
 ```
 

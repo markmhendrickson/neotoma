@@ -69,23 +69,19 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 
 Local mode uses a built-in auth provider and does not call Supabase. OAuth endpoints remain the same, but the authorization step is handled by a local login page.
 
-**Local flow summary:**
+**Local flow summary (encryption off):**
 
 1. Client opens `GET /api/mcp/oauth/authorize` with PKCE parameters.
-2. Neotoma shows `GET /api/mcp/oauth/local-login` and collects local credentials.
-3. On successful login, Neotoma creates a local OAuth connection and redirects to the client redirect URI with `code` and `state`.
+2. If `dev_stub=1`: Neotoma completes immediately with dev user. Otherwise, redirects to local-login.
+3. Local-login auto-uses dev account (no credentials form). Creates OAuth connection and redirects with `code` and `state`.
 4. Client exchanges `code` at `POST /api/mcp/oauth/token` and uses the returned access token.
 
-**Local users:**
+**When encryption is on:** OAuth is not supported. MCP and API require key-derived Bearer token. See Key-Based Auth section below.
 
-- Stored in SQLite (`local_auth_users` table)
-- First successful login bootstraps the initial local user
-- Subsequent logins require valid local credentials
+**OAuth with local backend (encryption off):**
 
-**Dev-only stub:**
-
-- Disabled by default
-- Enabled only via CLI: `neotoma auth login --dev-stub`
+- When encryption is off, the local-login flow auto-uses the dev account (no email/password form).
+- `neotoma auth login --dev-stub` skips the redirect to the login page and completes immediately.
 
 **Base URL when running locally:**
 
@@ -94,6 +90,38 @@ The redirect to the local login page uses `API_BASE_URL` (or the default `http:/
 **Deployment with multiple instances (local backend):**
 
 OAuth state for the local login flow is stored in SQLite. If more than one API instance is running (e.g. multiple pods or processes behind a load balancer), the instance that serves `/api/mcp/oauth/authorize` may not be the one that serves `/api/mcp/oauth/local-login`. The second instance has no record of the state, so the user sees "authorization link expired or already used" even on first use. Fix: run a single API instance for the local backend, or configure sticky sessions so that all requests under `/api/mcp/oauth` are routed to the same instance for the duration of the flow.
+
+### Key-Based Auth and Encryption (Local Backend)
+
+When `NEOTOMA_ENCRYPTION_ENABLED=true`, local authentication and data encryption use a single cryptographic root: either an Ed25519 private key file or a BIP-39 mnemonic phrase.
+
+**Key derivation:**
+
+Three separate keys are derived from the root secret using HKDF (RFC 5869):
+
+1. **Auth Key** (`neotoma-auth-v1`): Ed25519 seed for signing and authentication. Suitable for future event signing.
+2. **Data Key** (`neotoma-data-v1`): AES-256-GCM key for encrypting sensitive DB columns (observations.fields, entity_snapshots.snapshot, etc.).
+3. **Log Key** (`neotoma-logs-v1`): AES-256-GCM key for encrypting persistent log entries.
+
+**Key sources:**
+
+| Source | Config | Use case |
+|--------|--------|----------|
+| Private key file | `NEOTOMA_KEY_FILE_PATH` | Machine-bound; key never leaves device |
+| Mnemonic phrase | `NEOTOMA_MNEMONIC` (+ optional `NEOTOMA_MNEMONIC_PASSPHRASE`) | Backup-friendly; same mnemonic restores access on any device |
+
+**Mnemonic flow:**
+
+1. User provides 12 or 24-word BIP-39 mnemonic.
+2. BIP-39 PBKDF2 derives a 512-bit seed.
+3. Seed feeds HKDF; Auth, Data, Log keys derived identically to the private key path.
+
+**What is encrypted (local backend):**
+
+- Content columns: observations.fields, entity_snapshots.snapshot, entity_snapshots.provenance, relationship_snapshots.snapshot, relationship_snapshots.provenance, raw_fragments.fragment_value, raw_fragments.fragment_envelope
+- Not encrypted: IDs, timestamps, entity types, hash chain fields, signatures (needed for querying and future blockchain compatibility)
+
+**Key loss warning:** Without the key file or mnemonic, encrypted data is unrecoverable.
 
 ### Session Token Flow (Deprecated)
 

@@ -24,6 +24,7 @@ This document does NOT cover:
 - **AI-Native Individual Operators:** 2-5M
 - **High-Context Knowledge Workers:** 10-20M (some overlap with AI-Native)
 - **AI-Native Founders & Small Teams:** 500K-1M founders (2-5M potential team users)
+- **Builders of agentic systems:** 200K-500K (overlap with Tier 2 Developer Integrators and AI Tool Integrators)
 - **Note:** Significant overlap between AI-Native and Knowledge Workers (~30-40% overlap estimated)
 - **Deduplicated Tier 1:** ~12-25M individuals
 ### Tier 2 (Early B2B) - ~4-8M users
@@ -461,8 +462,43 @@ After the founder uses it individually for 2-3 weeks and then successfully share
 - Shared memory (team-wide queries)
 - Access controls (who can see what)
 - Team onboarding workflows
+## 4. Builders of agentic systems
+### Profile
+Developers and teams building agentic systems (agent frameworks, orchestration pipelines, multi-agent workflows, observability stacks) who need a deterministic memory and provenance layer. They need cross-session state, entity resolution, and full audit trails so agents and toolchains can reason over structured personal or operational data.
+### Key Visible Criteria
+- **Activity signals:** Builds or integrates with CrewAI, LangGraph, AutoGPT, or similar; posts about agent memory, agent orchestration, MCP
+- **Company signals:** Agent infrastructure, AI Ops, agent orchestration tooling
+- **Proxy indicators:** Multiple AI agent deployments, agent platforms, agent infrastructure, agent teams
+### Key Acquisition Channels
+- **Developer communities:** GitHub, Hacker News, AI/ML Discord servers, MCP and agent framework communities
+- **Content marketing:** Agent memory case studies, deterministic memory content, MCP integration content
+- **Partnerships:** Agent framework maintainers, AI Ops vendors, system integrators
+- **SEO:** "agent memory", "deterministic memory for agents", "MCP memory backend"
+### Estimated Worldwide Population
+**200K–500K** (overlap with Developer Integrators and AI Tool Integrators in Tier 2)
+### Pain Points
+- **No shared memory for agents:** Token-based or conversation-only memory; no cross-session, cross-agent state
+- **No provenance:** Cannot trace agent decisions or outputs to source data
+- **No deterministic layer:** Need reproducible, explainable memory for eval, debug, and compliance
+### Use Cases
+- **Agent memory backend:** Neotoma as MCP-backed memory for agent frameworks
+- **Orchestration pipelines:** Structured memory and timelines for multi-step workflows
+- **Observability and eval:** Provenance and audit trail for agent actions and reasoning
+### Value Proposition
+- **Deterministic memory substrate:** Same input → same output; hash-based IDs; full provenance
+- **Cross-platform MCP:** One memory layer for any agent or toolchain
+- **Privacy-first:** User-controlled data; no provider access; suitable for localhost agents
+### A-ha Moment
+When an agent or pipeline queries Neotoma for structured context and gets deterministic, traceable results—enabling reliable reasoning and auditability.
+### Ready-to-Pay Threshold
+After integrating Neotoma as memory backend for an agent framework or pipeline and seeing deterministic recall and provenance in production or eval workflows.
+### Technical Requirements
+- MCP integration (primary interface)
+- Deterministic extraction and entity resolution
+- Provenance and audit trail
+- Local or self-hosted option for privacy-sensitive deployments
 # TIER 2 — Early B2B Expansion
-## 4. Hybrid Product Teams (PM + Eng + Design + Marketing)
+## 5. Hybrid Product Teams (PM + Eng + Design + Marketing)
 ### Profile
 Cross-functional product teams that struggle with coordination breakdown. They use many AI tools but lack shared memory. High ROI from unified memory substrate.
 ### Key Visible Criteria
@@ -573,7 +609,7 @@ After 2-3 successful cross-functional queries that saved significant time (e.g.,
 - Role-based access controls
 - Shared memory and queries
 - Integration with existing tools (Slack, Notion, etc.)
-## 5. Cross-Functional Operational Teams (Ops, RevOps, Marketing Ops)
+## 6. Cross-Functional Operational Teams (Ops, RevOps, Marketing Ops)
 ### Profile
 Operations teams that rely heavily on content, workflows, and repetitive AI tasks. They crave consistency and need shared memory for operational processes.
 ### Key Visible Criteria
@@ -684,7 +720,7 @@ After successfully using it to answer 5-10 operational questions that would have
 - Process documentation support
 - Compliance tracking features
 - Integration with ops tools
-## 6. Developer Integrators
+## 7. Developer Integrators
 ### Profile
 Developers who build internal tools, automations, and agent systems. They require stable truth APIs to integrate Neotoma into their systems.
 ### Key Visible Criteria
@@ -793,7 +829,7 @@ After successfully integrating Neotoma into a production system or building a wo
 - Webhook support
 - Developer documentation
 - Integration examples and SDKs
-## 7. AI Tool Integrators (Cursor, Raycast, VSCode, Claude Tools)
+## 8. AI Tool Integrators (Cursor, Raycast, VSCode, Claude Tools)
 ### Profile
 Developers and teams who integrate Neotoma into AI-native tools (Cursor, Raycast, VSCode, Claude) to provide persistent memory across tools.
 ### Key Visible Criteria
@@ -902,7 +938,7 @@ After successfully using memory across 2-3 different AI tools (e.g., Cursor, Cla
 - API stability for integrations
 - Webhook support for real-time updates
 # TIER 3 — B2C Power Users
-## 8. Cross-Border Solopreneurs
+## 9. Cross-Border Solopreneurs
 ### Profile
 Solo entrepreneurs who operate across multiple jurisdictions. High document entropy from receipts, invoicing, travel, and compliance requirements.
 ### Key Visible Criteria
@@ -1011,7 +1047,7 @@ During tax season when they successfully organize documents by jurisdiction and 
 - Multi-jurisdiction organization
 - Receipt OCR accuracy
 - Tax document categorization
-## 9. Multi-System Information Workers
+## 10. Multi-System Information Workers
 ### Profile
 Knowledge workers who use multiple systems (Gmail, Notes, Drive, PDFs, screenshots) interchangeably. Benefit from unification but require education.
 ### Key Visible Criteria
@@ -1119,7 +1155,7 @@ After successfully finding information 3-5 times that they couldn't find before 
 - Cloud drive integration
 - Screenshot handling
 - Multi-source ingestion
-## 10. High-Entropy Households / Family Managers
+## 11. High-Entropy Households / Family Managers
 ### Profile
 Family managers who handle documents for entire households. Strong personal need but slow adoption curve.
 ### Key Visible Criteria
@@ -1197,7 +1233,7 @@ After successfully organizing documents for 2-3 family members and receiving use
 - Medical record handling
 - School form recognition
 # TIER 4 — Strategy-Layer ICPs (Agentic Portfolio)
-## 11. High-Net-Worth Individuals
+## 12. High-Net-Worth Individuals
 ### Profile
 High-net-worth individuals who need sophisticated financial planning and asset management. Require Agentic Portfolio capabilities built on Neotoma.
 ### Key Visible Criteria
@@ -1292,7 +1328,7 @@ After successfully using Agentic Portfolio for 2-3 months and seeing measurable 
 - Tax optimization capabilities
 - Risk management features
 - Multi-jurisdiction support
-## 12. Multi-Jurisdiction Residents
+## 13. Multi-Jurisdiction Residents
 ### Profile
 Individuals who live or work across multiple jurisdictions. Need sophisticated tax and compliance management.
 ### Key Visible Criteria
@@ -1386,7 +1422,7 @@ After successfully organizing documents and running tax optimization scenarios t
 - Tax optimization capabilities
 - Compliance tracking features
 - Currency management
-## 13. Crypto-Native Power Users (staking, LPs, vaults)
+## 14. Crypto-Native Power Users (staking, LPs, vaults)
 ### Profile
 Crypto-native users who engage in staking, liquidity provision, vault strategies. Need sophisticated portfolio management and strategy planning.
 ### Key Visible Criteria
@@ -1480,7 +1516,7 @@ After successfully using Agentic Portfolio for crypto portfolio management and s
 - Yield optimization capabilities
 - Risk management features
 - Crypto tax support
-## 14. Startup Founders with Equity Docs
+## 15. Startup Founders with Equity Docs
 ### Profile
 Startup founders who need to manage equity documents, cap tables, and financial planning.
 ### Key Visible Criteria
@@ -1576,7 +1612,7 @@ After successfully using Agentic Portfolio for equity planning and seeing tax sa
 - Cap table management
 - Financial planning features
 - Tax optimization
-## 15. Family-Office-Lite Users
+## 16. Family-Office-Lite Users
 ### Profile
 High-net-worth individuals who need family-office-like services but at a lower scale.
 ### Key Visible Criteria
@@ -1671,7 +1707,7 @@ After successfully using Agentic Portfolio for family wealth management and seei
 - Estate planning features
 - Compliance tracking
 # TIER 5 — Execution-Layer ICPs (Agentic Wallet)
-## 16. High-Frequency On-Chain Actors
+## 17. High-Frequency On-Chain Actors
 ### Profile
 Users who engage in high-frequency on-chain activities. Require Agentic Wallet execution layer.
 ### Key Visible Criteria
@@ -1758,7 +1794,7 @@ After successfully executing 10-20 automated transactions with measurable profit
 - Gas optimization
 - Risk management features
 - Safety systems
-## 17. Agent-Compatible Crypto Users
+## 18. Agent-Compatible Crypto Users
 ### Profile
 Crypto users who want agent-compatible wallet functionality.
 ### Key Visible Criteria
@@ -1845,7 +1881,7 @@ After successfully automating 5-10 crypto operations with their AI agent and see
 - Automation features
 - Safety systems
 - Multi-chain support
-## 18. Protocol Explorers
+## 19. Protocol Explorers
 ### Profile
 Users who explore and interact with new protocols. Need execution layer for protocol interactions.
 ### Key Visible Criteria
@@ -1932,7 +1968,7 @@ After successfully exploring 3-5 new protocols with risk assessment and safe exe
 - Safety systems
 - Risk management features
 - Multi-chain support
-## 19. Bitcoin/Stacks Ecosystem Power Users
+## 20. Bitcoin/Stacks Ecosystem Power Users
 ### Profile
 Power users in Bitcoin and Stacks ecosystems. Need execution layer for Bitcoin/Stacks operations.
 ### Key Visible Criteria
@@ -2020,7 +2056,7 @@ After successfully executing 5-10 Bitcoin/Stacks operations with measurable resu
 - Safety systems
 - Strategy execution capabilities
 # TIER 6 — Enterprise AI Deployments
-## 20. Mid-Market + Enterprise Teams (200–10,000 employees)
+## 21. Mid-Market + Enterprise Teams (200–10,000 employees)
 ### Profile
 Large organizations deploying AI agents at scale. Require full organizational memory architecture.
 ### Key Visible Criteria
@@ -2108,7 +2144,7 @@ After successfully deploying 5-10 AI agents with shared memory and seeing measur
 - Agent orchestration
 - Advanced permissions
 - Compliance and auditability
-## 21. Companies Deploying Dozens of Internal AI Agents
+## 22. Companies Deploying Dozens of Internal AI Agents
 ### Profile
 Companies deploying many internal AI agents. Need shared memory substrate for agent coordination.
 ### Key Visible Criteria
@@ -2196,7 +2232,7 @@ After successfully coordinating 20+ agents for 2-3 months and seeing measurable 
 - Context sharing capabilities
 - Governance features
 - Compliance and auditability
-## 22. Organizations Requiring AI Governance + Auditability
+## 23. Organizations Requiring AI Governance + Auditability
 ### Profile
 Organizations with strict governance and auditability requirements. Need full organizational memory with governance.
 ### Key Visible Criteria

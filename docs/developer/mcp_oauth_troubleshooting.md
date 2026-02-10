@@ -4,6 +4,21 @@
 
 This guide helps debug common issues with Neotoma's MCP OAuth authentication flow.
 
+## Auth Options (aligned across MCP, REST API, and CLI)
+
+**Encryption off (`NEOTOMA_ENCRYPTION_ENABLED` not set or `false`):**
+- **MCP/API/CLI:** No auth required. Uses local dev user automatically.
+- **Optional:** Set `NEOTOMA_DEV_TOKEN` for explicit dev token (applies to all: MCP, API, CLI).
+- **OAuth (Connect button):** Auto-uses dev account (no email/password form). Connection ID stored by Cursor, but not required for auth.
+
+**Encryption on (`NEOTOMA_ENCRYPTION_ENABLED=true`):**
+- **MCP/API/CLI:** Key-derived Bearer token required. Same patterns across all interfaces.
+- **How to configure:**
+  1. Run `neotoma auth mcp-token` to get your token
+  2. Add to mcp.json: `"headers": { "Authorization": "Bearer <token>" }`
+  3. Same token works for CLI (auto-derived) and REST API
+- **OAuth (Connect button):** Not supported when encryption is on. Shows info page with token setup instructions.
+
 ## Quick Diagnostics
 
 **Check these first:**
@@ -12,7 +27,9 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
 
    ```bash
    curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp
-   # Expect 401 (auth required) or 200; not 000 or connection refused
+   # Encryption off: 200 (no auth required)
+   # Encryption on: 401 until you send Authorization: Bearer <token from neotoma auth mcp-token>
+   # Not 000 or connection refused
    ```
 
    If connection refused: run `npm run dev:mcp` and use `http://localhost:8080/mcp` as the MCP URL (not `https://...` or port 443). See scenario **0. ECONNREFUSED 127.0.0.1:443** below.
@@ -246,15 +263,41 @@ SELECT * FROM mcp_oauth_state WHERE state = 'your-state-token';
 echo $MCP_TOKEN_ENCRYPTION_KEY
 ```
 
+### 4a. "Loading tools" indefinitely
+
+**Symptom:** Cursor shows "Loading tools" forever instead of Connect or a clear error.
+
+**Avoid in development:** Use `npm run dev` or `npm run dev:mcp` (not `start:prod`). In development, no auth is required and tools load immediately.
+
+**Causes (when using production mode):**
+
+1. **Stale X-Connection-Id:** Cursor has a cached connection ID (e.g. from before a DB wipe) and keeps retrying with it. The server returns 401, but Cursor may not surface the Connect UI.
+
+2. **OAuth metadata incomplete:** Ensure `/.well-known/oauth-authorization-server` includes `token_endpoint_auth_methods_supported` and `registration_endpoint`.
+
+**Fix:**
+
+1. **Remove X-Connection-Id from MCP config:**
+   - Open `.cursor/mcp.json` (or Cursor MCP settings)
+   - Remove the `headers` block with `X-Connection-Id`, or remove the entire neotoma entry and re-add with just `"url": "http://localhost:8082/mcp"` (or your port)
+
+2. **Use static dev token (option 2):** Set `NEOTOMA_DEV_TOKEN` and add `Authorization: Bearer <token>` to mcp.json headers. Bypasses OAuth entirely.
+
+3. **Fully restart Cursor:** Quit completely (Cmd+Q on Mac), then reopen. Reloading the window is not enough.
+
+4. **Disable and re-enable the neotoma MCP server** in Cursor MCP settings.
+
+5. **Verify server returns 401:** `curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/mcp` should return 401 when unauthenticated.
+
 ### 5. "OAUTH_CONNECTION_NOT_FOUND"
 
-**Symptom:** MCP calls fail with connection not found
+**Symptom:** MCP calls fail with connection not found (e.g. after DB wipe)
 
 **Causes:**
 
 1. **Connection deleted from database:**
-   - Manual deletion
-   - User cleanup
+   - Local DB wipe (`npm run wipe:local` or `wipe:local:prod`)
+   - Manual deletion or user cleanup
 
 2. **Wrong connection_id:**
    - Typo in `.cursor/mcp.json`
@@ -263,17 +306,20 @@ echo $MCP_TOKEN_ENCRYPTION_KEY
 3. **Database migration issue:**
    - `mcp_oauth_connections` table not created
 
-**Fix:**
+**Fix (to get Connect prompt):**
 
-```bash
-# Verify connection exists
-# Check Neotoma UI > MCP Setup > OAuth Connections
+1. Remove the invalid `X-Connection-Id` from your MCP config so Cursor shows the Connect button:
+   - Open `.cursor/mcp.json` (or Cursor MCP settings)
+   - Remove the `headers` block with `X-Connection-Id`, or set the neotoma entry to `"url": "http://localhost:8082/mcp"` only
+   - Alternatively: disable and re-enable the neotoma server in Cursor MCP settings
 
-# Verify connection_id in .cursor/mcp.json matches
-cat .cursor/mcp.json | grep NEOTOMA_CONNECTION_ID
+2. Restart Cursor (or wait for it to reconnect)
 
-# Create new connection if needed
-```
+3. Click Connect when it appears (auto-uses dev account when encryption is off; shows token setup instructions when encryption is on)
+
+4. If using OAuth (encryption off): Update mcp.json with the new connection_id from `neotoma auth status` (optional - auth works without it)
+
+5. If using encryption: Follow the instructions to configure Bearer token via `neotoma auth mcp-token`
 
 **Debug:**
 

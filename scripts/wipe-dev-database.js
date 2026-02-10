@@ -1,24 +1,34 @@
 #!/usr/bin/env node
 /**
- * Wipe Dev Supabase Database
- * 
- * This script deletes all data from the dev Supabase database.
+ * Wipe Supabase Database
+ *
+ * This script deletes all data from the Supabase database.
  * WARNING: This is destructive and cannot be undone!
- * 
+ *
  * Usage:
  *   node scripts/wipe-dev-database.js [--confirm] [--storage]
- * 
+ *   node scripts/wipe-dev-database.js --env production [--storage]
+ *
  * Options:
- *   --confirm    Skip confirmation prompt (useful for automation)
+ *   --confirm    Skip confirmation prompt (dev only; prod always requires typing "wipe production")
  *   --storage    Also clear storage buckets (sources and files)
+ *   --env production  Target production DB. Loads .env.production. Requires typing "wipe production" to confirm.
  */
 
 import { createClient } from "@supabase/supabase-js";
 import { config } from "dotenv";
+import { join } from "path";
 import readline from "readline";
 
-// Load environment variables
-config();
+// Parse --env early to load correct env file
+const args = process.argv.slice(2);
+const envArg = args.includes("--env") && args[args.indexOf("--env") + 1];
+const targetProd = envArg === "production" || envArg === "prod";
+
+config(); // Load .env (dev defaults)
+if (targetProd) {
+  config({ path: join(process.cwd(), ".env.production"), override: true });
+}
 
 // Tables to clear in dependency order (respecting foreign key constraints)
 const TABLES_TO_CLEAR = [
@@ -96,6 +106,20 @@ function askConfirmation(question) {
     rl.question(question, (answer) => {
       rl.close();
       resolve(answer.toLowerCase() === "yes" || answer.toLowerCase() === "y");
+    });
+  });
+}
+
+function askProductionConfirmation(question, required) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim() === required);
     });
   });
 }
@@ -178,14 +202,17 @@ async function wipeDatabase() {
   const args = process.argv.slice(2);
   const skipConfirm = args.includes("--confirm");
   const clearStorage = args.includes("--storage");
+  const envIdx = args.indexOf("--env");
+  const envVal = envIdx >= 0 ? args[envIdx + 1] : null;
+  const targetProd = envVal === "production" || envVal === "prod";
 
-  console.log("🗑️  Neotoma Dev Database Wipe Tool\n");
+  console.log(targetProd ? "🗑️  Neotoma Production Database Wipe Tool\n" : "🗑️  Neotoma Dev Database Wipe Tool\n");
 
-  // Safety check: only allow in development
+  // Safety check: block production unless explicitly requested via --env production
   const env = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
-  if (env === "production") {
+  if (env === "production" && !targetProd) {
     console.error("❌ ERROR: This script cannot be run in production environment!");
-    console.error("   Set NEOTOMA_ENV=development or NODE_ENV=development to proceed.");
+    console.error("   Use --env production to wipe prod, or set NEOTOMA_ENV=development for dev.");
     process.exit(1);
   }
 
@@ -200,11 +227,19 @@ async function wipeDatabase() {
     process.exit(1);
   }
 
-  // Confirmation prompt
-  if (!skipConfirm) {
+  // Confirmation prompt (prod always requires typing "wipe production", --confirm cannot skip)
+  if (targetProd) {
+    console.log("⚠️  WARNING: You are about to wipe the PRODUCTION database!");
+    console.log("   This will delete ALL data. This action cannot be undone.\n");
+    const confirmed = await askProductionConfirmation("Type 'wipe production' to continue: ", "wipe production");
+    if (!confirmed) {
+      console.log("\n❌ Operation cancelled.");
+      process.exit(0);
+    }
+    console.log();
+  } else if (!skipConfirm) {
     console.log("⚠️  WARNING: This will delete ALL data from the dev database!");
     console.log("   This action cannot be undone.\n");
-    
     const confirmed = await askConfirmation("Type 'yes' to continue: ");
     if (!confirmed) {
       console.log("\n❌ Operation cancelled.");

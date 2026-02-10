@@ -55,7 +55,7 @@ Neotoma defaults to local storage with SQLite. Remote Supabase storage is option
 
 **Default local storage:**
 
-- SQLite database at `./data/neotoma.db`
+- SQLite database at `./data/neotoma.db` (development) or `./data/neotoma.prod.db` (production)
 - Raw file storage at `./data/sources/`
 - Optional JSONL event log mirror at `./data/events/` when enabled
 
@@ -142,10 +142,12 @@ Create `.env` in the project root:
 ```bash
 # Storage backend
 NEOTOMA_STORAGE_BACKEND=local
-# Optional local storage paths
+# Optional local storage paths (defaults are env-specific: dev uses data/sources, data/events, data/logs; prod uses data/sources_prod, data/events_prod, data/logs_prod)
 NEOTOMA_DATA_DIR=./data
 NEOTOMA_SQLITE_PATH=./data/neotoma.db
 NEOTOMA_RAW_STORAGE_DIR=./data/sources
+NEOTOMA_EVENT_LOG_DIR=./data/events
+NEOTOMA_LOGS_DIR=./data/logs
 # Optional JSONL event log mirror
 NEOTOMA_EVENT_LOG_MIRROR=false
 
@@ -186,33 +188,64 @@ npm test
 
 This runs integration tests against your configured backend. If tests pass, your database connection is working.
 
-### Start Development Server
+### Start development server
 
-**MCP Server (stdio mode):**
+**Watch** = run with file watching (hot reload). **Start** = run built code once. **:prod** = production environment (port 8082). Everything else = development (port 8080).
 
-```bash
-npm run dev
-```
-
-Should see: `MCP Server running on stdio`
-**API server only (no UI):**
+**MCP (stdio):**
 
 ```bash
-npm run dev:server
+npm run watch
 ```
 
-Should see the API listening on :8080 (MCP at `/mcp`).
-**Full Stack (HTTP + UI):**
+**API only (no UI):**
 
 ```bash
-npm run dev:full
+npm run watch:server
 ```
 
-Opens UI at `http://localhost:5173` (or next available port).
+**API + tunnel (for remote MCP):**
+
+```bash
+npm run watch:api
+```
+
+**API + tunnel + tsc watch:**
+
+```bash
+npm run watch:server+api
+```
+
+**Development env with reload (port 8080, tunnel + API + tsc watch):**
+
+```bash
+npm run watch:dev
+```
+
+**Production env with reload (port 8082):**
+
+```bash
+npm run watch:prod
+```
+
+**Full stack (API + UI):**
+
+```bash
+npm run watch:full
+```
+
+**Run built code (no watch):** `npm run start` (MCP), `npm run start:api` (API), `npm run start:prod` (API on 8082, production env).
+
+| Environment | Port | Watch | Start |
+|-------------|------|-------|-------|
+| Development | 8080 | `watch:dev`, `watch`, `watch:server`, `watch:server+api` | `start`, `start:api` |
+| Production  | 8082 | `watch:prod` | `start:prod` |
+
+The `dev:*` scripts (e.g. `dev:server`, `dev:prod`) are aliases for the corresponding `watch:*` scripts and remain for backward compatibility.
 
 ### Branch-Based Port Assignment
 
-When running `npm run dev:full` or other dev commands, the system automatically assigns ports based on your git branch name. This allows multiple branches to run development servers simultaneously without port conflicts.
+When running `npm run watch:full` (or `dev:full`) or other watch commands, the system automatically assigns ports based on your git branch name. This allows multiple branches to run development servers simultaneously without port conflicts.
 **How it works:**
 
 - Ports are deterministically assigned using a hash of the branch name
@@ -341,11 +374,14 @@ Then run `source ~/.zshrc` or open a new terminal. To diagnose: `echo "$(npm con
 
 ### Authenticate
 
+When encryption is off (default), no authentication is needed. The CLI works immediately.
+
+For MCP Connect (Cursor) setup only, run:
 ```bash
 neotoma auth login --base-url http://localhost:8080
 ```
 
-Credentials are stored at `~/.config/neotoma/config.json`.
+Check auth status: `neotoma auth status`. When encryption is on, set `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
 
 ### Example commands
 

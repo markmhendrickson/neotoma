@@ -45,7 +45,7 @@ Based on `env.example`, these variables should be mapped to 1Password:
 ### Server Configuration (Optional - usually local)
 These can be excluded from 1Password sync as they're typically local development values:
 - `PORT` - MCP Server port (default: 3000)
-- `HTTP_PORT` - HTTP Actions Server port (default: 8080)
+- `HTTP_PORT` - HTTP Actions Server port (default: 8080 for development, 8082 for production so dev and prod can run in parallel)
 - `WS_PORT` - WebSocket MCP Bridge port (default: 8081)
 - `ACTIONS_BEARER_TOKEN` - Bearer token for HTTP Actions API
 
