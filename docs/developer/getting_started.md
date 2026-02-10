@@ -137,17 +137,28 @@ Create two storage buckets in Supabase:
 
 ## Step 7: Configure Environment Variables
 
-Create `.env` in the project root:
+Create `.env` in the project root (see `env.example`).
+
+For local storage, no environment variables are required. The app uses these defaults if unset:
+
+| Variable | Default (when unset) |
+|----------|----------------------|
+| `NEOTOMA_STORAGE_BACKEND` | `local` |
+| `NEOTOMA_DATA_DIR` | `./data` |
+| `NEOTOMA_SQLITE_PATH` | `./data/neotoma.db` (dev) or `./data/neotoma.prod.db` (prod) |
+| `NEOTOMA_RAW_STORAGE_DIR` | `./data/sources` (dev) or `./data/sources_prod` (prod) |
+
+Override only when you need custom paths. `NEOTOMA_EVENT_LOG_DIR` and `NEOTOMA_LOGS_DIR` also default from `NEOTOMA_DATA_DIR` (e.g. `./data/events`, `./data/logs`). Example `.env` with optional overrides:
 
 ```bash
-# Storage backend
-NEOTOMA_STORAGE_BACKEND=local
-# Optional local storage paths (defaults are env-specific: dev uses data/sources, data/events, data/logs; prod uses data/sources_prod, data/events_prod, data/logs_prod)
-NEOTOMA_DATA_DIR=./data
-NEOTOMA_SQLITE_PATH=./data/neotoma.db
-NEOTOMA_RAW_STORAGE_DIR=./data/sources
-NEOTOMA_EVENT_LOG_DIR=./data/events
-NEOTOMA_LOGS_DIR=./data/logs
+# Storage backend (optional; default: local)
+# NEOTOMA_STORAGE_BACKEND=local
+# Optional local storage paths (defaults: ./data, ./data/neotoma.db, ./data/sources; prod uses _prod suffixes)
+# NEOTOMA_DATA_DIR=./data
+# NEOTOMA_SQLITE_PATH=./data/neotoma.db
+# NEOTOMA_RAW_STORAGE_DIR=./data/sources
+# NEOTOMA_EVENT_LOG_DIR=./data/events
+# NEOTOMA_LOGS_DIR=./data/logs
 # Optional JSONL event log mirror
 NEOTOMA_EVENT_LOG_MIRROR=false
 
