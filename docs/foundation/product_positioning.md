@@ -6,8 +6,12 @@ Neotoma is **not a PKM or app**. Neotoma is:
 - A **data foundation** beneath all AI interactions
 - The **Rosetta Stone** of a user's life data
 - The **one layer beneath all AI tooling**
+
+Neotoma serves both human-in-the-loop workflows (people using AI tools) and agentic systems that need a deterministic, queryable memory substrate (agent frameworks, orchestration pipelines, observability stacks).
+
 **Marketing positioning:**
 - "Structured personal data memory for AI agents"
+- "Memory infrastructure for agentic systems"
 - "Cross-platform memory that works with all your AI tools"
 - "The truth engine behind your AI tools"
 - "The foundation for agent-native personal computing"

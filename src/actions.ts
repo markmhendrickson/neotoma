@@ -24,8 +24,9 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
-import { authenticateLocalUser, countLocalAuthUsers, ensureLocalDevUser } from "./services/local_auth.js";
+import { ensureLocalDevUser } from "./services/local_auth.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
+import { getMcpAuthToken } from "./repositories/sqlite/supabase_adapter.js";
 import {
   CreateRelationshipRequestSchema,
   EntitiesQueryRequestSchema,
@@ -76,7 +77,7 @@ const corsOptions = {
   origin: process.env.FRONTEND_URL || "http://localhost:5195",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Connection-Id", "mcp-session-id"],
   exposedHeaders: ["Content-Type"],
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
@@ -137,17 +138,36 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
     scopes_supported: ["openid", "email"],
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    token_endpoint_auth_methods_supported: ["none"],
   });
 });
 
-app.get("/.well-known/oauth-protected-resource", (req, res) => {
+app.get("/.well-known/oauth-protected-resource", async (req, res) => {
   // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
-  // This may be required for Cursor to show Connect button
+  // Validate X-Connection-Id here so Cursor gets consistent invalid_token signal (helps trigger Connect prompt)
   const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
     | string
     | undefined;
-  if (!authHeader?.startsWith("Bearer ")) {
+  const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+
+  // If X-Connection-Id is sent, validate it. Invalid/expired connection → 401 with error=invalid_token
+  // so Cursor may clear stored credentials and show Connect button.
+  if (connectionIdHeader && !authHeader?.startsWith("Bearer ")) {
+    try {
+      const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+      await getAccessTokenForConnection(connectionIdHeader as string);
+    } catch {
+      const wwwAuth = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
+      res.setHeader("WWW-Authenticate", wwwAuth);
+      return res.status(401).json({
+        error: "invalid_token",
+        error_description: "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
+      });
+    }
+  }
+
+  if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
     res.setHeader(
       "WWW-Authenticate",
       `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`
@@ -195,17 +215,57 @@ app.all("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
     // Check for authentication BEFORE processing MCP requests
-    // Return 401 with WWW-Authenticate header to trigger Cursor's Connect button
-    // This matches oauth-repro pattern: 401 at HTTP layer before MCP handler
-    // Return 401 on ALL unauthenticated requests (GET, POST, DELETE), not just initialize
-    // Cursor may check auth on the initial GET request (SSE connection) first
-    // CRITICAL: Return 401 whenever auth is missing, even if session exists
-    // This ensures 401 is returned "on first protected call" as required by troubleshooting guide
+    // When encryption off: no auth by default; optional NEOTOMA_DEV_TOKEN or OAuth
+    // When encryption on: require Bearer token derived from private key (same key as data encryption)
     const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
       | string
       | undefined;
-    const connectionIdHeader = req.headers["x-connection-id"] || req.headers["X-Connection-Id"];
+    let connectionIdHeader = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as
+      | string
+      | undefined;
+
+    if (config.encryption.enabled) {
+      // Encryption on: require static token derived from user's private key
+      const expectedToken = getMcpAuthToken();
+      if (authHeader?.startsWith("Bearer ") && expectedToken) {
+        const token = authHeader.slice(7).trim();
+        if (token === expectedToken) {
+          req.headers["x-connection-id"] = "dev-local";
+          connectionIdHeader = "dev-local";
+        }
+      }
+    } else {
+      // Encryption off: no auth by default; optional static token or OAuth
+      if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
+        req.headers["x-connection-id"] = "dev-local";
+        connectionIdHeader = "dev-local";
+      }
+      if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_DEV_TOKEN) {
+        const token = authHeader.slice(7).trim();
+        if (token === process.env.NEOTOMA_DEV_TOKEN) {
+          req.headers["x-connection-id"] = "dev-local";
+          connectionIdHeader = "dev-local";
+        }
+      }
+    }
+
     const hasAuth = !!(authHeader?.startsWith("Bearer ") || connectionIdHeader);
+
+    // When encryption is on, only the key-derived token is accepted
+    if (config.encryption.enabled && connectionIdHeader !== "dev-local") {
+      const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`;
+      res.setHeader("WWW-Authenticate", wwwAuthHeader);
+      const msg =
+        "Encryption is enabled. Use MCP token from your private key: run 'neotoma auth mcp-token' and add Authorization: Bearer <token> to mcp.json.";
+      if (req.method === "POST" && req.body && typeof req.body === "object") {
+        return res.status(401).json({
+          jsonrpc: "2.0",
+          error: { code: -32001, message: msg },
+          id: req.body?.id ?? null,
+        });
+      }
+      return res.status(401).json({ error: "Unauthorized", error_description: msg });
+    }
 
     // Return 401 if: no auth (regardless of session existence)
     // This matches oauth-repro's app.all("/mcp*", ...) pattern
@@ -231,6 +291,43 @@ app.all("/mcp", async (req, res) => {
       return res.status(401).json({
         error: "Unauthorized: Authentication required",
       });
+    }
+
+    // Validate X-Connection-Id when that is the auth method (no Bearer). Invalid IDs return 401
+    // so Cursor shows Connect button instead of blocking on "Loading tools".
+    // Skip validation for dev-local (no-auth default or NEOTOMA_DEV_TOKEN).
+    if (
+      connectionIdHeader &&
+      connectionIdHeader !== "dev-local" &&
+      !authHeader?.startsWith("Bearer ")
+    ) {
+      try {
+        const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+        await getAccessTokenForConnection(connectionIdHeader as string);
+      } catch {
+        logger.info(
+          `[MCP HTTP] Invalid or expired X-Connection-Id: ${connectionIdHeader}. Returning 401 to show Connect button.`
+        );
+        // RFC 6750: error=invalid_token signals client to clear credentials and re-authenticate.
+        // Use consistent error format so Cursor may show Connect prompt.
+        const desc = "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.";
+        const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource", error="invalid_token", error_description="${desc}"`;
+        res.setHeader("WWW-Authenticate", wwwAuthHeader);
+        if (req.method === "POST" && req.body && typeof req.body === "object") {
+          return res.status(401).json({
+            jsonrpc: "2.0",
+            error: {
+              code: -32001,
+              message: desc,
+            },
+            id: req.body?.id ?? null,
+          });
+        }
+        return res.status(401).json({
+          error: "invalid_token",
+          error_description: desc,
+        });
+      }
     }
 
     // Get or create transport
@@ -622,16 +719,8 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
   }
 });
 
-// Escape for HTML attribute value to avoid broken state and XSS
-function escapeHtmlAttr(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 // Local OAuth login page (local backend only)
+// With MCP-style auth: encryption off = auto dev-local, encryption on = Bearer token only (no OAuth)
 app.get("/api/mcp/oauth/local-login", async (req, res) => {
   if (config.storageBackend !== "local") {
     return res.status(404).send("Not found");
@@ -642,127 +731,66 @@ app.get("/api/mcp/oauth/local-login", async (req, res) => {
     return res.status(400).send("state is required");
   }
 
-  const devStub = req.query.dev_stub as string | undefined;
-  if (devStub === "1" || devStub === "true") {
-    try {
-      const devUser = ensureLocalDevUser();
-      const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
-      const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
-        state,
-        devUser.id
-      );
-      const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
-      const frontendOauth = `${frontendBase}/oauth`;
-      if (redirectUri) {
-        if (!clientState && redirectUri.startsWith(frontendOauth)) {
-          const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
-          return res.redirect(successUrl);
-        }
-        const params = new URLSearchParams({
-          code: connectionId,
-          state: clientState ?? "",
-        });
-        return res.redirect(`${redirectUri}?${params.toString()}`);
-      }
-      return res.redirect(`${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`);
-    } catch (error: any) {
-      logError("MCPLocalLoginDevStub", req, error);
-      const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
-      return res.status(status).send(error.message ?? "Dev account authorization failed");
-    }
-  }
-
-  const hasUsers = countLocalAuthUsers() > 0;
-  const heading = hasUsers ? "Local sign in" : "Create local account";
-  const helper = hasUsers
-    ? "Enter your local credentials to authorize this connection."
-    : "Create the first local account to authorize this connection.";
-  const whyCopy =
-    "Local mode does not use Supabase. Email and password create (or sign into) a local account so this connection is tied to an identity.";
-  const devStubUrl = `/api/mcp/oauth/local-login?state=${encodeURIComponent(state)}&dev_stub=1`;
-
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  return res.send(`<!DOCTYPE html>
+  // When encryption is enabled: OAuth is not supported (MCP handler requires key-derived token)
+  if (config.encryption.enabled) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(`<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>${escapeHtmlAttr(heading)}</title>
+    <title>OAuth not supported with encryption</title>
   </head>
   <body>
-    <h1>${escapeHtmlAttr(heading)}</h1>
-    <p>${escapeHtmlAttr(helper)}</p>
-    <p><small>${escapeHtmlAttr(whyCopy)}</small></p>
-    <form method="post" action="/api/mcp/oauth/local-login">
-      <input type="hidden" name="state" value="${escapeHtmlAttr(state)}" />
-      <label>
-        Email
-        <input type="email" name="email" required />
-      </label>
-      <br />
-      <label>
-        Password
-        <input type="password" name="password" required />
-      </label>
-      <br />
-      <button type="submit">Continue</button>
-    </form>
-    <p><small><a href="${escapeHtmlAttr(devStubUrl)}">Use dev account (no password)</a></small></p>
+    <h1>OAuth not supported when encryption is enabled</h1>
+    <p>
+      When encryption is enabled (NEOTOMA_ENCRYPTION_ENABLED=true), MCP authentication 
+      uses a key-derived Bearer token instead of OAuth.
+    </p>
+    <h2>How to configure:</h2>
+    <ol>
+      <li>Run <code>neotoma auth mcp-token</code> to get your token</li>
+      <li>Add to .cursor/mcp.json under neotoma server:
+        <pre>"headers": { "Authorization": "Bearer &lt;your-token&gt;" }</pre>
+      </li>
+      <li>Remove <code>X-Connection-Id</code> if present</li>
+      <li>Restart Cursor</li>
+    </ol>
+    <p>See <a href="https://github.com/neotoma/neotoma/blob/main/docs/developer/mcp_oauth_troubleshooting.md">MCP OAuth Troubleshooting</a> for details.</p>
   </body>
 </html>`);
+  }
+
+  // When encryption is off: auto-use dev account (no email/password form needed)
+  // This aligns with MCP-style auth: encryption off = no auth required, auto dev-local
+  try {
+    const devUser = ensureLocalDevUser();
+    const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
+    const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
+      state,
+      devUser.id
+    );
+    const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+    const frontendOauth = `${frontendBase}/oauth`;
+    if (redirectUri) {
+      if (!clientState && redirectUri.startsWith(frontendOauth)) {
+        const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+        return res.redirect(successUrl);
+      }
+      const params = new URLSearchParams({
+        code: connectionId,
+        state: clientState ?? "",
+      });
+      return res.redirect(`${redirectUri}?${params.toString()}`);
+    }
+    return res.redirect(`${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`);
+  } catch (error: any) {
+    logError("MCPLocalLoginDevStub", req, error);
+    const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
+    return res.status(status).send(error.message ?? "Dev account authorization failed");
+  }
 });
 
-app.post(
-  "/api/mcp/oauth/local-login",
-  express.urlencoded({ extended: true }),
-  async (req, res) => {
-    if (config.storageBackend !== "local") {
-      return res.status(404).send("Not found");
-    }
-
-    const { state, email, password } = req.body as {
-      state?: string;
-      email?: string;
-      password?: string;
-    };
-
-    if (!state || !email || !password) {
-      return res.status(400).send("state, email, and password are required");
-    }
-
-    try {
-      const allowBootstrap = countLocalAuthUsers() === 0;
-      const user = authenticateLocalUser(email, password, allowBootstrap);
-      const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
-      const { connectionId, redirectUri, clientState } = await completeLocalAuthorization(
-        state,
-        user.id
-      );
-
-      const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
-      const frontendOauth = `${frontendBase}/oauth`;
-
-      if (redirectUri) {
-        if (!clientState && redirectUri.startsWith(frontendOauth)) {
-          const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
-          return res.redirect(successUrl);
-        }
-
-        const params = new URLSearchParams({
-          code: connectionId,
-          state: clientState ?? "",
-        });
-        return res.redirect(`${redirectUri}?${params.toString()}`);
-      }
-
-      const successUrl = `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`;
-      return res.redirect(successUrl);
-    } catch (error: any) {
-      logError("MCPLocalLogin", req, error);
-      const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
-      return res.status(status).send(error.message ?? "Local authentication failed");
-    }
-  }
-);
+// POST handler removed: local-login now auto-uses dev account (no email/password form)
 
 // RFC 8414 token endpoint (POST) for Cursor and other OAuth clients
 app.post(
@@ -1158,6 +1186,7 @@ app.post("/api/auth/dev-signin", async (req, res) => {
 });
 
 // Public key-based authentication middleware
+// MCP-style auth (same patterns as /mcp): encryption off = no auth or dev token; encryption on = key-derived token
 app.use(async (req, res, next) => {
   // Bypass auth only for truly public endpoints (no user data)
   if (
@@ -1168,10 +1197,36 @@ app.use(async (req, res, next) => {
     return next();
   }
 
-  // All data endpoints require authentication
+  const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
 
-  const headerAuth = req.headers.authorization || "";
+  // MCP-style auth (aligns CLI and REST API with MCP)
+  if (config.encryption.enabled) {
+    const expectedToken = getMcpAuthToken();
+    if (headerAuth.startsWith("Bearer ") && expectedToken) {
+      const token = headerAuth.slice(7).trim();
+      if (token === expectedToken) {
+        const devUser = ensureLocalDevUser();
+        (req as any).authenticatedUserId = devUser.id;
+        return next();
+      }
+    }
+  } else {
+    if (!headerAuth.startsWith("Bearer ")) {
+      const devUser = ensureLocalDevUser();
+      (req as any).authenticatedUserId = devUser.id;
+      return next();
+    }
+    if (process.env.NEOTOMA_DEV_TOKEN) {
+      const token = headerAuth.slice(7).trim();
+      if (token === process.env.NEOTOMA_DEV_TOKEN) {
+        const devUser = ensureLocalDevUser();
+        (req as any).authenticatedUserId = devUser.id;
+        return next();
+      }
+    }
+  }
 
+  // Bearer required for remaining paths (Ed25519, OAuth)
   if (!headerAuth.startsWith("Bearer ")) {
     logWarn("AuthMissingBearer", req);
     return sendError(res, 401, "AUTH_REQUIRED", "Missing Bearer token");
@@ -1249,7 +1304,7 @@ app.get("/api/me", async (req, res) => {
 
 /**
  * Helper to extract authenticated user_id from request
- * Supports both Ed25519 bearer tokens (requires user_id in body/query) and Supabase session tokens
+ * Supports: middleware-set user (e.g. dev-local when encryption off), Supabase session token, Ed25519 bearer
  * @param req - Express request object
  * @param providedUserId - Optional user_id from request body/query
  * @returns Authenticated user_id
@@ -1259,22 +1314,20 @@ async function getAuthenticatedUserId(
   req: express.Request,
   providedUserId?: string
 ): Promise<string> {
-  const headerAuth = req.headers.authorization || "";
-
-  if (!headerAuth.startsWith("Bearer ")) {
-    throw new Error("Not authenticated - missing Bearer token");
-  }
-
-  // Check if Supabase session token (already validated in middleware)
+  // Use user already set by auth middleware (e.g. dev-local when encryption off and no Bearer)
   const authenticatedUserId = (req as any).authenticatedUserId;
   if (authenticatedUserId) {
-    // Validate provided user_id matches authenticated user
     if (providedUserId && providedUserId !== authenticatedUserId) {
       throw new Error(
         `user_id parameter (${providedUserId}) does not match authenticated user (${authenticatedUserId})`
       );
     }
     return authenticatedUserId;
+  }
+
+  const headerAuth = req.headers.authorization || "";
+  if (!headerAuth.startsWith("Bearer ")) {
+    throw new Error("Not authenticated - missing Bearer token");
   }
 
   // Ed25519 bearer token - user_id must be provided
@@ -2197,7 +2250,7 @@ app.post("/api/store", async (req, res) => {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entities, source_priority, idempotency_key } = parsed.data;
+    const { entities, source_priority, idempotency_key, original_filename } = parsed.data;
 
     // Import entity resolution service
     const { resolveEntity } = await import("./services/entity_resolution.js");
@@ -2239,11 +2292,13 @@ app.post("/api/store", async (req, res) => {
       }
       return value;
     });
+    // Omit filename when not provided: agent-provided structured data has no real file origin.
+    const filenameForStorage = original_filename?.trim() || undefined;
     const storageResult = await storeRawContent({
       userId,
       fileBuffer: Buffer.from(jsonContent, "utf-8"),
       mimeType: "application/json",
-      originalFilename: "structured_data.json",
+      originalFilename: filenameForStorage,
       idempotencyKey: idempotency_key,
       provenance: {
         upload_method: "api_store",

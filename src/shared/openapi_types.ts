@@ -705,6 +705,7 @@ export interface components {
             source_priority?: number;
             idempotency_key: string;
             user_id?: string;
+            original_filename?: string;
         };
         StoreStructuredResponse: {
             success?: boolean;

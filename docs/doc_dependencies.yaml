@@ -202,6 +202,9 @@ docs/architecture/determinism.md:
     - path: docs/proposals/mcp-cli-action-items.md
       type: implicit
       reason: Proposal references determinism requirements for MCP and CLI
+    - path: docs/proposals/llm_sampling_parameters_interpretation_config.md
+      type: explicit
+      reason: Proposal extends interpretation config per determinism auditability
     - path: docs/reports/mcp_cli_action_items_fidelity_report.md
       type: implicit
       reason: Report references determinism requirements for MCP and CLI

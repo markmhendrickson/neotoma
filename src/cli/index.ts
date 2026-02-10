@@ -9,6 +9,8 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realpathSync } from "node:fs";
 
+import { config as appConfig } from "../config.js";
+import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
 import { createApiClient } from "../shared/api_client.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import {
@@ -17,10 +19,10 @@ import {
   API_PID_PATH,
   CONFIG_PATH,
   DEFAULT_BASE_URL,
-  baseUrlFromOption,
   clearConfig,
   isTokenExpired,
   readConfig,
+  resolveBaseUrl,
   writeConfig,
   type Config,
 } from "./config.js";
@@ -150,14 +152,32 @@ function writeMessage(message: string, mode: OutputMode): void {
   console.log(message);
 }
 
+/** Turn raw fetch/network errors into a short, human-readable message. */
+function humanReadableApiError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  const code = err instanceof Error && "cause" in err && (err.cause as NodeJS.ErrnoException)?.code;
+  if (msg === "fetch failed" || code === "ECONNREFUSED") {
+    return "Server not reachable. Is the API running? Try `neotoma api start`. If the API is on port 8082 (e.g. npm run dev:prod), use --base-url http://localhost:8082";
+  }
+  if (code === "ENOTFOUND") {
+    return "Host not found. Check --base-url.";
+  }
+  if (msg.includes("timeout") || (err instanceof Error && err.name === "AbortError")) {
+    return "Request timed out.";
+  }
+  return msg;
+}
+
 function formatCliError(err: unknown): string {
-  if (err instanceof Error) {
-    return err.message;
+  const human = humanReadableApiError(err);
+  let detail: string | undefined;
+  if (err instanceof Error && err.cause) {
+    const c = err.cause as NodeJS.ErrnoException & { message?: string };
+    if (typeof c.message === "string" && c.message) detail = c.message;
+    else if (c.code) detail = String(c.code);
   }
-  if (err && typeof err === "object" && "message" in err) {
-    return String((err as { message: unknown }).message);
-  }
-  return String(err);
+  if (detail) return `${human} (${detail})`;
+  return human;
 }
 
 function writeCliError(err: unknown): void {
@@ -310,11 +330,23 @@ async function exchangeToken(baseUrl: string, code: string): Promise<{
   };
 }
 
-async function requireToken(config: Config): Promise<string> {
-  if (!config.access_token || isTokenExpired(config)) {
-    throw new Error("Not authenticated. Run `neotoma auth login`.");
+/**
+ * Resolve CLI auth token using same patterns as MCP.
+ * Encryption off: NEOTOMA_DEV_TOKEN only, or no token (API treats no Bearer as dev-local).
+ * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
+ */
+async function getCliToken(): Promise<string | undefined> {
+  if (appConfig.encryption.enabled) {
+    const token = getMcpAuthToken();
+    if (!token) {
+      throw new Error(
+        "Encryption is enabled but no key configured. Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
+      );
+    }
+    return token;
   }
-  return config.access_token;
+  if (process.env.NEOTOMA_DEV_TOKEN) return process.env.NEOTOMA_DEV_TOKEN;
+  return undefined;
 }
 
 const PACK_RAT_ART = `
@@ -328,22 +360,6 @@ const PACK_RAT_ART = `
         \\ /   \\ /  ^   ^
 `;
 
-/** Turn raw fetch/network errors into a short, human-readable message. */
-function humanReadableApiError(err: unknown): string {
-  const msg = err instanceof Error ? err.message : String(err);
-  const code = err instanceof Error && "cause" in err && (err.cause as NodeJS.ErrnoException)?.code;
-  if (msg === "fetch failed" || code === "ECONNREFUSED") {
-    return "Server not reachable. Is the API running? Try `neotoma api start`.";
-  }
-  if (code === "ENOTFOUND") {
-    return "Host not found. Check --base-url.";
-  }
-  if (msg.includes("timeout") || (err instanceof Error && err.name === "AbortError")) {
-    return "Request timed out.";
-  }
-  return msg;
-}
-
 /** Check API health; returns status for display in intro. */
 async function checkApiStatusForIntro(): Promise<{
   ok: boolean;
@@ -353,7 +369,7 @@ async function checkApiStatusForIntro(): Promise<{
 }> {
   try {
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
     const healthUrl = `${baseUrl}/health`;
     const start = Date.now();
     const res = await fetch(healthUrl, { signal: AbortSignal.timeout(3000) });
@@ -362,7 +378,7 @@ async function checkApiStatusForIntro(): Promise<{
     return { ok, baseUrl, latencyMs: Date.now() - start };
   } catch (err) {
     const config = await readConfig().catch(() => ({} as Config));
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
     return {
       ok: false,
       baseUrl,
@@ -375,9 +391,12 @@ const program = new Command();
 program
   .name("neotoma")
   .description("Neotoma CLI")
-  .option("--base-url <url>", "API base URL", DEFAULT_BASE_URL)
+  .option("--base-url <url>", "API base URL (default: auto-detect 8082 or 8080)")
   .option("--json", "Output machine-readable JSON")
   .option("--pretty", "Output formatted JSON for humans");
+
+// No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
+// not stored OAuth. auth login remains for MCP Connect (Cursor) setup.
 
 const authCommand = program.command("auth").description("Authentication commands");
 
@@ -388,7 +407,7 @@ const authLoginCommand = authCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config);
+    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
     const loginOptions = authLoginCommand.opts();
     const state = base64UrlEncode(randomBytes(16));
     const verifier = base64UrlEncode(randomBytes(32));
@@ -438,21 +457,26 @@ authCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    if (!config.access_token) {
-      writeMessage("Not authenticated.", outputMode);
+    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    let token: string | undefined;
+    try {
+      token = await getCliToken();
+    } catch (err) {
+      writeMessage(formatCliError(err), outputMode);
+      process.exitCode = 1;
       return;
     }
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config);
     const status: Record<string, unknown> = {
       base_url: config.base_url || DEFAULT_BASE_URL,
       connection_id: config.connection_id,
-      expires_at: config.expires_at,
-      token_expired: isTokenExpired(config),
+      auth_mode: appConfig.encryption.enabled ? "key-derived" : token ? "dev-token" : "none",
     };
+    if (config.expires_at) status.expires_at = config.expires_at;
+    if (config.access_token) status.token_expired = isTokenExpired(config);
     try {
-      const res = await fetch(`${baseUrl}/api/me`, {
-        headers: { Authorization: `Bearer ${config.access_token}` },
-      });
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(`${baseUrl}/api/me`, { headers });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string; email?: string };
         if (me.user_id) status.user_id = me.user_id;
@@ -473,6 +497,48 @@ authCommand
     writeMessage("Credentials cleared.", outputMode);
   });
 
+authCommand
+  .command("mcp-token")
+  .description(
+    "Print MCP auth token derived from your private key (when encryption is enabled). Add to mcp.json: headers.Authorization = 'Bearer <token>'"
+  )
+  .action(async () => {
+    const outputMode = resolveOutputMode();
+    const keyFilePath = process.env.NEOTOMA_KEY_FILE_PATH || "";
+    const mnemonic = process.env.NEOTOMA_MNEMONIC || "";
+    const mnemonicPassphrase = process.env.NEOTOMA_MNEMONIC_PASSPHRASE || "";
+    const { deriveMcpAuthToken, hexToKey, mnemonicToSeed } = await import(
+      "../crypto/key_derivation.js"
+    );
+    const { readFileSync } = await import("fs");
+    let token: string;
+    if (keyFilePath) {
+      const raw = readFileSync(keyFilePath, "utf8").trim();
+      token = deriveMcpAuthToken(hexToKey(raw));
+    } else if (mnemonic) {
+      const seed = mnemonicToSeed(mnemonic, mnemonicPassphrase);
+      token = deriveMcpAuthToken(seed);
+    } else {
+      if (outputMode === "json") {
+        process.stdout.write(JSON.stringify({ error: "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC" }) + "\n");
+      } else {
+        process.stderr.write(
+          "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC to derive the MCP token.\n"
+        );
+      }
+      process.exitCode = 1;
+      return;
+    }
+    if (outputMode === "json") {
+      process.stdout.write(JSON.stringify({ token }) + "\n");
+    } else {
+      process.stdout.write(`${token}\n`);
+      process.stderr.write(
+        "Add to .cursor/mcp.json under neotoma: \"headers\": { \"Authorization\": \"Bearer <token>\" }\n"
+      );
+    }
+  });
+
 const mcpCommand = program.command("mcp").description("MCP server configuration");
 
 mcpCommand
@@ -481,7 +547,7 @@ mcpCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
     const mcpUrl = `${baseUrl}/mcp`;
     const hasAuth = Boolean(
       config.connection_id && config.connection_id !== "your-connection-id"
@@ -522,6 +588,310 @@ mcpCommand
     process.stdout.write("Full guide: docs/developer/mcp_cursor_setup.md\n");
   });
 
+program
+  .command("watch")
+  .description("Stream record changes from the database as they happen (local backend only)")
+  .option("--interval <ms>", "Polling interval in ms", "400")
+  .option("--json", "Output NDJSON (one JSON object per line)")
+  .option("--human", "Output one plain line per change (no timestamps, emoji, or IDs)")
+  .option("--tail", "Only show changes from now (skip existing records)")
+  .action(async (opts: { interval?: string; json?: boolean; human?: boolean; tail?: boolean }) => {
+    const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
+    if (storageBackend !== "local") {
+      process.stderr.write(
+        "neotoma watch requires local backend. Set NEOTOMA_STORAGE_BACKEND=local or use Supabase Realtime for remote.\n"
+      );
+      process.exit(1);
+    }
+
+    const config = await readConfig();
+    let token: string | undefined;
+    try {
+      token = await getCliToken();
+    } catch {
+      process.stderr.write(
+        "neotoma watch requires auth. Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC when encryption is on.\n"
+      );
+      process.exit(1);
+    }
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    let userId: string;
+    try {
+      const res = await fetch(`${baseUrl}/api/me`, { headers });
+      if (!res.ok) {
+        process.stderr.write("neotoma watch: could not resolve user. Run `neotoma auth login` and ensure the API is running.\n");
+        process.exit(1);
+      }
+      const me = (await res.json()) as { user_id?: string };
+      if (!me.user_id) {
+        process.stderr.write("neotoma watch: API did not return user_id. Ensure the API is running and you are authenticated.\n");
+        process.exit(1);
+      }
+      userId = me.user_id;
+    } catch (err) {
+      process.stderr.write(
+        "neotoma watch: could not reach API to resolve user. " +
+          (err instanceof Error ? err.message : String(err)) +
+          ". Run `neotoma auth login` and ensure the API is running.\n"
+      );
+      process.exit(1);
+    }
+
+    let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+    if (!projectRoot) {
+      try {
+        const pkgPath = path.join(process.cwd(), "package.json");
+        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+        if (pkg.name === "neotoma") projectRoot = process.cwd();
+      } catch {
+        // not in neotoma repo
+      }
+    }
+    const dataDir = process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+    const defaultDbFile =
+      (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production"
+        ? "neotoma.prod.db"
+        : "neotoma.db";
+    const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
+
+    const resolvedPath = path.isAbsolute(sqlitePath) ? sqlitePath : path.join(process.cwd(), sqlitePath);
+    try {
+      await fs.access(resolvedPath);
+    } catch {
+      process.stderr.write(`neotoma watch: SQLite DB not found at ${resolvedPath}. Start the API and ingest data first.\n`);
+      process.exit(1);
+    }
+
+    // Open read-write so we can attach to WAL/shm; we only run SELECT. Opening readonly
+    // while the API has the DB in WAL mode often causes "disk I/O error" (readers need shm access).
+    const { default: Database } = await import("better-sqlite3");
+    const db = new Database(resolvedPath);
+    db.pragma("busy_timeout = 2000");
+
+    type TableDef = { table: string; idCol: string; tsCol: string; userFilter?: "user_id" | "source_user" };
+    const tableDefs: TableDef[] = [
+      { table: "sources", idCol: "id", tsCol: "created_at" },
+      { table: "entities", idCol: "id", tsCol: "created_at" },
+      { table: "observations", idCol: "id", tsCol: "created_at" },
+      { table: "relationship_observations", idCol: "id", tsCol: "created_at" },
+      { table: "timeline_events", idCol: "id", tsCol: "created_at" },
+      { table: "interpretations", idCol: "id", tsCol: "started_at", userFilter: "source_user" },
+      { table: "entity_snapshots", idCol: "entity_id", tsCol: "computed_at" },
+      { table: "raw_fragments", idCol: "id", tsCol: "created_at" },
+      { table: "entity_merges", idCol: "id", tsCol: "created_at" },
+      { table: "relationship_snapshots", idCol: "relationship_key", tsCol: "computed_at" },
+    ];
+
+    const TABLE_EMOJI: Record<string, string> = {
+      sources: "📄",
+      entities: "👤",
+      observations: "👁️",
+      relationship_observations: "🔗",
+      timeline_events: "📅",
+      interpretations: "🔄",
+      entity_snapshots: "📊",
+      raw_fragments: "📝",
+      entity_merges: "🔀",
+      relationship_snapshots: "🔗",
+    };
+
+    function fetchEntityNames(entityIds: Set<string>, forUserId: string): Map<string, string> {
+      const map = new Map<string, string>();
+      if (entityIds.size === 0) return map;
+      try {
+        const placeholders = Array.from(entityIds).map(() => "?").join(",");
+        const stmt = db.prepare(
+          `SELECT id, canonical_name FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
+        );
+        const rows = stmt.all(...entityIds, forUserId) as { id: string; canonical_name: string }[];
+        for (const r of rows) map.set(r.id, r.canonical_name);
+      } catch {
+        // entities table may not exist or may lack user_id
+      }
+      return map;
+    }
+
+    function formatWatchSummary(
+      table: string,
+      row: Record<string, unknown>,
+      entityNames: Map<string, string>
+    ): string {
+      const v = (k: string) => String(row[k] ?? "").slice(0, 36);
+      const name = (id: string) => entityNames.get(id) ?? id.slice(0, 12) + "…";
+      switch (table) {
+        case "sources":
+          return v("original_filename") || v("mime_type") || "source";
+        case "entities":
+          return `${v("entity_type")}: ${v("canonical_name")}`;
+        case "observations":
+          return `${v("entity_type")} obs for ${name(v("entity_id"))}`;
+        case "relationship_observations":
+          return `${v("relationship_type")} ${name(v("source_entity_id"))} → ${name(v("target_entity_id"))}`;
+        case "timeline_events":
+          return `${v("event_type")} @ ${v("event_timestamp")}`;
+        case "interpretations":
+          return `${v("status")} (source: ${v("source_id").slice(0, 8)}…)`;
+        case "entity_snapshots":
+          return `${v("entity_type")} ${name(v("entity_id"))} (${row.observation_count ?? 0} obs)`;
+        case "raw_fragments":
+          return `${v("entity_type")}.${v("fragment_key")}`;
+        case "entity_merges":
+          return `${name(v("from_entity_id"))} → ${name(v("to_entity_id"))}`;
+        case "relationship_snapshots":
+          return `${v("relationship_type")} ${name(v("source_entity_id"))} → ${name(v("target_entity_id"))} (${row.observation_count ?? 0} obs)`;
+        default:
+          return "";
+      }
+    }
+
+    function formatWatchSentence(
+      table: string,
+      row: Record<string, unknown>,
+      entityNames: Map<string, string>
+    ): string {
+      const v = (k: string) => String(row[k] ?? "").trim();
+      const q = (s: string) => (s ? `"${s}"` : "");
+      const name = (id: string) => entityNames.get(id) || id.slice(0, 12) + "…";
+      const relPerson = (id: string) => {
+        const n = entityNames.get(id);
+        return n ? `person "${n}"` : `"${id.slice(0, 12)}…"`;
+      };
+      const entityWithType = (id: string, entityType: string) => {
+        const n = entityNames.get(id);
+        return n ? `${entityType} "${n}"` : `"${id.slice(0, 12)}…"`;
+      };
+      switch (table) {
+        case "sources":
+          return `Created source ${q(v("original_filename") || v("mime_type") || "unknown")}`;
+        case "entities": {
+          const type = v("entity_type") || "entity";
+          return `Created ${type} ${q(v("canonical_name"))}`;
+        }
+        case "observations": {
+          const entityType = v("entity_type") || "entity";
+          return `Created observation for ${entityWithType(v("entity_id"), entityType)}`;
+        }
+        case "relationship_observations":
+          return `Created relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
+        case "timeline_events":
+          return `Created timeline event ${q(v("event_type"))} at ${v("event_timestamp") || "unknown"}`;
+        case "interpretations":
+          return `Created interpretation for source ${q(String(v("source_id")).slice(0, 12) + "…")}`;
+        case "entity_snapshots":
+          return `Updated snapshot for ${relPerson(v("entity_id"))} (${row.observation_count ?? 0} observations)`;
+        case "raw_fragments":
+          return `Created fragment ${q(v("entity_type") + "." + v("fragment_key"))}`;
+        case "entity_merges":
+          return `Merged ${q(name(v("from_entity_id")))} into ${q(name(v("to_entity_id")))}`;
+        case "relationship_snapshots":
+          return `Updated relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
+        default:
+          return `Created ${table} record`;
+      }
+    }
+
+    const now = new Date().toISOString();
+    const cursors: Record<string, string> = opts.tail ? Object.fromEntries(tableDefs.map((t) => [t.table, now])) : {};
+    const intervalMs = Math.max(100, parseInt(opts.interval ?? "400", 10) || 400);
+    const jsonMode = Boolean(opts.json);
+    const humanMode = Boolean(opts.human);
+
+    if (!jsonMode && !humanMode) {
+      process.stderr.write("Streaming record changes (Ctrl+C to stop)\n");
+      process.stderr.write(`  DB: ${resolvedPath}\n`);
+      process.stderr.write(`  User: ${userId}\n`);
+      process.stderr.write(`  Poll interval: ${intervalMs} ms\n`);
+      process.stderr.write("---\n");
+    }
+
+    function collectEntityIds(table: string, rows: Record<string, unknown>[]): Set<string> {
+      const ids = new Set<string>();
+      for (const row of rows) {
+        const add = (k: string) => {
+          const val = row[k];
+          if (val && typeof val === "string") ids.add(val);
+        };
+        if (table === "observations") add("entity_id");
+        else if (table === "relationship_observations" || table === "relationship_snapshots") {
+          add("source_entity_id");
+          add("target_entity_id");
+        }
+        else if (table === "entity_snapshots") add("entity_id");
+        else if (table === "entity_merges") {
+          add("from_entity_id");
+          add("to_entity_id");
+        }
+      }
+      return ids;
+    }
+
+    function poll(): void {
+      for (const { table, idCol, tsCol, userFilter } of tableDefs) {
+        try {
+          const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
+          const userClause =
+            userFilter === "source_user"
+              ? "source_id IN (SELECT id FROM sources WHERE user_id = ?)"
+              : "user_id = ?";
+          const stmt = db.prepare(
+            `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
+          );
+          const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
+          const entityNames = fetchEntityNames(collectEntityIds(table, rows), userId);
+
+          for (const row of rows) {
+            const ts = String(row[tsCol] ?? "");
+            if (ts && (!cursors[table] || ts > cursors[table])) {
+              cursors[table] = ts;
+            }
+            const id = row[idCol];
+            const payload = sortKeys(row) as Record<string, unknown>;
+            const summary = formatWatchSummary(table, row, entityNames);
+            const event = {
+              table,
+              emoji: TABLE_EMOJI[table] ?? "•",
+              summary,
+              operation: "insert",
+              id: id ?? null,
+              ts_col: tsCol,
+              ts: ts || null,
+              payload,
+            };
+
+            if (jsonMode) {
+              process.stdout.write(JSON.stringify(event) + "\n");
+            } else if (humanMode) {
+              const line = formatWatchSentence(table, row, entityNames);
+              process.stdout.write(line + "\n");
+            } else {
+              const emoji = TABLE_EMOJI[table] ?? "•";
+              const tsStr = ts ? new Date(ts).toISOString() : "";
+              process.stdout.write(`[${tsStr}] ${emoji} ${table} ${String(id)}  ${summary}\n`);
+            }
+          }
+        } catch (err) {
+          // Table may not exist or column may differ
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes("no such table")) {
+            process.stderr.write(`neotoma watch: ${table}: ${msg}\n`);
+          }
+        }
+      }
+    }
+
+    poll();
+    const interval = setInterval(poll, intervalMs);
+    const onExit = () => {
+      clearInterval(interval);
+      db.close();
+      process.exit(0);
+    };
+    process.on("SIGINT", onExit);
+    process.on("SIGTERM", onExit);
+  });
+
 const storageCommand = program.command("storage").description("Storage locations and file paths");
 
 storageCommand
@@ -530,7 +900,7 @@ storageCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
 
     const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
     let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
@@ -545,12 +915,18 @@ storageCommand
     }
 
     const dataDir = process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const sqlitePath =
-      process.env.NEOTOMA_SQLITE_PATH || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, "neotoma.db") : "data/neotoma.db");
+    const isProd = (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
+    const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
+    const rawStorageSubdir = isProd ? "sources_prod" : "sources";
+    const eventLogSubdir = isProd ? "events_prod" : "events";
+    const logsSubdir = isProd ? "logs_prod" : "logs";
     const rawStorageDir =
-      process.env.NEOTOMA_RAW_STORAGE_DIR || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, "sources") : "data/sources");
+      process.env.NEOTOMA_RAW_STORAGE_DIR || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, rawStorageSubdir) : path.join("data", rawStorageSubdir));
     const eventLogDir =
-      process.env.NEOTOMA_EVENT_LOG_DIR || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, "events") : "data/events");
+      process.env.NEOTOMA_EVENT_LOG_DIR || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, eventLogSubdir) : path.join("data", eventLogSubdir));
+    const logsDir =
+      process.env.NEOTOMA_LOGS_DIR || (typeof dataDir === "string" && dataDir !== "data" ? path.join(dataDir, logsSubdir) : path.join("data", logsSubdir));
 
     const info: Record<string, unknown> = {
       config_file: CONFIG_PATH,
@@ -565,8 +941,9 @@ storageCommand
               sqlite_db: sqlitePath,
               raw_sources: rawStorageDir,
               event_log: eventLogDir,
+              logs: logsDir,
               description:
-                "Local backend: SQLite DB and raw files under data/. Override with NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_DIR, NEOTOMA_PROJECT_ROOT.",
+                "Local backend: SQLite DB and raw files under data/. Defaults are env-specific (dev: data/sources, data/events, data/logs, neotoma.db; prod: data/sources_prod, data/events_prod, data/logs_prod, neotoma.prod.db). Override with NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_DIR, NEOTOMA_LOGS_DIR, NEOTOMA_PROJECT_ROOT.",
             }
           : {
               description: "Supabase backend: data is stored in your Supabase project (Postgres + Storage bucket 'sources').",
@@ -590,10 +967,329 @@ storageCommand
       if (paths.sqlite_db) process.stdout.write(`  sqlite_db:   ${paths.sqlite_db}\n`);
       if (paths.raw_sources) process.stdout.write(`  raw_sources: ${paths.raw_sources}\n`);
       if (paths.event_log) process.stdout.write(`  event_log:   ${paths.event_log}\n`);
+      if (paths.logs) process.stdout.write(`  logs:        ${paths.logs}\n`);
       if (paths.description) process.stdout.write(`  ${paths.description}\n`);
     } else if (storageBackend === "supabase" && info.storage_paths && typeof info.storage_paths === "object") {
       const paths = info.storage_paths as Record<string, unknown>;
       if (paths.description) process.stdout.write(`  ${paths.description}\n`);
+    }
+  });
+
+// ── Backup & Restore ──────────────────────────────────────────────────────
+
+const backupCommand = program.command("backup").description("Backup encrypted neotoma.db and data files");
+
+backupCommand
+  .command("create")
+  .description("Create a backup of the local database, sources, and event logs")
+  .option("--output <dir>", "Output directory for the backup", "./backups")
+  .action(async (opts: { output: string }) => {
+    const outputMode = resolveOutputMode();
+    let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+    if (!projectRoot) {
+      try {
+        const pkgPath = path.join(process.cwd(), "package.json");
+        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+        if (pkg.name === "neotoma") projectRoot = process.cwd();
+      } catch {
+        // not in neotoma repo
+      }
+    }
+
+    const dataDir = process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+    const isProd = (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
+    const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
+    const rawStorageSubdir = isProd ? "sources_prod" : "sources";
+    const eventLogSubdir = isProd ? "events_prod" : "events";
+    const logsSubdir = isProd ? "logs_prod" : "logs";
+    const rawStorageDir = process.env.NEOTOMA_RAW_STORAGE_DIR || path.join(dataDir, rawStorageSubdir);
+    const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || path.join(dataDir, eventLogSubdir);
+    const logsDir = process.env.NEOTOMA_LOGS_DIR || path.join(dataDir, logsSubdir);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const backupDir = path.join(opts.output, `neotoma-backup-${timestamp}`);
+
+    await fs.mkdir(backupDir, { recursive: true });
+
+    const manifest: Record<string, unknown> = {
+      version: "1.0",
+      created_at: new Date().toISOString(),
+      contents: {} as Record<string, string>,
+      checksums: {} as Record<string, string>,
+      encrypted: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
+      key_required: "User must preserve private key file (~/.neotoma/keys/) or mnemonic phrase for restore",
+    };
+    const contents = manifest.contents as Record<string, string>;
+    const checksums = manifest.checksums as Record<string, string>;
+
+    // Copy SQLite DB using file copy (better-sqlite3 backup API requires the DB instance)
+    try {
+      await fs.access(sqlitePath);
+      const destDb = path.join(backupDir, path.basename(sqlitePath));
+      await fs.copyFile(sqlitePath, destDb);
+      contents.neotoma_db = path.basename(sqlitePath);
+
+      // Compute checksum
+      const dbBuf = await fs.readFile(destDb);
+      checksums[path.basename(sqlitePath)] = "sha256:" + createHash("sha256").update(dbBuf).digest("hex");
+
+      // WAL file
+      const walPath = sqlitePath + "-wal";
+      try {
+        await fs.access(walPath);
+        await fs.copyFile(walPath, path.join(backupDir, path.basename(walPath)));
+        contents.wal = path.basename(walPath);
+      } catch {
+        // No WAL file
+      }
+    } catch {
+      writeCliError("SQLite database not found at " + sqlitePath);
+    }
+
+    // Copy sources directory
+    try {
+      await fs.access(rawStorageDir);
+      const destSources = path.join(backupDir, "sources");
+      await fs.cp(rawStorageDir, destSources, { recursive: true });
+      contents.sources = "sources/";
+    } catch {
+      // No sources directory
+    }
+
+    // Copy event log directory
+    for (const dir of [eventLogDir, logsDir]) {
+      try {
+        await fs.access(dir);
+        const dirName = path.basename(dir);
+        await fs.cp(dir, path.join(backupDir, dirName), { recursive: true });
+        contents[dirName] = dirName + "/";
+      } catch {
+        // Directory does not exist
+      }
+    }
+
+    // Write manifest
+    await fs.writeFile(
+      path.join(backupDir, "manifest.json"),
+      JSON.stringify(manifest, null, 2),
+    );
+
+    const result = {
+      status: "complete",
+      backup_dir: backupDir,
+      contents,
+      encrypted: manifest.encrypted,
+    };
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+    } else {
+      process.stdout.write(`Backup complete: ${backupDir}\n`);
+      for (const [key, val] of Object.entries(contents)) {
+        process.stdout.write(`  ${key}: ${val}\n`);
+      }
+      if (manifest.encrypted) {
+        process.stdout.write("\nData is encrypted. Preserve your key file or mnemonic phrase for restore.\n");
+      }
+    }
+  });
+
+backupCommand
+  .command("restore")
+  .description("Restore a backup into the data directory")
+  .requiredOption("--from <dir>", "Backup directory to restore from")
+  .option("--target <dir>", "Target data directory (default: NEOTOMA_DATA_DIR or ./data)")
+  .action(async (opts: { from: string; target?: string }) => {
+    const outputMode = resolveOutputMode();
+    let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+    if (!projectRoot) {
+      try {
+        const pkgPath = path.join(process.cwd(), "package.json");
+        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+        if (pkg.name === "neotoma") projectRoot = process.cwd();
+      } catch {
+        // not in neotoma repo
+      }
+    }
+
+    const targetDir = opts.target || process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+
+    // Read manifest
+    const manifestPath = path.join(opts.from, "manifest.json");
+    let manifest: Record<string, unknown>;
+    try {
+      manifest = JSON.parse(await fs.readFile(manifestPath, "utf-8"));
+    } catch {
+      writeCliError("No manifest.json found in backup directory: " + opts.from);
+      return;
+    }
+
+    const contents = (manifest.contents || {}) as Record<string, string>;
+    await fs.mkdir(targetDir, { recursive: true });
+
+    // Restore DB
+    if (contents.neotoma_db) {
+      await fs.copyFile(
+        path.join(opts.from, contents.neotoma_db),
+        path.join(targetDir, contents.neotoma_db),
+      );
+    }
+    if (contents.wal) {
+      await fs.copyFile(
+        path.join(opts.from, contents.wal),
+        path.join(targetDir, contents.wal),
+      );
+    }
+
+    // Restore directories
+    for (const [, val] of Object.entries(contents)) {
+      if (typeof val === "string" && val.endsWith("/")) {
+        const srcDir = path.join(opts.from, val);
+        const destDir = path.join(targetDir, val);
+        try {
+          await fs.access(srcDir);
+          await fs.cp(srcDir, destDir, { recursive: true });
+        } catch {
+          // skip missing dirs
+        }
+      }
+    }
+
+    const result = {
+      status: "restored",
+      target_dir: targetDir,
+      contents,
+      encrypted: manifest.encrypted,
+    };
+
+    if (outputMode === "json") {
+      writeOutput(result, outputMode);
+    } else {
+      process.stdout.write(`Restore complete to: ${targetDir}\n`);
+      for (const [key, val] of Object.entries(contents)) {
+        process.stdout.write(`  ${key}: ${val}\n`);
+      }
+      if (manifest.encrypted) {
+        process.stdout.write("\nData is encrypted. You need the original key file or mnemonic to access it.\n");
+      }
+    }
+  });
+
+// ── Logs ──────────────────────────────────────────────────────────────────
+
+const logsCommand = program.command("logs").description("View and decrypt persistent log files");
+
+logsCommand
+  .command("tail")
+  .description("Read persistent log files, optionally decrypting encrypted entries")
+  .option("--decrypt", "Decrypt encrypted log lines using key file or mnemonic")
+  .option("--lines <n>", "Number of lines to show (default: last 50)", "50")
+  .option("--file <path>", "Specific log file path (default: latest in data/logs or data/events, env-specific)")
+  .action(async (opts: { decrypt?: boolean; lines: string; file?: string }) => {
+    const outputMode = resolveOutputMode();
+    const lineCount = parseInt(opts.lines, 10) || 50;
+
+    let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+    if (!projectRoot) {
+      try {
+        const pkgPath = path.join(process.cwd(), "package.json");
+        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+        if (pkg.name === "neotoma") projectRoot = process.cwd();
+      } catch {
+        // not in neotoma repo
+      }
+    }
+
+    const dataDir = process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+    const isProd = (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const logsSubdir = isProd ? "logs_prod" : "logs";
+    const eventLogSubdir = isProd ? "events_prod" : "events";
+
+    let logFilePath = opts.file;
+    if (!logFilePath) {
+      const logsDirResolved = process.env.NEOTOMA_LOGS_DIR || path.join(dataDir, logsSubdir);
+      const eventLogDirResolved = process.env.NEOTOMA_EVENT_LOG_DIR || path.join(dataDir, eventLogSubdir);
+      for (const dir of [logsDirResolved, eventLogDirResolved]) {
+        try {
+          const files = await fs.readdir(dir);
+          const logFiles = files.filter((f) => f.endsWith(".jsonl") || f.endsWith(".log"));
+          if (logFiles.length > 0) {
+            logFiles.sort().reverse();
+            logFilePath = path.join(dir, logFiles[0]);
+            break;
+          }
+        } catch {
+          // directory does not exist
+        }
+      }
+    }
+
+    if (!logFilePath) {
+      writeCliError("No log files found in env-specific data/logs or data/events (dev: logs, events; prod: logs_prod, events_prod).");
+      return;
+    }
+
+    let content: string;
+    try {
+      content = await fs.readFile(logFilePath, "utf-8");
+    } catch {
+      writeCliError("Cannot read log file: " + logFilePath);
+      return;
+    }
+
+    const allLines = content.split("\n").filter((l) => l.trim().length > 0);
+    const lines = allLines.slice(-lineCount);
+
+    let logKey: Uint8Array | null = null;
+    if (opts.decrypt) {
+      // Dynamically import to avoid loading crypto at CLI startup
+      const { deriveKeys, deriveKeysFromMnemonic, hexToKey } = await import("../crypto/key_derivation.js");
+
+      const keyFilePath = process.env.NEOTOMA_KEY_FILE_PATH || "";
+      const mnemonic = process.env.NEOTOMA_MNEMONIC || "";
+      const passphrase = process.env.NEOTOMA_MNEMONIC_PASSPHRASE || "";
+
+      if (keyFilePath) {
+        const raw = (await fs.readFile(keyFilePath, "utf-8")).trim();
+        const keyBytes = hexToKey(raw);
+        logKey = deriveKeys(keyBytes).logKey;
+      } else if (mnemonic) {
+        logKey = deriveKeysFromMnemonic(mnemonic, passphrase).logKey;
+      } else {
+        writeCliError("--decrypt requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC to be set.");
+        return;
+      }
+    }
+
+    const output: string[] = [];
+    for (const line of lines) {
+      if (opts.decrypt && logKey) {
+        const { isEncryptedLogLine, decryptLogLine } = await import("../utils/log_encrypt.js");
+        if (isEncryptedLogLine(line)) {
+          try {
+            output.push(decryptLogLine(line, logKey));
+          } catch {
+            output.push("[decryption failed] " + line);
+          }
+        } else {
+          output.push(line);
+        }
+      } else {
+        output.push(line);
+      }
+    }
+
+    if (outputMode === "json") {
+      const parsed = output.map((l) => {
+        try { return JSON.parse(l); } catch { return l; }
+      });
+      writeOutput({ file: logFilePath, lines: parsed }, outputMode);
+    } else {
+      process.stdout.write(`Log file: ${logFilePath}\n\n`);
+      for (const line of output) {
+        process.stdout.write(line + "\n");
+      }
     }
   });
 
@@ -605,7 +1301,7 @@ apiCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
     const healthUrl = baseUrl + "/health";
     const start = Date.now();
     let ok = false;
@@ -650,7 +1346,7 @@ apiCommand
 apiCommand
   .command("start")
   .description("Start the API server (foreground instructions or background)")
-  .option("--background", "Start the server in the background and write logs to ~/.config/neotoma/logs/api.log")
+  .option("--background", "Start the server in the background; logs and PID are env-specific (~/.config/neotoma/logs/api.log or logs_prod/api.log)")
   .action(async (opts: { background?: boolean }) => {
     const outputMode = resolveOutputMode();
     const cwd = process.cwd();
@@ -710,19 +1406,26 @@ apiCommand
     if (outputMode === "json") {
       writeOutput(
         {
-          command: "npm run dev:server",
-          command_production: "npm run start:api",
-          message: "Run in a separate terminal from the Neotoma repo.",
+          commands: {
+            dev: "npm run dev:server",
+            dev_prod: "npm run dev:prod",
+            start_api: "npm run start:api",
+            start_prod: "npm run start:prod",
+          },
+          ports: { default: 8080, prod: 8082 },
+          message: "Run in a separate terminal from the Neotoma repo. CLI defaults to port 8080; for 8082 use --base-url http://localhost:8082",
         },
         outputMode
       );
       return;
     }
     process.stdout.write("To start the API server, run in a separate terminal:\n\n");
-    process.stdout.write("  npm run dev:server   (development, no UI)\n");
-    process.stdout.write("  npm run start:api    (production, after npm run build)\n\n");
+    process.stdout.write("  npm run dev:server   (development, port 8080)\n");
+    process.stdout.write("  npm run dev:prod    (production-like, port 8082)\n");
+    process.stdout.write("  npm run start:api   (production, after npm run build; port from HTTP_PORT, default 8080)\n");
+    process.stdout.write("  npm run start:prod  (production, port 8082)\n\n");
     process.stdout.write("Or start in background: neotoma api start --background\n\n");
-    process.stdout.write("Default port: 8080. Set HTTP_PORT to use another port.\n");
+    process.stdout.write("CLI defaults to port 8080. If the API is on 8082 (e.g. dev:prod), use: neotoma --base-url http://localhost:8082 <command>\n");
   });
 
 apiCommand
@@ -731,7 +1434,7 @@ apiCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config).replace(/\/$/, "");
+    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
     let port = 8080;
     try {
       const u = new URL(baseUrl);
@@ -905,9 +1608,9 @@ entitiesCommand
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
-    const { data, error } = await api.POST("/api/entities/query", {
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
+    const { data, error, response } = await api.POST("/api/entities/query", {
       body: {
         entity_type: opts.type,
         search: opts.search,
@@ -916,7 +1619,13 @@ entitiesCommand
         include_merged: Boolean(opts.includeMerged),
       },
     });
-    if (error) throw new Error("Failed to list entities");
+    const status = response?.status;
+    if (error) {
+      const detail = formatApiError(error);
+      let msg = status ? `Failed to list entities: ${status} ${detail}` : `Failed to list entities: ${detail}`;
+      if (status === 401) msg += ". Run `neotoma auth login` to sign in.";
+      throw new Error(msg);
+    }
     writeOutput(data, outputMode);
   });
 
@@ -927,8 +1636,8 @@ entitiesCommand
   .action(async (id: string) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/entities/{id}", {
       params: { path: { id } },
     });
@@ -946,8 +1655,8 @@ sourcesCommand
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/sources", {
       params: {
         query: {
@@ -972,8 +1681,8 @@ observationsCommand
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.POST("/api/observations/query", {
       body: {
         entity_id: opts.entityId,
@@ -994,8 +1703,8 @@ relationshipsCommand
   .action(async (entityId: string, opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.POST("/list_relationships", {
       body: {
         entity_id: entityId,
@@ -1017,8 +1726,8 @@ timelineCommand
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/timeline", {
       params: {
         query: {
@@ -1040,8 +1749,8 @@ schemasCommand
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/schemas", {});
     if (error) throw new Error("Failed to list schemas");
     writeOutput(data, outputMode);
@@ -1054,8 +1763,8 @@ schemasCommand
   .action(async (entityType: string) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/schemas/{entity_type}", {
       params: { path: { entity_type: entityType } },
     });
@@ -1071,8 +1780,8 @@ program
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
 
     let entities: unknown;
     if (opts.json) {
@@ -1102,8 +1811,8 @@ program
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const token = await requireToken(config);
-    const api = createApiClient({ baseUrl: baseUrlFromOption(program.opts().baseUrl, config), token });
+    const token = await getCliToken();
+    const api = createApiClient({ baseUrl: await resolveBaseUrl(program.opts().baseUrl, config), token });
     const { data, error } = await api.GET("/api/stats", {});
     if (error) throw new Error("Failed to fetch stats");
     writeOutput(data, outputMode);
@@ -1146,8 +1855,8 @@ program
       throw new Error("Unknown operationId: " + opts.operation);
     }
 
-    const baseUrl = baseUrlFromOption(program.opts().baseUrl, config);
-    const token = opts.skipAuth ? undefined : await requireToken(config);
+    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    const token = opts.skipAuth ? undefined : await getCliToken();
     const api = createApiClient({ baseUrl, token });
 
     const params = parseOptionalJson(opts.params);

@@ -4,7 +4,7 @@
 
 Neotoma is a **truth layer**: an explicit, inspectable, replayable substrate for personal data that AI agents read and write. When agents act, personal data becomes state. Neotoma treats that state the way production systems do: contract-first, deterministic, immutable, and queryable.
 
-**Why it exists:** The thing that keeps breaking in agentic systems is not intelligence but trust. Memory changes implicitly, context drifts, and you cannot see what changed or replay it. Neotoma provides the missing primitive: user-controlled, inspectable memory with full provenance, so you can trust agents with real, ongoing state.
+**Why it exists:** The thing that keeps breaking in agentic systems is not intelligence but trust. Memory changes implicitly, context drifts, and you cannot see what changed or replay it. Neotoma provides the missing primitive: user-controlled, deterministic, inspectable memory with full provenance, so you can trust agents with real, ongoing state.
 
 For the full rationale, see [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory).
 
@@ -68,8 +68,11 @@ graph LR
 - **AI-native operators** who rely on ChatGPT, Claude, or Cursor and need persistent memory across sessions.
 - **Knowledge workers** (researchers, analysts, consultants, legal) who need cross-data reasoning and entity unification across contracts, invoices, and agent-created data.
 - **Small teams (2–20)** who want a shared truth layer with row-level security.
+- **Builders of agentic systems** who need a deterministic memory and provenance layer for agents and toolchains (e.g. agent frameworks, orchestration pipelines, observability stacks).
 
-**Why Neotoma:** One memory graph across documents and agent-created data; agents remember context without re-explanation; full provenance and audit trail; works with any MCP-compatible tool; privacy-first and user-controlled.
+**Why Neotoma:** One memory graph across documents and agent-created data; agents remember context without re-explanation; full provenance and audit trail; works with any MCP-compatible tool; privacy-first and user-controlled. The same substrate serves both human-in-the-loop use and agent frameworks or toolchains that need deterministic memory and provenance.
+
+**Suggested GitHub topics:** `ai-agents` `ai-memory` `memory-system` `entity-resolution` `event-sourcing` `truth-layer` `mcp` `provenance` `privacy-first`
 
 ---
 
@@ -120,7 +123,7 @@ Full release index: [docs/releases/](docs/releases/).
 
 ## Documentation Index
 
-The **primary entrypoint** for all documentation is the index and navigation guide:
+The **primary entrypoint** for all documentation is the index and navigation guide. All contributors and AI assistants working on the repo should load it first.
 
 - **[Documentation index and navigation](docs/context/index_rules.mdc)** – Map of the docs system, reading order by change type, dependency graph, and quick-reference answers. Start here when contributing or navigating the repo.
 

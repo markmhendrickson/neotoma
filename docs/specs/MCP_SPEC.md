@@ -284,10 +284,13 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
     // ... entity-specific fields (schema fields)
     // ... PLUS ALL additional fields from source data (non-schema fields stored in raw_fragments)
   }>;
+  original_filename?: string;         // Optional: Omit for agent-provided data (no file origin). Pass only when mirroring a real file name or when a display label is desired.
   provenance?: { ... };               // Optional: Provenance metadata
 }
 ```
 Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation) (schema fields) + [raw_fragments](../subsystems/schema.md#210-raw_fragments-table) (unknown fields)
+
+**Filename for agent-provided structured data:** When storing via `store` with an `entities` array (e.g. data from chat or another MCP, not from a file), agents SHOULD omit `original_filename`. The source then has no filename (null), which correctly reflects that there was no file. Pass `original_filename` only when mirroring a real file name or when a display label is explicitly desired.
 
 **CRITICAL: Agents MUST include ALL fields from source data**, not just schema fields. Unknown fields are automatically stored in `raw_fragments` for future schema expansion. See section 3.1 for details.
 

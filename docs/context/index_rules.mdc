@@ -252,15 +252,16 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/developer/`
 
-| Document                                                          | Purpose                                        | Load When                                                     |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
-| [`getting_started.md`](../developer/getting_started.md)           | Local environment setup, first contribution    | Setting up development environment, onboarding new developers |
-| [`development_workflow.md`](../developer/development_workflow.md) | Git workflow, branch strategy, PR process      | Creating feature branches, preparing pull requests            |
-| [`cli_overview.md`](../developer/cli_overview.md)                 | CLI usage overview and common workflows        | Using or documenting the Neotoma CLI                          |
-| [`cli_reference.md`](../developer/cli_reference.md)               | CLI command reference, config, and dev scripts | Updating CLI commands or configuration                        |
-| [`mcp_overview.md`](../developer/mcp_overview.md)                 | MCP entry point and canonical links            | Navigating MCP setup and specification                        |
-| [`mcp/instructions.md`](../developer/mcp/instructions.md)         | MCP server instructions and test references    | Updating MCP interaction guidance or agent MCP tests          |
-| [`env_check_rules.mdc`](../developer/env_check_rules.mdc)         | Check .env when facing env variables as a need | Implementing or debugging config, env vars, or tooling       |
+| Document                                                            | Purpose                                        | Load When                                                     |
+| ------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| [`getting_started.md`](../developer/getting_started.md)             | Local environment setup, first contribution    | Setting up development environment, onboarding new developers |
+| [`development_workflow.md`](../developer/development_workflow.md)   | Git workflow, branch strategy, PR process      | Creating feature branches, preparing pull requests            |
+| [`cli_overview.md`](../developer/cli_overview.md)                   | CLI usage overview and common workflows        | Using or documenting the Neotoma CLI                          |
+| [`cli_reference.md`](../developer/cli_reference.md)                 | CLI command reference, config, and dev scripts | Updating CLI commands or configuration                        |
+| [`mcp_overview.md`](../developer/mcp_overview.md)                   | MCP entry point and canonical links            | Navigating MCP setup and specification                        |
+| [`mcp/instructions.md`](../developer/mcp/instructions.md)           | MCP server instructions and test references    | Updating MCP interaction guidance or agent MCP tests          |
+| [`env_check_rules.mdc`](../developer/env_check_rules.mdc)           | Check .env when facing env variables as a need | Implementing or debugging config, env vars, or tooling        |
+| [`environment_distinction_audit.md`](../developer/environment_distinction_audit.md) | Env-specific paths (dev vs prod) and audit notes | Changing local storage paths, CLI/API log paths, or running dev and prod in parallel |
 | [`canonical_walkthrough.md`](../developer/canonical_walkthrough.md) | End to end ingestion walkthrough               | Implementing or reviewing ingestion and reducer flows         |
 
 ### 2.11 Operations and Infrastructure
@@ -296,10 +297,10 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/reports/`
 
-| Document | Purpose | Load When |
-| ---- | --- | ---- |
-| [`failure_gallery.md`](../reports/failure_gallery.md) | Canonical failure modes and expected error envelopes | Adding error codes or failure regression tests |
-| [`plan_execution_changes_report.md`](../reports/plan_execution_changes_report.md) | Summary of plan execution changes | Auditing or communicating plan execution outcomes |
+| Document                                                                          | Purpose                                              | Load When                                         |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| [`failure_gallery.md`](../reports/failure_gallery.md)                             | Canonical failure modes and expected error envelopes | Adding error codes or failure regression tests    |
+| [`plan_execution_changes_report.md`](../reports/plan_execution_changes_report.md) | Summary of plan execution changes                    | Auditing or communicating plan execution outcomes |
 
 ### 2.15 Vocabulary and Templates
 
@@ -646,6 +647,16 @@ graph TD
 5. `docs/private/governance/risk_classification.md` — Risk assessment
 6. `docs/private/governance/agent_background_execution.md` — If running autonomously
 7. Relevant domain docs as needed
+
+### 4.17 Evaluating or Documenting Neotoma as Memory Infrastructure for Agentic Systems
+
+**Required Reading Order:**
+
+1. `docs/foundation/core_identity.md` — Truth Layer scope and what Neotoma is not
+2. `docs/foundation/product_positioning.md` — Substrate positioning, dual runway (human-in-the-loop and agentic systems), marketing positioning
+3. `docs/foundation/problem_statement.md` — Why Neotoma exists, including agentic/multi-agent gap
+4. `docs/specs/ICP_PROFILES.md` — Builders of agentic systems and related ICPs (Developer Integrators, AI Tool Integrators)
+5. `docs/architecture/architecture.md` — System design and layer boundaries
 
 ---
 

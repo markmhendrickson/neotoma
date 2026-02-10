@@ -169,6 +169,21 @@ Cursor does not always show a "Connect" button for URL-based MCP servers. Use a 
 
 **If Cursor shows a "Connect" button:** You can omit `headers` and complete OAuth through that flow instead. If you do not see Connect, use the `X-Connection-Id` header as above.
 
+**Stdio (command) and working directory:** If you use stdio with `command` + `args` (e.g. `npm run watch:mcp:stdio`) and see `ENOENT: no such file or directory, open '.../package.json'`, Cursor may be spawning the process without applying `cwd` (for example when using a global MCP config). Use the repo wrapper scripts so the process runs from the repo root regardless of Cursor's cwd:
+
+```json
+"neotoma-dev": {
+  "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
+},
+"neotoma-prod": {
+  "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
+}
+```
+
+Replace `/absolute/path/to/neotoma` with your repo path (e.g. `/Users/you/repos/neotoma`). No `cwd` or `args` needed. **neotoma-prod** runs the built server (`dist/index.js`); run `npm run build` after code changes so prod uses the latest code.
+
+**Stdio shows "No tools, prompts, or resources":** When **encryption is off** (default), the server uses the local dev user automatically for stdio; no connection ID or login is required. If you still see 0 tools, ensure `NEOTOMA_ENCRYPTION_ENABLED` is not set (or is false) and restart the MCP server. When **encryption is on**, the server needs a connection ID: in `.env` set `NEOTOMA_CONNECTION_ID=your-connection-id` from the Neotoma web UI (MCP Setup → OAuth Connection), or use the key-derived token (see auth docs).
+
 ## Step 5: Verify the Connection
 
 1. **Restart Cursor** after configuring the MCP server

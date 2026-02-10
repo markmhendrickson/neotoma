@@ -15,7 +15,8 @@ const SCHEMA_STATEMENTS = [
     file_size INTEGER,
     original_filename TEXT,
     provenance TEXT,
-    created_at TEXT
+    created_at TEXT,
+    idempotency_key TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS interpretations (
     id TEXT PRIMARY KEY,
@@ -38,7 +39,8 @@ const SCHEMA_STATEMENTS = [
     source_priority INTEGER,
     fields TEXT,
     created_at TEXT,
-    user_id TEXT
+    user_id TEXT,
+    idempotency_key TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS entity_snapshots (
     entity_id TEXT PRIMARY KEY,
@@ -261,6 +263,18 @@ const DEPRECATED_TABLES = [
   "interpretation_runs",
 ];
 
+/** Add a column to a table if it does not exist (for existing SQLite DBs). */
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  type: string
+): void {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (rows.some((r) => r.name === column)) return;
+  db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
+}
+
 function ensureSchema(db: Database.Database): void {
   const transaction = db.transaction(() => {
     db.pragma("foreign_keys = OFF");
@@ -272,6 +286,10 @@ function ensureSchema(db: Database.Database): void {
     for (const statement of SCHEMA_STATEMENTS) {
       db.prepare(statement).run();
     }
+
+    // Add idempotency_key to sources/observations if missing (existing DBs created before this column existed)
+    addColumnIfMissing(db, "sources", "idempotency_key", "TEXT");
+    addColumnIfMissing(db, "observations", "idempotency_key", "TEXT");
   });
   transaction();
 }

@@ -54,18 +54,27 @@ function getOpenAIConfig() {
   return process.env.OPENAI_API_KEY || "";
 }
 
-const httpPort = parseInt(process.env.HTTP_PORT || "8080", 10);
+// Default ports differ by environment so dev and prod can run in parallel (dev=8080, prod=8082)
+const defaultHttpPort = env === "production" ? "8082" : "8080";
+const httpPort = parseInt(process.env.HTTP_PORT || defaultHttpPort, 10);
 const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
 const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
-const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, "events");
+const rawStorageSubdir = env === "production" ? "sources_prod" : "sources";
+const eventLogSubdir = env === "production" ? "events_prod" : "events";
+const logsSubdir = env === "production" ? "logs_prod" : "logs";
+const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, eventLogSubdir);
+const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
 
 export const config = {
   projectRoot,
   storageBackend,
   dataDir,
-  sqlitePath: process.env.NEOTOMA_SQLITE_PATH || join(dataDir, "neotoma.db"),
-  rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, "sources"),
+  sqlitePath:
+    process.env.NEOTOMA_SQLITE_PATH ||
+    join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
+  rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir),
   eventLogDir,
+  logsDir,
   eventLogMirrorEnabled: process.env.NEOTOMA_EVENT_LOG_MIRROR === "true",
   supabaseUrl: supabaseConfig.url,
   supabaseKey: supabaseConfig.key,
@@ -73,10 +82,19 @@ export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   httpPort,
   environment: env,
-  apiBase: process.env.API_BASE_URL || (env === "production" ? "https://neotoma.fly.dev" : `http://localhost:${httpPort}`),
+  apiBase: process.env.API_BASE_URL || `http://localhost:${httpPort}`,
   mcpTokenEncryptionKey: process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
   oauthClientId: process.env.SUPABASE_OAUTH_CLIENT_ID || "",
   
+  // Encryption settings (local backend)
+  encryption: {
+    enabled: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
+    keyFilePath: process.env.NEOTOMA_KEY_FILE_PATH || "",
+    mnemonic: process.env.NEOTOMA_MNEMONIC || "",
+    mnemonicPassphrase: process.env.NEOTOMA_MNEMONIC_PASSPHRASE || "",
+    logEncryptionEnabled: process.env.NEOTOMA_LOG_ENCRYPTION_ENABLED === "true",
+  },
+
   // Icon generation settings
   iconGeneration: {
     enabled: process.env.ICON_GENERATION_ENABLED !== "false", // Enabled by default

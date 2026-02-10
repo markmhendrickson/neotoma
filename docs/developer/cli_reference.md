@@ -26,10 +26,13 @@ Run via npm scripts: `npm run cli` or `npm run cli:dev` (dev mode with immediate
 - `--pretty`: Output formatted JSON.
 
 ### Authentication
-- `neotoma auth login`: Start OAuth PKCE flow in browser.
-  - `--dev-stub`: Use local dev stub authentication (local backend only).
-- `neotoma auth status`: Show stored auth status.
-- `neotoma auth logout`: Clear stored credentials.
+
+CLI uses the same auth patterns as MCP and REST API. When encryption is off, no login is needed; commands work immediately.
+
+- `neotoma auth status`: Show auth mode (none, dev-token, key-derived) and user details. Works without prior login.
+- `neotoma auth login`: OAuth PKCE flow for MCP Connect (Cursor) setup. Not required for CLI API usage.
+  - `--dev-stub`: Skip local-login page redirect (local backend only).
+- `neotoma auth logout`: Clear stored OAuth credentials (MCP Connect only).
 
 ### Entities
 - `neotoma entities list`:
@@ -84,10 +87,33 @@ Run via npm scripts: `npm run cli` or `npm run cli:dev` (dev mode with immediate
 ### Stats
 - `neotoma stats`
 
+### Watch (local backend only)
+- `neotoma watch`: Stream record changes (entities, observations, sources, etc.) as they happen. Uses local dev user when encryption is off (no login needed).
+  - `--interval <ms>`: Polling interval in ms (default: 400).
+  - `--json`: Output NDJSON (one JSON object per line).
+  - `--human`: Output one sentence per change (e.g. "Created person \"George\"", "Updated relationship \"wife\" for person \"Alice\" with person \"Bob\""). No timestamps, emoji, or IDs.
+  - `--tail`: Only show changes from now (skip existing records).
+  - When encryption is on, set `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
+
 ### Storage
 - `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).
-  - With local backend (`NEOTOMA_STORAGE_BACKEND=local` or unset): prints `data_dir`, `sqlite_db` (e.g. `data/neotoma.db`), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
+  - With local backend (`NEOTOMA_STORAGE_BACKEND=local` or unset): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
   - With Supabase backend: notes that data is in Supabase (Postgres + Storage bucket `sources`).
+
+### Backup and restore
+- `neotoma backup create`: Create a backup of the local database, sources, and logs.
+  - `--output <dir>`: Output directory (default: `./backups`).
+  - Creates a timestamped subdirectory with `neotoma.db`, WAL file, `sources/`, `events/`, `logs/`, and a `manifest.json` with checksums.
+  - If encryption is enabled, data in the backup remains encrypted. Preserve the key file or mnemonic for restore.
+- `neotoma backup restore`: Restore a backup into the data directory.
+  - `--from <dir>`: Backup directory to restore from (required).
+  - `--target <dir>`: Target data directory (default: `NEOTOMA_DATA_DIR` or `./data`).
+
+### Logs
+- `neotoma logs tail`: Read persistent log files.
+  - `--decrypt`: Decrypt encrypted log lines using `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
+  - `--lines <n>`: Number of lines to show (default: 50).
+  - `--file <path>`: Specific log file (default: latest in env-specific `data/logs` or `data/events`; prod uses `data/logs_prod`, `data/events_prod`).
 
 ### Developer scripts
 - `neotoma dev list`: List available npm scripts from `package.json`.
@@ -142,6 +168,15 @@ neotoma request --operation listEntities --params '{"query":{"limit":5}}' --pret
 ### Store entities from a file
 ```
 neotoma store --file ./fixtures/tasks.json
+```
+
+### Stream record changes alongside MCP actions
+```
+neotoma watch --tail --json   # NDJSON, only new changes
+neotoma watch --tail --human  # Plain one-line-per-change, only new
+neotoma watch --tail          # Human-readable, only new changes
+neotoma watch --human         # Plain one-line-per-change, no technical formatting
+neotoma watch                 # Human-readable, includes existing records on startup
 ```
 
 ## Testing requirements

@@ -1,9 +1,11 @@
 import crypto from "crypto";
-import { mkdirSync } from "fs";
+import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
 import { getSqliteDb } from "./sqlite_client.js";
 import { config } from "../../config.js";
+import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
+import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
 
 type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
 
@@ -20,6 +22,68 @@ const JSON_COLUMNS: Record<string, Set<string>> = {
   schema_recommendations: new Set(["fields_to_add", "fields_to_remove", "fields_to_modify", "converters_to_add"]),
   auto_enhancement_queue: new Set(["payload"]),
 };
+
+/**
+ * Columns that are encrypted at rest when NEOTOMA_ENCRYPTION_ENABLED=true.
+ * Only content/payload columns; never IDs, timestamps, hashes, or signatures.
+ * See plan Section 7 (blockchain compatibility).
+ */
+const ENCRYPTED_COLUMNS: Record<string, Set<string>> = {
+  observations: new Set(["fields"]),
+  entity_snapshots: new Set(["snapshot", "provenance"]),
+  relationship_snapshots: new Set(["snapshot", "provenance"]),
+  raw_fragments: new Set(["fragment_value", "fragment_envelope"]),
+  schema_recommendations: new Set(["fields_to_add", "fields_to_remove", "fields_to_modify", "converters_to_add"]),
+  auto_enhancement_queue: new Set(["payload"]),
+};
+
+/** Cached data encryption key (lazy-loaded on first use) */
+let cachedDataKey: Uint8Array | null = null;
+
+/**
+ * Load the data encryption key from config (key file or mnemonic).
+ * Returns null if encryption is not enabled.
+ */
+function getDataKey(): Uint8Array | null {
+  if (!config.encryption.enabled) {
+    return null;
+  }
+  if (cachedDataKey) {
+    return cachedDataKey;
+  }
+
+  // Priority: key file > mnemonic
+  if (config.encryption.keyFilePath) {
+    const raw = readFileSync(config.encryption.keyFilePath, "utf8").trim();
+    const keyBytes = hexToKey(raw);
+    const derived = deriveKeys(keyBytes);
+    cachedDataKey = derived.dataKey;
+    return cachedDataKey;
+  }
+
+  if (config.encryption.mnemonic) {
+    const derived = deriveKeysFromMnemonic(
+      config.encryption.mnemonic,
+      config.encryption.mnemonicPassphrase,
+    );
+    cachedDataKey = derived.dataKey;
+    return cachedDataKey;
+  }
+
+  throw new Error(
+    "Encryption is enabled but no key source configured. " +
+    "Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC."
+  );
+}
+
+/**
+ * Clear the cached data key. Call after key rotation or for testing.
+ */
+export function clearCachedDataKey(): void {
+  cachedDataKey = null;
+}
+
+export { getMcpAuthToken } from "../../crypto/mcp_auth_token.js";
 
 const TABLES_WITH_ID = new Set([
   "sources",
@@ -63,7 +127,15 @@ function toDbValue(table: string, column: string, value: unknown): unknown {
     return value ? 1 : 0;
   }
   if (JSON_COLUMNS[table]?.has(column)) {
-    return value === null ? null : JSON.stringify(value);
+    const jsonStr = value === null ? null : JSON.stringify(value);
+    // Encrypt if this column is in the encrypted set and encryption is enabled
+    if (jsonStr !== null && ENCRYPTED_COLUMNS[table]?.has(column)) {
+      const key = getDataKey();
+      if (key) {
+        return encryptColumn(jsonStr, key);
+      }
+    }
+    return jsonStr;
   }
   return value;
 }
@@ -79,10 +151,25 @@ function fromDbRow(table: string, row: Record<string, unknown>): Record<string, 
       continue;
     }
     if (typeof result[column] === "string") {
+      let raw = result[column] as string;
+
+      // Decrypt if this column is in the encrypted set and value looks encrypted
+      if (ENCRYPTED_COLUMNS[table]?.has(column) && isEncryptedColumn(raw)) {
+        const key = getDataKey();
+        if (key) {
+          try {
+            raw = decryptColumn(raw, key);
+          } catch {
+            // If decryption fails, leave as-is (wrong key or plaintext data from before encryption)
+          }
+        }
+      }
+
       try {
-        result[column] = JSON.parse(result[column] as string);
+        result[column] = JSON.parse(raw);
       } catch {
         // Leave as string if parse fails
+        result[column] = raw;
       }
     }
   }

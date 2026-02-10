@@ -47,6 +47,7 @@ import {
   generateEntityId,
   type Entity,
 } from "./services/entity_resolution.js";
+import { ensureLocalDevUser } from "./services/local_auth.js";
 import { detectSchemaType, extractFields } from "./services/extraction/rules.js";
 
 /**
@@ -166,11 +167,12 @@ export class NeotomaServer {
     const fallback = [
       "Use MCP actions proactively. Store and retrieve without waiting for explicit requests.",
       "Always store when the user states relevant information, even in conversational contexts. Store first, then respond. Do not skip store because the user did not explicitly ask to save.",
+      "When you pull data from other MCPs (e.g. email, calendar, search), apply the same proactive storage: extract and store people, companies, locations, events, tasks, notifications, device status, and relationships from that data. Create tasks for action items (e.g. \"replace battery\", \"share feedback\", \"review security alert\", \"reply about Madrid trip\"). Store locations and link events or tasks to them. Store first, then respond.",
       "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
-      "Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). Create relationships when implied (e.g. friend of, task for person, event attendee) using create_relationship or relationship fields per schema.",
+      "Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, places, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). When the user mentions a place, property, or location (e.g. \"our home in Barcelona\", \"my office\", \"apartment in Madrid\"), store it as an entity (e.g. location, property, or place) and link the task or other entities to it. Create relationships when implied (e.g. friend of, task for person, event attendee, task for location) using create_relationship or relationship fields per schema.",
       "Proactively create a task when the user expresses intent, obligation, debt, or a future action (e.g. “I need to”, “I have to”, “I owe”, “I should”, “I want to buy”, “remind me”, or any deadline). Unless the user explicitly says no reminders or no tasks, create a task with due date if available and relate it to the relevant person or entity.",
       "When entity type is not in the known list, use list_entity_types with a keyword (e.g. \"device\", \"asset\", \"preference\", \"gift\", \"reminder\") or store with a descriptive entity_type; the system will infer or create schema from the data. Be proactive about storing any type of relevant entity, including types not yet registered.",
-      "Example entity types (use when they fit; more may exist via list_entity_types or neotoma://entity_types): contact, person, company, task, invoice, transaction, receipt, note, contract, event, feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision. For any other concept, use a descriptive type (e.g. device, asset, preference, gift) or discover via list_entity_types.",
+      "Example entity types (use when they fit; more may exist via list_entity_types or neotoma://entity_types): contact, person, company, task, invoice, transaction, receipt, note, contract, event, location, property, place, feature_unit, release, agent_decision, agent_session, validation_result, codebase_entity, architectural_decision. For any other concept, use a descriptive type (e.g. device, asset, preference, gift, home) or discover via list_entity_types.",
       "Avoid calling get_authenticated_user unless required by the intended follow-up action. If the next actions do not require it, skip get_authenticated_user.",
       "Check for existing records before storing to avoid duplicates.",
       "Include all fields from source data when storing entities. Unknown fields must be included.",
@@ -269,36 +271,50 @@ export class NeotomaServer {
         }
       }
 
+      // Stdio + encryption off: no auth required, same as HTTP (actions.ts sets x-connection-id to dev-local)
+      if (!connectionId && !isHTTPTransport && !config.encryption.enabled) {
+        connectionId = "dev-local";
+      }
+
       logger.info(
         `[MCP Server] Initialize: connectionId=${connectionId}, authHeader=${authHeader ? "present" : "missing"}`
       );
 
       if (connectionId) {
         // In test environment, allow test connection ID to bypass authentication
-        // Check for test environment via NODE_ENV (vitest sets this) or explicit test connection ID
         const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
         if (connectionId === "test-connection-bypass" && isTestEnv) {
-          // Use default test user ID
           this.authenticatedUserId = "00000000-0000-0000-0000-000000000000";
           this.requestAuth.set(requestId, {
             userId: this.authenticatedUserId,
             token: "test-bypass-token",
           });
-
           logger.info(
             `[MCP Server] Using test authentication bypass (user: ${this.authenticatedUserId})`
           );
-
           return {
             protocolVersion: "2025-11-25",
-            capabilities: {
-              tools: {},
-              resources: {},
-            },
-            serverInfo: {
-              name: "neotoma",
-              version: "1.0.0",
-            },
+            capabilities: { tools: {}, resources: {} },
+            serverInfo: { name: "neotoma", version: "1.0.0" },
+            instructions: this.getMcpInteractionInstructions(),
+          };
+        }
+
+        // Dev-local: no-auth default (development) or NEOTOMA_DEV_TOKEN
+        if (connectionId === "dev-local") {
+          const devUser = ensureLocalDevUser();
+          this.authenticatedUserId = devUser.id;
+          this.requestAuth.set(requestId, {
+            userId: this.authenticatedUserId,
+            token: "dev-local",
+          });
+          logger.info(
+            `[MCP Server] Using dev-local auth (user: ${this.authenticatedUserId})`
+          );
+          return {
+            protocolVersion: "2025-11-25",
+            capabilities: { tools: {}, resources: {} },
+            serverInfo: { name: "neotoma", version: "1.0.0" },
             instructions: this.getMcpInteractionInstructions(),
           };
         }
@@ -621,9 +637,13 @@ export class NeotomaServer {
 
         if (connectionId) {
           try {
-            const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-            const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
-            userId = resolvedUserId;
+            if (connectionId === "dev-local") {
+              userId = ensureLocalDevUser().id;
+            } else {
+              const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              userId = resolvedUserId;
+            }
             this.authenticatedUserId = userId;
             logger.info(`[MCP Server] listTools fallback resolved userId: ${userId}`);
           } catch (error: any) {
@@ -864,7 +884,7 @@ export class NeotomaServer {
                   original_filename: {
                     type: "string",
                     description:
-                      "Original filename (optional, auto-detected from file_path if not provided)",
+                      "Original filename or source label (optional). For unstructured: auto-detected from file_path if not provided. For structured (entities): omit when data is agent-provided (no file origin); the source will have no filename. Pass only when mirroring a real file name or when a display label is desired.",
                   },
                   interpret: {
                     type: "boolean",
@@ -1312,9 +1332,13 @@ export class NeotomaServer {
 
         if (connectionId) {
           try {
-            const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
-            const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
-            userId = resolvedUserId;
+            if (connectionId === "dev-local") {
+              userId = ensureLocalDevUser().id;
+            } else {
+              const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
+              const { userId: resolvedUserId } = await getAccessTokenForConnection(connectionId);
+              userId = resolvedUserId;
+            }
             this.authenticatedUserId = userId;
             logger.info(`[MCP Server] listResources fallback resolved userId: ${userId}`);
           } catch (error: any) {
@@ -2793,7 +2817,8 @@ export class NeotomaServer {
         userId,
         parsed.entities,
         parsed.source_priority,
-        idempotencyKey
+        idempotencyKey,
+        parsed.original_filename
       );
     }
 
@@ -2909,7 +2934,8 @@ export class NeotomaServer {
             userId,
             parquetResult.entities,
             parsed.source_priority,
-            idempotencyKey
+            idempotencyKey,
+            parsed.original_filename
           );
         } catch (error: any) {
           // Safely extract error message, handling potential BigInt values
@@ -3286,7 +3312,8 @@ export class NeotomaServer {
     userId: string,
     entities: Record<string, unknown>[],
     sourcePriority: number = 100,
-    idempotencyKey?: string
+    idempotencyKey?: string,
+    originalFilename?: string
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { resolveEntity } = await import("./services/entity_resolution.js");
@@ -3360,11 +3387,14 @@ export class NeotomaServer {
     );
     const fileBuffer = Buffer.from(jsonContent, "utf-8");
 
+    // Omit filename when not provided: agent-provided structured data has no real file origin.
+    const filenameForStorage =
+      originalFilename?.trim() || undefined;
     const storageResult = await storeRawContent({
       userId,
       fileBuffer,
       mimeType: "application/json",
-      originalFilename: "structured_data.json",
+      originalFilename: filenameForStorage,
       idempotencyKey,
       provenance: {
         upload_method: "mcp_store",
