@@ -5,8 +5,8 @@
 
 // Local MCP URL resolution:
 // - If VITE_LOCAL_MCP_URL is set, use it directly
-// - Else, derive from WS_PORT (default 8081) with /mcp path
-const WS_PORT = import.meta.env.VITE_WS_PORT || "8081";
+// - Else, derive from WS_PORT (default 8280) with /mcp path
+const WS_PORT = import.meta.env.VITE_WS_PORT || "8280";
 const LOCAL_MCP_URL =
   import.meta.env.VITE_LOCAL_MCP_URL ?? `ws://127.0.0.1:${WS_PORT}/mcp`;
 const HOSTED_MCP_URL = 'wss://mcp.neotoma.io'; // Configurable

@@ -15,12 +15,20 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 - **Action catalog**: The list of supported MCP actions and schemas.
 - **Setup guide**: Tool specific instructions for MCP integration.
 
+## Transport choice: stdio (local) vs HTTP (remote)
+
+- **Stdio:** Use for local clients (Cursor, Claude Code, Codex on the same machine as the Neotoma repo). Client spawns the server; better recovery after sleep.
+- **HTTP:** Use for remote access (tunnel, ChatGPT, deployed `neotoma.fly.dev`).
+
+See setup guides for config examples and comparison table.
+
 ## Canonical MCP documentation
 - **MCP specification**: `docs/specs/MCP_SPEC.md`
 - **MCP server instructions** (loaded at runtime): `docs/developer/mcp/` — `instructions.md`, `unauthenticated.md`, `tool_descriptions.yaml`
 - **Cursor setup**: `docs/developer/mcp_cursor_setup.md`
 - **ChatGPT setup**: `docs/developer/mcp_chatgpt_setup.md`
 - **Claude Code setup**: `docs/developer/mcp_claude_code_setup.md`
+- **Agent CLI config** (unified MCP for Cursor, Claude Code, Codex): `docs/developer/agent_cli_configuration.md`
 - **OAuth implementation**: `docs/developer/mcp_oauth_implementation.md`
 - **Authentication summary**: `docs/developer/mcp_authentication_summary.md`
 
@@ -41,6 +49,9 @@ flowchart TD
 ```
 
 ## Examples
+
+**Storing:** Use the **structured** path (store with `entities`) for conversation- or tool-sourced data; use the **unstructured** path (store with `file_content`/`file_path`) for file- or resource-sourced data. See MCP_SPEC section 2.6 for the full rule.
+
 ### Store a structured entity
 ```
 {
@@ -52,6 +63,17 @@ flowchart TD
       "status": "open"
     }
   ]
+}
+```
+
+### Store a file (unstructured)
+```
+{
+  "action": "store",
+  "idempotency_key": "file-invoice-001",
+  "file_path": "/path/to/invoice.pdf",
+  "mime_type": "application/pdf",
+  "original_filename": "invoice.pdf"
 }
 ```
 

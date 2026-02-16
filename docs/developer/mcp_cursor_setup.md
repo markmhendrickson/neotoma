@@ -7,6 +7,20 @@ For other integrations, see:
 - [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md) - ChatGPT Custom GPT setup
 - [`mcp_claude_code_setup.md`](mcp_claude_code_setup.md) - Claude Code localhost agent setup
 
+## Choose Your Transport: Stdio (Local) vs HTTP (Remote)
+
+Neotoma supports two MCP transports. Choose based on where Cursor runs relative to the Neotoma server:
+
+| Criterion | Stdio | HTTP (URL-based) |
+|-----------|-------|------------------|
+| **Use case** | Cursor on same machine as Neotoma repo | Remote clients (ChatGPT, Claude Code on another machine), tunnel, deployed server |
+| **Who spawns the server** | Cursor spawns the process | You run the HTTP server (e.g. `npm run watch:prod`) |
+| **After sleep** | Toggle off/on; Cursor re-spawns automatically | Restart HTTP server in terminal, then toggle MCP |
+| **OAuth** | Not needed (encryption off) or connection ID in `.env` | OAuth via Connect button or `X-Connection-Id` header |
+| **Dev and prod in parallel** | Yes: `neotoma-dev` and `neotoma-prod` in config | Yes: dev on 8080, prod on 8180 |
+
+**Recommendation:** Use **stdio** for local Cursor usage. Use **HTTP** for remote access (tunnel, ChatGPT, deployed `neotoma.fly.dev`).
+
 ## Prerequisites
 
 1. **Node.js** v18.x or v20.x installed
@@ -18,20 +32,22 @@ For other integrations, see:
 The MCP server needs to be built before Cursor can use it:
 
 ```bash
-npm run build
+npm run build:server
 ```
 
 This compiles TypeScript to JavaScript in the `dist/` directory. The `.cursor/mcp.json` configuration file references `dist/index.js`.
 **Running MCP in development:**
 
 - **HTTP with tunnel (remote access):**  
-  `npm run dev:api` or `npm run dev:mcp` — starts the API/MCP server and an HTTPS tunnel (ngrok) so the server is reachable remotely. Use the printed tunnel URL for `MCP_PROXY_URL`, `API_BASE_URL`, and Cursor. Ctrl+C stops both.
+  `npm run dev:api` — starts the API/MCP server and an HTTPS tunnel so the server is reachable remotely. Set `API_BASE_URL` to the printed tunnel URL (or rely on the script to set it); use that URL in Cursor. Ctrl+C stops both.
+- **Production mode with tunnel (local backend, remote access):**  
+  `npm run watch:prod:tunnel` — same as above but with `NEOTOMA_ENV=production` and port 8180. Use for local storage with production behavior and remote access.
 - **HTTP server only (no tunnel):**  
   `npm run dev:server` — starts the API server only (no UI; serves `/mcp` and REST API) with hot reload (default port 8080).
 - **Stdio (for `command` + `args` in mcp.json):**  
-  `npm run dev:mcp:stdio` — runs the stdio MCP server with hot reload.
+  `npm run dev:api:stdio` — runs the stdio MCP server with hot reload.
 - **Compile only (watch):**  
-  `npm run dev:mcp:watch` — runs `tsc --watch`; use if another process runs the server.
+  `npm run dev:api:watch` — runs `tsc --watch`; use if another process runs the server.
 
 ## Step 2: Configure Environment Variables
 
@@ -95,94 +111,68 @@ DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 
 ## Step 4: Configure Cursor to Use the MCP Server
 
-### Method 1: Use "Add to Cursor" Widget or Connect button (Easiest)
+### Option A: Stdio (Recommended for Local)
+
+Use stdio when Cursor runs on the same machine as the Neotoma repo. Cursor spawns the server; no separate HTTP process. Run `npm run build:server` first, then add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
+    },
+    "neotoma-prod": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/neotoma` with your repo path (e.g. `/Users/you/repos/neotoma`). No `cwd` or `args` needed. Run `npm run build:server` after code changes so prod uses the latest code.
+
+When both dev (8080) and prod (8180) APIs are running, each MCP process picks the correct server by `NEOTOMA_ENV` (prod script sets production), so you do not need `NEOTOMA_SESSION_DEV_PORT` or `NEOTOMA_SESSION_PROD_PORT` in `mcp.json`.
+
+**Auth:** When encryption is off (default), stdio uses the local dev user automatically. When encryption is on, set `NEOTOMA_CONNECTION_ID` in `.env` from MCP Setup → OAuth Connection.
+
+**Stdio shows "No tools, prompts, or resources":** Ensure `NEOTOMA_ENCRYPTION_ENABLED` is not set (or is false). If encryption is on, set `NEOTOMA_CONNECTION_ID` in `.env`.
+
+**ENOENT / cwd:** If you see `ENOENT: no such file or directory, open '.../package.json'`, Cursor may not apply `cwd`. Use the wrapper scripts above; they `cd` to the repo root before running.
+
+### Option B: HTTP (Remote, Tunnel, Deployed)
+
+Use HTTP for remote access, ChatGPT, or when connecting to a deployed server.
+
+#### B1: Add to Cursor (Easiest for Tunnel)
 
 1. **Go to** the Neotoma web UI MCP Setup page (http://localhost:5195)
 2. **Navigate to** "Cursor Setup" tab
 3. **Click** the "Add to Cursor" button (or add the server URL in Cursor and use **Connect**)
 4. **Cursor opens** and shows the neotoma MCP server
-5. **Click "Connect"** in Cursor to start OAuth (server shows "Authentication needed" until then)
+5. **Click "Connect"** in Cursor to start OAuth
 6. **Approve** the connection in your browser
-7. **Done** - MCP server is now connected and authenticated
 
-**Benefits:**
+**Using a tunnel:** Set `HOST_URL` (or `API_BASE_URL`) to your tunnel URL in `.env`. Full tunnel docs: [tunnels.md](tunnels.md).
 
-- One-click installation
-- RFC 8414 discovery: Cursor uses `/.well-known/oauth-authorization-server` for OAuth endpoints and scopes
-- Cursor's fixed redirect URI (`cursor://anysphere.cursor-mcp/oauth/callback`) is supported; no Supabase redirect change needed (we receive the callback and redirect to Cursor)
-- No manual configuration needed when using Connect
-
-**Using a tunnel or proxy (ngrok, cloudflared):**
-
-When exposing the API via a tunnel, set `MCP_PROXY_URL` so the "Add to Cursor" button uses the proxy URL instead of localhost:
-
-```bash
-# .env
-MCP_PROXY_URL="https://your-tunnel.ngrok-free.dev"
-```
-
-The `/api/server-info` endpoint returns `mcpUrl` from `MCP_PROXY_URL` when set; the Add to Cursor widget uses that. Cursor then connects to `https://your-tunnel.ngrok-free.dev/mcp` instead of `http://localhost:8080/mcp`, which avoids ECONNREFUSED when Cursor expects HTTPS. See [`mcp_oauth_redirect_uri_config.md`](mcp_oauth_redirect_uri_config.md) for OAuth redirect vs API base URL.
-
-### Method 2: Manual Configuration via `.cursor/mcp.json`
-
-Cursor should automatically detect the `mcp.json` file at `.cursor/mcp.json` in your project root. Create or update this file:
-
-**HTTP Transport with connection ID (recommended when there is no Connect button):**
-
-Cursor does not always show a "Connect" button for URL-based MCP servers. Use a pre-created OAuth connection and pass its ID in headers:
-
-1. In the Neotoma web UI, go to **MCP Setup → OAuth Connection**, create a connection (or use an existing one), and copy the **connection ID**.
-2. In `.cursor/mcp.json` set the `X-Connection-Id` header to that value:
+#### B2: Manual URL Config in `.cursor/mcp.json`
 
 ```json
 {
   "mcpServers": {
-    "neotoma": {
+    "neotoma-dev": {
       "url": "http://localhost:8080/mcp",
-      "headers": {
-        "X-Connection-Id": "your-connection-id-from-web-ui"
-      }
+      "headers": { "X-Connection-Id": "your-connection-id-from-web-ui" }
+    },
+    "neotoma-prod": {
+      "url": "http://localhost:8180/mcp",
+      "headers": { "X-Connection-Id": "your-connection-id-from-web-ui" }
     }
   }
 }
 ```
 
-**For production:**
+**Production (deployed):** Use `"url": "https://neotoma.fly.dev/mcp"` with the same `X-Connection-Id` header.
 
-```json
-{
-  "mcpServers": {
-    "neotoma": {
-      "url": "https://neotoma.fly.dev/mcp",
-      "headers": {
-        "X-Connection-Id": "your-connection-id-from-web-ui"
-      }
-    }
-  }
-}
-```
-
-**Configuration fields:**
-
-- `url`: HTTP endpoint for MCP server (local or production).
-- `headers`: Optional. Set `X-Connection-Id` to your OAuth connection ID from the Neotoma web UI so the server can authenticate without a Connect button.
-
-**If Cursor shows a "Connect" button:** You can omit `headers` and complete OAuth through that flow instead. If you do not see Connect, use the `X-Connection-Id` header as above.
-
-**Stdio (command) and working directory:** If you use stdio with `command` + `args` (e.g. `npm run watch:mcp:stdio`) and see `ENOENT: no such file or directory, open '.../package.json'`, Cursor may be spawning the process without applying `cwd` (for example when using a global MCP config). Use the repo wrapper scripts so the process runs from the repo root regardless of Cursor's cwd:
-
-```json
-"neotoma-dev": {
-  "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
-},
-"neotoma-prod": {
-  "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-}
-```
-
-Replace `/absolute/path/to/neotoma` with your repo path (e.g. `/Users/you/repos/neotoma`). No `cwd` or `args` needed. **neotoma-prod** runs the built server (`dist/index.js`); run `npm run build` after code changes so prod uses the latest code.
-
-**Stdio shows "No tools, prompts, or resources":** When **encryption is off** (default), the server uses the local dev user automatically for stdio; no connection ID or login is required. If you still see 0 tools, ensure `NEOTOMA_ENCRYPTION_ENABLED` is not set (or is false) and restart the MCP server. When **encryption is on**, the server needs a connection ID: in `.env` set `NEOTOMA_CONNECTION_ID=your-connection-id` from the Neotoma web UI (MCP Setup → OAuth Connection), or use the key-derived token (see auth docs).
+Create the connection in Neotoma web UI (MCP Setup → OAuth Connection) and copy the connection ID. If Cursor shows a Connect button, you can omit `headers` and complete OAuth there.
 
 ## Step 5: Verify the Connection
 
@@ -349,7 +339,7 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 
 **Solutions:**
 
-1. Ensure `npm run build` completed successfully
+1. Ensure `npm run build:server` completed successfully
 2. Verify `dist/index.js` exists
 3. Check that Node.js is in your PATH: `which node`
 4. Try using absolute path in `.cursor/mcp.json`:
@@ -407,19 +397,30 @@ This error means the environment variables aren't being passed to the MCP server
 1. Restart Cursor completely
 2. Check Cursor's MCP server logs/status
 3. Verify the MCP server is running (check process: `ps aux | grep "node.*dist/index.js"`)
-4. Try rebuilding: `npm run build`
+4. Try rebuilding: `npm run build:server`
 
 ### Issue: MCP server shows "Error" after sleep or long idle
 
-Stdio MCP servers (neotoma-prod, neotoma-dev, web-scraper) talk to Cursor over stdin/stdout. When the machine sleeps, that pipe can break and Cursor marks the server as Error.
+Cursor does not retry failed connections. When the machine sleeps, the connection breaks and Cursor marks the server as Error. Behavior differs by transport:
 
-**What to do:**
+**URL-based (HTTP/SSE):** Cursor connects to `http://localhost:8180/mcp` (or similar). When the machine sleeps, the HTTP server process is suspended or killed. On wake, Cursor gets `ECONNREFUSED` and stops trying.
 
-1. In Cursor, open MCP settings (e.g. the MCP panel where servers are listed).
-2. Turn the affected server **off** (toggle), then turn it **on** again. Cursor will spawn a new process and reconnect.
-3. Or reload the window: Command Palette → "Developer: Reload Window".
+**Stdio:** Cursor spawns the server process. When the machine sleeps, the stdin/stdout pipe breaks. Cursor marks the server as Error but can reconnect by spawning a new process.
 
-The server process exits cleanly when the pipe breaks so Cursor can restart it; if you still see Error, use the toggle or reload above.
+**Recommended: Use stdio for local development** so Cursor owns the process lifecycle. Toggling off/on after wake spawns a fresh process and reconnects.
+
+**What to do after sleep:**
+
+1. In Cursor, open MCP settings (the MCP panel where servers are listed).
+2. Turn the affected server **off** (toggle), then turn it **on** again.
+
+**If using stdio:** Cursor spawns a new process. Reconnects immediately.
+
+**If using URL-based:** You must also restart the HTTP server in a terminal (e.g. `npm run watch:prod`) before toggling. Otherwise Cursor will fail again with `ECONNREFUSED`.
+
+**Alternative:** Reload the window: Command Palette → "Developer: Reload Window".
+
+**To switch from URL-based to stdio:** Remove the URL-based server from Cursor MCP settings and add the stdio config (Option A above) to `.cursor/mcp.json`.
 
 ### Issue: "spawn node ENOENT" error
 
@@ -449,7 +450,7 @@ This means Cursor can't find the `node` executable. This often happens when Node
 **Solutions:**
 
 1. Ensure dependencies are installed: `npm install`
-2. Rebuild: `npm run build`
+2. Rebuild: `npm run build:server`
 3. Check that `dist/` directory contains all necessary files
 
 ## Development Workflow
@@ -460,7 +461,7 @@ If you're actively developing the MCP server:
 
 1. **Run automatic rebuild in watch mode** (recommended for Cursor integration):
    ```bash
-   npm run dev:mcp
+   npm run dev:api
    ```
    This runs `tsc --watch` which automatically rebuilds `dist/` whenever you save TypeScript files. Keep this running in a terminal while developing.
 2. **Restart Cursor** after code changes to pick up the rebuilt version
@@ -476,7 +477,7 @@ If you prefer manual control:
    ```
 2. **Rebuild after changes** before testing in Cursor:
    ```bash
-   npm run build
+   npm run build:server
    ```
 3. **Restart Cursor** after rebuilding to pick up changes
 
@@ -496,13 +497,13 @@ To use the Neotoma MCP server from a different workspace/repository:
 1. **For auto-rebuild on code changes** (recommended for active development):
    ```bash
    cd /path/to/neotoma
-   npm run dev:mcp
+   npm run dev:api
    ```
    Keep this running in a terminal - it watches for TypeScript changes and automatically rebuilds `dist/`.
 2. **Or build once** (if not actively developing):
    ```bash
    cd /path/to/neotoma
-   npm run build
+   npm run build:server
    ```
 3. **Create `.cursor/mcp.json` in your other workspace:**
 
@@ -547,7 +548,7 @@ To use the Neotoma MCP server from a different workspace/repository:
    - Use absolute paths for both `command` (node executable) and `args` (dist/index.js)
    - Set `cwd` to the Neotoma project root (required for `.env` loading)
    - The server will load credentials from Neotoma's `.env` file automatically if not specified in the config
-   - **For auto-rebuild:** Run `npm run dev:mcp` in the Neotoma repo to watch for changes
+   - **For auto-rebuild:** Run `npm run dev:api` in the Neotoma repo to watch for changes
    - **After code changes:** Restart Cursor to reload the MCP server with the new build
 
    **Note:** `NEOTOMA_ENV` takes precedence over `NODE_ENV`. This prevents conflicts when the host workspace has its own `NODE_ENV` setting.
@@ -565,9 +566,9 @@ To use the Neotoma MCP server from a different workspace/repository:
 
 ```bash
 # Build MCP server (one-time)
-npm run build
+npm run build:server
 # Auto-rebuild on code changes (for Cursor integration)
-npm run dev:mcp
+npm run dev:api
 # Run in development mode (stdio, for testing)
 npm run dev
 # Set environment variables (macOS/Linux)

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.neotoma.dev-servers</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPO_ROOT_PLACEHOLDER/scripts/run_dev_servers_launchd.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>REPO_ROOT_PLACEHOLDER</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>REPO_ROOT_PLACEHOLDER/data/logs/launchd-dev-servers.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPO_ROOT_PLACEHOLDER/data/logs/launchd-dev-servers.error.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+  </dict>
+</dict>
+</plist>

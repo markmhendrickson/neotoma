@@ -8,7 +8,7 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
 
 **Encryption off (`NEOTOMA_ENCRYPTION_ENABLED` not set or `false`):**
 - **MCP/API/CLI:** No auth required. Uses local dev user automatically.
-- **Optional:** Set `NEOTOMA_DEV_TOKEN` for explicit dev token (applies to all: MCP, API, CLI).
+- **Optional:** Set `NEOTOMA_BEARER_TOKEN` for static bearer token (applies to all: MCP, API, CLI).
 - **OAuth (Connect button):** Auto-uses dev account (no email/password form). Connection ID stored by Cursor, but not required for auth.
 
 **Encryption on (`NEOTOMA_ENCRYPTION_ENABLED=true`):**
@@ -32,7 +32,7 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
    # Not 000 or connection refused
    ```
 
-   If connection refused: run `npm run dev:mcp` and use `http://localhost:8080/mcp` as the MCP URL (not `https://...` or port 443). See scenario **0. ECONNREFUSED 127.0.0.1:443** below.
+   If connection refused: run `npm run dev:api` and use `http://localhost:8080/mcp` as the MCP URL (not `https://...` or port 443). See scenario **0. ECONNREFUSED 127.0.0.1:443** below.
 
 1. **Encryption key configured?**
 
@@ -84,7 +84,7 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
 1. **Start the Neotoma MCP server:**
 
    ```bash
-   npm run dev:mcp
+   npm run dev:api
    ```
 
    You should see `HTTP Actions listening on :8080`. For UI + API: `npm run dev:full`.
@@ -105,7 +105,7 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
 
    Expect `401` (auth required) or similar; not connection refused.
 
-5. **When using a tunnel (ngrok, cloudflared):** Set `MCP_PROXY_URL` to your tunnel URL (e.g. `https://xxx.ngrok-free.dev`). The Add to Cursor button then uses the proxy URL so Cursor connects via HTTPS. See [`mcp_cursor_setup.md`](mcp_cursor_setup.md) (Add to Cursor / "Using a tunnel or proxy").
+5. **When using a tunnel (Cloudflare or ngrok):** Set `HOST_URL` (or `API_BASE_URL`) to your tunnel URL. The server uses it for the API and MCP host so Cursor connects via HTTPS. See [tunnels.md](tunnels.md) and [mcp_cursor_setup.md](mcp_cursor_setup.md) (Add to Cursor / "Using a tunnel or proxy").
 
 **See also:** [`mcp_cursor_setup.md`](mcp_cursor_setup.md) for full setup, [`getting_started.md`](getting_started.md) for environment setup.
 
@@ -132,6 +132,41 @@ This guide helps debug common issues with Neotoma's MCP OAuth authentication flo
    should output the registration URL, not `null`.
 
 **See also:** Scenario 1 (OAUTH_CLIENT_REGISTRATION_FAILED) for Supabase and `SUPABASE_OAUTH_CLIENT_ID` configuration.
+
+### 0b. Claude.ai: "There was an error connecting to the MCP server" (tunnel URL)
+
+**Symptom:** In Claude.ai → Settings → Connectors, adding a custom connector with a tunnel URL (e.g. `https://something.trycloudflare.com`) shows:
+
+- "There was an error connecting to the MCP server. Please check your server URL and make sure your server handles auth correctly."
+
+**Root cause:** The server must use the **tunnel URL** for OAuth discovery and for the OAuth callback. If the server was started without the tunnel URL in the environment, discovery returns `localhost` URLs and/or the callback URL is unreachable from the internet, so the OAuth handshake fails.
+
+**Fix:**
+
+1. **Start the server with tunnel support.** The combined tunnel commands do this automatically:
+   - **Dev:** `npm run watch:dev:tunnel` or `npm run watch:server+api` (tunnel + API; auto-discovers tunnel URL).
+   - **Prod-like:** `npm run watch:prod:tunnel` (port 8180, production env).
+   
+   **If starting tunnel and server separately:**
+   - Start tunnel first: `npm run tunnel:https`
+   - Then start server: `npm run dev:api` (auto-discovers from `/tmp/ngrok-mcp-url.txt`)
+   - Or set `HOST_URL` explicitly before starting server:
+     ```bash
+     export HOST_URL="https://minnesota-adams-chem-identifying.trycloudflare.com"
+     npm run dev:api
+     ```
+
+2. **Use the exact tunnel URL in Claude.ai.** In Connectors → Add custom connector, set the server URL to your current tunnel base (e.g. `https://minnesota-adams-chem-identifying.trycloudflare.com`). Do not add `/mcp` unless your client expects it; Claude.ai typically uses the base URL and discovers MCP from there.
+
+3. **Ensure Supabase allows dynamic OAuth apps.** Dashboard → Authentication → OAuth Server → enable **Allow Dynamic OAuth Apps**. Claude (like Cursor) uses dynamic client registration.
+
+4. **Verify discovery from the tunnel:**  
+   `curl -s "https://YOUR-TUNNEL-URL/.well-known/oauth-authorization-server" | jq .`  
+   The `issuer` and all `*_endpoint` URLs must be your tunnel URL (e.g. `https://...trycloudflare.com`), not `http://localhost:...`.
+
+5. **Cloudflare/ngrok URL changes each run.** If you restart the tunnel, you get a new URL. Update Claude.ai custom connector with the new URL. If using auto-discovery, restart the server to pick up the new URL. If using explicit `HOST_URL` in `.env`, update it and restart.
+
+**See also:** [tunnels.md](tunnels.md), [mcp_oauth_redirect_uri_config.md](mcp_oauth_redirect_uri_config.md), scenario 0 (tunnel config) and 0a (dynamic registration).
 
 ### 1. "OAUTH_CLIENT_REGISTRATION_FAILED"
 
@@ -267,7 +302,7 @@ echo $MCP_TOKEN_ENCRYPTION_KEY
 
 **Symptom:** Cursor shows "Loading tools" forever instead of Connect or a clear error.
 
-**Avoid in development:** Use `npm run dev` or `npm run dev:mcp` (not `start:prod`). In development, no auth is required and tools load immediately.
+**Avoid in development:** Use `npm run dev` or `npm run dev:api` (not `start:api:prod`). In development, no auth is required and tools load immediately.
 
 **Causes (when using production mode):**
 
@@ -279,15 +314,15 @@ echo $MCP_TOKEN_ENCRYPTION_KEY
 
 1. **Remove X-Connection-Id from MCP config:**
    - Open `.cursor/mcp.json` (or Cursor MCP settings)
-   - Remove the `headers` block with `X-Connection-Id`, or remove the entire neotoma entry and re-add with just `"url": "http://localhost:8082/mcp"` (or your port)
+   - Remove the `headers` block with `X-Connection-Id`, or remove the entire neotoma entry and re-add with just `"url": "http://localhost:8180/mcp"` (or your port)
 
-2. **Use static dev token (option 2):** Set `NEOTOMA_DEV_TOKEN` and add `Authorization: Bearer <token>` to mcp.json headers. Bypasses OAuth entirely.
+2. **Use static bearer token (option 2):** Set `NEOTOMA_BEARER_TOKEN` and add `Authorization: Bearer <token>` to mcp.json headers. Bypasses OAuth entirely.
 
 3. **Fully restart Cursor:** Quit completely (Cmd+Q on Mac), then reopen. Reloading the window is not enough.
 
 4. **Disable and re-enable the neotoma MCP server** in Cursor MCP settings.
 
-5. **Verify server returns 401:** `curl -s -o /dev/null -w "%{http_code}" http://localhost:8082/mcp` should return 401 when unauthenticated.
+5. **Verify server returns 401:** `curl -s -o /dev/null -w "%{http_code}" http://localhost:8180/mcp` should return 401 when unauthenticated.
 
 ### 5. "OAUTH_CONNECTION_NOT_FOUND"
 
@@ -310,7 +345,7 @@ echo $MCP_TOKEN_ENCRYPTION_KEY
 
 1. Remove the invalid `X-Connection-Id` from your MCP config so Cursor shows the Connect button:
    - Open `.cursor/mcp.json` (or Cursor MCP settings)
-   - Remove the `headers` block with `X-Connection-Id`, or set the neotoma entry to `"url": "http://localhost:8082/mcp"` only
+   - Remove the `headers` block with `X-Connection-Id`, or set the neotoma entry to `"url": "http://localhost:8180/mcp"` only
    - Alternatively: disable and re-enable the neotoma server in Cursor MCP settings
 
 2. Restart Cursor (or wait for it to reconnect)

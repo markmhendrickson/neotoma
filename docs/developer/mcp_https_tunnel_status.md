@@ -1,26 +1,29 @@
 # MCP HTTPS Tunnel Status
 
 **Date:** 2026-01-27  
-**Example URL:** `https://melissia-introrse-correspondently.ngrok-free.dev` (free tier gives a **new URL each run**; that one only worked while that tunnel was active)
+
+**Full reference:** For provider selection, scripts, env vars, install, and troubleshooting, see [tunnels.md](tunnels.md).
+
+**Example URLs:** ngrok free tier `https://<random>.ngrok-free.dev` (new URL each run). Cloudflare quick tunnel `https://<random>.trycloudflare.com`. Both write the current URL to `/tmp/ngrok-mcp-url.txt`.
 
 ## Current Status
 
 ### When the tunnel is running
 
-1. **ngrok tunnel:** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS → `http://localhost:8080`, UI at `http://localhost:4040`
-2. **Local MCP server:** Port 8080, `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`
-3. **Config:** `MCP_PROXY_URL` and `API_BASE_URL` set to the **current** tunnel URL; Add to Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`
+1. **Tunnel (Cloudflare or ngrok):** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS to `http://localhost:8080` (or 8180 for prod). ngrok only: UI at `http://localhost:4040`.
+2. **Local MCP server:** Port 8080 (or 8180), `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`.
+3. **Config:** `HOST_URL` (or `API_BASE_URL`) set to the **current** tunnel URL. Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`.
 
 ### "Connection refused" or "refuses to connect"
 
 **Symptom:** `https://...ngrok-free.dev/mcp` (or the tunnel URL) refuses to connect (browser ERR_CONNECTION_REFUSED, Cursor fetch failed, `curl` HTTP 000).
 
-**Most likely cause: tunnel not running.** The ngrok URL only works while the tunnel is active. Free-tier URLs change every time you start ngrok.
+**Most likely cause: tunnel not running.** The tunnel URL only works while the tunnel is active. Free-tier URLs (ngrok, Cloudflare quick tunnel) change every run.
 
 **Causes and fixes:**
 
 1. **Tunnel not running** – You stopped the terminal running `npm run tunnel:https` or ngrok died. **Fix:** Start the tunnel again and use the **new** URL it prints.
-2. **Stale URL** – You’re still using an old URL from a previous run. **Fix:** Run `npm run tunnel:https`, copy the current HTTPS URL, update `MCP_PROXY_URL`, `API_BASE_URL`, and Cursor.
+2. **Stale URL** – You’re still using an old URL from a previous run. **Fix:** Run `npm run tunnel:https`, copy the current HTTPS URL, update `API_BASE_URL` (and Cursor).
 3. **ngrok free-tier warning** – Open the tunnel URL in a browser, accept "Visit Site" if shown, then retry.
 4. **Network/firewall** – VPN or firewall blocking ngrok.
 5. **Tunnel still starting** – Wait 10–30 seconds after starting ngrok.
@@ -30,21 +33,26 @@
 
 ### Step 0: Start the tunnel
 
-The tunnel must be running for the HTTPS URL to work. **`npm run dev:mcp` and `npm run dev:api` start both the server and the tunnel** in one terminal (tunnel and API/MCP run together; Ctrl+C stops both).
+The tunnel must be running for the HTTPS URL to work. **`npm run dev:api` starts both the server and the tunnel** in one terminal (tunnel and API/MCP run together; Ctrl+C stops both).
 
 ```bash
-npm run dev:mcp
-# Or: npm run dev:api
+npm run dev:api
 ```
 
-Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `MCP_PROXY_URL` and `API_BASE_URL` to it, then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.
+Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `API_BASE_URL` to it (the script often sets it automatically); then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.
 
 ### Step 1: Verify tunnel is active
 
 ```bash
+# Tunnel URL (both providers)
+cat /tmp/ngrok-mcp-url.txt
+
+# ngrok only: API and web UI
 curl -s http://localhost:4040/api/tunnels | python3 -m json.tool
-# If this fails, tunnel is not running
 open http://localhost:4040
+
+# Cloudflare only: log
+tail -f /tmp/cloudflared-tunnel.log
 ```
 
 ### Step 2: Test local server
@@ -92,47 +100,48 @@ tail -f /tmp/ngrok.log
 grep -i error /tmp/ngrok.log
 ```
 
-## Alternative: Use ngrok Paid Tier
+## Provider options
 
-If free tier continues to have issues:
+- **Cloudflare:** Preferred when `cloudflared` is installed. No account required for quick tunnels. Install: `brew install cloudflare/cloudflare/cloudflared`. Force: `NEOTOMA_TUNNEL_PROVIDER=cloudflare`.
+- **ngrok:** Used when Cloudflare is not installed and ngrok is installed and authenticated. Free tier: new URL each run, possible "Visit Site" page. Paid: static domains. Force: `NEOTOMA_TUNNEL_PROVIDER=ngrok`.
 
-1. **Upgrade to ngrok paid plan** for:
-   - Static domains (no URL changes)
-   - No warning pages
-   - Better reliability
-
-2. **Or use Cloudflare Tunnel:**
-   ```bash
-   cloudflared tunnel --url http://localhost:8080
-   ```
+See [tunnels.md](tunnels.md) for full provider selection, install, and verification.
 
 ## Configuration (use current tunnel URL)
 
 - **Tunnel URL:** From `npm run tunnel:https` output or `cat /tmp/ngrok-mcp-url.txt`
 - **MCP endpoint:** `https://<your-tunnel-url>/mcp`
 - **Local server:** `http://localhost:8080`
-- **Env:** `MCP_PROXY_URL` and `API_BASE_URL` set to tunnel URL
+- **Env:** `API_BASE_URL` set to tunnel URL
 - **Cursor:** `url` in config = `https://<your-tunnel-url>/mcp`
 
 ## Next steps
 
-1. **Start tunnel** → copy URL → set `MCP_PROXY_URL` and `API_BASE_URL` → restart MCP server.
+1. **Start tunnel** → copy URL → set `API_BASE_URL` → restart MCP server.
 2. **Visit tunnel URL in browser** to accept warning page (free tier) if needed.
 3. **Restart Cursor** and test Connect.
 
 ## Verification commands
 
 ```bash
-# Tunnel status (fails if tunnel not running)
+# Tunnel URL (both providers)
+cat /tmp/ngrok-mcp-url.txt
+
+# ngrok only: tunnel status
 curl -s http://localhost:4040/api/tunnels | python3 -m json.tool
 
 # Local server
 curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp   # expect 401
 
-# Through tunnel (replace with your current URL)
+# Through tunnel (replace with your current URL; ngrok free tier may need header)
 curl -s -H "ngrok-skip-browser-warning: 1" "https://YOUR-TUNNEL-URL/.well-known/oauth-authorization-server"
 
 # Processes
 lsof -i :8080
 ps aux | grep "[n]grok http"
+ps aux | grep "[c]loudflared"
 ```
+
+## Related
+
+- [tunnels.md](tunnels.md) — Full tunnel documentation (providers, scripts, env, troubleshooting)

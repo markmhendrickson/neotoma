@@ -1,0 +1,160 @@
+---
+description: "Ensures configuration files are placed in the correct location based on their scope and purpose"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+<!-- Source: foundation/agent_instructions/cursor_rules/configuration_management.mdc -->
+
+# Configuration Management Rule
+
+Ensures configuration files are placed in the correct location based on their scope and purpose.
+
+## Configuration Locations
+
+### Repository-Specific Configuration
+
+**Location:** `foundation-config.yaml` in the repository root (NOT in foundation submodule)
+
+**Contains:**
+- Repository name, type, and languages
+- Development workflow settings (branch strategy, commit format, PR settings)
+- Code conventions specific to this repository
+- Testing configuration
+- Documentation standards
+- Security settings (protected paths, credential management)
+- Tooling configuration
+- Agent instructions configuration
+- Repository-specific custom settings
+
+**Example:**
+```yaml
+# foundation-config.yaml (in repository root)
+repository:
+  name: "my-project"
+  type: "application"
+
+conventions:
+  python:
+    files: "snake_case"
+
+security:
+  pre_commit_audit:
+    protected_paths:
+      - "data/imports/"  # Repository-specific paths
+```
+
+### Shared Configuration (Repo Adapters)
+
+**Location:** `foundation/config/repo-adapters/<repo-name>.yaml` (in foundation submodule)
+
+**Purpose:** Shared configurations used across MULTIPLE repositories with the same name/type
+
+**When to use:**
+- Configuration shared across multiple repositories (e.g., all "neotoma" repos)
+- Template configurations for similar project types
+- Organization-wide standards
+
+**When NOT to use:**
+- Single repository configuration
+- Repository-specific paths or settings
+- Unique repository requirements
+
+**Example:**
+```yaml
+# foundation/config/repo-adapters/neotoma.yaml
+# Used by ALL neotoma-related repositories
+
+repo_name: "neotoma"
+conventions:
+  typescript:
+    files: "snake_case"
+documentation:
+  required_sections:
+    - "Agent Instructions"  # Standard for all neotoma repos
+```
+
+## Rules
+
+### MUST
+
+1. Repository-specific config → repository's `foundation-config.yaml`
+   - All configuration unique to a single repository goes in the repository's own `foundation-config.yaml`
+   - Includes: conventions, security paths, documentation structure, custom settings
+
+2. Shared config → foundation repo adapters
+   - Only use `foundation/config/repo-adapters/` for configurations shared across multiple repositories
+   - Examples: organization standards, project templates, multi-repo conventions
+
+3. Never commit single-repo configs to foundation submodule
+   - If a configuration file is only relevant to one repository, it belongs in that repository's `foundation-config.yaml`, NOT in the foundation submodule
+
+### MUST NOT
+
+1. Do NOT add repository-specific configuration to `foundation/config/repo-adapters/`
+   - Single-repo configs belong in the repository's own `foundation-config.yaml`
+
+2. Do NOT duplicate configuration between repo adapters and `foundation-config.yaml`
+   - If it's in `foundation-config.yaml`, it shouldn't also be in a repo adapter
+
+3. Do NOT modify foundation submodule files for repository-specific needs
+   - Foundation submodule is shared code - repository-specific changes belong in the repository itself
+
+## Decision Tree
+
+```
+Need to add/modify configuration?
+    │
+    ├─ Is this specific to ONE repository?
+    │   │
+    │   └─ YES → Add to repository's foundation-config.yaml
+    │
+    ├─ Is this shared across MULTIPLE repositories?
+    │   │
+    │   └─ YES → Add to foundation/config/repo-adapters/<name>.yaml
+    │
+    └─ Is this a foundation framework change?
+        │
+        └─ YES → Modify foundation code/templates (careful - affects all repos)
+```
+
+## Examples
+
+### ✅ Correct: Repository-Specific Config
+
+```yaml
+# foundation-config.yaml (in repository root)
+repository:
+  name: "personal"
+
+security:
+  pre_commit_audit:
+    protected_paths:
+      - "$DATA_DIR/imports/"  # Specific to this repo's structure
+      - "$DATA_DIR/attachments/"
+```
+
+### ❌ Incorrect: Repository-Specific Config in Foundation
+
+```yaml
+# foundation/config/repo-adapters/personal.yaml  # WRONG!
+repo_name: "personal"
+security:
+  pre_commit_audit:
+    protected_paths:
+      - "$DATA_DIR/imports/"  # This is specific to ONE repo
+```
+
+### ✅ Correct: Shared Config in Foundation
+
+```yaml
+# foundation/config/repo-adapters/neotoma.yaml
+# Used by all neotoma-related repositories
+
+repo_name: "neotoma"
+documentation:
+  required_sections:
+    - "Purpose"
+    - "Scope"
+    - "Agent Instructions"  # Standard for ALL neotoma repos
+```

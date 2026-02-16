@@ -376,7 +376,7 @@ export function MCPConfigurationPage() {
             <div>
               <h2 className="text-xl font-semibold">Setup Steps</h2>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
-                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                 <li>Create/edit <code className="bg-muted px-1 py-0.5 rounded">.cursor/mcp.json</code> with the configuration above</li>
                 <li>Restart Cursor to detect the new MCP server</li>
                 <li>Test connection by asking Cursor to use Neotoma actions</li>
@@ -450,7 +450,7 @@ export function MCPConfigurationPage() {
                   <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                     <li>Enable ChatGPT Developer Mode (beta feature in your ChatGPT account)</li>
                     <li>Create an OAuth connection in the &quot;OAuth Connection&quot; tab above</li>
-                    <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                    <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                     <li>Configure MCP server in Developer Mode settings</li>
                     <li>Use the HTTP-based configuration below (with your MCP server URL)</li>
                   </ol>
@@ -565,7 +565,7 @@ export function MCPConfigurationPage() {
             <CardContent>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                 <li>Create an OAuth connection in the &quot;OAuth Connection&quot; tab (get your connection ID)</li>
-                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                 <li>Open Claude Desktop settings</li>
                 <li>Locate your Claude Desktop config file:
                   <ul className="list-disc list-inside ml-4 mt-1 space-y-1">

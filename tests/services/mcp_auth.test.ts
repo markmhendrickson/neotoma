@@ -12,19 +12,19 @@ describe("MCP Authentication Service", () => {
   describe("validateSupabaseSessionToken", () => {
     it("should throw error for invalid token format", async () => {
       await expect(validateSupabaseSessionToken("invalid-token")).rejects.toThrow(
-        "Token validation failed"
+        /Token validation failed|Invalid local session token/
       );
     });
 
     it("should throw error for empty token", async () => {
       await expect(validateSupabaseSessionToken("")).rejects.toThrow(
-        "Token validation failed"
+        /Token validation failed|Invalid local session token/
       );
     });
 
     it("should throw error for malformed JWT", async () => {
       await expect(validateSupabaseSessionToken("not.a.valid.jwt")).rejects.toThrow(
-        "Token validation failed"
+        /Token validation failed|Invalid local session token/
       );
     });
 

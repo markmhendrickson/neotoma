@@ -1,4 +1,5 @@
 import { normalizeRecordType } from "./config/record_types.js";
+import { ENTITY_SCHEMAS } from "./services/schema_definitions.js";
 
 export function levenshtein(a: string, b: string): number {
   const s = a.toLowerCase();
@@ -311,16 +312,31 @@ export function standardizeType(
   existingTypes: string[],
 ): string {
   const resolution = normalizeRecordType(input);
-  if (resolution.match === "canonical" || resolution.match === "alias") {
-    return resolution.type;
-  }
-
   const candidate = resolution.type || "unknown";
 
   const exact = existingTypes.find(
     (t) => t.toLowerCase() === candidate.toLowerCase(),
   );
   if (exact) return exact;
+
+  // If normalized type is not in allowed list, prefer an allowed type that has it as alias (e.g. workout -> exercise).
+  if (
+    (resolution.match === "canonical" || resolution.match === "alias") &&
+    existingTypes.length > 0
+  ) {
+    const allowedAsAlias = existingTypes.find((t) => {
+      const schema = ENTITY_SCHEMAS[t as keyof typeof ENTITY_SCHEMAS];
+      const aliases = schema?.metadata?.aliases ?? [];
+      return aliases.some(
+        (a) => String(a).toLowerCase() === candidate.toLowerCase(),
+      );
+    });
+    if (allowedAsAlias) return allowedAsAlias;
+  }
+
+  if (resolution.match === "canonical" || resolution.match === "alias") {
+    return resolution.type;
+  }
 
   let best = candidate;
   let bestDist = Infinity;

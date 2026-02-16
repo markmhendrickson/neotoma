@@ -74,11 +74,64 @@ export async function resolveEntity(
     entityType = options.entityType;
     userId = options.userId;
     
-    // Extract canonical name from fields (use 'name' field or first string field)
-    const nameField = options.fields.name || 
-                     options.fields.canonical_name ||
-                     Object.values(options.fields).find(v => typeof v === "string");
+    // Extract canonical name from fields: prefer name-like fields so we don't use dates, schema_version, or descriptions
+    const preferredNameKeys = [
+      "name",
+      "canonical_name",
+      "full_name",
+      "title",
+      "email",
+      "url",
+    ] as const;
+    let nameField: unknown = options.fields.name ?? options.fields.canonical_name;
+    if (nameField == null || String(nameField).trim() === "") {
+      for (const key of preferredNameKeys) {
+        const v = options.fields[key as string];
+        if (v != null && typeof v === "string" && String(v).trim() !== "") {
+          nameField = v;
+          break;
+        }
+      }
+    }
+    if (nameField == null || String(nameField).trim() === "") {
+      // Reject patterns for values that shouldn't be used as entity names
+      const rejectPatterns = [
+        /^\d{4}-\d{2}-\d{2}/,           // ISO date
+        /^\d+\.\d+$/,                    // schema_version e.g. "1.0"
+        /^\d+$/,                         // pure numeric
+      ];
+      // Reject keys that are metadata/types, not identifying names
+      const rejectKeys = new Set([
+        "contact_type", "entity_type", "type", "status",
+        "created_at", "updated_at", "created_date", "updated_date",
+        "schema_version", "import_date", "import_source_file"
+      ]);
+      const firstString = Object.entries(options.fields).find(
+        ([key, v]) =>
+          !rejectKeys.has(key) &&
+          typeof v === "string" &&
+          String(v).trim() !== "" &&
+          !rejectPatterns.some((re) => re.test(String(v)))
+      )?.[1] as string | undefined;
+      nameField = firstString;
+    }
+
+    // If still no valid name field, look for unique identifier fields (e.g., company_id, person_id, id)
+    if (nameField == null || String(nameField).trim() === "") {
+      const idFields = ["company_id", "person_id", "contact_id", "id", "uuid", "external_id"];
+      for (const idKey of idFields) {
+        const idValue = options.fields[idKey];
+        if (idValue != null && String(idValue).trim() !== "") {
+          // Use ID field to ensure uniqueness, prefix with "unknown:" to distinguish from named entities
+          nameField = `unknown:${String(idValue)}`;
+          console.error(`[entity_resolution] Using ID field ${idKey}=${idValue} for entity name`);
+          break;
+        }
+      }
+    }
+
     canonicalName = normalizeEntityValue(entityType, String(nameField || "unknown"));
+    console.error(`[entity_resolution] Final canonical name: ${canonicalName} for entityType: ${entityType}`);
   }
 
   const entityId = generateEntityId(entityType, canonicalName);

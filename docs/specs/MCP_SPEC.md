@@ -251,6 +251,13 @@ flowchart LR
 
 The unified `store` action handles all [source](../vocabulary/canonical_terms.md#source) types:
 
+**Choosing the storage path by source**
+
+Choose the storage path based on **where the data came from**, not only on what format you have. This keeps provenance correct (artifact vs agent-derived) and avoids double interpretation of files.
+
+- **Conversation-sourced or tool-sourced:** Data from what the user said in chat, or from another MCP/tool (e.g. email, calendar) where the agent is extracting entities. Use the **structured** path: `store` or `store_structured` with an `entities` array. Omit `original_filename`.
+- **File-sourced or resource-sourced:** User attached a file, or the agent has a file/blob to preserve as an artifact. Use the **unstructured** path: `store` or `store_unstructured` with `file_content`+`mime_type` or `file_path`. Do not interpret the file; pass it raw so the server can store and optionally interpret.
+
 **For Unstructured [Source](../vocabulary/canonical_terms.md#source):**
 ```typescript
 {
@@ -295,8 +302,8 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 **CRITICAL: Agents MUST include ALL fields from source data**, not just schema fields. Unknown fields are automatically stored in `raw_fragments` for future schema expansion. See section 3.1 for details.
 
 **Decision Logic:**
-1. **Raw file content?** → Use `store` with `file_content` and `mime_type`
-2. **Structured [source](../vocabulary/canonical_terms.md#source)?** → Use `store` with `entities` array containing `entity_type`
+1. **File- or resource-sourced** (user attachment or a file/blob to preserve) → Use `store` with `file_content`+`mime_type` or `file_path`.
+2. **Conversation- or tool-sourced** (what the user said or structured data from another MCP) → Use `store` with `entities` array containing `entity_type`. Omit `original_filename`.
 
 **Important: Entity Type Determination**
 Common [entity types](../vocabulary/canonical_terms.md#entity-type) are exposed in MCP server instructions so agents can set `entity_type` directly when user intent is clear, avoiding an extra `list_entity_types` call. **Common types (set directly when intent is clear):** `contact`, `person`, `company`, `task`, `invoice`, `transaction`, `receipt`, `note`, `contract`, `event`. For other types or when field schemas are needed, agents MUST use `list_entity_types` (optionally with a keyword) or the `neotoma://entity_types` resource. Also set `entity_type` directly when:
@@ -983,12 +990,15 @@ This enables full explainability: for any fact in the system, you can trace it b
 {
   entity_type?: string;              // Optional: Filter by entity type (e.g., 'company', 'person')
   user_id?: string;                  // Optional: Filter by user ID (UUID)
+  search?: string;                   // Optional: Text query for semantic similarity (when provided and embeddings available, uses pgvector; otherwise keyword substring on canonical_name)
   limit?: number;                    // Optional: Max results (default: 100)
   offset?: number;                   // Optional: Pagination offset (default: 0)
   include_snapshots?: boolean;       // Optional: Include entity snapshots (default: true)
   include_merged?: boolean;          // Optional: Include merged entities (default: false)
 }
 ```
+
+**Semantic search behavior:** When `search` is provided and embeddings are configured (Supabase + OPENAI_API_KEY), uses pgvector similarity over entity snapshots within structural filters. Falls back to keyword substring match on `canonical_name` when embeddings unavailable. Structural filters (user_id, entity_type, merged) always applied. Deterministic: same query + DB state → same ordering.
 
 **Response Schema:**
 ```typescript
@@ -1027,6 +1037,8 @@ This enables full explainability: for any fact in the system, you can trace it b
 }
 ```
 
+**Semantic fallback:** When keyword match (canonical_name, aliases, entity ID) returns 0 results, falls back to semantic search with identifier as query. Same structural filters applied. Deterministic: same query + DB state → same ordering.
+
 **Response Schema:**
 ```typescript
 {
@@ -1047,7 +1059,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 | `DB_QUERY_FAILED` | 500 | Database query failed | Yes |
 
 **Consistency:** Strong
-**Determinism:** Yes (same identifier → same results after normalization)
+**Determinism:** Yes (same identifier → same results after normalization; semantic path: same query + DB state → same order)
 
 ### 3.9 `retrieve_related_entities`
 
@@ -1294,12 +1306,14 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Request Schema:**
 ```typescript
 {
-  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES'; // Required
+  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES' | 'EMBEDS'; // Required
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
-  metadata?: Record<string, any>; // Optional: Relationship-specific metadata
+  metadata?: Record<string, any>; // Optional: Relationship-specific metadata (e.g. caption, order for EMBEDS)
 }
 ```
+
+**Relationship types:** `PART_OF` (source is part of target), `CORRECTS`, `REFERS_TO`, `SETTLES`, `DUPLICATE_OF`, `DEPENDS_ON`, `SUPERSEDES`, `EMBEDS` (source container embeds target asset; use for post embeds image, document embeds attachment). See [`docs/subsystems/relationships.md`](../subsystems/relationships.md).
 
 **Response Schema:**
 ```typescript
@@ -1375,7 +1389,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Request Schema:**
 ```typescript
 {
-  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES'; // Required
+  relationship_type: 'PART_OF' | 'CORRECTS' | 'REFERS_TO' | 'SETTLES' | 'DUPLICATE_OF' | 'DEPENDS_ON' | 'SUPERSEDES' | 'EMBEDS'; // Required
   source_entity_id: string; // Required: Source entity ID
   target_entity_id: string; // Required: Target entity ID
 }

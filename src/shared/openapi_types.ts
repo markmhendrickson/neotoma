@@ -126,6 +126,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get current authenticated user */
+        get: operations["getMe"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mcp/oauth/status": {
         parameters: {
             query?: never;
@@ -568,6 +585,306 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retrieve_entity_by_identifier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retrieve entity by identifier
+         * @description Search for entity by name, email, or other identifier
+         */
+        post: operations["retrieveEntityByIdentifier"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retrieve_related_entities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retrieve related entities
+         * @description Get entities connected via relationships with n-hop traversal support
+         */
+        post: operations["retrieveRelatedEntities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/retrieve_graph_neighborhood": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retrieve graph neighborhood
+         * @description Get complete graph neighborhood including entities, relationships, sources, and events
+         */
+        post: operations["retrieveGraphNeighborhood"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delete_entity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete entity
+         * @description Soft delete entity (creates deletion observation, reversible)
+         */
+        post: operations["deleteEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/restore_entity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore entity
+         * @description Restore a soft-deleted entity
+         */
+        post: operations["restoreEntity"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/delete_relationship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete relationship
+         * @description Soft delete relationship (creates deletion observation, reversible)
+         */
+        post: operations["deleteRelationship"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/restore_relationship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore relationship
+         * @description Restore a soft-deleted relationship
+         */
+        post: operations["restoreRelationship"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/analyze_schema_candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze schema candidates
+         * @description Analyze raw_fragments to identify fields for schema promotion
+         */
+        post: operations["analyzeSchemaCandidates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/get_schema_recommendations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get schema recommendations
+         * @description Get schema update recommendations from raw_fragments analysis
+         */
+        post: operations["getSchemaRecommendations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/update_schema_incremental": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update schema incrementally
+         * @description Add new fields to existing schema
+         */
+        post: operations["updateSchemaIncremental"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/register_schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register schema
+         * @description Register a new schema or schema version
+         */
+        post: operations["registerSchema"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reinterpret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reinterpret source
+         * @description Re-run AI interpretation on existing source
+         */
+        post: operations["reinterpret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/correct": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create correction
+         * @description Create high-priority correction observation
+         */
+        post: operations["correct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/get_authenticated_user": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get authenticated user
+         * @description Get authenticated user ID for current session
+         */
+        post: operations["getAuthenticatedUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health_check_snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Health check snapshots
+         * @description Check for stale entity snapshots
+         */
+        post: operations["healthCheckSnapshots"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -699,12 +1016,16 @@ export interface components {
             timeline_events?: number;
         };
         StoreStructuredRequest: {
-            entities?: {
+            entities: {
                 [key: string]: unknown;
             }[];
             source_priority?: number;
             idempotency_key: string;
             user_id?: string;
+            /**
+             * @description Optional. For agent-provided structured data, omit so the source has no filename (null).
+             *     Pass only when mirroring a real file name or when a display label is desired.
+             */
             original_filename?: string;
         };
         StoreStructuredResponse: {
@@ -718,6 +1039,7 @@ export interface components {
         OAuthInitiateRequest: {
             connection_id: string;
             client_name?: string;
+            redirect_uri?: string;
         };
         OAuthInitiateResponse: {
             auth_url?: string;
@@ -884,6 +1206,7 @@ export interface operations {
                 code_challenge: string;
                 code_challenge_method: string;
                 client_id?: string;
+                dev_stub?: string;
             };
             header?: never;
             path?: never;
@@ -938,6 +1261,38 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    getMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current user details */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user_id?: string;
+                        email?: string;
+                    };
+                };
+            };
+            /** @description Not authenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -1646,6 +2001,525 @@ export interface operations {
                 content: {
                     "application/json": {
                         relationships?: components["schemas"]["RelationshipSnapshot"][];
+                    };
+                };
+            };
+        };
+    };
+    retrieveEntityByIdentifier: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Identifier to search for (name, email, etc.) */
+                    identifier: string;
+                    /** @description Optional entity type to limit search */
+                    entity_type?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Entity search results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        entities?: components["schemas"]["Entity"][];
+                        total?: number;
+                    };
+                };
+            };
+            /** @description Invalid request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    retrieveRelatedEntities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id: string;
+                    relationship_types?: string[];
+                    /**
+                     * @default both
+                     * @enum {string}
+                     */
+                    direction?: "inbound" | "outbound" | "both";
+                    /** @default 1 */
+                    max_hops?: number;
+                    /** @default true */
+                    include_entities?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Related entities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    retrieveGraphNeighborhood: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    node_id: string;
+                    /**
+                     * @default entity
+                     * @enum {string}
+                     */
+                    node_type?: "entity" | "source";
+                    /** @default true */
+                    include_relationships?: boolean;
+                    /** @default true */
+                    include_sources?: boolean;
+                    /** @default true */
+                    include_events?: boolean;
+                    /** @default false */
+                    include_observations?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Graph neighborhood */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    deleteEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id: string;
+                    entity_type: string;
+                    reason?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Entity deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    restoreEntity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id: string;
+                    entity_type: string;
+                    reason?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Entity restored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    deleteRelationship: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                    source_entity_id: string;
+                    target_entity_id: string;
+                    reason?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Relationship deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    restoreRelationship: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                    source_entity_id: string;
+                    target_entity_id: string;
+                    reason?: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Relationship restored */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    analyzeSchemaCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    entity_type?: string;
+                    user_id?: string;
+                    /** @default 5 */
+                    min_frequency?: number;
+                    /** @default 0.8 */
+                    min_confidence?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Schema candidates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    getSchemaRecommendations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_type: string;
+                    user_id?: string;
+                    /** @enum {string} */
+                    source?: "raw_fragments" | "agent" | "inference" | "all";
+                    /** @enum {string} */
+                    status?: "pending" | "approved" | "rejected";
+                };
+            };
+        };
+        responses: {
+            /** @description Schema recommendations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    updateSchemaIncremental: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_type: string;
+                    fields_to_add: {
+                        field_name: string;
+                        /** @enum {string} */
+                        field_type: "string" | "number" | "date" | "boolean" | "array" | "object";
+                        /** @default false */
+                        required?: boolean;
+                        /** @enum {string} */
+                        reducer_strategy?: "last_write" | "highest_priority" | "most_specific" | "merge_array";
+                    }[];
+                    schema_version?: string;
+                    /** @default false */
+                    user_specific?: boolean;
+                    user_id?: string;
+                    /** @default true */
+                    activate?: boolean;
+                    /** @default false */
+                    migrate_existing?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Schema updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    registerSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_type: string;
+                    schema_definition: {
+                        [key: string]: unknown;
+                    };
+                    reducer_config: {
+                        [key: string]: unknown;
+                    };
+                    /** @default 1.0 */
+                    schema_version?: string;
+                    /** @default false */
+                    user_specific?: boolean;
+                    user_id?: string;
+                    /** @default false */
+                    activate?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Schema registered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    reinterpret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    source_id: string;
+                    interpretation_config?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Source reinterpreted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    correct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    entity_id: string;
+                    entity_type: string;
+                    field: string;
+                    value: unknown;
+                    idempotency_key: string;
+                    user_id?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Correction created */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    getAuthenticatedUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description User ID */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user_id?: string;
+                    };
+                };
+            };
+        };
+    };
+    healthCheckSnapshots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default false */
+                    auto_fix?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Health check results */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

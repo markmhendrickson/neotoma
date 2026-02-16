@@ -265,7 +265,7 @@ If critical issues found:
 # Code rollback
 git checkout v0.2.14
 npm install
-npm run build
+npm run build:server
 npm run build:ui
 
 # Database rollback (manual SQL required)
@@ -295,7 +295,7 @@ npm run build:ui
 
 **Start Services:**
 ```bash
-npm start        # MCP server
+npm run start:mcp   # MCP server
 npm run dev:server # HTTP API (background)
 # Deploy public/ to static hosting
 ```

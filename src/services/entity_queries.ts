@@ -7,8 +7,11 @@ export interface EntityQueryOptions {
   userId?: string;
   entityType?: string;
   includeMerged?: boolean;
+  includeDeleted?: boolean;
   limit?: number;
   offset?: number;
+  /** When provided, fetch only these entity IDs (e.g. from semantic search) */
+  entityIds?: string[];
 }
 
 export interface EntityWithProvenance {
@@ -48,8 +51,10 @@ export async function queryEntities(
     userId,
     entityType,
     includeMerged = false,
+    includeDeleted = false,
     limit = 100,
     offset = 0,
+    entityIds: filterEntityIds,
   } = options;
 
   // Build query for entities
@@ -72,19 +77,25 @@ export async function queryEntities(
     entityQuery = entityQuery.is("merged_to_entity_id", null);
   }
 
+  // Filter by specific entity IDs (e.g. from semantic search)
+  if (filterEntityIds && filterEntityIds.length > 0) {
+    entityQuery = entityQuery.in("id", filterEntityIds);
+  }
+
   entityQuery = entityQuery.range(offset, offset + limit - 1);
 
-  const { data: entities, error: entitiesError } = await entityQuery;
+  const { data: entitiesData, error: entitiesError } = await entityQuery;
 
   if (entitiesError) {
     throw new Error(`Failed to query entities: ${entitiesError.message}`);
   }
 
-  if (!entities || entities.length === 0) {
+  if (!entitiesData || entitiesData.length === 0) {
     return [];
   }
 
   // Get snapshots for entities
+  let entities = entitiesData;
   const entityIds = entities.map((e: any) => e.id);
   const { data: snapshots, error: snapshotsError } = await supabase
     .from("entity_snapshots")
@@ -93,6 +104,52 @@ export async function queryEntities(
 
   if (snapshotsError) {
     throw new Error(`Failed to query snapshots: ${snapshotsError.message}`);
+  }
+
+  // Filter deleted entities unless explicitly requested
+  let filteredEntityIds = entityIds;
+  if (!includeDeleted) {
+    // Check for deletion observations (highest priority with _deleted: true)
+    const { data: deletionObservations } = await supabase
+      .from("observations")
+      .select("entity_id, source_priority, observed_at, fields")
+      .in("entity_id", entityIds)
+      .order("source_priority", { ascending: false })
+      .order("observed_at", { ascending: false });
+
+    // Find entities with deletion observations
+    const deletedEntityIds = new Set<string>();
+    if (deletionObservations) {
+      // Group by entity_id and get highest priority observation
+      const highestByEntity = new Map<string, any>();
+      for (const obs of deletionObservations) {
+        if (!highestByEntity.has(obs.entity_id)) {
+          highestByEntity.set(obs.entity_id, obs);
+        } else {
+          const existing = highestByEntity.get(obs.entity_id);
+          if (obs.source_priority > existing.source_priority ||
+              (obs.source_priority === existing.source_priority &&
+               new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())) {
+            highestByEntity.set(obs.entity_id, obs);
+          }
+        }
+      }
+
+      // Check if highest priority observation is a deletion
+      for (const [entityId, obs] of highestByEntity.entries()) {
+        if (obs.fields?._deleted === true) {
+          deletedEntityIds.add(entityId);
+        }
+      }
+    }
+
+    // Filter out deleted entities
+    filteredEntityIds = entityIds.filter((id: string) => !deletedEntityIds.has(id));
+    entities = entities.filter((e: any) => !deletedEntityIds.has(e.id));
+
+    if (entities.length === 0) {
+      return [];
+    }
   }
 
   // Combine entities with snapshots
@@ -104,7 +161,7 @@ export async function queryEntities(
   const { data: allObservations } = await supabase
     .from("observations")
     .select("entity_id, source_id, user_id")
-    .in("entity_id", entityIds)
+    .in("entity_id", filteredEntityIds)
     .not("source_id", "is", null)
     .limit(1000); // Reasonable limit for batch
 
@@ -244,9 +301,12 @@ export async function queryEntities(
 
 /**
  * Get entity snapshot with full provenance chain
+ * 
+ * Returns null if entity is deleted (has deletion observation).
  */
 export async function getEntityWithProvenance(
-  entityId: string
+  entityId: string,
+  includeDeleted: boolean = false
 ): Promise<EntityWithProvenance | null> {
   // Get entity
   const { data: entity, error: entityError } = await supabase
@@ -261,7 +321,26 @@ export async function getEntityWithProvenance(
 
   // Check if entity is merged - redirect to target
   if (entity.merged_to_entity_id) {
-    return getEntityWithProvenance(entity.merged_to_entity_id);
+    return getEntityWithProvenance(entity.merged_to_entity_id, includeDeleted);
+  }
+
+  // Check if entity is deleted (unless explicitly requested)
+  if (!includeDeleted) {
+    const { data: observations } = await supabase
+      .from("observations")
+      .select("source_priority, observed_at, fields")
+      .eq("entity_id", entityId)
+      .order("source_priority", { ascending: false })
+      .order("observed_at", { ascending: false })
+      .limit(1);
+
+    if (observations && observations.length > 0) {
+      const highestPriorityObs = observations[0];
+      if (highestPriorityObs.fields?._deleted === true) {
+        // Entity is deleted - return null
+        return null;
+      }
+    }
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)

@@ -1137,3 +1137,537 @@ paths:
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
 
+  /retrieve_entity_by_identifier:
+    post:
+      summary: Retrieve entity by identifier
+      description: Search for entity by name, email, or other identifier
+      operationId: retrieveEntityByIdentifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - identifier
+              properties:
+                identifier:
+                  type: string
+                  description: Identifier to search for (name, email, etc.)
+                entity_type:
+                  type: string
+                  description: Optional entity type to limit search
+      responses:
+        '200':
+          description: Entity search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entity'
+                  total:
+                    type: integer
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /retrieve_related_entities:
+    post:
+      summary: Retrieve related entities
+      description: Get entities connected via relationships with n-hop traversal support
+      operationId: retrieveRelatedEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_id
+              properties:
+                entity_id:
+                  type: string
+                relationship_types:
+                  type: array
+                  items:
+                    type: string
+                direction:
+                  type: string
+                  enum: [inbound, outbound, both]
+                  default: both
+                max_hops:
+                  type: integer
+                  default: 1
+                include_entities:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Related entities
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /retrieve_graph_neighborhood:
+    post:
+      summary: Retrieve graph neighborhood
+      description: Get complete graph neighborhood including entities, relationships, sources, and events
+      operationId: retrieveGraphNeighborhood
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - node_id
+              properties:
+                node_id:
+                  type: string
+                node_type:
+                  type: string
+                  enum: [entity, source]
+                  default: entity
+                include_relationships:
+                  type: boolean
+                  default: true
+                include_sources:
+                  type: boolean
+                  default: true
+                include_events:
+                  type: boolean
+                  default: true
+                include_observations:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Graph neighborhood
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /delete_entity:
+    post:
+      summary: Delete entity
+      description: Soft delete entity (creates deletion observation, reversible)
+      operationId: deleteEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_id
+                - entity_type
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                reason:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /restore_entity:
+    post:
+      summary: Restore entity
+      description: Restore a soft-deleted entity
+      operationId: restoreEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_id
+                - entity_type
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                reason:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity restored
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /delete_relationship:
+    post:
+      summary: Delete relationship
+      description: Soft delete relationship (creates deletion observation, reversible)
+      operationId: deleteRelationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - relationship_type
+                - source_entity_id
+                - target_entity_id
+              properties:
+                relationship_type:
+                  type: string
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                source_entity_id:
+                  type: string
+                target_entity_id:
+                  type: string
+                reason:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Relationship deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /restore_relationship:
+    post:
+      summary: Restore relationship
+      description: Restore a soft-deleted relationship
+      operationId: restoreRelationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - relationship_type
+                - source_entity_id
+                - target_entity_id
+              properties:
+                relationship_type:
+                  type: string
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                source_entity_id:
+                  type: string
+                target_entity_id:
+                  type: string
+                reason:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Relationship restored
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /analyze_schema_candidates:
+    post:
+      summary: Analyze schema candidates
+      description: Analyze raw_fragments to identify fields for schema promotion
+      operationId: analyzeSchemaCandidates
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_type:
+                  type: string
+                user_id:
+                  type: string
+                min_frequency:
+                  type: integer
+                  default: 5
+                min_confidence:
+                  type: number
+                  default: 0.8
+      responses:
+        '200':
+          description: Schema candidates
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /get_schema_recommendations:
+    post:
+      summary: Get schema recommendations
+      description: Get schema update recommendations from raw_fragments analysis
+      operationId: getSchemaRecommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_type
+              properties:
+                entity_type:
+                  type: string
+                user_id:
+                  type: string
+                source:
+                  type: string
+                  enum: [raw_fragments, agent, inference, all]
+                status:
+                  type: string
+                  enum: [pending, approved, rejected]
+      responses:
+        '200':
+          description: Schema recommendations
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /update_schema_incremental:
+    post:
+      summary: Update schema incrementally
+      description: Add new fields to existing schema
+      operationId: updateSchemaIncremental
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_type
+                - fields_to_add
+              properties:
+                entity_type:
+                  type: string
+                fields_to_add:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - field_name
+                      - field_type
+                    properties:
+                      field_name:
+                        type: string
+                      field_type:
+                        type: string
+                        enum: [string, number, date, boolean, array, object]
+                      required:
+                        type: boolean
+                        default: false
+                      reducer_strategy:
+                        type: string
+                        enum: [last_write, highest_priority, most_specific, merge_array]
+                schema_version:
+                  type: string
+                user_specific:
+                  type: boolean
+                  default: false
+                user_id:
+                  type: string
+                activate:
+                  type: boolean
+                  default: true
+                migrate_existing:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Schema updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /register_schema:
+    post:
+      summary: Register schema
+      description: Register a new schema or schema version
+      operationId: registerSchema
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_type
+                - schema_definition
+                - reducer_config
+              properties:
+                entity_type:
+                  type: string
+                schema_definition:
+                  type: object
+                  additionalProperties: true
+                reducer_config:
+                  type: object
+                  additionalProperties: true
+                schema_version:
+                  type: string
+                  default: "1.0"
+                user_specific:
+                  type: boolean
+                  default: false
+                user_id:
+                  type: string
+                activate:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Schema registered
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /reinterpret:
+    post:
+      summary: Reinterpret source
+      description: Re-run AI interpretation on existing source
+      operationId: reinterpret
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - source_id
+              properties:
+                source_id:
+                  type: string
+                interpretation_config:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Source reinterpreted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /correct:
+    post:
+      summary: Create correction
+      description: Create high-priority correction observation
+      operationId: correct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - entity_id
+                - entity_type
+                - field
+                - value
+                - idempotency_key
+              properties:
+                entity_id:
+                  type: string
+                entity_type:
+                  type: string
+                field:
+                  type: string
+                value: {}
+                idempotency_key:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Correction created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /get_authenticated_user:
+    post:
+      summary: Get authenticated user
+      description: Get authenticated user ID for current session
+      operationId: getAuthenticatedUser
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: User ID
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+
+  /health_check_snapshots:
+    post:
+      summary: Health check snapshots
+      description: Check for stale entity snapshots
+      operationId: healthCheckSnapshots
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                auto_fix:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Health check results
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+

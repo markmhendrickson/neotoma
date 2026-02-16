@@ -17,7 +17,8 @@ export type RelationshipType =
   | "SETTLES"
   | "DUPLICATE_OF"
   | "DEPENDS_ON"
-  | "SUPERSEDES";
+  | "SUPERSEDES"
+  | "EMBEDS";
 
 export interface Relationship {
   id: string;
@@ -55,6 +56,7 @@ export class RelationshipsService {
     "DUPLICATE_OF",
     "DEPENDS_ON",
     "SUPERSEDES",
+    "EMBEDS",
   ]);
 
   /**
@@ -173,10 +175,13 @@ export class RelationshipsService {
 
   /**
    * Get relationship snapshots for entity (replaces getRelationshipsForEntity)
+   * 
+   * Filters deleted relationships by default.
    */
   async getRelationshipsForEntity(
     entityId: string,
     direction: "outgoing" | "incoming" | "both" = "both",
+    includeDeleted: boolean = false,
   ): Promise<RelationshipSnapshot[]> {
     let query;
 
@@ -205,14 +210,61 @@ export class RelationshipsService {
       throw new Error(`Failed to get relationships: ${error.message}`);
     }
 
-    return (data || []) as RelationshipSnapshot[];
+    const relationships = (data || []) as RelationshipSnapshot[];
+
+    // Filter deleted relationships unless explicitly requested
+    if (!includeDeleted && relationships.length > 0) {
+      const relationshipKeys = relationships.map((r) => r.relationship_key);
+      
+      // Check for deletion observations (highest priority with _deleted: true)
+      const { data: deletionObservations } = await supabase
+        .from("relationship_observations")
+        .select("relationship_key, source_priority, observed_at, metadata")
+        .in("relationship_key", relationshipKeys)
+        .order("source_priority", { ascending: false })
+        .order("observed_at", { ascending: false });
+
+      // Find relationships with deletion observations
+      const deletedRelationshipKeys = new Set<string>();
+      if (deletionObservations) {
+        // Group by relationship_key and get highest priority observation
+        const highestByKey = new Map<string, any>();
+        for (const obs of deletionObservations) {
+          if (!highestByKey.has(obs.relationship_key)) {
+            highestByKey.set(obs.relationship_key, obs);
+          } else {
+            const existing = highestByKey.get(obs.relationship_key);
+            if (obs.source_priority > existing.source_priority ||
+                (obs.source_priority === existing.source_priority &&
+                 new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())) {
+              highestByKey.set(obs.relationship_key, obs);
+            }
+          }
+        }
+
+        // Check if highest priority observation is a deletion
+        for (const [key, obs] of highestByKey.entries()) {
+          if (obs.metadata?._deleted === true) {
+            deletedRelationshipKeys.add(key);
+          }
+        }
+      }
+
+      // Filter out deleted relationships
+      return relationships.filter((r) => !deletedRelationshipKeys.has(r.relationship_key));
+    }
+
+    return relationships;
   }
 
   /**
    * Get relationship snapshots by type
+   * 
+   * Filters deleted relationships by default.
    */
   async getRelationshipsByType(
     type: RelationshipType,
+    includeDeleted: boolean = false,
   ): Promise<RelationshipSnapshot[]> {
     const { data, error } = await supabase
       .from("relationship_snapshots")
@@ -224,17 +276,59 @@ export class RelationshipsService {
       throw new Error(`Failed to get relationships by type: ${error.message}`);
     }
 
-    return (data || []) as RelationshipSnapshot[];
+    const relationships = (data || []) as RelationshipSnapshot[];
+
+    // Filter deleted relationships unless explicitly requested
+    if (!includeDeleted && relationships.length > 0) {
+      const relationshipKeys = relationships.map((r) => r.relationship_key);
+      
+      const { data: deletionObservations } = await supabase
+        .from("relationship_observations")
+        .select("relationship_key, source_priority, observed_at, metadata")
+        .in("relationship_key", relationshipKeys)
+        .order("source_priority", { ascending: false })
+        .order("observed_at", { ascending: false });
+
+      const deletedRelationshipKeys = new Set<string>();
+      if (deletionObservations) {
+        const highestByKey = new Map<string, any>();
+        for (const obs of deletionObservations) {
+          if (!highestByKey.has(obs.relationship_key)) {
+            highestByKey.set(obs.relationship_key, obs);
+          } else {
+            const existing = highestByKey.get(obs.relationship_key);
+            if (obs.source_priority > existing.source_priority ||
+                (obs.source_priority === existing.source_priority &&
+                 new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())) {
+              highestByKey.set(obs.relationship_key, obs);
+            }
+          }
+        }
+
+        for (const [key, obs] of highestByKey.entries()) {
+          if (obs.metadata?._deleted === true) {
+            deletedRelationshipKeys.add(key);
+          }
+        }
+      }
+
+      return relationships.filter((r) => !deletedRelationshipKeys.has(r.relationship_key));
+    }
+
+    return relationships;
   }
 
   /**
    * Get a specific relationship snapshot
+   * 
+   * Returns null if relationship is deleted (unless explicitly requested).
    */
   async getRelationshipSnapshot(
     relationshipType: RelationshipType,
     sourceEntityId: string,
     targetEntityId: string,
     userId: string,
+    includeDeleted: boolean = false,
   ): Promise<RelationshipSnapshot | null> {
     const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
@@ -249,7 +343,29 @@ export class RelationshipsService {
       throw new Error(`Failed to get relationship snapshot: ${error.message}`);
     }
 
-    return data as RelationshipSnapshot | null;
+    const snapshot = data as RelationshipSnapshot | null;
+
+    // Check if relationship is deleted (unless explicitly requested)
+    if (snapshot && !includeDeleted) {
+      const { data: observations } = await supabase
+        .from("relationship_observations")
+        .select("source_priority, observed_at, metadata")
+        .eq("relationship_key", relationshipKey)
+        .eq("user_id", userId)
+        .order("source_priority", { ascending: false })
+        .order("observed_at", { ascending: false })
+        .limit(1);
+
+      if (observations && observations.length > 0) {
+        const highestPriorityObs = observations[0];
+        if (highestPriorityObs.metadata?._deleted === true) {
+          // Relationship is deleted - return null
+          return null;
+        }
+      }
+    }
+
+    return snapshot;
   }
 
   /**

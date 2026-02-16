@@ -3,7 +3,7 @@ dist/
 .env*
 *.log
 .DS_Store
-.claude/
+# .claude/ is committed (project settings), but .claude/settings.local.json is ignored (user overrides)
 *.code-workspace
 .branch-ports/
 .venv-commit-scan/

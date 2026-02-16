@@ -215,6 +215,10 @@
 
 **Example:** "A [source](#source) can be a PDF file (invoice.pdf), raw text string, external URL, or structured JSON with `entity_type: 'invoice'`. All [sources](#source) are stored with content-addressed deduplication. Unstructured [sources](#source) undergo [interpretation](#interpretation) to transform them into structured [sources](#source) with entity types, which are then processed using [entity schemas](#entity-schema) for normalization (via [canonicalization rules](#canonicalization-rules)), [entity extraction](#entity-extraction-rule), and [observation](#observation) creation. Directly submitted structured [sources](#source) undergo the same [entity schema](#entity-schema) processing for normalization, [entity extraction](#entity-extraction-rule), and [observation](#observation) creation."
 
+**Source origin (for MCP storage path):**
+- **Conversation-sourced:** Data from what the user said in chat or from the agent's dialogue context; store via the structured path (`store` with `entities`).
+- **File-sourced / resource-sourced:** Data that is a user-attached file or another artifact (file/blob) to preserve; store via the unstructured path (`store` with `file_content`/`file_path`) so the server can store the artifact and optionally run [interpretation](#interpretation).
+
 **Forbidden Synonyms:**
 - ❌ "content" (replaced by [source](#source) for clarity)
 - ❌ "data" (too generic)

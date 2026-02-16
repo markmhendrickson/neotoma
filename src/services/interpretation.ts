@@ -15,6 +15,10 @@ import {
   checkObservationExistsByHash 
 } from "./observation_identity.js";
 import { validateFieldsWithConverters } from "./field_validation.js";
+import {
+  prepareEntitySnapshotWithEmbedding,
+  getEntitySnapshotUpsertPayload,
+} from "./entity_snapshot_embedding.js";
 
 
 export interface InterpretationConfig {
@@ -24,6 +28,8 @@ export interface InterpretationConfig {
   prompt_hash: string;
   code_version: string;
   feature_flags?: Record<string, boolean>;
+  /** When true (default), create a user-scoped schema from extracted fields when entity type is unknown. */
+  create_schema_for_unknown?: boolean;
 }
 
 export interface InterpretationOptions {
@@ -117,18 +123,16 @@ export async function runInterpretation(
     // Process each extracted entity
     for (const entityData of extractedData) {
       // Support both 'entity_type' and 'type' fields for entity type identification
-      const entityType = (entityData.entity_type as string) || 
-                         (entityData.type as string) || 
-                         "generic";
+      let entityType = (entityData.entity_type as string) ||
+                      (entityData.type as string) ||
+                      "generic";
+      let currentEntityData = entityData;
       
-      // Load active entity schema for entity type from database
+      // Load active entity schema (user-scoped first, then global) from database
       // NOTE: Schemas should be initialized in the database via `npm run schema:init`
-      // The fallback below is for backward compatibility and development convenience.
-      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType);
-      
+      let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType, userId);
+
       // Fallback to code-defined entity schemas if database schema not found
-      // This fallback should only be used during development or if schemas haven't been initialized.
-      // In production, all schemas should be registered in the database for transparency and consistency.
       if (!schema) {
         if (process.env.NODE_ENV === "development" || process.env.NEOTOMA_ENV === "development") {
           console.warn(
@@ -136,24 +140,36 @@ export async function runInterpretation(
             `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
           );
         }
-        
-        // Get entity schema (all schemas are now unified in ENTITY_SCHEMAS)
+
         const codeSchema = getSchemaDefinition(entityType);
-        
+
         if (codeSchema && codeSchema.entity_type && codeSchema.schema_definition && codeSchema.reducer_config) {
-          // Convert code schema to SchemaRegistryEntry format
           schema = {
-            id: "", // Not needed for validation
+            id: "",
             entity_type: codeSchema.entity_type,
             schema_version: codeSchema.schema_version || "1.0",
             schema_definition: codeSchema.schema_definition,
             reducer_config: codeSchema.reducer_config,
-            active: true, // Code schemas are considered active
+            active: true,
             created_at: new Date().toISOString(),
           };
         }
       }
-      
+
+      // When no known schema: optionally create a user-scoped schema from extracted fields
+      if (!schema && config.create_schema_for_unknown !== false) {
+        schema = await schemaRegistry.ensureSchemaForExtractedEntity(
+          entityType,
+          entityData,
+          userId,
+          { create_if_missing: true }
+        );
+        if (schema) {
+          entityType = schema.entity_type;
+          currentEntityData = { ...entityData, entity_type: entityType };
+        }
+      }
+
       if (!schema) {
         // No schema found - route all fields to raw_fragments
         const fragmentId = randomUUID();
@@ -164,18 +180,18 @@ export async function runInterpretation(
           user_id: userId,
           entity_type: entityType,
           fragment_key: "full_entity",
-          fragment_value: entityData,
+          fragment_value: currentEntityData,
           fragment_envelope: {
             reason: "no_schema",
             entity_type: entityType,
           },
         });
-        unknownFieldsCount += Object.keys(entityData).length;
+        unknownFieldsCount += Object.keys(currentEntityData).length;
         continue;
       }
 
       // Exclude entity_type and type from field validation (they're metadata, not schema fields)
-      const fieldsToValidate = { ...entityData };
+      const fieldsToValidate = { ...currentEntityData };
       delete fieldsToValidate.entity_type;
       delete fieldsToValidate.type;
 
@@ -433,19 +449,28 @@ export async function runInterpretation(
             allObservations as any
           );
 
-          // Save snapshot
+          if (!snapshot) {
+            console.error(
+              `Failed to compute snapshot for entity ${entity.entityId}: computeSnapshot returned null`
+            );
+            continue;
+          }
+
+          const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
+            entity_id: snapshot.entity_id,
+            entity_type: snapshot.entity_type,
+            schema_version: snapshot.schema_version,
+            snapshot: snapshot.snapshot,
+            computed_at: snapshot.computed_at,
+            observation_count: snapshot.observation_count,
+            last_observation_at: snapshot.last_observation_at,
+            provenance: snapshot.provenance,
+            user_id: snapshot.user_id,
+          });
+          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
+
           await supabase.from("entity_snapshots").upsert(
-            {
-              entity_id: snapshot.entity_id,
-              entity_type: snapshot.entity_type,
-              schema_version: snapshot.schema_version,
-              snapshot: snapshot.snapshot,
-              computed_at: snapshot.computed_at,
-              observation_count: snapshot.observation_count,
-              last_observation_at: snapshot.last_observation_at,
-              provenance: snapshot.provenance,
-              user_id: snapshot.user_id,
-            },
+            toUpsert as Record<string, unknown>,
             {
               onConflict: "entity_id",
             }
@@ -703,10 +728,22 @@ export async function createRelationshipObservations(
       }
 
       if (obsError) {
-        console.error(
-          `Failed to create relationship observation: ${obsError.message}`,
-        );
-        continue;
+        const rawDetails =
+          typeof obsError === "object" && obsError && "details" in obsError
+            ? (obsError as { details?: string | Record<string, unknown> }).details
+            : undefined;
+        const detailsStr =
+          rawDetails != null
+            ? typeof rawDetails === "string"
+              ? rawDetails
+              : JSON.stringify(rawDetails)
+            : "";
+        const errMsg = detailsStr
+          ? `${obsError.message} (${detailsStr})`
+          : obsError.message;
+        const fullMsg = `Failed to create relationship observation for ${relationshipKey}: ${errMsg}`;
+        console.error(fullMsg);
+        throw new Error(fullMsg);
       }
 
       relationshipsCreated++;

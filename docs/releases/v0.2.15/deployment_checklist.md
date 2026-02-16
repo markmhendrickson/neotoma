@@ -85,7 +85,7 @@ SELECT EXISTS (
 
 **Build artifacts:**
 ```bash
-npm run build        # Backend
+npm run build:server   # Backend
 npm run build:ui     # Frontend
 ```
 
@@ -172,7 +172,7 @@ If critical issues found:
    ```bash
    git checkout v0.2.14
    npm install
-   npm run build
+   npm run build:server
    npm run build:ui
    ```
 

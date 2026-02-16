@@ -5,8 +5,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import { createClient } from "@supabase/supabase-js";
-import { supabase } from "../../src/db.js";
+import { randomBytes } from "node:crypto";
+import { supabase, getServiceRoleClient } from "../../src/db.js";
 import { config } from "../../src/config.js";
 import {
   initiateOAuthFlow,
@@ -17,17 +17,9 @@ import {
   handleOAuthCallback,
 } from "../../src/services/mcp_oauth.js";
 
-// Get service role client for OAuth state operations (bypasses RLS)
-function getServiceRoleClient() {
-  return createClient(config.supabaseUrl, config.supabaseKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
-}
-
-describe("MCP OAuth Flow Integration", () => {
+// OAuth flow tests require Supabase Auth (createUser/signInWithPassword); skip when using local SQLite backend
+const isLocalBackend = config.storageBackend === "local";
+describe.skipIf(isLocalBackend)("MCP OAuth Flow Integration", () => {
   const testConnectionId = `test-oauth-${Date.now()}`;
   let testUserId: string;
   let testAccessToken: string;

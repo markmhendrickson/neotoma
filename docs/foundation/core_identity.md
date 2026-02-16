@@ -34,7 +34,7 @@ Neotoma focuses exclusively on:
 8. **Entity Resolution** — Canonical ID generation for people, companies, locations across all personal data
 9. **Event Creation** — Timeline events from date fields across all personal data
 10. **Memory Graph Construction** — Records → Entities → Events with typed edges, relationships
-11. **Deterministic Retrieval** — Structured search and queries
+11. **Deterministic Retrieval** — Structured search and queries; optional semantic similarity for entity retrieval when text query provided
 12. **AI-Safe Access** — Truth exposure via MCP tools, enabling agents to both read and write structured memory (cross-platform: ChatGPT, Claude, Cursor)
 
 ## What Neotoma Is NOT
@@ -44,7 +44,7 @@ Neotoma is **not**:
 - A note-taking system or PKM app
 - A writing assistant or browser integration
 - A calendar client or financial planner
-- A crypto wallet or semantic search platform
+- A crypto wallet or general semantic search platform over arbitrary unstructured content (structured retrieval is primary; entity semantic search is an optional retrieval mode over the structured store)
 - A strategy layer (e.g., [Agentic Portfolio](../architecture/agentic_portfolio_overview.md) as an example instance for financial strategy)
 - An execution layer (e.g., [Agentic Wallet](../architecture/agentic_wallet_overview.md) as part of the execution layer for financial execution)
 **Any attempt to generate features outside this scope MUST be rejected.**

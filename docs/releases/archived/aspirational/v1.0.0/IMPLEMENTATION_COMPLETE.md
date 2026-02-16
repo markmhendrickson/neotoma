@@ -319,7 +319,7 @@ npm run dev               # MCP stdio mode
 ### Build
 
 ```bash
-npm run build             # TypeScript → dist/
+npm run build:server     # TypeScript → dist/
 npm run build:ui          # Vite → public/
 npm run type-check        # TSC validation
 ```

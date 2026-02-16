@@ -116,7 +116,8 @@ CREATE TABLE entity_snapshots (
   observation_count INTEGER NOT NULL,
   last_observation_at TIMESTAMPTZ NOT NULL,
   provenance JSONB NOT NULL,
-  user_id UUID NOT NULL
+  user_id UUID NOT NULL,
+  embedding vector(1536)
 );
 ```
 **Field Definitions:**
@@ -131,11 +132,15 @@ CREATE TABLE entity_snapshots (
 | `last_observation_at` | TIMESTAMPTZ | Timestamp of most recent observation                     | Yes     | No          |
 | `provenance`          | JSONB       | Maps field → observation_id, traces each field to source | Yes     | No          |
 | `user_id`             | UUID        | User who owns this entity                                | No      | Yes         |
+| `embedding`           | vector(1536)| Optional embedding for semantic similarity search        | Yes     | Yes (ivfflat) |
 **Indexes:**
 ```sql
 CREATE INDEX idx_snapshots_type ON entity_snapshots(entity_type);
 CREATE INDEX idx_snapshots_user ON entity_snapshots(user_id);
 CREATE INDEX idx_snapshots_snapshot ON entity_snapshots USING GIN(snapshot);
+CREATE INDEX idx_entity_snapshots_embedding ON entity_snapshots
+  USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)
+  WHERE embedding IS NOT NULL;
 ```
 **Notes:**
 - Snapshots are recomputed when new observations arrive

@@ -25,9 +25,15 @@ A given operation MUST always produce the same final state:
 The Truth Layer MUST contain **no**:
 - Inference or prediction
 - Heuristics beyond allowed extraction rules
-- Semantic search (MVP constraint)
-- LLM-based field extraction (MVP)
+- Semantic-only retrieval (MVP: structural retrieval primary; entity semantic search allowed as optional path over structured state when text query provided)
 - Strategy or execution logic
+
+**Note:** Entity semantic search embeds structured output (entity snapshots), not raw chunks; structure drives what is searchable.
+
+**Note:** AI interpretation for unstructured files is permitted with:
+- Config logging (model, temperature, prompt_hash)
+- Canonicalization and hashing for idempotence
+- No claims of replay determinism
 
 ## 5.4 Truth is Immutable
 Once stored, these MUST NOT change:
@@ -48,7 +54,8 @@ Neotoma never:
 - Infers relationships beyond explicit extraction
 - Predicts future states
 - Hallucinates data
-**Only deterministic, rule-based processing.**
+
+**Processing approach:** AI interpretation is used for unstructured data extraction with audit trail and idempotence guarantees. The LLM extracts fields present in the source document but does not synthesize or infer data.
 
 ## 5.7 Full Explainability
 Every output MUST trace to:
@@ -79,7 +86,7 @@ Every output MUST trace to:
 17. **Pure Strategy:** Strategy Layer has no side effects
 18. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly
 ### MUST NOT
-1. **No semantic search** (MVP; structured search only; vector search post-MVP)
+1. **No semantic-only retrieval** (structural retrieval remains primary; entity semantic search permitted as supplemental path; set queries, relationship traversal, timelines remain structural)
 2. **No automatic ingestion** (explicit user action required)
 3. **No replay-deterministic claims for AI interpretation** (auditable but not replay-deterministic; see `docs/architecture/determinism.md`)
 4. **No nondeterminism in core components** (no random IDs for entities/events, no Date.now() in entity ID generation)

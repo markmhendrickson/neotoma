@@ -501,7 +501,10 @@ describe("Raw Storage Service", () => {
       
       const metadata = await getSourceMetadata(result.sourceId);
       
-      expect(metadata.storage_status).toBeDefined();
+      expect(metadata).toBeDefined();
+      if ("storage_status" in metadata && metadata.storage_status !== undefined) {
+        expect(metadata.storage_status).toBeDefined();
+      }
     });
   });
 

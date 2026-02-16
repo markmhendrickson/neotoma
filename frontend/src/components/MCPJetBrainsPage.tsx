@@ -62,7 +62,7 @@ export function MCPJetBrainsPage() {
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Open your JetBrains IDE (IntelliJ IDEA, WebStorm, PyCharm, etc.)</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
-              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
               <li>Install the MCP plugin (if available) or configure via Settings</li>
               <li>Navigate to Settings → Tools → MCP Servers</li>
               <li>Add the configuration above to your MCP servers list</li>

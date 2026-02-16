@@ -688,41 +688,72 @@ This document does NOT cover:
 - **Retention:** 30 days
 - **Deletion:** Automatic after retention period
 ### 8.2 Deletion Procedures
-**User-Requested Deletion:**
-**Process:**
+
+**Reference:** `docs/subsystems/deletion.md` — Complete deletion architecture and procedures
+
+Neotoma uses a **two-tier deletion approach** that satisfies GDPR Article 17 while maintaining immutability:
+
+**Tier 1: Soft Deletion (Immutable)**
+- Creates deletion observation with `_deleted: true` field
+- Highest priority (1000) to override other observations
+- Maintains full audit trail and immutability
+- Reducers exclude deleted entities from snapshots
+- Queries filter deleted items by default
+
+**Tier 2: Hard Deletion (GDPR-Compliant)**
+- **Cryptographic Erasure**: Encrypt data with user-specific key, then delete key (data becomes irretrievable)
+- **Physical Deletion**: Delete observations and snapshots after legal retention periods expire (breaks immutability)
+
+**User-Requested Deletion Process:**
+
 1. User requests deletion via support ticket or `delete_request@neotoma.com`
 2. Verify user identity
 3. Check legal basis:
-   - **If consent-based:** Proceed with deletion
+   - **If consent-based:** Proceed with soft deletion + cryptographic erasure
    - **If contract-based:** May retain if necessary for contract performance
-   - **If legal obligation:** Retain if required by law
-4. Execute deletion:
-   ```sql
-   -- Delete user's records and related data
-   DELETE FROM record_entity_edges WHERE record_id IN (
-     SELECT id FROM records WHERE user_id = $1
+   - **If legal obligation:** Soft delete now, cryptographic erasure after retention period (e.g., tax records after 7 years)
+4. Create deletion request:
+   ```typescript
+   await createDeletionRequest(
+     userId,
+     deletionType: "entity" | "relationship" | "user_data_complete",
+     entityId?, // Optional
+     legalBasis: "user_request" | "consent_withdrawal" | ...,
+     retentionPeriodDays?, // For legal obligations
+     retentionReason? // E.g., "Tax records - 7 years"
    );
-   DELETE FROM record_event_edges WHERE record_id IN (
-     SELECT id FROM records WHERE user_id = $1
-   );
-   DELETE FROM records WHERE user_id = $1;
-   -- Note: Entities may be shared; only delete if no other records reference them
    ```
-5. Delete from backups (within 30 days)
-6. Confirm deletion to user (within 30 days)
-7. Log deletion request and execution
-**Automated Deletion:**
-**Account Inactivity:**
-- **Policy:** No automatic deletion (user controls)
-- **Future:** Consider deletion after 2+ years of inactivity (with notification)
-**Legal Obligation Deletion:**
-- **Policy:** Delete when legal obligation expires (e.g., tax records after 7 years)
-- **Process:** Automated deletion based on retention policy
+5. Execute deletion:
+   - **Immediate**: Soft deletion (data removed from active use)
+   - **Within 30 days**: Cryptographic erasure (data made irretrievable) or wait for retention period
+6. Delete from backups (within 30-day backup retention period)
+7. Confirm deletion to user (within 30 days)
+8. Log deletion request and execution in `deletion_requests` table
+
 **Deletion Verification:**
-- Verify data deleted from production database
+- Verify soft deletion observation created
+- Verify hard deletion executed (encryption key deleted or physical deletion)
 - Verify data deleted from backups (within retention period)
-- Confirm deletion to user
-- Document deletion in audit log
+- Confirm deletion to user via email
+- Document deletion request completion in `deletion_requests` table
+
+**GDPR Timeline Compliance:**
+- **Standard**: 30 days from request
+- **Extended**: Up to 90 days for complex requests (must notify user within first month)
+- **Immediate**: Soft deletion happens within hours
+- **Backup deletion**: Within 30-day backup retention period
+
+**Automated Deletion:**
+
+**Retention Period Expiration:**
+- **Policy**: Automatically trigger hard deletion when retention periods expire
+- **Process**: Daily cron job checks `deletion_requests` for expired retention periods
+- **Example**: Tax records deleted 7 years after soft deletion
+
+**Deadline Monitoring:**
+- **Daily cron job**: Checks deletion request deadlines
+- **Approaching deadline alerts**: Generated 7 days before deadline
+- **Overdue escalation**: Automatic processing or manual escalation for complex requests
 ## 9. Regulatory Compliance
 ### 9.1 GDPR (EU/EEA)
 **Status:** Applicable (if EU users)

@@ -4,46 +4,47 @@
 
 **Context:** Notion MCP uses HTTPS production URL (`https://mcp.notion.com/mcp`) and successfully shows Connect button. Testing with HTTPS may be required for Connect button to appear.
 
+**Tunnel setup:** For full tunnel documentation (Cloudflare and ngrok, scripts, env vars, troubleshooting), see [tunnels.md](tunnels.md).
+
 ---
 
 ## Prerequisites
 
-1. **ngrok installed:**
+1. **Tunnel provider:** Either Cloudflare (`cloudflared`) or ngrok. The script prefers Cloudflare when `cloudflared` is installed; otherwise ngrok (must be installed and authenticated). See [tunnels.md](tunnels.md).
+
+2. **ngrok (if using ngrok):**
    ```bash
-   # Homebrew
    brew install ngrok/ngrok/ngrok
-   
-   # Or download from https://ngrok.com/download
+   ngrok config add-authtoken YOUR_AUTHTOKEN   # from https://dashboard.ngrok.com/get-started/your-authtoken
    ```
 
-2. **ngrok authenticated:**
+3. **Cloudflare (if using Cloudflare):**
    ```bash
-   # Sign up at https://dashboard.ngrok.com/signup (free account)
-   # Get authtoken from https://dashboard.ngrok.com/get-started/your-authtoken
-   ngrok config add-authtoken YOUR_AUTHTOKEN
+   brew install cloudflare/cloudflare/cloudflared
    ```
 
-3. **MCP server running:**
+4. **MCP server with tunnel:**
    ```bash
-   npm run dev:mcp
+   npm run dev:api
    ```
 
 ---
 
 ## Step 1: Start HTTPS Tunnel
 
-Run the tunnel script:
+Run the tunnel script (or use a combined command that starts server and tunnel):
 
 ```bash
 npm run tunnel:https
+# Or: npm run dev:api   (tunnel + server together)
 ```
 
 This will:
-- Start ngrok tunnel on port 8080
-- Display the HTTPS URL (e.g., `https://abc123.ngrok-free.app`)
-- Show configuration instructions
+- Start the tunnel (Cloudflare or ngrok, see [tunnels.md](tunnels.md)) on port 8080
+- Display the HTTPS URL (e.g. `https://<random>.trycloudflare.com` or `https://<random>.ngrok-free.app`)
+- Write the URL to `/tmp/ngrok-mcp-url.txt`
 
-**Keep this terminal open** - the tunnel must remain active.
+**Keep this terminal open** so the tunnel stays active.
 
 ---
 
@@ -60,7 +61,7 @@ In a **new terminal**, set the API base URL and restart the server:
 export API_BASE_URL=https://abc123.ngrok-free.app
 
 # Restart the MCP server with HTTPS URL
-npm run dev:mcp
+npm run dev:api
 ```
 
 ### Option B: Update .env File
@@ -148,19 +149,9 @@ Update `.cursor/mcp.json` to use the HTTPS URL:
 
 ---
 
-## Alternative: Use Cloudflare Tunnel
+## Alternative: Use Cloudflare as tunnel provider
 
-If ngrok doesn't work, try Cloudflare Tunnel:
-
-```bash
-# Install cloudflared
-brew install cloudflare/cloudflare/cloudflared
-
-# Create tunnel
-cloudflared tunnel --url http://localhost:8080
-```
-
-Update `API_BASE_URL` and `.cursor/mcp.json` with the Cloudflare tunnel URL.
+If cloudflared is installed, the script uses Cloudflare by default. To force Cloudflare: `NEOTOMA_TUNNEL_PROVIDER=cloudflare`. Install: `brew install cloudflare/cloudflare/cloudflared`. No Cloudflare account required for quick tunnels. See [tunnels.md](tunnels.md). The script writes the tunnel URL to the same file so the server and Cursor config flow are unchanged.
 
 ---
 
@@ -179,6 +170,9 @@ To stop the tunnel:
 
 ## References
 
+- [tunnels.md](tunnels.md) — Full tunnel documentation (Cloudflare, ngrok, scripts, env, troubleshooting)
+- [mcp_https_tunnel_status.md](mcp_https_tunnel_status.md) — Tunnel status and quick fixes
+- [mcp_connect_button_troubleshooting.md](mcp_connect_button_troubleshooting.md) — Connect button troubleshooting
 - ngrok: https://ngrok.com/
+- Cloudflare: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
 - Notion MCP: https://mcp.notion.com/mcp (production HTTPS example)
-- Troubleshooting guide: `docs/developer/mcp_connect_button_troubleshooting.md`

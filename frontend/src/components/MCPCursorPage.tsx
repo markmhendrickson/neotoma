@@ -287,7 +287,7 @@ export function MCPCursorPage() {
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>
                 Build the MCP server:{" "}
-                <code className="bg-muted px-1 py-0.5 rounded">npm run build</code>
+                <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code>
               </li>
               <li>
                 Create/edit <code className="bg-muted px-1 py-0.5 rounded">.cursor/mcp.json</code>{" "}

@@ -3,7 +3,7 @@
  * 
  * Tests per MCP_SPEC.md section 3.1 (unstructured path):
  * - File content or file path input
- * - Interpretation pipeline
+ * - AI interpretation pipeline (LLM extraction)
  * - Deduplication (deterministic content hashing)
  * - Response schema validation
  */
@@ -298,6 +298,44 @@ describe("MCP Store with Unstructured Files - Integration", () => {
       }
 
       expect(error).toBeDefined();
+    });
+
+    it("should skip interpretation when OpenAI is not configured", async () => {
+      // Store original env var
+      const originalKey = process.env.OPENAI_API_KEY;
+      
+      // Temporarily remove OpenAI key
+      delete process.env.OPENAI_API_KEY;
+      
+      try {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+        const testFile = path.join(tempDir, "test_no_openai.txt");
+        tempFiles.push(testFile);
+        tempFiles.push(tempDir);
+
+        fs.writeFileSync(testFile, "Test content without OpenAI");
+
+        const result = await (server as any).store({
+          user_id: testUserId,
+          file_path: testFile,
+          interpret: true, // Request interpretation but OpenAI not configured
+        });
+
+        const responseData = JSON.parse(result.content[0].text);
+
+        // Should skip interpretation with clear message
+        expect(responseData.interpretation).toBeDefined();
+        expect(responseData.interpretation.skipped).toBe(true);
+        expect(responseData.interpretation.reason).toBe("openai_not_configured");
+        expect(responseData.interpretation.message).toContain("OPENAI_API_KEY");
+        
+        createdSourceIds.push(responseData.source_id);
+      } finally {
+        // Restore original env var
+        if (originalKey) {
+          process.env.OPENAI_API_KEY = originalKey;
+        }
+      }
     });
   });
 });

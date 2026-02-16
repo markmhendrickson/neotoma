@@ -38,6 +38,18 @@ fi
 # Validate documentation dependencies for modified docs
 npm run validate:doc-deps
 
+# Apply migrations automatically if migration files changed
+if git diff --cached --name-only | grep -E "supabase/migrations/.*\.sql$" > /dev/null; then
+  echo "Applying database migrations..."
+  npm run migrate || {
+    echo "❌ Migration failed - fix errors before committing"
+    exit 1
+  }
+fi
+
 # Check Supabase advisor issues (migrations only)
 # Block commits if RLS errors are found - these are security issues
 npm run check:advisors
+
+# Sync .cursor/ and .claude/ if rule/command sources modified
+./scripts/linters/sync_agent_instructions_pre_commit.sh

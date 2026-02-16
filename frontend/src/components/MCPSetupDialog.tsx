@@ -167,7 +167,7 @@ export function MCPSetupDialog({ trigger }: MCPSetupDialogProps) {
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold mb-2">Setup Steps</h3>
               <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                 <li>Create/edit <code className="bg-muted px-1 py-0.5 rounded">.cursor/mcp.json</code> with the configuration above</li>
                 <li>Restart Cursor to detect the new MCP server</li>
                 <li>Test connection by asking Cursor to use Neotoma actions</li>
@@ -240,7 +240,7 @@ export function MCPSetupDialog({ trigger }: MCPSetupDialogProps) {
             <div className="border-t pt-4">
               <h3 className="text-sm font-semibold mb-2">Setup Steps</h3>
               <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                 <li>Open Claude Desktop settings</li>
                 <li>Add the configuration to <code className="bg-muted px-1 py-0.5 rounded">claude_desktop_config.json</code></li>
                 <li>Restart Claude Desktop</li>

@@ -5,18 +5,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
-import { createClient } from "@supabase/supabase-js";
-import { config } from "../../src/config.js";
+import { supabase, getServiceRoleClient } from "../../src/db.js";
 import { queryEntities, type EntityQueryOptions } from "../../src/services/entity_queries.js";
 
-// Create service role client for test data setup (bypasses RLS)
-const serviceRoleClient = createClient(config.supabaseUrl, config.supabaseKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+const serviceRoleClient = getServiceRoleClient();
 
 describe("Entity Queries Service", () => {
   const testUserId = "00000000-0000-0000-0000-000000000000";
@@ -610,6 +602,7 @@ describe("Entity Queries Service", () => {
         entity_type: "company",
         user_id: testUserId,
         snapshot: { name: "Provenance Test Company" },
+        provenance: {},
         observation_count: 1,
         last_observation_at: new Date().toISOString(),
         schema_version: "1.0",

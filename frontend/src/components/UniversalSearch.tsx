@@ -1,13 +1,14 @@
 /**
  * Universal Search Component
- * 
- * Search dropdown that shows up to 3 results across routes, entities, sources, observations, and interpretations
+ *
+ * Search dropdown that shows up to 3 results across routes, entities, sources, observations, and interpretations.
+ * Type / for a filterable command palette (name + description, autocomplete).
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, FileText, Eye, Layers, Users, Navigation } from "lucide-react";
+import { Loader2, Search, FileText, Eye, Layers, Users, Navigation, Slash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
@@ -19,6 +20,12 @@ interface SearchResult {
   type: "entity" | "source" | "observation" | "interpretation" | "route";
   title: string;
   subtitle?: string;
+  href: string;
+}
+
+export interface CommandItem {
+  name: string;
+  description: string;
   href: string;
 }
 
@@ -37,6 +44,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const commandDropdownRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout>();
 
   const { settings } = useSettings();
@@ -66,13 +74,56 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
     { path: "/design-system", label: "Design System" },
   ];
 
-  // Debounced search
+  // Commands for "/" palette (name = slug for filtering, description for UI)
+  const commands: CommandItem[] = [
+    { name: "dashboard", description: "Go to dashboard", href: "/" },
+    { name: "sources", description: "View and manage sources", href: "/sources" },
+    { name: "interpretations", description: "Browse interpretations", href: "/interpretations" },
+    { name: "observations", description: "Browse observations", href: "/observations" },
+    { name: "schemas", description: "View entity schemas", href: "/schemas" },
+    { name: "relationships", description: "View relationship graph", href: "/relationships" },
+    { name: "timeline", description: "View timeline events", href: "/timeline" },
+    { name: "search", description: "Full search page", href: "/search" },
+    { name: "cursor", description: "Cursor MCP setup", href: "/mcp/cursor" },
+    { name: "chatgpt", description: "ChatGPT MCP setup", href: "/mcp/chatgpt" },
+    { name: "claude", description: "Claude MCP setup", href: "/mcp/claude" },
+    { name: "continue", description: "Continue MCP setup", href: "/mcp/continue" },
+    { name: "copilot", description: "GitHub Copilot MCP setup", href: "/mcp/copilot" },
+    { name: "vscode", description: "VSCode MCP setup", href: "/mcp/vscode" },
+    { name: "gemini", description: "Gemini MCP setup", href: "/mcp/gemini" },
+    { name: "grok", description: "Grok MCP setup", href: "/mcp/grok" },
+    { name: "oauth", description: "OAuth configuration", href: "/oauth" },
+    { name: "design-system", description: "Design system and style guide", href: "/design-system" },
+  ];
+
+  const isCommandMode = query.startsWith("/");
+  const commandFilter = (query.slice(1).trim() || "").toLowerCase();
+  const filteredCommands = useMemo(() => {
+    if (!commandFilter) return commands;
+    return commands.filter(
+      (c) =>
+        c.name.toLowerCase().includes(commandFilter) ||
+        c.description.toLowerCase().includes(commandFilter)
+    );
+  }, [commandFilter]);
+
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  useEffect(() => {
+    setSelectedCommandIndex(0);
+  }, [commandFilter]);
+  useEffect(() => {
+    if (selectedCommandIndex >= filteredCommands.length && filteredCommands.length > 0) {
+      setSelectedCommandIndex(filteredCommands.length - 1);
+    }
+  }, [filteredCommands.length, selectedCommandIndex]);
+
+  // Debounced search (skip when in "/" command mode)
   useEffect(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
 
-    if (!query.trim() || query.length < 2) {
+    if (isCommandMode || !query.trim() || query.length < 2) {
       setResults([]);
       setLoading(false);
       return;
@@ -88,7 +139,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [query, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+  }, [query, isCommandMode, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
 
   async function performSearch(searchQuery: string) {
     const userId = user?.id;
@@ -280,6 +331,42 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
     }
   };
 
+  const handleCommandSelect = (cmd: CommandItem, event?: React.MouseEvent) => {
+    if (event?.metaKey || event?.ctrlKey) {
+      window.open(cmd.href, "_blank", "noopener,noreferrer");
+    } else {
+      setOpen(false);
+      setQuery("");
+      navigate(cmd.href);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+      return;
+    }
+    if (!isCommandMode || !open) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedCommandIndex((i) => (i + 1) % Math.max(1, filteredCommands.length));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedCommandIndex((i) =>
+        i <= 0 ? Math.max(0, filteredCommands.length - 1) : i - 1
+      );
+    } else if (e.key === "Enter" && filteredCommands.length > 0) {
+      e.preventDefault();
+      const cmd = filteredCommands[selectedCommandIndex];
+      if (cmd) {
+        setOpen(false);
+        setQuery("");
+        navigate(cmd.href);
+      }
+    }
+  };
+
   const getIcon = (type: SearchResult["type"]) => {
     switch (type) {
       case "entity":
@@ -299,12 +386,10 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Node;
-      if (
-        inputRef.current &&
-        !inputRef.current.contains(target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(target)
-      ) {
+      const inInput = inputRef.current?.contains(target);
+      const inDropdown = dropdownRef.current?.contains(target);
+      const inCommandDropdown = commandDropdownRef.current?.contains(target);
+      if (!inInput && !inDropdown && !inCommandDropdown) {
         setOpen(false);
       }
     }
@@ -321,16 +406,61 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       <Input
         ref={inputRef}
         type="text"
-        placeholder="Search"
+        placeholder="Search or / for commands"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => setOpen(true)}
+        onKeyDown={handleKeyDown}
         className={cn(widthClass, "pl-9 h-8 pt-0.5 pb-1 text-[13px]")}
       />
-      {open && (query.length >= 2 || results.length > 0) && (
+      {open && query === "" && (
+        <div className="absolute left-0 top-full mt-1 text-xs text-muted-foreground flex items-center gap-1.5 px-1">
+          <Slash className="h-3.5 w-3.5" />
+          <span>/ for commands</span>
+        </div>
+      )}
+      {open && isCommandMode && (
+        <div
+          ref={commandDropdownRef}
+          className={cn(
+            "absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50 max-h-[320px] overflow-hidden flex flex-col",
+            widthClass
+          )}
+        >
+          <div className="px-3 py-2 border-b bg-muted/30 text-xs text-muted-foreground">
+            Type to filter commands
+          </div>
+          <div className="overflow-y-auto max-h-[280px]">
+            {filteredCommands.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground text-center">
+                No commands match
+              </div>
+            ) : (
+              filteredCommands.map((cmd, idx) => (
+                <button
+                  key={cmd.href}
+                  type="button"
+                  onClick={(event) => handleCommandSelect(cmd, event)}
+                  className={cn(
+                    "w-full flex flex-col gap-0.5 px-4 py-2.5 text-left transition-colors",
+                    idx === selectedCommandIndex ? "bg-primary/10 text-foreground" : "hover:bg-muted/50"
+                  )}
+                >
+                  <span className="text-sm font-medium">{cmd.name}</span>
+                  <span className="text-xs text-muted-foreground">{cmd.description}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+      {open && !isCommandMode && (query.length >= 2 || results.length > 0) && (
         <div
           ref={dropdownRef}
-          className={cn("absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50", widthClass)}
+          className={cn(
+            "absolute top-full left-0 mt-1 bg-popover border rounded-md shadow-lg z-50",
+            widthClass
+          )}
         >
           {loading ? (
             <div className="flex items-center justify-center p-4">

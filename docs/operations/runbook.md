@@ -25,7 +25,7 @@ It does not cover:
 ### Local development
 
 1. **Prerequisites:** Node.js v18/v20, npm 9+. Optional: Supabase project if using remote backend.
-2. **Environment:** Copy or create `.env` (see [Getting started](../developer/getting_started.md)). For local storage: `NEOTOMA_STORAGE_BACKEND=local`. For Supabase: set `DEV_SUPABASE_PROJECT_ID` and `DEV_SUPABASE_SERVICE_KEY`.
+2. **Environment:** Copy or create `.env` (see [Getting started](../developer/getting_started.md)). For local storage, no env vars are required (defaults: local backend, `./data`, `./data/neotoma.db`, `./data/sources`). For Supabase: set `NEOTOMA_STORAGE_BACKEND=supabase`, `DEV_SUPABASE_PROJECT_ID`, and `DEV_SUPABASE_SERVICE_KEY`.
 3. **Install and migrate:**
    ```bash
    npm install
@@ -40,7 +40,7 @@ It does not cover:
 
 ### Production
 
-1. Build: `npm run build`.
+1. Build: `npm run build:server`.
 2. Set production env (storage backend, Supabase credentials, HTTPS, OAuth config).
 3. Run migrations: `npm run migrate` (Supabase) or ensure local DB path is correct.
 4. Start: `node dist/actions.js` (API) or `node dist/index.js` (stdio MCP). Use a process manager (e.g. systemd, PM2) and HTTPS in front.

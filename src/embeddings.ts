@@ -60,3 +60,17 @@ export function getRecordText(
   const propsText = JSON.stringify(properties);
   return `${type} ${propsText}`;
 }
+
+/**
+ * Generate searchable text for an entity snapshot (for embedding generation).
+ * Used for entity semantic search. Embeds structured output: entity_type,
+ * canonical_name, and snapshot fields. Structure drives what is searchable.
+ */
+export function getEntitySearchableText(
+  entityType: string,
+  canonicalName: string,
+  snapshot: Record<string, unknown>,
+): string {
+  const snapshotText = JSON.stringify(snapshot);
+  return `${entityType} ${canonicalName} ${snapshotText}`;
+}

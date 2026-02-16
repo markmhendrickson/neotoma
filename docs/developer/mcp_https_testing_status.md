@@ -39,7 +39,7 @@
 export API_BASE_URL="https://melissia-introrse-correspondently.ngrok-free.dev"
 
 # Restart MCP server
-npm run dev:mcp
+npm run dev:api
 ```
 
 **Or add to `.env` file:**

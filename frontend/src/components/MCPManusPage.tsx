@@ -61,7 +61,7 @@ export function MCPManusPage() {
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Open Manus AI IDE</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
-              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
               <li>Navigate to Settings → Integrations → MCP Connectors</li>
               <li>Click "Add Custom MCP Server"</li>
               <li>Add the configuration above to your MCP servers list</li>

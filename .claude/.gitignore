@@ -1,0 +1,7 @@
+# Local overrides (not committed)
+settings.local.json
+*.local.json
+*.local.md
+
+# User-specific state
+.cache/

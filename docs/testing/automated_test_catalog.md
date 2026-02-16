@@ -34,6 +34,39 @@ This document does not cover:
 ## Data models or schemas
 None.
 
+## Default (local) vs optional test modes
+
+- **Default (`npm test`)**: Runs **unit, service, and integration tests against the local SQLite DB**. Vitest setup sets `NEOTOMA_STORAGE_BACKEND=local` and a test DB under `.vitest/` (no Supabase required). Some integration and service tests that are not yet compatible with the local adapter are excluded from the default run; use Supabase mode to run them. Excludes: `data/imports/**`, React/frontend tests (unless frontend mode), tests for missing/broken modules, Playwright, and the integration/service files listed in "What is skipped" below.
+- **Supabase mode (`npm run test:supabase`)**: Sets `RUN_SUPABASE_TESTS=1`, runs Supabase migrations in setup, and runs the same suites against Supabase when env (e.g. `DEV_SUPABASE_*` or `SUPABASE_*`) is configured. Run: `RUN_SUPABASE_TESTS=1 npm test` or `npm run test:supabase`.
+- **Frontend mode (`npm run test:frontend`)**: Sets `RUN_FRONTEND_TESTS=1` and runs only React/frontend tests in `frontend/src`. Use when you need to run or debug React component and frontend unit tests (jsdom). Run: `RUN_FRONTEND_TESTS=1 npm test -- frontend/src` or `npm run test:frontend`.
+
+## Qualitative description: default run (npm test) vs skipped
+
+This section describes, in plain language, what the default `npm test` run executes and what it leaves out.
+
+### What runs (included in default)
+
+- **Backend unit and service logic.** Record-type normalization, CSV summary and Lucide icon helpers, crypto and key derivation, property keys and sanitization, action schemas, entity resolution, field canonicalization and validation, capability registry, interpretation and observation identity, encryption service, MCP OAuth and local auth, schema icon service, raw storage, schema registry incremental, auto-enhancement, observation reducer converters, deletion service, and similar modules. These run against the **local SQLite test DB** (`.vitest/neotoma.db`) when Supabase is not enabled.
+- **Integration tests (subset).** Dashboard stats, v0.2.0 ingestion, GDPR soft-delete and encryption, and other integration tests that work with the local SQLite adapter run by default. MCP OAuth flow integration tests are skipped when using the local backend (they require Supabase Auth).
+- **CLI and contract tests.** CLI smoke tests (auth status, entities list) and config parsing; contract tests that assert OpenAPI operation IDs are covered by mappings and that the OpenAPI schema is valid.
+- **Fixture and repo-level tests.** Fixture replay (e.g. replay_graph), SQLite Supabase adapter behavior, and any other tests that run with the local backend.
+
+Overall, the default run uses the **local SQLite DB** under `.vitest/`: no Supabase or migrations required, no jsdom, and no Playwright. You get full backend coverage including integration tests without Supabase.
+
+### What is skipped (excluded or opt-in)
+
+- **Integration/service tests excluded when running local.** The following run only with `RUN_SUPABASE_TESTS=1` until the local SQLite adapter is fully compatible: entity_queries, field_converters (integration), gdpr_deletion, llm_extraction, mcp_actions_matrix, mcp_auto_enhancement, mcp_auto_schema_creation, mcp_entity_creation, mcp_resources, mcp_schema_actions, mcp_store_parquet, mcp_store_unstructured, observation_ingestion, relationship_snapshots, schema_recommendation_integration; auto_enhancement_converter_detection, auto_enhancement_processor (service).
+- **MCP OAuth flow integration tests.** Skipped when using the local backend (`NEOTOMA_STORAGE_BACKEND=local`) because they require Supabase Auth (createUser/signInWithPassword). They run when `RUN_SUPABASE_TESTS=1` with Supabase configured.
+- **React and frontend tests (`frontend/src/**/*.test.ts`, `frontend/src/**/*.test.tsx`).** Component and UI logic tests that use jsdom. Skipped in the default run to avoid ESM/worker issues; run with `RUN_FRONTEND_TESTS=1` or `npm run test:frontend`. SchemaDetail.test.tsx is always excluded due to a known jsdom/worker error.
+- **Tests for missing or broken modules.** Payload identity, payload schema, and schema recommendation test files are excluded because the modules they import are not implemented or fail to load. Summary service tests are present but marked `it.skip` because the summary module does not exist yet.
+- **Agent MCP instruction behavior tests (`tests/agent/mcp_instruction_behavior.test.ts`).** The whole suite is conditionally skipped unless `AGENT_TEST_ENABLED=true`. These tests drive an external agent (e.g. Claude or Cursor CLI) and are opt-in for environment and cost reasons.
+- **Data/imports and Playwright.** Tests under `data/imports/**` and all Playwright E2E tests are never part of the default Vitest run; run them explicitly when needed.
+
+### Summary
+
+- **Included:** Unit, service, and integration tests run against the local SQLite DB (`.vitest/`); CLI and contract checks; fixture and adapter tests. No Supabase or browser required for default run.
+- **Skipped:** MCP OAuth flow integration tests (when using local backend); frontend tests (unless frontend mode); tests for missing/broken modules; agent-driven tests (unless enabled); data/imports and E2E.
+
 ## Flows and sequences
 ### Test execution flow
 1. Configure environment variables for the suite.
@@ -61,9 +94,9 @@ Files:
 - `tests/unit/schema_inference.test.ts`
 
 ### Vitest service tests
-**Directory:** `tests/services/`  
+**Directory:** `tests/services/` and `src/services/__tests__/`  
 **Runner:** `vitest`  
-**Command:** `npm test -- tests/services`  
+**Command:** `npm test -- tests/services` or `npm test -- src/services/__tests__`  
 **Requirements:** Basic `.env` with Supabase settings, see `docs/testing/test_environment_configuration.md`.
 
 Files:
@@ -88,18 +121,25 @@ Files:
 - `tests/services/schema_registry_incremental.test.ts`
 - `tests/services/search.test.ts`
 - `tests/services/summary.test.ts`
+- `src/services/__tests__/deletion.test.ts` — Soft deletion service tests
+- `src/services/__tests__/local_auth.test.ts`
+- `src/services/__tests__/mcp_oauth.test.ts`
+- `src/services/__tests__/oauth_state.test.ts`
+- `src/services/__tests__/schema_icon_service.test.ts`
 
 ### Vitest integration tests
 **Directory:** `tests/integration/`  
 **Runner:** `vitest`  
-**Command:** `npm run test:integration`  
-**Requirements:** Supabase service role key and migrations applied, see `docs/testing/test_environment_configuration.md`.
+**Commands:** `npm run test:integration` (integration only); `npm run test:supabase` (full suite including integration).  
+**Requirements:** Supabase service role key and migrations applied, see `docs/testing/test_environment_configuration.md`.  
+**Note:** Excluded by default from `npm test`; use `RUN_SUPABASE_TESTS=1` or `npm run test:supabase` to include.
 
 Files:
 - `tests/integration/dashboard_stats.test.ts`
 - `tests/integration/entity_queries.test.ts`
 - `tests/integration/event_generation.test.ts`
 - `tests/integration/field_converters.test.ts`
+- `tests/integration/gdpr_deletion.test.ts` — GDPR deletion workflows (soft + hard deletion)
 - `tests/integration/llm_extraction.test.ts`
 - `tests/integration/mcp_actions_matrix.test.ts`
 - `tests/integration/mcp_auto_enhancement.test.ts`
@@ -161,8 +201,9 @@ Files:
 
 ### Frontend Vitest tests
 **Directory:** `frontend/src/`  
-**Runner:** `vitest`  
-**Command:** `npm test -- frontend/src`  
+**Runner:** `vitest` (jsdom)  
+**Command:** `npm run test:frontend` or `RUN_FRONTEND_TESTS=1 npm test -- frontend/src`  
+**Note:** Excluded by default from `npm test`; use `RUN_FRONTEND_TESTS=1` or `npm run test:frontend` to run React/frontend tests.  
 **Requirements:** None beyond base repo setup.
 
 Files:

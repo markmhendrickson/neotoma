@@ -32,7 +32,7 @@ npm list neotoma
 
 ```bash
 # Start MCP server (if not running)
-npm run dev:mcp
+npm run dev:api
 
 # Verify MCP server is accessible
 curl http://localhost:3000/mcp/health

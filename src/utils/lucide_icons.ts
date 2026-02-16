@@ -245,9 +245,9 @@ export function getSuggestedIcon(entityType: string): string | null {
     return ENTITY_TYPE_ICON_MAP[entityType];
   }
   
-  // Pattern matching
+  // Pattern matching (people before document so "user_profile" matches User not File)
   const type = entityType.toLowerCase();
-  
+
   // Financial patterns
   if (type.includes("payment") || type.includes("transaction")) {
     return "DollarSign";
@@ -258,22 +258,22 @@ export function getSuggestedIcon(entityType: string): string | null {
   if (type.includes("receipt")) {
     return "Receipt";
   }
-  
-  // Document patterns
-  if (type.includes("document") || type.includes("file")) {
-    return "File";
-  }
-  if (type.includes("note")) {
-    return "FileText";
-  }
-  
-  // People patterns
+
+  // People patterns (before document so user_profile, contact_info match User)
   if (type.includes("person") || type.includes("user") || type.includes("contact")) {
     return "User";
   }
   if (type.includes("company") || type.includes("organization")) {
     return "Building2";
   }
-  
+
+  // Document patterns (after people so "profile" in user_profile does not match file)
+  if (type.includes("document") || type === "file" || /\bfile\b/.test(type)) {
+    return "File";
+  }
+  if (type.includes("note")) {
+    return "FileText";
+  }
+
   return null;
 }

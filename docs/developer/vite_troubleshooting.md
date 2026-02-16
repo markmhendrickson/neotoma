@@ -87,7 +87,7 @@ npm run build:ui
 - `VITE_PORT`: Override default dev server port (default: 5173)
 - `VITE_FORCE_OPTIMIZE`: Force dependency re-optimization (set to `true`)
 - `HTTP_PORT`: Backend API port (default: 8080)
-- `WS_PORT`: WebSocket port (default: 8081)
+- `WS_PORT`: WebSocket port (default: 8280)
 ## Agent Instructions
 ### When to Load This Document
 Load `docs/developer/vite_troubleshooting.md` when:

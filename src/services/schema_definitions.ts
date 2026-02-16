@@ -840,6 +840,8 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       merge_policies: {
         status: { strategy: "last_write" },
         completed_date: { strategy: "last_write" },
+        notes: { strategy: "highest_priority", tie_breaker: "source_priority" },
+        description: { strategy: "highest_priority", tie_breaker: "source_priority" },
         updated_date: { strategy: "last_write" },
         created_at: { strategy: "last_write" },
         updated_at: { strategy: "last_write" },
@@ -1020,6 +1022,52 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  dataset: {
+    entity_type: "dataset",
+    schema_version: "1.0",
+    metadata: {
+      label: "Dataset",
+      description: "Tabular datasets produced from CSV or spreadsheet uploads.",
+      category: "knowledge",
+      primaryProperties: ["row_count", "source_file", "summary"],
+      aliases: ["csv", "spreadsheet", "table", "dataset_file"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        row_count: { type: "number", required: false },
+        source_file: { type: "string", required: false },
+        summary: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {},
+    },
+  },
+
+  dataset_row: {
+    entity_type: "dataset_row",
+    schema_version: "1.0",
+    metadata: {
+      label: "Dataset Row",
+      description: "Single row derived from a dataset upload.",
+      category: "knowledge",
+      primaryProperties: ["csv_origin", "row_index", "source_file"],
+      aliases: ["table_row", "csv_row"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        csv_origin: { type: "string", required: false },
+        row_index: { type: "number", required: false },
+        source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {},
+    },
+  },
+
   event: {
     entity_type: "event",
     schema_version: "1.0",
@@ -1063,7 +1111,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Exercise",
       description: "Individual exercise activities or training sets (atomic unit).",
       category: "health",
-      aliases: ["training_session", "activity"],
+      aliases: ["workout", "training_session", "activity"],
     },
     schema_definition: {
       fields: {

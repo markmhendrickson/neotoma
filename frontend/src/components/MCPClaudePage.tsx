@@ -60,7 +60,7 @@ export function MCPClaudePage() {
             <h2 className="text-xl font-semibold">Setup Steps</h2>
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
-              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
               <li>Open Claude Desktop settings</li>
               <li>Locate your Claude Desktop config file:
                 <ul className="list-disc list-inside ml-4 mt-1 space-y-1">

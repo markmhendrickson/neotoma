@@ -14,54 +14,76 @@ If Supabase has registered `http://localhost:8080/api/mcp/oauth/callback`, but w
 
 ## Solution
 
-Separate OAuth redirect URI from `API_BASE_URL`:
+OAuth redirect URI now defaults to `HOST_URL` (or auto-discovered tunnel URL):
 
-1. **New Environment Variable:** `OAUTH_REDIRECT_BASE_URL`
-   - Defaults to `http://localhost:${HTTP_PORT}` if not set
-   - Used only for OAuth redirect URI construction
-   - Independent of `API_BASE_URL`
+1. **Default Behavior:**
+   - `OAUTH_REDIRECT_BASE_URL` defaults to `config.apiBase` (which is `HOST_URL` or auto-discovered tunnel URL)
+   - This makes OAuth callbacks reachable from the internet automatically when using tunnels
+   - No manual configuration needed for most use cases
 
 2. **Implementation:**
    ```typescript
-   // OAuth redirect URI (must match Supabase registration)
-   const oauthRedirectBase = process.env.OAUTH_REDIRECT_BASE_URL || `http://localhost:${config.httpPort}`;
+   // OAuth redirect URI - defaults to HOST_URL or discovered tunnel URL
+   const oauthRedirectBase = process.env.OAUTH_REDIRECT_BASE_URL || config.apiBase;
    const supabaseRedirectUri = `${oauthRedirectBase}/api/mcp/oauth/callback`;
    
-   // API base URL (used for discovery endpoints, can be ngrok/proxy)
-   const apiBase = process.env.API_BASE_URL || `http://localhost:${config.httpPort}`;
+   // config.apiBase priority:
+   // 1. HOST_URL (explicit)
+   // 2. API_BASE_URL (deprecated)
+   // 3. Auto-discovered from /tmp/ngrok-mcp-url.txt
+   // 4. http://localhost:${httpPort}
    ```
 
 ## Configuration
 
 ### For Local Development (Default)
 
-No configuration needed - defaults to `http://localhost:8080`:
+No configuration needed:
 ```bash
-# .env (optional - defaults work)
-# API_BASE_URL not set (or set to http://localhost:8080)
-# OAUTH_REDIRECT_BASE_URL not set (defaults to http://localhost:8080)
+# .env (optional)
+# HOST_URL not set → defaults to http://localhost:8080
+# OAUTH_REDIRECT_BASE_URL not set → defaults to HOST_URL
 ```
 
-### For HTTPS Testing with ngrok
+### For Tunnel Testing (Auto-Discovery)
 
-Set `API_BASE_URL` to ngrok URL, but keep OAuth redirect as localhost:
+**No configuration needed** - server auto-discovers tunnel URL:
+```bash
+# Start tunnel + server (auto-discovery works)
+npm run watch:dev:tunnel
+```
+
+Server reads tunnel URL from `/tmp/ngrok-mcp-url.txt` and uses it for OAuth callbacks automatically.
+
+### For Tunnel Testing (Explicit HOST_URL)
+
+Set `HOST_URL` to your tunnel:
 ```bash
 # .env
-API_BASE_URL="https://abc123.ngrok-free.dev"
-# OAUTH_REDIRECT_BASE_URL not set (defaults to http://localhost:8080)
-# OR explicitly set:
-OAUTH_REDIRECT_BASE_URL="http://localhost:8080"
+HOST_URL="https://abc123.ngrok-free.dev"
+# OAUTH_REDIRECT_BASE_URL not set → defaults to HOST_URL
 ```
 
-**Why:** Supabase OAuth client is registered with `http://localhost:8080/api/mcp/oauth/callback`, so we must use that exact URL for redirects, even when `API_BASE_URL` points to ngrok.
+OAuth callback will be `https://abc123.ngrok-free.dev/api/mcp/oauth/callback`.
+
+### Edge Case: OAuth Callback Different from HOST_URL
+
+If Supabase is registered with `localhost` callback but you want public discovery URLs:
+```bash
+# .env
+HOST_URL="https://abc123.ngrok-free.dev"  # For discovery endpoints
+OAUTH_REDIRECT_BASE_URL="http://localhost:8080"  # For OAuth callback (if Supabase registered with localhost)
+```
+
+**Why:** This is rare. Most users should rely on auto-discovery or set `HOST_URL` only.
 
 ### For Production
 
-Both should point to production domain:
+Set `HOST_URL` to production domain:
 ```bash
 # .env.production
-API_BASE_URL="https://neotoma.fly.dev"
-OAUTH_REDIRECT_BASE_URL="https://neotoma.fly.dev"
+HOST_URL="https://neotoma.fly.dev"
+# OAUTH_REDIRECT_BASE_URL not set → defaults to HOST_URL
 ```
 
 **Note:** In production, Supabase OAuth client must be registered with the production callback URL.
@@ -80,17 +102,18 @@ The OAuth redirect URI used in code **must exactly match** what's registered in 
    - Subsequent flows must use the same redirect URI
    - Check `oauth_clients` table in Supabase to see registered redirect URIs
 
-## Current Configuration
+## Current Configuration (After Auto-Discovery Update)
 
-**Development (with ngrok):**
-- `API_BASE_URL`: `https://melissia-introrse-correspondently.ngrok-free.dev`
-- `OAUTH_REDIRECT_BASE_URL`: Not set (defaults to `http://localhost:8080`)
-- OAuth redirect URI: `http://localhost:8080/api/mcp/oauth/callback`
-- Discovery issuer: `https://melissia-introrse-correspondently.ngrok-free.dev`
+**Development (with tunnel auto-discovery):**
+- `HOST_URL`: Not set (auto-discovered from `/tmp/ngrok-mcp-url.txt`)
+- `OAUTH_REDIRECT_BASE_URL`: Not set (defaults to `HOST_URL`)
+- OAuth redirect URI: `https://melissia-introrse-correspondently.ngrok-free.dev/api/mcp/oauth/callback` (auto-discovered)
+- Discovery issuer: `https://melissia-introrse-correspondently.ngrok-free.dev` (auto-discovered)
 
 This allows:
-- Discovery endpoints to return HTTPS URLs (for Cursor Connect button)
-- OAuth redirects to use localhost (matching Supabase registration)
+- Discovery endpoints to return tunnel HTTPS URLs automatically
+- OAuth redirects to use tunnel URL (reachable from internet for Claude.ai, ChatGPT)
+- No manual configuration needed
 
 ## Verification
 

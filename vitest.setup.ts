@@ -1,9 +1,25 @@
 import "@testing-library/jest-dom/vitest";
 import dotenv from "dotenv";
 import { randomBytes } from "node:crypto";
+import path from "node:path";
+import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Load .env file before setting any defaults
 dotenv.config(); // Load .env
+
+// When Supabase is not enabled, run integration/service/unit tests against local SQLite DB
+const runSupabaseTests = process.env.RUN_SUPABASE_TESTS === "1";
+if (!runSupabaseTests) {
+  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
+  const testDataDir = path.join(projectRoot, ".vitest", "data");
+  const testSourcesDir = path.join(testDataDir, "sources");
+  mkdirSync(testSourcesDir, { recursive: true });
+  process.env.NEOTOMA_STORAGE_BACKEND = "local";
+  process.env.NEOTOMA_SQLITE_PATH = path.join(projectRoot, ".vitest", "neotoma.db");
+  process.env.NEOTOMA_DATA_DIR = testDataDir;
+  process.env.NEOTOMA_RAW_STORAGE_DIR = testSourcesDir;
+}
 
 // Only set test key if no real key exists (don't override real keys)
 if (!process.env.OPENAI_API_KEY) {
@@ -28,11 +44,14 @@ if (!process.env.NEOTOMA_CONNECTION_ID && !process.env.NEOTOMA_SESSION_TOKEN) {
   process.env.NEOTOMA_CONNECTION_ID = "test-connection-bypass";
 }
 
-// Run database migrations before tests (skip when VITEST_SKIP_MIGRATIONS=1)
+// Run database migrations before tests (skip when VITEST_SKIP_MIGRATIONS=1 or RUN_SUPABASE_TESTS not set)
 const MIGRATION_TIMEOUT_MS = 20000;
 
 (async () => {
   if (process.env.VITEST_SKIP_MIGRATIONS === "1") {
+    return;
+  }
+  if (process.env.RUN_SUPABASE_TESTS !== "1") {
     return;
   }
   try {

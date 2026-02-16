@@ -71,6 +71,7 @@ const navigationSections: NavSection[] = [
     title: 'Developer Guides',
     items: [
       { label: 'Development Workflow', href: '/docs/developer/development_workflow.md', icon: Settings },
+      { label: 'HTTPS Tunnels', href: '/docs/developer/tunnels.md', icon: Code },
       { label: 'MCP Setup (Cursor)', href: '/docs/developer/mcp_cursor_setup.md', icon: Code },
       { label: 'MCP Setup (ChatGPT)', href: '/docs/developer/mcp_chatgpt_setup.md', icon: Code },
       { label: 'MCP Setup (Claude)', href: '/docs/developer/mcp_claude_code_setup.md', icon: Code },

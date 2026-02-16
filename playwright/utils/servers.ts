@@ -9,7 +9,7 @@ import { generateX25519KeyPair, generateEd25519KeyPair, deriveBearerToken } from
 import { exportKeyPairs } from '../../src/crypto/export.js';
 import type { KeyExport, X25519KeyPair, Ed25519KeyPair } from '../../src/crypto/types.js';
 import type { LocalRecord } from '../../frontend/src/store/types';
-import { buildSampleRecords } from '../../frontend/src/sample-data/sample-records';
+// import { buildSampleRecords } from '../../frontend/src/sample-data/sample-records';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(fileURLToPath(new URL('../../', import.meta.url)));
@@ -653,7 +653,7 @@ export async function startMockApiServer(
   let origin = `http://127.0.0.1:${port}`;
   const recordStore = new Map<string, LocalRecord>();
 
-  const seedRecords = (records: LocalRecord[] = buildSampleRecords()) => {
+  const seedRecords = (records: LocalRecord[] = []) => {
     recordStore.clear();
     for (const record of records) {
       recordStore.set(record.id, record);

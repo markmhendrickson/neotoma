@@ -77,7 +77,10 @@ export class RelationshipReducer {
     // Get all unique metadata fields from observations
     const allFields = new Set<string>();
     for (const obs of sortedObservations) {
-      Object.keys(obs.metadata).forEach((field) => allFields.add(field));
+      // Ensure metadata exists and is an object
+      if (obs.metadata && typeof obs.metadata === "object") {
+        Object.keys(obs.metadata).forEach((field) => allFields.add(field));
+      }
     }
 
     // Apply merge strategy for each field
