@@ -77,7 +77,7 @@ export default defineConfig({
   plugins: [react(), docsMarkdownPlugin()],
   root: "frontend",
   define: {
-    "import.meta.env.VITE_WS_PORT": JSON.stringify(process.env.WS_PORT || "8081"),
+    "import.meta.env.VITE_WS_PORT": JSON.stringify(process.env.WS_PORT || "8280"),
   },
   resolve: {
     alias: {

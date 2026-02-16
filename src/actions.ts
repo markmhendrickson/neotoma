@@ -28,20 +28,36 @@ import { ensureLocalDevUser } from "./services/local_auth.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./repositories/sqlite/supabase_adapter.js";
 import {
+  AnalyzeSchemaCandidatesRequestSchema,
+  CorrectEntityRequestSchema,
   CreateRelationshipRequestSchema,
+  DeleteEntityRequestSchema,
+  DeleteRelationshipRequestSchema,
   EntitiesQueryRequestSchema,
   EntitySnapshotRequestSchema,
   FieldProvenanceRequestSchema,
+  GetSchemaRecommendationsRequestSchema,
   ListObservationsRequestSchema,
   ListRelationshipsRequestSchema,
   MergeEntitiesRequestSchema,
   ObservationsQueryRequestSchema,
+  RegisterSchemaRequestSchema,
+  ReinterpretRequestSchema,
+  RestoreEntityRequestSchema,
+  RestoreRelationshipRequestSchema,
+  RetrieveEntityByIdentifierSchema,
+  RetrieveGraphNeighborhoodSchema,
+  RetrieveRelatedEntitiesSchema,
   StoreStructuredRequestSchema,
+  UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
 import {
-  filterEntitiesBySearch,
   queryEntitiesWithCount,
 } from "./shared/action_handlers/entity_handlers.js";
+import {
+  prepareEntitySnapshotWithEmbedding,
+  getEntitySnapshotUpsertPayload,
+} from "./services/entity_snapshot_embedding.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -208,6 +224,12 @@ const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
 // Store server instances by session ID to preserve authentication state
 const mcpServerInstances = new Map<string, NeotomaServer>();
 
+/** True when request is to localhost/127.0.0.1 (local access). Tunnel requests have a non-local Host. */
+function isLocalRequest(req: express.Request): boolean {
+  const host = ((req.headers["host"] || req.headers["Host"]) as string || "").split(":")[0].toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+}
+
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
 app.all("/mcp", async (req, res) => {
@@ -215,7 +237,7 @@ app.all("/mcp", async (req, res) => {
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
     // Check for authentication BEFORE processing MCP requests
-    // When encryption off: no auth by default; optional NEOTOMA_DEV_TOKEN or OAuth
+    // When encryption off: no auth by default; optional NEOTOMA_BEARER_TOKEN (or OAuth)
     // When encryption on: require Bearer token derived from private key (same key as data encryption)
     const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
       | string
@@ -235,14 +257,22 @@ app.all("/mcp", async (req, res) => {
         }
       }
     } else {
-      // Encryption off: no auth by default; optional static token or OAuth
+      // Encryption off: local requests can use no-auth. HTTP (insecure) defaults to anonymous 000... user; HTTPS/localhost can use dev-local.
       if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
-        req.headers["x-connection-id"] = "dev-local";
-        connectionIdHeader = "dev-local";
+        if (isLocalRequest(req)) {
+          const isInsecure = req.protocol === "http" || !(req as any).secure;
+          if (isInsecure) {
+            req.headers["x-connection-id"] = "dev-local-http";
+            connectionIdHeader = "dev-local-http";
+          } else {
+            req.headers["x-connection-id"] = "dev-local";
+            connectionIdHeader = "dev-local";
+          }
+        }
       }
-      if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_DEV_TOKEN) {
+      if (authHeader?.startsWith("Bearer ") && process.env.NEOTOMA_BEARER_TOKEN) {
         const token = authHeader.slice(7).trim();
-        if (token === process.env.NEOTOMA_DEV_TOKEN) {
+        if (token === process.env.NEOTOMA_BEARER_TOKEN) {
           req.headers["x-connection-id"] = "dev-local";
           connectionIdHeader = "dev-local";
         }
@@ -295,10 +325,11 @@ app.all("/mcp", async (req, res) => {
 
     // Validate X-Connection-Id when that is the auth method (no Bearer). Invalid IDs return 401
     // so Cursor shows Connect button instead of blocking on "Loading tools".
-    // Skip validation for dev-local (no-auth default or NEOTOMA_DEV_TOKEN).
+    // Skip validation for dev-local and dev-local-http (no-auth defaults).
     if (
       connectionIdHeader &&
       connectionIdHeader !== "dev-local" &&
+      connectionIdHeader !== "dev-local-http" &&
       !authHeader?.startsWith("Bearer ")
     ) {
       try {
@@ -1199,7 +1230,7 @@ app.use(async (req, res, next) => {
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
 
-  // MCP-style auth (aligns CLI and REST API with MCP)
+  // MCP-style auth (aligns CLI and REST API with MCP). Local requests can skip Bearer; tunnel requires Bearer or OAuth.
   if (config.encryption.enabled) {
     const expectedToken = getMcpAuthToken();
     if (headerAuth.startsWith("Bearer ") && expectedToken) {
@@ -1212,13 +1243,15 @@ app.use(async (req, res, next) => {
     }
   } else {
     if (!headerAuth.startsWith("Bearer ")) {
-      const devUser = ensureLocalDevUser();
-      (req as any).authenticatedUserId = devUser.id;
-      return next();
+      if (isLocalRequest(req)) {
+        const devUser = ensureLocalDevUser();
+        (req as any).authenticatedUserId = devUser.id;
+        return next();
+      }
     }
-    if (process.env.NEOTOMA_DEV_TOKEN) {
+    if (process.env.NEOTOMA_BEARER_TOKEN) {
       const token = headerAuth.slice(7).trim();
-      if (token === process.env.NEOTOMA_DEV_TOKEN) {
+      if (token === process.env.NEOTOMA_BEARER_TOKEN) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
         return next();
@@ -1395,15 +1428,14 @@ app.post("/api/entities/query", async (req, res) => {
       userId,
       entityType: entity_type,
       includeMerged: include_merged,
+      search,
       limit,
       offset,
     });
 
-    const filtered = filterEntitiesBySearch(entities, search);
-
     return res.json({
-      entities: filtered,
-      total: search ? filtered.length : total,
+      entities,
+      total,
       limit,
       offset,
     });
@@ -2786,6 +2818,1028 @@ app.get("/get_file_url", async (req, res) => {
   return res.json({ url: data.signedUrl });
 });
 
+// ========== New HTTP REST endpoints for Phase 0 E2E test coverage ==========
+
+// POST /retrieve_entity_by_identifier - Search for entity by identifier
+app.post("/retrieve_entity_by_identifier", async (req, res) => {
+  const parsed = RetrieveEntityByIdentifierSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:retrieve_entity_by_identifier", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { identifier, entity_type } = parsed.data;
+
+    // Import normalization and ID generation functions
+    const { normalizeEntityValue, generateEntityId } = await import("./services/entity_resolution.js");
+
+    // Normalize the identifier
+    const normalized = entity_type
+      ? normalizeEntityValue(entity_type, identifier)
+      : identifier.trim().toLowerCase();
+
+    // Search in entities table
+    let query = supabase
+      .from("entities")
+      .select("*")
+      .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
+
+    if (entity_type) {
+      query = query.eq("entity_type", entity_type);
+    }
+
+    const { data: entities, error } = await query.limit(100);
+
+    if (error) {
+      logError("SupabaseError:retrieve_entity_by_identifier", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    // Try entity ID match if no results
+    if ((!entities || entities.length === 0) && entity_type) {
+      const possibleId = generateEntityId(entity_type, identifier);
+      const { data: entityById, error: idError } = await supabase
+        .from("entities")
+        .select("*")
+        .eq("id", possibleId)
+        .single();
+
+      if (!idError && entityById) {
+        return res.json({ entities: [entityById], total: 1 });
+      }
+    }
+
+    logDebug("Success:retrieve_entity_by_identifier", req, { identifier, count: entities?.length });
+    return res.json({ entities: entities || [], total: entities?.length || 0 });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to retrieve entity by identifier",
+      "DB_QUERY_FAILED",
+      "APIError:retrieve_entity_by_identifier"
+    );
+  }
+});
+
+// POST /retrieve_related_entities - Get entities connected via relationships
+app.post("/retrieve_related_entities", async (req, res) => {
+  const parsed = RetrieveRelatedEntitiesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:retrieve_related_entities", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { entity_id, relationship_types, direction = "both", max_hops: _max_hops = 1, include_entities = true } = parsed.data;
+
+    // Simple 1-hop query implementation
+    const relationships: any[] = [];
+
+    // Get outbound relationships
+    if (direction === "outbound" || direction === "both") {
+      let query = supabase
+        .from("relationship_snapshots")
+        .select("*")
+        .eq("source_entity_id", entity_id);
+
+      if (relationship_types && relationship_types.length > 0) {
+        query = query.in("relationship_type", relationship_types);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        relationships.push(...data);
+      }
+    }
+
+    // Get inbound relationships
+    if (direction === "inbound" || direction === "both") {
+      let query = supabase
+        .from("relationship_snapshots")
+        .select("*")
+        .eq("target_entity_id", entity_id);
+
+      if (relationship_types && relationship_types.length > 0) {
+        query = query.in("relationship_type", relationship_types);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        relationships.push(...data);
+      }
+    }
+
+    // Get entities if requested
+    let entities: any[] = [];
+    if (include_entities && relationships.length > 0) {
+      const relatedIds = new Set<string>();
+      relationships.forEach(rel => {
+        if (rel.source_entity_id !== entity_id) relatedIds.add(rel.source_entity_id);
+        if (rel.target_entity_id !== entity_id) relatedIds.add(rel.target_entity_id);
+      });
+
+      if (relatedIds.size > 0) {
+        const { data, error } = await supabase
+          .from("entities")
+          .select("*")
+          .in("id", Array.from(relatedIds));
+
+        if (!error && data) {
+          entities = data;
+        }
+      }
+    }
+
+    logDebug("Success:retrieve_related_entities", req, { entity_id, count: relationships.length });
+    return res.json({ relationships, entities });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to retrieve related entities",
+      "DB_QUERY_FAILED",
+      "APIError:retrieve_related_entities"
+    );
+  }
+});
+
+// POST /retrieve_graph_neighborhood - Get complete graph neighborhood
+app.post("/retrieve_graph_neighborhood", async (req, res) => {
+  const parsed = RetrieveGraphNeighborhoodSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:retrieve_graph_neighborhood", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const {
+      node_id,
+      node_type = "entity",
+      include_relationships = true,
+      include_sources = true,
+      include_events: _include_events = true,
+      include_observations = false,
+    } = parsed.data;
+
+    const result: any = { node_id, node_type };
+
+    if (node_type === "entity") {
+      // Get entity
+      const { data: entity, error: entityError } = await supabase
+        .from("entities")
+        .select("*")
+        .eq("id", node_id)
+        .single();
+
+      if (!entityError && entity) {
+        result.entity = entity;
+      }
+
+      // Get relationships if requested
+      if (include_relationships) {
+        const { data: relationships, error: relError } = await supabase
+          .from("relationship_snapshots")
+          .select("*")
+          .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
+
+        if (!relError) {
+          result.relationships = relationships || [];
+        }
+      }
+
+      // Get observations if requested
+      if (include_observations) {
+        const { data: observations, error: obsError } = await supabase
+          .from("observations")
+          .select("*")
+          .eq("entity_id", node_id);
+
+        if (!obsError) {
+          result.observations = observations || [];
+        }
+      }
+
+      // Get sources if requested
+      if (include_sources && include_observations) {
+        const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
+        if (sourceIds.length > 0) {
+          const { data: sources, error: srcError } = await supabase
+            .from("source")
+            .select("*")
+            .in("id", sourceIds);
+
+          if (!srcError) {
+            result.sources = sources || [];
+          }
+        }
+      }
+    } else if (node_type === "source") {
+      // Get source
+      const { data: source, error: srcError } = await supabase
+        .from("source")
+        .select("*")
+        .eq("id", node_id)
+        .single();
+
+      if (!srcError && source) {
+        result.source = source;
+      }
+
+      // Get observations from this source
+      if (include_observations) {
+        const { data: observations, error: obsError } = await supabase
+          .from("observations")
+          .select("*")
+          .eq("source_id", node_id);
+
+        if (!obsError) {
+          result.observations = observations || [];
+        }
+      }
+    }
+
+    logDebug("Success:retrieve_graph_neighborhood", req, { node_id });
+    return res.json(result);
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to retrieve graph neighborhood",
+      "DB_QUERY_FAILED",
+      "APIError:retrieve_graph_neighborhood"
+    );
+  }
+});
+
+// POST /delete_entity - Soft delete entity
+app.post("/delete_entity", async (req, res) => {
+  const parsed = DeleteEntityRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:delete_entity", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_id, entity_type, reason } = parsed.data;
+
+    const { softDeleteEntity } = await import("./services/deletion.js");
+
+    const result = await softDeleteEntity(entity_id, entity_type, userId, reason);
+
+    if (!result.success) {
+      return sendError(res, 500, "DELETE_FAILED", result.error || "Failed to delete entity");
+    }
+
+    logDebug("Success:delete_entity", req, { entity_id });
+    return res.json({ success: true, entity_id, observation_id: result.observation_id });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to delete entity",
+      "DB_QUERY_FAILED",
+      "APIError:delete_entity"
+    );
+  }
+});
+
+// POST /restore_entity - Restore soft-deleted entity
+app.post("/restore_entity", async (req, res) => {
+  const parsed = RestoreEntityRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:restore_entity", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_id, entity_type, reason } = parsed.data;
+
+    const { restoreEntity } = await import("./services/deletion.js");
+
+    const result = await restoreEntity(entity_id, entity_type, userId, reason);
+
+    if (!result.success) {
+      return sendError(res, 500, "RESTORE_FAILED", result.error || "Failed to restore entity");
+    }
+
+    logDebug("Success:restore_entity", req, { entity_id });
+    return res.json({ success: true, entity_id, observation_id: result.observation_id });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to restore entity",
+      "DB_QUERY_FAILED",
+      "APIError:restore_entity"
+    );
+  }
+});
+
+// POST /delete_relationship - Soft delete relationship
+app.post("/delete_relationship", async (req, res) => {
+  const parsed = DeleteRelationshipRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:delete_relationship", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { relationship_type, source_entity_id, target_entity_id, reason } = parsed.data;
+
+    const { softDeleteRelationship } = await import("./services/deletion.js");
+
+    // Construct relationship key
+    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+
+    const result = await softDeleteRelationship(
+      relationshipKey,
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+      userId,
+      reason
+    );
+
+    if (!result.success) {
+      return sendError(res, 500, "DELETE_FAILED", result.error || "Failed to delete relationship");
+    }
+
+    logDebug("Success:delete_relationship", req, { relationship_type, source_entity_id, target_entity_id });
+    return res.json({ success: true, observation_id: result.observation_id });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to delete relationship",
+      "DB_QUERY_FAILED",
+      "APIError:delete_relationship"
+    );
+  }
+});
+
+// POST /restore_relationship - Restore soft-deleted relationship
+app.post("/restore_relationship", async (req, res) => {
+  const parsed = RestoreRelationshipRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:restore_relationship", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { relationship_type, source_entity_id, target_entity_id, reason } = parsed.data;
+
+    const { restoreRelationship } = await import("./services/deletion.js");
+
+    // Construct relationship key
+    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+
+    const result = await restoreRelationship(
+      relationshipKey,
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+      userId,
+      reason
+    );
+
+    if (!result.success) {
+      return sendError(res, 500, "RESTORE_FAILED", result.error || "Failed to restore relationship");
+    }
+
+    logDebug("Success:restore_relationship", req, { relationship_type, source_entity_id, target_entity_id });
+    return res.json({ success: true, observation_id: result.observation_id });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to restore relationship",
+      "DB_QUERY_FAILED",
+      "APIError:restore_relationship"
+    );
+  }
+});
+
+// POST /analyze_schema_candidates - Analyze raw fragments for schema promotion
+app.post("/analyze_schema_candidates", async (req, res) => {
+  const parsed = AnalyzeSchemaCandidatesRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:analyze_schema_candidates", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_type, min_frequency = 5, min_confidence = 0.8 } = parsed.data;
+
+    // Query raw_fragments for field frequency analysis
+    let query = supabase
+      .from("raw_fragments")
+      .select("fragment_key, fragment_value, fragment_type");
+
+    if (entity_type) {
+      query = query.eq("fragment_type", entity_type);
+    }
+
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+
+    const { data: fragments, error } = await query;
+
+    if (error) {
+      logError("SupabaseError:analyze_schema_candidates", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    // Analyze field frequency
+    const fieldFrequency = new Map<string, number>();
+    (fragments || []).forEach((frag: any) => {
+      const count = fieldFrequency.get(frag.fragment_key) || 0;
+      fieldFrequency.set(frag.fragment_key, count + 1);
+    });
+
+    // Build candidates
+    const candidates = Array.from(fieldFrequency.entries())
+      .filter(([, count]) => count >= min_frequency)
+      .map(([field_name, frequency]) => ({
+        field_name,
+        frequency,
+        confidence: Math.min(frequency / 100, 1), // Simple confidence based on frequency
+        recommended_type: "string", // Default type
+      }))
+      .filter(c => c.confidence >= min_confidence);
+
+    logDebug("Success:analyze_schema_candidates", req, { entity_type, count: candidates.length });
+    return res.json({ candidates });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to analyze schema candidates",
+      "DB_QUERY_FAILED",
+      "APIError:analyze_schema_candidates"
+    );
+  }
+});
+
+// POST /get_schema_recommendations - Get schema update recommendations
+app.post("/get_schema_recommendations", async (req, res) => {
+  const parsed = GetSchemaRecommendationsRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:get_schema_recommendations", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_type, source, status } = parsed.data;
+
+    // Query schema_recommendations table
+    let query = supabase
+      .from("schema_recommendations")
+      .select("*")
+      .eq("entity_type", entity_type);
+
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+
+    if (source) {
+      query = query.eq("source", source);
+    }
+
+    if (status) {
+      query = query.eq("status", status);
+    }
+
+    const { data: recommendations, error } = await query.order("confidence", { ascending: false });
+
+    if (error) {
+      logError("SupabaseError:get_schema_recommendations", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    logDebug("Success:get_schema_recommendations", req, { entity_type, count: recommendations?.length });
+    return res.json({ recommendations: recommendations || [] });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get schema recommendations",
+      "DB_QUERY_FAILED",
+      "APIError:get_schema_recommendations"
+    );
+  }
+});
+
+// POST /update_schema_incremental - Incrementally update schema with new fields
+app.post("/update_schema_incremental", async (req, res) => {
+  const parsed = UpdateSchemaIncrementalRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:update_schema_incremental", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const {
+      entity_type,
+      fields_to_add,
+      schema_version,
+      user_specific = false,
+      activate = true,
+    } = parsed.data;
+
+    // Get current schema
+    let query = supabase
+      .from("schema_registry")
+      .select("*")
+      .eq("entity_type", entity_type)
+      .eq("active", true);
+
+    if (user_specific && userId) {
+      query = query.eq("user_id", userId);
+    } else {
+      query = query.is("user_id", null);
+    }
+
+    const { data: currentSchema, error: fetchError } = await query.single();
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      logError("SupabaseError:update_schema_incremental", req, fetchError);
+      return sendError(res, 500, "DB_QUERY_FAILED", fetchError.message);
+    }
+
+    // Build new schema definition
+    const baseSchema = currentSchema?.schema_definition || { fields: {} };
+    const newFields: Record<string, any> = {};
+
+    fields_to_add.forEach((field: any) => {
+      newFields[field.field_name] = {
+        type: field.field_type,
+        required: field.required || false,
+        reducer_strategy: field.reducer_strategy || "highest_priority",
+      };
+    });
+
+    const updatedSchema = {
+      ...baseSchema,
+      fields: { ...baseSchema.fields, ...newFields },
+    };
+
+    // Insert new schema version
+    const { data: newSchemaVersion, error: insertError } = await supabase
+      .from("schema_registry")
+      .insert({
+        entity_type,
+        schema_version: schema_version || `${(parseInt(currentSchema?.schema_version || "1") + 1)}`,
+        schema_definition: updatedSchema,
+        reducer_config: currentSchema?.reducer_config || {},
+        user_id: user_specific ? userId : null,
+        active: activate,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      logError("SupabaseError:update_schema_incremental", req, insertError);
+      return sendError(res, 500, "DB_QUERY_FAILED", insertError.message);
+    }
+
+    // Deactivate old schema if activating new one
+    if (activate && currentSchema) {
+      await supabase
+        .from("schema_registry")
+        .update({ active: false })
+        .eq("id", currentSchema.id);
+    }
+
+    logDebug("Success:update_schema_incremental", req, { entity_type, fields_added: fields_to_add.length });
+    return res.json({ success: true, schema: newSchemaVersion });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to update schema incrementally",
+      "DB_QUERY_FAILED",
+      "APIError:update_schema_incremental"
+    );
+  }
+});
+
+// POST /register_schema - Register new schema or schema version
+app.post("/register_schema", async (req, res) => {
+  const parsed = RegisterSchemaRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:register_schema", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const {
+      entity_type,
+      schema_definition,
+      reducer_config,
+      schema_version = "1.0",
+      user_specific = false,
+      activate = false,
+    } = parsed.data;
+
+    // Insert new schema
+    const { data: newSchema, error } = await supabase
+      .from("schema_registry")
+      .insert({
+        entity_type,
+        schema_version,
+        schema_definition,
+        reducer_config,
+        user_id: user_specific ? userId : null,
+        active: activate,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logError("SupabaseError:register_schema", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    // If activating, deactivate other schemas for this entity type
+    if (activate) {
+      await supabase
+        .from("schema_registry")
+        .update({ active: false })
+        .eq("entity_type", entity_type)
+        .not("id", "eq", newSchema.id);
+
+      if (user_specific) {
+        await supabase
+          .from("schema_registry")
+          .update({ active: false })
+          .eq("user_id", userId);
+      }
+    }
+
+    logDebug("Success:register_schema", req, { entity_type, schema_version });
+    return res.json({ success: true, schema: newSchema });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to register schema",
+      "DB_QUERY_FAILED",
+      "APIError:register_schema"
+    );
+  }
+});
+
+// POST /reinterpret - Re-run AI interpretation on existing source
+app.post("/reinterpret", async (req, res) => {
+  const parsed = ReinterpretRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:reinterpret", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { source_id, interpretation_config } = parsed.data;
+
+    // Get source
+    const { data: source, error: srcError } = await supabase
+      .from("source")
+      .select("*")
+      .eq("id", source_id)
+      .single();
+
+    if (srcError || !source) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
+    }
+
+    // Re-extract from source.raw_text based on mime_type
+    let extractedData: Array<Record<string, unknown>> = [];
+
+    if (source.raw_text) {
+      const mimeType = source.mime_type || "text/plain";
+      const fileName = source.original_filename;
+
+      // Import extraction functions
+      const { extractWithLLM, extractFromCSVWithChunking } = await import("./services/llm_extraction.js");
+
+      // Get model ID from config or use default
+      const modelId =
+        (interpretation_config && typeof interpretation_config.model_id === "string")
+          ? interpretation_config.model_id
+          : "gpt-4o";
+
+      // Handle CSV files with chunking support
+      if (mimeType === "text/csv" || fileName?.toLowerCase().endsWith(".csv")) {
+        const extractionResult = await extractFromCSVWithChunking(
+          source.raw_text,
+          fileName,
+          mimeType,
+          modelId
+        );
+
+        // Handle both single-entity and multi-entity results
+        if ("entities" in extractionResult) {
+          // Multi-entity result from CSV chunking
+          extractedData = extractionResult.entities.map((entity) => ({
+            entity_type: entity.entity_type,
+            ...entity.fields,
+          }));
+        } else {
+          // Single entity result
+          const { entity_type, fields } = extractionResult;
+          extractedData = [
+            {
+              entity_type,
+              ...fields,
+            },
+          ];
+        }
+      } else {
+        // Non-CSV files - use standard extraction
+        const extractionResult = await extractWithLLM(
+          source.raw_text,
+          fileName,
+          mimeType,
+          modelId
+        );
+
+        const { entity_type, fields } = extractionResult;
+        extractedData = [
+          {
+            entity_type,
+            ...fields,
+          },
+        ];
+      }
+    }
+
+    const { runInterpretation } = await import("./services/interpretation.js");
+
+    // Re-run interpretation with re-extracted data
+    const result = await runInterpretation({
+      userId: source.user_id,
+      sourceId: source_id,
+      extractedData,
+      config: (interpretation_config || {}) as any,
+    });
+
+    logDebug("Success:reinterpret", req, { source_id });
+    return res.json({
+      success: true,
+      interpretation_id: result.interpretationId,
+      observations_created: result.observationsCreated
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to reinterpret source",
+      "DB_QUERY_FAILED",
+      "APIError:reinterpret"
+    );
+  }
+});
+
+// POST /correct - Create correction observation to override field value
+app.post("/correct", async (req, res) => {
+  const parsed = CorrectEntityRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:correct", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
+
+    // Create correction observation
+    const correctionSourceId = `correction_${idempotency_key}`;
+
+    // Insert correction observation with highest priority
+    const { data: observation, error } = await supabase
+      .from("observations")
+      .insert({
+        entity_id,
+        entity_type,
+        field,
+        value,
+        source_id: correctionSourceId,
+        source_priority: 1000, // Highest priority for manual corrections
+        user_id: userId,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        // Duplicate key - idempotent
+        return res.json({ success: true, message: "Correction already applied" });
+      }
+      logError("SupabaseError:correct", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    logDebug("Success:correct", req, { entity_id, field });
+    return res.json({ success: true, observation });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to create correction",
+      "DB_QUERY_FAILED",
+      "APIError:correct"
+    );
+  }
+});
+
+// POST /get_authenticated_user - Get authenticated user ID
+app.post("/get_authenticated_user", async (req, res) => {
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+
+    logDebug("Success:get_authenticated_user", req, { user_id: userId });
+    return res.json({ user_id: userId });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get authenticated user",
+      "AUTH_REQUIRED",
+      "APIError:get_authenticated_user"
+    );
+  }
+});
+
+// POST /health_check_snapshots - Check for stale entity snapshots
+app.post("/health_check_snapshots", async (req, res) => {
+  const schema = z.object({
+    auto_fix: z.boolean().optional().default(false),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:health_check_snapshots", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const { auto_fix } = parsed.data;
+
+    // Query for stale snapshots (observation_count=0 but observations exist)
+    const { data: staleSnapshots, error } = await supabase
+      .from("entity_snapshots")
+      .select("entity_id, entity_type, observation_count")
+      .eq("observation_count", 0);
+
+    if (error) {
+      logError("SupabaseError:health_check_snapshots", req, error);
+      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
+    }
+
+    // Check if these entities actually have observations
+    const staleEntities = [];
+    for (const snapshot of staleSnapshots || []) {
+      const { data: observations, error: obsError } = await supabase
+        .from("observations")
+        .select("id")
+        .eq("entity_id", snapshot.entity_id)
+        .limit(1);
+
+      if (!obsError && observations && observations.length > 0) {
+        staleEntities.push(snapshot);
+      }
+    }
+
+    let fixedCount = 0;
+    if (auto_fix && staleEntities.length > 0) {
+      // Recompute snapshots for stale entities using observationReducer
+      const { observationReducer } = await import("./reducers/observation_reducer.js");
+
+      for (const entity of staleEntities) {
+        try {
+          // Get all observations for this entity
+          const { data: observations } = await supabase
+            .from("observations")
+            .select("*")
+            .eq("entity_id", entity.entity_id)
+            .order("observed_at", { ascending: false });
+
+          if (!observations || observations.length === 0) continue;
+
+          // Recompute snapshot
+          const newSnapshot = await observationReducer.computeSnapshot(
+            entity.entity_id,
+            observations as any
+          );
+          if (!newSnapshot) continue;
+
+          const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
+            entity_id: newSnapshot.entity_id,
+            entity_type: newSnapshot.entity_type,
+            schema_version: newSnapshot.schema_version,
+            snapshot: newSnapshot.snapshot,
+            computed_at: newSnapshot.computed_at,
+            observation_count: newSnapshot.observation_count,
+            last_observation_at: newSnapshot.last_observation_at,
+            provenance: newSnapshot.provenance,
+            user_id: newSnapshot.user_id,
+          });
+          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
+
+          await supabase.from("entity_snapshots").upsert(
+            toUpsert as Record<string, unknown>,
+            { onConflict: "entity_id" }
+          );
+
+          fixedCount++;
+        } catch (error) {
+          console.error(`Failed to fix snapshot for ${entity.entity_id}:`, error);
+        }
+      }
+    }
+
+    logDebug("Success:health_check_snapshots", req, { stale_count: staleEntities.length, auto_fix });
+    return res.json({
+      healthy: staleEntities.length === 0,
+      message:
+        staleEntities.length === 0
+          ? "All snapshots healthy"
+          : auto_fix
+            ? `Found ${staleEntities.length} stale snapshots, fixed ${fixedCount}`
+            : `Found ${staleEntities.length} stale snapshots`,
+      checked: staleSnapshots?.length || 0,
+      stale: staleEntities.length,
+      fixed: auto_fix ? fixedCount : undefined,
+      stale_snapshots: staleEntities,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to check snapshot health",
+      "DB_QUERY_FAILED",
+      "APIError:health_check_snapshots"
+    );
+  }
+});
+
+// ========== End of Phase 0 endpoints ==========
+
 // Chat endpoint removed - violates Application Layer constraint "MUST NOT contain conversational logic"
 // Conversational interactions should be externalized to MCP-compatible agents per architecture
 
@@ -2801,24 +3855,53 @@ app.get("/openapi.yaml", (req, res) => {
 
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 
+/** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
+function tryListen(port: number): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      resolve({ server, port });
+    });
+    server.once("error", (err: NodeJS.ErrnoException) => {
+      server.close();
+      reject(err);
+    });
+  });
+}
+
 // Export function to start HTTP server (called explicitly, not on import)
 export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
 
-  const httpPort = process.env.HTTP_PORT
+  const basePort = process.env.HTTP_PORT
     ? parseInt(process.env.HTTP_PORT, 10)
     : config.httpPort || 8080;
+  const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
+  const maxTries = 20;
 
-  app.listen(httpPort, () => {
-    // eslint-disable-next-line no-console
-    console.log(`HTTP Actions listening on :${httpPort}`);
+  for (let offset = 0; offset < maxTries; offset++) {
+    const port = basePort + offset;
+    try {
+      await tryListen(port);
+      if (portFile) {
+        fs.writeFileSync(portFile, String(port), "utf-8");
+      }
+      // eslint-disable-next-line no-console
+      console.log(`HTTP Actions listening on :${port}`);
 
-    // Start background OAuth state cleanup job
-    import("./services/mcp_oauth.js").then((oauth) => {
-      oauth.startStateCleanupJob();
-    });
-  });
+      // Start background OAuth state cleanup job
+      import("./services/mcp_oauth.js").then((oauth) => {
+        oauth.startStateCleanupJob();
+      });
+      return;
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === "EADDRINUSE" && offset < maxTries - 1) {
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 // Only auto-start if not disabled AND if this is the main module

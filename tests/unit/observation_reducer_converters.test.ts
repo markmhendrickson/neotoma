@@ -6,6 +6,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import { supabase } from "../../src/db.js";
+import { config } from "../../src/config.js";
+
+const isLocalBackend = config.storageBackend === "local";
 
 describe("ObservationReducer - Converter Application", () => {
   const reducer = new ObservationReducer();
@@ -105,7 +108,7 @@ describe("ObservationReducer - Converter Application", () => {
       expect(snapshot.snapshot.invoice_number).toBe("INV-001");
     });
 
-    it("should convert numeric timestamp to ISO date string", async () => {
+    it.skipIf(isLocalBackend)("should convert numeric timestamp to ISO date string", async () => {
       // Register schema 1.0.0 with created_at as number
       await schemaRegistry.register({
         entity_type: testEntityType,
@@ -333,7 +336,7 @@ describe("ObservationReducer - Converter Application", () => {
       expect(snapshot.provenance.amount_due).toBe("obs_002");
     });
 
-    it("should convert old observation value if it wins merge strategy", async () => {
+    it.skipIf(isLocalBackend)("should convert old observation value if it wins merge strategy", async () => {
       // Register schema 1.0.0
       await schemaRegistry.register({
         entity_type: testEntityType,

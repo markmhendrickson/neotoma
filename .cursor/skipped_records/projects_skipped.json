@@ -1,0 +1,39 @@
+{
+  "batch_id": "batch_08_projects",
+  "data_type": "projects",
+  "total_skipped": 6,
+  "reason": "empty_name_field",
+  "skipped_records": [
+    {
+      "project_id": "9f9e2fc2-fe06-44",
+      "chunk": "01",
+      "reason": "empty name"
+    },
+    {
+      "project_id": "e7411ee0-e603-42",
+      "chunk": "01",
+      "reason": "empty name"
+    },
+    {
+      "project_id": "f9c8e13b-8f00-40",
+      "chunk": "01",
+      "reason": "empty name"
+    },
+    {
+      "project_id": "43614d09-7bb9-42",
+      "chunk": "01",
+      "reason": "empty name"
+    },
+    {
+      "project_id": "d0c39813-aa44-43",
+      "chunk": "01",
+      "reason": "empty name"
+    },
+    {
+      "project_id": "84c8e0e7-0ddf-44",
+      "chunk": "01",
+      "reason": "empty name"
+    }
+  ],
+  "note": "6 records from 'notion:Projects 99c4c7f5ad114e82a54f7e02cd6fb3f9.csv' (imported 2025-12-11) had empty name fields. 145 valid records from 'asana_api_direct' (imported 2025-12-21 or 2025-12-23) and 'manual_entry' were migrated."
+}

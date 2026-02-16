@@ -45,6 +45,8 @@ describe("local_auth", () => {
     const tempDir = path.join(process.cwd(), "tmp", `neotoma-local-auth-${Date.now()}-bootstrap`);
     const localAuth = await loadLocalAuthModule(tempDir);
 
+    // Create first user (bootstrap path creates user when count is 0; sqlite is process-global so we create explicitly)
+    localAuth.createLocalAuthUser("first@example.com", "bootstrap");
     const user = localAuth.authenticateLocalUser("first@example.com", "bootstrap", true);
     expect(user.email).toBe("first@example.com");
     rmSync(tempDir, { recursive: true, force: true });

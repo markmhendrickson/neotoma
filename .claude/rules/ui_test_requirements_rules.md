@@ -1,0 +1,470 @@
+<!-- Source: docs/conventions/ui_test_requirements_rules.mdc -->
+
+# UI Test Requirements Rules
+
+**Reference:** `docs/testing/testing_standard.md` — E2E test requirements
+
+## Purpose
+
+Ensures UI changes are thoroughly tested with Playwright E2E tests to catch bugs before manual testing.
+
+## Scope
+
+This document covers:
+- Playwright E2E test requirements for UI changes
+- UI interaction testing patterns
+- Error state and edge case testing
+- Responsive behavior testing
+
+This document does NOT cover:
+- Unit tests for UI components (see `docs/testing/testing_standard.md`)
+- Test execution workflow (see `docs/conventions/agent_test_execution_rules.mdc`)
+- Test-first workflow (see `docs/conventions/test_first_workflow_rules.mdc`)
+
+## Trigger Patterns
+
+Agents MUST write Playwright tests when:
+
+- Creating new UI components
+- Modifying existing UI components
+- Adding new user flows or interactions
+- Changing form behavior or validation
+- Updating navigation or routing
+- Modifying responsive behavior
+
+## Mandatory Playwright Tests
+
+### For New UI Components
+
+When creating a new UI component, write Playwright tests that:
+
+1. **Test component rendering:**
+   ```typescript
+   test("should render component with required props", async ({ page }) => {
+     await page.goto("/component-path");
+     await expect(page.locator("[data-testid='component']")).toBeVisible();
+   });
+   ```
+
+2. **Test user interactions:**
+   ```typescript
+   test("should handle user click", async ({ page }) => {
+     await page.goto("/component-path");
+     await page.click("button:has-text('Submit')");
+     await expect(page.locator(".success-message")).toBeVisible();
+   });
+   ```
+
+3. **Test form submissions:**
+   ```typescript
+   test("should submit form with valid data", async ({ page }) => {
+     await page.goto("/form-path");
+     await page.fill("input[name='email']", "test@example.com");
+     await page.click("button[type='submit']");
+     await expect(page.locator(".success-message")).toBeVisible();
+   });
+   ```
+
+### For User Flows
+
+When implementing user flows, write end-to-end tests that:
+
+1. **Test complete user journey:**
+   ```typescript
+   test("should complete upload flow", async ({ page }) => {
+     // 1. Navigate to upload page
+     await page.goto("/upload");
+     
+     // 2. Upload file
+     await page.setInputFiles("input[type='file']", "fixtures/invoice.pdf");
+     
+     // 3. Submit
+     await page.click("button:has-text('Upload')");
+     
+     // 4. Verify success
+     await page.waitForSelector("text=Upload successful");
+     await expect(page.locator("h1")).toContainText("Invoice");
+   });
+   ```
+
+2. **Test navigation:**
+   ```typescript
+   test("should navigate between pages", async ({ page }) => {
+     await page.goto("/dashboard");
+     await page.click("a:has-text('Records')");
+     await expect(page).toHaveURL("/records");
+   });
+   ```
+
+### For Error States
+
+When implementing error handling, write tests that:
+
+1. **Test error display:**
+   ```typescript
+   test("should display error message on failure", async ({ page }) => {
+     await page.goto("/form-path");
+     await page.fill("input[name='email']", "invalid-email");
+     await page.click("button[type='submit']");
+     await expect(page.locator(".error-message")).toBeVisible();
+     await expect(page.locator(".error-message")).toContainText("Invalid email");
+   });
+   ```
+
+2. **Test validation errors:**
+   ```typescript
+   test("should show validation errors for required fields", async ({ page }) => {
+     await page.goto("/form-path");
+     await page.click("button[type='submit']");
+     await expect(page.locator(".field-error")).toBeVisible();
+   });
+   ```
+
+### For Edge Cases
+
+When implementing edge cases, write tests that:
+
+1. **Test empty states:**
+   ```typescript
+   test("should display empty state when no data", async ({ page }) => {
+     await page.goto("/records");
+     await expect(page.locator(".empty-state")).toBeVisible();
+     await expect(page.locator(".empty-state")).toContainText("No records found");
+   });
+   ```
+
+2. **Test loading states:**
+   ```typescript
+   test("should show loading indicator during async operation", async ({ page }) => {
+     await page.goto("/records");
+     await page.click("button:has-text('Refresh')");
+     await expect(page.locator(".loading-spinner")).toBeVisible();
+     await page.waitForSelector(".loading-spinner", { state: "hidden" });
+   });
+   ```
+
+3. **Test async operations:**
+   ```typescript
+   test("should handle async data loading", async ({ page }) => {
+     await page.goto("/records");
+     await page.waitForSelector(".record-item", { timeout: 5000 });
+     const records = await page.locator(".record-item").count();
+     expect(records).toBeGreaterThan(0);
+   });
+   ```
+
+### For Responsive Behavior
+
+When implementing responsive design, write tests that:
+
+1. **Test mobile viewport:**
+   ```typescript
+   test("should render correctly on mobile", async ({ page }) => {
+     await page.setViewportSize({ width: 430, height: 932 });
+     await page.goto("/dashboard");
+     await expect(page.locator(".mobile-menu")).toBeVisible();
+   });
+   ```
+
+2. **Test desktop viewport:**
+   ```typescript
+   test("should render correctly on desktop", async ({ page }) => {
+     await page.setViewportSize({ width: 1920, height: 1080 });
+     await page.goto("/dashboard");
+     await expect(page.locator(".desktop-sidebar")).toBeVisible();
+   });
+   ```
+
+## Console Error Checking
+
+### Mandatory Console Error Verification
+
+**MANDATORY:** When making UI-impacting changes, agents MUST verify no console errors occur:
+
+1. **Use browser MCP tools to check console:**
+   - Navigate to the affected page using browser MCP tools
+   - Check browser console for errors using `browser_console_messages`
+   - Verify no `Uncaught SyntaxError`, `Uncaught TypeError`, or other runtime errors
+   - Verify no missing export errors (e.g., "does not provide an export named 'X'")
+
+2. **Use Playwright console error checking:**
+   ```typescript
+   test("should not have console errors", async ({ page }) => {
+     const errors: string[] = [];
+     page.on("console", (msg) => {
+       if (msg.type() === "error") {
+         errors.push(msg.text());
+       }
+     });
+     await page.goto("/page-path");
+     expect(errors).toHaveLength(0);
+   });
+   ```
+
+3. **Check for import/export errors:**
+   - Verify all imports resolve correctly
+   - Check that icon libraries have the correct icon names
+   - Verify TypeScript compilation succeeds (`npm run type-check`)
+   - Verify build succeeds (`npm run build:ui`)
+
+### Common Console Error Patterns
+
+Agents MUST check for and fix these common errors:
+
+1. **Missing exports:**
+   - Error: "does not provide an export named 'X'"
+   - Fix: Verify import name matches actual export, check library documentation
+
+2. **Import path errors:**
+   - Error: "Cannot find module 'X'"
+   - Fix: Verify import path is correct, check package is installed
+
+3. **Type errors:**
+   - Error: "Type 'X' is not assignable to type 'Y'"
+   - Fix: Verify types match, check TypeScript compilation
+
+4. **Runtime errors:**
+   - Error: "Cannot read property 'X' of undefined"
+   - Fix: Add null checks, verify data structure
+
+## Test Execution
+
+### Running Playwright Tests
+
+After writing Playwright tests:
+
+1. **Run E2E tests (headless):**
+   ```bash
+   npm run test:e2e
+   ```
+
+2. **Run E2E tests with visible browser (watch tests as they run):**
+   ```bash
+   npm run test:e2e:headed
+   ```
+   Use for visual verification and debugging. Optional: restrict to one project (e.g. `--project=chromium`) or one file (e.g. `playwright/tests/oauth-flow.spec.ts`).
+
+3. **Run specific test file:**
+   ```bash
+   npx playwright test playwright/tests/specific-test.spec.ts
+   ```
+   Add `--headed` to see the browser: `npm run test:e2e -- --headed playwright/tests/specific-test.spec.ts`
+
+4. **Run in UI mode (for debugging):**
+   ```bash
+   npx playwright test --ui
+   ```
+
+5. **Run with trace (for debugging failures):**
+   ```bash
+   npx playwright test --trace on
+   ```
+
+6. **Check console errors in tests:**
+   ```typescript
+   test("should not have console errors", async ({ page }) => {
+     const errors: string[] = [];
+     page.on("console", (msg) => {
+       if (msg.type() === "error") {
+         errors.push(msg.text());
+       }
+     });
+     await page.goto("/page-path");
+     expect(errors).toHaveLength(0);
+   });
+   ```
+
+### Test Failure Debugging
+
+If Playwright tests fail:
+
+1. **Check test output:**
+   - Read error messages
+   - Review stack traces
+   - Check test logs
+
+2. **Review screenshots/videos:**
+   - Screenshots are saved on failure (see `playwright.config.ts`)
+   - Videos are saved on failure
+   - Review to understand what happened
+
+3. **Run in headed mode (visible browser):**
+   ```bash
+   npm run test:e2e:headed
+   ```
+   Or pass `--headed` to any run: `npm run test:e2e -- --headed [path]`
+   - Watch test execution in the browser
+   - Identify where the test fails
+
+4. **Use Playwright Inspector:**
+   ```bash
+   npx playwright test --debug
+   ```
+   - Step through test execution
+   - Inspect page state at each step
+
+## Test Data and Fixtures
+
+### Using Test Fixtures
+
+Use test fixtures for consistent test data:
+
+```typescript
+import { test } from "@playwright/test";
+
+test("should display test data", async ({ page }) => {
+  // Use fixtures from tests/fixtures/
+  await page.goto("/records");
+  // Test expects fixture data to be loaded
+});
+```
+
+### Cleaning Up Test Data
+
+Ensure tests clean up after themselves:
+
+```typescript
+test.afterEach(async ({ page }) => {
+  // Clean up test data if needed
+  await page.evaluate(() => {
+    // Cleanup code
+  });
+});
+```
+
+## Coverage Requirements
+
+For UI components:
+
+- **Minimum coverage:** >75% lines, >75% branches
+- **User flows:** All critical user flows must have E2E tests
+- **Error states:** All error states must be tested
+- **Edge cases:** Empty states, loading states, async operations
+
+## Integration with Feature Unit Workflow
+
+When implementing UI Feature Units:
+
+1. **Planning phase:**
+   - Identify user flows to test
+   - Plan test structure
+   - Identify edge cases
+
+2. **Implementation phase:**
+   - Write Playwright tests alongside UI code
+   - Run tests frequently
+   - Fix failures immediately
+
+3. **Completion phase:**
+   - Verify all E2E tests pass
+   - Check coverage meets requirements
+   - Document test results
+
+## Constraints
+
+Agents MUST:
+- Write Playwright tests for all UI changes
+- Test user interactions and flows
+- Test error states and edge cases
+- Test responsive behavior
+- **Check browser console for errors** when making UI changes (use browser MCP tools or Playwright console listeners)
+- **Verify no import/export errors** (check TypeScript compilation, verify icon/library names)
+- **Verify build succeeds** before marking UI changes complete
+- Run E2E tests before marking UI changes complete
+
+Agents MUST NOT:
+- Skip E2E tests for UI changes
+- Defer test writing to "later"
+- Mark UI changes complete without E2E tests
+- Assume UI works without running tests
+- **Skip console error checking** when making UI-impacting changes
+- **Ignore import/export errors** (e.g., "does not provide an export named 'X'")
+- **Mark UI changes complete** if console errors exist
+
+## Examples
+
+### ✅ Correct: Comprehensive UI Testing
+
+```typescript
+// Test component rendering
+test("should render upload component", async ({ page }) => {
+  await page.goto("/upload");
+  await expect(page.locator("input[type='file']")).toBeVisible();
+});
+
+// Test user interaction
+test("should upload file successfully", async ({ page }) => {
+  await page.goto("/upload");
+  await page.setInputFiles("input[type='file']", "fixtures/invoice.pdf");
+  await page.click("button:has-text('Upload')");
+  await page.waitForSelector("text=Upload successful");
+});
+
+// Test error state
+test("should show error for invalid file", async ({ page }) => {
+  await page.goto("/upload");
+  await page.setInputFiles("input[type='file']", "fixtures/invalid.txt");
+  await page.click("button:has-text('Upload')");
+  await expect(page.locator(".error-message")).toBeVisible();
+});
+```
+
+### ❌ Incorrect: Missing UI Tests
+
+```typescript
+// UI component implemented but no tests
+// Result: Bugs discovered during manual testing
+```
+
+## Related Documents
+
+- `docs/testing/testing_standard.md` — E2E test requirements
+- `docs/testing/full_route_coverage_rules.md` — Full route coverage requirements (100% route coverage mandate)
+- `docs/conventions/agent_test_execution_rules.mdc` — Test execution workflow
+- `docs/conventions/test_first_workflow_rules.mdc` — Test-first workflow
+- `playwright.config.ts` — Playwright configuration
+
+## Agent Instructions
+
+### When to Load This Document
+
+Load this document when:
+- Implementing UI components or user flows
+- Writing Playwright E2E tests
+- Reviewing UI test coverage
+
+### Required Co-Loaded Documents
+
+- `docs/testing/testing_standard.md` — Testing requirements
+- `docs/conventions/agent_test_execution_rules.mdc` — Test execution workflow
+
+### Constraints Agents Must Enforce
+
+1. **MANDATORY Playwright tests** for all UI changes
+2. **MANDATORY user flow testing** for all critical flows
+3. **MANDATORY error state testing** for all error paths
+4. **MANDATORY responsive testing** for layout changes
+
+### Forbidden Patterns
+
+- Skipping E2E tests for UI changes
+- Deferring test writing to "later"
+- Marking UI changes complete without E2E tests
+- Assuming UI works without running tests
+- Testing only happy path without error states
+
+### Validation Checklist
+
+Before marking UI implementation complete:
+- [ ] Playwright tests written for all user flows
+- [ ] User interactions tested (clicks, form submissions)
+- [ ] Error states tested
+- [ ] Edge cases tested (empty states, loading states)
+- [ ] Responsive behavior tested (mobile/desktop)
+- [ ] **Browser console checked for errors** (using browser MCP tools or Playwright console listeners)
+- [ ] **No import/export errors** (verified via TypeScript compilation and browser console)
+- [ ] **TypeScript compilation succeeds** (`npm run type-check`)
+- [ ] **Build succeeds** (`npm run build:ui`)
+- [ ] All E2E tests pass (`npm run test:e2e`)
+- [ ] Test coverage meets requirements (>75%)
+- [ ] Screenshots/videos reviewed on failures

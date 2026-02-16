@@ -64,6 +64,7 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 | `DUPLICATE_OF` | Duplicate detection        | Duplicate [entity](../vocabulary/canonical_terms.md#entity) |
 | `DEPENDS_ON`   | Dependency relationships   | Task depends on another task         |
 | `SUPERSEDES`   | Version relationships      | Updated contract supersedes original |
+| `EMBEDS`       | Container embeds asset     | Blog post embeds image               |
 ### 2.2 Relationship Semantics
 **PART_OF:**
 - Represents hierarchical containment
@@ -93,6 +94,11 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 - Represents versioning
 - Source supersedes target
 - Example: `contract_v2` SUPERSEDES `contract_v1`
+**EMBEDS:**
+- Represents container-to-embedded-asset inclusion
+- Source (container) embeds target (asset); e.g. post embeds image, document embeds attachment
+- Use for images in posts, attachments in documents, media in pages (target is reusable across containers)
+- Example: `blog_post` EMBEDS `image`
 ## 3. Graph Patterns
 ### 3.1 Hierarchical Patterns
 **Invoice Hierarchy:**

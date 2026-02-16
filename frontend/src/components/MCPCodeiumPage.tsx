@@ -62,7 +62,7 @@ export function MCPCodeiumPage() {
             <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside mt-2">
               <li>Open Codeium in your IDE or editor</li>
               <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page (get your connection ID)</li>
-              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+              <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
               <li>Navigate to Codeium Settings → Integrations or MCP</li>
               <li>Add the configuration above to your MCP servers list</li>
               <li>Restart Codeium or refresh the connection</li>

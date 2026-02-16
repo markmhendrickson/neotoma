@@ -55,10 +55,13 @@ const navigationSections: NavSection[] = [
       { label: 'Development Workflow', href: '/docs/developer/development_workflow.md', icon: Settings },
       { label: 'CLI overview', href: '/docs/developer/cli_overview.md', icon: Code },
       { label: 'CLI reference', href: '/docs/developer/cli_reference.md', icon: Code },
+      { label: 'Agent CLI configuration', href: '/docs/developer/agent_cli_configuration.md', icon: Settings },
       { label: 'MCP overview', href: '/docs/developer/mcp_overview.md', icon: Code },
+      { label: 'HTTPS Tunnels', href: '/docs/developer/tunnels.md', icon: Code },
       { label: 'MCP Setup (Cursor)', href: '/docs/developer/mcp_cursor_setup.md', icon: Code },
       { label: 'MCP Setup (ChatGPT)', href: '/docs/developer/mcp_chatgpt_setup.md', icon: Code },
       { label: 'MCP Setup (Claude)', href: '/docs/developer/mcp_claude_code_setup.md', icon: Code },
+      { label: 'Developer release manual test checklist', href: '/docs/developer/developer_release_manual_test_checklist.md', icon: FileText },
     ],
   },
   {

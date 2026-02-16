@@ -10,6 +10,7 @@ export interface DashboardStats {
   sources_count: number;
   entities_by_type: Record<string, number>;
   total_entities: number;
+  total_relationships: number;
   total_events: number;
   total_observations: number;
   total_interpretations: number;
@@ -24,6 +25,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
     sources_count: 0,
     entities_by_type: {},
     total_entities: 0,
+    total_relationships: 0,
     total_events: 0,
     total_observations: 0,
     total_interpretations: 0,
@@ -86,6 +88,16 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   
   const { count: observationsCount } = await observationsQuery;
   stats.total_observations = observationsCount || 0;
+
+  // Get total relationships count (relationship_snapshots)
+  let relationshipsQuery = supabase
+    .from("relationship_snapshots")
+    .select("*", { count: "exact", head: true });
+  if (userId) {
+    relationshipsQuery = relationshipsQuery.eq("user_id", userId);
+  }
+  const { count: relationshipsCount } = await relationshipsQuery;
+  stats.total_relationships = relationshipsCount || 0;
 
   // Get total interpretations count
   let interpretationsQuery = supabase

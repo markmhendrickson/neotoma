@@ -292,7 +292,7 @@ If you need to rollback to v0.2.14:
    ```bash
    git checkout v0.2.14
    npm install
-   npm run build
+   npm run build:server
    ```
 
 2. Database migrations are **forward-only**. Rollback requires:

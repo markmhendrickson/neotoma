@@ -7,12 +7,14 @@ _(Local Environment Setup and First Contribution)_
 This document covers:
 
 - Prerequisites and system requirements
-- Local environment setup (Supabase, dependencies, configuration)
+- Installation options (npm package or repository clone)
+- Local environment setup (storage backends, configuration)
 - Running the development server
 - Running tests
 - Making your first code change
 - Common setup issues and solutions
-  This document does NOT cover:
+
+This document does NOT cover:
 - Deployment procedures (see `docs/infrastructure/deployment.md`)
 - Advanced development workflows (see `docs/developer/development_workflow.md`)
 - Feature Unit implementation (see `docs/feature_units/standards/feature_unit_spec.md`)
@@ -23,7 +25,7 @@ This document covers:
 
 - **Node.js**: v18.x or v20.x (LTS recommended)
 - **npm**: v9.x or later (comes with Node.js)
-- **Git**: 2.30+ for version control
+- **Git**: 2.30+ for version control (only needed for development)
 
 ### Optional Accounts
 
@@ -35,19 +37,81 @@ This document covers:
 - **Fly CLI**: For deployment testing (`brew install flyctl`)
 - **Docker**: For local Supabase (optional, cloud is easier for MVP)
 
-## Step 1: Clone and Install
+---
+
+## Installation Options
+
+### Option A: Install from npm (recommended for users)
+
+If you want to use Neotoma as an MCP server without modifying the source code:
+
+```bash
+# Global install
+npm install -g neotoma
+
+# Initialize Neotoma (creates directories, database, config)
+neotoma init
+
+# Or with encryption enabled (privacy-first mode)
+neotoma init --generate-keys
+```
+
+**What `neotoma init` does:**
+
+- Creates data directories (`~/neotoma/data/`, `sources/`, `events/`, `logs/`)
+- Initializes SQLite database with WAL mode
+- Optionally generates encryption keys for privacy-first mode
+- Creates `.env.example` with documented configuration
+
+**Init command options:**
+
+| Option | Description |
+|--------|-------------|
+| `--data-dir <path>` | Custom data directory (default: `~/neotoma/data` or `./data` if in repo) |
+| `--generate-keys` | Generate encryption keys for privacy-first mode |
+| `--force` | Overwrite existing configuration |
+| `--skip-db` | Skip database initialization |
+
+**After initialization:**
+
+```bash
+# Start the API server
+neotoma api start
+
+# Configure MCP for your AI tool
+neotoma mcp config
+
+# Check status
+neotoma api status
+```
+
+**Installation locations:**
+
+- **Global install** (`npm install -g`): Binary at `$(npm config get prefix)/bin/neotoma`
+- **Data directory**: `~/neotoma/data/` (or custom via `--data-dir`)
+- **Config file**: `~/.config/neotoma/config.json`
+
+---
+
+### Option B: Clone Repository (for development)
+
+If you want to modify the source code or contribute:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/neotoma.git
+git clone https://github.com/markmhendrickson/neotoma.git
 cd neotoma
+
 # Install dependencies
 npm install
+
 # Verify installation
 npm run type-check
 ```
 
 If `type-check` passes, dependencies are installed correctly.
+
+**Note:** When developing from a cloned repo, data defaults to `./data/` in the project directory.
 
 ## Step 2: Choose storage backend
 
@@ -201,7 +265,7 @@ This runs integration tests against your configured backend. If tests pass, your
 
 ### Start development server
 
-**Watch** = run with file watching (hot reload). **Start** = run built code once. **:prod** = production environment (port 8082). Everything else = development (port 8080).
+**Watch** = run with file watching (hot reload). **Start** = run built code once. **:prod** = production environment (port 8180). Everything else = development (port 8080).
 
 **MCP (stdio):**
 
@@ -218,7 +282,7 @@ npm run watch:server
 **API + tunnel (for remote MCP):**
 
 ```bash
-npm run watch:api
+npm run watch:dev:tunnel
 ```
 
 **API + tunnel + tsc watch:**
@@ -233,11 +297,27 @@ npm run watch:server+api
 npm run watch:dev
 ```
 
-**Production env with reload (port 8082):**
+**Production env with reload (port 8180):**
 
 ```bash
 npm run watch:prod
 ```
+
+**Production env with tunnel (local mode, remote access):**
+
+```bash
+npm run watch:prod:tunnel
+```
+
+Uses port 8180, `NEOTOMA_ENV=production`, and starts an HTTPS tunnel so the server is reachable at the printed URL. See [Tunnels](tunnels.md) and [MCP HTTPS tunnel status](mcp_https_tunnel_status.md).
+
+**Environment variables for `watch:prod:tunnel`:**
+
+- **Required for the command:** None in `.env` for default local storage. The script sets port and prod mode; the tunnel URL is passed to the server automatically. You need a tunnel provider: **Cloudflare** (install `cloudflared`) or **ngrok** (install and authenticate). The script prefers Cloudflare when `cloudflared` is installed; see [tunnels.md](tunnels.md).
+- **Required if using Supabase:** `SUPABASE_PROJECT_ID` or `SUPABASE_URL`, and `SUPABASE_SERVICE_KEY`.
+- **Optional (remote access / auth):** `HOST_URL` — base URL for API and MCP (OAuth, "Add to Cursor"). If not set, server auto-discovers from tunnel URL file. For fixed domain, set in `.env`. `MCP_PROXY_URL` overrides MCP URL only when it must differ (rare). `NEOTOMA_BEARER_TOKEN` = optional bearer token for MCP/tunnel auth.
+- **Optional (features / paths):** `OPENAI_API_KEY` (LLM extraction), `NEOTOMA_DATA_DIR`, `NEOTOMA_SQLITE_PATH`, `FRONTEND_URL`, encryption vars. For a fixed tunnel domain, set `HOST_URL` in `.env` (ngrok reserved/custom domain required). **Tunnel provider override:** `NEOTOMA_TUNNEL_PROVIDER=cloudflare` or `=ngrok`. Full tunnel docs: [tunnels.md](tunnels.md).
+- **Deprecated:** `API_BASE_URL` (legacy alias for `HOST_URL`; use `HOST_URL` instead).
 
 **Full stack (API + UI):**
 
@@ -245,14 +325,14 @@ npm run watch:prod
 npm run watch:full
 ```
 
-**Run built code (no watch):** `npm run start` (MCP), `npm run start:api` (API), `npm run start:prod` (API on 8082, production env).
+**Run built code (no watch):** `npm run start:mcp` (MCP), `npm run start:api` (API), `npm run start:api:prod` (build backend + API on 8180, production env; no UI build).
 
 | Environment | Port | Watch | Start |
 |-------------|------|-------|-------|
-| Development | 8080 | `watch:dev`, `watch`, `watch:server`, `watch:server+api` | `start`, `start:api` |
-| Production  | 8082 | `watch:prod` | `start:prod` |
+| Development | 8080 | `watch:dev`, `watch:dev:tunnel`, `watch:server`, `watch:server+api` | `start:mcp`, `start:api` |
+| Production  | 8180 | `watch:prod`, `watch:prod:tunnel` (with tunnel) | `start:api:prod` |
 
-The `dev:*` scripts (e.g. `dev:server`, `dev:prod`) are aliases for the corresponding `watch:*` scripts and remain for backward compatibility.
+The `dev:*` scripts (e.g. `dev:server`, `dev:prod`) are aliases for the corresponding `watch:*` scripts. For a full table of all npm scripts, see [CLI reference – npm scripts summary](cli_reference.md#npm-scripts-summary).
 
 ### Branch-Based Port Assignment
 
@@ -260,7 +340,7 @@ When running `npm run watch:full` (or `dev:full`) or other watch commands, the s
 **How it works:**
 
 - Ports are deterministically assigned using a hash of the branch name
-- Each branch gets unique ports for HTTP (8080-8179), Vite (5173-5272), and WebSocket (8081-8180)
+- Each branch gets unique ports for HTTP (8080-8179), Vite (5173-5272), and WebSocket (8280-8379)
 - Port assignments are stored in `.branch-ports/{branch-name}.json`
 - The same branch always gets the same ports
   **State files:**
@@ -326,7 +406,7 @@ npm test -- src/index.test.ts
 - If conflicts occur, check `.branch-ports/` for stale entries and remove them
 - Find process: `lsof -i :8080` (macOS/Linux)
 - Kill process: `kill -9 <PID>`
-- Or use different port: `HTTP_PORT=8081 npm run dev:server`
+- Or use different port: `HTTP_PORT=8180 npm run dev:server`
 
 ### Issue: TypeScript Errors
 
@@ -336,7 +416,7 @@ npm test -- src/index.test.ts
 # Clean and rebuild
 rm -rf dist node_modules
 npm install
-npm run build
+npm run build:server
 ```
 
 ### Issue: Supabase Connection Timeout
@@ -366,14 +446,14 @@ npm run cli:dev
 **Global install or link:**
 
 ```bash
-npm run build
+npm run build:server
 npm install -g .   # Install globally
 
-# Or link for development (points to local package; run npm run build after changes)
+# Or link for development (points to local package; run npm run build:server after changes)
 npm link
 ```
 
-Note: A global install uses a copy of `dist/cli/index.js`. Changes to `src/cli/index.ts` require `npm run build` and reinstall (`npm install -g .`). With `npm link`, run `npm run build` after changes; no reinstall needed. Use `npm run cli:dev` for immediate source changes during development.
+Note: A global install uses a copy of `dist/cli/index.js`. Changes to `src/cli/index.ts` require `npm run build:server` and reinstall (`npm install -g .`). With `npm link`, run `npm run build:server` after code changes; no reinstall needed. Use `npm run cli:dev` for immediate source changes during development.
 
 **If `neotoma` is not found after install or link:** The npm global bin directory may not be on your PATH. Add to `~/.zshrc` (or `~/.bashrc`):
 

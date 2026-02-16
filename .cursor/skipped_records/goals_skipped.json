@@ -1,0 +1,7 @@
+{
+  "batch_id": "batch_06_goals",
+  "data_type": "goals",
+  "total_skipped": 38,
+  "reason": "empty_name_field",
+  "note": "38 records from 'notion:Goals e87cf84958cd456594b4ccaadb35fc9b.csv' (imported 2025-12-11) had empty name fields. Only 1 valid record from 'manual_creation' (imported 2026-01-21) was migrated."
+}

@@ -45,6 +45,19 @@ export function deriveBearerToken(publicKey: Uint8Array): string {
 }
 
 /**
+ * Generate Ed25519 keypair synchronously (for tests and sync callers).
+ * Returns public key and base64url-encoded public key suitable as bearer token.
+ */
+export function generateKeyPair(): { publicKey: Uint8Array; publicKeyBase64url: string } {
+  const seed = randomBytes(32);
+  const publicKey = ed25519.getPublicKey(seed);
+  return {
+    publicKey,
+    publicKeyBase64url: base64UrlEncode(publicKey),
+  };
+}
+
+/**
  * Parse bearer token back to public key
  */
 export function parseBearerToken(token: string): Uint8Array {

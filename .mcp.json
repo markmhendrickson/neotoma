@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "neotoma-prod": {
+      "command": "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh",
+      "args": [],
+      "env": {}
+    },
+    "parquet": {
+      "command": "/Users/markmhendrickson/repos/ateles/mcp/parquet/run-parquet-mcp.sh",
+      "args": [],
+      "env": {}
+    }
+  }
+}

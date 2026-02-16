@@ -76,15 +76,52 @@ netstat -an | grep 8080
    ```
 2. **Or use different port:**
    ```bash
-   HTTP_PORT=8081 npm run dev:server
+   HTTP_PORT=8180 npm run dev:server
    ```
 3. **Or use branch-aware ports** (automatic port selection):
    ```bash
    npm run dev:full  # Automatically finds available ports
    ```
+4. **Session / dev server on 8021:** If the API is started by the CLI session (e.g. `npm run dev` with tunnel), it uses `HTTP_PORT` (default 8080; often set to 8021 in scripts). If you see `EADDRINUSE :::8021`, another process is already bound. Kill it with `lsof -i :8021` then `kill -9 <PID>`, or set `NEOTOMA_SESSION_PORT_FILE` so the server writes the actual port and the tunnel script waits for it.
+### Issue: "Invalid local session token"
+**Symptoms:**
+- API logs: `error: 'Invalid local session token'`
+- MCP or API requests return 401 or auth errors
+**Cause:**
+- Local storage backend: the token is not in `mcp_oauth_connections` or the connection was revoked.
+- Token expired or client (e.g. Cursor) is using an old token.
+**Solution:**
+1. **Re-authenticate:** Run `neotoma auth login` (or use the Neotoma UI) to get a fresh token.
+2. **Update Cursor MCP config:** After logging in, copy the new token/URL from the UI or CLI and update `.cursor/mcp.json` if you use token-based auth.
+3. **Local dev:** If using SQLite/local auth, ensure the dev server and CLI use the same `NEOTOMA_DATA_DIR` so the same `mcp_oauth_connections` is used.
+### Issue: "Tunnel: (not ready)" even though ngrok/cloudflared is installed
+**Symptoms:**
+- Intro shows `Tunnel: (not ready) — check <repo>/data/logs/tunnel-*-url.log`
+- `cloudflared` or `ngrok` is installed and works when run manually
+**Cause:**
+- The tunnel URL file is empty or missing because the tunnel script exited before writing it (e.g. Cloudflare named tunnel missing `CLOUDFLARE_TUNNEL_URL`, or quick tunnel hit rate limit).
+**Solution:**
+1. **Cloudflare named tunnel:** Set `CLOUDFLARE_TUNNEL_NAME` and `CLOUDFLARE_TUNNEL_URL` (or `HOST_URL`) in `.env`. Ensure `~/.cloudflared/config.yml` ingress points to `http://localhost:<HTTP_PORT>`.
+2. **Cloudflare quick tunnel:** If the script fails with "Failed to get Cloudflare tunnel URL", see the "Failed to get Cloudflare tunnel URL" section below; prefer a named tunnel to avoid 429s.
+3. **Check tunnel log:** When the CLI runs with `--tunnel`, the script writes logs under the repo at `data/logs/tunnel-dev-url.log` or `data/logs/tunnel-prod-url.log`. Run `tail -f data/logs/tunnel-prod-url.log` (or dev) to see why the tunnel exited.
+### Issue: "Failed to get Cloudflare tunnel URL"
+**Symptoms:**
+- Message: `Failed to get Cloudflare tunnel URL. Check: tail -f .../data/logs/tunnel-prod-url.log` (or similar)
+- Tunnel script exits before printing a URL
+**Diagnosis:**
+```bash
+# Tunnel logs are under repo data/logs (same dir as session and CLI logs)
+tail -f data/logs/tunnel-dev-url.log
+# Or for prod
+tail -f data/logs/tunnel-prod-url.log
+```
+**Solution:**
+1. **Quick tunnel rate limits:** Cloudflare quick tunnels can hit 429. Use a named tunnel: set `CLOUDFLARE_TUNNEL_NAME=neotoma` and `CLOUDFLARE_TUNNEL_URL` (or `HOST_URL`) in `.env`.
+2. **Wait longer:** The script polls for the URL for several seconds; if the tunnel is slow to start, increase retries or run `cloudflared tunnel --url http://localhost:8021` manually and copy the URL.
+3. **URL file path:** The CLI and `scripts/setup-https-tunnel.sh` use repo `data/logs/tunnel-dev-url.txt` and `tunnel-prod-url.txt` (and `.log` for script output). Ensure `data/logs` exists; the CLI creates it when starting with `--tunnel`.
 ### Issue: TypeScript Compilation Errors
 **Symptoms:**
-- `npm run build` fails
+- `npm run build:server` fails
 - Type errors in IDE
 - Import resolution errors
 **Diagnosis:**
@@ -99,7 +136,7 @@ npm run type-check
    ```bash
    rm -rf dist node_modules
    npm install
-   npm run build
+   npm run build:server
    ```
 2. **Check tsconfig.json:**
    - Verify `include` paths are correct
@@ -204,6 +241,20 @@ npm list tesseract.js
    const { data } = await recognize('path/to/image.png');
    console.log(data.text);
    ```
+### Issue: Many "Entity snapshot computed" lines for one store
+**Symptoms:**
+- CLI watch (or activity log) shows dozens of "Entity snapshot computed" entries for the same entity ID after a single store (e.g. one task).
+**Cause:**
+- The backend can write the same entity snapshot row multiple times in quick succession (each upsert sets a new `computed_at`). The watch displays one line per such update, so repeated writes produce repeated lines.
+**Solution:**
+- The CLI watch deduplicates entity_snapshot events: it shows at most one "Entity snapshot computed" per entity per 2-second window. Ensure you are on a build that includes this behavior. If you still see many lines, the backend may be invoking snapshot computation in a loop; check for multiple store or interpretation calls for the same idempotency key or entity.
+### Issue: Duplicate confirmation text in MCP response
+**Symptoms:**
+- After storing a task or entity, the agent response shows the same phrase twice (e.g. "Task created and stored:" in the thought and again as the section heading).
+**Cause:**
+- The assistant is repeating the same confirmation as both the thought summary and the structured output heading.
+**Solution:**
+- When summarizing store or entity results, do not use the same phrase for both the thought and the section heading. Use the thought for a brief status (e.g. "Task is created and stored. Summary below.") and use the heading only for the structured block, or omit the redundant heading.
 ## Integration Issues
 ### Issue: Plaid Link Token Expired
 **Symptoms:**
@@ -325,6 +376,21 @@ SELECT COUNT(*) FROM records;
 SELECT id, type, created_at FROM records 
 ORDER BY created_at DESC LIMIT 10;
 ```
+### CLI-related issues
+When debugging CLI-related issues, **always check the CLI log first.** In repo the default path is `<repo>/data/logs/cli.<pid>.log`; outside a repo, `~/.config/neotoma/cli.<pid>.log`. If the user ran with `--log-file <path>`, check that path. For session server output, check `<repo>/data/logs/session-dev.log` or `session-prod.log`. For tunnel issues, check `<repo>/data/logs/tunnel-*-url.log`. For the background API, run `neotoma api logs` or check `~/.config/neotoma/logs/api.log`. See `docs/developer/cli_reference.md` (Debugging and testing).
+
+### Where to look for what (logs)
+Neotoma does not write a single combined log. Use the right log for the component you are debugging:
+
+| Component | Log path | Contains |
+|-----------|----------|----------|
+| Session server (interactive `neotoma`) | `<repo>/data/logs/session-dev.log`, `session-prod.log` | HTTP API and build process for that env; MCP/API activity. Use `tail -f` to stream. |
+| Tunnel (when `neotoma --tunnel`) | `<repo>/data/logs/tunnel-dev-url.txt`, `tunnel-prod-url.txt` (URL), `tunnel-*-url.log` (script output) | Tunnel URL file and tunnel script stdout/stderr. |
+| CLI | `<repo>/data/logs/cli.<pid>.log` (in repo) or `~/.config/neotoma/cli.<pid>.log`; or `--log-file <path>` | CLI process stdout/stderr (commands, errors). |
+| Background API (`neotoma api start`) | `neotoma api logs` or `~/.config/neotoma/logs/api.log` | Background API process output. |
+
+For a full picture across components, check all three (or the two that apply to your setup).
+
 ### Check Logs
 ```bash
 # Development server logs
@@ -369,8 +435,9 @@ Load when:
 1. **Always verify environment first** — Check variables, credentials, network
 2. **Use diagnostic commands** — Don't guess, verify
 3. **Check logs** — Error messages provide clues
-4. **Test incrementally** — Fix one issue at a time
-5. **Document solutions** — Update this doc if new issues found
+4. **When debugging CLI-related issues, always check the CLI log** — In repo: `<repo>/data/logs/cli.<pid>.log`; session: `<repo>/data/logs/session-dev.log` or `session-prod.log`; tunnel: `<repo>/data/logs/tunnel-*-url.log`; background API: `neotoma api logs` or `~/.config/neotoma/logs/api.log`
+5. **Test incrementally** — Fix one issue at a time
+6. **Document solutions** — Update this doc if new issues found
 ### Forbidden Patterns
 - Guessing at solutions without diagnosis
 - Skipping verification steps

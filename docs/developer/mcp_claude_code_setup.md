@@ -6,6 +6,18 @@ For other integrations, see:
 - [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
 - [`mcp_chatgpt_setup.md`](mcp_chatgpt_setup.md) - ChatGPT Custom GPT setup
 
+## Choose Your Transport: Stdio (Local) vs HTTP (Remote)
+
+Use **stdio** when Claude Code runs on the same machine as the Neotoma repo. Claude Code spawns the server; no separate HTTP process. Use **HTTP** for remote access or when connecting to a tunnel/deployed server.
+
+| Criterion | Stdio | HTTP |
+|-----------|-------|------|
+| **Use case** | Claude Code on same machine | Remote, tunnel, deployed |
+| **After sleep** | Toggle off/on; client re-spawns | Restart HTTP server, then toggle |
+| **Unified config** | `.cursor/mcp.json` + `npm run sync:mcp` propagates to `.mcp.json` and Codex | Separate config per client |
+
+**Recommendation:** Use stdio for local Claude Code. See [agent_cli_configuration.md](agent_cli_configuration.md) for the unified `.cursor/mcp.json` + sync workflow shared with Cursor and Codex.
+
 ## Why Claude Code + Neotoma
 
 Claude Code represents a new paradigm of localhost AI agents that run on your computer with private environment, data, and context, as [Karpathy describes](https://x.com/karpathy/status/2002118205729562949). Neotoma aligns perfectly with this architecture:
@@ -29,12 +41,12 @@ This integration validates the localhost agent paradigm: agents running on your 
 The MCP server needs to be built before Claude Code can use it:
 
 ```bash
-npm run build
+npm run build:server
 ```
 
 This compiles TypeScript to JavaScript in the `dist/` directory.
 
-**Note:** For active development, use `npm run dev:mcp` to auto-rebuild on changes.
+**Note:** For active development, use `npm run dev:api` to auto-rebuild on changes.
 
 ## Step 2: Configure Environment Variables
 
@@ -89,32 +101,43 @@ DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
 
 ## Step 4: Configure Claude Code MCP Settings
 
-Claude Code uses a configuration file to connect to MCP servers.
+### Option A: Unified Config (Recommended)
 
-### Locate Claude Code Config
+Use the same stdio config as Cursor and Codex. Add to `.cursor/mcp.json` in the Neotoma repo, then sync:
 
-The configuration file location depends on your OS:
-
-**macOS:**
 ```bash
-~/Library/Application Support/Claude/claude_desktop_config.json
+cd /path/to/neotoma
+# Add neotoma-dev and neotoma-prod to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
+npm run sync:mcp
 ```
 
-**Linux:**
-```bash
-~/.config/Claude/claude_desktop_config.json
+The sync updates `.mcp.json`, which Claude Code may use when opening the Neotoma project. If Claude Code uses user-level config only, copy the synced entries from `.mcp.json` into your Claude config (see Option B).
+
+### Option B: Manual Config
+
+Claude Code config location:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Stdio with wrapper scripts (recommended):**
+
+```json
+{
+  "mcpServers": {
+    "neotoma-dev": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
+    },
+    "neotoma-prod": {
+      "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
+    }
+  }
+}
 ```
 
-**Windows:**
-```bash
-%APPDATA%\Claude\claude_desktop_config.json
-```
+Replace `/absolute/path/to/neotoma` with your repo path. No `cwd` or `args` needed. When encryption is off (default), no connection ID required. When encryption is on, set `NEOTOMA_CONNECTION_ID` in `.env`.
 
-### Add Neotoma MCP Server
-
-Edit the config file and add the Neotoma server:
-
-**With OAuth (Recommended):**
+**Alternative (command + args + cwd):**
 
 ```json
 {
@@ -124,6 +147,7 @@ Edit the config file and add the Neotoma server:
       "args": ["/absolute/path/to/neotoma/dist/index.js"],
       "cwd": "/absolute/path/to/neotoma",
       "env": {
+        "NEOTOMA_ENV": "development",
         "NEOTOMA_CONNECTION_ID": "claude-2025-01-21-abc123"
       }
     }
@@ -131,50 +155,9 @@ Edit the config file and add the Neotoma server:
 }
 ```
 
-**With Session Token (Deprecated):**
+Use `which node` for the node path. For prod, set `NEOTOMA_ENV": "production"`.
 
-```json
-{
-  "mcpServers": {
-    "neotoma": {
-      "command": "/absolute/path/to/node",
-      "args": ["/absolute/path/to/neotoma/dist/index.js"],
-      "cwd": "/absolute/path/to/neotoma",
-      "env": {
-        "NEOTOMA_SESSION_TOKEN": "your-session-token-here"
-      }
-    }
-  }
-}
-```
-
-**Configuration fields:**
-- `command`: Absolute path to node executable (get via `which node`)
-- `args`: Absolute path to built MCP server (dist/index.js)
-- `cwd`: Absolute path to Neotoma project root
-- `env.NEOTOMA_CONNECTION_ID`: Your OAuth connection ID (recommended)
-- `env.NEOTOMA_SESSION_TOKEN`: Your Supabase session token (deprecated)
-
-**Example OAuth configuration:**
-
-```json
-{
-  "mcpServers": {
-    "neotoma": {
-      "command": "/Users/username/.nvm/versions/node/v20.10.0/bin/node",
-      "args": ["/Users/username/Projects/neotoma/dist/index.js"],
-      "cwd": "/Users/username/Projects/neotoma",
-      "env": {
-        "NEOTOMA_CONNECTION_ID": "claude-2025-01-21-abc123"
-      }
-    }
-  }
-}
-```
-
-**Note:** OAuth connections automatically refresh tokens and persist until revoked.
-
-## Step 4: Restart Claude Code
+## Step 5: Restart Claude Code
 
 After configuring the MCP server:
 
@@ -182,7 +165,7 @@ After configuring the MCP server:
 2. **Restart Claude Code**
 3. **Verify connection** in a new conversation
 
-## Step 5: Test the Integration
+## Step 6: Test the Integration
 
 Once connected, test the available Neotoma actions:
 
@@ -218,6 +201,103 @@ Show me all the people I've referenced recently.
 ```
 Can you upload this invoice PDF and extract the structured data?
 ```
+
+## Step 7: Project Instructions (CLAUDE.md and .claude/)
+
+Neotoma includes project-specific instructions for Claude Code that ensure consistent agent behavior with repository conventions and constraints.
+
+### What's Included
+
+**Generated files:**
+- **`.claude/CLAUDE.md`** — Primary entrypoint with document loading order, core constraints, and quick reference
+- **`.claude/rules/`** — ~45 modular instruction files (foundation + repository rules)
+- **`.claude/skills/`** — Slash-invokable workflows (e.g. `/create_release`, `/fix_feature_bug`)
+- **`.claude/settings.json`** — Permissions and autonomous execution config
+
+**Sources:**
+- `foundation/agent_instructions/cursor_rules/` — Foundation-level rules
+- `foundation/agent_instructions/cursor_commands/` — Foundation-level commands
+- `docs/**/*_rules.mdc` — Repository-specific rules
+
+### Syncing Instructions
+
+Instructions are generated from sources via `scripts/setup_claude_instructions.sh`. They sync automatically on git commit when sources change, but you can manually sync:
+
+```bash
+./scripts/setup_claude_instructions.sh
+```
+
+**When to sync:**
+- After pulling foundation updates
+- After editing rule sources in `docs/` or `foundation/`
+- When adding new repository-specific rules
+
+**Auto-sync:** Pre-commit hook automatically syncs `.claude/` when rule/command sources are staged.
+
+### Key Features
+
+**1. Autonomous execution:**
+- Claude proceeds without asking for routine implementation, tests, docs, lint fixes
+- Stops only for high-stakes architectural/design ambiguity that could lead to wrong assumptions
+- See `.claude/rules/autonomous_execution.md` for details
+
+**2. Permissions:**
+- `defaultMode: acceptEdits` — File edits auto-accepted
+- Broad `allow` rules for npm, git, and project scripts
+- `deny` rules for `.env`, `docs/private/`, and other sensitive paths
+
+**3. Document loading order:**
+- Every session loads `docs/context/index_rules.mdc` first (documentation map)
+- Then foundation docs from `docs/foundation/`
+- Then task-specific docs (architecture, subsystems, testing)
+
+**4. Core constraints:**
+- Truth Layer boundaries (no strategy/execution logic)
+- Determinism (hash-based IDs, no randomness, stable sorting)
+- Immutability (observations/source never modified after creation)
+- Schema-first processing
+- Full constraint list in `.claude/CLAUDE.md`
+
+### Editing Instructions
+
+**NEVER edit files in `.claude/` directly** — they are generated and will be overwritten.
+
+**To modify instructions:**
+1. Edit source files:
+   - Foundation rules: `foundation/agent_instructions/cursor_rules/*.mdc`
+   - Foundation commands: `foundation/agent_instructions/cursor_commands/*.md`
+   - Repository rules: `docs/**/*_rules.mdc`
+2. Run sync script: `./scripts/setup_claude_instructions.sh`
+3. Commit changes (auto-syncs via pre-commit hook)
+
+### Skills (Slash Commands)
+
+Claude Code supports skills that work like slash commands:
+
+**Available skills:**
+- `/create_release` — Create a new release following release workflow
+- `/fix_feature_bug` — Fix a bug in a feature unit with error classification
+- `/create_feature_unit` — Create a new feature unit with spec and manifest
+- `/setup_symlinks` — Set up project symlinks
+- `/pull` — Pull foundation submodule updates
+- `/commit` — Create a git commit following conventions
+
+Skills are generated from foundation commands. To add repository-specific skills, add markdown files to foundation commands or document workflows in rules.
+
+### Settings and Permissions
+
+`.claude/settings.json` configures:
+
+**Permissions:**
+- **Allow:** npm scripts, git commands, project scripts, file edits/reads
+- **Deny:** `.env` files, `docs/private/`, destructive commands
+- **DefaultMode:** `acceptEdits` (auto-accept file edits)
+
+**Local overrides:**
+- Create `.claude/settings.local.json` for user-specific settings
+- Already gitignored (Claude creates this automatically)
+
+**No secrets in settings:** Environment variables go in `.env`, not in `.claude/settings.json`.
 
 ## Localhost Agent Architecture
 
@@ -325,7 +405,7 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 ### Issue: "MCP server not found" or "Command failed"
 
 **Solutions:**
-1. Ensure `npm run build` completed successfully
+1. Ensure `npm run build:server` completed successfully
 2. Verify `dist/index.js` exists
 3. Use absolute paths in config (not `~` or relative paths)
 4. Check node executable: `which node`
@@ -353,7 +433,7 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 1. Completely quit and restart Claude Code (not just reload)
 2. Check config file syntax (valid JSON)
 3. Verify MCP server is running in background
-4. Try rebuilding: `npm run build`
+4. Try rebuilding: `npm run build:server`
 5. Check Claude Code logs for errors
 
 ### Issue: "spawn node ENOENT" error
@@ -369,7 +449,7 @@ This means Claude Code can't find the node executable.
 
 **Solutions:**
 1. Ensure dependencies installed: `npm install`
-2. Rebuild: `npm run build`
+2. Rebuild: `npm run build:server`
 3. Check `dist/` directory contains all necessary files
 
 ## Development Workflow
@@ -380,7 +460,7 @@ If you're actively developing the MCP server:
 
 1. **Run automatic rebuild in watch mode:**
    ```bash
-   npm run dev:mcp
+   npm run dev:api
    ```
    This runs `tsc --watch` and automatically rebuilds `dist/` on file changes.
 
@@ -389,7 +469,7 @@ If you're actively developing the MCP server:
 ### Alternative: Manual Rebuild
 
 1. **Make code changes**
-2. **Rebuild:** `npm run build`
+2. **Rebuild:** `npm run build:server`
 3. **Restart Claude Code** to pick up changes
 
 ## Using Neotoma from Multiple Claude Code Instances
@@ -399,14 +479,14 @@ If you use Claude Code from different machines or profiles:
 1. **Build once** in the Neotoma project:
    ```bash
    cd /path/to/neotoma
-   npm run build
+   npm run build:server
    ```
 
 2. **Configure each Claude Code instance** with the same MCP server path
 
 3. **For auto-rebuild** (development):
    ```bash
-   npm run dev:mcp
+   npm run dev:api
    ```
    Keep this running to watch for changes.
 
@@ -438,10 +518,10 @@ All instances will share the same Neotoma database via Supabase.
 
 ```bash
 # Build MCP server (one-time)
-npm run build
+npm run build:server
 
 # Auto-rebuild on code changes (for development)
-npm run dev:mcp
+npm run dev:api
 
 # Get node path
 which node  # macOS/Linux

@@ -75,6 +75,14 @@
       "completed_date": {
         "strategy": "last_write"
       },
+      "notes": {
+        "strategy": "highest_priority",
+        "tie_breaker": "source_priority"
+      },
+      "description": {
+        "strategy": "highest_priority",
+        "tie_breaker": "source_priority"
+      },
       "updated_date": {
         "strategy": "last_write"
       }

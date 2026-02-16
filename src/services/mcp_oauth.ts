@@ -870,10 +870,10 @@ export async function initiateOAuthFlow(
 
   // Supabase always redirects to our callback; we then redirect to finalRedirectUri (e.g. cursor://) if set
   // IMPORTANT: OAuth redirect URI must match what's registered in Supabase exactly
-  // Use OAuth-specific redirect URI that defaults to localhost:8080, independent of API_BASE_URL
-  // This allows API_BASE_URL to be set to ngrok/proxy URLs for other purposes without breaking OAuth
+  // Default to HOST_URL (or discovered tunnel URL) so OAuth callbacks are reachable from internet
+  // Still allow explicit OAUTH_REDIRECT_BASE_URL override for edge cases (e.g. Supabase registered with localhost)
   const oauthRedirectBase =
-    process.env.OAUTH_REDIRECT_BASE_URL || `http://localhost:${config.httpPort}`;
+    process.env.OAUTH_REDIRECT_BASE_URL || config.apiBase;
   const supabaseRedirectUri = `${oauthRedirectBase}/api/mcp/oauth/callback`;
 
   const { error } = await getServiceRoleSupabaseClient()

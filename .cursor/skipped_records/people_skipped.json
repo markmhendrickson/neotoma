@@ -1,0 +1,14 @@
+{
+  "batch_id": "batch_05_people",
+  "data_type": "people",
+  "total_skipped": 134,
+  "reason": "empty_name_field",
+  "skipped_records": [
+    {
+      "person_id": "8a9f5aeb-eadd-44",
+      "chunk": "01",
+      "reason": "empty name"
+    }
+  ],
+  "note": "134 records from 'notion:People 9ba2e4010118476d84465cc985b1b05e.csv' (imported 2025-12-11) had empty name fields. Only 3 valid records from 'personal-information.md' (imported 2025-12-26) were migrated."
+}

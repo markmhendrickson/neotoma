@@ -1,0 +1,27 @@
+{
+  "batch_id": "batch_01_companies",
+  "data_type": "companies",
+  "total_skipped": 19,
+  "reason": "empty_name_field",
+  "skipped_records": [
+    {"company_id": "159.203.91.199", "reason": "empty name field"},
+    {"company_id": "192.168.0.1", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_1", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_2", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_3", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_4", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_5", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_6", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_7", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_8", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_9", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_10", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_11", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_12", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_13", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_14", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_15", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_16", "reason": "empty name field"},
+    {"company_id": "company_with_empty_name_17", "reason": "empty name field"}
+  ]
+}

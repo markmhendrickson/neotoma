@@ -18,7 +18,22 @@ Provide a concise, user-facing guide to the Neotoma CLI for interacting with the
 
 ## Installation and setup
 
-### Running the CLI
+### Option 1: Install from npm (recommended for users)
+
+```bash
+# Global install
+npm install -g neotoma
+
+# Initialize (creates directories, database, optional encryption)
+neotoma init
+
+# Or with encryption enabled
+neotoma init --generate-keys
+```
+
+After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From the Neotoma repo root, running `neotoma` with no arguments starts an interactive session and both dev and prod API servers in watch mode; exit the session (exit / quit / Ctrl+D) to stop the servers. Use `neotoma --no-session` to show the intro and then the command menu (prompt `> `, type `?` for shortcuts).
+
+### Option 2: Run from project (for development)
 
 From the project root, you can run the CLI without installing globally:
 
@@ -30,16 +45,28 @@ npm run cli
 npm run cli:dev
 ```
 
-To use the `neotoma` command from any directory:
+To use the `neotoma` command from any directory during development:
 
 ```bash
 npm run setup:cli   # Build and link in one step (recommended)
 # Or manually:
-npm run build
+npm run build:server
 npm install -g .    # Or: npm link (for development)
 ```
 
 If `neotoma` is not found after install or link, add the npm global bin to your PATH. See [CLI setup](getting_started.md#cli-setup) in the getting started guide for the fix and diagnostic commands.
+
+### First-time initialization
+
+After installing (either via npm or from the project), run `neotoma init` to set up directories and the database:
+
+```bash
+neotoma init                    # Basic setup
+neotoma init --generate-keys    # With encryption for privacy-first mode
+neotoma init --data-dir /path   # Custom data directory
+```
+
+See [CLI reference](cli_reference.md#initialization) for all init options.
 
 ### Authentication
 
@@ -92,6 +119,22 @@ neotoma dev list
 neotoma dev dev:server
 neotoma dev test:unit -- --reporter=dot
 ```
+
+### Set up MCP server configuration
+For IDE integrations (Cursor, Claude Code, Windsurf), scan and configure dev/prod servers:
+
+```bash
+# Show MCP config guidance
+neotoma mcp config
+
+# Scan for MCP config files and offer to add missing dev/prod servers
+neotoma mcp check
+
+# Include user-level configs (Cursor, Claude, Windsurf)
+neotoma mcp check --user-level
+```
+
+The `mcp check` command scans current directory and subdirectories for MCP config files (`.cursor/mcp.json`, `claude_desktop_config.json`, `mcp_config.json`), detects whether dev and prod Neotoma servers are configured, and prompts to install missing servers with absolute script paths. See [CLI reference](cli_reference.md#mcp-configuration) for details on detection patterns and supported environments.
 
 ## Output modes
 The CLI supports deterministic output formats:

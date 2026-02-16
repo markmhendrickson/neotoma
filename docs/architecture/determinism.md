@@ -28,7 +28,7 @@ Not all Neotoma components are deterministic. The following table explicitly cla
 | Rule-based extraction | **Yes** | Same text + same rules → same fields |
 | AI interpretation | **No** | Outputs vary; config logged for audit |
 | Entity resolution (heuristic) | **No** | May drift; duplicates expected |
-**Policy:** Neotoma never claims replay determinism for AI interpretation. Interpretation config is logged for audit, but outputs may vary across runs.
+**Policy:** Neotoma never claims replay determinism for AI interpretation. Interpretation config is logged for audit, but outputs may vary across runs. A first run may produce zero observations (e.g. empty extraction or misclassification); re-interpreting the same source may produce observations on retry. When debugging imports, retry interpretation if the first run yielded no entities.
 ### 1.3 Interpretation Auditability vs Replay Determinism
 **Key Distinction:**
 - **Replay Determinism**: Same input always produces identical output

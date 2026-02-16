@@ -727,7 +727,7 @@ Application layer MUST distinguish and signal retry eligibility.
 1. **Domain layer MUST NOT call Application or Presentation**
 2. **Infrastructure MUST NOT contain business logic**
 3. **Presentation MUST NOT call External layer directly**
-4. **Any layer MUST NOT introduce nondeterminism** (randomness, LLM extraction)
+4. **Any layer MUST NOT introduce nondeterminism** (randomness) except AI interpretation with auditability
 5. **Graph MUST NOT contain orphan nodes** (all nodes have edges)
 6. **Schema assignments MUST NOT change post-creation**
 7. **Raw text MUST NOT be modified after ingestion**
@@ -766,12 +766,13 @@ See `docs/releases/v2.1.0/` for detailed release plan.
 **Graph Query Language:**
 - Custom query language for graph traversal (e.g., "Find all entities linked to records from Q1 2024")
 ### 10.2 Non-Goals (Never)
-- LLM-based extraction (violates determinism)
 - Autonomous agents in Truth Layer (belongs in Strategy Layer or Execution Layer)
 - Predictive analytics (belongs in Strategy Layer)
 - Strategy or execution logic in Truth Layer (belongs in upper layers)
 - Direct truth mutations (all updates via Domain Events → Reducers)
 - Side effects in Strategy Layer (belongs in Execution Layer)
+
+**Note:** AI interpretation for unstructured files is allowed with audit trail and idempotence (see `docs/architecture/determinism.md` Section 1.2-1.4). The system logs interpretation config (model, temperature, prompt_hash) and ensures idempotence via canonicalization and hashing. While LLM output is non-deterministic, the final system state is idempotent.
 - Internal chat UI or conversational interfaces (externalized to MCP-compatible agents; see `docs/architecture/conversational_ux_architecture.md`)
 ## Agent Instructions
 ### When to Load This Document

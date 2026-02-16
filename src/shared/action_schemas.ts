@@ -28,6 +28,7 @@ export const RelationshipTypeSchema = z.enum([
   "DUPLICATE_OF",
   "DEPENDS_ON",
   "SUPERSEDES",
+  "EMBEDS",
 ]);
 
 export const CreateRelationshipRequestSchema = z.object({
@@ -70,6 +71,7 @@ export const EntitiesQueryRequestSchema = z.object({
 export const RetrieveEntitiesRequestSchema = z.object({
   user_id: z.string().uuid().optional(),
   entity_type: z.string().optional(),
+  search: z.string().optional(),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
   include_snapshots: z.boolean().optional().default(true),
@@ -99,6 +101,36 @@ export const MergeEntitiesRequestSchema = z.object({
   user_id: z.string().uuid().optional(),
 });
 
+export const DeleteEntityRequestSchema = z.object({
+  entity_id: z.string(),
+  entity_type: z.string(),
+  reason: z.string().optional(),
+  user_id: z.string().uuid().optional(),
+});
+
+export const DeleteRelationshipRequestSchema = z.object({
+  relationship_type: RelationshipTypeSchema,
+  source_entity_id: z.string(),
+  target_entity_id: z.string(),
+  reason: z.string().optional(),
+  user_id: z.string().uuid().optional(),
+});
+
+export const RestoreEntityRequestSchema = z.object({
+  entity_id: z.string(),
+  entity_type: z.string(),
+  reason: z.string().optional(),
+  user_id: z.string().uuid().optional(),
+});
+
+export const RestoreRelationshipRequestSchema = z.object({
+  relationship_type: RelationshipTypeSchema,
+  source_entity_id: z.string(),
+  target_entity_id: z.string(),
+  reason: z.string().optional(),
+  user_id: z.string().uuid().optional(),
+});
+
 export const CorrectEntityRequestSchema = z.object({
   entity_id: z.string(),
   entity_type: z.string(),
@@ -110,7 +142,7 @@ export const CorrectEntityRequestSchema = z.object({
 
 export const ReinterpretRequestSchema = z.object({
   source_id: z.string(),
-  interpretation_config: z.record(z.unknown()),
+  interpretation_config: z.record(z.unknown()).optional(),
 });
 
 export const ListEntityTypesRequestSchema = z.object({

@@ -1,10 +1,13 @@
 # Neotoma Search — Query Models and Ranking
 *(Structured Search with Deterministic Ranking)*
 ## Scope
-MVP: Structured search only (no semantic/embedding search)
+MVP: Entity semantic search in scope for `retrieve_entities` and `retrieve_entity_by_identifier` when text query provided; structural search remains primary for set queries, relationships, timelines.
 - Full-text search over `raw_text` and `properties`
 - Structured filters (type, date range, entities)
+- Optional entity semantic search (when `search` param or identifier provided; embeddings required)
 - Deterministic ranking with tiebreakers
+
+**Constraint:** Semantic search MUST operate over entity snapshots (structured), never raw document chunks.
 ## Query Model
 ```typescript
 interface SearchQuery {
@@ -56,5 +59,5 @@ Load when implementing search features, query logic, or ranking algorithms.
 Required co-loaded: `docs/architecture/determinism.md`, `docs/architecture/consistency.md`
 Constraints:
 - MUST use deterministic ranking with tiebreakers
-- MUST NOT use semantic search in MVP
+- Semantic search MUST operate over entity snapshots (structured), never raw document chunks
 - MUST document ranking changes

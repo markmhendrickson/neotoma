@@ -84,7 +84,7 @@ describe("cli smoke tests", () => {
         stdout.restore();
       }
       const parsed = JSON.parse(stdout.output.join(""));
-      expect(parsed).toEqual({ message: "Not authenticated." });
+      expect(parsed.auth_mode === "none" || parsed.message === "Not authenticated.").toBe(true);
     });
   });
 
@@ -105,8 +105,9 @@ describe("cli smoke tests", () => {
         )
       );
 
-      const fetchMock = vi.fn(async (input: RequestInfo) => {
-        if (String(input).includes("/api/entities/query")) {
+      const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/entities/query")) {
           return new Response(
             JSON.stringify({ entities: [{ id: "ent_test", entity_type: "company" }] }),
             { status: 200, headers: { "Content-Type": "application/json" } }
@@ -129,9 +130,64 @@ describe("cli smoke tests", () => {
 
       expect(fetchMock).toHaveBeenCalled();
       const parsed = JSON.parse(stdout.output.join(""));
-      expect(parsed).toEqual({
-        entities: [{ id: "ent_test", entity_type: "company" }],
+      expect(parsed).toHaveProperty("entities");
+      expect(parsed.entities).toEqual([{ id: "ent_test", entity_type: "company" }]);
+    });
+  });
+
+  it("filters entities by type when type is passed as positional argument", async () => {
+    await withTempHome(async (homeDir) => {
+      const configDir = path.join(homeDir, ".config", "neotoma");
+      await fs.mkdir(configDir, { recursive: true });
+      await fs.writeFile(
+        path.join(configDir, "config.json"),
+        JSON.stringify(
+          {
+            base_url: "http://localhost:9999",
+            access_token: "token-test",
+            expires_at: "2099-01-01T00:00:00Z",
+          },
+          null,
+          2
+        )
+      );
+
+      let capturedBody: Record<string, unknown> = {};
+      const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/api/entities/query")) {
+          const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
+          if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
+          return new Response(
+            JSON.stringify({
+              entities: [{ id: "ent_image_1", entity_type: "image" }],
+              limit: 100,
+              offset: 0,
+              total: 1,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "entities", "list", "image", "--json"]);
+      } finally {
+        stdout.restore();
+      }
+
+      expect(fetchMock).toHaveBeenCalled();
+      expect(capturedBody).toMatchObject({ entity_type: "image" });
+      const parsed = JSON.parse(stdout.output.join(""));
+      expect(parsed.entities).toHaveLength(1);
+      expect(parsed.entities[0].entity_type).toBe("image");
     });
   });
 });

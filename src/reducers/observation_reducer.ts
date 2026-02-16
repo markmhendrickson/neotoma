@@ -45,13 +45,33 @@ type MergeStrategy =
 export class ObservationReducer {
   /**
    * Compute snapshot from observations
+   * 
+   * Returns null if entity is deleted (has deletion observation with _deleted: true).
    */
   async computeSnapshot(
     entityId: string,
     observations: Observation[],
-  ): Promise<EntitySnapshot> {
+  ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
+    }
+
+    // Sort observations first to check for deletion
+    const sortedObservations = this.sortObservations(observations);
+
+    // Check if entity is deleted (highest priority observation with _deleted: true)
+    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
+      // Primary: source_priority DESC
+      if (b.source_priority !== a.source_priority) {
+        return b.source_priority - a.source_priority;
+      }
+      // Secondary: observed_at DESC
+      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
+    })[0];
+
+    if (highestPriorityObs.fields._deleted === true) {
+      // Entity is deleted - return null instead of snapshot
+      return null;
     }
 
     // Get entity type and user from first observation
@@ -72,9 +92,6 @@ export class ObservationReducer {
     const schemaVersion = schemaEntry.schema_version;
     const schemaDef = schemaEntry.schema_definition;
     const reducerConfig = schemaEntry.reducer_config;
-
-    // Sort observations deterministically
-    const sortedObservations = this.sortObservations(observations);
 
     // Compute snapshot by applying merge strategies per field
     const snapshot: Record<string, unknown> = {};
@@ -347,21 +364,38 @@ export class ObservationReducer {
 
   /**
    * Compute snapshot with default merge policies (when no schema exists)
+   * 
+   * Returns null if entity is deleted.
    */
   private async computeSnapshotWithDefaults(
     entityId: string,
     observations: Observation[],
-  ): Promise<EntitySnapshot> {
+  ): Promise<EntitySnapshot | null> {
     if (observations.length === 0) {
       throw new Error(`No observations found for entity ${entityId}`);
+    }
+
+    // Sort observations deterministically
+    const sortedObservations = this.sortObservations(observations);
+
+    // Check if entity is deleted (highest priority observation with _deleted: true)
+    const highestPriorityObs = [...sortedObservations].sort((a, b) => {
+      // Primary: source_priority DESC
+      if (b.source_priority !== a.source_priority) {
+        return b.source_priority - a.source_priority;
+      }
+      // Secondary: observed_at DESC
+      return new Date(b.observed_at).getTime() - new Date(a.observed_at).getTime();
+    })[0];
+
+    if (highestPriorityObs.fields._deleted === true) {
+      // Entity is deleted - return null instead of snapshot
+      return null;
     }
 
     const entityType = observations[0].entity_type;
     const schemaVersion = observations[0].schema_version || "1.0";
     const userId = observations[0].user_id;
-
-    // Sort observations deterministically
-    const sortedObservations = this.sortObservations(observations);
 
     // Use last-write-wins for all fields
     const snapshot: Record<string, unknown> = {};

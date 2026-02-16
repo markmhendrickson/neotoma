@@ -178,11 +178,16 @@ export function summarizeCsvRowRecord(params: RowSummaryParams): string {
     parts.push(...secondary);
   }
 
-  const prefix = label ? "" : `${humanizeType(type)} row ${rowIndex + 1}`;
+  const rowLabel =
+    type
+      .split("_")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  const prefix = label ? "" : `${rowLabel} row ${rowIndex + 1}`;
   const assembled = prefix ? [prefix, ...parts] : parts;
   const summary = assembled.join(parts.length ? " — " : "");
   if (summary.trim().length === 0) {
-    return `${humanizeType(type)} row ${rowIndex + 1}`;
+    return `${rowLabel} row ${rowIndex + 1}`;
   }
   return summary.length > MAX_SUMMARY_LENGTH
     ? `${summary.slice(0, MAX_SUMMARY_LENGTH - 1)}…`

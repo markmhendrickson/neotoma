@@ -3,7 +3,7 @@ import { WebSocketServer, WebSocket } from "ws";
 
 const MCP_CMD = process.env.MCP_CMD || "node";
 const MCP_ARGS = (process.env.MCP_ARGS ? JSON.parse(process.env.MCP_ARGS) : ["dist/index.js"]) as string[];
-const PORT = parseInt(process.env.WS_PORT || "8081", 10);
+const PORT = parseInt(process.env.WS_PORT || "8280", 10);
 
 interface BridgeMessage {
   type: "client_request" | "server_request" | "client_response" | "server_response" | "event" | "oauth_init";

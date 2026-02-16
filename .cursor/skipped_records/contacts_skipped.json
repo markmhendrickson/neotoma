@@ -1,0 +1,23 @@
+{
+  "batch_id": "batch_02_contacts",
+  "data_type": "contacts",
+  "total_skipped": 3,
+  "reason": "empty_name_field",
+  "skipped_records": [
+    {
+      "contact_id": "cb73ffeefc0c7120",
+      "chunk": "02",
+      "reason": "empty name"
+    },
+    {
+      "contact_id": "a4ab7dcf-8c61-49",
+      "chunk": "04",
+      "reason": "null name"
+    },
+    {
+      "contact_id": "529937b1-decb-40",
+      "chunk": "04",
+      "reason": "null name"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+---
+description: "Ensures the README.md file always reflects the current status of all releases, maintaining accurate project status visibility"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+<!-- Source: foundation/agent_instructions/cursor_rules/release_status_readme_update.mdc -->
+
+# Release Status README Update Rule
+
+## Purpose
+
+Ensures the README.md file always reflects the current status of all releases, maintaining accurate project status visibility for all developers and stakeholders.
+
+## Implementation
+
+**Automated:** README release status updates are enforced by a pre-commit hook that runs when release `status.md` files change.
+
+**Hook:** `scripts/update_readme_release_status.py` (configured in `.pre-commit-config.yaml` as `release-status-readme`)
+
+**How it works:**
+1. When `docs/releases/*/status.md` is staged, the hook runs automatically
+2. Script parses all release status files
+3. Updates corresponding entries in README.md Releases section
+4. Stages the updated README.md automatically
+
+**Manual execution:**
+```bash
+python scripts/update_readme_release_status.py
+```
+
+## Agent Actions
+
+Agents do NOT need to manually update README when release status changes — the pre-commit hook handles this automatically.
+
+If manually updating release status outside of a commit:
+1. Update `docs/releases/{version}/status.md`
+2. Either commit (hook will update README) or run the script manually: `python scripts/update_readme_release_status.py`
+
+## Constraints
+
+- **MUST** use exact status values from release workflow (planning, in_progress, in_testing, ready_for_deployment, deployed, completed)
+- **MUST NOT** bypass the pre-commit hook
+- If manually running the script, verify README is updated correctly before committing
+
+## Configuration
+
+Release status file path is configurable in `foundation-config.yaml`:
+
+```yaml
+orchestration:
+  release:
+    enabled: true
+    directory: "docs/releases/"  # Or configured path
+    status_file: "status.md"
+```
+
+## Related Files
+
+- `scripts/update_readme_release_status.py` — Script implementation
+- `.pre-commit-config.yaml` — Hook configuration (release-status-readme)
+- `foundation-config.yaml` — Release directory configuration
+

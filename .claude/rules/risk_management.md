@@ -1,0 +1,171 @@
+---
+description: "Ensures agents stop and request human approval for high-risk changes that could impact system stability, security, or architectural integrity"
+globs: ["**/*"]
+alwaysApply: true
+---
+
+<!-- Source: foundation/agent_instructions/cursor_rules/risk_management.mdc -->
+
+# Risk Management and Hold Points Rule
+
+**Reference:** `foundation/conventions/documentation-standards.md` - Documentation standards
+
+## Purpose
+
+Ensures agents stop and request human approval for high-risk changes that could impact system stability, security, or architectural integrity.
+
+## Scope
+
+This document defines:
+- When agents MUST stop and request approval
+- Risk levels (Low/Medium/High)
+- Hold point triggers
+- Approval workflow
+
+This document does NOT cover:
+- Specific constraints agents must enforce (see `agent_constraints.md`)
+- Security audit requirements (see `security.md`)
+- Repository-specific risk classification (configured in `foundation-config.yaml`)
+
+## Configuration
+
+Configure risk classification in `foundation-config.yaml`:
+
+```yaml
+risk_management:
+  enabled: true
+  risk_classification_path: "docs/private/governance/risk_classification.md"  # Optional
+  foundation_docs_path: "docs/foundation/"  # Path to foundation documents
+  high_risk_paths: []  # Repository-specific high-risk paths
+    # Example:
+    # - "docs/foundation/"
+    # - "src/auth/"
+```
+
+## When Agents MUST Stop
+
+AI assistants MUST stop and request human approval for:
+
+1. **Schema changes** (table structure, breaking data model changes)
+2. **High-risk changes** (see configured risk classification path if exists)
+3. **Foundation document changes** (files in configured foundation docs path)
+4. **Security changes** (auth, access control, encryption)
+5. **Violating documented constraints** (even if user requests)
+
+## Risk Levels
+
+### Low Risk
+
+- Documentation updates
+- UI text changes
+- Unit test additions
+- Non-breaking API additions
+- Feature additions within existing scope
+
+**Action:** Proceed with standard validation checklist
+
+### Medium Risk
+
+- New features within scope
+- API endpoint additions
+- Logic changes in non-critical paths
+- Subsystem modifications
+- Configuration changes
+
+**Action:** Proceed with enhanced validation, notify user of scope
+
+### High Risk
+
+- Schema migrations
+- Auth changes
+- Breaking API changes
+- Foundation document modifications (files in configured foundation docs path)
+- Security changes
+- Architectural changes
+- Changes that violate documented constraints
+
+**Action:** **STOP** and request explicit user approval before proceeding
+
+## Hold Point Triggers
+
+Agents MUST stop and request approval when encountering:
+
+1. **Schema modifications:**
+   - Adding/removing columns
+   - Changing column types
+   - Modifying JSONB structure
+   - Breaking migrations
+
+2. **Foundation document changes:**
+   - Modifying files in configured foundation docs path (default: `docs/foundation/`)
+   - Changing core philosophy or principles
+   - Updating architectural invariants
+
+3. **Security-sensitive changes:**
+   - Authentication/authorization logic
+   - Access control policy changes
+   - Encryption/decryption logic
+   - Credential handling
+
+4. **Constraint violations:**
+   - User requests that violate architectural boundaries
+   - Requests for nondeterministic features
+   - Features outside project scope
+   - Breaking immutability or data integrity requirements
+
+5. **Architectural changes:**
+   - Layer boundary modifications
+   - Consistency model changes
+   - Data structure changes
+   - Core system pattern modifications
+
+## Approval Workflow
+
+When a hold point is triggered:
+
+1. **STOP all work immediately**
+2. **Identify the risk level** (Low/Medium/High)
+3. **Explain the risk** to the user
+4. **Request explicit approval** before proceeding
+5. **Document the approval** in conversation
+6. **Proceed only after approval** is received
+
+### Example Hold Point Message
+
+```
+⚠️ HOLD POINT: High-Risk Change Detected
+
+I've identified a high-risk change that requires your approval:
+
+[Description of change]
+
+Risk Level: High
+Reason: [Schema change / Foundation doc / Security / Constraint violation]
+
+This change could impact:
+- [List potential impacts]
+
+Do you want me to proceed with this change? Please confirm explicitly.
+```
+
+## Exception Handling
+
+**No exceptions for high-risk changes.** Even if the user requests a change, agents MUST:
+
+1. Identify if it's high-risk
+2. Stop and explain the risk
+3. Request explicit approval
+4. Document the approval
+5. Proceed only after confirmation
+
+**For constraint violations:** Agents MUST refuse to proceed even with approval, explaining why the constraint cannot be violated.
+
+## Related Documents
+
+- `foundation/conventions/documentation-standards.md` - Documentation standards
+- `foundation-config.yaml` - Repository-specific configuration
+- Repository foundation docs (e.g., `docs/foundation/philosophy.md`) - Architectural invariants
+- Repository risk classification (if configured) - Detailed risk classification
+- `.claude/rules/foundation-agent_constraints.md` - Constraints and forbidden patterns
+- `.claude/rules/foundation-security.md` - Security audit requirements
+

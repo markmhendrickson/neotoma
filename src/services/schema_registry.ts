@@ -5,6 +5,10 @@
  */
 
 import { supabase } from "../db.js";
+import {
+  prepareEntitySnapshotWithEmbedding,
+  getEntitySnapshotUpsertPayload,
+} from "./entity_snapshot_embedding.js";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -73,6 +77,67 @@ export interface SchemaRegistryEntry {
   user_id?: string | null;
   scope?: "global" | "user";
   metadata?: SchemaMetadata;
+}
+
+/** Normalize entity type for schema registry: snake_case, safe characters, max length */
+export function normalizeEntityTypeForSchema(raw: string): string {
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "") || "generic";
+  return normalized.slice(0, 64);
+}
+
+/** Infer schema field type from a value (for schema-from-extraction). */
+function inferFieldType(value: unknown): "string" | "number" | "date" | "boolean" | "array" | "object" {
+  if (value === null || value === undefined) return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (Array.isArray(value)) return "array";
+  if (typeof value === "object") return "object";
+  if (typeof value === "string") {
+    const s = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s) || !Number.isNaN(Date.parse(s))) return "date";
+    return "string";
+  }
+  return "string";
+}
+
+/**
+ * Build schema definition and reducer config from extracted entity data.
+ * Used when the entity type has no known schema so a user-scoped schema can be created.
+ */
+export function buildSchemaFromExtractedFields(
+  entityData: Record<string, unknown>
+): { schema_definition: SchemaDefinition; reducer_config: ReducerConfig } {
+  const fields: Record<string, FieldDefinition> = {
+    schema_version: { type: "string", required: true },
+  };
+  const merge_policies: ReducerConfig["merge_policies"] = {};
+
+  const skipKeys = new Set(["entity_type", "type", "schema_version"]);
+  for (const [key, value] of Object.entries(entityData)) {
+    if (skipKeys.has(key)) continue;
+    const safeKey = key
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+    if (!safeKey) continue;
+    const fieldType = inferFieldType(value);
+    fields[safeKey] = { type: fieldType, required: false };
+    merge_policies[safeKey] = { strategy: "last_write" };
+  }
+
+  return {
+    schema_definition: { fields },
+    reducer_config: { merge_policies },
+  };
 }
 
 export class SchemaRegistryService {
@@ -199,6 +264,51 @@ export class SchemaRegistryService {
     }
 
     return data as SchemaRegistryEntry;
+  }
+
+  /**
+   * Ensure a schema exists for an extracted entity type; if not, create one from extracted fields.
+   * Registers a user-scoped schema so observations can be created for unknown entity types.
+   * Returns the schema to use (existing or newly created), or null if creation is disabled or fails.
+   */
+  async ensureSchemaForExtractedEntity(
+    entityType: string,
+    entityData: Record<string, unknown>,
+    userId: string,
+    options?: { create_if_missing?: boolean }
+  ): Promise<SchemaRegistryEntry | null> {
+    const createIfMissing = options?.create_if_missing !== false;
+    const normalizedType = normalizeEntityTypeForSchema(entityType);
+    if (!normalizedType) return null;
+
+    const schema = await this.loadActiveSchema(normalizedType, userId);
+    if (schema) return schema;
+
+    if (!createIfMissing) return null;
+
+    const { schema_definition, reducer_config } = buildSchemaFromExtractedFields(entityData);
+    if (Object.keys(schema_definition.fields).length <= 1) {
+      return null;
+    }
+
+    try {
+      const registered = await this.register({
+        entity_type: normalizedType,
+        schema_version: "1.0",
+        schema_definition,
+        reducer_config,
+        user_id: userId,
+        user_specific: true,
+        activate: true,
+        metadata: {
+          label: normalizedType.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          description: `User-created schema from extraction (entity type: ${entityType})`,
+        },
+      });
+      return registered;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -527,18 +637,28 @@ export class SchemaRegistryService {
                     allObservations as any,
                   );
 
+                  if (!snapshot) {
+                    console.warn(
+                      `[SCHEMA_REGISTRY] computeSnapshot returned null for entity ${entityId}`,
+                    );
+                    continue;
+                  }
+
+                  const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
+                    entity_id: snapshot.entity_id,
+                    entity_type: snapshot.entity_type,
+                    schema_version: snapshot.schema_version,
+                    snapshot: snapshot.snapshot,
+                    computed_at: snapshot.computed_at,
+                    observation_count: snapshot.observation_count,
+                    last_observation_at: snapshot.last_observation_at,
+                    provenance: snapshot.provenance,
+                    user_id: snapshot.user_id,
+                  });
+                  const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
+
                   await supabase.from("entity_snapshots").upsert(
-                    {
-                      entity_id: snapshot.entity_id,
-                      entity_type: snapshot.entity_type,
-                      schema_version: snapshot.schema_version,
-                      snapshot: snapshot.snapshot,
-                      computed_at: snapshot.computed_at,
-                      observation_count: snapshot.observation_count,
-                      last_observation_at: snapshot.last_observation_at,
-                      provenance: snapshot.provenance,
-                      user_id: snapshot.user_id,
-                    },
+                    toUpsert as Record<string, unknown>,
                     {
                       onConflict: "entity_id",
                     },

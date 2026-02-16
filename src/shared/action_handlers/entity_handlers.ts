@@ -1,48 +1,99 @@
 import { supabase } from "../../db.js";
 import { queryEntities } from "../../services/entity_queries.js";
+import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
+import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
 interface QueryEntitiesParams {
   userId: string;
   entityType?: string;
   includeMerged?: boolean;
+  search?: string;
   limit?: number;
   offset?: number;
 }
 
 export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
-  entities: Awaited<ReturnType<typeof queryEntities>>;
+  entities: EntityWithProvenance[];
   total: number;
   excluded_merged: boolean;
 }> {
-  const { userId, entityType, includeMerged = false, limit = 100, offset = 0 } = params;
-  const entities = await queryEntities({
+  const {
     userId,
     entityType,
-    includeMerged,
-    limit,
-    offset,
-  });
+    includeMerged = false,
+    search,
+    limit = 100,
+    offset = 0,
+  } = params;
 
-  let countQuery = supabase.from("entities").select("*", { count: "exact", head: true });
+  let entities: EntityWithProvenance[];
+  let total: number;
 
-  countQuery = countQuery.eq("user_id", userId);
+  if (search && search.trim()) {
+    const { entityIds, total: semanticTotal } = await semanticSearchEntities({
+      searchText: search.trim(),
+      userId,
+      entityType,
+      includeMerged,
+      limit,
+      offset,
+    });
 
-  if (entityType) {
-    countQuery = countQuery.eq("entity_type", entityType);
-  }
+    if (entityIds.length > 0) {
+      entities = await queryEntities({
+        userId,
+        entityType,
+        includeMerged,
+        limit,
+        offset: 0,
+        entityIds,
+      });
+      const orderMap = new Map(entityIds.map((id, i) => [id, i]));
+      entities.sort((a, b) => {
+        const ai = orderMap.get(a.entity_id) ?? 9999;
+        const bi = orderMap.get(b.entity_id) ?? 9999;
+        return ai - bi;
+      });
+      total = semanticTotal;
+    } else {
+      entities = await queryEntities({
+        userId,
+        entityType,
+        includeMerged,
+        limit,
+        offset,
+      });
+      const filtered = filterEntitiesBySearch(entities, search);
+      entities = filtered;
+      total = filtered.length;
+    }
+  } else {
+    entities = await queryEntities({
+      userId,
+      entityType,
+      includeMerged,
+      limit,
+      offset,
+    });
 
-  if (!includeMerged) {
-    countQuery = countQuery.is("merged_to_entity_id", null);
-  }
-
-  const { count, error: countError } = await countQuery;
-  if (countError) {
-    throw new Error(`Failed to count entities: ${countError.message}`);
+    let countQuery = supabase.from("entities").select("*", { count: "exact", head: true });
+    countQuery = countQuery.eq("user_id", userId);
+    if (entityType) {
+      countQuery = countQuery.eq("entity_type", entityType);
+    }
+    if (!includeMerged) {
+      countQuery = countQuery.is("merged_to_entity_id", null);
+    }
+    const { count, error: countError } = await countQuery;
+    if (countError) {
+      throw new Error(`Failed to count entities: ${countError.message}`);
+    }
+    total = count || 0;
   }
 
   return {
     entities,
-    total: count || 0,
+    total,
     excluded_merged: !includeMerged,
   };
 }

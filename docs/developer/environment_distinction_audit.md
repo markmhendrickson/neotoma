@@ -19,7 +19,7 @@ This document records how the codebase distinguishes development from production
 | Logs (CLI/backup) | `data/logs` | `data/logs_prod` | `NEOTOMA_LOGS_DIR` |
 | API background log dir | `~/.config/neotoma/logs` | `~/.config/neotoma/logs_prod` | (derived from `NEOTOMA_ENV`/`NODE_ENV`) |
 | API background PID file | `~/.config/neotoma/api.pid` | `~/.config/neotoma/api_prod.pid` | (derived from env) |
-| HTTP port | 8080 | 8082 | `HTTP_PORT` |
+| HTTP port | 8080 | 8021 | `HTTP_PORT` |
 
 Environment is determined by `NEOTOMA_ENV` or `NODE_ENV`; `production` means prod defaults.
 

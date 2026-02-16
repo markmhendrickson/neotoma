@@ -7,15 +7,25 @@
  * Per idempotence directive:
  * - LLM is stochastic (not deterministic)
  * - System enforces idempotence through validation, retry, and canonicalization
+ *
+ * System prompt is loaded from docs/prompts/llm_extraction_system_prompt.md (content after ---).
  */
 
+import { readFileSync, existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 import { config } from "../config.js";
 import type { SchemaDefinition } from "./schema_registry.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const openai = config.openaiApiKey
   ? new OpenAI({ apiKey: config.openaiApiKey })
   : null;
+
+/** Max tokens for LLM extraction response. Large documents (e.g. CSV with many rows) need more; 2000 caused "Unterminated string in JSON" when output was truncated. */
+const MAX_EXTRACTION_OUTPUT_TOKENS = 8192;
 
 export interface LLMExtractionResult {
   entity_type: string;
@@ -44,69 +54,7 @@ export async function extractWithLLM(
     throw new Error("OpenAI API key not configured");
   }
 
-  const systemPrompt = [
-    "You are a document analysis expert that extracts structured data from documents.",
-    "Analyze the provided document and:",
-    "1. Identify the document type (invoice, receipt, contract, note, etc.)",
-    "2. Extract all relevant fields as structured data",
-    "3. Support multiple languages (English, Spanish, French, German, etc.)",
-    "",
-    "Return a JSON object with:",
-    "- entity_type: The document type (invoice, receipt, transaction, contract, note, etc.)",
-    "- fields: Object containing all extracted fields",
-    "",
-    "Available entity types:",
-    "- invoice: Invoices with vendor, customer, amounts, dates",
-    "- receipt: Purchase receipts with merchant, amount, date",
-    "- transaction: Bank transactions with merchant, amount, date",
-    "- contract: Contracts with parties, dates, terms",
-    "- note: General notes or documents",
-    "- contact: Person/company contact information",
-    "- task: Tasks with status, due date, priority",
-    "- event: Calendar events with date, location, attendees",
-    "- message: Emails or messages with sender, recipient, subject",
-    "- property: Real estate or vehicle with address/identification, value",
-    "",
-    "For invoices, extract:",
-    "- invoice_number: Invoice/factura/facture number",
-    "- invoice_date: Invoice date",
-    "- due_date: Payment due date (if present)",
-    "- vendor_name: Seller/vendor name",
-    "- customer_name: Buyer/customer name",
-    "- amount_due or total_amount: Total amount",
-    "- currency: Currency code (EUR, USD, GBP, etc.)",
-    "- tax_amount: VAT/IVA/tax amount",
-    "- tax_rate: Tax percentage",
-    "- subtotal: Amount before tax",
-    "- items: Line items (if present)",
-    "",
-    "For receipts, extract:",
-    "- merchant_name: Store/merchant name",
-    "- amount_total: Total amount",
-    "- date_purchased: Purchase date",
-    "- payment_method: Payment method",
-    "- items: Purchased items",
-    "",
-    "For contracts, extract:",
-    "- contract_number: Contract identifier",
-    "- name: Contract title/name",
-    "- parties: Contracting parties",
-    "- effective_date: Start date",
-    "- expiration_date: End date",
-    "- type: Contract type",
-    "",
-    "For property (vehicles, real estate), extract:",
-    "- name: Property/vehicle name",
-    "- type: Property type (vehicle, real_estate, etc.)",
-    "- address or identification: Address for real estate, VIN for vehicles",
-    "- purchase_date: Purchase date",
-    "- purchase_price: Purchase price",
-    "- current_value: Current value",
-    "- description: Additional details",
-    "",
-    "Return ONLY valid JSON. No markdown, no code blocks, no explanations.",
-  ].join("\n");
-
+  const systemPrompt = buildSystemPrompt();
   const userPrompt = [
     fileName ? `Filename: ${fileName}` : undefined,
     mimeType ? `MIME Type: ${mimeType}` : undefined,
@@ -122,7 +70,8 @@ export async function extractWithLLM(
       model: modelId,
       temperature: 0, // Reduce variance for idempotence (optional aid)
       top_p: 1, // Consider all tokens (with temperature=0, picks most likely)
-      max_tokens: 2000,
+      max_tokens: MAX_EXTRACTION_OUTPUT_TOKENS,
+      seed: 1, // Reproducible outputs for same input (reinterpret determinism)
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: systemPrompt },
@@ -135,8 +84,19 @@ export async function extractWithLLM(
       throw new Error("No content returned from OpenAI");
     }
 
-    const parsed = JSON.parse(content);
-    
+    let parsed: { entity_type?: string; fields?: Record<string, unknown>; confidence?: number };
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      const msg = parseError instanceof Error ? parseError.message : String(parseError);
+      if (/unterminated|position \d+/i.test(msg)) {
+        throw new Error(
+          `${msg}. LLM output may have been truncated; extraction of large documents (e.g. CSV with many rows) can exceed the output token limit.`
+        );
+      }
+      throw parseError;
+    }
+
     // Validate response structure
     if (!parsed.entity_type || typeof parsed.entity_type !== "string") {
       throw new Error("Invalid response: missing or invalid entity_type");
@@ -212,7 +172,8 @@ export async function extractWithLLMWithRetry(
         model: modelId,
         temperature: 0, // Most deterministic
         top_p: 1, // Consider all tokens
-        max_tokens: 2000,
+        max_tokens: MAX_EXTRACTION_OUTPUT_TOKENS,
+        seed: 1, // Reproducible outputs for same input
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPromptWithFeedback },
@@ -273,72 +234,42 @@ export async function extractWithLLMWithRetry(
   );
 }
 
+const PROMPT_FILENAME = "llm_extraction_system_prompt.md";
+
+/** Path to the prompt doc: repo root is either cwd or two levels up from this file (dist/services or src/services). */
+function getPromptPath(): string {
+  const fromCwd = path.join(process.cwd(), "docs", "prompts", PROMPT_FILENAME);
+  if (existsSync(fromCwd)) return fromCwd;
+  const repoRoot = path.join(__dirname, "..", "..");
+  return path.join(repoRoot, "docs", "prompts", PROMPT_FILENAME);
+}
+
 /**
- * Build system prompt (extracted for reuse)
+ * Load system prompt from docs/prompts/llm_extraction_system_prompt.md.
+ * Uses content after the first "---" as the prompt body. Throws if file missing or body empty.
  */
+function loadSystemPrompt(): string {
+  const promptPath = getPromptPath();
+  if (!existsSync(promptPath)) {
+    throw new Error(
+      `LLM extraction prompt not found at ${promptPath}. Ensure docs/prompts/llm_extraction_system_prompt.md exists.`
+    );
+  }
+  const raw = readFileSync(promptPath, "utf-8");
+  const sep = "---";
+  const idx = raw.indexOf(sep);
+  const body = idx >= 0 ? raw.slice(idx + sep.length).trim() : raw.trim();
+  if (!body) {
+    throw new Error(
+      `LLM extraction prompt file is empty or has no content after "---": ${promptPath}`
+    );
+  }
+  return body;
+}
+
+/** Build system prompt: load from docs/prompts/llm_extraction_system_prompt.md. */
 function buildSystemPrompt(): string {
-  return [
-    "You are a document analysis expert that extracts structured data from documents.",
-    "Analyze the provided document and:",
-    "1. Identify the document type (invoice, receipt, contract, note, etc.)",
-    "2. Extract all relevant fields as structured data",
-    "3. Support multiple languages (English, Spanish, French, German, etc.)",
-    "",
-    "Return a JSON object with:",
-    "- entity_type: The document type (invoice, receipt, transaction, contract, note, etc.)",
-    "- fields: Object containing all extracted fields",
-    "",
-    "Available entity types:",
-    "- invoice: Invoices with vendor, customer, amounts, dates",
-    "- receipt: Purchase receipts with merchant, amount, date",
-    "- transaction: Bank transactions with merchant, amount, date",
-    "- contract: Contracts with parties, dates, terms",
-    "- note: General notes or documents",
-    "- contact: Person/company contact information",
-    "- task: Tasks with status, due date, priority",
-    "- event: Calendar events with date, location, attendees",
-    "- message: Emails or messages with sender, recipient, subject",
-    "- property: Real estate or vehicle with address/identification, value",
-    "",
-    "For invoices, extract:",
-    "- invoice_number: Invoice/factura/facture number",
-    "- invoice_date: Invoice date",
-    "- due_date: Payment due date (if present)",
-    "- vendor_name: Seller/vendor name",
-    "- customer_name: Buyer/customer name",
-    "- amount_due or total_amount: Total amount",
-    "- currency: Currency code (EUR, USD, GBP, etc.)",
-    "- tax_amount: VAT/IVA/tax amount",
-    "- tax_rate: Tax percentage",
-    "- subtotal: Amount before tax",
-    "- items: Line items (if present)",
-    "",
-    "For receipts, extract:",
-    "- merchant_name: Store/merchant name",
-    "- amount_total: Total amount",
-    "- date_purchased: Purchase date",
-    "- payment_method: Payment method",
-    "- items: Purchased items",
-    "",
-    "For contracts, extract:",
-    "- contract_number: Contract identifier",
-    "- name: Contract title/name",
-    "- parties: Contracting parties",
-    "- effective_date: Start date",
-    "- expiration_date: End date",
-    "- type: Contract type",
-    "",
-    "For property (vehicles, real estate), extract:",
-    "- name: Property/vehicle name",
-    "- type: Property type (vehicle, real_estate, etc.)",
-    "- address or identification: Address for real estate, VIN for vehicles",
-    "- purchase_date: Purchase date",
-    "- purchase_price: Purchase price",
-    "- current_value: Current value",
-    "- description: Additional details",
-    "",
-    "Return ONLY valid JSON. No markdown, no code blocks, no explanations.",
-  ].join("\n");
+  return loadSystemPrompt();
 }
 
 /**
@@ -408,4 +339,91 @@ function getValueType(value: unknown): string {
     return "object";
   }
   return "unknown";
+}
+
+/**
+ * Multi-entity extraction result for CSV chunking
+ */
+export interface MultiEntityExtractionResult {
+  entities: Array<{
+    entity_type: string;
+    fields: Record<string, unknown>;
+    confidence?: number;
+  }>;
+  total_confidence: number;
+}
+
+/**
+ * Extract from CSV with automatic chunking for large files
+ * Processes CSV in chunks if it exceeds token limits, returns array of entities
+ *
+ * For large CSV files, this returns multiple entities (one per chunk's extracted data)
+ * rather than attempting to merge all data into a single entity, which would exceed
+ * the output token limit (8192 tokens).
+ *
+ * @param csvContent Full CSV content
+ * @param fileName Original filename
+ * @param mimeType MIME type (should be text/csv)
+ * @param modelId Model to use for extraction
+ * @returns Array of extraction results (one per chunk for large files, or single result for small files)
+ */
+export async function extractFromCSVWithChunking(
+  csvContent: string,
+  fileName?: string,
+  mimeType?: string,
+  modelId: string = "gpt-4o"
+): Promise<LLMExtractionResult | MultiEntityExtractionResult> {
+  const { needsChunking, chunkCSV, getRecommendedChunkSize } = await import("./csv_chunking.js");
+
+  // Log to file for debugging
+  const fs = await import("fs/promises");
+  const fileSize = Buffer.byteLength(csvContent, "utf-8");
+  const needsChunk = needsChunking(csvContent);
+  await fs.appendFile("/tmp/neotoma-csv-chunking.log", `[CSV Check] File size: ${fileSize} bytes, Needs chunking: ${needsChunk}\n`).catch(() => {});
+
+  // Check if chunking is needed
+  if (!needsChunk) {
+    // Small CSV - process normally and return single result
+    return extractWithLLM(csvContent, fileName, mimeType, modelId);
+  }
+
+  // Large CSV - chunk and process in parallel
+  const rowsPerChunk = getRecommendedChunkSize(fileSize);
+  const chunks = chunkCSV(csvContent, rowsPerChunk);
+
+  // Log to file for debugging (MCP stdout is used for JSON-RPC)
+  const logMsg = `[CSV Chunking] File size: ${fileSize} bytes, Rows per chunk: ${rowsPerChunk}, Total chunks: ${chunks.length}\n`;
+  await fs.appendFile("/tmp/neotoma-csv-chunking.log", logMsg).catch(() => {});
+
+  console.log(
+    `CSV file too large (${fileSize} bytes), chunking into ${chunks.length} chunks of ~${rowsPerChunk} rows each`
+  );
+
+  // Process chunks in parallel
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const chunkFileName = fileName
+        ? `${fileName} (chunk ${chunk.metadata.chunkIndex + 1}/${chunk.metadata.totalChunks})`
+        : undefined;
+
+      return extractWithLLM(chunk.content, chunkFileName, mimeType, modelId);
+    })
+  );
+
+  // Return array of entities (one per chunk) to avoid exceeding output token limit
+  // The interpretation service will process each entity separately
+  let totalConfidence = 0;
+  const entities = chunkResults.map((chunkResult) => {
+    totalConfidence += chunkResult.confidence || 0.8;
+    return {
+      entity_type: chunkResult.entity_type,
+      fields: chunkResult.fields,
+      confidence: chunkResult.confidence,
+    };
+  });
+
+  return {
+    entities,
+    total_confidence: totalConfidence / chunkResults.length,
+  };
 }

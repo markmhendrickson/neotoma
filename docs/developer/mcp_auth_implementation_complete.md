@@ -147,7 +147,7 @@ MCP authentication was initially implemented using Supabase session tokens. This
 
 All code builds successfully:
 - ✓ TypeScript compilation passes (`npm run type-check`)
-- ✓ Backend builds (`npm run build`)
+- ✓ Backend builds (`npm run build:server`)
 - ✓ Frontend builds (`cd frontend && npm run build`)
 - ✓ No linter errors
 
@@ -230,7 +230,7 @@ Run these commands to verify the implementation:
 npm run type-check
 
 # Build backend
-npm run build
+npm run build:server
 
 # Build frontend
 cd frontend && npm run build

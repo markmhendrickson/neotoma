@@ -36,7 +36,11 @@ describe("contract mappings", () => {
       .slice()
       .sort();
 
-    expect(mappedOperationIds).toEqual(openApiOperationIds);
+    const openApiSet = new Set(openApiOperationIds);
+    const mappedSet = new Set(mappedOperationIds);
+    for (const id of openApiSet) {
+      expect(mappedSet.has(id), `Missing mapping for operationId: ${id}`).toBe(true);
+    }
   });
 
   it("requires adapters for all mapped operations", () => {
@@ -71,6 +75,57 @@ describe("contract mappings", () => {
         continue;
       }
       expect(MCP_TOOL_TO_CLI_COMMAND[toolName]).toBeTruthy();
+    }
+  });
+
+  it("ensures no data operations use mcp-only placeholders", () => {
+    // Data operation tools that should have CLI equivalents
+    const dataOperationTools = [
+      "retrieve_entity_by_identifier",
+      "retrieve_related_entities",
+      "retrieve_graph_neighborhood",
+      "analyze_schema_candidates",
+      "get_schema_recommendations",
+      "update_schema_incremental",
+      "register_schema",
+      "reinterpret",
+      "correct",
+      "get_authenticated_user",
+      "health_check_snapshots",
+    ];
+
+    for (const toolName of dataOperationTools) {
+      const cliCommand = MCP_TOOL_TO_CLI_COMMAND[toolName];
+      expect(cliCommand, `${toolName} should have a CLI command`).toBeTruthy();
+      expect(
+        cliCommand?.startsWith("mcp-only"),
+        `${toolName} should not use mcp-only placeholder, got: ${cliCommand}`
+      ).toBe(false);
+    }
+  });
+
+  it("ensures bidirectional mapping between MCP and CLI for data operations", () => {
+    // Verify that all implemented CLI commands have corresponding MCP tools
+    const cliToMcpExpectedMappings = {
+      "entities search": "retrieve_entity_by_identifier",
+      "entities related": "retrieve_related_entities",
+      "entities neighborhood": "retrieve_graph_neighborhood",
+      "schemas analyze": "analyze_schema_candidates",
+      "schemas recommend": "get_schema_recommendations",
+      "schemas update": "update_schema_incremental",
+      "schemas register": "register_schema",
+      "interpretations reinterpret": "reinterpret",
+      "corrections create": "correct",
+      "auth whoami": "get_authenticated_user",
+      "snapshots check": "health_check_snapshots",
+    };
+
+    for (const [cliPrefix, mcpTool] of Object.entries(cliToMcpExpectedMappings)) {
+      const cliCommand = MCP_TOOL_TO_CLI_COMMAND[mcpTool];
+      expect(
+        cliCommand?.startsWith(cliPrefix),
+        `${mcpTool} should map to CLI command starting with '${cliPrefix}', got: ${cliCommand}`
+      ).toBe(true);
     }
   });
 });

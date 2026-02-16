@@ -50,7 +50,7 @@ export function MCPChatGPTPage() {
                 <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                   <li>Enable ChatGPT Developer Mode (beta feature in your ChatGPT account)</li>
                   <li>Create an OAuth connection in the <a href="/oauth" className="underline">OAuth</a> page</li>
-                  <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build</code></li>
+                  <li>Build the MCP server: <code className="bg-muted px-1 py-0.5 rounded">npm run build:server</code></li>
                   <li>Configure MCP server in Developer Mode settings</li>
                   <li>Use the HTTP-based configuration below (with your MCP server URL)</li>
                 </ol>

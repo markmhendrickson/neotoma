@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { existsSync, readFileSync } from "fs";
 
 // Use NEOTOMA_ENV to avoid conflicts when running as MCP in other workspaces
 // Falls back to NODE_ENV for backward compatibility
@@ -54,8 +55,8 @@ function getOpenAIConfig() {
   return process.env.OPENAI_API_KEY || "";
 }
 
-// Default ports differ by environment so dev and prod can run in parallel (dev=8080, prod=8082)
-const defaultHttpPort = env === "production" ? "8082" : "8080";
+// Default ports: 8080 dev, 8180 prod, 8280 WS (spaced to avoid cascade when prod bumps)
+const defaultHttpPort = env === "production" ? "8180" : "8080";
 const httpPort = parseInt(process.env.HTTP_PORT || defaultHttpPort, 10);
 const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
 const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
@@ -64,6 +65,36 @@ const eventLogSubdir = env === "production" ? "events_prod" : "events";
 const logsSubdir = env === "production" ? "logs_prod" : "logs";
 const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, eventLogSubdir);
 const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
+
+/**
+ * Auto-discover tunnel URL from file written by setup-https-tunnel.sh
+ * This allows tunnels to "just work" without manually setting HOST_URL
+ */
+function discoverTunnelUrl(httpPort: number): string {
+  const tunnelFiles = [
+    "/tmp/ngrok-mcp-url.txt",  // Combined scripts write here
+    "/tmp/cloudflared-tunnel.txt"  // Alternative for cloudflare-only
+  ];
+  
+  for (const file of tunnelFiles) {
+    try {
+      if (existsSync(file)) {
+        const url = readFileSync(file, "utf-8").trim();
+        if (url && url.startsWith("http")) {
+          // Store for logging after config is created
+          (discoverTunnelUrl as any)._discovered = { url, file };
+          return url;
+        }
+      }
+    } catch {
+      // File doesn't exist or unreadable, continue to next
+    }
+  }
+  
+  // Store that we're using localhost default
+  (discoverTunnelUrl as any)._discovered = { url: `http://localhost:${httpPort}`, file: null };
+  return `http://localhost:${httpPort}`;
+}
 
 export const config = {
   projectRoot,
@@ -82,7 +113,7 @@ export const config = {
   port: parseInt(process.env.PORT || "3000", 10),
   httpPort,
   environment: env,
-  apiBase: process.env.API_BASE_URL || `http://localhost:${httpPort}`,
+  apiBase: process.env.HOST_URL || process.env.API_BASE_URL || discoverTunnelUrl(httpPort),
   mcpTokenEncryptionKey: process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
   oauthClientId: process.env.SUPABASE_OAUTH_CLIENT_ID || "",
   
@@ -123,3 +154,24 @@ if (config.storageBackend === "supabase" && (!config.supabaseUrl || !config.supa
   }
 }
 
+/**
+ * Log configuration after it's loaded
+ * Call this after importing config to see what was configured
+ */
+export function logConfigInfo(): void {
+  const discovered = (discoverTunnelUrl as any)._discovered;
+  
+  if (process.env.HOST_URL) {
+    console.log(`[Config] Using HOST_URL from environment: ${config.apiBase}`);
+  } else if (process.env.API_BASE_URL) {
+    console.log(`[Config] Using API_BASE_URL from environment (deprecated): ${config.apiBase}`);
+  } else if (discovered?.file) {
+    console.log(`[Config] HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`);
+  } else {
+    console.log(`[Config] HOST_URL not set and no tunnel URL file found; using localhost:${config.httpPort}`);
+  }
+  
+  console.log(`[Config] API base (apiBase): ${config.apiBase}`);
+  console.log(`[Config] Storage backend: ${config.storageBackend}`);
+  console.log(`[Config] Environment: ${config.environment}`);
+}

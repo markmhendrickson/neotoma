@@ -108,6 +108,9 @@ docs/foundation/philosophy.md:
     - path: docs/feature_units/standards/feature_unit_spec.md
       type: implicit
       reason: Feature units must follow philosophy
+    - path: docs/subsystems/vector_ops.md
+      type: implicit
+      reason: Philosophy constrains vector ops scope (entity semantic search, structure-over-similarity)
     - path: README.md
       type: restates
       reason: Restates principles from philosophy
@@ -236,6 +239,9 @@ docs/specs/MCP_SPEC.md:
     - path: docs/developer/mcp_cursor_setup.md
       type: explicit
       reason: Setup guide references MCP spec
+    - path: docs/developer/mcp_claude_code_setup.md
+      type: explicit
+      reason: Setup guide references MCP spec and project instructions
     - path: docs/developer/mcp_chatgpt_setup.md
       type: explicit
       reason: Setup guide references MCP spec
@@ -270,6 +276,9 @@ docs/developer/cli_reference.md:
     - path: docs/developer/cli_overview.md
       type: explicit
       reason: Overview links to CLI reference for command details
+    - path: docs/developer/agent_cli_configuration.md
+      type: explicit
+      reason: Agent CLI config doc links to CLI overview and related setup docs
     - path: README.md
       type: implicit
       reason: README links to CLI reference
@@ -279,6 +288,30 @@ docs/developer/mcp_overview.md:
     - path: tests/fixtures/agent_mcp_cases.json
       type: explicit
       reason: Agent MCP behavior tests are referenced in MCP overview
+
+docs/developer/tunnels.md:
+  downstream:
+    - path: docs/developer/getting_started.md
+      type: explicit
+      reason: Getting started references tunnels for watch:prod:tunnel and env
+    - path: docs/developer/mcp_https_tunnel_status.md
+      type: explicit
+      reason: Tunnel status doc links to tunnels.md for full reference
+    - path: docs/developer/mcp_https_testing.md
+      type: explicit
+      reason: HTTPS testing doc links to tunnels.md for setup
+    - path: docs/developer/mcp_cursor_setup.md
+      type: explicit
+      reason: Cursor setup references tunnels for tunnel or proxy usage
+    - path: docs/developer/mcp_claude_code_setup.md
+      type: explicit
+      reason: Claude Code setup references tunnels for tunnel or proxy usage
+    - path: docs/developer/mcp_oauth_troubleshooting.md
+      type: explicit
+      reason: OAuth troubleshooting references tunnels for HOST_URL when using tunnel
+    - path: README.md
+      type: explicit
+      reason: README links to tunnels for watch:prod:tunnel
 
 # Standards Layer
 docs/testing/testing_standard.md:
