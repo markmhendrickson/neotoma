@@ -257,7 +257,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Invoice",
       description: "Money owed to you or vendors.",
       category: "finance",
-      aliases: ["bill"],
+      aliases: ["bill", "factura"],
     },
     schema_definition: {
       fields: {
@@ -295,7 +295,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Receipt",
       description: "Proof-of-purchase documents.",
       category: "finance",
-      aliases: ["proof_of_purchase"],
+      aliases: ["proof_of_purchase", "recibo", "comprobante"],
     },
     schema_definition: {
       fields: {
@@ -997,7 +997,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Note",
       description: "Free-form text, journals, scratchpads.",
       category: "productivity",
-      aliases: ["journal", "memo"],
+      aliases: ["journal", "memo", "nota"],
     },
     schema_definition: {
       fields: {
@@ -1178,7 +1178,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Transaction",
       description: "Individual debits/credits pulled from Plaid or uploads.",
       category: "finance",
-      aliases: ["transactions", "txn", "expense", "purchase", "payment"],
+      aliases: ["transactions", "txn", "expense", "purchase", "payment", "transaccion"],
     },
     schema_definition: {
       fields: {
@@ -1249,7 +1249,7 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
       label: "Contract",
       description: "Legal contracts and agreements.",
       category: "finance",
-      aliases: ["agreement", "legal_document"],
+      aliases: ["agreement", "legal_document", "contrato"],
     },
     schema_definition: {
       fields: {
@@ -1817,6 +1817,126 @@ export const EXPANDED_ENTITY_SCHEMAS: Record<string, Partial<EntitySchema>> = {}
  */
 export function getSchemaDefinition(entityType: string): EntitySchema | null {
   return ENTITY_SCHEMAS[entityType] || null;
+}
+
+/**
+ * Normalize string for alias matching: lowercase, trim, strip diacritics.
+ * So "Récibo" and "Recibo" both match alias "recibo".
+ */
+function normalizeForAliasMatch(s: string): string {
+  const trimmed = s.trim().toLowerCase();
+  if (!trimmed) return "";
+  return trimmed.normalize("NFD").replace(/\p{Diacritic}/gu, "") || trimmed;
+}
+
+/**
+ * Resolve an extracted or localized entity type to a canonical entity_type
+ * by matching against registered schemas' entity_type and metadata.aliases.
+ * No hardcoded map: all mappings come from schema definitions, so new schemas
+ * and aliases extend behavior automatically.
+ * Matching is case- and accent-insensitive (e.g. "Recibo", "Récibo" -> receipt).
+ *
+ * @param extractedType - Raw type from LLM or client (e.g. "Recibo", "factura")
+ * @returns Canonical entity_type if a schema matches, otherwise null
+ */
+export function resolveEntityTypeFromAlias(extractedType: string): string | null {
+  const normalized = normalizeForAliasMatch(extractedType);
+  if (!normalized) return null;
+
+  for (const [canonicalType, schema] of Object.entries(ENTITY_SCHEMAS)) {
+    if (normalized === normalizeForAliasMatch(canonicalType)) return canonicalType;
+    const aliases = schema.metadata?.aliases ?? [];
+    if (aliases.some((a) => normalizeForAliasMatch(a) === normalized)) return canonicalType;
+  }
+  return null;
+}
+
+/**
+ * Return all canonical entity types that have a registered schema.
+ * Used e.g. for LLM-based entity type inference when no alias matches.
+ */
+export function getRegisteredEntityTypes(): string[] {
+  return Object.keys(ENTITY_SCHEMAS);
+}
+
+/** Minimal schema shape for scoring (code-defined or registry entry). */
+export interface SchemaCandidate {
+  entity_type: string;
+  schema_definition: { fields?: Record<string, { type: string; required?: boolean }> };
+}
+
+/**
+ * Score how well a set of extracted field keys matches a schema.
+ * Required fields present count 2, optional count 1. Keys compared case-insensitively.
+ */
+function scoreSchemaMatch(
+  extractedKeys: Set<string>,
+  schema: SchemaCandidate
+): { required: number; optional: number } {
+  const fields = schema.schema_definition?.fields ?? {};
+  let required = 0;
+  let optional = 0;
+  for (const [name, def] of Object.entries(fields)) {
+    if (name === "schema_version") continue;
+    const key = name.toLowerCase();
+    if (!extractedKeys.has(key)) continue;
+    if ((def as { required?: boolean }).required) {
+      required += 1;
+    } else {
+      optional += 1;
+    }
+  }
+  return { required, optional };
+}
+
+/**
+ * Refine entity type using extracted field keys: if the current type fits poorly
+ * (e.g. 0–1 required fields) and another schema fits better (e.g. 2+ required fields),
+ * return the better-matching type. Reduces misclassification (e.g. receipt doc → note).
+ *
+ * Works with a dynamic number of schema types: pass candidateSchemas from the registry
+ * (e.g. schemaRegistry.listActiveSchemas(userId)) merged with code-defined schemas so
+ * user/global DB schemas participate. When candidateSchemas is omitted, only code-defined
+ * ENTITY_SCHEMAS are considered.
+ *
+ * @param currentEntityType - Resolved type from alias/LLM
+ * @param extractedFieldKeys - Keys from extracted entity data (e.g. Object.keys(fields))
+ * @param candidateSchemas - Optional list of schemas to consider (code + DB); when omitted, uses ENTITY_SCHEMAS only
+ * @returns Refined entity type, or currentEntityType if no better match
+ */
+export function refineEntityTypeFromExtractedFields(
+  currentEntityType: string,
+  extractedFieldKeys: string[],
+  candidateSchemas?: SchemaCandidate[]
+): string {
+  const keySet = new Set(extractedFieldKeys.map((k) => k.trim().toLowerCase()).filter(Boolean));
+  if (keySet.size === 0) return currentEntityType;
+
+  const candidates: SchemaCandidate[] =
+    candidateSchemas ?? Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({ entity_type, schema_definition: s.schema_definition }));
+
+  const currentSchema = candidates.find((c) => c.entity_type === currentEntityType) ?? getSchemaDefinition(currentEntityType);
+  const currentScore = currentSchema
+    ? scoreSchemaMatch(keySet, currentSchema as SchemaCandidate)
+    : { required: 0, optional: 0 };
+
+  // If current type already has strong fit (2+ required), keep it
+  if (currentScore.required >= 2) return currentEntityType;
+
+  let bestOther: { type: string; required: number; optional: number } | null = null;
+  for (const schema of candidates) {
+    if (schema.entity_type === currentEntityType) continue;
+    const s = scoreSchemaMatch(keySet, schema);
+    if (s.required >= 2 && (!bestOther || s.required > bestOther.required || (s.required === bestOther.required && s.optional > bestOther.optional))) {
+      bestOther = { type: schema.entity_type, required: s.required, optional: s.optional };
+    }
+  }
+  if (!bestOther) return currentEntityType;
+  // Override when another type has clearly better fit
+  const currentTotal = currentScore.required * 2 + currentScore.optional;
+  const bestTotal = bestOther.required * 2 + bestOther.optional;
+  if (bestTotal > currentTotal + 1) return bestOther.type;
+  return currentEntityType;
 }
 
 /**

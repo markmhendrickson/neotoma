@@ -262,6 +262,21 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         expect(Array.isArray(responseData.entities)).toBe(true);
         expect(responseData.entities.length).toBeLessThanOrEqual(10);
       });
+
+      it("should support semantic search via search param", async () => {
+        const result = await callMCPAction(server, "retrieve_entities", {
+          entity_type: testEntityType,
+          search: "query test",
+          limit: 10,
+          offset: 0,
+        });
+
+        const responseData = JSON.parse(result.content[0].text);
+        expect(responseData.entities).toBeDefined();
+        expect(Array.isArray(responseData.entities)).toBe(true);
+        expect(typeof responseData.total).toBe("number");
+        expect(responseData.excluded_merged).toBeDefined();
+      });
     });
 
     describe("list_entity_types (MCP_SPEC.md 3.2)", () => {

@@ -147,6 +147,11 @@ CREATE INDEX idx_entity_snapshots_embedding ON entity_snapshots
 - Provenance enables full traceability: snapshot field → observation → document
 - Reducers are deterministic: same observations + merge rules → same snapshot
 - See [`docs/subsystems/reducer.md`](./reducer.md) for reducer patterns
+
+**Local/SQLite schema additions for entity semantic search (when sqlite-vec loaded):**
+- `entity_embeddings_vec`: vec0 virtual table, `embedding float[1536]`. Stores embeddings for KNN similarity search.
+- `entity_embedding_rows`: Maps vec rowid to entity metadata. Columns: `rowid` (PK, matches vec rowid), `entity_id` (UNIQUE), `user_id`, `entity_type`, `merged`. See [`docs/subsystems/vector_ops.md`](./vector_ops.md) for local path details.
+
 ### 2.9 `schema_registry` Table
 **Purpose:** Manage config-driven schema definitions, versions, and merge policies. Enables runtime schema evolution without code deployments.
 **Schema:**

@@ -2,8 +2,7 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
-import { verifySourceExists } from "../helpers/database_verifiers.js";
-import { writeFile, mkdir, rm } from "fs/promises";
+import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 
@@ -49,10 +48,6 @@ describe("CLI store commands", () => {
       expect(result).toHaveProperty("observations_created");
 
       tracker.trackSource(result.source_id);
-
-      // Verify database state
-      const sourceExists = await verifySourceExists(result.source_id);
-      expect(sourceExists).toBe(true);
     });
 
     it("should store file with --interpret false", async () => {

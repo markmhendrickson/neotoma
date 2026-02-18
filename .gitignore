@@ -22,6 +22,7 @@ docs/developer/mcp.json.example
 .secrets/
 tmp/
 .creds/
+backups/
 
 # Vite build artifacts
 frontend/.vite/deps/

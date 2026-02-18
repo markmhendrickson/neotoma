@@ -240,6 +240,26 @@ components:
           items:
             type: object
             additionalProperties: true
+        relationships:
+          type: array
+          description: |
+            Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+            Enables one-call chat persistence: store [conversation, agent_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }].
+          items:
+            type: object
+            required: [relationship_type, source_index, target_index]
+            properties:
+              relationship_type:
+                type: string
+                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+              source_index:
+                type: integer
+                minimum: 0
+                description: Index into the entities array for the source entity
+              target_index:
+                type: integer
+                minimum: 0
+                description: Index into the entities array for the target entity
         source_priority:
           type: integer
         idempotency_key:
@@ -267,6 +287,74 @@ components:
                 type: string
               observation_id:
                 type: string
+    StoreUnstructuredRequest:
+      type: object
+      required: [file_content, mime_type]
+      properties:
+        file_content:
+          type: string
+          description: Base64-encoded file content
+        mime_type:
+          type: string
+          description: MIME type of the file
+        idempotency_key:
+          type: string
+          description: Optional idempotency key; if omitted, content hash is used
+        original_filename:
+          type: string
+        interpret:
+          type: boolean
+          default: true
+          description: Run AI interpretation after store
+        user_id:
+          type: string
+          format: uuid
+    StoreUnstructuredResponse:
+      type: object
+      properties:
+        source_id:
+          type: string
+        content_hash:
+          type: string
+        file_size:
+          type: integer
+        deduplicated:
+          type: boolean
+        interpretation:
+          type: object
+          additionalProperties: true
+        entity_ids:
+          type: array
+          items:
+            type: string
+    GetRelationshipSnapshotRequest:
+      type: object
+      required: [relationship_type, source_entity_id, target_entity_id]
+      properties:
+        relationship_type:
+          type: string
+          enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    GetRelationshipSnapshotResponse:
+      type: object
+      required: [snapshot, observations]
+      properties:
+        snapshot:
+          $ref: '#/components/schemas/RelationshipSnapshot'
+        observations:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              source_id: { type: string }
+              observed_at: { type: string }
+              specificity_score: { type: number }
+              source_priority: { type: number }
+              metadata: { type: object }
     OAuthInitiateRequest:
       type: object
       required: [connection_id]
@@ -875,6 +963,22 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
 
+  /api/relationships/snapshot:
+    post:
+      summary: Get relationship snapshot with provenance
+      operationId: getRelationshipSnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GetRelationshipSnapshotRequest' }
+      responses:
+        '200':
+          description: Relationship snapshot and observations
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GetRelationshipSnapshotResponse' }
+
   /api/timeline:
     get:
       summary: List timeline events
@@ -1020,6 +1124,22 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/StoreStructuredResponse' }
+
+  /api/store/unstructured:
+    post:
+      summary: Store unstructured file (raw upload with optional AI interpretation)
+      operationId: storeUnstructured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreUnstructuredRequest' }
+      responses:
+        '200':
+          description: Store result with source_id and optional interpretation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreUnstructuredResponse' }
 
   /get_entity_snapshot:
     post:

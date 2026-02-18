@@ -45,6 +45,12 @@ Every AI assistant (Cursor, ChatGPT, Claude) working on Neotoma MUST follow:
 4. Load task-specific docs based on change type (see Section 23.3)
 5. Load `docs/conventions/documentation_standards_rules.md` if creating/editing docs
 
+**Note for Cursor and Claude Code users:**
+- **Cursor**: Instructions in `.cursor/rules/` and `.cursor/commands/` are generated from sources via `foundation/scripts/setup_cursor_copies.sh`
+- **Claude Code**: Instructions in `.claude/rules/`, `.claude/skills/`, and `.claude/CLAUDE.md` are generated from the same sources via `scripts/setup_claude_instructions.sh`
+- Both IDEs use identical rule/command sources from `foundation/agent_instructions/` and `docs/`
+- See `docs/developer/mcp_cursor_setup.md` and `docs/developer/mcp_claude_code_setup.md` for IDE-specific setup
+
 ### 23.2 Absolute Constraints
 
 1. **Never violate Truth Layer boundaries** (no strategy/execution logic)

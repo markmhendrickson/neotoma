@@ -366,7 +366,14 @@ export interface paths {
     };
     "/api/relationships": {
         parameters: {
-            query?: never;
+            query?: {
+                source_entity_id?: string;
+                target_entity_id?: string;
+                relationship_type?: string;
+                direction?: string;
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -398,6 +405,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/relationships/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Get relationship snapshot with provenance */
+        post: operations["getRelationshipSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/timeline": {
         parameters: {
             query?: never;
@@ -417,7 +441,10 @@ export interface paths {
     };
     "/api/schemas": {
         parameters: {
-            query?: never;
+            query?: {
+                user_id?: string;
+                entity_type?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -434,7 +461,9 @@ export interface paths {
     };
     "/api/schemas/{entity_type}": {
         parameters: {
-            query?: never;
+            query?: {
+                user_id?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -494,6 +523,23 @@ export interface paths {
         put?: never;
         /** Store structured entities */
         post: operations["storeStructured"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/store/unstructured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Store unstructured file (raw upload with optional AI interpretation) */
+        post: operations["storeUnstructured"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1019,6 +1065,18 @@ export interface components {
             entities: {
                 [key: string]: unknown;
             }[];
+            /**
+             * @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+             *     Enables one-call chat persistence: store [conversation, agent_message] with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index: 0 }].
+             */
+            relationships?: {
+                /** @enum {string} */
+                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                /** @description Index into the entities array for the source entity */
+                source_index: number;
+                /** @description Index into the entities array for the target entity */
+                target_index: number;
+            }[];
             source_priority?: number;
             idempotency_key: string;
             user_id?: string;
@@ -1034,6 +1092,49 @@ export interface components {
                 entity_id?: string;
                 entity_type?: string;
                 observation_id?: string;
+            }[];
+        };
+        StoreUnstructuredRequest: {
+            /** @description Base64-encoded file content */
+            file_content: string;
+            /** @description MIME type of the file */
+            mime_type: string;
+            /** @description Optional idempotency key; if omitted, content hash is used */
+            idempotency_key?: string;
+            original_filename?: string;
+            /**
+             * @description Run AI interpretation after store
+             * @default true
+             */
+            interpret: boolean;
+            /** Format: uuid */
+            user_id?: string;
+        };
+        StoreUnstructuredResponse: {
+            source_id?: string;
+            content_hash?: string;
+            file_size?: number;
+            deduplicated?: boolean;
+            interpretation?: {
+                [key: string]: unknown;
+            };
+            entity_ids?: string[];
+        };
+        GetRelationshipSnapshotRequest: {
+            /** @enum {string} */
+            relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+            source_entity_id: string;
+            target_entity_id: string;
+        };
+        GetRelationshipSnapshotResponse: {
+            snapshot: components["schemas"]["RelationshipSnapshot"];
+            observations: {
+                id?: string;
+                source_id?: string;
+                observed_at?: string;
+                specificity_score?: number;
+                source_priority?: number;
+                metadata?: Record<string, never>;
             }[];
         };
         OAuthInitiateRequest: {
@@ -1677,7 +1778,14 @@ export interface operations {
     };
     listRelationships: {
         parameters: {
-            query?: never;
+            query?: {
+                source_entity_id?: string;
+                target_entity_id?: string;
+                relationship_type?: string;
+                direction?: string;
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1719,6 +1827,30 @@ export interface operations {
             };
         };
     };
+    getRelationshipSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GetRelationshipSnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Relationship snapshot and observations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetRelationshipSnapshotResponse"];
+                };
+            };
+        };
+    };
     listTimeline: {
         parameters: {
             query?: {
@@ -1752,6 +1884,7 @@ export interface operations {
         parameters: {
             query?: {
                 user_id?: string;
+                entity_type?: string;
             };
             header?: never;
             path?: never;
@@ -1774,7 +1907,9 @@ export interface operations {
     };
     getSchemaByEntityType: {
         parameters: {
-            query?: never;
+            query?: {
+                user_id?: string;
+            };
             header?: never;
             path: {
                 entity_type: string;
@@ -1863,6 +1998,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StoreStructuredResponse"];
+                };
+            };
+        };
+    };
+    storeUnstructured: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreUnstructuredRequest"];
+            };
+        };
+        responses: {
+            /** @description Store result with source_id and optional interpretation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreUnstructuredResponse"];
                 };
             };
         };

@@ -6,6 +6,17 @@ _(User-level settings for Claude Code, OpenAI Codex, and Cursor Agent CLI)_
 
 This document describes how Neotoma keeps agent and CLI behavior in **user-level** config so only your personal settings apply. Project-level config in the repo is minimal or absent so it does not override your choices.
 
+## Prefer MCP when available, CLI as backup
+
+- **When MCP is installed and running:** Prefer **Neotoma MCP** for Neotoma operations. Use MCP tools (e.g. `store_structured`, `create_relationship`) per `docs/developer/mcp/instructions.md`.
+- **When MCP is not available:** Use the **Neotoma CLI** as backup. Invoke with dev by default (e.g. `neotoma dev entities list`, `neotoma dev store --json='...'`).
+
+Agents get the same behaviors (chat persistence, entity extraction, conventions) either way; the rule instructs them to use MCP when it is available and to fall back to the CLI when it is not.
+
+The rule content is sourced from **`docs/developer/cli_agent_instructions.md`**, which mirrors the behavioral instructions in `docs/developer/mcp/instructions.md` (same chat persistence, entity extraction, and conventions), with MCP preferred when available and CLI equivalents as backup. When you run `neotoma cli-instructions check`, the CLI creates **symlinks** from both project paths (`.cursor/rules/`, `.claude/rules/`, `.codex/`) and user-level paths (`~/.cursor/rules/`, etc.) to that doc so the rule is always up to date. User symlinks use the absolute path to the doc in this repo; if you move the repo, re-run the check to recreate them.
+
+To add the rule so it is applied in Cursor, Claude Code, and Codex, run `neotoma cli-instructions check` from the repo root. The check only considers paths each IDE actually loads (e.g. `.cursor/rules/`, `.claude/`, `.codex/`); it will offer to add the rule to all three environments (project and/or user). Use `neotoma cli-instructions config` to print paths and the instruction source doc.
+
 ## Configuration strategy
 
 - **Permissions and approval behavior** live in your user config, not in the repo.
@@ -117,6 +128,8 @@ Use the user config paths above so the same behavior applies in every project. F
 
 ## Related documents
 
+- [CLI agent instructions](cli_agent_instructions.md) — Source of truth for rule content (aligned with MCP instructions)
+- [MCP instructions](mcp/instructions.md) — MCP interaction instructions (same behaviors, MCP tools)
 - [Getting started](getting_started.md) — Local environment and first contribution
 - [CLI overview](cli_overview.md) — Neotoma CLI usage
 - [MCP Cursor setup](mcp_cursor_setup.md) — Cursor IDE MCP integration

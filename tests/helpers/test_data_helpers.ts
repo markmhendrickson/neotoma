@@ -46,15 +46,19 @@ export async function createTestObservation(params: {
   observed_properties: Record<string, any>;
   observation_priority?: number;
 }): Promise<{ id: string }> {
+  const crypto = await import("crypto");
   const { data: observation, error } = await supabase
     .from("observations")
     .insert({
+      id: crypto.randomUUID(),
       source_id: params.source_id,
       entity_id: params.entity_id,
       entity_type: params.entity_type,
+      schema_version: "1.0",
       user_id: params.user_id,
-      observed_properties: params.observed_properties,
-      observation_priority: params.observation_priority || 500,
+      fields: params.observed_properties,
+      source_priority: params.observation_priority ?? 500,
+      observed_at: new Date().toISOString(),
     })
     .select()
     .single();
@@ -200,14 +204,16 @@ export async function createTestInterpretation(params: {
   interpretation_data: Record<string, any>;
   config?: Record<string, any>;
 }): Promise<string> {
+  const crypto = await import("crypto");
   const { data: interpretation, error } = await supabase
     .from("interpretations")
     .insert({
+      id: crypto.randomUUID(),
       source_id: params.source_id,
       user_id: params.user_id,
-      interpreted_data: params.interpretation_data,
       interpretation_config: params.config || {},
       status: "completed",
+      created_at: new Date().toISOString(),
     })
     .select("id")
     .single();

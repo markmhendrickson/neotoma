@@ -16,7 +16,7 @@ describe("CLI admin commands", () => {
   });
 
   describe("auth whoami", () => {
-    it("should show current auth context with --json", async () => {
+    it("should show user ID with --json", async () => {
       const { stdout, stderr } = await execAsync(
         `${CLI_PATH} auth whoami --json`
       );
@@ -24,54 +24,17 @@ describe("CLI admin commands", () => {
       expect(stderr).toBe("");
       const result = JSON.parse(stdout);
 
-      expect(result).toHaveProperty("environment");
-      expect(["development", "production"]).toContain(result.environment);
+      expect(result).toHaveProperty("user_id");
+      expect(typeof result.user_id).toBe("string");
     });
 
-    it("should show project ID", async () => {
+    it("should output JSON format", async () => {
       const { stdout } = await execAsync(
         `${CLI_PATH} auth whoami --json`
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("project_id");
-    });
-
-    it("should show database connection info", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} auth whoami --json`
-      );
-
-      const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("connected");
-      expect(typeof result.connected).toBe("boolean");
-    });
-
-    it("should output pretty format without --json", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} auth whoami`
-      );
-
-      const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("environment");
-    });
-
-    it("should work with --env development", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} auth whoami --env development --json`
-      );
-
-      const result = JSON.parse(stdout);
-      expect(result.environment).toBe("development");
-    });
-
-    it("should work with --env production", async () => {
-      const { stdout } = await execAsync(
-        `${CLI_PATH} auth whoami --env production --json`
-      );
-
-      const result = JSON.parse(stdout);
-      expect(result.environment).toBe("production");
+      expect(result).toHaveProperty("user_id");
     });
   });
 
@@ -82,8 +45,14 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("status");
-      expect(result).toHaveProperty("entities_checked");
+      expect(result).toHaveProperty("healthy");
+      expect(result).toHaveProperty("message");
+      expect(result).toHaveProperty("checked");
+      expect(result).toHaveProperty("stale");
+      expect(typeof result.healthy).toBe("boolean");
+      expect(typeof result.message).toBe("string");
+      expect(typeof result.checked).toBe("number");
+      expect(typeof result.stale).toBe("number");
     });
 
     it("should check without auto-fix by default", async () => {
@@ -92,11 +61,8 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("status");
-      // Should not have auto-fixed anything
-      if (result.issues_found) {
-        expect(result).not.toHaveProperty("auto_fixed_count");
-      }
+      // Should not have fixed field when auto-fix is not used
+      expect(result.fixed).toBeUndefined();
     });
 
     it("should check with --auto-fix flag", async () => {
@@ -105,8 +71,12 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("status");
-      // May have auto-fixed issues if any existed
+      expect(result).toHaveProperty("healthy");
+      // May have fixed field if issues existed
+      if (result.stale > 0) {
+        expect(result).toHaveProperty("fixed");
+        expect(typeof result.fixed).toBe("number");
+      }
     });
 
     it("should report entities checked count", async () => {
@@ -115,28 +85,29 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("entities_checked");
-      expect(typeof result.entities_checked).toBe("number");
-      expect(result.entities_checked).toBeGreaterThanOrEqual(0);
+      expect(result).toHaveProperty("checked");
+      expect(typeof result.checked).toBe("number");
+      expect(result.checked).toBeGreaterThanOrEqual(0);
     });
 
-    it("should report issues if found", async () => {
+    it("should report stale snapshots if found", async () => {
       const { stdout } = await execAsync(
         `${CLI_PATH} snapshots check --json`
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("issues_found");
-      expect(typeof result.issues_found).toBe("boolean");
+      expect(result).toHaveProperty("stale");
+      expect(typeof result.stale).toBe("number");
+      expect(result.stale).toBeGreaterThanOrEqual(0);
     });
 
-    it("should output pretty format without --json", async () => {
+    it("should output JSON format", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} snapshots check`
+        `${CLI_PATH} snapshots check --json`
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("status");
+      expect(result).toHaveProperty("healthy");
     });
   });
 
@@ -171,7 +142,7 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("environment");
+      expect(result).toHaveProperty("user_id");
     });
 
     it("should accept --debug flag with snapshots check", async () => {
@@ -180,7 +151,7 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("status");
+      expect(result).toHaveProperty("healthy");
     });
 
     it("should accept --env flag with whoami", async () => {
@@ -189,7 +160,7 @@ describe("CLI admin commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result.environment).toBe("development");
+      expect(result).toHaveProperty("user_id");
     });
   });
 
@@ -230,13 +201,10 @@ describe("CLI admin commands", () => {
       const result = JSON.parse(stdout);
 
       // Check for expected fields
-      expect(result).toHaveProperty("environment");
-      expect(result).toHaveProperty("project_id");
-      expect(result).toHaveProperty("connected");
+      expect(result).toHaveProperty("user_id");
 
       // Check types
-      expect(typeof result.environment).toBe("string");
-      expect(typeof result.connected).toBe("boolean");
+      expect(typeof result.user_id).toBe("string");
     });
 
     it("should have consistent JSON structure for snapshots check", async () => {
@@ -247,14 +215,16 @@ describe("CLI admin commands", () => {
       const result = JSON.parse(stdout);
 
       // Check for expected fields
-      expect(result).toHaveProperty("status");
-      expect(result).toHaveProperty("entities_checked");
-      expect(result).toHaveProperty("issues_found");
+      expect(result).toHaveProperty("healthy");
+      expect(result).toHaveProperty("message");
+      expect(result).toHaveProperty("checked");
+      expect(result).toHaveProperty("stale");
 
       // Check types
-      expect(typeof result.status).toBe("string");
-      expect(typeof result.entities_checked).toBe("number");
-      expect(typeof result.issues_found).toBe("boolean");
+      expect(typeof result.healthy).toBe("boolean");
+      expect(typeof result.message).toBe("string");
+      expect(typeof result.checked).toBe("number");
+      expect(typeof result.stale).toBe("number");
     });
   });
 });

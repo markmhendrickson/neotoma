@@ -64,34 +64,31 @@ export const logger = {
 
   /**
    * Log info messages
-   * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout with ℹ️ prefix
+   * In MCP stdio mode: must use stderr (stdout is JSON-RPC). Uses stderr for all levels.
    */
   info(...args: unknown[]): void {
     if (shouldLog) {
-      console.info(...formatArgs("info", args));
+      console.error(...formatArgs("info", args));
     }
   },
 
   /**
    * Log debug messages
-   * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout with 🔍 prefix
+   * Uses stderr to avoid polluting stdout (JSON-RPC in MCP mode).
    */
   debug(...args: unknown[]): void {
     if (shouldLog) {
-      console.debug(...formatArgs("debug", args));
+      console.error(...formatArgs("debug", args));
     }
   },
 
   /**
    * Log general messages
-   * In MCP mode: suppressed by default
-   * In HTTP mode: written to stdout with ℹ️ prefix
+   * Uses stderr to avoid polluting stdout (JSON-RPC in MCP mode).
    */
   log(...args: unknown[]): void {
     if (shouldLog) {
-      console.log(...formatArgs("info", args));
+      console.error(...formatArgs("info", args));
     }
   },
 };

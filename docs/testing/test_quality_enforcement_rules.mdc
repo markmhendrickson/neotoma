@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Test Quality Enforcement Rules
 
 **Reference**: `foundation/conventions/testing_conventions.md` — Generic testing principles

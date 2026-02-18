@@ -221,6 +221,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "store",
   },
   {
+    operationId: "storeUnstructured",
+    method: "post",
+    path: "/api/store/unstructured",
+    adapter: "both",
+    mcpTool: "store_unstructured",
+    cliCommand: "upload <path>",
+  },
+  {
     operationId: "getRecordById",
     method: "get",
     path: "/api/records/{id}",
@@ -345,6 +353,14 @@ export const OPENAPI_OPERATION_MAPPINGS: OpenApiOperationMapping[] = [
     cliCommand: "relationships restore",
   },
   {
+    operationId: "getRelationshipSnapshot",
+    method: "post",
+    path: "/api/relationships/snapshot",
+    adapter: "both",
+    mcpTool: "get_relationship_snapshot",
+    cliCommand: "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
+  },
+  {
     operationId: "analyzeSchemaCandidates",
     method: "post",
     path: "/analyze_schema_candidates",
@@ -423,6 +439,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   merge_entities: "mergeEntities",
   store: "storeStructured",
   store_structured: "storeStructured",
+  store_unstructured: "storeUnstructured",
   retrieve_entity_by_identifier: "retrieveEntityByIdentifier",
   retrieve_related_entities: "retrieveRelatedEntities",
   retrieve_graph_neighborhood: "retrieveGraphNeighborhood",
@@ -430,6 +447,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   restore_entity: "restoreEntity",
   delete_relationship: "deleteRelationship",
   restore_relationship: "restoreRelationship",
+  get_relationship_snapshot: "getRelationshipSnapshot",
   analyze_schema_candidates: "analyzeSchemaCandidates",
   get_schema_recommendations: "getSchemaRecommendations",
   update_schema_incremental: "updateSchemaIncremental",
@@ -440,10 +458,7 @@ export const MCP_TOOL_TO_OPERATION_ID: Record<string, string> = {
   health_check_snapshots: "healthCheckSnapshots",
 };
 
-export const MCP_ONLY_TOOLS: string[] = [
-  "get_relationship_snapshot",
-  "store_unstructured",
-];
+export const MCP_ONLY_TOOLS: string[] = [];
 
 export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   get_authenticated_user: "auth whoami",
@@ -451,14 +466,14 @@ export const MCP_TOOL_TO_CLI_COMMAND: Record<string, string> = {
   retrieve_entity_by_identifier: "entities search <identifier>",
   retrieve_related_entities: "entities related <entityId>",
   retrieve_graph_neighborhood: "entities neighborhood <nodeId>",
-  get_relationship_snapshot: "mcp-only --tool get_relationship_snapshot",
+  get_relationship_snapshot: "relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>",
   analyze_schema_candidates: "schemas analyze",
   get_schema_recommendations: "schemas recommend <entityType>",
   update_schema_incremental: "schemas update <entityType>",
   register_schema: "schemas register <entityType>",
   reinterpret: "interpretations reinterpret <sourceId>",
   correct: "corrections create <entityId> <entityType> <field> <value>",
-  store_unstructured: "mcp-only --tool store_unstructured",
+  store_unstructured: "upload <path>",
 };
 
 export function getOpenApiOperationMapping(

@@ -15,6 +15,13 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 - **Action catalog**: The list of supported MCP actions and schemas.
 - **Setup guide**: Tool specific instructions for MCP integration.
 
+## When to use CLI vs MCP
+
+- **Local (same machine as repo):** Prefer the **Neotoma CLI** for all Neotoma operations. Invoke commands directly (e.g. `neotoma entities list`). The CLI is more reliable locally (no MCP server spawn/sync issues). Use MCP only if the user explicitly configures it.
+- **Remote (tunnel, ChatGPT, cloud):** Use **MCP** over HTTP with the configured Neotoma URL (e.g. tunnel or neotoma.fly.dev).
+
+For local development and agents running in the repo, the CLI is the recommended interface; MCP is recommended for remote clients.
+
 ## Transport choice: stdio (local) vs HTTP (remote)
 
 - **Stdio:** Use for local clients (Cursor, Claude Code, Codex on the same machine as the Neotoma repo). Client spawns the server; better recovery after sleep.

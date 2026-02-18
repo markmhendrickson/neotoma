@@ -9,6 +9,11 @@ import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_d
 
 type QueryResult<T> = { data: T | null; error: { message: string; code?: string } | null; count?: number };
 
+/** Columns stored as 0/1 in SQLite that should be returned as boolean */
+const BOOLEAN_COLUMNS: Record<string, Set<string>> = {
+  schema_registry: new Set(["active", "test"]),
+};
+
 const JSON_COLUMNS: Record<string, Set<string>> = {
   sources: new Set(["provenance"]),
   interpretations: new Set(["interpretation_config"]),
@@ -140,8 +145,34 @@ function toDbValue(table: string, column: string, value: unknown): unknown {
   return value;
 }
 
+/** Map SQLite constraint errors to PostgreSQL error codes for compatibility */
+function mapSqliteErrorToPostgres(error: { errno?: number; code?: string; message?: string }): string | undefined {
+  const code = error.code || "";
+  const msg = (error.message || "").toLowerCase();
+  const errno = error.errno;
+  if (errno === 2067 || code === "SQLITE_CONSTRAINT_UNIQUE" || msg.includes("unique constraint")) {
+    return "23505";
+  }
+  if (errno === 787 || code === "SQLITE_CONSTRAINT_FOREIGNKEY" || msg.includes("foreign key")) {
+    return "23503";
+  }
+  if (code === "SQLITE_CONSTRAINT" && msg.includes("unique")) return "23505";
+  if (code === "SQLITE_CONSTRAINT" && msg.includes("foreign key")) return "23503";
+  return undefined;
+}
+
 function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...row };
+  const booleanColumns = BOOLEAN_COLUMNS[table];
+  if (booleanColumns) {
+    for (const column of booleanColumns) {
+      if (result[column] === 1 || result[column] === "1") {
+        result[column] = true;
+      } else if (result[column] === 0 || result[column] === "0") {
+        result[column] = false;
+      }
+    }
+  }
   const jsonColumns = JSON_COLUMNS[table];
   if (!jsonColumns) {
     return result;
@@ -272,6 +303,12 @@ class LocalQueryBuilder {
     return this;
   }
 
+  ilike(column: string, pattern: string): this {
+    this.filters.push(`${column} LIKE ? COLLATE NOCASE`);
+    this.filterValues.push(pattern);
+    return this;
+  }
+
   gte(column: string, value: unknown): this {
     this.filters.push(`${column} >= ?`);
     this.filterValues.push(value);
@@ -325,16 +362,34 @@ class LocalQueryBuilder {
     const values: unknown[] = [];
 
     for (const part of parts) {
-      const [left, op, ...rest] = part.split(".");
-      const value = rest.join(".");
-      if (!left || !op) {
-        continue;
-      }
+      const dotIdx = part.indexOf(".");
+      if (dotIdx < 0) continue;
+      const left = part.slice(0, dotIdx);
+      const rest = part.slice(dotIdx + 1);
+      const dotIdx2 = rest.indexOf(".");
+      const op = dotIdx2 >= 0 ? rest.slice(0, dotIdx2) : rest;
+      const value = dotIdx2 >= 0 ? rest.slice(dotIdx2 + 1) : "";
+
+      if (!left || !op) continue;
+
       if (op === "eq") {
         clauses.push(`${left} = ?`);
         values.push(value);
       } else if (op === "is" && value === "null") {
         clauses.push(`${left} IS NULL`);
+      } else if (op === "ilike") {
+        clauses.push(`${left} LIKE ? COLLATE NOCASE`);
+        values.push(value);
+      } else if (op === "like") {
+        clauses.push(`${left} LIKE ?`);
+        values.push(value);
+      } else if (op === "neq") {
+        clauses.push(`${left} != ?`);
+        values.push(value);
+      } else if (op === "cs") {
+        // PostgREST cs (contains) - for JSON arrays, do a LIKE check on the TEXT column
+        clauses.push(`${left} LIKE ?`);
+        values.push(`%${value.replace(/^\["|"\]$/, "").replace(/^"|"$/g, "")}%`);
       }
     }
 
@@ -408,7 +463,10 @@ class LocalQueryBuilder {
           if (TABLES_WITH_ID.has(this.table) && !payload.id) {
             payload.id = crypto.randomUUID();
           }
-          if ("created_at" in payload === false) {
+          // Only add created_at for tables that have this column
+          // entity_snapshots and relationship_snapshots don't have created_at
+          const TABLES_WITHOUT_CREATED_AT = new Set(["entity_snapshots", "relationship_snapshots"]);
+          if ("created_at" in payload === false && !TABLES_WITHOUT_CREATED_AT.has(this.table)) {
             payload.created_at = new Date().toISOString();
           }
           const columns = Object.keys(payload);
@@ -482,7 +540,9 @@ class LocalQueryBuilder {
 
       return { data: null, error: { message: "Unsupported operation" } };
     } catch (error: any) {
-      return { data: null, error: { message: error.message || String(error) } };
+      const msg = error.message || String(error);
+      const code = mapSqliteErrorToPostgres(error);
+      return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
     }
   }
 

@@ -134,11 +134,18 @@ export function padToDisplayWidth(line: string, width: number): string {
   return line + " ".repeat(need);
 }
 
-/** Box-drawing: single-line panel around content. Content is an array of lines; width is max visible length + padding. */
+/** Terminal width for box and layout sizing. Respects viewport; use for capping box width. */
+export function getTerminalWidth(margin = 2): number {
+  const cols = typeof process.stdout?.columns === "number" ? process.stdout.columns : 80;
+  return Math.max(20, cols - margin);
+}
+
+/** Box-drawing: single-line panel around content. Content is an array of lines; width is max visible length + padding, capped to terminal. */
 export function panel(lines: string[], options: { title?: string; padding?: number; width?: number } = {}): string {
   const pad = options.padding ?? 2;
   const title = options.title ?? "";
-  const contentWidth = options.width ?? Math.max(visibleLength(title), ...lines.map((l) => visibleLength(l)), 44);
+  const rawContentWidth = options.width ?? Math.max(visibleLength(title), ...lines.map((l) => visibleLength(l)), 44);
+  const contentWidth = Math.min(rawContentWidth, getTerminalWidth(2 * pad));
   const w = contentWidth + pad * 2;
   const top = "┌" + "─".repeat(w - 2) + "┐";
   const bottom = "└" + "─".repeat(w - 2) + "┘";
@@ -260,12 +267,15 @@ export function blackBox(
     (options.borderBlack ? "black" : "accent");
   const borderStyle = boxBorderStyle(color);
 
+  const maxWidth = getTerminalWidth();
+  const cappedInnerWidth = Math.min(innerWidth, maxWidth);
+
   const padLeft = " ".repeat(pad);
   const out: string[] = [];
 
   // Top border with title on the left
   if (title) {
-    const rightDashes = Math.max(0, innerWidth - titleLen);
+    const rightDashes = Math.max(0, cappedInnerWidth - titleLen);
     const topLine =
       BOX_ROUND.topLeft +
       title +
@@ -275,22 +285,32 @@ export function blackBox(
   } else {
     const topLine =
       BOX_ROUND.topLeft +
-      BOX_ROUND.horizontal.repeat(innerWidth) +
+      BOX_ROUND.horizontal.repeat(cappedInnerWidth) +
       BOX_ROUND.topRight;
     out.push(borderStyle(topLine));
   }
 
   // Content lines with side borders and padding (use displayWidth so right border aligns)
+  const maxContentWidth = cappedInnerWidth - pad;
+  // eslint-disable-next-line no-control-regex
+  const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, "");
   for (const line of lines) {
-    const len = displayWidth(line);
-    const padded = padLeft + line + " ".repeat(Math.max(0, innerWidth - pad - len));
+    let outLine = line;
+    if (displayWidth(line) > maxContentWidth) {
+      const plain = stripAnsi(line);
+      let len = plain.length;
+      while (len > 0 && displayWidth(plain.slice(0, len) + "…") > maxContentWidth) len--;
+      outLine = (plain.slice(0, len) || plain.slice(0, 1)) + "…";
+    }
+    const len = displayWidth(outLine);
+    const padded = padLeft + outLine + " ".repeat(Math.max(0, cappedInnerWidth - pad - len));
     out.push(borderStyle(BOX_ROUND.vertical) + padded + borderStyle(BOX_ROUND.vertical));
   }
 
   // Bottom border
   const bottomLine =
     BOX_ROUND.bottomLeft +
-    BOX_ROUND.horizontal.repeat(innerWidth) +
+    BOX_ROUND.horizontal.repeat(cappedInnerWidth) +
     BOX_ROUND.bottomRight;
   out.push(borderStyle(bottomLine));
 

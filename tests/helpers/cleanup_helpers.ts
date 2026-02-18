@@ -452,6 +452,7 @@ export class TestIdTracker {
   private sourceIds: string[] = [];
   private observationIds: string[] = [];
   private entityTypes: string[] = [];
+  private relationshipKeys: string[] = [];
 
   /**
    * Track entity ID for cleanup
@@ -490,9 +491,31 @@ export class TestIdTracker {
   }
 
   /**
+   * Track relationship key (relationship_id = "type:source_entity_id:target_entity_id") for cleanup
+   */
+  addRelationship(relationshipKey: string): void {
+    if (relationshipKey && !this.relationshipKeys.includes(relationshipKey)) {
+      this.relationshipKeys.push(relationshipKey);
+    }
+  }
+
+  /**
    * Clean up all tracked IDs
    */
   async cleanup(): Promise<void> {
+    // Clean up tracked relationships first (before entities)
+    for (const key of this.relationshipKeys) {
+      const parts = key.split(":");
+      if (parts.length >= 3) {
+        const [relationshipType, sourceEntityId, targetEntityId] = parts;
+        try {
+          await cleanupTestRelationship(relationshipType, sourceEntityId, targetEntityId);
+        } catch {
+          // Ignore cleanup errors
+        }
+      }
+    }
+
     await cleanupAllTestData({
       entityIds: this.entityIds,
       sourceIds: this.sourceIds,
@@ -505,6 +528,7 @@ export class TestIdTracker {
     this.sourceIds = [];
     this.observationIds = [];
     this.entityTypes = [];
+    this.relationshipKeys = [];
   }
 
   /**

@@ -5,7 +5,13 @@
 import { supabase } from "../db.js";
 import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
 import { resolveEntity } from "./entity_resolution.js";
-import { getSchemaDefinition } from "./schema_definitions.js";
+import {
+  getSchemaDefinition,
+  getRegisteredEntityTypes,
+  resolveEntityTypeFromAlias,
+  refineEntityTypeFromExtractedFields,
+} from "./schema_definitions.js";
+import { inferCanonicalEntityType, isLLMExtractionAvailable } from "./llm_extraction.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
 import { randomUUID } from "crypto";
 import { canonicalizeFields, hashCanonicalFields } from "./field_canonicalization.js";
@@ -19,6 +25,7 @@ import {
   prepareEntitySnapshotWithEmbedding,
   getEntitySnapshotUpsertPayload,
 } from "./entity_snapshot_embedding.js";
+import { logger } from "../utils/logger.js";
 
 
 export interface InterpretationConfig {
@@ -30,6 +37,8 @@ export interface InterpretationConfig {
   feature_flags?: Record<string, boolean>;
   /** When true (default), create a user-scoped schema from extracted fields when entity type is unknown. */
   create_schema_for_unknown?: boolean;
+  /** When true, use LLM to infer canonical entity type when no schema alias matches (e.g. localized types). */
+  infer_entity_type_from_llm?: boolean;
 }
 
 export interface InterpretationOptions {
@@ -51,6 +60,8 @@ export interface InterpretationResult {
     entityType: string;
     observationId: string;
   }>;
+  /** Debug: per-entity type refinement (extracted keys, type before/after) for store responses */
+  refinement_debug?: Array<{ extracted_keys: string[]; type_before: string; type_after: string }>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -118,16 +129,54 @@ export async function runInterpretation(
     entityType: string;
     observationId: string;
   }> = [];
+  const refinementDebug: Array<{ extracted_keys: string[]; type_before: string; type_after: string }> = [];
 
   try {
+    // Build refinement candidates: DB schemas (user + global) + code-only types so dynamic schemas participate
+    const dbSchemas = await schemaRegistry.listActiveSchemas(userId).catch(() => []);
+    const dbTypes = new Set(dbSchemas.map((e) => e.entity_type));
+    const refinementCandidates = [
+      ...dbSchemas.map((e) => ({ entity_type: e.entity_type, schema_definition: e.schema_definition })),
+      ...getRegisteredEntityTypes()
+        .filter((t) => !dbTypes.has(t))
+        .map((t) => getSchemaDefinition(t))
+        .filter(Boolean)
+        .map((s) => ({ entity_type: s!.entity_type, schema_definition: s!.schema_definition })),
+    ];
+
     // Process each extracted entity
     for (const entityData of extractedData) {
       // Support both 'entity_type' and 'type' fields for entity type identification
       let entityType = (entityData.entity_type as string) ||
                       (entityData.type as string) ||
                       "generic";
+      // Resolve to canonical type via schema-defined aliases (no hardcoded map)
+      let resolvedType = resolveEntityTypeFromAlias(entityType);
+      if (!resolvedType && config.infer_entity_type_from_llm && isLLMExtractionAvailable()) {
+        const canonicalTypes = getRegisteredEntityTypes();
+        resolvedType = await inferCanonicalEntityType(entityType, canonicalTypes, config.model_id);
+      }
+      if (resolvedType) entityType = resolvedType;
+      // Refine type by field fit (considers dynamic + code schemas when another schema fits better)
+      const extractedFieldKeys = Object.keys(entityData).filter(
+        (k) => k !== "entity_type" && k !== "type"
+      );
+      const typeBeforeRefinement = entityType;
+      entityType = refineEntityTypeFromExtractedFields(entityType, extractedFieldKeys, refinementCandidates);
+      refinementDebug.push({
+        extracted_keys: extractedFieldKeys,
+        type_before: typeBeforeRefinement,
+        type_after: entityType,
+      });
+      logger.info(
+        "[Interpretation] type refinement: extracted_keys=%s type_before=%s type_after=%s",
+        JSON.stringify(extractedFieldKeys),
+        typeBeforeRefinement,
+        entityType,
+        typeBeforeRefinement !== entityType ? { refined: `${typeBeforeRefinement} → ${entityType}` } : {}
+      );
       let currentEntityData = entityData;
-      
+
       // Load active entity schema (user-scoped first, then global) from database
       // NOTE: Schemas should be initialized in the database via `npm run schema:init`
       let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType, userId);
@@ -171,7 +220,11 @@ export async function runInterpretation(
       }
 
       if (!schema) {
-        // No schema found - route all fields to raw_fragments
+        // No schema found - route all fields to raw_fragments (helps debug: log extracted type)
+        logger.warn(
+          `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); routing to raw_fragments. ` +
+            `Run schema:init or add alias for this type.`
+        );
         const fragmentId = randomUUID();
         await supabase.from("raw_fragments").insert({
           id: fragmentId,
@@ -501,6 +554,7 @@ export async function runInterpretation(
       observationsCreated,
       unknownFieldsCount,
       entities,
+      refinement_debug: refinementDebug.length > 0 ? refinementDebug : undefined,
     };
   } catch (error) {
     // Mark interpretation as failed

@@ -38,6 +38,11 @@ import {
   type Config,
 } from "./config.js";
 import {
+  getLatestFromRegistry,
+  isUpdateAvailable,
+  formatUpgradeCommand,
+} from "../version_check.js";
+import {
   accent,
   black,
   blackBox,
@@ -46,6 +51,7 @@ import {
   computeBoxInnerWidth,
   dim,
   displayWidth,
+  getTerminalWidth,
   heading,
   keyValue,
   nl,
@@ -84,20 +90,37 @@ const BANNER_ANSI = {
 /** Ref object so watch callback can read current line (e.g. { current: "" }). */
 type BufferRef = { current: string };
 
+/** Ref for suggestion line count; when set to 0 by external redraw (SIGWINCH), clears are skipped. */
+type SuggestionLinesRef = { current: number };
+
+/** Session command history for Up/Down cycling. indexRef.current is the current history index (history.length = new line). */
+export type SessionHistoryRef = { history: string[]; indexRef: { current: number } };
+
+const MAX_SESSION_HISTORY = 100;
+
 /**
  * Ask for one line with live "/" command list: when line starts with "/", suggestions
  * (name + description) are shown and updated on every keypress. Uses raw mode.
+ * Optional historyRef enables Up/Down to cycle through previous lines.
  */
 function askWithLiveSlash(
   prog: Command,
   promptPrefix: string,
   onLine: (line: string | null) => void,
-  bufferRef?: BufferRef
+  bufferRef?: BufferRef,
+  suggestionLinesRef?: SuggestionLinesRef,
+  historyRef?: SessionHistoryRef
 ): void {
   const stdin = process.stdin;
   const wasPaused = stdin.isPaused();
-  if (!stdin.isTTY) {
+  if (suggestionLinesRef) suggestionLinesRef.current = 0;
+  const useReadline =
+    !stdin.isTTY || process.env.NEOTOMA_USE_READLINE === "1" || process.env.NEOTOMA_USE_READLINE === "true";
+  if (useReadline) {
     const rl = readline.createInterface({ input: stdin, output: process.stdout });
+    if (historyRef && Array.isArray(historyRef.history) && historyRef.history.length > 0) {
+      (rl as readline.ReadLine & { history?: string[] }).history = [...historyRef.history];
+    }
     rl.question(promptPrefix, (line) => {
       rl.close();
       if (bufferRef) bufferRef.current = "";
@@ -108,26 +131,32 @@ function askWithLiveSlash(
   stdin.setRawMode(true);
   stdin.resume();
   let buffer = "";
-  let lastSuggestionLines = 0;
+  const lastSuggestionLinesRef = suggestionLinesRef ?? { current: 0 };
+  if (historyRef) {
+    historyRef.indexRef.current = historyRef.history.length;
+  }
+  /** 0 = normal, 1 = saw ESC, 2 = saw ESC [ (expect A/B/C/D). */
+  let escapeState: 0 | 1 | 2 = 0;
 
+  /** Redraw prompt line and, when line starts with "/", show command list below so Tab can complete. */
   function redrawSuggestions(): void {
-    if (lastSuggestionLines > 0) {
-      for (let i = 0; i < lastSuggestionLines; i++) {
+    const toClear = lastSuggestionLinesRef.current;
+    if (toClear > 0) {
+      for (let i = 0; i < toClear; i++) {
         process.stdout.write(BANNER_ANSI.down(1) + BANNER_ANSI.clearLineFull);
       }
-      process.stdout.write(BANNER_ANSI.up(lastSuggestionLines));
+      process.stdout.write(BANNER_ANSI.up(toClear));
     }
+    lastSuggestionLinesRef.current = 0;
+    process.stdout.write("\r" + BANNER_ANSI.clearLineFull + promptPrefix + buffer);
     const trimmed = buffer.trimStart();
-    if (!trimmed.startsWith("/")) {
-      lastSuggestionLines = 0;
-      return;
+    if (trimmed.startsWith("/")) {
+      const filter = trimmed.slice(1).trim();
+      const { text, lines } = getSessionCommandsBlock(prog, filter);
+      process.stdout.write(text);
+      lastSuggestionLinesRef.current = lines;
+      process.stdout.write(BANNER_ANSI.up(lines));
     }
-    const filter = trimmed.slice(1).trim();
-    const { text, lines } = getSessionCommandsBlock(prog, filter);
-    process.stdout.write("\n" + text);
-    lastSuggestionLines = lines;
-    process.stdout.write(BANNER_ANSI.up(lines + 1));
-    process.stdout.write("\r" + promptPrefix + buffer);
   }
 
   function finish(line: string | null): void {
@@ -135,8 +164,9 @@ function askWithLiveSlash(
     stdin.setRawMode(false);
     if (wasPaused) stdin.pause();
     if (bufferRef) bufferRef.current = "";
-    if (lastSuggestionLines > 0) {
-      for (let i = 0; i < lastSuggestionLines; i++) {
+    const toClear = lastSuggestionLinesRef.current;
+    if (toClear > 0) {
+      for (let i = 0; i < toClear; i++) {
         process.stdout.write(BANNER_ANSI.clearLineFull + "\n");
       }
     }
@@ -147,6 +177,32 @@ function askWithLiveSlash(
     const k = typeof key === "string" ? key : key.toString("utf8");
     for (let i = 0; i < k.length; i++) {
       const c = k[i]!;
+      if (escapeState === 1) {
+        escapeState = c === "[" ? 2 : 0;
+        continue;
+      }
+      if (escapeState === 2) {
+        if (c === "A" && historyRef) {
+          if (historyRef.history.length > 0) {
+            historyRef.indexRef.current = Math.max(0, historyRef.indexRef.current - 1);
+            buffer = historyRef.history[historyRef.indexRef.current] ?? "";
+            if (bufferRef) bufferRef.current = buffer;
+            redrawSuggestions();
+          }
+        } else if (c === "B" && historyRef) {
+          if (historyRef.indexRef.current < historyRef.history.length) {
+            historyRef.indexRef.current += 1;
+            buffer =
+              historyRef.indexRef.current === historyRef.history.length
+                ? ""
+                : (historyRef.history[historyRef.indexRef.current] ?? "");
+            if (bufferRef) bufferRef.current = buffer;
+            redrawSuggestions();
+          }
+        }
+        escapeState = 0;
+        continue;
+      }
       if (c === "\u0003") {
         finish(null);
         return;
@@ -166,16 +222,30 @@ function askWithLiveSlash(
         if (buffer.length > 0) {
           buffer = buffer.slice(0, -1);
           if (bufferRef) bufferRef.current = buffer;
-          process.stdout.write("\b" + " " + "\b");
+          process.stdout.write("\b \b");
           redrawSuggestions();
         }
         continue;
       }
       if (c === ESC) {
-        i = k.length;
+        escapeState = 1;
+        continue;
+      }
+      if (c === "\t") {
+        const trimmed = buffer.trimStart();
+        if (trimmed.startsWith("/")) {
+          const filter = trimmed.slice(1).trim();
+          const commands = getSessionCommands(prog, filter);
+          if (commands.length > 0) {
+            buffer = "/" + commands[0]!.name + " ";
+            if (bufferRef) bufferRef.current = buffer;
+            redrawSuggestions();
+          }
+        }
         continue;
       }
       if (c >= " ") {
+        if (historyRef) historyRef.indexRef.current = historyRef.history.length;
         buffer += c;
         if (bufferRef) bufferRef.current = buffer;
         process.stdout.write(c);
@@ -1415,7 +1485,7 @@ program
   .option("--pretty", "Output formatted JSON for humans")
   .option(
     "--no-session",
-    "With no args: show intro then command menu (>) with ? for shortcuts; no servers"
+    "With no args: show intro then command menu (>); no servers"
   )
   .option("--no-servers", "With no args: use existing API only (no start). Same as --servers=use-existing.")
   .option(
@@ -1439,7 +1509,8 @@ program
     "--log-file <path>",
     "Append CLI stdout and stderr to this file (dev default: repo data/logs/cli.<pid>.log when in a repo, else ~/.config/neotoma/cli.<pid>.log)"
   )
-  .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)");
+  .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)")
+  .option("--no-update-check", "Disable update availability check");
 
 function isDebug(): boolean {
   return Boolean((program.opts() as { debug?: boolean }).debug);
@@ -1470,24 +1541,6 @@ program
     process.stdout.write(
       nl() + dim("Use with: ") + pathStyle("neotoma [options] [command]") + nl()
     );
-  });
-
-program
-  .command("env [env]")
-  .description("Show or set preferred environment (dev or prod) for interactive sessions")
-  .action(async (envArg: string | undefined) => {
-    const config = await readConfig();
-    if (envArg !== undefined) {
-      const env = envArg.toLowerCase() === "prod" ? "prod" : "dev";
-      await writeConfig({ ...config, preferred_env: env });
-      process.stdout.write(success("Preferred environment set to ") + bold(env) + ".\n");
-      return;
-    }
-    const current =
-      config.preferred_env === "dev" || config.preferred_env === "prod"
-        ? config.preferred_env
-        : "dev";
-    process.stdout.write(dim("Preferred environment: ") + bold(current) + nl());
   });
 
 // No preAction auth validation: CLI uses MCP-style auth (key-derived or no token),
@@ -1584,11 +1637,60 @@ type SessionWatchState = {
   onEvent: (event: WatchEvent) => void;
   stop: () => void;
   repoRoot: string;
+  preferredEnv: "dev" | "prod";
+  userId: string | null;
   refreshIntervalId: ReturnType<typeof setInterval> | null;
 };
 let sessionWatchState: SessionWatchState | null = null;
 
+/** Current watch display for SIGWINCH redraw. Set when watch turns on, cleared when off. */
+let sessionWatchDisplayRef: { watchLines: string[]; watchEventCount: number } | null = null;
+
 const WATCH_LIVE_MAX = 20;
+
+/** Wait for user to press Enter or q then Enter to exit watch mode. Uses raw stdin (same as session prompt) so the next prompt's raw mode and Tab completion keep working. */
+function runWatchModeExit(): Promise<void> {
+  return new Promise((resolve) => {
+    const stdin = process.stdin;
+    if (!stdin.isTTY || !stdin.setRawMode) {
+      const rl = readline.createInterface({ input: stdin, output: process.stdout });
+      rl.question("", () => {
+        rl.close();
+        stdin.resume();
+        resolve();
+      });
+      return;
+    }
+    stdin.setRawMode(true);
+    stdin.resume();
+    let _buffer = "";
+    function done(): void {
+      stdin.removeListener("data", onData);
+      stdin.setRawMode(false);
+      resolve();
+    }
+    function onData(key: string | Buffer): void {
+      const k = typeof key === "string" ? key : key.toString("utf8");
+      for (let i = 0; i < k.length; i++) {
+        const c = k[i]!;
+        if (c === "\u0003") {
+          done();
+          return;
+        }
+        if (c === "\n" || c === "\r") {
+          done();
+          return;
+        }
+        if (c === "q" || c === "Q") {
+          _buffer = "q";
+          continue;
+        }
+        if (c >= " ") _buffer += c;
+      }
+    }
+    stdin.on("data", onData);
+  });
+}
 
 /** Human-readable "time ago" from an ISO timestamp (compact format, fits Time column). */
 function timeAgo(iso: string, ref: Date = new Date()): string {
@@ -1671,9 +1773,10 @@ function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
     dim("-".repeat(wSummary));
   const rows = events.map((e, i) => {
     const numStr = String(i + 1);
-    const ago = timeAgo(e.ts, ref);
+    const ago = truncateToDisplayWidth(timeAgo(e.ts, ref), wTime);
     const typeStr = e.entityType ?? "-";
     const typeShort = truncateToDisplayWidth(typeStr, wType);
+    const actionShort = truncateToDisplayWidth(e.actionLabel, wAction);
     const idShort = truncateToDisplayWidth(e.id, wId);
     const summaryShort = truncateToDisplayWidth(e.summary, wSummary);
     return (
@@ -1683,7 +1786,7 @@ function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
       WATCH_TABLE_GAP +
       dim(padToDisplayWidth(typeShort, wType)) +
       WATCH_TABLE_GAP +
-      dim(padToDisplayWidth(e.actionLabel, wAction)) +
+      dim(padToDisplayWidth(actionShort, wAction)) +
       WATCH_TABLE_GAP +
       dim(padToDisplayWidth(idShort, wId)) +
       WATCH_TABLE_GAP +
@@ -1957,11 +2060,17 @@ const SESSION_READY_PHRASES = [
 ];
 let sessionReadyPhraseIndex = 0;
 
+type RedrawStatusBlockFn = (currentBuffer: string) => void;
+
 async function runSessionLoop(opts?: {
   onExit?: () => void;
   repoRoot?: string;
   preferredEnv?: "dev" | "prod";
   userId?: string | null;
+  redrawStatusBlock?: RedrawStatusBlockFn;
+  statusBlockLineCount?: number;
+  suggestionLinesRef?: SuggestionLinesRef;
+  lastReadyPhraseRef?: { current: string };
 }): Promise<void> {
   const realExit = process.exit.bind(process);
   process.exit = ((code?: number) => {
@@ -1969,10 +2078,16 @@ async function runSessionLoop(opts?: {
   }) as typeof process.exit;
 
   const lineBufferRef: BufferRef = { current: "" };
+  const suggestionLinesRef = opts?.suggestionLinesRef ?? { current: 0 };
+  const lastReadyPhraseRef = opts?.lastReadyPhraseRef ?? { current: SESSION_READY_PHRASES[0]! };
+  const sessionHistory: string[] = [];
+  const historyIndexRef = { current: 0 };
+  const historyRef: SessionHistoryRef = { history: sessionHistory, indexRef: historyIndexRef };
   let exited = false;
   function doExit(): void {
     if (exited) return;
     exited = true;
+    sigwinchCleanup?.();
     if (sessionWatchState) {
       if (sessionWatchState.refreshIntervalId) clearInterval(sessionWatchState.refreshIntervalId);
       sessionWatchState.stop();
@@ -1985,43 +2100,71 @@ async function runSessionLoop(opts?: {
   process.stdin.on("close", () => doExit());
 
   if (opts?.repoRoot) {
-    const preferredEnv = opts.preferredEnv || "dev";
+    const preferredEnv: "dev" | "prod" = opts.preferredEnv ?? "dev";
     const state: SessionWatchState = {
-      enabled: true,
+      enabled: false,
       liveLines: [],
       onEvent: () => {},
       stop: () => {},
       repoRoot: opts.repoRoot,
+      preferredEnv,
+      userId: opts.userId ?? null,
       refreshIntervalId: null,
-    };
-    const redrawWatchTable = () => {
-      if (!state.enabled || state.liveLines.length === 0) return;
-      const tableLines = formatWatchTable(state.liveLines, new Date());
-      const lineCount = tableLines.length;
-      process.stdout.write(BANNER_ANSI.up(lineCount + 1));
-      for (let i = 0; i < lineCount; i++) {
-        process.stdout.write(BANNER_ANSI.clearLine + tableLines[i] + "\n");
-      }
-      process.stdout.write("\r" + bold("neotoma> ") + lineBufferRef.current);
     };
     state.onEvent = (event) => {
       if (!state.enabled) return;
       state.liveLines.push(event);
       if (state.liveLines.length > WATCH_LIVE_MAX) state.liveLines.shift();
-      redrawWatchTable();
+      const line = _formatWatchLiveLine(event, new Date());
+      process.stdout.write(
+        "\r" + BANNER_ANSI.clearLineFull + "\n" + line + "\n" + bold("neotoma> ") + lineBufferRef.current
+      );
     };
-    state.stop = await startSessionWatch(opts.repoRoot, state.onEvent, preferredEnv);
-    state.refreshIntervalId = setInterval(redrawWatchTable, 1000);
     sessionWatchState = state;
   }
 
   const prompt = () => {
+    suggestionLinesRef.current = 0;
+    historyIndexRef.current = sessionHistory.length;
     const phrase = SESSION_READY_PHRASES[sessionReadyPhraseIndex++ % SESSION_READY_PHRASES.length];
+    lastReadyPhraseRef.current = phrase;
     process.stdout.write(
-      success("●") + " " + dim(phrase) + " " + dim("Type / for commands, ? for help.") + "\n"
+      success("●") + " " + dim(phrase) + " " + dim("Type / for commands. Up/Down: history.") + "\n"
     );
-    askWithLiveSlash(program, bold("neotoma> "), onLine, lineBufferRef);
+    askWithLiveSlash(program, bold("neotoma> "), onLine, lineBufferRef, suggestionLinesRef, historyRef);
   };
+
+  let sigwinchCleanup: (() => void) | undefined;
+  if (
+    process.stdout.isTTY &&
+    opts?.redrawStatusBlock != null &&
+    opts?.statusBlockLineCount != null &&
+    opts.statusBlockLineCount > 0
+  ) {
+    let debounceId: ReturnType<typeof setTimeout> | undefined;
+    const onResize = (): void => {
+      if (debounceId) clearTimeout(debounceId);
+      debounceId = setTimeout(() => {
+        debounceId = undefined;
+        suggestionLinesRef.current = 0;
+        const baseLines = opts.statusBlockLineCount! + 1;
+        const rows = typeof process.stdout.rows === "number" ? process.stdout.rows : 100;
+        const totalLines = Math.max(baseLines, rows - 1);
+        process.stdout.write(BANNER_ANSI.up(totalLines));
+        process.stdout.write("\x1b[0J");
+        opts.redrawStatusBlock!(lineBufferRef.current);
+        const readyLine =
+          success("●") + " " + dim(lastReadyPhraseRef.current) + " " + dim("Type / for commands.");
+        process.stdout.write("\n" + readyLine + "\n");
+        process.stdout.write(bold("neotoma> ") + lineBufferRef.current);
+      }, 100);
+    };
+    process.on("SIGWINCH", onResize);
+    sigwinchCleanup = () => {
+      process.removeListener("SIGWINCH", onResize);
+      if (debounceId) clearTimeout(debounceId);
+    };
+  }
 
   async function onLine(line: string | null): Promise<void> {
     if (line == null) {
@@ -2029,6 +2172,13 @@ async function runSessionLoop(opts?: {
       return;
     }
     const trimmed = line.trim();
+    if (trimmed !== "" && trimmed !== "exit" && trimmed !== "quit") {
+      const last = sessionHistory[sessionHistory.length - 1];
+      if (last !== trimmed) {
+        sessionHistory.push(trimmed);
+        if (sessionHistory.length > MAX_SESSION_HISTORY) sessionHistory.shift();
+      }
+    }
     if (trimmed === "" || trimmed === "exit" || trimmed === "quit") {
       if (trimmed === "exit" || trimmed === "quit") {
         doExit();
@@ -2042,9 +2192,31 @@ async function runSessionLoop(opts?: {
       prompt();
       return;
     }
-    if (trimmed === "?" || trimmed.startsWith("/")) {
-      const filter = trimmed.startsWith("/") ? trimmed.slice(1).trim() : "";
-      printSessionCommands(program, filter);
+    if (trimmed.startsWith("/")) {
+      const afterSlash = trimmed.slice(1).trim();
+      if (afterSlash.length === 0) {
+        printSessionCommands(program, undefined);
+        prompt();
+        return;
+      }
+      const args = parseSessionLine(afterSlash);
+      if (args.length > 0) {
+        const argv = [process.argv[0], process.argv[1], ...args];
+        process.stdout.write("\n");
+        try {
+          await program.parseAsync(argv);
+        } catch (err) {
+          if (err instanceof SessionExit) {
+            process.exitCode = err.code;
+          } else {
+            writeCliError(err);
+            process.exitCode = 1;
+          }
+        }
+        prompt();
+        return;
+      }
+      printSessionCommands(program, afterSlash);
       prompt();
       return;
     }
@@ -2053,7 +2225,9 @@ async function runSessionLoop(opts?: {
     if (rowNum >= 1) {
       if (!lastShownWatchEvents || lastShownWatchEvents.length === 0) {
         process.stdout.write(
-          dim("  No recent events in this session. Run neotoma with no args from a repo to see recent events; then enter 1–N to view details.") +
+          dim("  No recent events. Run ") +
+            pathStyle("watch") +
+            dim(" to see recent events; then enter 1–N to view details.") +
             "\n"
         );
         prompt();
@@ -2200,7 +2374,7 @@ async function runSessionLoop(opts?: {
   prompt();
 }
 
-/** Command menu: prompt "> " with hint "? for shortcuts". Typing ? or help shows commands; otherwise run as neotoma command. */
+/** Command menu: prompt "> " with hint. Typing help shows commands; / filters them. Otherwise run as neotoma command. */
 async function runCommandMenuLoop(): Promise<void> {
   const realExit = process.exit.bind(process);
   process.exit = ((code?: number) => {
@@ -2216,7 +2390,7 @@ async function runCommandMenuLoop(): Promise<void> {
   }
 
   const ask = () => {
-    process.stdout.write(dim("Type / for commands, ? for shortcuts") + "\n");
+    process.stdout.write(dim("Type / for commands.") + "\n");
     askWithLiveSlash(program, bold("> "), onLine);
   };
   rl.on("close", () => doExit());
@@ -2237,14 +2411,36 @@ async function runCommandMenuLoop(): Promise<void> {
       ask();
       return;
     }
-    if (trimmed === "?" || trimmed === "help") {
+    if (trimmed === "help") {
       program.outputHelp();
       ask();
       return;
     }
     if (trimmed.startsWith("/")) {
-      const filter = trimmed.slice(1).trim();
-      printSessionCommands(program, filter);
+      const afterSlash = trimmed.slice(1).trim();
+      if (afterSlash.length === 0) {
+        printSessionCommands(program, undefined);
+        ask();
+        return;
+      }
+      const args = parseSessionLine(afterSlash);
+      if (args.length > 0) {
+        const argv = [process.argv[0], process.argv[1], ...args];
+        process.stdout.write("\n");
+        try {
+          await program.parseAsync(argv);
+        } catch (err) {
+          if (err instanceof SessionExit) {
+            process.exitCode = err.code;
+          } else {
+            writeCliError(err);
+            process.exitCode = 1;
+          }
+        }
+        ask();
+        return;
+      }
+      printSessionCommands(program, afterSlash);
       ask();
       return;
     }
@@ -2274,8 +2470,9 @@ program
     "Show server URLs and tunnel status for the preferred environment (when running in a session with servers)"
   )
   .action(async () => {
-    const config = await readConfig();
-    const preferredEnv = config.preferred_env || "dev";
+    const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+    const preferredEnv: "dev" | "prod" =
+      sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : "dev";
     const portEnvVar =
       preferredEnv === "dev" ? "NEOTOMA_SESSION_DEV_PORT" : "NEOTOMA_SESSION_PROD_PORT";
     const portStr = process.env[portEnvVar];
@@ -2915,29 +3112,311 @@ mcpCommand
     }
   });
 
+const agentInstructionsCommand = program
+  .command("cli-instructions")
+  .description("Configure CLI instructions: prefer MCP when available, CLI as backup");
+
+agentInstructionsCommand
+  .command("config")
+  .description("Show guidance for adding 'prefer MCP when available, CLI as backup' to Cursor, Claude, and Codex")
+  .action(() => {
+    const outputMode = resolveOutputMode();
+    if (outputMode === "json") {
+      writeOutput(
+        {
+          message:
+            "Prefer Neotoma MCP when installed and running; use CLI as backup when MCP is not available.",
+          project_applied_paths: {
+            cursor: ".cursor/rules/neotoma_cli.mdc",
+            claude: ".claude/rules/neotoma_cli.mdc",
+            codex: ".codex/neotoma_cli.md",
+          },
+          user_paths_linux: {
+            cursor: "~/.cursor/rules/neotoma_cli.mdc",
+            claude: "~/.claude/rules/neotoma_cli.mdc",
+            codex: "~/.codex/neotoma_cli.md",
+          },
+          docs: "docs/developer/agent_cli_configuration.md",
+          instruction_source: "docs/developer/cli_agent_instructions.md",
+          run_check: "neotoma cli-instructions check",
+        },
+        outputMode
+      );
+      return;
+    }
+    process.stdout.write(
+      heading("CLI instructions: prefer MCP when available, CLI as backup") + nl() + nl()
+    );
+    process.stdout.write(
+      "Add the rule so it is applied in Cursor, Claude Code, and Codex (only paths each IDE loads count)." + nl()
+    );
+    process.stdout.write(dim("Rule content source: ") + pathStyle("docs/developer/cli_agent_instructions.md") + nl());
+    process.stdout.write(nl());
+    process.stdout.write(bold("Project (this repo):") + nl());
+    process.stdout.write("  Cursor: " + pathStyle(".cursor/rules/neotoma_cli.mdc") + nl());
+    process.stdout.write("  Claude: " + pathStyle(".claude/rules/neotoma_cli.mdc") + nl());
+    process.stdout.write("  Codex:  " + pathStyle(".codex/neotoma_cli.md") + nl());
+    process.stdout.write(nl());
+    process.stdout.write(bold("User (all projects):") + nl());
+    process.stdout.write("  " + pathStyle("~/.cursor/rules/neotoma_cli.mdc") + " (Cursor)" + nl());
+    process.stdout.write("  " + pathStyle("~/.claude/rules/neotoma_cli.mdc") + " (Claude)" + nl());
+    process.stdout.write("  " + pathStyle("~/.codex/neotoma_cli.md") + " (Codex)" + nl());
+    process.stdout.write(nl());
+    process.stdout.write(
+      dim("Run ") + pathStyle("neotoma cli-instructions check") + dim(" to add to missing environments.") + nl()
+    );
+    process.stdout.write(dim("Docs: ") + pathStyle("docs/developer/agent_cli_configuration.md") + nl());
+  });
+
+agentInstructionsCommand
+  .command("check")
+  .description("Scan for 'prefer MCP when available, CLI as backup' in Cursor, Claude, and Codex applied paths; offer to add if missing")
+  .option("--user-level", "Include user-level paths in scan", true)
+  .option("--no-user-level", "Scan project only")
+  .option("--yes", "Non-interactive: only report, do not offer to add")
+  .action(async (opts: { userLevel?: boolean; yes?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    try {
+      const {
+        scanAgentInstructions,
+        offerAddPreferCliRule,
+        loadCliAgentInstructions,
+        PROJECT_APPLIED_RULE_PATHS,
+        getUserAppliedRulePaths,
+      } = await import("./agent_instructions_scan.js");
+      const result = await scanAgentInstructions(process.cwd(), {
+        includeUserLevel: opts.userLevel !== false,
+      });
+
+      if (outputMode === "json") {
+        writeOutput(
+          {
+            projectRoot: result.projectRoot,
+            applied: result.applied,
+            applied_project: result.appliedProject,
+            applied_user: result.appliedUser,
+            stale_project: result.staleProject,
+            stale_user: result.staleUser,
+            missing_in_applied: result.missingInApplied,
+            needs_update_in_applied: result.needsUpdateInApplied,
+            project: result.project.map((p) => ({
+              path: p.path,
+              label: p.label,
+              has_instruction: p.hasInstruction,
+            })),
+            user: result.user.map((u) => ({
+              path: u.path,
+              label: u.label,
+              has_instruction: u.hasInstruction,
+            })),
+            missing_in_project: result.missingInProject,
+            missing_in_user: result.missingInUser,
+            symlink_project: result.symlinkProject,
+            symlink_user: result.symlinkUser,
+          },
+          outputMode
+        );
+        return;
+      }
+
+      process.stdout.write(
+        heading("CLI instructions check") + nl() + nl()
+      );
+      process.stdout.write("Project root: " + pathStyle(result.projectRoot) + nl() + nl());
+
+      const fmtStatus = (ok: boolean, sym: boolean) =>
+        ok ? success("✓") + dim(sym ? " symlink" : " file") : dim("○ missing");
+      const userPaths = getUserAppliedRulePaths();
+      const projRoot = result.projectRoot;
+
+      process.stdout.write(bold("Applied (loaded by each IDE):") + nl());
+
+      process.stdout.write("  " + bold("Project") + nl());
+      const projEntries = [
+        { label: "Cursor", ok: result.appliedProject.cursor, sym: result.symlinkProject.cursor, relPath: PROJECT_APPLIED_RULE_PATHS.cursor },
+        { label: "Claude", ok: result.appliedProject.claude, sym: result.symlinkProject.claude, relPath: PROJECT_APPLIED_RULE_PATHS.claude },
+        { label: "Codex",  ok: result.appliedProject.codex,  sym: result.symlinkProject.codex,  relPath: PROJECT_APPLIED_RULE_PATHS.codex },
+      ];
+      for (const e of projEntries) {
+        process.stdout.write(
+          "    " + fmtStatus(e.ok, e.sym) + "  " + e.label + "  " + dim(path.join(projRoot, e.relPath)) + nl()
+        );
+      }
+
+      process.stdout.write("  " + bold("User") + nl());
+      const userEntries = userPaths ? [
+        { label: "Cursor", ok: result.appliedUser.cursor, sym: result.symlinkUser.cursor, p: userPaths.cursor },
+        { label: "Claude", ok: result.appliedUser.claude, sym: result.symlinkUser.claude, p: userPaths.claude },
+        { label: "Codex",  ok: result.appliedUser.codex,  sym: result.symlinkUser.codex,  p: userPaths.codex },
+      ] : [];
+      for (const e of userEntries) {
+        process.stdout.write(
+          "    " + fmtStatus(e.ok, e.sym) + "  " + e.label + "  " + dim(e.p) + nl()
+        );
+      }
+      process.stdout.write(dim("  (Paths are symlinks to doc when added by check.)") + nl() + nl());
+
+      const projectWith = result.project.filter((p) => p.hasInstruction);
+      const projectWithout = result.project.filter((p) => !p.hasInstruction);
+      if (result.project.length > 0) {
+        process.stdout.write(bold("Scanned (discovery):") + nl());
+        for (const p of projectWith) {
+          process.stdout.write("  " + success("✓ ") + pathStyle(p.label ?? p.path) + nl());
+        }
+        for (const p of projectWithout) {
+          process.stdout.write("  " + dim("○ ") + pathStyle(p.label ?? p.path) + nl());
+        }
+        process.stdout.write(nl());
+      }
+
+      if (result.user.length > 0) {
+        process.stdout.write(bold("User-level (scanned):") + nl());
+        for (const u of result.user) {
+          const icon = u.hasInstruction ? success("✓ ") : dim("○ ");
+          process.stdout.write("  " + icon + pathStyle(u.label ?? u.path) + nl());
+        }
+        process.stdout.write(nl());
+      }
+
+      const missingProject =
+        !result.appliedProject.cursor || !result.appliedProject.claude || !result.appliedProject.codex;
+      const missingUser =
+        !result.appliedUser.cursor || !result.appliedUser.claude || !result.appliedUser.codex;
+      const needsUpdate = result.needsUpdateInApplied;
+      const needsAddOrUpdate = missingProject || missingUser || needsUpdate;
+
+      if (needsAddOrUpdate) {
+        const parts: string[] = [];
+        if (missingProject) {
+          const missingEnvs: string[] = [];
+          if (!result.appliedProject.cursor) missingEnvs.push("Cursor");
+          if (!result.appliedProject.claude) missingEnvs.push("Claude");
+          if (!result.appliedProject.codex) missingEnvs.push("Codex");
+          parts.push("Not applied at project level in: " + missingEnvs.join(", "));
+        }
+        if (missingUser) {
+          const missingEnvs: string[] = [];
+          if (!result.appliedUser.cursor) missingEnvs.push("Cursor");
+          if (!result.appliedUser.claude) missingEnvs.push("Claude");
+          if (!result.appliedUser.codex) missingEnvs.push("Codex");
+          parts.push("Not applied at user level in: " + missingEnvs.join(", ") + " (user rules apply to all projects)");
+        }
+        if (needsUpdate) {
+          const staleEnvs: string[] = [];
+          if (result.staleProject.cursor || result.staleUser.cursor) staleEnvs.push("Cursor");
+          if (result.staleProject.claude || result.staleUser.claude) staleEnvs.push("Claude");
+          if (result.staleProject.codex || result.staleUser.codex) staleEnvs.push("Codex");
+          if (staleEnvs.length > 0) {
+            parts.push("Outdated in: " + staleEnvs.join(", "));
+          }
+        }
+        process.stdout.write(
+          warn(parts.join(". ") + ".") + nl()
+        );
+        if (process.stdin.isTTY && !opts.yes) {
+          const { added, skipped } = await offerAddPreferCliRule(result, { nonInteractive: false });
+          if (added.length > 0) {
+            process.stdout.write(success("Added or updated rule at:") + nl());
+            for (const p of added) {
+              process.stdout.write("  " + pathStyle(p) + nl());
+            }
+          } else if (skipped) {
+            process.stdout.write(dim("Already up to date for the chosen scope. Nothing written.") + nl());
+          }
+        } else if (opts.yes) {
+          process.stdout.write(dim("Paths to add or update (run without --yes to apply):") + nl());
+          if (!result.appliedProject.cursor || result.staleProject.cursor) {
+            process.stdout.write("  " + pathStyle(PROJECT_APPLIED_RULE_PATHS.cursor) + nl());
+          }
+          if (!result.appliedProject.claude || result.staleProject.claude) {
+            process.stdout.write("  " + pathStyle(PROJECT_APPLIED_RULE_PATHS.claude) + nl());
+          }
+          if (!result.appliedProject.codex || result.staleProject.codex) {
+            process.stdout.write("  " + pathStyle(PROJECT_APPLIED_RULE_PATHS.codex) + nl());
+          }
+          const snippetBody = await loadCliAgentInstructions(result.projectRoot);
+          process.stdout.write(nl() + dim("Source: docs/developer/cli_agent_instructions.md") + nl());
+          process.stdout.write(dim("Snippet:") + nl() + nl());
+          process.stdout.write(snippetBody.trim().slice(0, 400) + "…" + nl());
+        }
+      } else {
+        process.stdout.write(
+          success("Instruction applied and up to date at project and user level (Cursor, Claude, Codex).") + nl()
+        );
+      }
+    } catch (err) {
+      if (outputMode === "json") {
+        writeOutput({ error: err instanceof Error ? err.message : String(err) }, outputMode);
+      } else {
+        process.stderr.write(
+          "Error scanning CLI instructions: " +
+            (err instanceof Error ? err.message : String(err)) +
+            nl()
+        );
+      }
+      process.exitCode = 1;
+    }
+  });
+
 program
   .command("watch")
   .description("Stream record changes from the database as they happen (local backend only).")
+  .option("--env <env>", "Environment to watch (dev or prod); required when running outside a session")
   .option("--interval <ms>", "Polling interval in ms", "400")
   .option("--json", "Output NDJSON (one JSON object per line)")
   .option("--human", "Output one plain line per change (no timestamps, emoji, or IDs)")
   .option("--tail", "Only show changes from now (skip existing records)")
-  .action(async (opts: { interval?: string; json?: boolean; human?: boolean; tail?: boolean }) => {
+  .action(async (opts: { env?: string; interval?: string; json?: boolean; human?: boolean; tail?: boolean }) => {
     if (sessionWatchState) {
-      sessionWatchState.enabled = !sessionWatchState.enabled;
-      if (!sessionWatchState.enabled) {
-        sessionWatchState.stop();
-        sessionWatchState.stop = () => {};
-      } else {
-        const config = await readConfig();
-        const preferredEnv = config.preferred_env || "dev";
-        sessionWatchState.stop = await startSessionWatch(
-          sessionWatchState.repoRoot,
-          sessionWatchState.onEvent,
-          preferredEnv
+      sessionWatchState.enabled = true;
+      const events = await getLastNWatchEntries(
+        sessionWatchState.repoRoot,
+        sessionWatchState.preferredEnv,
+        sessionWatchState.userId,
+        WATCH_INITIAL_EVENT_LIMIT
+      );
+      lastShownWatchEvents = events.length > 0 ? events : null;
+      if (events.length > 0) {
+        const watchLines = formatWatchTable(events, new Date());
+        sessionWatchDisplayRef = { watchLines, watchEventCount: events.length };
+        const sessionBoxWidth = getTerminalWidth();
+        process.stdout.write(
+          "\n" +
+            blackBox(watchLines, {
+              title: " Recent events ",
+              borderColor: "green",
+              padding: 1,
+              sessionBoxWidth,
+            }) +
+            "\n"
         );
+        process.stdout.write(
+          dim("  View details: enter row number (1–" + events.length + ") at the prompt after exiting.") +
+            "\n"
+        );
+      } else {
+        sessionWatchDisplayRef = null;
+        process.stdout.write("\n" + dim("No recent events.") + "\n");
       }
-      process.stdout.write((sessionWatchState.enabled ? "Watch on." : "Watch off.") + "\n");
+      sessionWatchState.stop = await startSessionWatch(
+        sessionWatchState.repoRoot,
+        sessionWatchState.onEvent,
+        sessionWatchState.preferredEnv
+      );
+      process.stdout.write(
+        dim("Watch mode. Streaming new events. Press ") +
+          pathStyle("Enter") +
+          dim(" or ") +
+          pathStyle("q") +
+          dim(" to exit to prompt.") +
+          "\n"
+      );
+      await runWatchModeExit();
+      sessionWatchState.enabled = false;
+      sessionWatchState.stop();
+      sessionWatchState.stop = () => {};
+      sessionWatchDisplayRef = null;
+      process.stdout.write("\n" + dim("Exited watch mode.") + "\n");
       return;
     }
 
@@ -3000,8 +3479,23 @@ program
     }
     const dataDir =
       process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const preferredEnv = config.preferred_env || "dev";
-    const defaultDbFile = preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
+    const watchEnvFlag = opts.env;
+    const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+    let watchEnv: "dev" | "prod";
+    if (watchEnvFlag === "dev" || watchEnvFlag === "prod") {
+      watchEnv = watchEnvFlag;
+    } else if (sessionEnv === "dev" || sessionEnv === "prod") {
+      watchEnv = sessionEnv;
+    } else if (!process.env.NEOTOMA_SQLITE_PATH) {
+      process.stderr.write(
+        "neotoma watch: no environment specified. Use --env dev or --env prod, or set NEOTOMA_SQLITE_PATH.\n"
+      );
+      process.exit(1);
+      watchEnv = "dev"; // unreachable; satisfy TypeScript
+    } else {
+      watchEnv = "dev"; // NEOTOMA_SQLITE_PATH is set; env is irrelevant
+    }
+    const defaultDbFile = watchEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
     const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
 
     const resolvedPath = path.isAbsolute(sqlitePath)
@@ -3128,12 +3622,11 @@ program
     }
 
     const now = new Date().toISOString();
-    const cursors: Record<string, string> = opts.tail
-      ? Object.fromEntries(tableDefs.map((t) => [t.table, now]))
-      : {};
     const intervalMs = Math.max(100, parseInt(opts.interval ?? "400", 10) || 400);
     const jsonMode = Boolean(opts.json);
     const humanMode = Boolean(opts.human);
+    const skipInitial =
+      Boolean(opts.tail) || jsonMode || humanMode;
 
     if (!jsonMode && !humanMode) {
       process.stderr.write(
@@ -3143,6 +3636,29 @@ program
       process.stderr.write(keyValue("User", userId) + "\n");
       process.stderr.write(keyValue("Poll interval", `${intervalMs} ms`) + "\n");
       process.stderr.write(dim("---") + "\n");
+    }
+
+    let cursors: Record<string, string>;
+    if (skipInitial) {
+      cursors = Object.fromEntries(tableDefs.map((t) => [t.table, now]));
+    } else {
+      const repoRoot = projectRoot ?? process.cwd();
+      const initialEvents = await getLastNWatchEntries(
+        repoRoot,
+        watchEnv,
+        userId,
+        WATCH_INITIAL_EVENT_LIMIT
+      );
+      let maxTs = "1970-01-01T00:00:00Z";
+      for (const e of initialEvents) {
+        if (e.ts && e.ts > maxTs) maxTs = e.ts;
+      }
+      cursors = Object.fromEntries(tableDefs.map((t) => [t.table, maxTs]));
+      for (const e of initialEvents) {
+        const emoji = TABLE_EMOJI[e.table] ?? "•";
+        const tsStr = e.ts ? new Date(e.ts).toISOString() : "";
+        process.stdout.write(`[${tsStr}] ${emoji} ${e.table} ${e.id}  ${e.summary}\n`);
+      }
     }
 
     function collectEntityIds(table: string, rows: Record<string, unknown>[]): Set<string> {
@@ -4248,14 +4764,24 @@ entitiesCommand
   .description("List entities or show one entity's properties as a table")
   .argument("[entityId]", "Entity ID (if provided, show this entity's properties as a table)")
   .option("--type <entityType>", "Filter by entity type")
+  .option("--entity-type <entityType>", "Filter by entity type (alias for --type)")
   .option("--search <query>", "Search by canonical name")
+  .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .option("--include-merged", "Include merged entities")
-  .action(async (entityId: string | undefined, cmd: Command) => {
+  .action(async (...args: any[]) => {
+    // Commander passes different arguments depending on whether optional argument is provided:
+    // Without entityId: (command)
+    // With entityId: (entityId, command)
+    const cmd = args[args.length - 1] as Command;
+    const entityId = args.length > 1 ? args[0] as string | undefined : undefined;
+
     const opts = cmd.opts() as {
       type?: string;
+      entityType?: string;
       search?: string;
+      userId?: string;
       limit?: string;
       offset?: string;
       includeMerged?: boolean;
@@ -4309,11 +4835,14 @@ entitiesCommand
       }
       return;
     }
-    const entityType = opts.type ?? entityId ?? undefined;
+    // If positional arg is provided and doesn't look like an entity ID, treat it as entity type
+    const positionalEntityType = id && !/^ent_[a-f0-9]+$/i.test(id) ? id : undefined;
+    const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
     const { data, error, response } = await api.POST("/api/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
+        user_id: opts.userId,
         limit: Number(opts.limit ?? "100"),
         offset: Number(opts.offset ?? "0"),
         include_merged: Boolean(opts.includeMerged),
@@ -4377,9 +4906,12 @@ entitiesCommand
 entitiesCommand
   .command("search")
   .description("Search entity by identifier (name, email, etc.)")
-  .argument("<identifier>", "Identifier to search for")
+  .argument("[identifier]", "Identifier to search for (or use --identifier)")
+  .option("--identifier <id>", "Identifier to search for (alternative to positional argument)")
   .option("--entity-type <type>", "Limit search to specific entity type")
-  .action(async (identifier: string, opts: { entityType?: string }) => {
+  .option("--user-id <userId>", "User ID")
+  .action(async (identifierArg: string | undefined, opts: { identifier?: string; entityType?: string; userId?: string }) => {
+    const identifier = opts.identifier ?? identifierArg;
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -4387,6 +4919,7 @@ entitiesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    if (!identifier) throw new Error("identifier is required (positional argument or --identifier)");
     const { data, error } = await api.POST("/retrieve_entity_by_identifier", {
       body: {
         identifier,
@@ -4405,6 +4938,7 @@ entitiesCommand
   .option("--relationship-types <types>", "Comma-separated relationship types to filter")
   .option("--max-hops <n>", "Maximum relationship hops (1 = direct, 2 = 2-hop, etc.)", "1")
   .option("--include-entities", "Include full entity snapshots in response", true)
+  .option("--user-id <userId>", "User ID")
   .action(async (entityId: string, opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -4440,6 +4974,7 @@ entitiesCommand
   .option("--include-sources", "Include related sources", true)
   .option("--include-events", "Include timeline events", true)
   .option("--include-observations", "Include observations (entities only)", false)
+  .option("--user-id <userId>", "User ID")
   .action(async (nodeId: string, opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -4466,9 +5001,11 @@ entitiesCommand
   .command("delete")
   .description("Delete an entity (creates deletion observation, reversible)")
   .argument("<entityId>", "Entity ID to delete")
-  .argument("<entityType>", "Entity type")
+  .argument("[entityType]", "Entity type (optional, looked up if not provided)")
+  .option("--entity-type <type>", "Entity type (alternative to positional argument)")
   .option("--reason <reason>", "Optional reason for deletion")
-  .action(async (entityId: string, entityType: string, opts: { reason?: string }) => {
+  .option("--user-id <userId>", "User ID")
+  .action(async (entityId: string, entityTypeArg: string | undefined, opts: { entityType?: string; reason?: string; userId?: string }) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -4476,10 +5013,11 @@ entitiesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const entityType = opts.entityType ?? entityTypeArg;
     const { data, error } = await api.POST("/delete_entity", {
       body: {
         entity_id: entityId,
-        entity_type: entityType,
+        entity_type: entityType ?? "unknown",
         reason: opts.reason,
       },
     });
@@ -4491,9 +5029,11 @@ entitiesCommand
   .command("restore")
   .description("Restore a deleted entity (creates restoration observation)")
   .argument("<entityId>", "Entity ID to restore")
-  .argument("<entityType>", "Entity type")
+  .argument("[entityType]", "Entity type (optional)")
+  .option("--entity-type <type>", "Entity type (alternative to positional argument)")
   .option("--reason <reason>", "Optional reason for restoration")
-  .action(async (entityId: string, entityType: string, opts: { reason?: string }) => {
+  .option("--user-id <userId>", "User ID")
+  .action(async (entityId: string, entityTypeArg: string | undefined, opts: { entityType?: string; reason?: string; userId?: string }) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -4501,10 +5041,11 @@ entitiesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const entityType = opts.entityType ?? entityTypeArg;
     const { data, error } = await api.POST("/restore_entity", {
       body: {
         entity_id: entityId,
-        entity_type: entityType,
+        entity_type: entityType ?? "unknown",
         reason: opts.reason,
       },
     });
@@ -4515,8 +5056,11 @@ entitiesCommand
 sourcesCommand
   .command("get")
   .description("Get source by ID")
-  .argument("<id>", "Source ID")
-  .action(async (id: string) => {
+  .argument("[id]", "Source ID (or use --source-id)")
+  .option("--source-id <id>", "Source ID (alternative to positional argument)")
+  .action(async (idArg: string | undefined, opts: { sourceId?: string }) => {
+    const id = opts.sourceId ?? idArg;
+    if (!id) throw new Error("Source ID is required (positional argument or --source-id)");
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -4549,6 +5093,7 @@ sourcesCommand
   .description("List sources")
   .option("--search <query>", "Search by filename or ID")
   .option("--mime-type <mimeType>", "Filter by MIME type")
+  .option("--user-id <userId>", "Filter by user ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .action(async (opts) => {
@@ -4564,6 +5109,7 @@ sourcesCommand
         query: {
           search: opts.search,
           mime_type: opts.mimeType,
+          user_id: opts.userId,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
         },
@@ -4574,10 +5120,39 @@ sourcesCommand
   });
 
 observationsCommand
+  .command("get")
+  .description("Get observation by ID")
+  .option("--observation-id <id>", "Observation ID (required)")
+  .action(async (opts: { observationId?: string }) => {
+    if (!opts.observationId) throw new Error("--observation-id is required");
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.POST("/api/observations/query", {
+      body: {
+        observation_id: opts.observationId,
+        limit: 1,
+        offset: 0,
+      },
+    });
+    if (error) throw new Error("Failed to get observation");
+    const result = data as any;
+    const observations: any[] = result?.observations ?? result ?? [];
+    const obs = observations[0] ?? null;
+    if (!obs) throw new Error(`Observation not found: ${opts.observationId}`);
+    writeOutput({ observation: obs }, outputMode);
+  });
+
+observationsCommand
   .command("list")
   .description("List observations")
   .option("--entity-id <id>", "Filter by entity ID")
   .option("--entity-type <type>", "Filter by entity type")
+  .option("--source-id <id>", "Filter by source ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .action(async (opts) => {
@@ -4592,6 +5167,7 @@ observationsCommand
       body: {
         entity_id: opts.entityId,
         entity_type: opts.entityType,
+        source_id: opts.sourceId,
         limit: Number(opts.limit),
         offset: Number(opts.offset),
       },
@@ -4601,11 +5177,59 @@ observationsCommand
   });
 
 relationshipsCommand
+  .command("create")
+  .description("Create a relationship between two entities")
+  .option("--source-entity-id <id>", "Source entity ID (required)")
+  .option("--target-entity-id <id>", "Target entity ID (required)")
+  .option("--relationship-type <type>", "Relationship type (required)")
+  .option("--user-id <userId>", "User ID")
+  .option("--metadata <json>", "Relationship metadata as JSON")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    if (!opts.sourceEntityId) throw new Error("--source-entity-id is required");
+    if (!opts.targetEntityId) throw new Error("--target-entity-id is required");
+    if (!opts.relationshipType) throw new Error("--relationship-type is required");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const metadata = opts.metadata ? JSON.parse(opts.metadata) : undefined;
+    const { data, error } = await api.POST("/create_relationship", {
+      body: {
+        relationship_type: opts.relationshipType as any,
+        source_entity_id: opts.sourceEntityId,
+        target_entity_id: opts.targetEntityId,
+        metadata,
+      },
+    });
+    if (error) throw new Error("Failed to create relationship");
+    const rel = data as any;
+    writeOutput(
+      {
+        relationship_id: rel.relationship_key,
+        relationship_type: rel.relationship_type,
+        source_entity_id: rel.source_entity_id,
+        target_entity_id: rel.target_entity_id,
+        metadata: rel.metadata,
+        created_at: rel.created_at,
+      },
+      outputMode
+    );
+  });
+
+relationshipsCommand
   .command("list")
-  .description("List relationships for an entity")
-  .argument("<entityId>", "Entity ID")
-  .option("--direction <direction>", "Direction: inbound, outbound, both", "both")
-  .action(async (entityId: string, opts) => {
+  .description("List relationships with optional filters")
+  .option("--source-entity-id <id>", "Filter by source entity ID")
+  .option("--target-entity-id <id>", "Filter by target entity ID")
+  .option("--relationship-type <type>", "Filter by relationship type")
+  .option("--direction <direction>", "Direction: inbound, outbound, both")
+  .option("--user-id <userId>", "Filter by user ID")
+  .option("--limit <n>", "Limit", "100")
+  .option("--offset <n>", "Offset", "0")
+  .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -4613,10 +5237,15 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.POST("/list_relationships", {
-      body: {
-        entity_id: entityId,
-        direction: opts.direction,
+    const { data, error } = await api.GET("/api/relationships", {
+      params: {
+        query: {
+          source_entity_id: opts.sourceEntityId,
+          target_entity_id: opts.targetEntityId,
+          relationship_type: opts.relationshipType,
+          limit: Number(opts.limit),
+          offset: Number(opts.offset),
+        },
       },
     });
     if (error) throw new Error("Failed to list relationships");
@@ -4624,72 +5253,143 @@ relationshipsCommand
   });
 
 relationshipsCommand
+  .command("get")
+  .description("Get a relationship by ID")
+  .option("--relationship-id <id>", "Relationship ID (relationship_key)")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    if (!opts.relationshipId) throw new Error("--relationship-id is required");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/api/relationships/{id}", {
+      params: { path: { id: encodeURIComponent(opts.relationshipId) } },
+    });
+    if (error) throw new Error("Failed to get relationship");
+    writeOutput({ relationship: data }, outputMode);
+  });
+
+relationshipsCommand
   .command("delete")
   .description("Delete a relationship (creates deletion observation, reversible)")
+  .option("--relationship-id <id>", "Relationship ID (relationship_key, format: type:source:target)")
+  .option("--source-entity-id <id>", "Source entity ID (use with --target-entity-id and --relationship-type)")
+  .option("--target-entity-id <id>", "Target entity ID")
+  .option("--relationship-type <type>", "Relationship type")
+  .option("--user-id <userId>", "User ID")
+  .option("--reason <reason>", "Optional reason for deletion")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    let relationshipType: string;
+    let sourceEntityId: string;
+    let targetEntityId: string;
+    if (opts.sourceEntityId && opts.targetEntityId && opts.relationshipType) {
+      relationshipType = opts.relationshipType;
+      sourceEntityId = opts.sourceEntityId;
+      targetEntityId = opts.targetEntityId;
+    } else if (opts.relationshipId) {
+      const parts = opts.relationshipId.split(":");
+      if (parts.length < 3) throw new Error("Invalid relationship ID format (expected type:source:target)");
+      const [type, ...rest] = parts;
+      relationshipType = type;
+      targetEntityId = rest.pop() as string;
+      sourceEntityId = rest.join(":");
+    } else {
+      throw new Error("Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)");
+    }
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.POST("/delete_relationship", {
+      body: {
+        relationship_type: relationshipType as any,
+        source_entity_id: sourceEntityId,
+        target_entity_id: targetEntityId,
+        reason: opts.reason,
+      },
+    });
+    if (error) throw new Error("Failed to delete relationship");
+    const result = data as any;
+    writeOutput({ success: result?.success ?? true }, outputMode);
+  });
+
+relationshipsCommand
+  .command("get-snapshot")
+  .description("Get relationship snapshot with provenance (observations)")
   .argument("<relationshipType>", "Relationship type (e.g., PART_OF, CORRECTS)")
   .argument("<sourceEntityId>", "Source entity ID")
   .argument("<targetEntityId>", "Target entity ID")
-  .option("--reason <reason>", "Optional reason for deletion")
-  .action(
-    async (
-      relationshipType: string,
-      sourceEntityId: string,
-      targetEntityId: string,
-      opts: { reason?: string }
-    ) => {
-      const outputMode = resolveOutputMode();
-      const config = await readConfig();
-      const token = await getCliToken();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-        token,
-      });
-      const { data, error } = await api.POST("/delete_relationship", {
-        body: {
-          relationship_type: relationshipType as any,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          reason: opts.reason,
-        },
-      });
-      if (error) throw new Error("Failed to delete relationship");
-      writeOutput(data, outputMode);
-    }
-  );
+  .action(async (relationshipType: string, sourceEntityId: string, targetEntityId: string) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.POST("/api/relationships/snapshot", {
+      body: {
+        relationship_type: relationshipType as "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS",
+        source_entity_id: sourceEntityId,
+        target_entity_id: targetEntityId,
+      },
+    });
+    if (error) throw new Error("Failed to get relationship snapshot");
+    writeOutput(data, outputMode);
+  });
 
 relationshipsCommand
   .command("restore")
   .description("Restore a deleted relationship (creates restoration observation)")
-  .argument("<relationshipType>", "Relationship type (e.g., PART_OF, CORRECTS)")
-  .argument("<sourceEntityId>", "Source entity ID")
-  .argument("<targetEntityId>", "Target entity ID")
+  .option("--relationship-id <id>", "Relationship ID (relationship_key, format: type:source:target)")
+  .option("--source-entity-id <id>", "Source entity ID (use with --target-entity-id and --relationship-type)")
+  .option("--target-entity-id <id>", "Target entity ID")
+  .option("--relationship-type <type>", "Relationship type")
+  .option("--user-id <userId>", "User ID")
   .option("--reason <reason>", "Optional reason for restoration")
-  .action(
-    async (
-      relationshipType: string,
-      sourceEntityId: string,
-      targetEntityId: string,
-      opts: { reason?: string }
-    ) => {
-      const outputMode = resolveOutputMode();
-      const config = await readConfig();
-      const token = await getCliToken();
-      const api = createApiClient({
-        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-        token,
-      });
-      const { data, error } = await api.POST("/restore_relationship", {
-        body: {
-          relationship_type: relationshipType as any,
-          source_entity_id: sourceEntityId,
-          target_entity_id: targetEntityId,
-          reason: opts.reason,
-        },
-      });
-      if (error) throw new Error("Failed to restore relationship");
-      writeOutput(data, outputMode);
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    let relationshipType: string;
+    let sourceEntityId: string;
+    let targetEntityId: string;
+    if (opts.sourceEntityId && opts.targetEntityId && opts.relationshipType) {
+      relationshipType = opts.relationshipType;
+      sourceEntityId = opts.sourceEntityId;
+      targetEntityId = opts.targetEntityId;
+    } else if (opts.relationshipId) {
+      const parts = opts.relationshipId.split(":");
+      if (parts.length < 3) throw new Error("Invalid relationship ID format (expected type:source:target)");
+      const [type, ...rest] = parts;
+      relationshipType = type;
+      targetEntityId = rest.pop() as string;
+      sourceEntityId = rest.join(":");
+    } else {
+      throw new Error("Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)");
     }
-  );
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.POST("/restore_relationship", {
+      body: {
+        relationship_type: relationshipType as any,
+        source_entity_id: sourceEntityId,
+        target_entity_id: targetEntityId,
+        reason: opts.reason,
+      },
+    });
+    if (error) throw new Error("Failed to restore relationship");
+    const result = data as any;
+    writeOutput({ success: result?.success ?? true }, outputMode);
+  });
 
 timelineCommand
   .command("list")
@@ -4697,6 +5397,7 @@ timelineCommand
   .option("--start-date <date>", "Filter start date")
   .option("--end-date <date>", "Filter end date")
   .option("--event-type <type>", "Filter by event type")
+  .option("--entity-id <id>", "Filter by entity ID")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .action(async (opts) => {
@@ -4713,6 +5414,7 @@ timelineCommand
           start_date: opts.startDate,
           end_date: opts.endDate,
           event_type: opts.eventType,
+          entity_id: opts.entityId,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
         },
@@ -4725,44 +5427,11 @@ timelineCommand
 schemasCommand
   .command("list")
   .description("List schemas")
-  .action(async () => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const { data, error } = await api.GET("/api/schemas", {});
-    if (error) throw new Error("Failed to list schemas");
-    writeOutput(data, outputMode);
-  });
-
-schemasCommand
-  .command("get")
-  .description("Get schema by entity type")
-  .argument("<entityType>", "Entity type")
-  .action(async (entityType: string) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const { data, error } = await api.GET("/api/schemas/{entity_type}", {
-      params: { path: { entity_type: entityType } },
-    });
-    if (error) throw new Error("Failed to fetch schema");
-    writeOutput(data, outputMode);
-  });
-
-schemasCommand
-  .command("analyze")
-  .description("Analyze raw_fragments to identify schema candidate fields")
-  .option("--entity-type <type>", "Entity type to analyze (optional, analyzes all if not provided)")
-  .option("--min-confidence <n>", "Minimum confidence score 0-1", "0.8")
-  .option("--min-frequency <n>", "Minimum frequency threshold", "5")
+  .option("--entity-type <type>", "Filter by entity type")
+  .option("--user-specific", "Show user-specific schemas")
+  .option("--user-id <userId>", "Filter by user ID")
+  .option("--limit <n>", "Limit", "100")
+  .option("--offset <n>", "Offset", "0")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -4771,25 +5440,85 @@ schemasCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
+    const { data, error } = await api.GET("/api/schemas", {
+      params: {
+        query: {
+          entity_type: opts.entityType,
+          limit: Number(opts.limit),
+          offset: Number(opts.offset),
+        },
+      },
+    });
+    if (error) throw new Error("Failed to list schemas");
+    writeOutput(data, outputMode);
+  });
+
+schemasCommand
+  .command("get")
+  .description("Get schema by entity type")
+  .option("--entity-type <type>", "Entity type (required)")
+  .option("--user-id <userId>", "User ID for user-specific schema lookup")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    if (!opts.entityType) throw new Error("--entity-type is required");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/api/schemas/{entity_type}", {
+      params: {
+        path: { entity_type: opts.entityType },
+        query: { user_id: opts.userId },
+      },
+    });
+    if (error) throw new Error("Failed to fetch schema");
+    writeOutput({ schema: data }, outputMode);
+  });
+
+schemasCommand
+  .command("analyze")
+  .description("Analyze raw_fragments to identify schema candidate fields")
+  .argument("[entityType]", "Entity type to analyze (or use --entity-type)")
+  .option("--entity-type <type>", "Entity type to analyze (alternative to positional argument)")
+  .option("--user-id <userId>", "User ID")
+  .option("--min-confidence <n>", "Minimum confidence score 0-1", "0.8")
+  .option("--min-frequency <n>", "Minimum frequency threshold", "5")
+  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string; minConfidence?: string; minFrequency?: string }) => {
+    const outputMode = resolveOutputMode();
+    const entityTypeResolved = opts.entityType ?? entityTypeArg;
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
     const { data, error } = await api.POST("/analyze_schema_candidates", {
       body: {
-        entity_type: opts.entityType,
+        entity_type: entityTypeResolved,
+        user_id: opts.userId,
         min_confidence: Number(opts.minConfidence),
         min_frequency: Number(opts.minFrequency),
       },
     });
     if (error) throw new Error("Failed to analyze schema candidates");
-    writeOutput(data, outputMode);
+    const result = data as any;
+    writeOutput({ analysis: result?.candidates ?? result }, outputMode);
   });
 
 schemasCommand
   .command("recommend")
   .description("Get schema update recommendations for an entity type")
-  .argument("<entityType>", "Entity type to get recommendations for")
+  .argument("[entityType]", "Entity type (or use --entity-type)")
+  .option("--entity-type <type>", "Entity type to get recommendations for")
+  .option("--user-id <userId>", "User ID")
   .option("--source <source>", "Recommendation source: raw_fragments, agent, inference, all", "all")
   .option("--status <status>", "Filter by status: pending, approved, rejected", "pending")
-  .action(async (entityType: string, opts) => {
+  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string; source?: string; status?: string }) => {
     const outputMode = resolveOutputMode();
+    const entityTypeResolved = opts.entityType ?? entityTypeArg;
+    if (!entityTypeResolved) throw new Error("entity type is required (positional argument or --entity-type)");
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
@@ -4798,9 +5527,10 @@ schemasCommand
     });
     const { data, error } = await api.POST("/get_schema_recommendations", {
       body: {
-        entity_type: entityType,
-        source: opts.source,
-        status: opts.status,
+        entity_type: entityTypeResolved,
+        user_id: opts.userId,
+        source: opts.source as any,
+        status: opts.status as any,
       },
     });
     if (error) throw new Error("Failed to get schema recommendations");
@@ -4810,14 +5540,18 @@ schemasCommand
 schemasCommand
   .command("update")
   .description("Incrementally update schema by adding new fields")
-  .argument("<entityType>", "Entity type to update")
-  .option("--fields <json>", "JSON array of fields to add (required)")
+  .argument("[entityType]", "Entity type (or use --entity-type)")
+  .option("--entity-type <type>", "Entity type to update (alternative to positional argument)")
+  .option("--fields <json>", "JSON object or array of fields to add (required)")
+  .option("--user-id <userId>", "User ID")
   .option("--activate", "Activate schema immediately", true)
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
   .option("--user-specific", "Create user-specific schema variant", false)
-  .action(async (entityType: string, opts) => {
+  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; fields?: string; userId?: string; activate?: boolean; migrateExisting?: boolean; schemaVersion?: string; userSpecific?: boolean }) => {
     const outputMode = resolveOutputMode();
+    const entityType = opts.entityType ?? entityTypeArg;
+    if (!entityType) throw new Error("entity type is required (positional argument or --entity-type)");
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
@@ -4825,13 +5559,25 @@ schemasCommand
       token,
     });
     if (!opts.fields) {
-      throw new Error("--fields is required (JSON array of field definitions)");
+      throw new Error("--fields is required (JSON object or array of field definitions)");
     }
-    const fieldsToAdd = JSON.parse(opts.fields);
+    let fieldsToAdd: any[];
+    const parsedFields = JSON.parse(opts.fields);
+    if (Array.isArray(parsedFields)) {
+      fieldsToAdd = parsedFields;
+    } else {
+      fieldsToAdd = Object.entries(parsedFields).map(([field_name, def]: [string, any]) => ({
+        field_name,
+        field_type: def.type ?? "string",
+        required: def.required ?? false,
+        reducer_strategy: def.reducer,
+      }));
+    }
     const { data, error } = await api.POST("/update_schema_incremental", {
       body: {
         entity_type: entityType,
         fields_to_add: fieldsToAdd,
+        user_id: opts.userId,
         activate: opts.activate,
         migrate_existing: opts.migrateExisting,
         schema_version: opts.schemaVersion,
@@ -4845,25 +5591,49 @@ schemasCommand
 schemasCommand
   .command("register")
   .description("Register a new schema or schema version")
-  .argument("<entityType>", "Entity type")
-  .option("--schema-definition <json>", "Schema definition JSON (required)")
-  .option("--reducer-config <json>", "Reducer configuration JSON (required)")
+  .argument("[entityType]", "Entity type (or use --entity-type)")
+  .option("--entity-type <type>", "Entity type (alternative to positional argument)")
+  .option("--fields <json>", "JSON object of fields (format: {fieldName: {type, required}})")
+  .option("--schema <json>", "JSON schema definition or fields (alias for --fields)")
+  .option("--user-id <userId>", "User ID")
   .option("--schema-version <version>", "Schema version", "1.0")
   .option("--activate", "Activate schema immediately", false)
+  .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
-  .action(async (entityType: string, opts) => {
+  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; fields?: string; schema?: string; userId?: string; schemaVersion?: string; activate?: boolean; migrateExisting?: boolean; userSpecific?: boolean }) => {
     const outputMode = resolveOutputMode();
+    const entityType = opts.entityType ?? entityTypeArg;
+    if (!entityType) throw new Error("entity type is required (positional argument or --entity-type)");
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    if (!opts.schemaDefinition || !opts.reducerConfig) {
-      throw new Error("--schema-definition and --reducer-config are required");
+    const fieldsJson = opts.fields ?? opts.schema;
+    if (!fieldsJson) {
+      throw new Error("--fields or --schema is required (JSON object of field definitions)");
     }
-    const schemaDefinition = JSON.parse(opts.schemaDefinition);
-    const reducerConfig = JSON.parse(opts.reducerConfig);
+    const parsedFields = JSON.parse(fieldsJson);
+    let schemaFields: Record<string, any>;
+    if (Array.isArray(parsedFields)) {
+      schemaFields = {};
+      parsedFields.forEach((f: any) => {
+        schemaFields[f.field_name] = { type: f.field_type, required: f.required ?? false };
+      });
+    } else if (parsedFields.fields) {
+      // Already a schema definition object
+      schemaFields = parsedFields.fields;
+    } else {
+      schemaFields = Object.fromEntries(
+        Object.entries(parsedFields).map(([name, def]: [string, any]) => [
+          name,
+          { type: def.type ?? "string", required: def.required ?? false },
+        ])
+      );
+    }
+    const schemaDefinition = { fields: schemaFields };
+    const reducerConfig = {};
     const { data, error } = await api.POST("/register_schema", {
       body: {
         entity_type: entityType,
@@ -4871,6 +5641,7 @@ schemasCommand
         reducer_config: reducerConfig,
         schema_version: opts.schemaVersion,
         activate: opts.activate,
+        user_id: opts.userId,
         user_specific: opts.userSpecific,
       },
     });
@@ -4880,9 +5651,15 @@ schemasCommand
 
 program
   .command("store")
-  .description("Store structured entities from JSON")
-  .option("--json <json>", "Inline JSON array of entities")
-  .option("--file <path>", "Path to JSON file containing entity array")
+  .description("Store a file or structured entities; routes based on options provided")
+  .option("--entities <json>", "Inline JSON array of entities (legacy structured store)")
+  .option("--file <path>", "Path to JSON file containing entity array (legacy structured store)")
+  .option("--file-path <path>", "Path to any file to store (unstructured pipeline)")
+  .option("--file-content <content>", "Inline file content to store")
+  .option("--user-id <id>", "User ID for the operation")
+  .option("--interpret <bool>", "Run AI interpretation after store (default: false)", "false")
+  .option("--source-priority <level>", "Source priority level (default: 100)")
+  .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -4892,14 +5669,57 @@ program
       token,
     });
 
+    if (opts.filePath || opts.fileContent) {
+      // New file-based store: send to unstructured pipeline
+      let fileBuffer: Buffer;
+      let originalFilename: string | undefined;
+      if (opts.filePath) {
+        const resolvedPath = path.isAbsolute(opts.filePath)
+          ? opts.filePath
+          : path.resolve(process.cwd(), opts.filePath);
+        fileBuffer = await fs.readFile(resolvedPath);
+        originalFilename = path.basename(resolvedPath);
+      } else {
+        fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
+        originalFilename = undefined;
+      }
+
+      const ext = originalFilename ? path.extname(originalFilename).toLowerCase() : "";
+      const mimeMap: Record<string, string> = {
+        ".json": "application/json",
+        ".txt": "text/plain",
+        ".csv": "text/csv",
+        ".md": "text/markdown",
+        ".pdf": "application/pdf",
+      };
+      const mimeType = mimeMap[ext] ?? "application/octet-stream";
+      const shouldInterpret = opts.interpret === "true" || opts.interpret === true;
+      const contentBase64 = fileBuffer.toString("base64");
+      const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
+
+      const { data, error } = await api.POST("/api/store/unstructured", {
+        body: {
+          file_content: contentBase64,
+          mime_type: mimeType,
+          original_filename: originalFilename,
+          interpret: shouldInterpret,
+          idempotency_key: idempotencyKey,
+        },
+      });
+      if (error) throw new Error(`Failed to store file: ${JSON.stringify(error)}`);
+      writeOutput(data, outputMode);
+      return;
+    }
+
+    // Legacy structured entities store
     let entities: unknown;
-    if (opts.json) {
-      entities = JSON.parse(opts.json);
+    if (opts.entities) {
+      entities = JSON.parse(opts.entities as string);
     } else if (opts.file) {
       const raw = await fs.readFile(opts.file, "utf-8");
       entities = JSON.parse(raw);
     } else {
-      throw new Error("Provide --json or --file with entity array");
+      throw new Error("Provide --file-path, --file-content, --entities, or --file");
     }
 
     if (!Array.isArray(entities)) {
@@ -4911,6 +5731,369 @@ program
       body: { entities, idempotency_key: idempotencyKey },
     });
     if (error) throw new Error("Failed to store entities");
+    writeOutput(data, outputMode);
+  });
+
+program
+  .command("store-structured")
+  .description("Store structured JSON data as entities")
+  .option("--file-path <path>", "Path to JSON file")
+  .option("--file-content <content>", "Inline JSON content")
+  .option("--entity-type <type>", "Entity type to use if not in data")
+  .option("--user-id <id>", "User ID for the operation")
+  .option("--source-priority <priority>", "Source priority (default: 100)")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    let rawContent: string;
+    let originalFilename: string | undefined;
+
+    if (opts.filePath) {
+      const resolvedPath = path.isAbsolute(opts.filePath)
+        ? opts.filePath
+        : path.resolve(process.cwd(), opts.filePath);
+      rawContent = await fs.readFile(resolvedPath, "utf-8");
+      originalFilename = path.basename(resolvedPath);
+    } else if (opts.fileContent) {
+      rawContent = opts.fileContent as string;
+    } else {
+      throw new Error("Provide --file-path or --file-content");
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawContent);
+    } catch {
+      throw new Error("Invalid JSON content");
+    }
+
+    // Normalize to array of entity objects
+    let entityArray: Record<string, unknown>[];
+    if (Array.isArray(parsed)) {
+      entityArray = parsed as Record<string, unknown>[];
+    } else {
+      entityArray = [parsed as Record<string, unknown>];
+    }
+
+    // Apply entity_type from option if missing from data
+    const defaultEntityType = opts.entityType ?? "document";
+    entityArray = entityArray.map((e) => {
+      if (!e.entity_type && !e.type) {
+        return { ...e, entity_type: defaultEntityType };
+      }
+      return e;
+    });
+
+    const sourcePriority = opts.sourcePriority ? parseInt(opts.sourcePriority as string, 10) : 100;
+    const idempotencyKey = createIdempotencyKey({ entities: entityArray });
+
+    const { data, error } = await api.POST("/api/store", {
+      body: {
+        entities: entityArray,
+        idempotency_key: idempotencyKey,
+        source_priority: sourcePriority,
+        original_filename: originalFilename,
+      },
+    });
+    if (error) throw new Error("Failed to store structured data");
+    writeOutput(data, outputMode);
+  });
+
+program
+  .command("store-unstructured")
+  .description("Store raw unstructured file content")
+  .option("--file-path <path>", "Path to file to store")
+  .option("--file-content <content>", "Inline file content to store")
+  .option("--user-id <id>", "User ID for the operation")
+  .option("--interpret <bool>", "Run AI interpretation after store (default: true)", "true")
+  .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    let fileBuffer: Buffer;
+    let originalFilename: string | undefined;
+
+    if (opts.filePath) {
+      const resolvedPath = path.isAbsolute(opts.filePath)
+        ? opts.filePath
+        : path.resolve(process.cwd(), opts.filePath);
+      fileBuffer = await fs.readFile(resolvedPath);
+      originalFilename = path.basename(resolvedPath);
+    } else if (opts.fileContent) {
+      fileBuffer = Buffer.from(opts.fileContent as string, "utf-8");
+    } else {
+      throw new Error("Provide --file-path or --file-content");
+    }
+
+    const ext = originalFilename ? path.extname(originalFilename).toLowerCase() : "";
+    const mimeMap: Record<string, string> = {
+      ".json": "application/json",
+      ".txt": "text/plain",
+      ".csv": "text/csv",
+      ".md": "text/markdown",
+      ".pdf": "application/pdf",
+    };
+    const mimeType = mimeMap[ext] ?? "text/plain";
+    const shouldInterpret = opts.interpret !== "false" && opts.interpret !== false;
+    const contentBase64 = fileBuffer.toString("base64");
+    const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
+
+    const { data, error } = await api.POST("/api/store/unstructured", {
+      body: {
+        file_content: contentBase64,
+        mime_type: mimeType,
+        original_filename: originalFilename,
+        interpret: shouldInterpret,
+        idempotency_key: idempotencyKey,
+      },
+    });
+    if (error) throw new Error(`Failed to store unstructured content: ${JSON.stringify(error)}`);
+    writeOutput(data, outputMode);
+  });
+
+program
+  .command("upload <path>")
+  .description("Store an unstructured file (raw upload with optional AI interpretation)")
+  .option("--no-interpret", "Skip AI interpretation after store")
+  .option("--idempotency-key <key>", "Idempotency key (default: content hash)")
+  .option("--mime-type <type>", "MIME type (default: inferred from extension)")
+  .option("--local", "Run store and interpretation in-process (no API server required)")
+  .action(async (filePath: string, opts: { interpret?: boolean; idempotencyKey?: string; mimeType?: string; local?: boolean }) => {
+    const outputMode = resolveOutputMode();
+
+    const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
+    const stat = await fs.stat(resolvedPath).catch(() => null);
+    if (!stat?.isFile()) {
+      throw new Error(`File not found or not a file: ${resolvedPath}`);
+    }
+
+    const fileBuffer = await fs.readFile(resolvedPath);
+    const originalFilename = path.basename(resolvedPath);
+    const ext = path.extname(resolvedPath).toLowerCase();
+    const mimeMap: Record<string, string> = {
+      ".pdf": "application/pdf",
+      ".txt": "text/plain",
+      ".csv": "text/csv",
+      ".json": "application/json",
+      ".md": "text/markdown",
+      ".html": "text/html",
+      ".xml": "application/xml",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+    };
+    const mimeType = opts.mimeType ?? mimeMap[ext] ?? "application/octet-stream";
+
+    if (opts.local) {
+      // Run the store+interpretation pipeline in-process without an API server.
+      try {
+        const { storeRawContent } = await import("../services/raw_storage.js");
+        const { ensureLocalDevUser } = await import("../services/local_auth.js");
+
+        const userRow = ensureLocalDevUser();
+        const userId = userRow.id;
+
+        const idempotencyKey =
+          opts.idempotencyKey ??
+          (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
+
+        const storageResult = await storeRawContent({
+          userId,
+          fileBuffer,
+          mimeType,
+          originalFilename: originalFilename.trim() || undefined,
+          idempotencyKey,
+          provenance: { upload_method: "cli_upload_local", client: "cli" },
+        });
+
+        const response: {
+          source_id: string;
+          content_hash: string;
+          file_size: number;
+          deduplicated?: boolean;
+          interpretation?: unknown;
+          interpretation_debug?: Record<string, unknown>;
+          entity_ids?: string[];
+        } = {
+          source_id: storageResult.sourceId,
+          content_hash: storageResult.contentHash,
+          file_size: storageResult.fileSize,
+          deduplicated: storageResult.deduplicated,
+        };
+
+        const interpret = opts.interpret !== false;
+        if (interpret && storageResult.sourceId) {
+          const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
+            await import("../services/file_text_extraction.js");
+          const {
+            extractWithLLM,
+            extractWithLLMFromImage,
+            extractFromCSVWithChunking,
+            isLLMExtractionAvailable,
+          } = await import("../services/llm_extraction.js");
+          const { runInterpretation } = await import("../services/interpretation.js");
+
+          const rawText = await extractTextFromBuffer(fileBuffer, mimeType, originalFilename || "file");
+
+          if (!isLLMExtractionAvailable()) {
+            response.interpretation = {
+              skipped: true,
+              reason: "openai_not_configured",
+              message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
+            };
+            writeOutput(response, outputMode);
+            return;
+          }
+
+          const isCsv = mimeType?.toLowerCase() === "text/csv";
+          const isPdf =
+            mimeType.toLowerCase().includes("pdf") || originalFilename.toLowerCase().endsWith(".pdf");
+          const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
+
+          const pdfDebug = getPdfWorkerDebug();
+          const interpretationDebug: Record<string, unknown> = {
+            raw_text_length: rawTextLength,
+            pdf_worker_wrapper_used: pdfDebug.configured,
+            pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
+            pdf_worker_set_worker_error: pdfDebug.set_worker_error,
+          };
+
+          let extractionResult:
+            | Awaited<ReturnType<typeof extractWithLLM>>
+            | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
+
+          if (rawTextLength === 0 && isPdf) {
+            interpretationDebug.vision_fallback_attempted = true;
+            const imageResult = await getPdfFirstPageImageDataUrl(
+              fileBuffer,
+              mimeType,
+              originalFilename || "file",
+              { returnError: true }
+            );
+            const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+            if (typeof imageResult === "object" && imageResult.error) {
+              interpretationDebug.vision_fallback_image_error = imageResult.error;
+            }
+            interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+            if (imageDataUrl) {
+              try {
+                extractionResult = await extractWithLLMFromImage(
+                  imageDataUrl,
+                  originalFilename || "file",
+                  mimeType,
+                  "gpt-4o"
+                );
+                interpretationDebug.used_vision_fallback = true;
+              } catch (visionErr) {
+                interpretationDebug.vision_fallback_error =
+                  visionErr instanceof Error ? visionErr.message : String(visionErr);
+                extractionResult = await extractWithLLM(
+                  rawText,
+                  originalFilename || "file",
+                  mimeType,
+                  "gpt-4o"
+                );
+              }
+            } else {
+              extractionResult = await extractWithLLM(
+                rawText,
+                originalFilename || "file",
+                mimeType,
+                "gpt-4o"
+              );
+            }
+          } else {
+            extractionResult = isCsv
+              ? await extractFromCSVWithChunking(rawText, originalFilename || "file", mimeType, "gpt-4o")
+              : await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+          }
+
+          let extractedData: Array<Record<string, unknown>>;
+          if ("entities" in extractionResult) {
+            extractedData = extractionResult.entities.map((e) => ({
+              entity_type: e.entity_type,
+              ...e.fields,
+            }));
+          } else {
+            const { entity_type, fields } = extractionResult;
+            extractedData = [{ entity_type, ...fields }];
+          }
+
+          const defaultConfig = {
+            provider: "openai",
+            model_id: "gpt-4o",
+            temperature: 0,
+            prompt_hash: "llm_extraction_v2_idempotent",
+            code_version: "v0.2.0",
+          };
+          interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
+            Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
+          );
+          response.interpretation_debug = interpretationDebug;
+
+          try {
+            const interpretationResult = await runInterpretation({
+              userId,
+              sourceId: storageResult.sourceId,
+              extractedData,
+              config: defaultConfig,
+            });
+            response.interpretation = interpretationResult;
+            if (interpretationResult.entities?.length) {
+              response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
+            }
+          } catch (interpretError) {
+            response.interpretation = {
+              error: interpretError instanceof Error ? interpretError.message : String(interpretError),
+              skipped: true,
+            };
+          }
+        }
+
+        writeOutput(response, outputMode);
+      } catch (localError) {
+        const msg = localError instanceof Error ? localError.message : String(localError);
+        throw new Error(
+          `Local mode failed: ${msg}\nEnsure .env and backend (NEOTOMA_STORAGE_BACKEND, DB path or Supabase) are configured.`
+        );
+      }
+      return;
+    }
+
+    // Default: send to API server.
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    const base64 = fileBuffer.toString("base64");
+    const body = {
+      file_content: base64,
+      mime_type: mimeType,
+      original_filename: originalFilename,
+      interpret: opts.interpret !== false,
+    };
+    if (opts.idempotencyKey) {
+      (body as { idempotency_key?: string }).idempotency_key = opts.idempotencyKey;
+    }
+
+    const { data, error } = await api.POST("/api/store/unstructured", { body });
+    if (error) throw new Error("Failed to upload file");
     writeOutput(data, outputMode);
   });
 
@@ -5035,10 +6218,13 @@ const interpretationsCommand = program
 
 interpretationsCommand
   .command("reinterpret")
-  .description("Re-run AI interpretation on an existing source")
-  .argument("<sourceId>", "Source ID to reinterpret")
+  .description("Re-run AI interpretation on an existing source or interpretation")
+  .argument("[sourceId]", "Source ID to reinterpret (or use --source-id / --interpretation-id)")
+  .option("--source-id <id>", "Source ID to reinterpret")
+  .option("--interpretation-id <id>", "Interpretation ID (looks up source automatically)")
   .option("--interpretation-config <json>", "Optional interpretation configuration JSON")
-  .action(async (sourceId: string, opts) => {
+  .option("--user-id <userId>", "User ID")
+  .action(async (sourceIdArg: string | undefined, opts: { sourceId?: string; interpretationId?: string; interpretationConfig?: string; userId?: string }) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
     const token = await getCliToken();
@@ -5049,14 +6235,27 @@ interpretationsCommand
     const interpretationConfig = opts.interpretationConfig
       ? JSON.parse(opts.interpretationConfig)
       : undefined;
+
+    const sourceId = opts.sourceId ?? sourceIdArg;
+
+    if (!sourceId && !opts.interpretationId) throw new Error("source ID or --interpretation-id is required");
+
+    const reinterpretBody: Record<string, unknown> = {
+      interpretation_config: interpretationConfig,
+    };
+    if (sourceId) reinterpretBody["source_id"] = sourceId;
+    if (opts.interpretationId) reinterpretBody["interpretation_id"] = opts.interpretationId;
+
     const { data, error } = await api.POST("/reinterpret", {
-      body: {
-        source_id: sourceId,
-        interpretation_config: interpretationConfig,
-      },
+      body: reinterpretBody as any,
     });
     if (error) throw new Error("Failed to reinterpret source");
-    writeOutput(data, outputMode);
+    const result = data as any;
+    writeOutput({
+      interpretation_id: result?.interpretation_id ?? opts.interpretationId,
+      reinterpreted: result?.success ?? true,
+      observations_created: result?.observations_created ?? 0,
+    }, outputMode);
   });
 
 // Add new corrections command (after interpretations command)
@@ -5065,31 +6264,40 @@ const correctionsCommand = program.command("corrections").description("Correctio
 correctionsCommand
   .command("create")
   .description("Create high-priority correction observation")
-  .argument("<entityId>", "Entity ID to correct")
-  .argument("<entityType>", "Entity type")
-  .argument("<field>", "Field name to correct")
-  .argument("<value>", "Corrected value")
+  .argument("[entityId]", "Entity ID to correct (or use --entity-id)")
+  .option("--entity-id <id>", "Entity ID to correct")
+  .option("--entity-type <type>", "Entity type (optional, looked up if not provided)")
+  .option("--field-name <field>", "Field name to correct (required)")
+  .option("--corrected-value <value>", "Corrected value (required)")
+  .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
-  .action(async (entityId: string, entityType: string, field: string, value: string, opts) => {
+  .action(async (entityIdArg: string | undefined, opts: { entityId?: string; entityType?: string; fieldName?: string; correctedValue?: string; userId?: string; idempotencyKey?: string }) => {
     const outputMode = resolveOutputMode();
+    const entityId = opts.entityId ?? entityIdArg;
+    if (!entityId) throw new Error("entity ID is required (positional argument or --entity-id)");
+    if (!opts.fieldName) throw new Error("--field-name is required");
+    if (opts.correctedValue === undefined) throw new Error("--corrected-value is required");
     const config = await readConfig();
     const token = await getCliToken();
     const api = createApiClient({
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const idempotencyKey = opts.idempotencyKey || createIdempotencyKey({ entityId, field, value });
+    const idempotencyKey = opts.idempotencyKey || createIdempotencyKey({ entityId, field: opts.fieldName, value: opts.correctedValue });
     const { data, error } = await api.POST("/correct", {
       body: {
         entity_id: entityId,
-        entity_type: entityType,
-        field,
-        value,
+        entity_type: opts.entityType ?? "unknown",
+        field: opts.fieldName,
+        value: opts.correctedValue,
         idempotency_key: idempotencyKey,
+        user_id: opts.userId,
       },
     });
     if (error) throw new Error("Failed to create correction");
-    writeOutput(data, outputMode);
+    const result = data as any;
+    const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
+    writeOutput({ correction_id: correctionId, entity_id: entityId, success: result?.success ?? true }, outputMode);
   });
 
 const statsCmd = program.command("stats").description("Dashboard and entity statistics");
@@ -5283,12 +6491,14 @@ async function fetchStorageSummary(): Promise<string | null> {
   }
 }
 
+/** Pack-rat (bunny) artwork for intro box. */
 const INTRO_PACK_RAT_LINES = ["(\\__/)", "(•ㅅ•)", "/ 　 づ"];
 const INTRO_PACK_RAT_FACE_WINK = "(-ㅅ•)";
 const INTRO_WINK_MS = 180;
-const _INTRO_PACK_RAT_WIDTH = Math.max(...INTRO_PACK_RAT_LINES.map((s) => s.length));
-const INTRO_PACK_RAT_DISPLAY_WIDTH = Math.max(...INTRO_PACK_RAT_LINES.map((s) => displayWidth(s)));
-const _INTRO_GAP = 1;
+const INTRO_PACK_RAT_DISPLAY_WIDTH = Math.max(
+  ...INTRO_PACK_RAT_LINES.map((s) => displayWidth(s))
+);
+
 /** Minimum content width so the box fits all summary stats (e.g. "N entities, N relationships, N sources"). */
 const INTRO_MIN_WIDTH = 52;
 
@@ -5296,6 +6506,9 @@ const INIT_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const INIT_SPINNER_MS = 80;
 
 /** Resolve package.json from CLI entry (dist/cli/index.js -> ../../package.json). */
+const UPDATE_CHECK_TTL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_CHECK_CACHE_PATH = path.join(CONFIG_DIR, "update_check.json");
+
 async function getCliVersion(): Promise<string> {
   try {
     const dir = path.dirname(fileURLToPath(import.meta.url));
@@ -5306,6 +6519,79 @@ async function getCliVersion(): Promise<string> {
   } catch {
     return "?";
   }
+}
+
+async function getPackageName(): Promise<string> {
+  try {
+    const dir = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(dir, "..", "..", "package.json");
+    const raw = await fs.readFile(pkgPath, "utf-8");
+    const pkg = JSON.parse(raw) as { name?: string };
+    return typeof pkg.name === "string" ? pkg.name : "neotoma";
+  } catch {
+    return "neotoma";
+  }
+}
+
+/** Fire-and-forget: check npm registry for newer version and, if available, write one-line notice to stderr. Never blocks or throws. */
+function runUpdateNotifier(): void {
+  if (process.env.CI !== undefined && process.env.CI !== "") return;
+  if (process.env.NO_UPDATE_NOTIFIER === "1") return;
+  const opts = program.opts() as { updateCheck?: boolean };
+  if (opts.updateCheck === false) return;
+  if (resolveOutputMode() === "json") return;
+  if (!process.stdout.isTTY) return;
+
+  void (async () => {
+    try {
+      const [current, packageName] = await Promise.all([
+        getCliVersion(),
+        getPackageName(),
+      ]);
+      if (!current || current === "?") return;
+
+      let latest: string | null = null;
+      try {
+        const raw = await fs.readFile(UPDATE_CHECK_CACHE_PATH, "utf-8");
+        const cache = JSON.parse(raw) as { latest?: string; checkedAt?: number };
+        if (
+          typeof cache.checkedAt === "number" &&
+          Date.now() - cache.checkedAt < UPDATE_CHECK_TTL_MS &&
+          typeof cache.latest === "string"
+        ) {
+          latest = cache.latest;
+        }
+      } catch {
+        // no cache or stale
+      }
+      if (latest === null) {
+        latest = await getLatestFromRegistry(packageName, "latest");
+        if (latest) {
+          await fs.mkdir(path.dirname(UPDATE_CHECK_CACHE_PATH), {
+            recursive: true,
+          });
+          await fs.writeFile(
+            UPDATE_CHECK_CACHE_PATH,
+            JSON.stringify({ latest, checkedAt: Date.now() }),
+            "utf-8"
+          );
+        }
+      }
+      if (latest && isUpdateAvailable(current, latest)) {
+        const cmd = formatUpgradeCommand(packageName, "latest", "global");
+        const line1 =
+          dim("Update available: ") +
+          pathStyle(`${packageName} ${current}`) +
+          dim(" → ") +
+          pathStyle(latest) +
+          "\n";
+        const line2 = dim("Run: ") + pathStyle(cmd) + "\n";
+        process.stderr.write(line1 + line2);
+      }
+    } catch {
+      // never surface to user
+    }
+  })();
 }
 
 /** Recursive directory size in bytes (best-effort). */
@@ -5471,14 +6757,17 @@ async function getEntityFromLocalDb(
   }
 }
 
+const WATCH_INITIAL_EVENT_LIMIT = 50;
+
 /**
- * Last 20 watch entries: sourced from the local SQLite DB (same tables the watch command polls).
+ * Last N watch entries: sourced from the local SQLite DB (same tables the watch command polls).
  * Returns WatchEvent[] for display with formatWatchTable (Recent events box).
  */
-async function getLast20WatchEntries(
+async function getLastNWatchEntries(
   repoRoot: string,
   preferredEnv: "dev" | "prod",
-  userId: string | null
+  userId: string | null,
+  limit = 20
 ): Promise<WatchEvent[]> {
   if (process.env.NEOTOMA_STORAGE_BACKEND && process.env.NEOTOMA_STORAGE_BACKEND !== "local") {
     return [];
@@ -5509,7 +6798,8 @@ async function getLast20WatchEntries(
           userFilter === "source_user"
             ? "source_id IN (SELECT id FROM sources WHERE user_id = ?)"
             : "user_id = ?";
-        const sql = `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${userClause} ORDER BY ${tsCol} DESC LIMIT 5`;
+        const perTable = Math.max(5, Math.ceil(limit / WATCH_ENTRY_TABLE_DEFS.length) + 2);
+        const sql = `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${userClause} ORDER BY ${tsCol} DESC LIMIT ${perTable}`;
         const rows = db.prepare(sql).all(userId) as Row[];
         for (const row of rows) {
           const ts = String(row[tsCol] ?? "");
@@ -5521,9 +6811,9 @@ async function getLast20WatchEntries(
       }
     }
     merged.sort((a, b) => (b.ts < a.ts ? -1 : b.ts > a.ts ? 1 : 0));
-    const top20 = merged.slice(0, 20).reverse(); // oldest first so most recent at bottom
+    const topN = merged.slice(0, limit).reverse(); // oldest first so most recent at bottom
     const entityIds = new Set<string>();
-    for (const { table, row } of top20) {
+    for (const { table, row } of topN) {
       const add = (k: string) => {
         const v = row[k];
         if (v && typeof v === "string") entityIds.add(v);
@@ -5597,7 +6887,7 @@ async function getLast20WatchEntries(
       const v = r[k];
       return v != null && typeof v === "string" ? v : undefined;
     };
-    return top20.map(({ table, ts, id, row }) => {
+    return topN.map(({ table, ts, id, row }) => {
       const out: WatchEvent = {
         ts,
         table,
@@ -5735,8 +7025,13 @@ function installInitCancelListener(onCancel: () => void): () => void {
   return cleanup;
 }
 
-/** Run init steps with an animated status line; returns version and intro stats for the intro block. */
-async function runInitWithStatus(): Promise<{
+/** Run init steps with an animated status line; returns version and intro stats for the intro block.
+ * When deferApiStats is true, skips API-dependent steps (checkApiStatusForIntro, fetchIntroStats).
+ * Use deferApiStats when we will start the server or resolve the port later; intro is then
+ * fetched after the server is up or the port is known. */
+async function runInitWithStatus(options?: {
+  deferApiStats?: boolean;
+}): Promise<{
   version: string;
   intro: {
     total_entities: number;
@@ -5745,6 +7040,7 @@ async function runInitWithStatus(): Promise<{
     total_events: number;
   } | null;
 }> {
+  const deferApiStats = options?.deferApiStats === true;
   let status = "Loading project…";
   let frame = 0;
   writeStatusLine(INIT_SPINNER_FRAMES[0], status);
@@ -5754,6 +7050,13 @@ async function runInitWithStatus(): Promise<{
   }, INIT_SPINNER_MS);
   try {
     await ensureDevCommands();
+    if (deferApiStats) {
+      status = "Preparing session…";
+      writeStatusLine(INIT_SPINNER_FRAMES[frame], status);
+      const version = await getCliVersion();
+      await new Promise((r) => setTimeout(r, 200));
+      return { version, intro: null };
+    }
     status = "Checking for running servers…";
     writeStatusLine(INIT_SPINNER_FRAMES[frame], status);
     await checkApiStatusForIntro();
@@ -5788,28 +7091,81 @@ function buildIntroBoxContent(
   const title = black(bold(" Neotoma ") + versionPart + envPart);
   const formatInt = (n: number): string =>
     Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : String(n);
-  const text2 =
+  const statsLine =
     intro === null
       ? "Data unavailable"
       : `${formatInt(intro.total_entities)} entities, ${formatInt(intro.total_relationships)} relationships, ${formatInt(intro.total_sources)} sources, ${formatInt(intro.total_events)} timeline events`;
   const ratW = INTRO_PACK_RAT_DISPLAY_WIDTH;
-  const padBeforeLine = "  ";
-  const afterLine = " ";
-  const ratSep = padBeforeLine + black("│") + afterLine;
+  const ratSep = "  " + black("│") + " ";
   const blankRat = padToDisplayWidth("", ratW) + ratSep;
+  // Stats on its own row (no art); then three art rows for Local, Tunnel, User so each server line appears once
   const contentLines: string[] = [
     blankRat,
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[0], ratW) + ratSep + dim(text2),
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + (serverLines?.[0] ?? ""),
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[2], ratW) + ratSep + (serverLines?.[1] ?? ""),
+    blankRat + dim(statsLine),
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[0], ratW) + ratSep + (serverLines?.[0] ?? ""),
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + (serverLines?.[1] ?? ""),
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[2], ratW) + ratSep + (serverLines?.[2] ?? ""),
   ];
-  if (serverLines != null && serverLines.length > 2) {
-    for (let i = 2; i < serverLines.length; i++) {
+  if (serverLines != null && serverLines.length > 3) {
+    for (let i = 3; i < serverLines.length; i++) {
       contentLines.push(padToDisplayWidth("", ratW) + ratSep + serverLines[i]);
     }
   }
   const withInnerPadding = [...contentLines, blankRat];
   return { lines: withInnerPadding, title };
+}
+
+type McpConfigStatus = { path: string; hasDev: boolean; hasProd: boolean };
+
+/**
+ * Build the status block string (intro + optional watch + optional MCP) for redraw on SIGWINCH.
+ * Returns output and line count so we know how many lines to clear before redraw.
+ */
+function buildStatusBlockOutput(
+  opts: {
+    introContent: IntroBoxContent;
+    watchLines?: string[];
+    watchEventCount?: number;
+    mcpConfigs?: McpConfigStatus[] | null;
+    formatMcpBox: (configs: McpConfigStatus[], width?: number) => string;
+  },
+  sessionBoxWidth: number
+): { output: string; lineCount: number } {
+  const parts: string[] = [];
+  const introStr =
+    "\n" +
+    blackBox(opts.introContent.lines, {
+      title: opts.introContent.title,
+      borderColor: "black",
+      padding: 2,
+      minWidth: INTRO_MIN_WIDTH,
+      sessionBoxWidth,
+    }) +
+    "\n";
+  parts.push(introStr);
+  if (opts.watchLines != null && opts.watchLines.length > 0) {
+    parts.push(
+      "\n" +
+        blackBox(opts.watchLines, {
+          title: " Recent events ",
+          borderColor: "green",
+          padding: 1,
+          sessionBoxWidth,
+        }) +
+        "\n"
+    );
+    if (opts.watchEventCount != null) {
+      parts.push(
+        dim("  View details: enter row number (1–" + opts.watchEventCount + ") at the prompt.") + "\n\n"
+      );
+    }
+  }
+  if (opts.mcpConfigs != null && opts.mcpConfigs.length > 0) {
+    parts.push("\n" + opts.formatMcpBox(opts.mcpConfigs, sessionBoxWidth) + "\n");
+  }
+  const output = parts.join("");
+  const lineCount = output.split("\n").length;
+  return { output, lineCount };
 }
 
 async function printIntroBlock(
@@ -5837,27 +7193,26 @@ async function printIntroBlock(
       minWidth: INTRO_MIN_WIDTH,
       sessionBoxWidth: options?.sessionBoxWidth,
     }) +
-    "\n\n";
+    "\n";
   process.stdout.write(boxStr);
 
-  if (process.stdout.isTTY) {
+  if (process.stdout.isTTY && serverLines != null && serverLines.length > 1) {
     const pad = 2;
     const ratW = INTRO_PACK_RAT_DISPLAY_WIDTH;
-    const padBeforeLine = "  ";
-    const afterLine = " ";
-    const ratSep = padBeforeLine + black("│") + afterLine;
+    const ratSep = "  " + black("│") + " ";
     const rawContentWidth = Math.max(0, ...withInnerPadding.map((l) => displayWidth(l)));
     const contentWidth = rawContentWidth + 2 * pad;
     const titleLen = visibleLength(title);
     const innerWidth =
       options?.sessionBoxWidth ??
       Math.max(contentWidth, titleLen + 2, INTRO_MIN_WIDTH + 2 * pad);
+    // (o.o) row is now Tunnel (serverLines[1])
     const faceContentOpen =
-      padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + (serverLines?.[0] ?? "");
+      padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + serverLines[1];
     const faceContentWink =
-      padToDisplayWidth(INTRO_PACK_RAT_FACE_WINK, ratW) + ratSep + (serverLines?.[0] ?? "");
-    const padLeft = " ".repeat(pad);
+      padToDisplayWidth(INTRO_PACK_RAT_FACE_WINK, ratW) + ratSep + serverLines[1];
     const boxVertical = black("│");
+    const padLeft = " ".repeat(pad);
     const buildFaceLine = (content: string) =>
       boxVertical +
       padLeft +
@@ -5867,8 +7222,9 @@ async function printIntroBlock(
     const faceLineOpen = buildFaceLine(faceContentOpen);
     const faceLineWink = buildFaceLine(faceContentWink);
     const totalBoxLines = withInnerPadding.length + 2;
+    // (o.o) line is output line index 4 (0=top border). From line after bottom border, go up to reach it.
     const faceOutputLineIndex = 4;
-    const linesUpToFace = totalBoxLines + 2 - faceOutputLineIndex;
+    const linesUpToFace = totalBoxLines - faceOutputLineIndex;
     process.stdout.write(BANNER_ANSI.up(linesUpToFace));
     for (let i = 0; i < 2; i++) {
       process.stdout.write(faceLineWink + "\r");
@@ -5878,6 +7234,11 @@ async function printIntroBlock(
     }
     process.stdout.write(faceLineOpen + BANNER_ANSI.down(linesUpToFace) + "\n");
   }
+}
+
+/** Exported for tests: top-level command names (same as session command list). */
+export function getSessionCommandNames(): string[] {
+  return getSessionCommands(program).map((c) => c.name);
 }
 
 /** True when argv has no command (only global options or empty). */
@@ -5967,10 +7328,30 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     total_sources: number;
     total_events: number;
   } | null = null;
+
+  program.parseOptions(argv);
+  const args = (program.args && program.args.length > 0) ? program.args : argv.slice(2);
+  const noSession = argv.includes("--no-session");
+  const noServers = argv.includes("--no-servers");
+  const serversOpt = (program.opts() as { servers?: string }).servers;
+  const background = argv.includes("--background");
+  const tunnel = argv.includes("--tunnel");
+  const noArgs = hasNoCommand(args);
+
+  runUpdateNotifier();
+
+  const serverPolicy =
+    noArgs && !background && !noSession
+      ? await resolveServerPolicy(noServers, serversOpt)
+      : null;
+  const startServers = serverPolicy === "start";
+  const deferApiStats =
+    serverPolicy === "start" || serverPolicy === "use-existing";
+
   if (process.stdout.isTTY) {
     const cleanupCancel = installInitCancelListener(() => process.exit(0));
     try {
-      const init = await runInitWithStatus();
+      const init = await runInitWithStatus({ deferApiStats });
       version = init.version;
       intro = init.intro;
     } finally {
@@ -5979,16 +7360,20 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
   } else {
     await ensureDevCommands();
   }
-  program.parseOptions(argv);
-  const args = program.args ?? argv.slice(2);
-  const noSession = argv.includes("--no-session");
-  const noServers = argv.includes("--no-servers");
-  const serversOpt = (program.opts() as { servers?: string }).servers;
-  const background = argv.includes("--background");
-  const tunnel = argv.includes("--tunnel");
-  const noArgs = hasNoCommand(args);
 
   if (noArgs) {
+    const wantsHelpOrVersion =
+      argv.includes("--help") ||
+      argv.includes("-h") ||
+      argv.includes("--version") ||
+      argv.includes("-V");
+    if (!process.stdout.isTTY && !wantsHelpOrVersion) {
+      process.stderr.write(
+        "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options.\n"
+      );
+      process.exitCode = 1;
+      return;
+    }
     if (background) {
       const repoResult = await loadNpmScripts().catch(() => null);
       if (!repoResult) {
@@ -6097,8 +7482,6 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       return;
     }
 
-    const serverPolicy = await resolveServerPolicy(noServers, serversOpt);
-    const startServers = serverPolicy === "start";
     if (isDebug()) {
       process.stderr.write(
         dim(
@@ -6116,21 +7499,24 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     let storedMcpConfigs: { path: string; hasDev: boolean; hasProd: boolean }[] | null = null;
     let storedMcpRepoRoot: string | null = null;
     let storedSessionBoxWidth: number | undefined;
+    let storedStatusBlockRedrawData: {
+      introContent: IntroBoxContent;
+      watchLines?: string[];
+      watchEventCount?: number;
+      mcpConfigs: McpConfigStatus[];
+      baseSessionBoxWidth: number;
+      formatMcpBox: (configs: McpConfigStatus[], width?: number) => string;
+    } | null = null;
 
-    // Preferred environment: from --env flag, then config, then prompt
-    let preferredEnv: "dev" | "prod" = "dev";
+    // Preferred environment: from --env flag, or always prompt (no saved default)
+    let preferredEnv: "dev" | "prod";
     const envFlag = program.opts().env as string | undefined;
     if (envFlag === "dev" || envFlag === "prod") {
       preferredEnv = envFlag;
       debugLog(`Preferred environment from --env: ${preferredEnv}`);
     } else if (startServers) {
-      const config = await readConfig();
-      if (config.preferred_env === "dev" || config.preferred_env === "prod") {
-        preferredEnv = config.preferred_env;
-        debugLog(`Preferred environment from config: ${preferredEnv}`);
-      } else if (process.stdout.isTTY) {
-        debugLog("Preferred environment not set; prompting user");
-        // Prompt for environment selection
+      if (process.stdout.isTTY) {
+        debugLog("No --env flag; prompting user for environment");
         process.stdout.write("\n" + bold("Load which environment?") + "\n");
         process.stdout.write(dim("1) dev (port 8080)") + "\n");
         process.stdout.write(dim("2) prod (port 8180)") + "\n");
@@ -6141,11 +7527,18 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           preferredEnv = "dev";
         }
         debugLog(`User selected: ${preferredEnv}`);
-        // Save to config
-        config.preferred_env = preferredEnv;
-        await writeConfig(config);
+      } else {
+        process.stderr.write(
+          "neotoma: no environment specified. Use --env dev or --env prod.\n"
+        );
+        process.exit(1);
+        preferredEnv = "dev"; // unreachable; satisfy TypeScript
       }
+    } else {
+      // use-existing: env is determined later when connecting to a running server
+      preferredEnv = "dev"; // temporary; overridden below
     }
+    process.env.NEOTOMA_SESSION_ENV = preferredEnv;
 
     if (startServers) {
       debugLog("Loading project (package.json, npm scripts)…");
@@ -6411,27 +7804,21 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const dbPath = path.isAbsolute(dbPathRaw)
             ? dbPathRaw
             : path.join(sessionRepoRoot, dbPathRaw);
-          serverLines.push(dim("DB:  ") + pathStyle(dbPath));
+          serverLines.push(dim("DB: ") + pathStyle(dbPath));
           const sessionLogPath =
             currentSessionLogPath ??
             path.join(sessionRepoRoot, "data", "logs", `session-${result.env}.log`);
           serverLines.push(dim("Server log: ") + pathStyle(sessionLogPath));
-          serverLines.push(dim("CLI log:     ") + pathStyle(logFilePath ?? CLI_LOG_PATH));
+          serverLines.push(dim("CLI log: ") + pathStyle(logFilePath ?? CLI_LOG_PATH));
         }
         if (version != null && sessionRepoRoot) {
-          const watchEvents = await getLast20WatchEntries(
-            sessionRepoRoot,
-            result.env,
-            userIdForWatch
-          );
-          lastShownWatchEvents = watchEvents.length > 0 ? watchEvents : null;
           const apiAllZeros =
             intro != null &&
             intro.total_entities === 0 &&
             intro.total_relationships === 0 &&
             intro.total_sources === 0 &&
             intro.total_events === 0;
-          if (apiAllZeros && watchEvents.length > 0 && userIdForWatch) {
+          if (apiAllZeros && userIdForWatch) {
             const localIntro = await getLocalIntroStats(
               sessionRepoRoot,
               result.env,
@@ -6445,13 +7832,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
             serverLines,
             result.env
           );
-          const watchLines =
-            watchEvents.length > 0
-              ? formatWatchTable(watchEvents, new Date())
-              : [];
           const {
             scanForMcpConfigs,
             getMcpStatusBoxLines,
+            formatMcpStatusBox,
             MCP_STATUS_BOX_TITLE,
           } = await import("./mcp_config_scan.js");
           const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
@@ -6473,17 +7857,11 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               neotomaRepoRoot: sessionRepoRoot,
             });
           const mcpLines = getMcpStatusBoxLines(mcpConfigs);
-          const sessionBoxWidth = Math.max(
+          const rawSessionBoxWidth = Math.max(
             computeBoxInnerWidth(introContent.lines, {
               title: introContent.title,
               padding: 2,
             }),
-            watchLines.length > 0
-              ? computeBoxInnerWidth(watchLines, {
-                  title: " Recent events ",
-                  padding: 1,
-                })
-              : 0,
             mcpLines.length > 0
               ? computeBoxInnerWidth(mcpLines, {
                   title: MCP_STATUS_BOX_TITLE,
@@ -6491,30 +7869,21 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
                 })
               : 0
           );
+          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
           await printIntroBlock(version, intro, serverLines, result.env, {
             sessionBoxWidth,
             contentLines: introContent.lines,
             title: introContent.title,
           });
-          if (watchLines.length > 0) {
-            process.stdout.write(
-              "\n" +
-                blackBox(watchLines, {
-                  title: " Recent events ",
-                  borderColor: "green",
-                  padding: 1,
-                  sessionBoxWidth,
-                }) +
-                "\n"
-            );
-            process.stdout.write(
-              dim("  View details: enter row number (1–" + watchEvents.length + ") at the prompt.") +
-                "\n\n"
-            );
-          }
           storedMcpConfigs = mcpConfigs;
           storedMcpRepoRoot = mcpRepoRoot;
           storedSessionBoxWidth = sessionBoxWidth;
+          storedStatusBlockRedrawData = {
+            introContent,
+            mcpConfigs,
+            baseSessionBoxWidth: sessionBoxWidth,
+            formatMcpBox: formatMcpStatusBox,
+          };
         } else if (version != null) {
           await printIntroBlock(version, intro, serverLines, result.env);
         }
@@ -6615,6 +7984,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         process.stderr.write(warn("Could not establish session: " + msg + "\n"));
       }
       preferredEnv = useExistingEnv;
+      process.env.NEOTOMA_SESSION_ENV = useExistingEnv;
     }
 
     if (process.stdout.isTTY && sessionRepoRoot) {
@@ -6645,7 +8015,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         // Always show MCP config status when we have configs; only prompt to install when current env is missing
         if (configs.length > 0) {
           process.stdout.write(
-            "\n" + formatMcpStatusBox(configs, sessionBoxWidth ?? undefined) + "\n"
+            formatMcpStatusBox(configs, sessionBoxWidth ?? undefined) + "\n"
           );
           const missingAny = configs.some((c) =>
             preferredEnv === "dev" ? !c.hasDev : !c.hasProd
@@ -6665,7 +8035,56 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       }
     }
 
+    // cli-instructions auto-check: silently update env section in existing rule files;
+    // offer to add if no rule file is present yet (TTY only).
+    if (sessionRepoRoot) {
+      try {
+        const { autoUpdateCliInstructionsEnv } = await import("./agent_instructions_scan.js");
+        await autoUpdateCliInstructionsEnv(sessionRepoRoot, preferredEnv);
+      } catch {
+        // Non-fatal; session continues
+      }
+      if (process.stdout.isTTY) {
+        try {
+          const { scanAgentInstructions, offerAddPreferCliRule } = await import(
+            "./agent_instructions_scan.js"
+          );
+          const agentScan = await scanAgentInstructions(sessionRepoRoot);
+          if (agentScan.missingInApplied) {
+            await offerAddPreferCliRule(agentScan, { env: preferredEnv });
+          }
+        } catch {
+          // Non-fatal; session continues
+        }
+      }
+    }
+
     debugLog("Starting session REPL (runSessionLoop)");
+    const suggestionLinesRef = { current: 0 };
+    const lastReadyPhraseRef = { current: SESSION_READY_PHRASES[0]! };
+    let redrawStatusBlock: RedrawStatusBlockFn | undefined;
+    let statusBlockLineCount: number | undefined;
+    if (storedStatusBlockRedrawData != null) {
+      const data = storedStatusBlockRedrawData;
+      redrawStatusBlock = (_currentBuffer: string) => {
+        const newWidth = Math.min(data.baseSessionBoxWidth, getTerminalWidth());
+        const dataWithWatch =
+          sessionWatchDisplayRef != null
+            ? {
+                ...data,
+                watchLines: sessionWatchDisplayRef.watchLines,
+                watchEventCount: sessionWatchDisplayRef.watchEventCount,
+              }
+            : data;
+        const { output } = buildStatusBlockOutput(dataWithWatch, newWidth);
+        process.stdout.write(output);
+      };
+      const { lineCount } = buildStatusBlockOutput(
+        storedStatusBlockRedrawData,
+        storedSessionBoxWidth ?? getTerminalWidth()
+      );
+      statusBlockLineCount = lineCount;
+    }
     await runSessionLoop({
       onExit: () => {
         if (devChild) devChild.kill("SIGTERM");
@@ -6674,6 +8093,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       repoRoot: sessionRepoRoot,
       preferredEnv,
       userId: userIdForWatch ?? undefined,
+      redrawStatusBlock,
+      statusBlockLineCount,
+      suggestionLinesRef,
+      lastReadyPhraseRef,
     });
     return;
   }

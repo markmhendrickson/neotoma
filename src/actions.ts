@@ -24,7 +24,7 @@ import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { NeotomaServer } from "./server.js";
 import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
-import { ensureLocalDevUser } from "./services/local_auth.js";
+import { ensureLocalDevUser, LOCAL_DEV_USER_ID } from "./services/local_auth.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./repositories/sqlite/supabase_adapter.js";
 import {
@@ -42,6 +42,7 @@ import {
   MergeEntitiesRequestSchema,
   ObservationsQueryRequestSchema,
   RegisterSchemaRequestSchema,
+  RelationshipSnapshotRequestSchema,
   ReinterpretRequestSchema,
   RestoreEntityRequestSchema,
   RestoreRelationshipRequestSchema,
@@ -49,14 +50,13 @@ import {
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
   StoreStructuredRequestSchema,
+  StoreUnstructuredRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
-import {
-  queryEntitiesWithCount,
-} from "./shared/action_handlers/entity_handlers.js";
+import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
 import {
   prepareEntitySnapshotWithEmbedding,
-  getEntitySnapshotUpsertPayload,
+  upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
@@ -93,7 +93,13 @@ const corsOptions = {
   origin: process.env.FRONTEND_URL || "http://localhost:5195",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-Connection-Id", "mcp-session-id"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "X-Connection-Id",
+    "mcp-session-id",
+  ],
   exposedHeaders: ["Content-Type"],
   optionsSuccessStatus: 200, // Some legacy browsers (IE11, various SmartTVs) choke on 204
 };
@@ -178,7 +184,8 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
       res.setHeader("WWW-Authenticate", wwwAuth);
       return res.status(401).json({
         error: "invalid_token",
-        error_description: "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
+        error_description:
+          "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.",
       });
     }
   }
@@ -226,7 +233,9 @@ const mcpServerInstances = new Map<string, NeotomaServer>();
 
 /** True when request is to localhost/127.0.0.1 (local access). Tunnel requests have a non-local Host. */
 function isLocalRequest(req: express.Request): boolean {
-  const host = ((req.headers["host"] || req.headers["Host"]) as string || "").split(":")[0].toLowerCase();
+  const host = (((req.headers["host"] || req.headers["Host"]) as string) || "")
+    .split(":")[0]
+    .toLowerCase();
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
 }
 
@@ -341,7 +350,8 @@ app.all("/mcp", async (req, res) => {
         );
         // RFC 6750: error=invalid_token signals client to clear credentials and re-authenticate.
         // Use consistent error format so Cursor may show Connect prompt.
-        const desc = "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.";
+        const desc =
+          "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.";
         const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource", error="invalid_token", error_description="${desc}"`;
         res.setHeader("WWW-Authenticate", wwwAuthHeader);
         if (req.method === "POST" && req.body && typeof req.body === "object") {
@@ -368,7 +378,8 @@ app.all("/mcp", async (req, res) => {
       // Create new server instance for each session to ensure clean auth state
       // This ensures OAuth flow is required for each new connection
       const serverInstance = new NeotomaServer();
-      const connectionIdFromReq = (req.headers["x-connection-id"] || req.headers["X-Connection-Id"]) as string | undefined;
+      const connectionIdFromReq = (req.headers["x-connection-id"] ||
+        req.headers["X-Connection-Id"]) as string | undefined;
       if (connectionIdFromReq) {
         serverInstance.setSessionConnectionId(connectionIdFromReq);
       }
@@ -436,7 +447,6 @@ const SENSITIVE_FIELDS = new Set([
   "authorization",
   "Authorization",
 ]);
-
 
 function redactHeaders(headers: Record<string, unknown>): Record<string, unknown> {
   const clone = { ...headers } as Record<string, unknown>;
@@ -539,10 +549,7 @@ function sendError(
   return res.status(status).json(buildErrorEnvelope(errorCode, message, details));
 }
 
-function sendValidationError(
-  res: express.Response,
-  issues: unknown
-): express.Response {
+function sendValidationError(res: express.Response, issues: unknown): express.Response {
   return res.status(400).json(
     buildErrorEnvelope("VALIDATION_INVALID_FORMAT", "Invalid request payload.", {
       issues,
@@ -576,11 +583,7 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
         : config.storageBackend === "local"
           ? `${frontendBase}/oauth`
           : `${config.apiBase}/api/mcp/oauth/callback`;
-    const result = await initiateOAuthFlow(
-      connection_id,
-      client_name,
-      finalRedirectUri
-    );
+    const result = await initiateOAuthFlow(connection_id, client_name, finalRedirectUri);
 
     return res.json(result);
   } catch (error: any) {
@@ -714,9 +717,8 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
     if (config.storageBackend === "local") {
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest, completeLocalAuthorization } = await import(
-        "./services/mcp_oauth.js"
-      );
+      const { createLocalAuthorizationRequest, completeLocalAuthorization } =
+        await import("./services/mcp_oauth.js");
 
       const authRequest = await createLocalAuthorizationRequest({
         connectionId,
@@ -727,7 +729,11 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
 
       if (dev_stub === "1" || dev_stub === "true") {
         const devUser = ensureLocalDevUser();
-        const completion = await completeLocalAuthorization(authRequest.state, devUser.id, client_id);
+        const completion = await completeLocalAuthorization(
+          authRequest.state,
+          devUser.id,
+          client_id
+        );
         const params = new URLSearchParams({
           code: completion.connectionId,
           state: completion.clientState ?? state,
@@ -741,7 +747,12 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
     const { randomUUID } = await import("node:crypto");
     const connectionId = randomUUID();
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
-    const result = await initiateOAuthFlow(connectionId, client_id ?? undefined, redirect_uri, state);
+    const result = await initiateOAuthFlow(
+      connectionId,
+      client_id ?? undefined,
+      redirect_uri,
+      state
+    );
 
     return res.redirect(result.authUrl);
   } catch (error: any) {
@@ -813,7 +824,9 @@ app.get("/api/mcp/oauth/local-login", async (req, res) => {
       });
       return res.redirect(`${redirectUri}?${params.toString()}`);
     }
-    return res.redirect(`${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`);
+    return res.redirect(
+      `${frontendOauth}?connection_id=${encodeURIComponent(connectionId)}&status=success`
+    );
   } catch (error: any) {
     logError("MCPLocalLoginDevStub", req, error);
     const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
@@ -1068,12 +1081,7 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
 app.post("/api/auth/dev-signin", async (req, res) => {
   // Only allow in development mode
   if (config.environment !== "development") {
-    return sendError(
-      res,
-      403,
-      "FORBIDDEN",
-      "Dev signin only available in development mode"
-    );
+    return sendError(res, 403, "FORBIDDEN", "Dev signin only available in development mode");
   }
   if (config.storageBackend === "local") {
     return sendError(res, 403, "FORBIDDEN", "Dev signin is disabled in local mode");
@@ -1271,7 +1279,6 @@ app.use(async (req, res, next) => {
   const registered = ensurePublicKeyRegistered(bearerToken);
 
   if (registered && isBearerTokenValid(bearerToken)) {
-
     // Optional: Verify signature if provided
     const { signature } = parseAuthHeader(headerAuth);
     if (signature && req.body) {
@@ -1305,12 +1312,7 @@ app.use(async (req, res, next) => {
       logWarn("AuthInvalidToken", req, {
         error: authError instanceof Error ? authError.message : String(authError),
       });
-      return sendError(
-        res,
-        401,
-        "AUTH_INVALID",
-        "Unauthorized - invalid authentication token"
-      );
+      return sendError(res, 401, "AUTH_INVALID", "Unauthorized - invalid authentication token");
     }
   }
 
@@ -1351,6 +1353,11 @@ async function getAuthenticatedUserId(
   const authenticatedUserId = (req as any).authenticatedUserId;
   if (authenticatedUserId) {
     if (providedUserId && providedUserId !== authenticatedUserId) {
+      // In dev mode (no encryption, local dev user), allow user_id override for testing and development.
+      // This allows CLI tests to use custom user IDs without requiring full OAuth auth.
+      if (!config.encryption.enabled && authenticatedUserId === LOCAL_DEV_USER_ID) {
+        return providedUserId;
+      }
       throw new Error(
         `user_id parameter (${providedUserId}) does not match authenticated user (${authenticatedUserId})`
       );
@@ -1607,6 +1614,7 @@ app.get("/api/schemas", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     const keyword = req.query.keyword as string | undefined;
+    const filterEntityType = req.query.entity_type as string | undefined;
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
@@ -1626,7 +1634,12 @@ app.get("/api/schemas", async (req, res) => {
     if (dbError) throw dbError;
 
     const allowedEntityTypes = new Set((dbSchemas || []).map((s: any) => s.entity_type));
-    const filteredSchemas = allSchemas.filter((s) => allowedEntityTypes.has(s.entity_type));
+    let filteredSchemas = allSchemas.filter((s) => allowedEntityTypes.has(s.entity_type));
+
+    // Filter by entity_type if provided
+    if (filterEntityType) {
+      filteredSchemas = filteredSchemas.filter((s) => s.entity_type === filterEntityType);
+    }
 
     // Enrich schemas with metadata (including icons)
     const schemaMetadataMap = new Map(
@@ -1865,6 +1878,58 @@ app.get("/api/relationships/:id", async (req, res) => {
   }
 });
 
+// POST /api/relationships/snapshot - Get relationship snapshot with provenance
+app.post("/api/relationships/snapshot", async (req, res) => {
+  const parsed = RelationshipSnapshotRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:get_relationship_snapshot", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const { relationship_type, source_entity_id, target_entity_id } = parsed.data;
+    const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
+
+    const { data: snapshot, error: snapshotError } = await supabase
+      .from("relationship_snapshots")
+      .select("*")
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (snapshotError) throw snapshotError;
+    if (!snapshot) {
+      return sendError(
+        res,
+        404,
+        "RESOURCE_NOT_FOUND",
+        `Relationship not found: ${relationshipKey}`
+      );
+    }
+
+    const { data: observations, error: obsError } = await supabase
+      .from("relationship_observations")
+      .select("id, source_id, observed_at, specificity_score, source_priority, metadata")
+      .eq("relationship_key", relationshipKey)
+      .eq("user_id", userId)
+      .order("observed_at", { ascending: false });
+
+    if (obsError) throw obsError;
+
+    return res.json({ snapshot, observations: observations ?? [] });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to get relationship snapshot",
+      "DB_QUERY_FAILED",
+      "APIError:relationship_snapshot"
+    );
+  }
+});
+
 // GET /api/timeline - Get timeline events with filtering (FU-303)
 // REQUIRES AUTHENTICATION - filters events through sources.user_id
 app.get("/api/timeline", async (req, res) => {
@@ -1875,6 +1940,7 @@ app.get("/api/timeline", async (req, res) => {
     const startDate = req.query.start_date as string | undefined;
     const endDate = req.query.end_date as string | undefined;
     const eventType = req.query.event_type as string | undefined;
+    const entityId = req.query.entity_id as string | undefined;
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
 
@@ -1915,6 +1981,11 @@ app.get("/api/timeline", async (req, res) => {
     // Filter by event type
     if (eventType) {
       query = query.eq("event_type", eventType);
+    }
+
+    // Filter by entity_id
+    if (entityId) {
+      query = query.eq("entity_id", entityId);
     }
 
     // Sort by event timestamp (chronological)
@@ -2208,9 +2279,9 @@ app.post("/api/observations/create", async (req, res) => {
 
     // SECURITY: Ensure provided user_id matches authenticated user
     if (user_id !== authenticatedUserId) {
-      return res.status(403).json(
-        buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user.")
-      );
+      return res
+        .status(403)
+        .json(buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user."));
     }
 
     // Use the ingestStructuredInternal helper from the MCP server
@@ -2307,14 +2378,20 @@ app.post("/api/store", async (req, res) => {
 
       if (obsError) throw obsError;
 
+      const existingEntities = existingObservations?.map(
+        (obs: { id: string; entity_id: string; entity_type: string }) => ({
+          entity_id: obs.entity_id,
+          entity_type: obs.entity_type,
+          observation_id: obs.id,
+        })
+      ) ?? [];
+
       return res.json({
         success: true,
-        entities:
-          existingObservations?.map((obs: { id: string; entity_id: string; entity_type: string }) => ({
-            entity_id: obs.entity_id,
-            entity_type: obs.entity_type,
-            observation_id: obs.id,
-          })) ?? [],
+        source_id: existingSource.id,
+        entities_created: existingEntities.length,
+        observations_created: existingEntities.length,
+        entities: existingEntities,
       });
     }
 
@@ -2392,6 +2469,9 @@ app.post("/api/store", async (req, res) => {
 
     return res.json({
       success: true,
+      source_id: storageResult.sourceId,
+      entities_created: createdEntities.length,
+      observations_created: createdEntities.length,
       entities: createdEntities,
     });
   } catch (error) {
@@ -2400,6 +2480,208 @@ app.post("/api/store", async (req, res) => {
     }
     logError("APIError:store", req, error);
     const message = error instanceof Error ? error.message : "Failed to store entities";
+    return sendError(res, 500, "DB_QUERY_FAILED", message);
+  }
+});
+
+// POST /api/store/unstructured - Store raw file (base64), optional AI interpretation
+app.post("/api/store/unstructured", async (req, res) => {
+  const parsed = StoreUnstructuredRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:store_unstructured", req, { issues: parsed.error.issues });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const {
+      file_content,
+      mime_type,
+      idempotency_key: providedIdempotencyKey,
+      original_filename,
+      interpret,
+    } = parsed.data;
+
+    const fileBuffer = Buffer.from(file_content, "base64");
+    const idempotencyKey =
+      providedIdempotencyKey ??
+      (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
+
+    const storageResult = await storeRawContent({
+      userId,
+      fileBuffer,
+      mimeType: mime_type,
+      originalFilename: original_filename?.trim() || undefined,
+      idempotencyKey,
+      provenance: { upload_method: "api_store_unstructured", client: "api" },
+    });
+
+    const response: {
+      source_id: string;
+      content_hash: string;
+      file_size: number;
+      deduplicated?: boolean;
+      entities_created?: number;
+      observations_created?: number;
+      interpretation_run_id?: string;
+      interpretation?: unknown;
+      interpretation_debug?: Record<string, unknown>;
+      entity_ids?: string[];
+    } = {
+      source_id: storageResult.sourceId,
+      content_hash: storageResult.contentHash,
+      file_size: storageResult.fileSize,
+      deduplicated: storageResult.deduplicated,
+      entities_created: 0,
+      observations_created: 0,
+    };
+
+    if (interpret && storageResult.sourceId) {
+      const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
+        await import("./services/file_text_extraction.js");
+      const {
+        extractWithLLM,
+        extractWithLLMFromImage,
+        extractFromCSVWithChunking,
+        isLLMExtractionAvailable,
+      } = await import("./services/llm_extraction.js");
+      const { runInterpretation } = await import("./services/interpretation.js");
+
+      const rawText = await extractTextFromBuffer(
+        fileBuffer,
+        mime_type,
+        original_filename || "file"
+      );
+
+      if (!isLLMExtractionAvailable()) {
+        response.interpretation = {
+          skipped: true,
+          reason: "openai_not_configured",
+          message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
+        };
+        return res.status(200).json(response);
+      }
+
+      const isCsv = mime_type?.toLowerCase() === "text/csv";
+      const isPdf =
+        (mime_type || "").toLowerCase().includes("pdf") ||
+        (original_filename || "").toLowerCase().endsWith(".pdf");
+      const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
+
+      let extractionResult:
+        | Awaited<ReturnType<typeof extractWithLLM>>
+        | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
+      const pdfDebug = getPdfWorkerDebug();
+      const interpretationDebug: Record<string, unknown> = {
+        raw_text_length: rawTextLength,
+        pdf_worker_wrapper_used: pdfDebug.configured,
+        pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
+        pdf_worker_set_worker_error: pdfDebug.set_worker_error,
+      };
+      if (rawTextLength === 0 && isPdf) {
+        interpretationDebug.vision_fallback_attempted = true;
+        const imageResult = await getPdfFirstPageImageDataUrl(
+          fileBuffer,
+          mime_type,
+          original_filename || "file",
+          { returnError: true }
+        );
+        const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+        if (typeof imageResult === "object" && imageResult.error) {
+          interpretationDebug.vision_fallback_image_error = imageResult.error;
+        }
+        interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+        if (imageDataUrl) {
+          try {
+            extractionResult = await extractWithLLMFromImage(
+              imageDataUrl,
+              original_filename || "file",
+              mime_type,
+              "gpt-4o"
+            );
+            interpretationDebug.used_vision_fallback = true;
+          } catch (visionErr) {
+            interpretationDebug.vision_fallback_error =
+              visionErr instanceof Error ? visionErr.message : String(visionErr);
+            extractionResult = await extractWithLLM(
+              rawText,
+              original_filename || "file",
+              mime_type,
+              "gpt-4o"
+            );
+          }
+        } else {
+          extractionResult = await extractWithLLM(
+            rawText,
+            original_filename || "file",
+            mime_type,
+            "gpt-4o"
+          );
+        }
+      } else {
+        extractionResult = isCsv
+          ? await extractFromCSVWithChunking(
+              rawText,
+              original_filename || "file",
+              mime_type,
+              "gpt-4o"
+            )
+          : await extractWithLLM(rawText, original_filename || "file", mime_type, "gpt-4o");
+      }
+
+      let extractedData: Array<Record<string, unknown>>;
+      if ("entities" in extractionResult) {
+        extractedData = extractionResult.entities.map((e) => ({
+          entity_type: e.entity_type,
+          ...e.fields,
+        }));
+      } else {
+        const { entity_type, fields } = extractionResult;
+        extractedData = [{ entity_type, ...fields }];
+      }
+
+      const defaultConfig = {
+        provider: "openai",
+        model_id: "gpt-4o",
+        temperature: 0,
+        prompt_hash: "llm_extraction_v2_idempotent",
+        code_version: "v0.2.0",
+      };
+      interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
+        Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
+      );
+      response.interpretation_debug = interpretationDebug;
+      try {
+        const interpretationResult = await runInterpretation({
+          userId,
+          sourceId: storageResult.sourceId,
+          extractedData,
+          config: defaultConfig,
+        });
+        response.interpretation = interpretationResult;
+        if (interpretationResult.entities?.length) {
+          response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
+          response.entities_created = interpretationResult.entities.length;
+          response.observations_created = interpretationResult.entities.length;
+        }
+        if (interpretationResult.interpretationId) {
+          response.interpretation_run_id = interpretationResult.interpretationId;
+        }
+      } catch (interpretError) {
+        response.interpretation = {
+          error: interpretError instanceof Error ? interpretError.message : String(interpretError),
+          skipped: true,
+        };
+      }
+    }
+
+    return res.status(200).json(response);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    logError("APIError:store_unstructured", req, error);
+    const message = error instanceof Error ? error.message : "Failed to store unstructured file";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
@@ -2418,10 +2700,14 @@ app.post("/api/observations/query", async (req, res) => {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entity_id, entity_type, limit, offset } = parsed.data;
+    const { observation_id, entity_id, entity_type, source_id, limit, offset } = parsed.data;
 
     // Build query - ALWAYS filter by authenticated user_id
     let query = supabase.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+
+    if (observation_id) {
+      query = query.eq("id", observation_id);
+    }
 
     if (entity_id) {
       query = query.eq("entity_id", entity_id);
@@ -2429,6 +2715,10 @@ app.post("/api/observations/query", async (req, res) => {
 
     if (entity_type) {
       query = query.eq("entity_type", entity_type);
+    }
+
+    if (source_id) {
+      query = query.eq("source_id", source_id);
     }
 
     query = query.order("observed_at", { ascending: false }).range(offset, offset + limit - 1);
@@ -2555,7 +2845,6 @@ app.post("/api/entities/merge", async (req, res) => {
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
-
 
 // MCP Actions for Observation Architecture (FU-061)
 
@@ -2782,7 +3071,6 @@ app.post("/list_relationships", async (req, res) => {
   }
 });
 
-
 app.get("/get_file_url", async (req, res) => {
   const schema = z.object({
     file_path: z.string(),
@@ -2806,12 +3094,7 @@ app.get("/get_file_url", async (req, res) => {
     .createSignedUrl(path, expires_in || 3600);
   if (error || !data?.signedUrl) {
     logError("SupabaseStorageError:get_file_url", req, error, { bucket, path });
-    return sendError(
-      res,
-      500,
-      "DB_QUERY_FAILED",
-      error?.message ?? "Failed to create signed URL"
-    );
+    return sendError(res, 500, "DB_QUERY_FAILED", error?.message ?? "Failed to create signed URL");
   }
 
   logDebug("Success:get_file_url", req, { path: file_path });
@@ -2834,7 +3117,8 @@ app.post("/retrieve_entity_by_identifier", async (req, res) => {
     const { identifier, entity_type } = parsed.data;
 
     // Import normalization and ID generation functions
-    const { normalizeEntityValue, generateEntityId } = await import("./services/entity_resolution.js");
+    const { normalizeEntityValue, generateEntityId } =
+      await import("./services/entity_resolution.js");
 
     // Normalize the identifier
     const normalized = entity_type
@@ -2897,7 +3181,13 @@ app.post("/retrieve_related_entities", async (req, res) => {
   }
 
   try {
-    const { entity_id, relationship_types, direction = "both", max_hops: _max_hops = 1, include_entities = true } = parsed.data;
+    const {
+      entity_id,
+      relationship_types,
+      direction = "both",
+      max_hops: _max_hops = 1,
+      include_entities = true,
+    } = parsed.data;
 
     // Simple 1-hop query implementation
     const relationships: any[] = [];
@@ -2940,7 +3230,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
     let entities: any[] = [];
     if (include_entities && relationships.length > 0) {
       const relatedIds = new Set<string>();
-      relationships.forEach(rel => {
+      relationships.forEach((rel) => {
         if (rel.source_entity_id !== entity_id) relatedIds.add(rel.source_entity_id);
         if (rel.target_entity_id !== entity_id) relatedIds.add(rel.target_entity_id);
       });
@@ -3186,7 +3476,11 @@ app.post("/delete_relationship", async (req, res) => {
       return sendError(res, 500, "DELETE_FAILED", result.error || "Failed to delete relationship");
     }
 
-    logDebug("Success:delete_relationship", req, { relationship_type, source_entity_id, target_entity_id });
+    logDebug("Success:delete_relationship", req, {
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+    });
     return res.json({ success: true, observation_id: result.observation_id });
   } catch (error) {
     return handleApiError(
@@ -3229,10 +3523,19 @@ app.post("/restore_relationship", async (req, res) => {
     );
 
     if (!result.success) {
-      return sendError(res, 500, "RESTORE_FAILED", result.error || "Failed to restore relationship");
+      return sendError(
+        res,
+        500,
+        "RESTORE_FAILED",
+        result.error || "Failed to restore relationship"
+      );
     }
 
-    logDebug("Success:restore_relationship", req, { relationship_type, source_entity_id, target_entity_id });
+    logDebug("Success:restore_relationship", req, {
+      relationship_type,
+      source_entity_id,
+      target_entity_id,
+    });
     return res.json({ success: true, observation_id: result.observation_id });
   } catch (error) {
     return handleApiError(
@@ -3296,7 +3599,7 @@ app.post("/analyze_schema_candidates", async (req, res) => {
         confidence: Math.min(frequency / 100, 1), // Simple confidence based on frequency
         recommended_type: "string", // Default type
       }))
-      .filter(c => c.confidence >= min_confidence);
+      .filter((c) => c.confidence >= min_confidence);
 
     logDebug("Success:analyze_schema_candidates", req, { entity_type, count: candidates.length });
     return res.json({ candidates });
@@ -3327,10 +3630,7 @@ app.post("/get_schema_recommendations", async (req, res) => {
     const { entity_type, source, status } = parsed.data;
 
     // Query schema_recommendations table
-    let query = supabase
-      .from("schema_recommendations")
-      .select("*")
-      .eq("entity_type", entity_type);
+    let query = supabase.from("schema_recommendations").select("*").eq("entity_type", entity_type);
 
     if (userId) {
       query = query.eq("user_id", userId);
@@ -3351,7 +3651,10 @@ app.post("/get_schema_recommendations", async (req, res) => {
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
-    logDebug("Success:get_schema_recommendations", req, { entity_type, count: recommendations?.length });
+    logDebug("Success:get_schema_recommendations", req, {
+      entity_type,
+      count: recommendations?.length,
+    });
     return res.json({ recommendations: recommendations || [] });
   } catch (error) {
     return handleApiError(
@@ -3427,7 +3730,7 @@ app.post("/update_schema_incremental", async (req, res) => {
       .from("schema_registry")
       .insert({
         entity_type,
-        schema_version: schema_version || `${(parseInt(currentSchema?.schema_version || "1") + 1)}`,
+        schema_version: schema_version || `${parseInt(currentSchema?.schema_version || "1") + 1}`,
         schema_definition: updatedSchema,
         reducer_config: currentSchema?.reducer_config || {},
         user_id: user_specific ? userId : null,
@@ -3444,13 +3747,13 @@ app.post("/update_schema_incremental", async (req, res) => {
 
     // Deactivate old schema if activating new one
     if (activate && currentSchema) {
-      await supabase
-        .from("schema_registry")
-        .update({ active: false })
-        .eq("id", currentSchema.id);
+      await supabase.from("schema_registry").update({ active: false }).eq("id", currentSchema.id);
     }
 
-    logDebug("Success:update_schema_incremental", req, { entity_type, fields_added: fields_to_add.length });
+    logDebug("Success:update_schema_incremental", req, {
+      entity_type,
+      fields_added: fields_to_add.length,
+    });
     return res.json({ success: true, schema: newSchemaVersion });
   } catch (error) {
     return handleApiError(
@@ -3514,10 +3817,7 @@ app.post("/register_schema", async (req, res) => {
         .not("id", "eq", newSchema.id);
 
       if (user_specific) {
-        await supabase
-          .from("schema_registry")
-          .update({ active: false })
-          .eq("user_id", userId);
+        await supabase.from("schema_registry").update({ active: false }).eq("user_id", userId);
       }
     }
 
@@ -3546,11 +3846,29 @@ app.post("/reinterpret", async (req, res) => {
   }
 
   try {
-    const { source_id, interpretation_config } = parsed.data;
+    let { source_id } = parsed.data;
+    const { interpretation_config, interpretation_id } = parsed.data;
+
+    // Look up source_id from interpretation if not provided directly
+    if (!source_id && interpretation_id) {
+      const { data: interp, error: interpError } = await supabase
+        .from("interpretations")
+        .select("source_id")
+        .eq("id", interpretation_id)
+        .maybeSingle();
+      if (interpError || !interp) {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Interpretation not found");
+      }
+      source_id = interp.source_id;
+    }
+
+    if (!source_id) {
+      return sendError(res, 400, "VALIDATION_ERROR", "source_id is required");
+    }
 
     // Get source
     const { data: source, error: srcError } = await supabase
-      .from("source")
+      .from("sources")
       .select("*")
       .eq("id", source_id)
       .single();
@@ -3567,11 +3885,12 @@ app.post("/reinterpret", async (req, res) => {
       const fileName = source.original_filename;
 
       // Import extraction functions
-      const { extractWithLLM, extractFromCSVWithChunking } = await import("./services/llm_extraction.js");
+      const { extractWithLLM, extractFromCSVWithChunking } =
+        await import("./services/llm_extraction.js");
 
       // Get model ID from config or use default
       const modelId =
-        (interpretation_config && typeof interpretation_config.model_id === "string")
+        interpretation_config && typeof interpretation_config.model_id === "string"
           ? interpretation_config.model_id
           : "gpt-4o";
 
@@ -3603,12 +3922,7 @@ app.post("/reinterpret", async (req, res) => {
         }
       } else {
         // Non-CSV files - use standard extraction
-        const extractionResult = await extractWithLLM(
-          source.raw_text,
-          fileName,
-          mimeType,
-          modelId
-        );
+        const extractionResult = await extractWithLLM(source.raw_text, fileName, mimeType, modelId);
 
         const { entity_type, fields } = extractionResult;
         extractedData = [
@@ -3634,7 +3948,7 @@ app.post("/reinterpret", async (req, res) => {
     return res.json({
       success: true,
       interpretation_id: result.interpretationId,
-      observations_created: result.observationsCreated
+      observations_created: result.observationsCreated,
     });
   } catch (error) {
     return handleApiError(
@@ -3798,12 +4112,7 @@ app.post("/health_check_snapshots", async (req, res) => {
             provenance: newSnapshot.provenance,
             user_id: newSnapshot.user_id,
           });
-          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
-
-          await supabase.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            { onConflict: "entity_id" }
-          );
+          await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
 
           fixedCount++;
         } catch (error) {
@@ -3812,7 +4121,10 @@ app.post("/health_check_snapshots", async (req, res) => {
       }
     }
 
-    logDebug("Success:health_check_snapshots", req, { stale_count: staleEntities.length, auto_fix });
+    logDebug("Success:health_check_snapshots", req, {
+      stale_count: staleEntities.length,
+      auto_fix,
+    });
     return res.json({
       healthy: staleEntities.length === 0,
       message:
@@ -3856,7 +4168,9 @@ app.get("/openapi.yaml", (req, res) => {
 // SPA fallback - serve index.html for non-API routes (must be after all API routes)
 
 /** Try to bind on a port; resolves with server and port, or rejects on error (e.g. EADDRINUSE). */
-function tryListen(port: number): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
+function tryListen(
+  port: number
+): Promise<{ server: ReturnType<express.Express["listen"]>; port: number }> {
   return new Promise((resolve, reject) => {
     const server = app.listen(port, () => {
       resolve({ server, port });
@@ -3912,4 +4226,3 @@ if (process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART !== "1" && isMainModule) {
     process.exit(1);
   });
 }
-

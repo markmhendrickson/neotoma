@@ -4,6 +4,7 @@
 import { config } from "../config.js";
 import { generateEmbedding, getEntitySearchableText } from "../embeddings.js";
 import { supabase } from "../db.js";
+import { storeLocalEntityEmbedding } from "./local_entity_embedding.js";
 
 export interface EntitySnapshotRowForEmbedding {
   entity_id: string;
@@ -46,11 +47,8 @@ export async function prepareEntitySnapshotWithEmbedding(
   snapshotRow: EntitySnapshotRowForEmbedding,
   canonicalName?: string | null,
 ): Promise<EntitySnapshotRowWithEmbedding> {
-  // Embedding only supported on Supabase (pgvector); SQLite has no embedding column
-  if (config.storageBackend === "local") {
-    return { ...snapshotRow, embedding: null };
-  }
-
+  // Generate embedding for both Supabase (pgvector) and local (sqlite-vec)
+  // Skip only when OPENAI_API_KEY is not configured
   const name =
     canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
   const effectiveName = name ?? snapshotRow.entity_id;
@@ -67,6 +65,29 @@ export async function prepareEntitySnapshotWithEmbedding(
     ...snapshotRow,
     embedding: embedding ?? null,
   };
+}
+
+/**
+ * Upsert entity snapshot and store embedding for local backend when present.
+ * Single entry point for all entity_snapshots upserts to ensure local embedding storage.
+ */
+export async function upsertEntitySnapshotWithEmbedding(
+  row: EntitySnapshotRowWithEmbedding,
+): Promise<void> {
+  const payload = getEntitySnapshotUpsertPayload(row);
+  await supabase.from("entity_snapshots").upsert(
+    payload as Record<string, unknown>,
+    { onConflict: "entity_id" }
+  );
+  if (config.storageBackend === "local" && row.embedding) {
+    storeLocalEntityEmbedding({
+      entity_id: row.entity_id,
+      embedding: row.embedding,
+      user_id: row.user_id,
+      entity_type: row.entity_type,
+      merged: false,
+    });
+  }
 }
 
 /**

@@ -6,6 +6,7 @@
 
 import { createHash } from "node:crypto";
 import { supabase } from "../db.js";
+import { logger } from "../utils/logger.js";
 
 export interface Entity {
   id: string;
@@ -124,14 +125,14 @@ export async function resolveEntity(
         if (idValue != null && String(idValue).trim() !== "") {
           // Use ID field to ensure uniqueness, prefix with "unknown:" to distinguish from named entities
           nameField = `unknown:${String(idValue)}`;
-          console.error(`[entity_resolution] Using ID field ${idKey}=${idValue} for entity name`);
+          logger.info(`[entity_resolution] Using ID field ${idKey}=${idValue} for entity name`);
           break;
         }
       }
     }
 
     canonicalName = normalizeEntityValue(entityType, String(nameField || "unknown"));
-    console.error(`[entity_resolution] Final canonical name: ${canonicalName} for entityType: ${entityType}`);
+    logger.warn(`[entity_resolution] Final canonical name: ${canonicalName} for entityType: ${entityType}`);
   }
 
   const entityId = generateEntityId(entityType, canonicalName);
@@ -159,19 +160,19 @@ export async function resolveEntity(
         .eq("id", entityId);
       
       if (updateError) {
-        console.warn(
+        logger.warn(
           `Failed to update user_id for existing entity ${entityId}:`,
           updateError.message
         );
       } else {
-        console.log(
+        logger.info(
           `Updated user_id for entity ${entityId} from ${existing.user_id} to ${userId}`
         );
       }
     } else if (existing.user_id && userId && existing.user_id !== userId) {
       // Entity already has a different user_id - log warning but don't change it
       // This preserves data integrity (entity belongs to another user)
-      console.warn(
+      logger.warn(
         `Entity ${entityId} already has user_id ${existing.user_id}, ` +
           `but resolution requested with user_id ${userId}. Keeping existing user_id.`
       );
@@ -196,7 +197,7 @@ export async function resolveEntity(
     .single();
 
   if (error) {
-    console.error(`Failed to insert entity ${entityId}:`, error);
+    logger.error(`Failed to insert entity ${entityId}:`, error);
   }
 
   return entityId;
