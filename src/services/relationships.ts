@@ -18,7 +18,27 @@ export type RelationshipType =
   | "DUPLICATE_OF"
   | "DEPENDS_ON"
   | "SUPERSEDES"
-  | "EMBEDS";
+  | "EMBEDS"
+  | "works_at"
+  | "owns"
+  | "manages"
+  | "part_of"
+  | "related_to"
+  | "depends_on"
+  | "references"
+  | "transacted_with"
+  | "member_of"
+  | "reports_to"
+  | "located_at"
+  | "created_by"
+  | "funded_by"
+  | "acquired_by"
+  | "subsidiary_of"
+  | "partner_of"
+  | "competitor_of"
+  | "supplies_to"
+  | "contracted_with"
+  | "invested_in";
 
 export interface Relationship {
   id: string;
@@ -57,6 +77,26 @@ export class RelationshipsService {
     "DEPENDS_ON",
     "SUPERSEDES",
     "EMBEDS",
+    "works_at",
+    "owns",
+    "manages",
+    "part_of",
+    "related_to",
+    "depends_on",
+    "references",
+    "transacted_with",
+    "member_of",
+    "reports_to",
+    "located_at",
+    "created_by",
+    "funded_by",
+    "acquired_by",
+    "subsidiary_of",
+    "partner_of",
+    "competitor_of",
+    "supplies_to",
+    "contracted_with",
+    "invested_in",
   ]);
 
   /**
@@ -82,26 +122,39 @@ export class RelationshipsService {
       const contentHash = createHash("sha256")
         .update(`${relationshipKey}:${params.user_id}:${metadataString}`)
         .digest("hex");
+      const contentHashValue = `relationship_${contentHash.substring(0, 24)}`;
 
-      const { data: source, error: sourceError } = await supabase
+      // Try to find existing source first (handles idempotent re-creation after cleanup)
+      const { data: existing } = await supabase
         .from("sources")
-        .insert({
-          content_hash: `relationship_${contentHash.substring(0, 24)}`,
-          mime_type: "application/json",
-          storage_url: `internal://relationship/${params.relationship_type}`,
-          file_size: 0,
-          user_id: params.user_id,
-        })
-        .select()
+        .select("id")
+        .eq("content_hash", contentHashValue)
+        .eq("user_id", params.user_id)
         .single();
 
-      if (sourceError || !source) {
-        throw new Error(
-          `Failed to create relationship source: ${sourceError?.message || "Unknown error"}`
-        );
-      }
+      if (existing) {
+        sourceId = existing.id;
+      } else {
+        const { data: source, error: sourceError } = await supabase
+          .from("sources")
+          .insert({
+            content_hash: contentHashValue,
+            mime_type: "application/json",
+            storage_url: `internal://relationship/${params.relationship_type}`,
+            file_size: 0,
+            user_id: params.user_id,
+          })
+          .select()
+          .single();
 
-      sourceId = source.id;
+        if (sourceError || !source) {
+          throw new Error(
+            `Failed to create relationship source: ${sourceError?.message || "Unknown error"}`
+          );
+        }
+
+        sourceId = source.id;
+      }
     }
 
     if (sourceId == null) {

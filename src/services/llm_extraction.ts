@@ -126,10 +126,104 @@ export async function extractWithLLM(
 }
 
 /**
+ * Extract structured data from a document image (e.g. first page of a scanned PDF) using vision.
+ * Use when extractTextFromBuffer returns empty for PDFs. Same output shape as extractWithLLM.
+ */
+export async function extractWithLLMFromImage(
+  imageDataUrl: string,
+  fileName?: string,
+  mimeType?: string,
+  modelId: string = "gpt-4o"
+): Promise<LLMExtractionResult> {
+  if (!openai) {
+    throw new Error("OpenAI API key not configured");
+  }
+  const systemPrompt = buildSystemPrompt();
+  const userContent: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+    {
+      type: "text",
+      text: [
+        fileName ? `Filename: ${fileName}` : undefined,
+        mimeType ? `MIME Type: ${mimeType}` : undefined,
+        "",
+        "Extract structured data from this document image. Return ONLY valid JSON with entity_type and fields.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    },
+    { type: "image_url", image_url: { url: imageDataUrl } },
+  ];
+  const response = await openai.chat.completions.create({
+    model: modelId,
+    temperature: 0,
+    max_tokens: MAX_EXTRACTION_OUTPUT_TOKENS,
+    seed: 1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userContent },
+    ],
+  });
+  const content = response.choices?.[0]?.message?.content?.trim();
+  if (!content) {
+    throw new Error("No content returned from OpenAI vision");
+  }
+  let parsed: { entity_type?: string; fields?: Record<string, unknown>; confidence?: number };
+  try {
+    parsed = JSON.parse(content);
+  } catch (parseError) {
+    throw parseError instanceof Error ? parseError : new Error(String(parseError));
+  }
+  if (!parsed.entity_type || typeof parsed.entity_type !== "string") {
+    throw new Error("Invalid response: missing or invalid entity_type");
+  }
+  if (!parsed.fields || typeof parsed.fields !== "object") {
+    throw new Error("Invalid response: missing or invalid fields");
+  }
+  if (!parsed.fields.schema_version) {
+    parsed.fields.schema_version = "1.0";
+  }
+  return {
+    entity_type: parsed.entity_type,
+    fields: parsed.fields,
+    confidence: parsed.confidence ?? 0.8,
+  };
+}
+
+/**
  * Check if LLM extraction is available (OpenAI configured)
  */
 export function isLLMExtractionAvailable(): boolean {
   return openai !== null;
+}
+
+/**
+ * Infer a canonical entity type from an extracted/localized type using the LLM.
+ * Use when alias resolution found no match; avoids hardcoding translations.
+ * Returns the canonical type from the list, or null if the model says none match.
+ */
+export async function inferCanonicalEntityType(
+  extractedType: string,
+  canonicalTypes: string[],
+  modelId: string = "gpt-4o"
+): Promise<string | null> {
+  if (!openai || canonicalTypes.length === 0) return null;
+
+  const list = canonicalTypes.join(", ");
+  const prompt = `The document was classified as entity type "${extractedType}". Which of these canonical types does it match? The type may be in any language (e.g. German, Mandarin); match by meaning. Reply with exactly one word from this list: ${list}. If none match, reply with exactly: none`;
+
+  const response = await openai.chat.completions.create({
+    model: modelId,
+    temperature: 0,
+    max_tokens: 50,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const raw = response.choices?.[0]?.message?.content?.trim()?.toLowerCase();
+  if (!raw || raw === "none") return null;
+
+  const match = canonicalTypes.find((c) => c.toLowerCase() === raw);
+  return match ?? null;
 }
 
 /**
@@ -377,9 +471,11 @@ export async function extractFromCSVWithChunking(
 
   // Log to file for debugging
   const fs = await import("fs/promises");
+  const path = await import("path");
   const fileSize = Buffer.byteLength(csvContent, "utf-8");
   const needsChunk = needsChunking(csvContent);
-  await fs.appendFile("/tmp/neotoma-csv-chunking.log", `[CSV Check] File size: ${fileSize} bytes, Needs chunking: ${needsChunk}\n`).catch(() => {});
+  const logPath = path.join(process.cwd(), "data/logs/csv-chunking.log");
+  await fs.appendFile(logPath, `[CSV Check] File size: ${fileSize} bytes, Needs chunking: ${needsChunk}\n`).catch(() => {});
 
   // Check if chunking is needed
   if (!needsChunk) {
@@ -393,7 +489,7 @@ export async function extractFromCSVWithChunking(
 
   // Log to file for debugging (MCP stdout is used for JSON-RPC)
   const logMsg = `[CSV Chunking] File size: ${fileSize} bytes, Rows per chunk: ${rowsPerChunk}, Total chunks: ${chunks.length}\n`;
-  await fs.appendFile("/tmp/neotoma-csv-chunking.log", logMsg).catch(() => {});
+  await fs.appendFile(logPath, logMsg).catch(() => {});
 
   console.log(
     `CSV file too large (${fileSize} bytes), chunking into ${chunks.length} chunks of ~${rowsPerChunk} rows each`

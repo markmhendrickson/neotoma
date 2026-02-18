@@ -1,7 +1,7 @@
 ---
 description: "When debugging CLI-related issues, always check the CLI log and relevant log files"
 globs: ["src/cli/**", "docs/developer/cli_*.md"]
-alwaysApply: false
+alwaysApply: true
 ---
 # Check Logs When Debugging CLI-Related Issues
 

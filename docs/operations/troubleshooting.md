@@ -83,6 +83,19 @@ netstat -an | grep 8080
    npm run dev:full  # Automatically finds available ports
    ```
 4. **Session / dev server on 8021:** If the API is started by the CLI session (e.g. `npm run dev` with tunnel), it uses `HTTP_PORT` (default 8080; often set to 8021 in scripts). If you see `EADDRINUSE :::8021`, another process is already bound. Kill it with `lsof -i :8021` then `kill -9 <PID>`, or set `NEOTOMA_SESSION_PORT_FILE` so the server writes the actual port and the tunnel script waits for it.
+### Issue: Can't enter commands in session prompt
+**Symptoms:**
+- `neotoma>` prompt appears but keystrokes don't show or nothing happens
+- Stray `[` or broken line when typing
+**Cause:**
+- Terminal or environment (e.g. embedded Cursor/Codex terminal) doesn't handle raw mode or ANSI escape sequences correctly.
+**Solution:**
+1. **Force readline mode** so the prompt uses normal line editing instead of raw mode:
+   ```bash
+   NEOTOMA_USE_READLINE=1 neotoma
+   ```
+   You get a single prompt line; type your command and press Enter. No live `/` suggestions; use `help` or type `/` and Enter to see commands.
+2. **Use a standard terminal** (e.g. iTerm2, Terminal.app, or a system terminal) when possible so raw mode and ANSI work.
 ### Issue: "Invalid local session token"
 **Symptoms:**
 - API logs: `error: 'Invalid local session token'`

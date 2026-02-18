@@ -46,7 +46,9 @@ When you run `neotoma` with **no arguments**, the CLI finds the repo from the cu
 4. Enters an **interactive session** with a `neotoma> ` prompt. Commands use the session server (or existing one).
 5. When you type `exit`, `quit`, or press Ctrl+D, the session ends and any servers started by this run are stopped.
 
-**Non-interactive (e.g. agents):** When stdout is not a TTY, the CLI does **not** prompt. It defaults to **use-existing** (connect only). To start servers from a script or agent, pass `--servers=start`. To force connect-only, pass `--no-servers` or `--servers=use-existing`.
+**Non-interactive (e.g. agents):** When stdout is not a TTY, the CLI does **not** prompt. It defaults to **use-existing** (connect only). To start servers from a script or agent, pass `--servers=start`. To force connect-only, pass `--no-servers` or `--servers=use-existing`. If **no command** is given and stdout is not a TTY (e.g. an agent runs `neotoma` with no args), the CLI prints: "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options." and exits with code 1.
+
+**Direct invocation and session parity:** Every action available at the interactive `neotoma>` prompt is available as a direct CLI call: `neotoma <top-level> [subcommand] [options] [args]`. Examples: `neotoma entities list`, `neotoma relationships list <entityId>`, `neotoma storage info`. Agents and scripts should always use direct invocation; do not depend on entering the interactive session. See [CLI overview](cli_overview.md) and the command sections below for the full command tree.
 
 To show the intro and then a **command menu** (prompt `> ` and `? for shortcuts`; no servers), use:
 
@@ -176,6 +178,11 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `--no-servers`: With no arguments, enter session without starting dev/prod servers.
 - `--background`: With no arguments, start dev and prod servers in the background and exit; stop with `neotoma stop`.
 - `--tunnel`: Start HTTPS tunnel (ngrok/cloudflared) with dev/prod servers. Off by default; use with no args (session) or with `--background` to enable remote MCP access.
+- `--no-update-check`: Disable the update availability check. When enabled (default), the CLI checks the npm registry for a newer version and, if available, prints a one-line notice to stderr. The notice is never shown when `--json` is used.
+
+### Update check (stderr notice)
+
+When the CLI runs in an interactive context (TTY, not `--json`), it may check the npm registry for a newer version of the package. If an update is available, it writes one or two lines to **stderr only** (e.g. "Update available: neotoma 0.2.15 → 0.2.16" and "Run: npm i -g neotoma@latest"). The check is fire-and-forget and does not block startup. To disable: set `NO_UPDATE_NOTIFIER=1` or pass `--no-update-check`. The check is also skipped when `CI` is set. Cache: `~/.config/neotoma/update_check.json` with a 24-hour TTL so the registry is not queried on every run.
 
 ### stop
 
@@ -280,6 +287,17 @@ neotoma mcp check
 neotoma mcp check --user-level
 ```
 
+### CLI instructions (prefer MCP when available, CLI as backup)
+
+Commands to ensure agent instructions tell agents to use the Neotoma CLI when running locally and MCP when remote:
+
+- `neotoma cli-instructions config`: Show guidance for adding the "prefer MCP when available, CLI as backup" rule to Cursor, Claude, and Codex (project: `.cursor/rules/`, `.claude/rules/`, `.codex/`; user: `~/.cursor/rules/`, `~/.claude/rules/`, `~/.codex/`). Does not modify files.
+- `neotoma cli-instructions check`: Scan only paths that each IDE actually loads (applied paths). Reports Cursor, Claude, and Codex separately; if missing in any, prompts to add to project (all three), user (all three), or both. Writes to `.cursor/rules/neotoma_cli.mdc`, `.claude/rules/neotoma_cli.mdc`, `.codex/neotoma_cli.md` so the instruction is applied in all three environments.
+  - `--user-level` / `--no-user-level`: Include or exclude user-level paths in scan (default: include).
+  - `--yes`: Non-interactive; only report status and print snippet path, do not offer to add.
+
+See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
+
 ### Entities
 - `neotoma entities list`:
   - `--type <entityType>`
@@ -306,6 +324,8 @@ neotoma mcp check --user-level
 ### Relationships
 - `neotoma relationships list <entityId>`:
   - `--direction <direction>`: inbound, outbound, or both
+- `neotoma relationships get-snapshot <relationshipType> <sourceEntityId> <targetEntityId>`: Get relationship snapshot with provenance (observations). Relationship type is one of: PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS.
+- `neotoma relationships restore <relationshipType> <sourceEntityId> <targetEntityId>`: Restore a deleted relationship (creates restoration observation). Optional: `--reason <reason>`.
 
 ### Timeline
 - `neotoma timeline list`:
@@ -321,11 +341,15 @@ neotoma mcp check --user-level
 
 ### Store
 - `neotoma store`:
-  - `--json <json>`: Inline JSON array of entities.
-  - `--file <path>`: Path to JSON file containing entity array.
+  - `--json=<json>`: Inline JSON array of entities. Use `--json=` (equals, no space) for reliable shell parsing.
+  - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
 
 ### Upload
-- `neotoma upload <filePath>`
+- `neotoma upload <path>`: Store an unstructured file (raw upload with optional AI interpretation).
+  - `--no-interpret`: Skip AI interpretation after store.
+  - `--idempotency-key <key>`: Idempotency key (default: content hash).
+  - `--mime-type <type>`: MIME type (default: inferred from extension).
+  - `--local`: Run store and interpretation in-process without starting or connecting to the API server. Uses the same `.env`, database, and storage backend as the server. Requires `neotoma init` to have been run. Encryption-off only (local dev user) for MVP. Example: `neotoma upload --local invoice.pdf`.
 
 ### Analyze
 - `neotoma analyze <filePath>`

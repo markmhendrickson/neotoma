@@ -33,6 +33,8 @@ neotoma init --generate-keys
 
 After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From the Neotoma repo root, running `neotoma` with no arguments starts an interactive session and both dev and prod API servers in watch mode; exit the session (exit / quit / Ctrl+D) to stop the servers. Use `neotoma --no-session` to show the intro and then the command menu (prompt `> `, type `?` for shortcuts).
 
+**Direct invocation:** Every action available in the interactive session is available as a direct CLI call: `neotoma <top-level> [subcommand] [options] [args]`. For example, `entities list` at the prompt is equivalent to `neotoma entities list`. Agents and scripts should always use direct invocation (e.g. `neotoma entities list --type company`) and never depend on entering the interactive session. When no command is given and stdout is not a TTY (e.g. an agent runs `neotoma` with no args), the CLI prints a short message and exits with code 1; pass an explicit command to avoid that.
+
 ### Option 2: Run from project (for development)
 
 From the project root, you can run the CLI without installing globally:
@@ -94,12 +96,19 @@ neotoma entities get ent_1234567890abcdef12345678
 
 ### Store structured entities from JSON
 ```
-neotoma store --json '[{"entity_type":"task","title":"Submit expense report","status":"open"}]'
+neotoma store --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'
 ```
 
 ### Upload a file for ingestion
 ```
 neotoma upload ./fixtures/invoice.pdf
+neotoma upload ./doc.pdf --no-interpret --mime-type application/pdf
+neotoma upload --local ./invoice.pdf   # run in-process, no API server required
+```
+
+### Get relationship snapshot with provenance
+```
+neotoma relationships get-snapshot PART_OF <sourceEntityId> <targetEntityId>
 ```
 
 ### Analyze a file without storing
@@ -147,7 +156,7 @@ neotoma entities list --type company --json
 ```
 
 ## Configuration and storage
-The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`.
+The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`. The CLI may show an update-available notice to stderr when a newer npm version exists; disable with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`.
 
 ## Diagrams
 
@@ -169,7 +178,7 @@ neotoma entities list --type company --limit 5 --pretty
 
 ### Store a task
 ```
-neotoma store --json '[{"entity_type":"task","title":"Prepare Q1 budget","status":"open"}]'
+neotoma store --json='[{"entity_type":"task","title":"Prepare Q1 budget","status":"open"}]'
 ```
 
 ## Testing requirements

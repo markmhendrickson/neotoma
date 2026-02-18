@@ -242,9 +242,12 @@ PLAID_SECRET=your_plaid_secret
 PLAID_ENV=sandbox
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
-# Optional: OpenAI (for embeddings)
+# Optional: OpenAI (for embeddings and AI interpretation)
+# Required for: AI interpretation of unstructured files, entity semantic search (both Supabase and local)
 OPENAI_API_KEY=sk-your-api-key-here
 ```
+
+**Note:** Local semantic search (sqlite-vec) requires `OPENAI_API_KEY`. When unset, semantic search returns empty; keyword fallback remains available.
 
 **Where to find Supabase credentials:**
 

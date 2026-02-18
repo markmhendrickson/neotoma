@@ -137,14 +137,14 @@ Run this checklist:
 - [ ] **Clean build**: 
   ```bash
   rm -rf dist/
-  npm run build
+  npm run build:server
   ```
   - **Why**: Ensures build artifacts are up to date
   - **Check**: No build errors, `dist/` directory created
 
 - [ ] **Watch mode works**: 
   ```bash
-  npm run dev:mcp
+  npm run dev:api
   ```
   - **Why**: Ensures development workflow isn't broken
   - **Check**: TypeScript compiles without errors
@@ -262,7 +262,7 @@ npm run type-check
 npm run lint
 
 # 4. Build
-rm -rf dist/ && npm run build
+rm -rf dist/ && npm run build:server:backend
 
 # 5. Run tests
 npm test
@@ -280,7 +280,7 @@ npm run check:advisors
 npm run dev
 
 # 10. Test MCP watch mode (in background terminal)
-npm run dev:mcp
+npm run dev:api
 ```
 
 If all commands succeed, the release is ready for manual validation.
@@ -347,10 +347,11 @@ After all checks pass:
 1. **Update release status** to `ready_for_deployment`
 2. **Update README.md** with release status
 3. **Commit validation results** to release documentation
-4. **Proceed to manual testing phase** (see `integration_tests.md`)
+4. **Proceed to manual testing phase**: Use `docs/developer/developer_release_manual_test_checklist.md` for a full manual test checklist; then run release-specific cases from `integration_tests.md` and the release report Section 9.
 
 ## References
 
+- **Manual test checklist**: `docs/developer/developer_release_manual_test_checklist.md`
 - **Release process**: `docs/developer/release_orchestrator.md`
 - **Integration tests**: `docs/releases/{version}/integration_tests.md`
 - **Deployment strategy**: `docs/releases/{version}/deployment_strategy.md`

@@ -84,7 +84,11 @@ describe("cli smoke tests", () => {
         stdout.restore();
       }
       const parsed = JSON.parse(stdout.output.join(""));
-      expect(parsed.auth_mode === "none" || parsed.message === "Not authenticated.").toBe(true);
+      // auth_mode can be "none", "dev-token", or "key-derived" (when encryption enabled)
+      expect(parsed).toHaveProperty("auth_mode");
+      expect(["none", "dev-token", "key-derived"]).toContain(parsed.auth_mode);
+      expect(parsed).toHaveProperty("base_url");
+      // connection_id is optional - only present when config exists
     });
   });
 

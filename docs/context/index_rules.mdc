@@ -259,6 +259,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`cli_overview.md`](../developer/cli_overview.md)                                   | CLI usage overview and common workflows          | Using or documenting the Neotoma CLI                                                 |
 | [`cli_reference.md`](../developer/cli_reference.md)                                 | CLI command reference, config, and dev scripts   | Updating CLI commands or configuration                                               |
 | [`agent_cli_configuration.md`](../developer/agent_cli_configuration.md)             | User-level config for Claude Code, Codex, Cursor Agent CLI | Configuring permissions and behavior for agent CLIs                    |
+| [`cli_agent_instructions.md`](../developer/cli_agent_instructions.md)               | Source of truth for transport rule: prefer MCP when available, CLI as backup (aligned with MCP instructions) | Editing rule written by `neotoma cli-instructions check`; CLI/MCP behavior parity |
 | [`tunnels.md`](../developer/tunnels.md)                                             | HTTPS tunnels (Cloudflare, ngrok), scripts, env  | Remote MCP access, tunnel setup, provider selection, troubleshooting                  |
 | [`mcp_overview.md`](../developer/mcp_overview.md)                                   | MCP entry point and canonical links              | Navigating MCP setup and specification                                               |
 | [`mcp/instructions.md`](../developer/mcp/instructions.md)                           | MCP server instructions and test references      | Updating MCP interaction guidance or agent MCP tests                                 |
@@ -269,6 +270,7 @@ These documents are the **root of truth** for all Neotoma work:
 | [`import_interpretation_debug.md`](../developer/import_interpretation_debug.md)     | Import/interpretation debug guide (empty snapshots, retries, hallucinations) | Debugging file import, AI interpretation, or entity/snapshot behavior   |
 | [`mcp_bug_investigation_rules.mdc`](../developer/mcp_bug_investigation_rules.mdc)   | Investigate unexpected behavior by tracing MCP server code paths and snapshot/reducer flow | When MCP result or API/CLI data is unexpected; debugging correct/store/snapshot visibility |
 | [`developer_release_manual_test_checklist.md`](../developer/developer_release_manual_test_checklist.md) | Manual test checklist before developer release | Before marking release ready_for_deployment, manual validation of CLI/MCP/API/frontend |
+| [`developer_preview_launch_checklist.md`](../developer/developer_preview_launch_checklist.md)       | Developer preview launch criteria and readiness | Verifying preview readiness before announcement; auditing against ateles criteria      |
 
 ### 2.11 Operations and Infrastructure
 
@@ -884,6 +886,7 @@ After loading this file, immediately load foundation documents from `docs/founda
 5. **Verify Truth Layer boundaries** — All changes must respect architectural constraints
 6. **Never introduce nondeterminism** — Follow `determinism.md` rules
 7. **Document references in manifests** — Feature Units MUST cite relevant docs
+8. **Prefer CLI when local** — When interacting with Neotoma from the same machine as the repo, use the Neotoma CLI (direct invocation); use MCP when remote. Load `docs/developer/mcp_overview.md`, `docs/developer/agent_cli_configuration.md`, and `docs/developer/cli_agent_instructions.md` when configuring or documenting agent/CLI behavior.
 
 ### Forbidden Patterns
 

@@ -229,6 +229,78 @@ describe("MCP Store with Unstructured Files - Integration", () => {
       expect(responseData2.content_hash).toBe(firstContentHash);
     });
 
+    it("should run interpretation again when storing same file content with interpret=true (content-dedupe implicit reinterpret)", async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+      const testFile = path.join(tempDir, "test_reinterpret.txt");
+      tempFiles.push(testFile);
+      tempFiles.push(tempDir);
+
+      const content = `Reinterpret test content ${Date.now()}.`;
+      fs.writeFileSync(testFile, content);
+
+      const key1 = `dedupe-reinterpret-1-${Date.now()}`;
+      const key2 = `dedupe-reinterpret-2-${Date.now()}`;
+
+      const result1 = await (server as any).store({
+        user_id: testUserId,
+        idempotency_key: key1,
+        file_path: testFile,
+        interpret: true,
+      });
+      const responseData1 = JSON.parse(result1.content[0].text);
+      expect(responseData1.source_id).toBeDefined();
+      createdSourceIds.push(responseData1.source_id);
+
+      const result2 = await (server as any).store({
+        user_id: testUserId,
+        idempotency_key: key2,
+        file_path: testFile,
+        interpret: true,
+      });
+      const responseData2 = JSON.parse(result2.content[0].text);
+
+      expect(responseData2.deduplicated).toBe(true);
+      expect(responseData2.source_id).toBe(responseData1.source_id);
+      expect(responseData2.interpretation_debug).toBeDefined();
+      expect(responseData2.interpretation_debug.should_run).toBe(true);
+      expect(responseData2.interpretation_debug.reason).not.toBe("idempotency_key");
+    });
+
+    it("should run interpretation when storing with same idempotency_key and interpret=true (idempotency-key implicit reinterpret)", async () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
+      const testFile = path.join(tempDir, "test_idem_reinterpret.txt");
+      tempFiles.push(testFile);
+      tempFiles.push(tempDir);
+
+      fs.writeFileSync(testFile, `Idempotency reinterpret test ${Date.now()}.`);
+
+      const idemKey = `idem-reinterpret-${Date.now()}`;
+
+      const result1 = await (server as any).store({
+        user_id: testUserId,
+        idempotency_key: idemKey,
+        file_path: testFile,
+        interpret: true,
+      });
+      const responseData1 = JSON.parse(result1.content[0].text);
+      expect(responseData1.source_id).toBeDefined();
+      createdSourceIds.push(responseData1.source_id);
+
+      const result2 = await (server as any).store({
+        user_id: testUserId,
+        idempotency_key: idemKey,
+        file_path: testFile,
+        interpret: true,
+      });
+      const responseData2 = JSON.parse(result2.content[0].text);
+
+      expect(responseData2.deduplicated).toBe(true);
+      expect(responseData2.source_id).toBe(responseData1.source_id);
+      expect(responseData2.interpretation).toBeDefined();
+      expect(responseData2.interpretation?.reason).not.toBe("idempotency_key");
+      expect(responseData2.interpretation_debug?.reason).toBe("idempotency_key_reinterpret");
+    });
+
     it("should generate different hashes for different content", async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neotoma-test-"));
       tempFiles.push(tempDir);

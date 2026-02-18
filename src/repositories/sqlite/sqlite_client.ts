@@ -14,6 +14,7 @@ const SCHEMA_STATEMENTS = [
     storage_url TEXT,
     file_size INTEGER,
     original_filename TEXT,
+    source_type TEXT,
     provenance TEXT,
     created_at TEXT,
     idempotency_key TEXT
@@ -254,6 +255,13 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT,
     user_id TEXT
   )`,
+  `CREATE TABLE IF NOT EXISTS entity_embedding_rows (
+    rowid INTEGER PRIMARY KEY,
+    entity_id TEXT UNIQUE NOT NULL,
+    user_id TEXT NOT NULL,
+    entity_type TEXT NOT NULL,
+    merged INTEGER DEFAULT 0
+  )`,
 ];
 
 /** Legacy tables that may exist in older neotoma.db files. Dropped on open so DB matches canonical schema. */
@@ -302,6 +310,11 @@ function ensureSchema(db: Database.Database): void {
     addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
     addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
     addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
+
+    // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
+    db.prepare(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sources_content_hash_user ON sources(content_hash, user_id) WHERE content_hash IS NOT NULL AND user_id IS NOT NULL"
+    ).run();
   });
   transaction();
 }

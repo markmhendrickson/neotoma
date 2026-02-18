@@ -7,7 +7,7 @@
 import { supabase } from "../db.js";
 import {
   prepareEntitySnapshotWithEmbedding,
-  getEntitySnapshotUpsertPayload,
+  upsertEntitySnapshotWithEmbedding,
 } from "./entity_snapshot_embedding.js";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
@@ -210,6 +210,26 @@ export class SchemaRegistryService {
 
     // 2. Fall back to global schema
     return await this.loadGlobalSchema(entityType);
+  }
+
+  /**
+   * List all active schemas available for refinement/candidates: global schemas
+   * plus user-scoped schemas when userId is provided. Use when scoring against
+   * a dynamic set of types (e.g. field-based type refinement).
+   */
+  async listActiveSchemas(userId?: string): Promise<SchemaRegistryEntry[]> {
+    const base = supabase
+      .from("schema_registry")
+      .select("id, entity_type, schema_version, schema_definition, reducer_config, active, created_at, user_id, scope, metadata")
+      .eq("active", true);
+    const query = userId
+      ? base.or(`scope.eq.global,and(scope.eq.user,user_id.eq.${userId})`)
+      : base.eq("scope", "global");
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to list active schemas: ${error.message}`);
+    }
+    return (data ?? []) as SchemaRegistryEntry[];
   }
 
   /**
@@ -655,14 +675,7 @@ export class SchemaRegistryService {
                     provenance: snapshot.provenance,
                     user_id: snapshot.user_id,
                   });
-                  const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
-
-                  await supabase.from("entity_snapshots").upsert(
-                    toUpsert as Record<string, unknown>,
-                    {
-                      onConflict: "entity_id",
-                    },
-                  );
+                  await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
                 }
               } catch (snapshotError: any) {
                 console.warn(

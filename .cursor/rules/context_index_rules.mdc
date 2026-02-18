@@ -264,16 +264,25 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/developer/`
 
-| Document                                                          | Purpose                                        | Load When                                                     |
-| ----------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
-| [`getting_started.md`](../developer/getting_started.md)           | Local environment setup, first contribution    | Setting up development environment, onboarding new developers |
-| [`development_workflow.md`](../developer/development_workflow.md) | Git workflow, branch strategy, PR process      | Creating feature branches, preparing pull requests            |
-| [`cli_overview.md`](../developer/cli_overview.md)                 | CLI usage overview and common workflows        | Using or documenting the Neotoma CLI                          |
-| [`cli_reference.md`](../developer/cli_reference.md)               | CLI command reference, config, and dev scripts | Updating CLI commands or configuration                        |
-| [`mcp_overview.md`](../developer/mcp_overview.md)                 | MCP entry point and canonical links            | Navigating MCP setup and specification                        |
-| [`mcp/instructions.md`](../developer/mcp/instructions.md)         | MCP server instructions and test references    | Updating MCP interaction guidance or agent MCP tests          |
-| [`env_check_rules.mdc`](../developer/env_check_rules.mdc)         | Check .env when facing env variables as a need | Implementing or debugging config, env vars, or tooling       |
-| [`canonical_walkthrough.md`](../developer/canonical_walkthrough.md) | End to end ingestion walkthrough               | Implementing or reviewing ingestion and reducer flows         |
+| Document                                                                            | Purpose                                          | Load When                                                                            |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [`getting_started.md`](../developer/getting_started.md)                             | Local environment setup, first contribution      | Setting up development environment, onboarding new developers                        |
+| [`development_workflow.md`](../developer/development_workflow.md)                   | Git workflow, branch strategy, PR process        | Creating feature branches, preparing pull requests                                   |
+| [`cli_overview.md`](../developer/cli_overview.md)                                   | CLI usage overview and common workflows          | Using or documenting the Neotoma CLI                                                 |
+| [`cli_reference.md`](../developer/cli_reference.md)                                 | CLI command reference, config, and dev scripts   | Updating CLI commands or configuration                                               |
+| [`agent_cli_configuration.md`](../developer/agent_cli_configuration.md)             | User-level config for Claude Code, Codex, Cursor Agent CLI | Configuring permissions and behavior for agent CLIs                    |
+| [`cli_agent_instructions.md`](../developer/cli_agent_instructions.md)               | Source of truth for transport rule: prefer MCP when available, CLI as backup (aligned with MCP instructions) | Editing rule written by `neotoma cli-instructions check`; CLI/MCP behavior parity |
+| [`tunnels.md`](../developer/tunnels.md)                                             | HTTPS tunnels (Cloudflare, ngrok), scripts, env  | Remote MCP access, tunnel setup, provider selection, troubleshooting                  |
+| [`mcp_overview.md`](../developer/mcp_overview.md)                                   | MCP entry point and canonical links              | Navigating MCP setup and specification                                               |
+| [`mcp/instructions.md`](../developer/mcp/instructions.md)                           | MCP server instructions and test references      | Updating MCP interaction guidance or agent MCP tests                                 |
+| [`env_check_rules.mdc`](../developer/env_check_rules.mdc)                           | Check .env when facing env variables as a need   | Implementing or debugging config, env vars, or tooling                               |
+| [`cli_debugging_rules.mdc`](../developer/cli_debugging_rules.mdc)                   | Check CLI logs when debugging CLI-related issues | Debugging or fixing CLI behavior, repo discovery, init, or session startup            |
+| [`environment_distinction_audit.md`](../developer/environment_distinction_audit.md) | Env-specific paths (dev vs prod) and audit notes | Changing local storage paths, CLI/API log paths, or running dev and prod in parallel |
+| [`canonical_walkthrough.md`](../developer/canonical_walkthrough.md)                 | End to end ingestion walkthrough                 | Implementing or reviewing ingestion and reducer flows                                |
+| [`import_interpretation_debug.md`](../developer/import_interpretation_debug.md)     | Import/interpretation debug guide (empty snapshots, retries, hallucinations) | Debugging file import, AI interpretation, or entity/snapshot behavior   |
+| [`mcp_bug_investigation_rules.mdc`](../developer/mcp_bug_investigation_rules.mdc)   | Investigate unexpected behavior by tracing MCP server code paths and snapshot/reducer flow | When MCP result or API/CLI data is unexpected; debugging correct/store/snapshot visibility |
+| [`developer_release_manual_test_checklist.md`](../developer/developer_release_manual_test_checklist.md) | Manual test checklist before developer release | Before marking release ready_for_deployment, manual validation of CLI/MCP/API/frontend |
+| [`developer_preview_launch_checklist.md`](../developer/developer_preview_launch_checklist.md)       | Developer preview launch criteria and readiness | Verifying preview readiness before announcement; auditing against ateles criteria      |
 
 ### 2.11 Operations and Infrastructure
 
@@ -308,10 +317,10 @@ These documents are the **root of truth** for all Neotoma work:
 
 **Directory:** `docs/reports/`
 
-| Document | Purpose | Load When |
-| ---- | --- | ---- |
-| [`failure_gallery.md`](../reports/failure_gallery.md) | Canonical failure modes and expected error envelopes | Adding error codes or failure regression tests |
-| [`plan_execution_changes_report.md`](../reports/plan_execution_changes_report.md) | Summary of plan execution changes | Auditing or communicating plan execution outcomes |
+| Document                                                                          | Purpose                                              | Load When                                         |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------- |
+| [`failure_gallery.md`](../reports/failure_gallery.md)                             | Canonical failure modes and expected error envelopes | Adding error codes or failure regression tests    |
+| [`plan_execution_changes_report.md`](../reports/plan_execution_changes_report.md) | Summary of plan execution changes                    | Auditing or communicating plan execution outcomes |
 
 ### 2.15 Vocabulary and Templates
 
@@ -539,12 +548,12 @@ graph TD
 
 **Required Reading Order:**
 
-1. `docs/foundation/core_identity.md` — No semantic search in MVP
+1. `docs/foundation/core_identity.md` — Structured retrieval primary, optional entity semantic search
 2. `docs/architecture/architecture.md` — Search layer placement
 3. `docs/subsystems/search/search.md` — Search models and ranking
 4. `docs/architecture/consistency.md` — Search index consistency model
 5. `docs/subsystems/i18n.md` — Cross-language search rules
-6. `docs/subsystems/vector_ops.md` — If using embeddings
+6. `docs/subsystems/vector_ops.md` — If using embeddings (entity semantic search)
 
 ### 4.6 Adding Authentication or Authorization
 
@@ -646,6 +655,7 @@ graph TD
 3. `docs/observability/logging.md` — Logging for debugging
 4. `docs/observability/tracing.md` — Distributed tracing if multi-service
 5. `docs/feature_units/standards/error_protocol.md` — Error classification
+6. `docs/developer/mcp_bug_investigation_rules.mdc` — When unexpected behavior involves MCP, entity/snapshot visibility, or API/CLI sharing the same backend
 
 ### 4.16 Agent or Automated Development
 
@@ -658,6 +668,25 @@ graph TD
 5. `docs/private/governance/risk_classification.md` — Risk assessment
 6. `docs/private/governance/agent_background_execution.md` — If running autonomously
 7. Relevant domain docs as needed
+
+### 4.17 Working with Entity Semantic Search
+
+**Required Reading Order:**
+
+1. `docs/subsystems/vector_ops.md` — Entity embeddings, similarity search, structural filters
+2. `docs/subsystems/schema.md` — entity_snapshots table (embedding column)
+3. `docs/subsystems/search/search.md` — Entity semantic search scope and constraints
+4. `docs/foundation/philosophy.md` — Semantic-only retrieval constraints
+
+### 4.18 Evaluating or Documenting Neotoma as Memory Infrastructure for Agentic Systems
+
+**Required Reading Order:**
+
+1. `docs/foundation/core_identity.md` — Truth Layer scope and what Neotoma is not
+2. `docs/foundation/product_positioning.md` — Substrate positioning, dual runway (human-in-the-loop and agentic systems), marketing positioning
+3. `docs/foundation/problem_statement.md` — Why Neotoma exists, including agentic/multi-agent gap
+4. `docs/specs/ICP_PROFILES.md` — Builders of agentic systems and related ICPs (Developer Integrators, AI Tool Integrators)
+5. `docs/architecture/architecture.md` — System design and layer boundaries
 
 ---
 
@@ -869,6 +898,7 @@ After loading this file, immediately load foundation documents from `docs/founda
 5. **Verify Truth Layer boundaries** — All changes must respect architectural constraints
 6. **Never introduce nondeterminism** — Follow `determinism.md` rules
 7. **Document references in manifests** — Feature Units MUST cite relevant docs
+8. **Prefer CLI when local** — When interacting with Neotoma from the same machine as the repo, use the Neotoma CLI (direct invocation); use MCP when remote. Load `docs/developer/mcp_overview.md`, `docs/developer/agent_cli_configuration.md`, and `docs/developer/cli_agent_instructions.md` when configuring or documenting agent/CLI behavior.
 
 ### Forbidden Patterns
 

@@ -11,8 +11,6 @@ export type Config = {
   connection_id?: string;
   /** Neotoma repo root; set by init so CLI can start servers from any cwd. */
   repo_root?: string;
-  /** Preferred environment (dev or prod) for interactive sessions. */
-  preferred_env?: "dev" | "prod";
   /** Server policy: start (start API if needed) or use-existing (connect only). Set by consent prompt. */
   server_policy?: "start" | "use-existing";
 };
@@ -192,7 +190,7 @@ const FALLBACK_BASE_URL = `http://${DETECT_HOST}:8180`;
  * (production → 8180, development → 8080) so dev/prod MCP configs do not need
  * session port env vars in mcp.json.
  */
-export async function resolveBaseUrl(option?: string, config?: Config): Promise<string> {
+export async function resolveBaseUrl(option?: string, _config?: Config): Promise<string> {
   if (option) return option.replace(/\/$/, "");
 
   const sessionDev = process.env[SESSION_DEV_PORT_ENV];
@@ -207,8 +205,9 @@ export async function resolveBaseUrl(option?: string, config?: Config): Promise<
     return `http://${DETECT_HOST}:${validSessionPorts[0]}`;
   }
   if (validSessionPorts.length === 2) {
-    const cfg = config ?? (await readConfig());
-    const preferred = cfg.preferred_env ?? "prod";
+    const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+    const preferred: "dev" | "prod" =
+      sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : "prod";
     const port = preferred === "dev" ? devPort! : prodPort!;
     return `http://${DETECT_HOST}:${port}`;
   }

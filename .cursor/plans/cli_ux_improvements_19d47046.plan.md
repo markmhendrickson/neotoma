@@ -9,12 +9,15 @@ isProject: false
 
 ## Current state
 
-- **Entry:** Pack-rat intro box (version, entity/relationship/source counts, server lines) with wink animation; `--no-session` shows a panel with nest art, API status, storage summary, and "Tips for getting started" then command menu.
-- **Command menu:** Hint "Type / for commands, ? for shortcuts", prompt `> ` (no placeholder). Live `/` filtering for command list.
-- **Output:** [format.ts](src/cli/format.ts) provides bold, dim, success, warn, accent, panel, blackBox; no dedicated error color. Messages go through `writeMessage` / `writeOutput` with `--json` / `--pretty`.
+- **Entry and session:** Pack-rat intro box (version, entity/relationship/source counts, server lines) with wink animation. When running `neotoma` with no args (TTY), CLI asks for **server policy**: **(s) Start** dev+prod API servers for this session, or **(e) Use existing** (connect only; fail if nothing reachable). Choice is persisted to config. Non-TTY defaults to use-existing; agents can pass `--servers=start`. Ports: dev 8080, prod 8180. Session prompt is `neotoma> ` with live `/` filtering and `suggestionLinesRef` for command suggestions.
+- **--no-session:** Shows intro panel (nest art, API status, storage summary, "Tips for getting started"), then command menu with prompt `> ` and "Type / for commands, ? for shortcuts"; no placeholder in input.
+- **Commands (summary):** options, env, servers, init, auth (login, status, logout, mcp-token, whoami), mcp (config, check), watch, storage (info, backup create, restore), logs tail, api (status, start, stop, processes, logs), stop, dev (list, run), entities (list, get, search, related, neighborhood, delete, restore), sources (get, list), observations list, relationships (list, delete, restore), timeline list, schemas (list, get, analyze, recommend, update, register), store (--json, --file), interpretations reinterpret, corrections create, stats (entities), snapshots check, request (--operation). **Note:** `neotoma mcp config` is MCP configuration guidance only; there is no general `neotoma config` for base_url / preferred_env / output. Upload and analyze (file) are documented in [cli_reference](docs/developer/cli_reference.md) and [cli_overview](docs/developer/cli_overview.md); implementation may be via store --file or MCP.
+- **Output:** [format.ts](src/cli/format.ts) provides bold, dim, success, warn, accent, panel, blackBox; **no dedicated `error()` (red)** yet. Messages go through `writeMessage` / `writeOutput` with `--json` / `--pretty`.
 - **Auth:** `auth login` opens browser, prints "Opening browser..." and "Waiting for you..."; no manual URL fallback, no device code, no Esc to cancel.
-- **Doctor:** `npm run doctor` runs [scripts/doctor.ts](scripts/doctor.ts) (env, Supabase, security, DB placeholder); there is no `neotoma doctor` subcommand.
+- **Doctor:** `npm run doctor` runs [scripts/doctor.ts](scripts/doctor.ts) (env, Supabase, security, DB placeholder); **no `neotoma doctor` subcommand**.
 - **Repo not found:** In pretty mode, asks "Path to Neotoma repo (optional...)"; no explicit "run neotoma init" first step or bordered trust-style prompt.
+
+**References:** [cli_reference](docs/developer/cli_reference.md) (command list, options, session behavior), [cli_overview](docs/developer/cli_overview.md) (workflows). Implementation: [src/cli/index.ts](src/cli/index.ts), [src/cli/format.ts](src/cli/format.ts), [src/cli/config.ts](src/cli/config.ts).
 
 ---
 
@@ -53,8 +56,8 @@ isProject: false
 **Changes:**
 
 - **Quantitative success messages:** For commands that perform a countable action, add a one-line summary where applicable, e.g.:
-  - `neotoma store --json '...'`: "Stored N record(s)." or "Stored N record(s) in 0.3s" if we measure.
-  - `neotoma upload &lt;file&gt;`: "Uploaded 1 file. Created N observation(s)." (or whatever the API returns).
+  - `neotoma store` (--json or --file): "Stored N entity/record(s)." or "Stored N in 0.3s" if we measure.
+  - `neotoma upload &lt;file&gt;` (if added as a command): "Uploaded 1 file. Created N observation(s)." (or whatever the API returns).
   - `neotoma init`: already has "created" / "done"; optionally add "Initialized in &lt;n&gt;s".
 - **Multi-step flows:** For init or other multi-step flows, consider showing step checkmarks (e.g. "✓ Directories created", "✓ Database ready") in pretty mode, then a final "Initialization complete." and "Next: " + pathStyle("neotoma storage info") (or similar). Keep existing behavior when `--json` is set.
 
@@ -142,7 +145,7 @@ isProject: false
 
 **Changes:**
 
-- **Config / settings surface:** Add a `neotoma config` (or `neotoma settings`) command that shows current CLI config (base_url, preferred_env, output style, etc.) in a clear key/value list. Optionally support `neotoma config get/set <key>` or an interactive TUI; if interactive, show hints at bottom: "Type to filter · Enter/↓ to select · Esc to clear" (or "Tab to cycle").
+- **Config / settings surface:** Add a **general** `neotoma config` (or `neotoma settings`) command for CLI settings (base_url, preferred_env, output style, server_policy, repo_root, etc.) in a clear key/value list. This is distinct from the existing `neotoma mcp config` (MCP configuration guidance). Optionally support `neotoma config get/set <key>` or an interactive TUI; if interactive, show hints at bottom: "Type to filter · Enter/↓ to select · Esc to clear" (or "Tab to cycle").
 - **Command list with optional-arg hints:** In the existing `/` live-filter command list, keep the two-column layout (command | description) and add optional-arg hints in descriptions where useful (e.g. `store --json '<...>'`, `upload <path>`). Ensure `?` / `help` use the same concise, action-oriented descriptions.
 - **Proactive suggestion line:** After certain commands, print a single suggestion line with a distinct prefix (e.g. "► " or "Next: "): e.g. after `neotoma init`: "► Run " + pathStyle("neotoma storage info") + " to verify." After a failed API call: "► Run " + pathStyle("neotoma servers") + " or start with " + pathStyle("neotoma") + " (no args)." Optional later: keyboard-driven "cycle through suggestions" if we add multiple follow-ups.
 - **Status / resource indicator (optional):** For interactive session, optional one-line status (e.g. right of prompt or one line above): "API: up" / "API: down" or "Env: dev", or "Storage: N sources, M entities" when relevant. Minimal and non-intrusive; only in TTY when not `--json`.
@@ -153,6 +156,8 @@ isProject: false
 ---
 
 ## Implementation order (suggested)
+
+**Already in place:** Server policy (Start / Use existing), session prompt `neotoma> `, live `/` filtering with suggestionLinesRef, `neotoma session`, `--servers=start` for agents, prod port 8180. See [cli_reference](docs/developer/cli_reference.md) for full command list.
 
 1. **Format and errors:** Add `error()` in format.ts; use it and actionable hints in 1–2 key error paths.
 2. **Quantitative feedback:** Add one-line success summaries for store and upload (and init if easy).

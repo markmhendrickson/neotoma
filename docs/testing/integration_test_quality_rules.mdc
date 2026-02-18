@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # Integration Test Quality Rules
 
 **Reference**: `foundation/conventions/testing_conventions.md` — Generic testing principles

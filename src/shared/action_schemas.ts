@@ -29,13 +29,33 @@ export const RelationshipTypeSchema = z.enum([
   "DEPENDS_ON",
   "SUPERSEDES",
   "EMBEDS",
+  "works_at",
+  "owns",
+  "manages",
+  "part_of",
+  "related_to",
+  "depends_on",
+  "references",
+  "transacted_with",
+  "member_of",
+  "reports_to",
+  "located_at",
+  "created_by",
+  "funded_by",
+  "acquired_by",
+  "subsidiary_of",
+  "partner_of",
+  "competitor_of",
+  "supplies_to",
+  "contracted_with",
+  "invested_in",
 ]);
 
 export const CreateRelationshipRequestSchema = z.object({
   relationship_type: RelationshipTypeSchema,
   source_entity_id: z.string(),
   target_entity_id: z.string(),
-  source_id: z.string().uuid().optional(),
+  source_id: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 
@@ -65,13 +85,20 @@ export const EntitiesQueryRequestSchema = z.object({
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
   include_merged: z.boolean().optional().default(false),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const RetrieveEntitiesRequestSchema = z.object({
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   entity_type: z.string().optional(),
   search: z.string().optional(),
+  /**
+   * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
+   * Results with distance >= threshold are dropped. Lower = stricter matching.
+   * Typical values: 1.0 (very strict), 1.02 (moderate), 1.05 (loose).
+   * Only applied when search is provided.
+   */
+  similarity_threshold: z.number().min(0).max(2).optional(),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
   include_snapshots: z.boolean().optional().default(true),
@@ -79,33 +106,45 @@ export const RetrieveEntitiesRequestSchema = z.object({
 });
 
 export const ObservationsQueryRequestSchema = z.object({
+  observation_id: z.string().optional(),
   entity_id: z.string().optional(),
   entity_type: z.string().optional(),
+  source_id: z.string().optional(),
   limit: z.number().int().positive().optional().default(100),
   offset: z.number().int().nonnegative().optional().default(0),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
   source_priority: z.number().optional().default(100),
   idempotency_key: z.string().min(1),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   original_filename: z.string().optional(),
+});
+
+/** REST store/unstructured: file_content (base64) + mime_type, optional interpret and idempotency_key. */
+export const StoreUnstructuredRequestSchema = z.object({
+  file_content: z.string(),
+  mime_type: z.string().min(1),
+  idempotency_key: z.string().min(1).optional(),
+  original_filename: z.string().optional(),
+  interpret: z.boolean().optional().default(true),
+  user_id: z.string().optional(),
 });
 
 export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),
   to_entity_id: z.string(),
   merge_reason: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const DeleteEntityRequestSchema = z.object({
   entity_id: z.string(),
   entity_type: z.string(),
   reason: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const DeleteRelationshipRequestSchema = z.object({
@@ -113,14 +152,14 @@ export const DeleteRelationshipRequestSchema = z.object({
   source_entity_id: z.string(),
   target_entity_id: z.string(),
   reason: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const RestoreEntityRequestSchema = z.object({
   entity_id: z.string(),
   entity_type: z.string(),
   reason: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const RestoreRelationshipRequestSchema = z.object({
@@ -128,21 +167,24 @@ export const RestoreRelationshipRequestSchema = z.object({
   source_entity_id: z.string(),
   target_entity_id: z.string(),
   reason: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const CorrectEntityRequestSchema = z.object({
   entity_id: z.string(),
-  entity_type: z.string(),
+  entity_type: z.string().optional().default("unknown"),
   field: z.string(),
   value: z.unknown(),
   idempotency_key: z.string().min(1),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
 });
 
 export const ReinterpretRequestSchema = z.object({
-  source_id: z.string(),
+  source_id: z.string().optional(),
+  interpretation_id: z.string().optional(),
   interpretation_config: z.record(z.unknown()).optional(),
+}).refine((data) => data.source_id || data.interpretation_id, {
+  message: "Either source_id or interpretation_id is required",
 });
 
 export const ListEntityTypesRequestSchema = z.object({
@@ -180,14 +222,14 @@ export const RelationshipSnapshotRequestSchema = z.object({
 
 export const AnalyzeSchemaCandidatesRequestSchema = z.object({
   entity_type: z.string().optional(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   min_frequency: z.number().int().positive().optional().default(5),
   min_confidence: z.number().min(0).max(1).optional().default(0.8),
 });
 
 export const GetSchemaRecommendationsRequestSchema = z.object({
   entity_type: z.string(),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   source: z.enum(["raw_fragments", "agent", "inference", "all"]).optional(),
   status: z.enum(["pending", "approved", "rejected"]).optional(),
 });
@@ -206,7 +248,7 @@ export const UpdateSchemaIncrementalRequestSchema = z.object({
   ),
   schema_version: z.string().optional(),
   user_specific: z.boolean().default(false),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   activate: z.boolean().default(true),
   migrate_existing: z.boolean().default(false),
 });
@@ -217,6 +259,6 @@ export const RegisterSchemaRequestSchema = z.object({
   reducer_config: z.record(z.unknown()),
   schema_version: z.string().default("1.0"),
   user_specific: z.boolean().default(false),
-  user_id: z.string().uuid().optional(),
+  user_id: z.string().optional(),
   activate: z.boolean().default(false),
 });

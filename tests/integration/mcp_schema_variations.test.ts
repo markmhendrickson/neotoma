@@ -341,42 +341,47 @@ describe("MCP schema actions - parameter variations", () => {
 
       await supabase.from("raw_fragments").insert([
         {
-          fragment_type: testEntityType,
+          source_id: source!.id,
+          entity_type: testEntityType,
           fragment_key: "new_field_1",
           fragment_value: "test value 1",
-          inferred_type: "string",
-          user_id: testUserId
+          fragment_envelope: { inferred_type: "string" },
+          user_id: testUserId,
         },
         {
-          fragment_type: testEntityType,
+          source_id: source!.id,
+          entity_type: testEntityType,
           fragment_key: "new_field_1",
           fragment_value: "test value 2",
-          inferred_type: "string",
-          user_id: testUserId
+          fragment_envelope: { inferred_type: "string" },
+          user_id: testUserId,
         },
         {
-          fragment_type: testEntityType,
+          source_id: source!.id,
+          entity_type: testEntityType,
           fragment_key: "new_field_2",
           fragment_value: "123",
-          inferred_type: "number",
-          user_id: testUserId
+          fragment_envelope: { inferred_type: "number" },
+          user_id: testUserId,
         },
       ]);
 
       // Analyze would return candidates with frequency > threshold
-      const { data: fragments } = await supabase
+      const { data: fragments, error: fragError } = await supabase
         .from("raw_fragments")
-        .select("fragment_key, inferred_type")
-        .eq("fragment_type", testEntityType)
+        .select("fragment_key, fragment_envelope")
+        .eq("entity_type", testEntityType)
         .eq("user_id", testUserId);
 
+      expect(fragError).toBeNull();
+      expect(fragments).not.toBeNull();
       expect(fragments!.length).toBeGreaterThan(0);
 
       // Cleanup raw_fragments
       await supabase
         .from("raw_fragments")
         .delete()
-        .eq("fragment_type", testEntityType);
+        .eq("entity_type", testEntityType);
     });
 
     it("should filter by min_frequency threshold", async () => {

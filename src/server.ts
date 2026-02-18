@@ -52,7 +52,19 @@ import {
   type Entity,
 } from "./services/entity_resolution.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
-import { extractWithLLM, extractFromCSVWithChunking, isLLMExtractionAvailable } from "./services/llm_extraction.js";
+import type { RelationshipType } from "./services/relationships.js";
+import {
+  extractWithLLM,
+  extractWithLLMFromImage,
+  extractFromCSVWithChunking,
+  isLLMExtractionAvailable,
+} from "./services/llm_extraction.js";
+import {
+  extractTextFromBuffer,
+  getPdfFirstPageImageDataUrl,
+  getMimeTypeFromExtension,
+  getPdfWorkerDebug,
+} from "./services/file_text_extraction.js";
 import {
   softDeleteEntity as softDeleteEntityService,
   softDeleteRelationship as softDeleteRelationshipService,
@@ -61,84 +73,10 @@ import {
 } from "./services/deletion.js";
 import {
   prepareEntitySnapshotWithEmbedding,
-  getEntitySnapshotUpsertPayload,
+  upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
 import { semanticSearchEntities } from "./services/entity_semantic_search.js";
-
-/**
- * Get MIME type from file extension
- */
-function getMimeTypeFromExtension(ext: string): string | null {
-  const mimeTypes: Record<string, string> = {
-    ".pdf": "application/pdf",
-    ".txt": "text/plain",
-    ".csv": "text/csv",
-    ".json": "application/json",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".gif": "image/gif",
-    ".html": "text/html",
-    ".xml": "application/xml",
-    ".md": "text/markdown",
-    ".doc": "application/msword",
-    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ".xls": "application/vnd.ms-excel",
-    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ".ppt": "application/vnd.ms-powerpoint",
-    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ".zip": "application/zip",
-    ".tar": "application/x-tar",
-    ".gz": "application/gzip",
-    ".parquet": "application/x-parquet",
-  };
-  return mimeTypes[ext] || null;
-}
-
-async function extractTextFromBuffer(
-  buffer: Buffer,
-  mimeType?: string,
-  fileName?: string
-): Promise<string> {
-  const lowerName = fileName?.toLowerCase() || "";
-  const lowerMime = mimeType?.toLowerCase() || "";
-
-  if (lowerMime.includes("pdf") || lowerName.endsWith(".pdf")) {
-    try {
-      const module = await import("pdf-parse");
-      const PdfParse =
-        (
-          module as {
-            PDFParse?: new (options: { data: Buffer }) => { getText(): Promise<{ text?: string }> };
-          }
-        ).PDFParse ?? (module as any).default;
-      if (!PdfParse) {
-        return "";
-      }
-      const parser = new PdfParse({ data: buffer });
-      const { text } = await parser.getText();
-      return text || "";
-    } catch (error) {
-      logger.warn("Failed to parse PDF for extraction:", error);
-      return "";
-    }
-  }
-
-  if (lowerMime.startsWith("text/") || lowerMime.includes("json") || lowerMime.includes("xml")) {
-    return buffer.toString("utf8");
-  }
-
-  if (
-    lowerName.endsWith(".txt") ||
-    lowerName.endsWith(".csv") ||
-    lowerName.endsWith(".json") ||
-    lowerName.endsWith(".md")
-  ) {
-    return buffer.toString("utf8");
-  }
-
-  return "";
-}
+import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
 
@@ -152,6 +90,9 @@ export class NeotomaServer {
   private sessionConnectionId: string | null = null;
   /** Tool descriptions loaded from docs/developer/mcp/tool_descriptions.yaml; empty Map if file missing */
   private toolDescriptions: Map<string, string> = new Map();
+  /** In-memory cache for npm registry dist-tags: key = "packageName:distTag", value = { version, until } */
+  private registryCache = new Map<string, { version: string; until: number }>();
+  private static REGISTRY_CACHE_TTL_MS = 10 * 60 * 1000;
 
   constructor() {
     this.server = new Server(
@@ -182,6 +123,10 @@ export class NeotomaServer {
     const fallback = [
       "Use MCP actions proactively. Store and retrieve without waiting for explicit requests.",
       "Always store when the user states relevant information, even in conversational contexts. Store first, then respond. Do not skip store because the user did not explicitly ask to save.",
+      "MANDATORY in chat: every assistant turn you MUST (1) create or update a conversation entity with a stable conversation_id, (2) store this turn as an agent_message linked to it via PART_OF (message PART_OF conversation). Do NOT skip this for greetings, minimal messages, or when the user message has no extractable entities; chat storage is required every turn.",
+      'In chat contexts (details): prefer host-provided conversation_id, thread_id, or session_id; when host does not provide, use entity id from first turn\'s store if re-exposed, or a deterministic derivative. Store any new attachments via the unstructured path and link them with EMBEDS. Use only Neotoma-supported relationship types (PART_OF, REFERS_TO, EMBEDS, SUPERSEDES, etc.); see MCP spec. Do this in the same turn as your response; do not wait for the user to say "save" or run an end-of-chat command. This is in addition to extracting and storing entities and attachments from the turn as below.',
+      "For conversation/turn idempotency_key: use conversation-{conversation_id}-{turn_id}-{timestamp_ms} or conversation-{conversation_id}-{turn_id}-{uuid} so each turn store creates a new observation. Include stable turn identity in the message entity (e.g. turn_key or id = conversation_id:turn_id). Overwriting between branches is OK; history is available via list_observations.",
+      "For reverted turns: optionally link the new message to the previous one with create_relationship(SUPERSEDES, new_message_entity_id, previous_message_entity_id).",
       'When you pull data from other MCPs (e.g. email, calendar, search), apply the same proactive storage: extract and store people, companies, locations, events, tasks, notifications, device status, and relationships from that data. Create tasks for action items (e.g. "replace battery", "share feedback", "review security alert", "reply about Madrid trip"). Store locations and link events or tasks to them. Store first, then respond.',
       "When confirming stored information, you MUST use memory-related language (e.g. “remember”, “recall”, “store in memory”) and include one of those phrases in the confirmation.",
       'Extract and store all relevant entities from what the user says: people, tasks, events, commitments, preferences, possessions, relationships, places, and any other types that fit. Store every distinct entity (e.g. a person and a task and an event from the same message). When the user mentions a place, property, or location (e.g. "our home in Barcelona", "my office", "apartment in Madrid"), store it as an entity (e.g. location, property, or place) and link the task or other entities to it. Create relationships when implied (e.g. friend of, task for person, event attendee, task for location) using create_relationship or relationship fields per schema.',
@@ -625,14 +570,7 @@ export class NeotomaServer {
             provenance: newSnapshot.provenance,
             user_id: newSnapshot.user_id,
           });
-          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
-
-          await supabase.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            {
-              onConflict: "entity_id",
-            }
-          );
+          await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
 
           fixedCount++;
         } catch (error) {
@@ -659,6 +597,62 @@ export class NeotomaServer {
       checked: potentiallyStale.length,
       stale: staleSnapshots.length,
       stale_snapshots: staleSnapshots,
+    });
+  }
+
+  private async npmCheckUpdate(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const schema = z.object({
+      packageName: z.string(),
+      currentVersion: z.string(),
+      distTag: z.string().default("latest"),
+    });
+    const parsed = schema.parse(args ?? {});
+    const { packageName, currentVersion, distTag } = parsed;
+
+    const cacheKey = `${packageName}:${distTag}`;
+    const cached = this.registryCache.get(cacheKey);
+    let latest: string | null = cached && cached.until > Date.now() ? cached.version : null;
+
+    if (latest === null) {
+      latest = await getLatestFromRegistry(packageName, distTag);
+      if (latest) {
+        this.registryCache.set(cacheKey, {
+          version: latest,
+          until: Date.now() + NeotomaServer.REGISTRY_CACHE_TTL_MS,
+        });
+      }
+    }
+
+    if (latest === null) {
+      return this.buildTextResponse({
+        packageName,
+        currentVersion,
+        distTag,
+        latestVersion: null,
+        updateAvailable: false,
+        message: "Registry unreachable.",
+        suggestedCommand: null,
+      });
+    }
+
+    const updateAvailable = isUpdateAvailable(currentVersion, latest);
+    const message = updateAvailable
+      ? `New version available (${latest}). Please upgrade before continuing.`
+      : "No update available.";
+    const suggestedCommand = updateAvailable
+      ? formatUpgradeCommand(packageName, distTag, "global")
+      : null;
+
+    return this.buildTextResponse({
+      packageName,
+      currentVersion,
+      distTag,
+      latestVersion: latest,
+      updateAvailable,
+      message,
+      suggestedCommand,
     });
   }
 
@@ -1416,6 +1410,31 @@ export class NeotomaServer {
               required: [],
             },
           },
+          {
+            name: "npm_check_update",
+            description:
+              this.toolDescriptions.get("npm_check_update") ??
+              "Check if a newer npm version is available. Returns updateAvailable, message, and suggestedCommand. Call at session start to encourage user to upgrade.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                packageName: {
+                  type: "string",
+                  description: "npm package name (e.g. neotoma)",
+                },
+                currentVersion: {
+                  type: "string",
+                  description: "Current version reported by the client",
+                },
+                distTag: {
+                  type: "string",
+                  description: "Dist tag to check (default: latest)",
+                  default: "latest",
+                },
+              },
+              required: ["packageName", "currentVersion"],
+            },
+          },
         ],
       };
     });
@@ -1569,6 +1588,8 @@ export class NeotomaServer {
         return await this.getAuthenticatedUser(args);
       case "health_check_snapshots":
         return await this.healthCheckSnapshots(args);
+      case "npm_check_update":
+        return await this.npmCheckUpdate(args);
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
@@ -2416,6 +2437,7 @@ export class NeotomaServer {
       entityType: parsed.entity_type,
       includeMerged: parsed.include_merged,
       search: parsed.search,
+      similarityThreshold: parsed.similarity_threshold,
       limit: parsed.limit,
       offset: parsed.offset,
     });
@@ -2906,8 +2928,12 @@ export class NeotomaServer {
     try {
       const entityTypes = await schemaRegistry.listEntityTypes(parsed.keyword);
 
-      // If summary mode, return only entity type names and field counts
-      const responseData = parsed.summary
+      // When no keyword, always return summary to avoid huge payload (all types × full schema).
+      // When keyword is provided, respect summary param (default full detail for the few matches).
+      const useSummary =
+        parsed.keyword === undefined || parsed.keyword === "" ? true : parsed.summary;
+
+      const responseData = useSummary
         ? {
             entity_types: entityTypes.map((et) => ({
               entity_type: et.entity_type,
@@ -3112,6 +3138,15 @@ export class NeotomaServer {
         interpretation_config: z.record(z.unknown()).optional(),
         // Structured source
         entities: z.array(z.record(z.unknown())).optional(),
+        relationships: z
+          .array(
+            z.object({
+              relationship_type: z.string(),
+              source_index: z.number().int().min(0),
+              target_index: z.number().int().min(0),
+            })
+          )
+          .optional(),
         source_priority: z.number().default(100),
       })
       .refine(
@@ -3138,7 +3173,8 @@ export class NeotomaServer {
         parsed.entities,
         parsed.source_priority,
         idempotencyKey,
-        parsed.original_filename
+        parsed.original_filename,
+        parsed.relationships
       );
     }
 
@@ -3160,29 +3196,263 @@ export class NeotomaServer {
       }
 
       if (existingSource) {
-        const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
-        const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+        if (!parsed.interpret) {
+          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
+          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+          return this.buildTextResponse({
+            source_id: existingSource.id,
+            content_hash: existingSource.content_hash,
+            file_size: existingSource.file_size,
+            deduplicated: true,
+            interpretation: { skipped: true, reason: "interpret_false" },
+            interpretation_debug: {
+              interpret_requested: false,
+              deduplicated: true,
+              existing_observations_count: existingEntityIds.length,
+              should_run: false,
+              reason: "interpret_false",
+            },
+            related_entities: relatedData.entities,
+            related_relationships: relatedData.relationships,
+          });
+        }
+        // Idempotency-key hit with interpret=true: run reinterpret (download, extract, runInterpretation).
+        const {
+          runInterpretation: runInterpretationForIdempotency,
+          runInterpretationWithFixedPoint: runInterpretationWithFixedPointForIdempotency,
+          checkInterpretationQuota: checkInterpretationQuotaForIdempotency,
+        } = await import("./services/interpretation.js");
+        const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
+        const quota = await checkInterpretationQuotaForIdempotency(userId);
+        if (!quota.allowed) {
+          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
+          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+          return this.buildTextResponse({
+            source_id: existingSource.id,
+            content_hash: existingSource.content_hash,
+            file_size: existingSource.file_size,
+            deduplicated: true,
+            interpretation: { skipped: true, reason: "quota_exceeded", quota },
+            interpretation_debug: {
+              interpret_requested: true,
+              deduplicated: true,
+              existing_observations_count: existingEntityIds.length,
+              should_run: true,
+              reason: "quota_exceeded",
+            },
+            related_entities: relatedData.entities,
+            related_relationships: relatedData.relationships,
+          });
+        }
+        const source = await getSourceMetadata(existingSource.id);
+        const idempotencyFileBuffer = await downloadRawContent(source.storage_url);
+        const rawText = await extractTextFromBuffer(
+          idempotencyFileBuffer,
+          source.mime_type,
+          source.original_filename || "file"
+        );
+        if (!isLLMExtractionAvailable()) {
+          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
+          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
+          return this.buildTextResponse({
+            source_id: existingSource.id,
+            content_hash: existingSource.content_hash,
+            file_size: existingSource.file_size,
+            deduplicated: true,
+            interpretation: {
+              skipped: true,
+              reason: "openai_not_configured",
+              message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
+            },
+            interpretation_debug: {
+              interpret_requested: true,
+              deduplicated: true,
+              existing_observations_count: existingEntityIds.length,
+              should_run: true,
+              reason: "openai_not_configured",
+            },
+            related_entities: relatedData.entities,
+            related_relationships: relatedData.relationships,
+          });
+        }
+        const existingEntityIdsForDebug = await this.getEntityIdsFromSource(existingSource.id);
+        const idempotencyPdfDebug = getPdfWorkerDebug();
+        const idempotencyExtractionDebug: {
+          raw_text_length?: number;
+          extraction_field_keys?: string[];
+          used_vision_fallback?: boolean;
+          vision_fallback_attempted?: boolean;
+          vision_fallback_image_got?: boolean;
+          vision_fallback_image_error?: string;
+          vision_fallback_error?: string;
+          pdf_worker_wrapper_used?: boolean;
+          pdf_worker_wrapper_path_tried?: string | null;
+          pdf_worker_set_worker_error?: string;
+        } = {
+          raw_text_length: typeof rawText === "string" ? rawText.length : 0,
+          pdf_worker_wrapper_used: idempotencyPdfDebug.configured,
+          pdf_worker_wrapper_path_tried: idempotencyPdfDebug.wrapper_path_tried,
+          pdf_worker_set_worker_error: idempotencyPdfDebug.set_worker_error,
+        };
+        const isPdfIdem =
+          (source.mime_type || "").toLowerCase().includes("pdf") ||
+          (source.original_filename || "").toLowerCase().endsWith(".pdf");
+        let idempotencyExtractionResult:
+          | Awaited<ReturnType<typeof extractWithLLM>>
+          | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
+          | undefined = undefined;
+        if (idempotencyExtractionDebug.raw_text_length === 0 && isPdfIdem) {
+          idempotencyExtractionDebug.vision_fallback_attempted = true;
+          const imageResult = await getPdfFirstPageImageDataUrl(
+            idempotencyFileBuffer,
+            source.mime_type,
+            source.original_filename || "file",
+            { returnError: true }
+          );
+          const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+          if (typeof imageResult === "object" && imageResult.error) {
+            idempotencyExtractionDebug.vision_fallback_image_error = imageResult.error;
+          }
+          idempotencyExtractionDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+          if (imageDataUrl) {
+            try {
+              idempotencyExtractionResult = await extractWithLLMFromImage(
+                imageDataUrl,
+                source.original_filename || "file",
+                source.mime_type || "text/plain",
+                "gpt-4o"
+              );
+              idempotencyExtractionDebug.used_vision_fallback = true;
+            } catch (visionErr) {
+              logger.warn("Vision extraction failed (idempotency):", visionErr);
+              idempotencyExtractionDebug.vision_fallback_error =
+                visionErr instanceof Error ? visionErr.message : String(visionErr);
+            }
+          }
+        }
+        if (typeof idempotencyExtractionResult === "undefined") {
+          const isCsvFile = (source.mime_type || "").toLowerCase() === "text/csv";
+          idempotencyExtractionResult = isCsvFile
+            ? await extractFromCSVWithChunking(
+                rawText,
+                source.original_filename || "file",
+                source.mime_type || "text/plain",
+                "gpt-4o"
+              )
+            : await extractWithLLM(
+                rawText,
+                source.original_filename || "file",
+                source.mime_type || "text/plain",
+                "gpt-4o"
+              );
+        }
+        let idempotencyExtractedData: Array<Record<string, unknown>>;
+        if ("entities" in idempotencyExtractionResult) {
+          idempotencyExtractedData = idempotencyExtractionResult.entities.map((entity) => ({
+            entity_type: entity.entity_type,
+            ...entity.fields,
+          }));
+          idempotencyExtractionDebug.extraction_field_keys =
+            idempotencyExtractionResult.entities.flatMap((e) =>
+              Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
+            );
+        } else {
+          const { entity_type, fields } = idempotencyExtractionResult;
+          idempotencyExtractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
+            (k) => k !== "entity_type" && k !== "type"
+          );
+          idempotencyExtractedData = [{ entity_type, ...fields }];
+        }
+        const defaultConfig = config.openaiApiKey
+          ? {
+              provider: "openai",
+              model_id: "gpt-4o",
+              temperature: 0,
+              prompt_hash: "llm_extraction_v2_idempotent",
+              code_version: "v0.2.0",
+            }
+          : {
+              provider: "rule_based",
+              model_id: "neotoma_v1",
+              temperature: 0,
+              prompt_hash: "n/a",
+              code_version: "v0.2.0",
+            };
+        const idempotencyInterpretationConfig = parsed.interpretation_config
+          ? {
+              provider: (parsed.interpretation_config.provider as string) || defaultConfig.provider,
+              model_id: (parsed.interpretation_config.model_id as string) || defaultConfig.model_id,
+              temperature:
+                (parsed.interpretation_config.temperature as number) ?? defaultConfig.temperature,
+              prompt_hash:
+                (parsed.interpretation_config.prompt_hash as string) || defaultConfig.prompt_hash,
+              code_version:
+                (parsed.interpretation_config.code_version as string) || defaultConfig.code_version,
+              feature_flags: parsed.interpretation_config.feature_flags as
+                | Record<string, boolean>
+                | undefined,
+            }
+          : defaultConfig;
+        const idempotencyFeatureFlags = parsed.interpretation_config?.feature_flags as
+          | Record<string, boolean>
+          | undefined;
+        const useFixedPoint = idempotencyFeatureFlags?.use_fixed_point ?? false;
+        let idempotencyInterpretationResult;
+        try {
+          idempotencyInterpretationResult = useFixedPoint
+            ? await runInterpretationWithFixedPointForIdempotency({
+                userId,
+                sourceId: existingSource.id,
+                extractedData: idempotencyExtractedData,
+                config: idempotencyInterpretationConfig,
+              })
+            : await runInterpretationForIdempotency({
+                userId,
+                sourceId: existingSource.id,
+                extractedData: idempotencyExtractedData,
+                config: idempotencyInterpretationConfig,
+              });
+        } catch (interpretError) {
+          logger.error("Interpretation error (idempotency-key reinterpret):", interpretError);
+          idempotencyInterpretationResult = {
+            error:
+              interpretError instanceof Error ? interpretError.message : String(interpretError),
+            skipped: true,
+            reason: "interpretation_failed",
+          };
+        }
+        let idempotencyEntityIds: string[] = [];
+        if (
+          idempotencyInterpretationResult &&
+          !(
+            "skipped" in idempotencyInterpretationResult && idempotencyInterpretationResult.skipped
+          ) &&
+          (idempotencyInterpretationResult as { entities?: { entityId: string }[] }).entities
+        ) {
+          idempotencyEntityIds = (
+            idempotencyInterpretationResult as { entities: { entityId: string }[] }
+          ).entities.map((e) => e.entityId);
+        } else {
+          idempotencyEntityIds = await this.getEntityIdsFromSource(existingSource.id);
+        }
+        const idempotencyRelatedData =
+          await this.getRelatedEntitiesAndRelationships(idempotencyEntityIds);
         return this.buildTextResponse({
           source_id: existingSource.id,
           content_hash: existingSource.content_hash,
           file_size: existingSource.file_size,
           deduplicated: true,
-          interpretation: parsed.interpret
-            ? {
-                skipped: true,
-                reason: "idempotency_key",
-                existing_observations_count: existingEntityIds.length,
-              }
-            : { skipped: true, reason: "interpret_false" },
+          interpretation: idempotencyInterpretationResult,
           interpretation_debug: {
-            interpret_requested: parsed.interpret,
+            interpret_requested: true,
             deduplicated: true,
-            existing_observations_count: existingEntityIds.length,
-            should_run: false,
-            reason: "idempotency_key",
+            existing_observations_count: existingEntityIdsForDebug.length,
+            should_run: true,
+            reason: "idempotency_key_reinterpret",
+            ...idempotencyExtractionDebug,
           },
-          related_entities: relatedData.entities,
-          related_relationships: relatedData.relationships,
+          related_entities: idempotencyRelatedData.entities,
+          related_relationships: idempotencyRelatedData.relationships,
         });
       }
     }
@@ -3332,12 +3602,9 @@ export class NeotomaServer {
     // Track entity IDs for related entities lookup
     let entityIds: string[] = [];
 
-    // Check if interpretation should run:
-    // 1. User requested interpretation (parsed.interpret === true)
-    // 2. Either file is new OR file is deduplicated but has no observations yet
+    // Check if interpretation should run: when interpret=true, always run (first time or reinterpret).
     const existingEntityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
-    const shouldRunInterpretation =
-      parsed.interpret && (!storageResult.deduplicated || existingEntityIds.length === 0);
+    const shouldRunInterpretation = parsed.interpret;
 
     // Add debug info to result
     result.interpretation_debug = {
@@ -3370,6 +3637,25 @@ export class NeotomaServer {
         // Extract data from file using AI interpretation
         const rawText = await extractTextFromBuffer(fileBuffer, detectedMimeType, detectedFilename);
 
+        // Debug: surface extraction input/output so store response shows why refinement may have few keys
+        const extractionDebug: {
+          raw_text_length?: number;
+          extraction_field_keys?: string[];
+          used_vision_fallback?: boolean;
+          vision_fallback_attempted?: boolean;
+          vision_fallback_image_got?: boolean;
+          vision_fallback_image_error?: string;
+          vision_fallback_error?: string;
+          pdf_worker_wrapper_used?: boolean;
+          pdf_worker_wrapper_path_tried?: string | null;
+          pdf_worker_set_worker_error?: string;
+        } = {};
+        extractionDebug.raw_text_length = typeof rawText === "string" ? rawText.length : 0;
+        const pdfDebug = getPdfWorkerDebug();
+        extractionDebug.pdf_worker_wrapper_used = pdfDebug.configured;
+        extractionDebug.pdf_worker_wrapper_path_tried = pdfDebug.wrapper_path_tried;
+        extractionDebug.pdf_worker_set_worker_error = pdfDebug.set_worker_error;
+
         // Check if OpenAI is configured
         if (!isLLMExtractionAvailable()) {
           return this.buildTextResponse({
@@ -3382,21 +3668,59 @@ export class NeotomaServer {
           });
         }
 
-        // Use CSV chunking for CSV files to avoid token limits
-        const isCsvFile = detectedMimeType?.toLowerCase() === "text/csv";
-        const extractionResult = isCsvFile
-          ? await extractFromCSVWithChunking(
-              rawText,
-              detectedFilename,
-              detectedMimeType,
-              "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
-            )
-          : await extractWithLLM(
-              rawText,
-              detectedFilename,
-              detectedMimeType,
-              "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
-            );
+        // When PDF text is empty (e.g. scanned/image-only), use vision on first page
+        const isPdf =
+          detectedMimeType?.toLowerCase().includes("pdf") ||
+          detectedFilename?.toLowerCase().endsWith(".pdf");
+        let extractionResult:
+          | Awaited<ReturnType<typeof extractWithLLM>>
+          | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
+          | undefined = undefined;
+        if (extractionDebug.raw_text_length === 0 && isPdf) {
+          extractionDebug.vision_fallback_attempted = true;
+          const imageResult = await getPdfFirstPageImageDataUrl(
+            fileBuffer,
+            detectedMimeType,
+            detectedFilename,
+            { returnError: true }
+          );
+          const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+          if (typeof imageResult === "object" && imageResult.error) {
+            extractionDebug.vision_fallback_image_error = imageResult.error;
+          }
+          extractionDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+          if (imageDataUrl) {
+            try {
+              extractionResult = await extractWithLLMFromImage(
+                imageDataUrl,
+                detectedFilename,
+                detectedMimeType,
+                "gpt-4o"
+              );
+              extractionDebug.used_vision_fallback = true;
+            } catch (visionErr) {
+              logger.warn("Vision extraction failed:", visionErr);
+              extractionDebug.vision_fallback_error =
+                visionErr instanceof Error ? visionErr.message : String(visionErr);
+            }
+          }
+        }
+        if (typeof extractionResult === "undefined") {
+          const isCsvFile = detectedMimeType?.toLowerCase() === "text/csv";
+          extractionResult = isCsvFile
+            ? await extractFromCSVWithChunking(
+                rawText,
+                detectedFilename,
+                detectedMimeType,
+                "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
+              )
+            : await extractWithLLM(
+                rawText,
+                detectedFilename,
+                detectedMimeType,
+                "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
+              );
+        }
 
         // Handle both single entity (LLMExtractionResult) and multi-entity (MultiEntityExtractionResult) results
         let extractedData: Array<Record<string, unknown>>;
@@ -3410,12 +3734,20 @@ export class NeotomaServer {
         } else {
           // Single entity result
           const { entity_type, fields } = extractionResult;
+          extractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
+            (k) => k !== "entity_type" && k !== "type"
+          );
           extractedData = [
             {
               entity_type,
               ...fields,
             },
           ];
+        }
+        if ("entities" in extractionResult) {
+          extractionDebug.extraction_field_keys = extractionResult.entities.flatMap((e) =>
+            Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
+          );
         }
 
         // Run interpretation with fixed-point guarantee
@@ -3472,6 +3804,10 @@ export class NeotomaServer {
             });
 
         result.interpretation = interpretationResult;
+        result.interpretation_debug = {
+          ...result.interpretation_debug,
+          ...extractionDebug,
+        };
 
         // Get entity IDs from interpretation result
         if (interpretationResult.entities && interpretationResult.entities.length > 0) {
@@ -3676,7 +4012,8 @@ export class NeotomaServer {
     entities: Record<string, unknown>[],
     sourcePriority: number = 100,
     idempotencyKey?: string,
-    originalFilename?: string
+    originalFilename?: string,
+    relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const { storeRawContent } = await import("./services/raw_storage.js");
     const { resolveEntity } = await import("./services/entity_resolution.js");
@@ -4178,14 +4515,7 @@ export class NeotomaServer {
             provenance: snapshot.provenance,
             user_id: snapshot.user_id,
           });
-          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
-
-          await supabase.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            {
-              onConflict: "entity_id",
-            }
-          );
+          await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
 
           // Derive and insert timeline events from date fields in snapshot
           const { deriveTimelineEventsFromSnapshot, deriveTimelineEventsFromRawFragments } =
@@ -4252,6 +4582,37 @@ export class NeotomaServer {
       }
     }
 
+    // Create relationships between just-created entities when requested (e.g. one-call chat: message PART_OF conversation)
+    if (relationships?.length) {
+      const { relationshipsService } = await import("./services/relationships.js");
+      const entityIds = createdEntities.map((e) => e.entityId);
+      for (const rel of relationships) {
+        if (rel.source_index >= entityIds.length || rel.target_index >= entityIds.length) {
+          logger.warn(
+            `store_structured: relationship index out of range (source_index=${rel.source_index}, target_index=${rel.target_index}, entities.length=${entityIds.length}); skipping`
+          );
+          continue;
+        }
+        const sourceEntityId = entityIds[rel.source_index];
+        const targetEntityId = entityIds[rel.target_index];
+        try {
+          await relationshipsService.createRelationship({
+            relationship_type: rel.relationship_type as RelationshipType,
+            source_entity_id: sourceEntityId,
+            target_entity_id: targetEntityId,
+            source_id: storageResult.sourceId,
+            metadata: {},
+            user_id: userId,
+          });
+        } catch (relError) {
+          logger.warn(
+            `store_structured: failed to create relationship ${rel.relationship_type} ${sourceEntityId} -> ${targetEntityId}:`,
+            relError instanceof Error ? relError.message : String(relError)
+          );
+        }
+      }
+    }
+
     // Get related entities and relationships for all created entities
     const relatedData = await this.getRelatedEntitiesAndRelationships(
       createdEntities.map((e) => e.entityId)
@@ -4280,6 +4641,13 @@ export class NeotomaServer {
       await import("./services/interpretation.js");
 
     const parsed = ReinterpretRequestSchema.parse(args);
+
+    if (!parsed.source_id) {
+      return this.buildTextResponse({
+        error: "source_id_required",
+        message: "source_id is required for MCP reinterpret action",
+      });
+    }
 
     // Get source metadata
     const source = await getSourceMetadata(parsed.source_id);
@@ -4504,12 +4872,7 @@ export class NeotomaServer {
             provenance: snapshot.provenance,
             user_id: snapshot.user_id,
           });
-          const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
-
-          await supabase.from("entity_snapshots").upsert(
-            toUpsert as Record<string, unknown>,
-            { onConflict: "entity_id" }
-          );
+          await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
         }
       }
     } catch (recomputeErr) {

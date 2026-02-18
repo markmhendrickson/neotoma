@@ -1,5 +1,6 @@
 import { supabase } from "../../db.js";
 import { queryEntities } from "../../services/entity_queries.js";
+import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
 import type { EntityWithProvenance } from "../../services/entity_queries.js";
 
@@ -8,6 +9,7 @@ interface QueryEntitiesParams {
   entityType?: string;
   includeMerged?: boolean;
   search?: string;
+  similarityThreshold?: number;
   limit?: number;
   offset?: number;
 }
@@ -22,6 +24,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
     entityType,
     includeMerged = false,
     search,
+    similarityThreshold,
     limit = 100,
     offset = 0,
   } = params;
@@ -30,11 +33,15 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
   let total: number;
 
   if (search && search.trim()) {
+    logger.info(
+      `[queryEntitiesWithCount] semantic search path: userId=${userId} search=${search.trim().slice(0, 50)} entityType=${entityType ?? "(any)"}`
+    );
     const { entityIds, total: semanticTotal } = await semanticSearchEntities({
       searchText: search.trim(),
       userId,
       entityType,
       includeMerged,
+      similarityThreshold,
       limit,
       offset,
     });

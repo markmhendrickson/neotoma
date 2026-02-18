@@ -1,3 +1,7 @@
+---
+alwaysApply: true
+---
+
 # UI Test Requirements Rules
 
 **Reference:** `docs/testing/testing_standard.md` — E2E test requirements

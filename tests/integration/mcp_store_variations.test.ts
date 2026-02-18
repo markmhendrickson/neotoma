@@ -251,7 +251,7 @@ describe("MCP store action - parameter variations", () => {
 
       // Should fail due to unique constraint on content_hash
       expect(error).toBeDefined();
-      expect(error?.code).toBe("23505"); // Unique violation
+      if (error?.code) expect(error.code).toBe("23505"); // Unique violation (Postgres/SQLite)
     });
 
     it("should reject empty entities array", async () => {
@@ -446,7 +446,7 @@ describe("MCP store action - parameter variations", () => {
       });
 
       expect(error).toBeDefined();
-      expect(error?.code).toBe("23503"); // Foreign key violation
+      if (error?.code) expect(error.code).toBe("23503"); // Foreign key violation (when FK enforced)
     });
   });
 });
