@@ -1,4 +1,4 @@
-import { supabase } from "../../db.js";
+import { db } from "../../db.js";
 import { queryEntities } from "../../services/entity_queries.js";
 import { logger } from "../../utils/logger.js";
 import { semanticSearchEntities } from "../../services/entity_semantic_search.js";
@@ -83,7 +83,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       offset,
     });
 
-    let countQuery = supabase.from("entities").select("*", { count: "exact", head: true });
+    let countQuery = db.from("entities").select("*", { count: "exact", head: true });
     countQuery = countQuery.eq("user_id", userId);
     if (entityType) {
       countQuery = countQuery.eq("entity_type", entityType);

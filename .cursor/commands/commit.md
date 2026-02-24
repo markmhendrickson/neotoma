@@ -567,7 +567,7 @@ development:
      - Configuration (`*.json`, `*.yaml`, `*.toml`, `*.config.*`)
      - Tests (`**/*.test.*`, `**/*.spec.*`, or configured test paths)
      - Build/deployment (`Dockerfile`, `*.sh`, or configured paths)
-     - **Database migrations** (`supabase/migrations/**`, `**/migrations/*.sql`) - these indicate release execution
+     - **Database migrations** (`**/migrations/*.sql`) - these indicate release execution
    - Identify major functional areas affected
 
 3. **Analyze Change Magnitude:**

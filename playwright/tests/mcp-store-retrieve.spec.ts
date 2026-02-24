@@ -14,7 +14,7 @@ import {
   attachBrowserLogging,
   routeChatThroughMock,
 } from "./helpers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 const uploadFixturePath = path.join(
   repoRoot,
@@ -29,11 +29,11 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
   test.afterEach(async () => {
     // Clean up test data
     if (createdEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
   });
@@ -76,7 +76,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     createdEntityIds.push(entityId);
 
     // Verify entity was created in database
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("*")
       .eq("id", entityId)
@@ -87,7 +87,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     expect(entity!.entity_type).toBe("company");
 
     // Verify entity snapshot was created
-    const { data: snapshot, error: snapshotError } = await supabase
+    const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", entityId)
@@ -111,7 +111,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     await primeLocalSettings(page);
 
     // Create entity directly in database
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -124,7 +124,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     createdEntityIds.push(entity!.id);
 
     // Create entity snapshot
-    await supabase
+    await db
       .from("entity_snapshots")
       .insert({
         entity_id: entity!.id,
@@ -193,7 +193,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     createdSourceIds.push(sourceId);
 
     // Verify source was created
-    const { data: source, error: sourceError } = await supabase
+    const { data: source, error: sourceError } = await db
       .from("sources")
       .select("*")
       .eq("id", sourceId)
@@ -204,7 +204,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
     expect(source!.storage_status).toBe("uploaded");
 
     // Verify interpretation was created
-    const { data: interpretations } = await supabase
+    const { data: interpretations } = await db
       .from("interpretations")
       .select("*")
       .eq("source_id", sourceId);
@@ -215,7 +215,7 @@ test.describe("E2E-006: MCP Store and Retrieve Flow", () => {
       expect(interpretations[0].status).toBe("completed");
 
       // Verify observations were created
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("interpretation_id", interpretations[0].id);

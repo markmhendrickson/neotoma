@@ -2,7 +2,7 @@
 // Schema validation, entity resolution, and unknown field routing
 // Implements idempotence pattern: canonicalization, hash-based IDs, deduplication
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { schemaRegistry, type SchemaDefinition, type SchemaRegistryEntry } from "./schema_registry.js";
 import { resolveEntity } from "./entity_resolution.js";
 import {
@@ -26,6 +26,7 @@ import {
   getEntitySnapshotUpsertPayload,
 } from "./entity_snapshot_embedding.js";
 import { logger } from "../utils/logger.js";
+import { config } from "../config.js";
 
 
 export interface InterpretationConfig {
@@ -105,7 +106,7 @@ export async function runInterpretation(
   const { userId, sourceId, extractedData, config } = options;
 
   // Create interpretation
-  const { data: run, error: runError } = await supabase
+  const { data: run, error: runError } = await db
     .from("interpretations")
     .insert({
       user_id: userId,
@@ -177,20 +178,20 @@ export async function runInterpretation(
       );
       let currentEntityData = entityData;
 
+      const codeSchema = getSchemaDefinition(entityType);
+
       // Load active entity schema (user-scoped first, then global) from database
       // NOTE: Schemas should be initialized in the database via `npm run schema:init`
       let schema: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(entityType, userId);
 
       // Fallback to code-defined entity schemas if database schema not found
       if (!schema) {
-        if (process.env.NODE_ENV === "development" || process.env.NEOTOMA_ENV === "development") {
+        if (process.env.NEOTOMA_ENV !== "production") {
           console.warn(
             `[Schema Fallback] No database entity schema found for entity type "${entityType}". ` +
             `Using code fallback. Run 'npm run schema:init' to register schemas in the database.`
           );
         }
-
-        const codeSchema = getSchemaDefinition(entityType);
 
         if (codeSchema && codeSchema.entity_type && codeSchema.schema_definition && codeSchema.reducer_config) {
           schema = {
@@ -205,8 +206,8 @@ export async function runInterpretation(
         }
       }
 
-      // When no known schema: optionally create a user-scoped schema from extracted fields
-      if (!schema && config.create_schema_for_unknown !== false) {
+      // When no known schema at all (neither DB nor code): optionally create a user-scoped schema from extracted fields
+      if (!schema && !codeSchema && config.create_schema_for_unknown !== false) {
         schema = await schemaRegistry.ensureSchemaForExtractedEntity(
           entityType,
           entityData,
@@ -219,14 +220,22 @@ export async function runInterpretation(
         }
       }
 
-      if (!schema) {
+      const effectiveSchemaDefinition = {
+        fields: {
+          ...(schema?.schema_definition?.fields ?? {}),
+          ...(codeSchema?.schema_definition?.fields ?? {}),
+        },
+      };
+      const effectiveSchemaVersion = schema?.schema_version ?? codeSchema?.schema_version ?? "1.0";
+
+      if (Object.keys(effectiveSchemaDefinition.fields).length === 0) {
         // No schema found - route all fields to raw_fragments (helps debug: log extracted type)
         logger.warn(
           `[Interpretation] No schema for entity_type "${entityType}" (resolved from extracted data); routing to raw_fragments. ` +
             `Run schema:init or add alias for this type.`
         );
         const fragmentId = randomUUID();
-        await supabase.from("raw_fragments").insert({
+        await db.from("raw_fragments").insert({
           id: fragmentId,
           source_id: sourceId,
           interpretation_id: interpretationId,
@@ -251,7 +260,7 @@ export async function runInterpretation(
       // Validate fields against schema (with converter support)
       const { validFields, unknownFields, originalValues } = validateAgainstSchema(
         fieldsToValidate,
-        schema.schema_definition
+        effectiveSchemaDefinition
       );
 
       // Store original values in raw_fragments for converted fields (preserves zero data loss)
@@ -262,7 +271,7 @@ export async function runInterpretation(
         }
         
         // Check if fragment already exists (for idempotence)
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("raw_fragments")
           .select("id, frequency_count")
           .eq("source_id", sourceId)
@@ -272,14 +281,14 @@ export async function runInterpretation(
 
         if (existing) {
           // Update existing fragment
-          await supabase
+          await db
             .from("raw_fragments")
             .update({
               fragment_value: value,
               fragment_envelope: {
                 reason: "converted_value_original",
                 entity_type: entityType,
-                schema_version: schema.schema_version,
+                schema_version: effectiveSchemaVersion,
                 converted_to: validFields[key],
               },
               frequency_count: (existing.frequency_count || 1) + 1,
@@ -289,7 +298,7 @@ export async function runInterpretation(
         } else {
           // Insert new fragment
           const fragmentId = randomUUID();
-          await supabase.from("raw_fragments").insert({
+          await db.from("raw_fragments").insert({
             id: fragmentId,
             source_id: sourceId,
             interpretation_id: interpretationId,
@@ -300,7 +309,7 @@ export async function runInterpretation(
             fragment_envelope: {
               reason: "converted_value_original",
               entity_type: entityType,
-              schema_version: schema.schema_version,
+              schema_version: effectiveSchemaVersion,
               converted_to: validFields[key],
             },
           });
@@ -315,7 +324,7 @@ export async function runInterpretation(
           continue;
         }
         // Check if fragment already exists (for idempotence)
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("raw_fragments")
           .select("id, frequency_count")
           .eq("source_id", sourceId)
@@ -325,24 +334,41 @@ export async function runInterpretation(
 
         if (existing) {
           // Update existing fragment (increment frequency, update last_seen)
-          await supabase
+          const newFreq = (existing.frequency_count || 1) + 1;
+          await db
             .from("raw_fragments")
             .update({
               fragment_value: value,
               fragment_envelope: {
                 reason: "unknown_field",
                 entity_type: entityType,
-                schema_version: schema.schema_version,
+                schema_version: effectiveSchemaVersion,
               },
-              frequency_count: (existing.frequency_count || 1) + 1,
+              frequency_count: newFreq,
               last_seen: new Date().toISOString(),
             })
             .eq("id", existing.id);
           unknownFieldsCount++;
+          // Queue auto-enhancement so raw_fragments can promote to schema
+          try {
+            const { schemaRecommendationService } =
+              await import("./schema_recommendation.js");
+            await schemaRecommendationService.queueAutoEnhancementCheck({
+              entity_type: entityType,
+              fragment_key: key,
+              user_id: userId,
+              frequency_count: newFreq,
+            });
+          } catch (queueError: unknown) {
+            logger.warn(
+              `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+              queueError instanceof Error ? queueError.message : String(queueError)
+            );
+          }
         } else {
           // Insert new fragment
           const fragmentId = randomUUID();
-          const { error: insertError } = await supabase.from("raw_fragments").insert({
+          const { error: insertError } = await db.from("raw_fragments").insert({
             id: fragmentId,
             source_id: sourceId,
             interpretation_id: interpretationId,
@@ -353,14 +379,14 @@ export async function runInterpretation(
             fragment_envelope: {
               reason: "unknown_field",
               entity_type: entityType,
-              schema_version: schema.schema_version,
+              schema_version: effectiveSchemaVersion,
             },
           });
           
           // Handle race condition (unique constraint violation)
           if (insertError?.code === "23505") {
             // Another process inserted it, retry as update
-            const { data: retryExisting } = await supabase
+            const { data: retryExisting } = await db
               .from("raw_fragments")
               .select("id, frequency_count")
               .eq("source_id", sourceId)
@@ -369,27 +395,68 @@ export async function runInterpretation(
               .maybeSingle();
             
             if (retryExisting) {
-              await supabase
+              const retryFreq = (retryExisting.frequency_count || 1) + 1;
+              await db
                 .from("raw_fragments")
                 .update({
                   fragment_value: value,
                   fragment_envelope: {
                     reason: "unknown_field",
                     entity_type: entityType,
-                    schema_version: schema.schema_version,
+                    schema_version: effectiveSchemaVersion,
                   },
-                  frequency_count: (retryExisting.frequency_count || 1) + 1,
+                  frequency_count: retryFreq,
                   last_seen: new Date().toISOString(),
                 })
                 .eq("id", retryExisting.id);
+              try {
+                const { schemaRecommendationService } =
+                  await import("./schema_recommendation.js");
+                await schemaRecommendationService.queueAutoEnhancementCheck({
+                  entity_type: entityType,
+                  fragment_key: key,
+                  user_id: userId,
+                  frequency_count: retryFreq,
+                });
+              } catch (queueError: unknown) {
+                logger.warn(
+                  `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+                  queueError instanceof Error ? queueError.message : String(queueError)
+                );
+              }
+            }
+          } else if (!insertError) {
+            // New fragment inserted successfully; queue auto-enhancement
+            try {
+              const { schemaRecommendationService } =
+                await import("./schema_recommendation.js");
+              await schemaRecommendationService.queueAutoEnhancementCheck({
+                entity_type: entityType,
+                fragment_key: key,
+                user_id: userId,
+                frequency_count: 1,
+              });
+            } catch (queueError: unknown) {
+              logger.warn(
+                `[Interpretation] Failed to queue auto-enhancement for ${entityType}.${key}:`,
+                queueError instanceof Error ? queueError.message : String(queueError)
+              );
             }
           }
           unknownFieldsCount++;
         }
       }
 
+      const validFieldKeys = Object.keys(validFields).filter((key) => key !== "schema_version");
+      if (validFieldKeys.length === 0) {
+        logger.warn(
+          `[Interpretation] Skipping observation creation for ${entityType}: no schema-valid fields after validation`
+        );
+        continue;
+      }
+
       // Canonicalize valid fields for idempotence
-      const canonicalFields = canonicalizeFields(validFields, schema.schema_definition);
+      const canonicalFields = canonicalizeFields(validFields, effectiveSchemaDefinition);
       const canonicalHash = computeCanonicalHash(canonicalFields);
 
       // Resolve entity (user-scoped)
@@ -432,7 +499,7 @@ export async function runInterpretation(
         id: observationId,
         entity_id: entityId,
         entity_type: entityType,
-        schema_version: schema.schema_version,
+        schema_version: effectiveSchemaVersion,
         source_id: sourceId,
         interpretation_id: interpretationId,
         observed_at: new Date().toISOString(),
@@ -443,7 +510,7 @@ export async function runInterpretation(
         user_id: userId,
       };
 
-      let { error: obsError } = await supabase
+      let { error: obsError } = await db
         .from("observations")
         .insert(observationData);
 
@@ -460,7 +527,7 @@ export async function runInterpretation(
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { canonical_hash: _canonical_hash, ...observationDataWithoutHash } = observationData;
-        ({ error: obsError } = await supabase
+        ({ error: obsError } = await db
           .from("observations")
           .insert(observationDataWithoutHash));
       }
@@ -481,7 +548,7 @@ export async function runInterpretation(
     for (const entity of entities) {
       try {
         // Get all observations for entity
-        const { data: allObservations, error: fetchError } = await supabase
+        const { data: allObservations, error: fetchError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", entity.entityId)
@@ -522,7 +589,7 @@ export async function runInterpretation(
           });
           const toUpsert = getEntitySnapshotUpsertPayload(rowWithEmbedding);
 
-          await supabase.from("entity_snapshots").upsert(
+          await db.from("entity_snapshots").upsert(
             toUpsert as Record<string, unknown>,
             {
               onConflict: "entity_id",
@@ -539,7 +606,7 @@ export async function runInterpretation(
     }
 
     // Mark interpretation as completed
-    await supabase
+    await db
       .from("interpretations")
       .update({
         status: "completed",
@@ -558,7 +625,7 @@ export async function runInterpretation(
     };
   } catch (error) {
     // Mark interpretation as failed
-    await supabase
+    await db
       .from("interpretations")
       .update({
         status: "failed",
@@ -597,7 +664,7 @@ export async function runInterpretationWithFixedPoint(
     
     for (const entity of result.entities) {
       // Get observation to access canonical fields
-      const { data: observation } = await supabase
+      const { data: observation } = await db
         .from("observations")
         .select("fields, canonical_hash")
         .eq("id", entity.observationId)
@@ -638,17 +705,21 @@ export async function runInterpretationWithFixedPoint(
 }
 
 /**
- * Check interpretation quota (simple hard-coded limit for v0.2.0)
+ * Check interpretation quota (simple hard-coded limit for v0.2.0).
+ * In local mode (user's own OPENAI key), no cap is enforced.
  */
 export async function checkInterpretationQuota(
   userId: string,
   limit: number = 100
 ): Promise<{ allowed: boolean; current: number; limit: number }> {
+  if (config.storageBackend === "local") {
+    return { allowed: true, current: 0, limit: 0 };
+  }
   // Count interpretation runs in the last 30 days
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const { count, error } = await supabase
+  const { count, error } = await db
     .from("interpretations")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
@@ -726,7 +797,7 @@ export async function createRelationshipObservations(
       ].join("-");
 
       // Check for duplicate observation (idempotence)
-      const { data: existingObs } = await supabase
+      const { data: existingObs } = await db
         .from("relationship_observations")
         .select("id")
         .eq("source_id", sourceId)
@@ -759,7 +830,7 @@ export async function createRelationshipObservations(
         user_id: userId,
       };
 
-      let { error: obsError } = await supabase
+      let { error: obsError } = await db
         .from("relationship_observations")
         .insert(relationshipObsData);
 
@@ -776,7 +847,7 @@ export async function createRelationshipObservations(
         // Retry without canonical_hash
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { canonical_hash: _canonical_hash, ...relationshipObsDataWithoutHash } = relationshipObsData;
-        ({ error: obsError } = await supabase
+        ({ error: obsError } = await db
           .from("relationship_observations")
           .insert(relationshipObsDataWithoutHash));
       }
@@ -814,7 +885,7 @@ export async function createRelationshipObservations(
   for (const relationshipKey of uniqueRelationshipKeys) {
     try {
       // Get all observations for this relationship
-      const { data: allObservations, error: fetchError } = await supabase
+      const { data: allObservations, error: fetchError } = await db
         .from("relationship_observations")
         .select("*")
         .eq("relationship_key", relationshipKey)
@@ -837,7 +908,7 @@ export async function createRelationshipObservations(
         );
 
         // Save snapshot
-        await supabase.from("relationship_snapshots").upsert(
+        await db.from("relationship_snapshots").upsert(
           {
             relationship_key: snapshot.relationship_key,
             relationship_type: snapshot.relationship_type,

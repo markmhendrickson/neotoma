@@ -5,7 +5,7 @@
  * Supports auto-enhancement for high-confidence fields and manual recommendations.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { SchemaRegistryService } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
@@ -118,7 +118,7 @@ export class SchemaRecommendationService {
 
     // 4. Query raw_fragments for this field
     // Include source_id for diversity checks
-    let fragmentsQuery = supabase
+    let fragmentsQuery = db
       .from("raw_fragments")
       .select("fragment_value, frequency_count, source_id, entity_type")
       .eq("entity_type", options.entity_type)
@@ -235,7 +235,7 @@ export class SchemaRecommendationService {
         // Build query with proper null handling for user_id
         // Note: Queue items convert default UUID to null, but observations may have default UUID
         // So we need to check both null and default UUID
-        let obsQuery = supabase
+        let obsQuery = db
           .from("observations")
           .select("id", { count: "exact", head: true })
           .eq("source_id", sourceId)
@@ -310,7 +310,7 @@ export class SchemaRecommendationService {
     const idempotencyKey = `auto_enhance_${options.entity_type}_${options.field_name}_${options.user_id || "global"}`;
 
     // Check if already enhanced (idempotent check)
-    const { data: existing } = await supabase
+    const { data: existing } = await db
       .from("schema_recommendations")
       .select("id, status")
       .eq("idempotency_key", idempotencyKey)
@@ -392,7 +392,7 @@ export class SchemaRecommendationService {
         ];
       }
       
-      const { data: recommendation, error: recError } = await supabase
+      const { data: recommendation, error: recError } = await db
         .from("schema_recommendations")
         .insert(recommendationData)
         .select()
@@ -455,7 +455,7 @@ export class SchemaRecommendationService {
       | "object";
   }> {
     // Get all samples for this field
-    let confidenceQuery = supabase
+    let confidenceQuery = db
       .from("raw_fragments")
       .select("fragment_value, frequency_count")
       .eq("entity_type", options.entity_type)
@@ -531,7 +531,7 @@ export class SchemaRecommendationService {
     const minConfidence = options.min_confidence || 0.8;
 
     // Query raw_fragments grouped by entity_type and fragment_key
-    let query = supabase
+    let query = db
       .from("raw_fragments")
       .select(
         "entity_type, fragment_key, fragment_value, frequency_count, user_id",
@@ -790,7 +790,7 @@ Return your recommendations in JSON format:
     confidence_score: number;
     reasoning?: string;
   }): Promise<string> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("schema_recommendations")
       .insert({
         entity_type: recommendation.entity_type,
@@ -825,7 +825,7 @@ Return your recommendations in JSON format:
     source?: "raw_fragments" | "agent" | "inference";
     status?: "pending" | "approved" | "rejected";
   }): Promise<Array<SchemaRecommendation & { id: string; status: string }>> {
-    let query = supabase.from("schema_recommendations").select("*");
+    let query = db.from("schema_recommendations").select("*");
 
     if (options.entity_type) {
       query = query.eq("entity_type", options.entity_type);
@@ -881,7 +881,7 @@ Return your recommendations in JSON format:
         : null;
       
       // Check if entry already exists
-      let query = supabase
+      let query = db
         .from("auto_enhancement_queue")
         .select("id, status, frequency_count")
         .eq("entity_type", options.entity_type)
@@ -902,7 +902,7 @@ Return your recommendations in JSON format:
       
       if (existing) {
         // Update existing entry
-        const { error: updateError } = await supabase
+        const { error: updateError } = await db
           .from("auto_enhancement_queue")
           .update({
             status: "pending", // Reset to pending if it was skipped/failed
@@ -915,7 +915,7 @@ Return your recommendations in JSON format:
         }
       } else {
         // Insert new entry
-        const { error: insertError } = await supabase
+        const { error: insertError } = await db
           .from("auto_enhancement_queue")
           .insert({
             entity_type: options.entity_type,
@@ -1134,7 +1134,7 @@ Return your recommendations in JSON format:
     fieldName: string,
     userId?: string,
   ): Promise<boolean> {
-    const { data: blacklist } = await supabase
+    const { data: blacklist } = await db
       .from("field_blacklist")
       .select("field_pattern")
       .or(

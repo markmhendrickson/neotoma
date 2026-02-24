@@ -38,7 +38,7 @@ const unblockInstructions = `
 All infrastructure blockers have been resolved! You can now proceed with tests.
 
 **What was fixed:**
-1. ✅ Supabase CLI is now linked to the project
+1. ✅ Database migrations CLI is now linked to the project
 2. ✅ Database migrations have been applied (schema is up to date)
 3. ✅ Playwright browsers are installed
 4. ✅ Automated setup script created: \`scripts/setup_agent_environment.sh\`

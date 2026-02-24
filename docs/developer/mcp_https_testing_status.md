@@ -25,8 +25,8 @@
 
 ### 3. Server Configuration ⚠️
 - **MCP server running:** Port 8080 (confirmed)
-- **API_BASE_URL:** Needs to be set to HTTPS URL for OAuth redirects
-- **Action required:** Restart MCP server with `API_BASE_URL` environment variable
+- **NEOTOMA_HOST_URL:** Set to HTTPS URL for OAuth redirects (or rely on auto-discovery from tunnel file)
+- **Action required:** Restart MCP server with `NEOTOMA_HOST_URL` environment variable if not using auto-discovery
 
 ## Next Steps
 
@@ -36,7 +36,7 @@
 
 ```bash
 # Set API_BASE_URL to ngrok HTTPS URL
-export API_BASE_URL="https://melissia-introrse-correspondently.ngrok-free.dev"
+export NEOTOMA_HOST_URL="https://melissia-introrse-correspondently.ngrok-free.dev"
 
 # Restart MCP server
 npm run dev:api
@@ -44,7 +44,7 @@ npm run dev:api
 
 **Or add to `.env` file:**
 ```bash
-echo 'API_BASE_URL="https://melissia-introrse-correspondently.ngrok-free.dev"' >> .env
+echo 'NEOTOMA_HOST_URL="https://melissia-introrse-correspondently.ngrok-free.dev"' >> .env
 ```
 
 Then restart the server.
@@ -94,14 +94,14 @@ npm run tunnel:https
 ### Connect Button Still Not Appearing
 
 1. **Verify HTTPS URL is correct** in `.cursor/mcp.json`
-2. **Verify API_BASE_URL is set** and server restarted
+2. **Verify NEOTOMA_HOST_URL is set** and server restarted (or rely on auto-discovery)
 3. **Check tunnel is active:** `curl https://melissia-introrse-correspondently.ngrok-free.dev/.well-known/oauth-authorization-server`
 4. **Clear Cursor's MCP cache:** Remove and re-add server
 5. **Check server logs** for 401 responses
 
 ### OAuth Redirect Fails
 
-- **Verify API_BASE_URL** matches ngrok URL exactly
+- **Verify NEOTOMA_HOST_URL** matches ngrok URL exactly
 - **Check discovery endpoints** return HTTPS URLs:
   ```bash
   curl https://melissia-introrse-correspondently.ngrok-free.dev/.well-known/oauth-authorization-server
@@ -111,7 +111,7 @@ npm run tunnel:https
 
 **Note:** ngrok free tier assigns new URLs on each restart. If you restart ngrok:
 1. Update `.cursor/mcp.json` with new URL
-2. Update `API_BASE_URL` environment variable
+2. Update `NEOTOMA_HOST_URL` environment variable
 3. Restart MCP server
 4. Restart Cursor
 
@@ -121,7 +121,7 @@ npm run tunnel:https
 - **MCP Endpoint:** `https://melissia-introrse-correspondently.ngrok-free.dev/mcp`
 - **Tunnel Status:** Active (PID in `/tmp/ngrok-mcp.pid`)
 - **Server Status:** Running on port 8080
-- **API_BASE_URL:** Needs to be set to HTTPS URL
+- **NEOTOMA_HOST_URL:** Set to HTTPS URL (or use auto-discovery)
 
 ## References
 

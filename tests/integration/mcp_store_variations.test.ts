@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { verifySourceExists, verifyEntityExists } from "../helpers/database_verifiers.js";
 import { readFileSync } from "node:fs";
@@ -23,7 +23,7 @@ describe("MCP store action - parameter variations", () => {
         },
       ];
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -42,7 +42,7 @@ describe("MCP store action - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .insert(
           entities.map((entity) => ({
@@ -72,7 +72,7 @@ describe("MCP store action - parameter variations", () => {
         },
       ];
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: null,
@@ -89,7 +89,7 @@ describe("MCP store action - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .insert(
           entities.map((entity) => ({
@@ -118,7 +118,7 @@ describe("MCP store action - parameter variations", () => {
         },
       ];
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: defaultUserId,
@@ -135,7 +135,7 @@ describe("MCP store action - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .insert(
           entities.map((entity) => ({
@@ -163,7 +163,7 @@ describe("MCP store action - parameter variations", () => {
         },
       ];
 
-      const { data: source, error: sourceError} = await supabase
+      const { data: source, error: sourceError} = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -194,7 +194,7 @@ describe("MCP store action - parameter variations", () => {
         },
       ];
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -220,7 +220,7 @@ describe("MCP store action - parameter variations", () => {
       const contentHash = "duplicate-test-hash";
 
       // First insert
-      const { data: source1, error: source1Error } = await supabase
+      const { data: source1, error: source1Error } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -236,7 +236,7 @@ describe("MCP store action - parameter variations", () => {
       tracker.trackSource(source1!.id);
 
       // Second insert with same hash
-      const { data: source2, error } = await supabase
+      const { data: source2, error } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -258,7 +258,7 @@ describe("MCP store action - parameter variations", () => {
       const entities: any[] = [];
 
       // Attempting to insert empty array should result in no observations
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -276,7 +276,7 @@ describe("MCP store action - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // No observations to insert - verify source exists but has no observations
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_id", source!.id);
@@ -291,7 +291,7 @@ describe("MCP store action - parameter variations", () => {
       const fileContent = readFileSync(testFile);
       const base64Content = fileContent.toString("base64");
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -316,7 +316,7 @@ describe("MCP store action - parameter variations", () => {
     it("should store unstructured data with file_path", async () => {
       const testFile = join(process.cwd(), "tests/fixtures/sample_invoice.pdf");
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -338,7 +338,7 @@ describe("MCP store action - parameter variations", () => {
     });
 
     it("should store unstructured data with interpret: false", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -356,7 +356,7 @@ describe("MCP store action - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // Verify no observations created (interpret: false)
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_id", source!.id);
@@ -371,7 +371,7 @@ describe("MCP store action - parameter variations", () => {
         max_tokens: 2000
       };
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -397,7 +397,7 @@ describe("MCP store action - parameter variations", () => {
     it("should accept same idempotency_key for identical operations", async () => {
       const idempotencyKey = `idem-${Date.now()}`;
 
-      const { data: source1, error: source1Error } = await supabase
+      const { data: source1, error: source1Error } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -419,7 +419,7 @@ describe("MCP store action - parameter variations", () => {
 
   describe("error cases", () => {
     it("should reject invalid entity_type", async () => {
-      const { error } = await supabase.from("observations")
+      const { error } = await db.from("observations")
     .insert({
         entity_id: `ent_${Date.now()}`,
         entity_type: "", // Empty entity_type
@@ -434,7 +434,7 @@ describe("MCP store action - parameter variations", () => {
     });
 
     it("should reject invalid source_id foreign key", async () => {
-      const { error } = await supabase.from("observations")
+      const { error } = await db.from("observations")
     .insert({
         entity_id: `ent_${Date.now()}`,
         entity_type: "task",

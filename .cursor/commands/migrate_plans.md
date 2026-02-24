@@ -49,7 +49,7 @@ The migration command analyzes plan **content** (not just todos) to determine im
 For each plan, the command:
 
 1. **Extracts implementation items** from plan content:
-   - File paths (`src/services/...`, `supabase/migrations/...`)
+   - File paths (`src/services/...`, `**/migrations/...`)
    - Function names (`createDeletionObservation`, `generateRecordSummary`)
    - API endpoints (`/gdpr_delete`, `/store_record`)
    - Database tables/columns (`CREATE TABLE`, `ALTER TABLE`)

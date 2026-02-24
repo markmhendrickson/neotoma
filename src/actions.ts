@@ -5,10 +5,11 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
-import { supabase } from "./db.js";
+import { db } from "./db.js";
 import { config } from "./config.js";
 import fs from "fs";
 import path from "path";
+import yaml from "js-yaml";
 import {
   ensurePublicKeyRegistered,
   getPublicKey,
@@ -26,7 +27,7 @@ import { logger } from "./utils/logger.js";
 import { OAuthError } from "./services/mcp_oauth_errors.js";
 import { ensureLocalDevUser, LOCAL_DEV_USER_ID } from "./services/local_auth.js";
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
-import { getMcpAuthToken } from "./repositories/sqlite/supabase_adapter.js";
+import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
@@ -44,12 +45,13 @@ import {
   RegisterSchemaRequestSchema,
   RelationshipSnapshotRequestSchema,
   ReinterpretRequestSchema,
+  InterpretUninterpretedRequestSchema,
   RestoreEntityRequestSchema,
   RestoreRelationshipRequestSchema,
   RetrieveEntityByIdentifierSchema,
   RetrieveGraphNeighborhoodSchema,
   RetrieveRelatedEntitiesSchema,
-  StoreStructuredRequestSchema,
+  StoreRequestSchema,
   StoreUnstructuredRequestSchema,
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
@@ -90,7 +92,10 @@ app.use(
 );
 // Configure CORS to allow frontend origin
 const corsOptions = {
-  origin: process.env.FRONTEND_URL || "http://localhost:5195",
+  origin:
+    process.env.NEOTOMA_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    "http://localhost:5195",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
@@ -154,9 +159,9 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
   res.setHeader("Content-Type", "application/json");
   res.json({
     issuer: base,
-    authorization_endpoint: `${base}/api/mcp/oauth/authorize`,
-    token_endpoint: `${base}/api/mcp/oauth/token`,
-    registration_endpoint: `${base}/api/mcp/oauth/register`,
+    authorization_endpoint: `${base}/mcp/oauth/authorize`,
+    token_endpoint: `${base}/mcp/oauth/token`,
+    registration_endpoint: `${base}/mcp/oauth/register`,
     scopes_supported: ["openid", "email"],
     response_types_supported: ["code"],
     code_challenge_methods_supported: ["S256"],
@@ -207,12 +212,17 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
 });
 
 // Server info endpoint (no-auth) - exposes server port for MCP configuration
-// When MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
-app.get("/api/server-info", (_req, res) => {
-  const httpPort = process.env.HTTP_PORT
-    ? parseInt(process.env.HTTP_PORT, 10)
+// When NEOTOMA_MCP_PROXY_URL or MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
+app.get("/server-info", (_req, res) => {
+  const httpPortEnv =
+    process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
+  const httpPort = httpPortEnv
+    ? parseInt(httpPortEnv, 10)
     : config.httpPort || 8080;
-  const mcpBase = process.env.MCP_PROXY_URL || config.apiBase;
+  const mcpBase =
+    process.env.NEOTOMA_MCP_PROXY_URL ||
+    process.env.MCP_PROXY_URL ||
+    config.apiBase;
   const base = mcpBase.replace(/\/$/, "");
   const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
   res.json({
@@ -567,7 +577,7 @@ app.get("/health", (_req, res) => {
 // ============================================================================
 
 // Initiate MCP OAuth flow
-app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
+app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
   try {
     const { connection_id, client_name, redirect_uri } = req.body;
 
@@ -576,13 +586,16 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
     }
 
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
-    const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+    const frontendBase =
+      process.env.NEOTOMA_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:5195";
     const finalRedirectUri =
       typeof redirect_uri === "string" && redirect_uri.length > 0
         ? redirect_uri
         : config.storageBackend === "local"
           ? `${frontendBase}/oauth`
-          : `${config.apiBase}/api/mcp/oauth/callback`;
+          : `${config.apiBase}/mcp/oauth/callback`;
     const result = await initiateOAuthFlow(connection_id, client_name, finalRedirectUri);
 
     return res.json(result);
@@ -607,7 +620,7 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
         details: oauthError.details,
         timestamp: new Date().toISOString(),
         ...(oauthError.code === "OAUTH_CLIENT_REGISTRATION_FAILED" && {
-          hint: "Enable 'Allow Dynamic OAuth Apps' in Supabase Dashboard > Authentication > OAuth Server, or set SUPABASE_OAUTH_CLIENT_ID in .env file",
+          hint: "Enable 'Allow Dynamic OAuth Apps' in auth server, or set NEOTOMA_OAUTH_CLIENT_ID in .env file",
         }),
       });
     }
@@ -615,7 +628,7 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
     // Fallback for non-OAuth errors
     const isConfigError =
       error.message?.includes("client_id not configured") ||
-      error.message?.includes("SUPABASE_OAUTH_CLIENT_ID");
+      error.message?.includes("OAUTH_CLIENT_ID");
     const statusCode = isConfigError ? 400 : 500;
 
     return res.status(statusCode).json({
@@ -624,19 +637,19 @@ app.post("/api/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
       message: error.message,
       timestamp: new Date().toISOString(),
       ...(isConfigError && {
-        hint: "Enable 'Allow Dynamic OAuth Apps' in Supabase Dashboard, or set SUPABASE_OAUTH_CLIENT_ID in .env file",
+        hint: "Enable 'Allow Dynamic OAuth Apps' in auth server, or set NEOTOMA_OAUTH_CLIENT_ID in .env file",
       }),
     });
   }
 });
 
 // OAuth callback endpoint
-app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
+app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
   try {
     if (config.storageBackend === "local") {
       return res
         .status(400)
-        .send("Local OAuth callback is disabled. Use /api/mcp/oauth/local-login.");
+        .send("Local OAuth callback is disabled. Use /mcp/oauth/local-login.");
     }
 
     const { code, state } = req.query;
@@ -661,7 +674,11 @@ app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
     }
 
     // Default: redirect to frontend success page
-    const successUrl = `${process.env.FRONTEND_URL || "http://localhost:5195"}/oauth?connection_id=${encodeURIComponent(connectionId)}&status=success`;
+    const frontendBase =
+      process.env.NEOTOMA_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:5195";
+    const successUrl = `${frontendBase}/oauth?connection_id=${encodeURIComponent(connectionId)}&status=success`;
     return res.redirect(successUrl);
   } catch (error: any) {
     logError("MCPOAuthCallback", req, error);
@@ -689,13 +706,17 @@ app.get("/api/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
       params.set("error_details", errorDetails);
     }
 
-    const errorUrl = `${process.env.FRONTEND_URL || "http://localhost:5195"}/oauth?${params.toString()}`;
+    const frontendBaseForError =
+      process.env.NEOTOMA_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:5195";
+    const errorUrl = `${frontendBaseForError}/oauth?${params.toString()}`;
     return res.redirect(errorUrl);
   }
 });
 
 // RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
-app.get("/api/mcp/oauth/authorize", async (req, res) => {
+app.get("/mcp/oauth/authorize", async (req, res) => {
   try {
     const redirect_uri = req.query.redirect_uri as string | undefined;
     const state = req.query.state as string | undefined;
@@ -763,7 +784,7 @@ app.get("/api/mcp/oauth/authorize", async (req, res) => {
 
 // Local OAuth login page (local backend only)
 // With MCP-style auth: encryption off = auto dev-local, encryption on = Bearer token only (no OAuth)
-app.get("/api/mcp/oauth/local-login", async (req, res) => {
+app.get("/mcp/oauth/local-login", async (req, res) => {
   if (config.storageBackend !== "local") {
     return res.status(404).send("Not found");
   }
@@ -811,7 +832,10 @@ app.get("/api/mcp/oauth/local-login", async (req, res) => {
       state,
       devUser.id
     );
-    const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+    const frontendBase =
+      process.env.NEOTOMA_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:5195";
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
@@ -838,7 +862,7 @@ app.get("/api/mcp/oauth/local-login", async (req, res) => {
 
 // RFC 8414 token endpoint (POST) for Cursor and other OAuth clients
 app.post(
-  "/api/mcp/oauth/token",
+  "/mcp/oauth/token",
   oauthTokenLimit,
   express.urlencoded({ extended: true }),
   async (req, res) => {
@@ -874,7 +898,7 @@ app.post(
 );
 
 // RFC 7591 Dynamic Client Registration (for Cursor and other MCP clients)
-app.post("/api/mcp/oauth/register", oauthRegisterLimit, async (req, res) => {
+app.post("/mcp/oauth/register", oauthRegisterLimit, async (req, res) => {
   try {
     const body = req.body as { redirect_uris?: string[]; client_name?: string; scope?: string };
     if (!body || typeof body !== "object") {
@@ -915,7 +939,7 @@ app.post("/api/mcp/oauth/register", oauthRegisterLimit, async (req, res) => {
 });
 
 // Get connection status
-app.get("/api/mcp/oauth/status", async (req, res) => {
+app.get("/mcp/oauth/status", async (req, res) => {
   try {
     const { connection_id } = req.query;
 
@@ -934,7 +958,7 @@ app.get("/api/mcp/oauth/status", async (req, res) => {
 });
 
 // List user's MCP connections (authenticated)
-app.get("/api/mcp/oauth/connections", async (req, res) => {
+app.get("/mcp/oauth/connections", async (req, res) => {
   try {
     // Extract bearer token
     const authHeader = req.headers.authorization;
@@ -945,8 +969,8 @@ app.get("/api/mcp/oauth/connections", async (req, res) => {
     const token = authHeader.substring(7);
 
     // Validate token and get user
-    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-    const { userId } = await validateSupabaseSessionToken(token);
+    const { validateSessionToken } = await import("./services/mcp_auth.js");
+    const { userId } = await validateSessionToken(token);
 
     // List connections
     const { listConnections } = await import("./services/mcp_oauth.js");
@@ -960,7 +984,7 @@ app.get("/api/mcp/oauth/connections", async (req, res) => {
 });
 
 // Revoke MCP connection (authenticated)
-app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
+app.delete("/mcp/oauth/connections/:connection_id", async (req, res) => {
   try {
     // Extract bearer token
     const authHeader = req.headers.authorization;
@@ -972,8 +996,8 @@ app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
     const { connection_id } = req.params;
 
     // Validate token and get user
-    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-    const { userId } = await validateSupabaseSessionToken(token);
+    const { validateSessionToken } = await import("./services/mcp_auth.js");
+    const { userId } = await validateSessionToken(token);
 
     // Revoke connection
     const { revokeConnection } = await import("./services/mcp_oauth.js");
@@ -987,8 +1011,8 @@ app.delete("/api/mcp/oauth/connections/:connection_id", async (req, res) => {
 });
 
 // Get OAuth authorization details (proxy to avoid CORS)
-// This endpoint proxies requests to Supabase OAuth 2.1 Server to avoid CORS issues
-app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
+// This endpoint proxies requests to OAuth 2.1 Server to avoid CORS issues
+app.get("/mcp/oauth/authorization-details", async (req, res) => {
   logger.info(
     `[MCP OAuth] Authorization details request: authorization_id=${req.query.authorization_id}`
   );
@@ -1007,70 +1031,28 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
     }
 
     // Validate token and get user (ensures user is authenticated)
-    const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-    await validateSupabaseSessionToken(token);
+    const { validateSessionToken } = await import("./services/mcp_auth.js");
+    await validateSessionToken(token);
 
-    if (config.storageBackend === "local") {
-      const db = getSqliteDb();
-      const stateData = db
-        .prepare("SELECT redirect_uri FROM mcp_oauth_state WHERE state = ?")
-        .get(authorization_id) as { redirect_uri?: string } | undefined;
+    const db = getSqliteDb();
+    const stateData = db
+      .prepare("SELECT redirect_uri FROM mcp_oauth_state WHERE state = ?")
+      .get(authorization_id) as { redirect_uri?: string } | undefined;
 
-      if (!stateData?.redirect_uri) {
-        return res.status(404).json({
-          error: "Authorization not found",
-          error_description:
-            "The authorization_id has expired or is invalid. Please try the OAuth flow again.",
-        });
-      }
-
-      return res.json({
-        id: authorization_id,
-        status: "approved",
-        client_id: "local_mcp_oauth_client",
-        redirect_uri: stateData.redirect_uri,
+    if (!stateData?.redirect_uri) {
+      return res.status(404).json({
+        error: "Authorization not found",
+        error_description:
+          "The authorization_id has expired or is invalid. Please try the OAuth flow again.",
       });
     }
 
-    // Proxy request to Supabase OAuth 2.1 Server
-    // Use /auth/v1/oauth/authorizations/ endpoint (matches Supabase client library)
-    // This endpoint requires the user's access token to fetch their authorization details
-    // The apikey header can be service key or anon key - service key works fine here
-    const supabaseUrl = config.supabaseUrl;
-    const detailsUrl = `${supabaseUrl}/auth/v1/oauth/authorizations/${encodeURIComponent(authorization_id)}`;
-
-    logger.info(`[MCP OAuth] Fetching authorization details from Supabase: ${detailsUrl}`);
-
-    const detailsResponse = await fetch(detailsUrl, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`, // User's access token (validates user identity)
-        apikey: config.supabaseKey, // Service key for Supabase API (works for OAuth endpoints)
-      },
+    return res.json({
+      id: authorization_id,
+      status: "approved",
+      client_id: "local_mcp_oauth_client",
+      redirect_uri: stateData.redirect_uri,
     });
-
-    logger.info(
-      `[MCP OAuth] Supabase response status: ${detailsResponse.status} for authorization_id=${authorization_id}`
-    );
-
-    if (!detailsResponse.ok) {
-      const errorText = await detailsResponse.text();
-      logger.warn(`[MCP OAuth] Supabase returned error: ${detailsResponse.status} - ${errorText}`);
-      if (detailsResponse.status === 404) {
-        return res.status(404).json({
-          error: "Authorization not found",
-          error_description:
-            "The authorization_id has expired or is invalid. Please try the OAuth flow again.",
-        });
-      }
-      return res.status(detailsResponse.status).json({
-        error: "Failed to get authorization details",
-        error_description: errorText,
-      });
-    }
-
-    const details = await detailsResponse.json();
-    return res.json(details);
   } catch (error: any) {
     logError("MCPOAuthAuthorizationDetails", req, error);
     return sendError(res, 500, "DB_QUERY_FAILED", error.message);
@@ -1078,150 +1060,12 @@ app.get("/api/mcp/oauth/authorization-details", async (req, res) => {
 });
 
 // Dev-only endpoint to sign in as a specific user (for development/testing)
-app.post("/api/auth/dev-signin", async (req, res) => {
+app.post("/auth/dev-signin", async (req, res) => {
   // Only allow in development mode
   if (config.environment !== "development") {
     return sendError(res, 403, "FORBIDDEN", "Dev signin only available in development mode");
   }
-  if (config.storageBackend === "local") {
-    return sendError(res, 403, "FORBIDDEN", "Dev signin is disabled in local mode");
-  }
-
-  const { userId } = req.body;
-
-  if (!userId || typeof userId !== "string") {
-    return sendError(res, 400, "VALIDATION_MISSING_FIELD", "userId is required");
-  }
-
-  // Check if userId is nil UUID - Supabase doesn't allow nil UUIDs
-  const isNilUuid = userId === "00000000-0000-0000-0000-000000000000";
-
-  try {
-    let targetUserId = userId;
-    let userEmail = `dev-${userId}@neotoma.local`;
-
-    // Check if user exists (only if not nil UUID, as nil UUID lookup will fail)
-    if (!isNilUuid) {
-      const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
-      const existingUser = userData?.user;
-
-      if (!userError && existingUser) {
-        // User exists, use it
-        targetUserId = existingUser.id;
-        userEmail = existingUser.email || userEmail;
-      } else {
-        // User doesn't exist, create them with specified ID
-        const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-          id: userId,
-          email: userEmail,
-          email_confirm: true,
-        });
-
-        if (createError) {
-          logError("DevSigninCreateUser", req, createError);
-          return res
-            .status(500)
-            .json({ error: `Failed to create dev user: ${createError.message}` });
-        }
-
-        if (!newUser?.user) {
-          return sendError(
-            res,
-            500,
-            "DB_QUERY_FAILED",
-            "Failed to create dev user: no user returned"
-          );
-        }
-        targetUserId = newUser.user.id;
-        userEmail = newUser.user.email || userEmail;
-      }
-    } else {
-      // For nil UUID, create user without specifying ID (let Supabase generate it)
-      // First check if a dev user with this email already exists
-      const { data: existingUsers } = await supabase.auth.admin.listUsers();
-      const existingDevUser = existingUsers?.users?.find(
-        (u) => u.email === userEmail || u.email?.startsWith("dev-00000000")
-      );
-
-      if (existingDevUser) {
-        // Use existing dev user
-        targetUserId = existingDevUser.id;
-        userEmail = existingDevUser.email || userEmail;
-      } else {
-        // Create new user without specifying ID (Supabase will generate a valid UUID)
-        const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-          email: userEmail,
-          email_confirm: true,
-        });
-
-        if (createError) {
-          logError("DevSigninCreateUser", req, createError);
-          return res
-            .status(500)
-            .json({ error: `Failed to create dev user: ${createError.message}` });
-        }
-
-        if (!newUser?.user) {
-          return sendError(
-            res,
-            500,
-            "DB_QUERY_FAILED",
-            "Failed to create dev user: no user returned"
-          );
-        }
-        targetUserId = newUser.user.id;
-        userEmail = newUser.user.email || userEmail;
-      }
-    }
-
-    // Generate a magic link to get an access token
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: "magiclink",
-      email: userEmail,
-      options: {
-        redirectTo: "http://localhost:5173",
-      },
-    });
-
-    const actionLink = linkData?.properties?.action_link;
-    if (linkError || !actionLink) {
-      logError("DevSigninGenerateLink", req, linkError);
-      return res.status(500).json({
-        error: `Failed to generate link: ${linkError?.message ?? "no link data"}`,
-      });
-    }
-
-    // Extract access token from the magic link URL
-    const url = new URL(actionLink);
-    const accessToken = url.hash.includes("access_token=")
-      ? url.hash.split("access_token=")[1]?.split("&")[0]
-      : url.searchParams.get("access_token");
-
-    if (!accessToken) {
-      return sendError(
-        res,
-        500,
-        "DB_QUERY_FAILED",
-        "Could not extract access token from magic link"
-      );
-    }
-
-    // Get refresh token from URL as well
-    const refreshToken = url.hash.includes("refresh_token=")
-      ? url.hash.split("refresh_token=")[1]?.split("&")[0]
-      : url.searchParams.get("refresh_token");
-
-    return res.json({
-      userId: targetUserId,
-      accessToken,
-      refreshToken: refreshToken || undefined,
-    });
-  } catch (error) {
-    logError("DevSignin", req, error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Failed to sign in as dev user",
-    });
-  }
+  return sendError(res, 403, "FORBIDDEN", "Dev signin endpoint is disabled in local-only mode");
 });
 
 // Public key-based authentication middleware
@@ -1231,12 +1075,23 @@ app.use(async (req, res, next) => {
   if (
     req.method === "OPTIONS" ||
     (req.method === "GET" && (req.path === "/openapi.yaml" || req.path === "/health")) ||
-    (req.method === "POST" && req.path === "/api/auth/dev-signin")
+    (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();
   }
 
   const headerAuth = (req.headers.authorization || req.headers.Authorization || "") as string;
+
+  // Local mode: when storage is local and request is from localhost, no Bearer → default user (00..) by default
+  if (
+    config.storageBackend === "local" &&
+    isLocalRequest(req) &&
+    !headerAuth.startsWith("Bearer ")
+  ) {
+    const devUser = ensureLocalDevUser();
+    (req as any).authenticatedUserId = devUser.id;
+    return next();
+  }
 
   // MCP-style auth (aligns CLI and REST API with MCP). Local requests can skip Bearer; tunnel requires Bearer or OAuth.
   if (config.encryption.enabled) {
@@ -1299,11 +1154,11 @@ app.use(async (req, res, next) => {
       (req as any).authenticatedUserId = registeredUserId;
     }
   } else {
-    // Try to validate as Supabase session token
+    // Try to validate as session token
     try {
-      const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-      const validated = await validateSupabaseSessionToken(bearerToken);
-      // Attach user_id and email to request for user-scoped queries and /api/me
+      const { validateSessionToken } = await import("./services/mcp_auth.js");
+      const validated = await validateSessionToken(bearerToken);
+      // Attach user_id and email to request for user-scoped queries and /me
       (req as any).authenticatedUserId = validated.userId;
       (req as any).authenticatedUserEmail = validated.email;
       (req as any).bearerToken = bearerToken;
@@ -1323,7 +1178,7 @@ app.use(async (req, res, next) => {
 app.use(encryptResponseMiddleware);
 
 // Current session (authenticated user details)
-app.get("/api/me", async (req, res) => {
+app.get("/me", async (req, res) => {
   try {
     const userId = (req as any).authenticatedUserId;
     const email = (req as any).authenticatedUserEmail;
@@ -1339,7 +1194,7 @@ app.get("/api/me", async (req, res) => {
 
 /**
  * Helper to extract authenticated user_id from request
- * Supports: middleware-set user (e.g. dev-local when encryption off), Supabase session token, Ed25519 bearer
+ * Supports: middleware-set user (e.g. dev-local when encryption off), session token, Ed25519 bearer
  * @param req - Express request object
  * @param providedUserId - Optional user_id from request body/query
  * @returns Authenticated user_id
@@ -1353,9 +1208,8 @@ async function getAuthenticatedUserId(
   const authenticatedUserId = (req as any).authenticatedUserId;
   if (authenticatedUserId) {
     if (providedUserId && providedUserId !== authenticatedUserId) {
-      // In dev mode (no encryption, local dev user), allow user_id override for testing and development.
-      // This allows CLI tests to use custom user IDs without requiring full OAuth auth.
-      if (!config.encryption.enabled && authenticatedUserId === LOCAL_DEV_USER_ID) {
+      // When authenticated as local dev user, allow body/query user_id override for CLI tests and dev flows.
+      if (authenticatedUserId === LOCAL_DEV_USER_ID) {
         return providedUserId;
       }
       throw new Error(
@@ -1417,7 +1271,7 @@ function handleApiError(
 
 // POST /api/entities/query - Query entities with filters
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.post("/api/entities/query", async (req, res) => {
+app.post("/entities/query", async (req, res) => {
   const parsed = EntitiesQueryRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:entities_query", req, {
@@ -1460,7 +1314,7 @@ app.post("/api/entities/query", async (req, res) => {
 
 // GET /api/entities/:id - Get entity detail with snapshot and provenance (FU-601)
 // REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
-app.get("/api/entities/:id", async (req, res) => {
+app.get("/entities/:id", async (req, res) => {
   try {
     const entityId = req.params.id;
 
@@ -1468,7 +1322,7 @@ app.get("/api/entities/:id", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("id, user_id")
       .eq("id", entityId)
@@ -1499,7 +1353,7 @@ app.get("/api/entities/:id", async (req, res) => {
 
 // GET /api/entities/:id/observations - Get observations for entity (FU-601)
 // REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
-app.get("/api/entities/:id/observations", async (req, res) => {
+app.get("/entities/:id/observations", async (req, res) => {
   try {
     const entityId = req.params.id;
 
@@ -1507,7 +1361,7 @@ app.get("/api/entities/:id/observations", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("id")
       .eq("id", entityId)
@@ -1522,7 +1376,7 @@ app.get("/api/entities/:id/observations", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Get observations for this entity - filter by user_id for security
-    const { data, error, count } = await supabase
+    const { data, error, count } = await db
       .from("observations")
       .select("*", { count: "exact" })
       .eq("entity_id", entityId)
@@ -1550,7 +1404,7 @@ app.get("/api/entities/:id/observations", async (req, res) => {
 
 // GET /api/entities/:id/relationships - Get relationships for entity (FU-601)
 // REQUIRES AUTHENTICATION - verifies entity belongs to authenticated user
-app.get("/api/entities/:id/relationships", async (req, res) => {
+app.get("/entities/:id/relationships", async (req, res) => {
   try {
     const entityId = req.params.id;
 
@@ -1558,7 +1412,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     // Verify entity exists and belongs to authenticated user
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("id")
       .eq("id", entityId)
@@ -1570,7 +1424,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
     }
 
     // Get relationships where this entity is the source - filter by user_id
-    const { data: outgoing, error: outgoingError } = await supabase
+    const { data: outgoing, error: outgoingError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("source_entity_id", entityId)
@@ -1579,7 +1433,7 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
     if (outgoingError) throw outgoingError;
 
     // Get relationships where this entity is the target - filter by user_id
-    const { data: incoming, error: incomingError } = await supabase
+    const { data: incoming, error: incomingError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("target_entity_id", entityId)
@@ -1607,14 +1461,21 @@ app.get("/api/entities/:id/relationships", async (req, res) => {
 
 // GET /api/schemas - List all schemas (FU-XXX)
 // REQUIRES AUTHENTICATION - returns global schemas + user-specific schemas for authenticated user
-app.get("/api/schemas", async (req, res) => {
+app.get("/schemas", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
-    // For Ed25519 tokens, user_id may be in query params; for Supabase tokens, it's extracted from token
+    // For Ed25519 tokens, user_id may be in query params; for session tokens, it's extracted from token
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
 
     const keyword = req.query.keyword as string | undefined;
     const filterEntityType = req.query.entity_type as string | undefined;
+    const limitRaw = req.query.limit as string | undefined;
+    const offsetRaw = req.query.offset as string | undefined;
+    const limit =
+      limitRaw && /^\d+$/.test(limitRaw) ? Math.max(0, parseInt(limitRaw, 10)) : 100;
+    const offset =
+      offsetRaw && /^\d+$/.test(offsetRaw) ? Math.max(0, parseInt(offsetRaw, 10)) : 0;
+
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
@@ -1625,7 +1486,7 @@ app.get("/api/schemas", async (req, res) => {
     // Filter to only show global schemas (user_id is null) or user-specific schemas for this user
     // Note: listEntityTypes doesn't currently filter by user_id, so we need to query directly
     // Also fetch metadata (including icons) for each schema
-    const { data: dbSchemas, error: dbError } = await supabase
+    const { data: dbSchemas, error: dbError } = await db
       .from("schema_registry")
       .select("entity_type, metadata")
       .eq("active", true)
@@ -1657,9 +1518,16 @@ app.get("/api/schemas", async (req, res) => {
       return metadata["test"] !== true;
     });
 
+    const sortedSchemas = productionSchemas.sort((a, b) =>
+      String(a.entity_type).localeCompare(String(b.entity_type))
+    );
+    const paginatedSchemas = sortedSchemas.slice(offset, offset + limit);
+
     return res.json({
-      schemas: productionSchemas,
+      schemas: paginatedSchemas,
       total: productionSchemas.length,
+      limit,
+      offset,
     });
   } catch (error) {
     return handleApiError(
@@ -1674,13 +1542,13 @@ app.get("/api/schemas", async (req, res) => {
 });
 
 // GET /api/schemas/:entity_type - Get specific schema (FU-XXX)
-app.get("/api/schemas/:entity_type", async (req, res) => {
+app.get("/schemas/:entity_type", async (req, res) => {
   try {
     const entityType = decodeURIComponent(req.params.entity_type);
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
 
-    // Handle authentication - support both Ed25519 and Supabase session tokens
+    // Handle authentication - support both Ed25519 and session tokens
     const headerAuth = req.headers.authorization || "";
     let userId: string | undefined = req.query.user_id as string | undefined;
 
@@ -1690,10 +1558,10 @@ app.get("/api/schemas/:entity_type", async (req, res) => {
       // Try to validate as Ed25519 bearer token first
       const registered = ensurePublicKeyRegistered(token);
       if (!registered || !isBearerTokenValid(token)) {
-        // Try to validate as Supabase session token
+        // Try to validate as session token
         try {
-          const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-          const validated = await validateSupabaseSessionToken(token);
+          const { validateSessionToken } = await import("./services/mcp_auth.js");
+          const validated = await validateSessionToken(token);
           // Use validated user ID if not provided in query
           userId = userId || validated.userId;
         } catch (authError) {
@@ -1703,8 +1571,25 @@ app.get("/api/schemas/:entity_type", async (req, res) => {
       // If Ed25519 token is valid, use user_id from query (Ed25519 tokens don't contain user info)
     }
 
-    // Try to load active schema (global or user-specific)
-    const schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+    // Try to load active schema (global or user-specific), then fallback to code-defined schemas
+    let schema = await schemaRegistry.loadActiveSchema(entityType, userId);
+
+    if (!schema) {
+      const { ENTITY_SCHEMAS } = await import("./services/schema_definitions.js");
+      const normalized = entityType.toLowerCase().trim().replace(/\s+/g, "_");
+      const codeSchema = ENTITY_SCHEMAS[entityType] ?? ENTITY_SCHEMAS[normalized];
+      if (codeSchema) {
+        schema = {
+          id: "",
+          entity_type: codeSchema.entity_type,
+          schema_version: codeSchema.schema_version,
+          schema_definition: codeSchema.schema_definition,
+          reducer_config: codeSchema.reducer_config,
+          active: true,
+          created_at: new Date().toISOString(),
+        };
+      }
+    }
 
     if (!schema) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", `Schema not found: ${entityType}`);
@@ -1720,7 +1605,7 @@ app.get("/api/schemas/:entity_type", async (req, res) => {
 
 // GET /api/relationships - List all relationships with filtering (FU-XXX)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.get("/api/relationships", async (req, res) => {
+app.get("/relationships", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -1732,7 +1617,7 @@ app.get("/api/relationships", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase
+    let query = db
       .from("relationship_snapshots")
       .select("*", { count: "exact" })
       .eq("user_id", userId); // SECURITY: Always filter by authenticated user
@@ -1763,7 +1648,7 @@ app.get("/api/relationships", async (req, res) => {
     // Fetch entity details - filter by user_id for security
     let entityMap = new Map<string, { canonical_name: string; entity_type: string }>();
     if (entityIds.size > 0) {
-      const { data: entities, error: entityError } = await supabase
+      const { data: entities, error: entityError } = await db
         .from("entities")
         .select("id, canonical_name, entity_type")
         .in("id", Array.from(entityIds))
@@ -1815,7 +1700,7 @@ app.get("/api/relationships", async (req, res) => {
 // GET /api/relationships/:id - Get specific relationship (FU-XXX)
 // REQUIRES AUTHENTICATION - verifies relationship belongs to authenticated user
 // Note: id is actually relationship_key (composite key)
-app.get("/api/relationships/:id", async (req, res) => {
+app.get("/relationships/:id", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -1823,7 +1708,7 @@ app.get("/api/relationships/:id", async (req, res) => {
     const relationshipKey = decodeURIComponent(req.params.id);
 
     // Verify relationship exists and belongs to authenticated user
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", relationshipKey)
@@ -1843,14 +1728,14 @@ app.get("/api/relationships/:id", async (req, res) => {
     }
 
     // Fetch entity details - filter by user_id for security
-    const { data: sourceEntity } = await supabase
+    const { data: sourceEntity } = await db
       .from("entities")
       .select("canonical_name, entity_type")
       .eq("id", data.source_entity_id)
       .eq("user_id", userId) // SECURITY: Only return if belongs to authenticated user
       .single();
 
-    const { data: targetEntity } = await supabase
+    const { data: targetEntity } = await db
       .from("entities")
       .select("canonical_name, entity_type")
       .eq("id", data.target_entity_id)
@@ -1879,7 +1764,7 @@ app.get("/api/relationships/:id", async (req, res) => {
 });
 
 // POST /api/relationships/snapshot - Get relationship snapshot with provenance
-app.post("/api/relationships/snapshot", async (req, res) => {
+app.post("/relationships/snapshot", async (req, res) => {
   const parsed = RelationshipSnapshotRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:get_relationship_snapshot", req, { issues: parsed.error.issues });
@@ -1891,7 +1776,7 @@ app.post("/api/relationships/snapshot", async (req, res) => {
     const { relationship_type, source_entity_id, target_entity_id } = parsed.data;
     const relationshipKey = `${relationship_type}:${source_entity_id}:${target_entity_id}`;
 
-    const { data: snapshot, error: snapshotError } = await supabase
+    const { data: snapshot, error: snapshotError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", relationshipKey)
@@ -1908,7 +1793,7 @@ app.post("/api/relationships/snapshot", async (req, res) => {
       );
     }
 
-    const { data: observations, error: obsError } = await supabase
+    const { data: observations, error: obsError } = await db
       .from("relationship_observations")
       .select("id, source_id, observed_at, specificity_score, source_priority, metadata")
       .eq("relationship_key", relationshipKey)
@@ -1932,7 +1817,7 @@ app.post("/api/relationships/snapshot", async (req, res) => {
 
 // GET /api/timeline - Get timeline events with filtering (FU-303)
 // REQUIRES AUTHENTICATION - filters events through sources.user_id
-app.get("/api/timeline", async (req, res) => {
+app.get("/timeline", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -1945,7 +1830,7 @@ app.get("/api/timeline", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Get source IDs for this user first (timeline_events doesn't have user_id)
-    const { data: userSources, error: sourcesError } = await supabase
+    const { data: userSources, error: sourcesError } = await db
       .from("sources")
       .select("id")
       .eq("user_id", userId);
@@ -1955,7 +1840,7 @@ app.get("/api/timeline", async (req, res) => {
     const sourceIds = (userSources || []).map((s: any) => s.id);
 
     // Build query - filter by source_ids that belong to authenticated user
-    let query = supabase.from("timeline_events").select("*", { count: "exact" });
+    let query = db.from("timeline_events").select("*", { count: "exact" });
 
     // SECURITY: Only return events from sources that belong to authenticated user
     if (sourceIds.length > 0) {
@@ -2034,15 +1919,67 @@ app.get("/api/timeline", async (req, res) => {
     }
     logError("APIError:timeline", req, error);
     const message = error instanceof Error ? error.message : "Failed to get timeline";
-    // Include error code if available (for Supabase errors)
+    // Include error code if available (for db errors)
     const errorCode = (error as any)?.code;
     const errorDetails = errorCode ? { code: errorCode, message } : { message };
     return sendError(res, 500, "DB_QUERY_FAILED", message, errorDetails);
   }
 });
 
+// GET /api/timeline/:id - Get one timeline event by ID (FU-303)
+// REQUIRES AUTHENTICATION - verifies event source belongs to authenticated user
+app.get("/timeline/:id", async (req, res) => {
+  try {
+    const eventId = decodeURIComponent(req.params.id);
+    const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
+
+    // Get source IDs for this user first (timeline_events doesn't have user_id)
+    const { data: userSources, error: sourcesError } = await db
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId);
+
+    if (sourcesError) throw sourcesError;
+    const sourceIds = (userSources || []).map((source: { id: string }) => source.id);
+
+    if (sourceIds.length === 0) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
+    }
+
+    const { data: event, error } = await db
+      .from("timeline_events")
+      .select("*")
+      .eq("id", eventId)
+      .in("source_id", sourceIds)
+      .maybeSingle();
+
+    if (error) {
+      const err = error as { code?: string; message?: string };
+      if (err.code === "PGRST116") {
+        return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
+      }
+      throw error;
+    }
+
+    if (!event) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Timeline event not found");
+    }
+
+    return res.json({ event });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Not authenticated")) {
+      return sendError(res, 401, "AUTH_REQUIRED", error.message);
+    }
+    logError("APIError:timeline_detail", req, error);
+    const message = error instanceof Error ? error.message : "Failed to get timeline event";
+    const errorCode = (error as { code?: string })?.code;
+    const errorDetails = errorCode ? { code: errorCode, message } : { message };
+    return sendError(res, 500, "DB_QUERY_FAILED", message, errorDetails);
+  }
+});
+
 // GET /api/sources - Get source list (FU-301)
-app.get("/api/sources", async (req, res) => {
+app.get("/sources", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -2054,7 +1991,7 @@ app.get("/api/sources", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase.from("sources").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+    let query = db.from("sources").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     // Filter by MIME type
     if (mimeType) {
@@ -2101,7 +2038,7 @@ app.get("/api/sources", async (req, res) => {
 
 // GET /api/sources/:id - Get source detail (FU-302)
 // REQUIRES AUTHENTICATION - verifies source belongs to authenticated user
-app.get("/api/sources/:id", async (req, res) => {
+app.get("/sources/:id", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -2109,7 +2046,7 @@ app.get("/api/sources/:id", async (req, res) => {
     const sourceId = req.params.id;
 
     // Verify source exists and belongs to authenticated user
-    const { data: source, error } = await supabase
+    const { data: source, error } = await db
       .from("sources")
       .select("*")
       .eq("id", sourceId)
@@ -2142,7 +2079,7 @@ app.get("/api/sources/:id", async (req, res) => {
 
 // GET /api/interpretations - Get interpretations with filters (FU-302)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.get("/api/interpretations", async (req, res) => {
+app.get("/interpretations", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -2152,7 +2089,7 @@ app.get("/api/interpretations", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase
+    let query = db
       .from("interpretations")
       .select("*", { count: "exact" })
       .eq("user_id", userId); // SECURITY: Always filter by authenticated user
@@ -2183,7 +2120,7 @@ app.get("/api/interpretations", async (req, res) => {
 
 // GET /api/observations - Get observations with filters (FU-302, FU-601)
 // REQUIRES AUTHENTICATION - all queries filtered by authenticated user_id
-app.get("/api/observations", async (req, res) => {
+app.get("/observations", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -2194,7 +2131,7 @@ app.get("/api/observations", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+    let query = db.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     if (sourceId) {
       query = query.eq("source_id", sourceId);
@@ -2231,7 +2168,7 @@ app.get("/api/observations", async (req, res) => {
 
 // GET /api/stats - Get dashboard statistics (FU-305)
 // REQUIRES AUTHENTICATION - all stats filtered by authenticated user_id
-app.get("/api/stats", async (req, res) => {
+app.get("/stats", async (req, res) => {
   try {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, req.query.user_id as string | undefined);
@@ -2254,7 +2191,7 @@ app.get("/api/stats", async (req, res) => {
 
 // POST /api/observations/create - Create observation for entity
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user
-app.post("/api/observations/create", async (req, res) => {
+app.post("/observations/create", async (req, res) => {
   const schema = z.object({
     entity_type: z.string(),
     entity_identifier: z.string(),
@@ -2311,7 +2248,7 @@ app.post("/api/observations/create", async (req, res) => {
       created_at: new Date().toISOString(),
     };
 
-    const { data: obsData, error: obsError } = await supabase
+    const { data: obsData, error: obsError } = await db
       .from("observations")
       .insert(observation)
       .select()
@@ -2320,7 +2257,7 @@ app.post("/api/observations/create", async (req, res) => {
     if (obsError) throw obsError;
 
     // Get updated snapshot
-    const { data: snapshot } = await supabase
+    const { data: snapshot } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", entity_id)
@@ -2339,9 +2276,314 @@ app.post("/api/observations/create", async (req, res) => {
   }
 });
 
-// POST /api/store - Store structured entities (for quick-entry forms)
-app.post("/api/store", async (req, res) => {
-  const parsed = StoreStructuredRequestSchema.safeParse(req.body);
+async function storeStructuredForApi(params: {
+  userId: string;
+  entities: Record<string, unknown>[];
+  sourcePriority: number;
+  idempotencyKey: string;
+  originalFilename?: string;
+}) {
+  const { userId, entities, sourcePriority, idempotencyKey, originalFilename } = params;
+  const { resolveEntity } = await import("./services/entity_resolution.js");
+
+  const { data: existingSource, error: existingSourceError } = await db
+    .from("sources")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("idempotency_key", idempotencyKey)
+    .maybeSingle();
+
+  if (existingSourceError) {
+    throw existingSourceError;
+  }
+
+  if (existingSource) {
+    const { data: existingObservations, error: obsError } = await db
+      .from("observations")
+      .select("id, entity_id, entity_type")
+      .eq("source_id", existingSource.id)
+      .eq("user_id", userId);
+
+    if (obsError) throw obsError;
+
+    const existingEntities =
+      existingObservations?.map((obs: { id: string; entity_id: string; entity_type: string }) => ({
+        entity_id: obs.entity_id,
+        entity_type: obs.entity_type,
+        observation_id: obs.id,
+      })) ?? [];
+
+    return {
+      success: true,
+      source_id: existingSource.id,
+      entities_created: existingEntities.length,
+      observations_created: existingEntities.length,
+      entities: existingEntities,
+    };
+  }
+
+  const jsonContent = JSON.stringify(entities, (key, value) => {
+    if (typeof value === "bigint") {
+      return Number(value);
+    }
+    return value;
+  });
+  const filenameForStorage = originalFilename?.trim() || undefined;
+  const storageResult = await storeRawContent({
+    userId,
+    fileBuffer: Buffer.from(jsonContent, "utf-8"),
+    mimeType: "application/json",
+    originalFilename: filenameForStorage,
+    idempotencyKey,
+    provenance: {
+      upload_method: "api_store",
+      client: "api",
+      source_priority: sourcePriority,
+    },
+  });
+
+  const createdEntities = [];
+
+  for (const entityData of entities) {
+    const entity_type = entityData.entity_type as string;
+    if (!entity_type) {
+      throw new Error("entity_type is required for each entity");
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional omit
+    const { entity_type: _removed, ...fields } = entityData;
+    const entity_id = await resolveEntity({
+      entityType: entity_type,
+      fields,
+      userId,
+    });
+
+    const observation = {
+      id: randomUUID(),
+      entity_id,
+      entity_type,
+      schema_version: "1.0",
+      source_id: storageResult.sourceId,
+      interpretation_id: null,
+      observed_at: new Date().toISOString(),
+      specificity_score: 1.0,
+      source_priority: sourcePriority,
+      fields,
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    };
+
+    const { data: obsData, error: obsError } = await db
+      .from("observations")
+      .insert(observation)
+      .select()
+      .single();
+
+    if (obsError) throw obsError;
+
+    createdEntities.push({
+      entity_id,
+      entity_type,
+      observation_id: obsData.id,
+    });
+  }
+
+  return {
+    success: true,
+    source_id: storageResult.sourceId,
+    entities_created: createdEntities.length,
+    observations_created: createdEntities.length,
+    entities: createdEntities,
+  };
+}
+
+async function storeUnstructuredForApi(params: {
+  userId: string;
+  fileContent: string;
+  mimeType: string;
+  idempotencyKey?: string;
+  originalFilename?: string;
+  interpret: boolean;
+  interpretationConfig?: Record<string, unknown>;
+}) {
+  const { runInterpretation } = await import("./services/interpretation.js");
+  const {
+    fileContent,
+    mimeType,
+    idempotencyKey,
+    originalFilename,
+    interpret,
+    userId,
+    interpretationConfig,
+  } = params;
+  const fileBuffer = Buffer.from(fileContent, "base64");
+  const resolvedIdempotencyKey =
+    idempotencyKey ??
+    (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
+
+  const storageResult = await storeRawContent({
+    userId,
+    fileBuffer,
+    mimeType,
+    originalFilename: originalFilename?.trim() || undefined,
+    idempotencyKey: resolvedIdempotencyKey,
+    provenance: { upload_method: "api_store_unstructured", client: "api" },
+  });
+
+  const response: {
+    source_id: string;
+    content_hash: string;
+    file_size: number;
+    deduplicated?: boolean;
+    entities_created?: number;
+    observations_created?: number;
+    interpretation_run_id?: string;
+    interpretation?: unknown;
+    interpretation_debug?: Record<string, unknown>;
+    entity_ids?: string[];
+  } = {
+    source_id: storageResult.sourceId,
+    content_hash: storageResult.contentHash,
+    file_size: storageResult.fileSize,
+    deduplicated: storageResult.deduplicated,
+    entities_created: 0,
+    observations_created: 0,
+  };
+
+  if (interpret && storageResult.sourceId) {
+    const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } = await import(
+      "./services/file_text_extraction.js"
+    );
+    const {
+      extractWithLLM,
+      extractWithLLMFromImage,
+      extractFromCSVWithChunking,
+      isLLMExtractionAvailable,
+    } = await import("./services/llm_extraction.js");
+
+    const rawText = await extractTextFromBuffer(fileBuffer, mimeType, originalFilename || "file");
+
+    const isCsv = mimeType?.toLowerCase() === "text/csv";
+
+    if (!isCsv && !isLLMExtractionAvailable()) {
+      response.interpretation = {
+        skipped: true,
+        reason: "openai_not_configured",
+        message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
+      };
+      return response;
+    }
+
+    const isPdf =
+      (mimeType || "").toLowerCase().includes("pdf") ||
+      (originalFilename || "").toLowerCase().endsWith(".pdf");
+    const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
+
+    let extractionResult:
+      | Awaited<ReturnType<typeof extractWithLLM>>
+      | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
+      | undefined = undefined;
+    let extractedData: Array<Record<string, unknown>> = [];
+    const pdfDebug = getPdfWorkerDebug();
+    const interpretationDebug: Record<string, unknown> = {
+      raw_text_length: rawTextLength,
+      pdf_worker_wrapper_used: pdfDebug.configured,
+      pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
+      pdf_worker_set_worker_error: pdfDebug.set_worker_error,
+    };
+    if (rawTextLength === 0 && isPdf) {
+      interpretationDebug.vision_fallback_attempted = true;
+      const imageResult = await getPdfFirstPageImageDataUrl(fileBuffer, mimeType, originalFilename || "file", {
+        returnError: true,
+      });
+      const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+      if (typeof imageResult === "object" && imageResult.error) {
+        interpretationDebug.vision_fallback_image_error = imageResult.error;
+      }
+      interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+      if (imageDataUrl) {
+        try {
+          extractionResult = await extractWithLLMFromImage(
+            imageDataUrl,
+            originalFilename || "file",
+            mimeType,
+            "gpt-4o"
+          );
+          interpretationDebug.used_vision_fallback = true;
+        } catch (visionErr) {
+          interpretationDebug.vision_fallback_error =
+            visionErr instanceof Error ? visionErr.message : String(visionErr);
+          extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+        }
+      } else {
+        extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+      }
+    } else if (isCsv) {
+      const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
+      extractedData = extractEntitiesFromCsvRows(fileBuffer, originalFilename || "file");
+    } else {
+      extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+    }
+
+    if (extractedData.length === 0 && extractionResult) {
+      if ("entities" in extractionResult) {
+        const multiResult = extractionResult as {
+          entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
+        };
+        extractedData = multiResult.entities.map((e) => ({
+          entity_type: e.entity_type,
+          ...e.fields,
+        }));
+      } else {
+        const { entity_type, fields } = extractionResult;
+        extractedData = [{ entity_type, ...fields }];
+      }
+    }
+
+    const defaultConfig = {
+      provider: "openai",
+      model_id: "gpt-4o",
+      temperature: 0,
+      prompt_hash: "llm_extraction_v2_idempotent",
+      code_version: "v0.2.0",
+    };
+    interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
+      Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
+    );
+    response.interpretation_debug = interpretationDebug;
+    try {
+      const interpretationResult = await runInterpretation({
+        userId,
+        sourceId: storageResult.sourceId,
+        extractedData,
+        config: {
+          ...defaultConfig,
+          ...(interpretationConfig ?? {}),
+        },
+      });
+      response.interpretation = interpretationResult;
+      if (interpretationResult.entities?.length) {
+        response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
+        response.entities_created = interpretationResult.entities.length;
+        response.observations_created = interpretationResult.entities.length;
+      }
+      if (interpretationResult.interpretationId) {
+        response.interpretation_run_id = interpretationResult.interpretationId;
+      }
+    } catch (interpretError) {
+      response.interpretation = {
+        error: interpretError instanceof Error ? interpretError.message : String(interpretError),
+        skipped: true,
+      };
+    }
+  }
+
+  return response;
+}
+
+// POST /api/store - Unified store for structured, unstructured, or combined payloads
+app.post("/store", async (req, res) => {
+  const parsed = StoreRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:store", req, {
       issues: parsed.error.issues,
@@ -2350,142 +2592,83 @@ app.post("/api/store", async (req, res) => {
   }
 
   try {
-    // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const hasEntities = Boolean(parsed.data.entities?.length);
+    const hasFileContent = Boolean(parsed.data.file_content && parsed.data.mime_type);
+    const hasFilePath = Boolean(parsed.data.file_path);
+    const hasUnstructured = hasFileContent || hasFilePath;
 
-    const { entities, source_priority, idempotency_key, original_filename } = parsed.data;
+    let structuredResult: Record<string, unknown> | undefined;
+    let unstructuredResult: Record<string, unknown> | undefined;
 
-    // Import entity resolution service
-    const { resolveEntity } = await import("./services/entity_resolution.js");
-
-    const { data: existingSource, error: existingSourceError } = await supabase
-      .from("sources")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("idempotency_key", idempotency_key)
-      .maybeSingle();
-
-    if (existingSourceError) {
-      throw existingSourceError;
-    }
-
-    if (existingSource) {
-      const { data: existingObservations, error: obsError } = await supabase
-        .from("observations")
-        .select("id, entity_id, entity_type")
-        .eq("source_id", existingSource.id)
-        .eq("user_id", userId);
-
-      if (obsError) throw obsError;
-
-      const existingEntities = existingObservations?.map(
-        (obs: { id: string; entity_id: string; entity_type: string }) => ({
-          entity_id: obs.entity_id,
-          entity_type: obs.entity_type,
-          observation_id: obs.id,
-        })
-      ) ?? [];
-
-      return res.json({
-        success: true,
-        source_id: existingSource.id,
-        entities_created: existingEntities.length,
-        observations_created: existingEntities.length,
-        entities: existingEntities,
-      });
-    }
-
-    const jsonContent = JSON.stringify(entities, (key, value) => {
-      if (typeof value === "bigint") {
-        return Number(value);
+    if (hasEntities) {
+      if (!parsed.data.idempotency_key) {
+        return sendError(res, 400, "VALIDATION_ERROR", "idempotency_key is required when entities are provided");
       }
-      return value;
-    });
-    // Omit filename when not provided: agent-provided structured data has no real file origin.
-    const filenameForStorage = original_filename?.trim() || undefined;
-    const storageResult = await storeRawContent({
-      userId,
-      fileBuffer: Buffer.from(jsonContent, "utf-8"),
-      mimeType: "application/json",
-      originalFilename: filenameForStorage,
-      idempotencyKey: idempotency_key,
-      provenance: {
-        upload_method: "api_store",
-        client: "api",
-        source_priority,
-      },
-    });
-
-    const createdEntities = [];
-
-    // Process each entity
-    for (const entityData of entities) {
-      const entity_type = entityData.entity_type as string;
-      if (!entity_type) {
-        throw new Error("entity_type is required for each entity");
-      }
-
-      // Remove entity_type from fields (destructure to omit from ...fields)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- intentional omit
-      const { entity_type: _removed, ...fields } = entityData;
-
-      // Resolve or create entity
-      const entity_id = await resolveEntity({
-        entityType: entity_type,
-        fields,
+      structuredResult = await storeStructuredForApi({
         userId,
-      });
-
-      // Create observation
-      const observation = {
-        id: randomUUID(),
-        entity_id,
-        entity_type,
-        schema_version: "1.0",
-        source_id: storageResult.sourceId,
-        interpretation_id: null,
-        observed_at: new Date().toISOString(),
-        specificity_score: 1.0,
-        source_priority,
-        fields,
-        user_id: userId,
-        created_at: new Date().toISOString(),
-      };
-
-      const { data: obsData, error: obsError } = await supabase
-        .from("observations")
-        .insert(observation)
-        .select()
-        .single();
-
-      if (obsError) throw obsError;
-
-      createdEntities.push({
-        entity_id,
-        entity_type,
-        observation_id: obsData.id,
+        entities: parsed.data.entities as Record<string, unknown>[],
+        sourcePriority: parsed.data.source_priority ?? 100,
+        idempotencyKey: parsed.data.idempotency_key,
+        originalFilename: parsed.data.original_filename,
       });
     }
 
-    return res.json({
-      success: true,
-      source_id: storageResult.sourceId,
-      entities_created: createdEntities.length,
-      observations_created: createdEntities.length,
-      entities: createdEntities,
-    });
+    if (hasUnstructured) {
+      let fileContent = parsed.data.file_content;
+      let mimeType = parsed.data.mime_type;
+      let originalFilename = parsed.data.original_filename;
+
+      if (hasFilePath) {
+        const resolvedPath = path.isAbsolute(parsed.data.file_path as string)
+          ? (parsed.data.file_path as string)
+          : path.resolve(process.cwd(), parsed.data.file_path as string);
+        const fileBuffer = fs.readFileSync(resolvedPath);
+        fileContent = fileBuffer.toString("base64");
+        if (!mimeType) {
+          const ext = path.extname(resolvedPath).toLowerCase();
+          mimeType = ext === ".pdf" ? "application/pdf" : ext === ".csv" ? "text/csv" : ext === ".json" ? "application/json" : "text/plain";
+        }
+        originalFilename = originalFilename || path.basename(resolvedPath);
+      }
+
+      if (!fileContent || !mimeType) {
+        return sendError(res, 400, "VALIDATION_ERROR", "Unstructured store requires file_content+mime_type or file_path");
+      }
+
+      unstructuredResult = await storeUnstructuredForApi({
+        userId,
+        fileContent,
+        mimeType,
+        idempotencyKey: parsed.data.file_idempotency_key,
+        originalFilename,
+        interpret: parsed.data.interpret ?? true,
+        interpretationConfig: parsed.data.interpretation_config,
+      });
+    }
+
+    if (structuredResult && unstructuredResult) {
+      return res.json({
+        structured: structuredResult,
+        unstructured: unstructuredResult,
+      });
+    }
+    if (structuredResult) {
+      return res.json(structuredResult);
+    }
+    return res.status(200).json(unstructuredResult);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
       return sendError(res, 401, "AUTH_REQUIRED", error.message);
     }
     logError("APIError:store", req, error);
-    const message = error instanceof Error ? error.message : "Failed to store entities";
+    const message = error instanceof Error ? error.message : "Failed to store payload";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
   }
 });
 
 // POST /api/store/unstructured - Store raw file (base64), optional AI interpretation
-app.post("/api/store/unstructured", async (req, res) => {
+app.post("/store/unstructured", async (req, res) => {
   const parsed = StoreUnstructuredRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:store_unstructured", req, { issues: parsed.error.issues });
@@ -2494,187 +2677,15 @@ app.post("/api/store/unstructured", async (req, res) => {
 
   try {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
-    const {
-      file_content,
-      mime_type,
-      idempotency_key: providedIdempotencyKey,
-      original_filename,
-      interpret,
-    } = parsed.data;
-
-    const fileBuffer = Buffer.from(file_content, "base64");
-    const idempotencyKey =
-      providedIdempotencyKey ??
-      (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
-
-    const storageResult = await storeRawContent({
+    const response = await storeUnstructuredForApi({
       userId,
-      fileBuffer,
-      mimeType: mime_type,
-      originalFilename: original_filename?.trim() || undefined,
-      idempotencyKey,
-      provenance: { upload_method: "api_store_unstructured", client: "api" },
+      fileContent: parsed.data.file_content,
+      mimeType: parsed.data.mime_type,
+      idempotencyKey: parsed.data.idempotency_key,
+      originalFilename: parsed.data.original_filename,
+      interpret: parsed.data.interpret ?? true,
+      interpretationConfig: parsed.data.interpretation_config,
     });
-
-    const response: {
-      source_id: string;
-      content_hash: string;
-      file_size: number;
-      deduplicated?: boolean;
-      entities_created?: number;
-      observations_created?: number;
-      interpretation_run_id?: string;
-      interpretation?: unknown;
-      interpretation_debug?: Record<string, unknown>;
-      entity_ids?: string[];
-    } = {
-      source_id: storageResult.sourceId,
-      content_hash: storageResult.contentHash,
-      file_size: storageResult.fileSize,
-      deduplicated: storageResult.deduplicated,
-      entities_created: 0,
-      observations_created: 0,
-    };
-
-    if (interpret && storageResult.sourceId) {
-      const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
-        await import("./services/file_text_extraction.js");
-      const {
-        extractWithLLM,
-        extractWithLLMFromImage,
-        extractFromCSVWithChunking,
-        isLLMExtractionAvailable,
-      } = await import("./services/llm_extraction.js");
-      const { runInterpretation } = await import("./services/interpretation.js");
-
-      const rawText = await extractTextFromBuffer(
-        fileBuffer,
-        mime_type,
-        original_filename || "file"
-      );
-
-      if (!isLLMExtractionAvailable()) {
-        response.interpretation = {
-          skipped: true,
-          reason: "openai_not_configured",
-          message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-        };
-        return res.status(200).json(response);
-      }
-
-      const isCsv = mime_type?.toLowerCase() === "text/csv";
-      const isPdf =
-        (mime_type || "").toLowerCase().includes("pdf") ||
-        (original_filename || "").toLowerCase().endsWith(".pdf");
-      const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
-
-      let extractionResult:
-        | Awaited<ReturnType<typeof extractWithLLM>>
-        | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
-      const pdfDebug = getPdfWorkerDebug();
-      const interpretationDebug: Record<string, unknown> = {
-        raw_text_length: rawTextLength,
-        pdf_worker_wrapper_used: pdfDebug.configured,
-        pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
-        pdf_worker_set_worker_error: pdfDebug.set_worker_error,
-      };
-      if (rawTextLength === 0 && isPdf) {
-        interpretationDebug.vision_fallback_attempted = true;
-        const imageResult = await getPdfFirstPageImageDataUrl(
-          fileBuffer,
-          mime_type,
-          original_filename || "file",
-          { returnError: true }
-        );
-        const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-        if (typeof imageResult === "object" && imageResult.error) {
-          interpretationDebug.vision_fallback_image_error = imageResult.error;
-        }
-        interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-        if (imageDataUrl) {
-          try {
-            extractionResult = await extractWithLLMFromImage(
-              imageDataUrl,
-              original_filename || "file",
-              mime_type,
-              "gpt-4o"
-            );
-            interpretationDebug.used_vision_fallback = true;
-          } catch (visionErr) {
-            interpretationDebug.vision_fallback_error =
-              visionErr instanceof Error ? visionErr.message : String(visionErr);
-            extractionResult = await extractWithLLM(
-              rawText,
-              original_filename || "file",
-              mime_type,
-              "gpt-4o"
-            );
-          }
-        } else {
-          extractionResult = await extractWithLLM(
-            rawText,
-            original_filename || "file",
-            mime_type,
-            "gpt-4o"
-          );
-        }
-      } else {
-        extractionResult = isCsv
-          ? await extractFromCSVWithChunking(
-              rawText,
-              original_filename || "file",
-              mime_type,
-              "gpt-4o"
-            )
-          : await extractWithLLM(rawText, original_filename || "file", mime_type, "gpt-4o");
-      }
-
-      let extractedData: Array<Record<string, unknown>>;
-      if ("entities" in extractionResult) {
-        extractedData = extractionResult.entities.map((e) => ({
-          entity_type: e.entity_type,
-          ...e.fields,
-        }));
-      } else {
-        const { entity_type, fields } = extractionResult;
-        extractedData = [{ entity_type, ...fields }];
-      }
-
-      const defaultConfig = {
-        provider: "openai",
-        model_id: "gpt-4o",
-        temperature: 0,
-        prompt_hash: "llm_extraction_v2_idempotent",
-        code_version: "v0.2.0",
-      };
-      interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
-        Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
-      );
-      response.interpretation_debug = interpretationDebug;
-      try {
-        const interpretationResult = await runInterpretation({
-          userId,
-          sourceId: storageResult.sourceId,
-          extractedData,
-          config: defaultConfig,
-        });
-        response.interpretation = interpretationResult;
-        if (interpretationResult.entities?.length) {
-          response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
-          response.entities_created = interpretationResult.entities.length;
-          response.observations_created = interpretationResult.entities.length;
-        }
-        if (interpretationResult.interpretationId) {
-          response.interpretation_run_id = interpretationResult.interpretationId;
-        }
-      } catch (interpretError) {
-        response.interpretation = {
-          error: interpretError instanceof Error ? interpretError.message : String(interpretError),
-          skipped: true,
-        };
-      }
-    }
-
     return res.status(200).json(response);
   } catch (error) {
     if (error instanceof Error && error.message.includes("Not authenticated")) {
@@ -2687,7 +2698,7 @@ app.post("/api/store/unstructured", async (req, res) => {
 });
 
 // POST /api/observations/query - Query observations
-app.post("/api/observations/query", async (req, res) => {
+app.post("/observations/query", async (req, res) => {
   const parsed = ObservationsQueryRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:observations_query", req, {
@@ -2703,7 +2714,7 @@ app.post("/api/observations/query", async (req, res) => {
     const { observation_id, entity_id, entity_type, source_id, limit, offset } = parsed.data;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = supabase.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
+    let query = db.from("observations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     if (observation_id) {
       query = query.eq("id", observation_id);
@@ -2745,7 +2756,7 @@ app.post("/api/observations/query", async (req, res) => {
 
 // POST /api/entities/merge - Merge duplicate entities
 // REQUIRES AUTHENTICATION - validates user_id matches authenticated user and entities belong to user
-app.post("/api/entities/merge", async (req, res) => {
+app.post("/entities/merge", async (req, res) => {
   const parsed = MergeEntitiesRequestSchema.safeParse(req.body);
   if (!parsed.success) {
     logWarn("ValidationError:entities_merge", req, {
@@ -2766,14 +2777,14 @@ app.post("/api/entities/merge", async (req, res) => {
     }
 
     // Validate both entities exist and belong to authenticated user
-    const { data: fromEntity } = await supabase
+    const { data: fromEntity } = await db
       .from("entities")
       .select("id, merged_to_entity_id")
       .eq("id", from_entity_id)
       .eq("user_id", authenticatedUserId) // SECURITY: Only merge entities belonging to authenticated user
       .single();
 
-    const { data: toEntity } = await supabase
+    const { data: toEntity } = await db
       .from("entities")
       .select("id, merged_to_entity_id")
       .eq("id", to_entity_id)
@@ -2793,7 +2804,7 @@ app.post("/api/entities/merge", async (req, res) => {
     }
 
     // Rewrite observations
-    const { data: rewriteData, error: rewriteError } = await supabase
+    const { data: rewriteData, error: rewriteError } = await db
       .from("observations")
       .update({ entity_id: to_entity_id })
       .eq("entity_id", from_entity_id)
@@ -2805,7 +2816,7 @@ app.post("/api/entities/merge", async (req, res) => {
     const observations_moved = rewriteData?.length || 0;
 
     // Mark source entity as merged
-    const { error: mergeError } = await supabase
+    const { error: mergeError } = await db
       .from("entities")
       .update({
         merged_to_entity_id: to_entity_id,
@@ -2817,7 +2828,7 @@ app.post("/api/entities/merge", async (req, res) => {
     if (mergeError) throw mergeError;
 
     // Record merge in entity_merges table
-    await supabase.from("entity_merges").insert({
+    await db.from("entity_merges").insert({
       user_id,
       from_entity_id,
       to_entity_id,
@@ -2827,7 +2838,7 @@ app.post("/api/entities/merge", async (req, res) => {
     });
 
     // Delete snapshot for merged entity
-    await supabase
+    await db
       .from("entity_snapshots")
       .delete()
       .eq("entity_id", from_entity_id)
@@ -2860,7 +2871,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
 
   const { entity_id } = parsed.data;
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("entity_snapshots")
     .select("*")
     .eq("entity_id", entity_id)
@@ -2870,7 +2881,7 @@ app.post("/get_entity_snapshot", async (req, res) => {
     if (error.code === "PGRST116") {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
     }
-    logError("SupabaseError:get_entity_snapshot", req, error);
+    logError("DbError:get_entity_snapshot", req, error);
     return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 
@@ -2890,7 +2901,7 @@ app.post("/list_observations", async (req, res) => {
 
   const { entity_id, limit = 100, offset = 0 } = parsed.data;
 
-  const query = supabase
+  const query = db
     .from("observations")
     .select("*")
     .eq("entity_id", entity_id)
@@ -2900,7 +2911,7 @@ app.post("/list_observations", async (req, res) => {
   const { data, error } = await query;
 
   if (error) {
-    logError("SupabaseError:list_observations", req, error);
+    logError("DbError:list_observations", req, error);
     return sendError(res, 500, "DB_QUERY_FAILED", error.message);
   }
 
@@ -2924,7 +2935,7 @@ app.post("/get_field_provenance", async (req, res) => {
   const { entity_id, field } = parsed.data;
 
   // Get snapshot to find observation ID for this field
-  const { data: snapshot } = await supabase
+  const { data: snapshot } = await db
     .from("entity_snapshots")
     .select("provenance")
     .eq("entity_id", entity_id)
@@ -2944,13 +2955,13 @@ app.post("/get_field_provenance", async (req, res) => {
   // Get observation(s) - may be comma-separated for merge_array
   const observationIds = observationId.split(",");
 
-  const { data: observations, error: obsError } = await supabase
+  const { data: observations, error: obsError } = await db
     .from("observations")
     .select("*, source_id")
     .in("id", observationIds);
 
   if (obsError) {
-    logError("SupabaseError:get_field_provenance", req, obsError);
+    logError("DbError:get_field_provenance", req, obsError);
     return sendError(res, 500, "DB_QUERY_FAILED", obsError.message);
   }
 
@@ -2959,13 +2970,13 @@ app.post("/get_field_provenance", async (req, res) => {
     .map((obs: { source_id?: string }) => obs.source_id)
     .filter((sourceId: string | undefined): sourceId is string => Boolean(sourceId));
 
-  const { data: sources, error: sourceError } = await supabase
+  const { data: sources, error: sourceError } = await db
     .from("sources")
     .select("id, content_hash, mime_type, storage_url, file_name, created_at")
     .in("id", sourceIds);
 
   if (sourceError) {
-    logError("SupabaseError:get_field_provenance:sources", req, sourceError);
+    logError("DbError:get_field_provenance:sources", req, sourceError);
   }
 
   logDebug("Success:get_field_provenance", req, { entity_id, field });
@@ -3089,11 +3100,11 @@ app.get("/get_file_url", async (req, res) => {
   const bucket = parts[0];
   const path = parts.slice(1).join("/");
 
-  const { data, error } = await supabase.storage
+  const { data, error } = await db.storage
     .from(bucket)
     .createSignedUrl(path, expires_in || 3600);
   if (error || !data?.signedUrl) {
-    logError("SupabaseStorageError:get_file_url", req, error, { bucket, path });
+    logError("StorageError:get_file_url", req, error, { bucket, path });
     return sendError(res, 500, "DB_QUERY_FAILED", error?.message ?? "Failed to create signed URL");
   }
 
@@ -3126,7 +3137,7 @@ app.post("/retrieve_entity_by_identifier", async (req, res) => {
       : identifier.trim().toLowerCase();
 
     // Search in entities table
-    let query = supabase
+    let query = db
       .from("entities")
       .select("*")
       .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
@@ -3138,14 +3149,14 @@ app.post("/retrieve_entity_by_identifier", async (req, res) => {
     const { data: entities, error } = await query.limit(100);
 
     if (error) {
-      logError("SupabaseError:retrieve_entity_by_identifier", req, error);
+      logError("DbError:retrieve_entity_by_identifier", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
     // Try entity ID match if no results
     if ((!entities || entities.length === 0) && entity_type) {
       const possibleId = generateEntityId(entity_type, identifier);
-      const { data: entityById, error: idError } = await supabase
+      const { data: entityById, error: idError } = await db
         .from("entities")
         .select("*")
         .eq("id", possibleId)
@@ -3194,7 +3205,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
 
     // Get outbound relationships
     if (direction === "outbound" || direction === "both") {
-      let query = supabase
+      let query = db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity_id);
@@ -3211,7 +3222,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
 
     // Get inbound relationships
     if (direction === "inbound" || direction === "both") {
-      let query = supabase
+      let query = db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entity_id);
@@ -3236,7 +3247,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
       });
 
       if (relatedIds.size > 0) {
-        const { data, error } = await supabase
+        const { data, error } = await db
           .from("entities")
           .select("*")
           .in("id", Array.from(relatedIds));
@@ -3285,7 +3296,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
     if (node_type === "entity") {
       // Get entity
-      const { data: entity, error: entityError } = await supabase
+      const { data: entity, error: entityError } = await db
         .from("entities")
         .select("*")
         .eq("id", node_id)
@@ -3297,7 +3308,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get relationships if requested
       if (include_relationships) {
-        const { data: relationships, error: relError } = await supabase
+        const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${node_id},target_entity_id.eq.${node_id}`);
@@ -3309,7 +3320,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get observations if requested
       if (include_observations) {
-        const { data: observations, error: obsError } = await supabase
+        const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", node_id);
@@ -3323,7 +3334,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       if (include_sources && include_observations) {
         const sourceIds = result.observations?.map((o: any) => o.source_id).filter(Boolean) || [];
         if (sourceIds.length > 0) {
-          const { data: sources, error: srcError } = await supabase
+          const { data: sources, error: srcError } = await db
             .from("source")
             .select("*")
             .in("id", sourceIds);
@@ -3335,7 +3346,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
       }
     } else if (node_type === "source") {
       // Get source
-      const { data: source, error: srcError } = await supabase
+      const { data: source, error: srcError } = await db
         .from("source")
         .select("*")
         .eq("id", node_id)
@@ -3347,7 +3358,7 @@ app.post("/retrieve_graph_neighborhood", async (req, res) => {
 
       // Get observations from this source
       if (include_observations) {
-        const { data: observations, error: obsError } = await supabase
+        const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("source_id", node_id);
@@ -3391,7 +3402,8 @@ app.post("/delete_entity", async (req, res) => {
     const result = await softDeleteEntity(entity_id, entity_type, userId, reason);
 
     if (!result.success) {
-      return sendError(res, 500, "DELETE_FAILED", result.error || "Failed to delete entity");
+      const status = result.error === "Entity not found" ? 404 : 500;
+      return sendError(res, status, "DELETE_FAILED", result.error || "Failed to delete entity");
     }
 
     logDebug("Success:delete_entity", req, { entity_id });
@@ -3564,12 +3576,12 @@ app.post("/analyze_schema_candidates", async (req, res) => {
     const { entity_type, min_frequency = 5, min_confidence = 0.8 } = parsed.data;
 
     // Query raw_fragments for field frequency analysis
-    let query = supabase
+    let query = db
       .from("raw_fragments")
-      .select("fragment_key, fragment_value, fragment_type");
+      .select("fragment_key, frequency_count, entity_type");
 
     if (entity_type) {
-      query = query.eq("fragment_type", entity_type);
+      query = query.eq("entity_type", entity_type);
     }
 
     if (userId) {
@@ -3579,27 +3591,44 @@ app.post("/analyze_schema_candidates", async (req, res) => {
     const { data: fragments, error } = await query;
 
     if (error) {
-      logError("SupabaseError:analyze_schema_candidates", req, error);
+      logError("DbError:analyze_schema_candidates", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
     // Analyze field frequency
     const fieldFrequency = new Map<string, number>();
     (fragments || []).forEach((frag: any) => {
-      const count = fieldFrequency.get(frag.fragment_key) || 0;
-      fieldFrequency.set(frag.fragment_key, count + 1);
+      const key = String(frag.fragment_key ?? "");
+      if (!key) return;
+      const increment =
+        typeof frag.frequency_count === "number" && Number.isFinite(frag.frequency_count)
+          ? frag.frequency_count
+          : 1;
+      const count = fieldFrequency.get(key) ?? 0;
+      fieldFrequency.set(key, count + increment);
     });
 
     // Build candidates
     const candidates = Array.from(fieldFrequency.entries())
       .filter(([, count]) => count >= min_frequency)
-      .map(([field_name, frequency]) => ({
-        field_name,
-        frequency,
-        confidence: Math.min(frequency / 100, 1), // Simple confidence based on frequency
-        recommended_type: "string", // Default type
-      }))
-      .filter((c) => c.confidence >= min_confidence);
+      .map(([field_name, frequency]) => {
+        const confidence = Math.min(frequency / 100, 1);
+        const recommendedType =
+          /\b(date|dated|dob)\b/i.test(field_name) || /_at$/i.test(field_name)
+            ? "date"
+            : "string";
+        return {
+          field_name,
+          frequency,
+          confidence,
+          recommended_type: recommendedType,
+        };
+      })
+      .filter((c) => c.confidence >= min_confidence)
+      .sort((a, b) => {
+        if (b.frequency !== a.frequency) return b.frequency - a.frequency;
+        return a.field_name.localeCompare(b.field_name);
+      });
 
     logDebug("Success:analyze_schema_candidates", req, { entity_type, count: candidates.length });
     return res.json({ candidates });
@@ -3630,13 +3659,13 @@ app.post("/get_schema_recommendations", async (req, res) => {
     const { entity_type, source, status } = parsed.data;
 
     // Query schema_recommendations table
-    let query = supabase.from("schema_recommendations").select("*").eq("entity_type", entity_type);
+    let query = db.from("schema_recommendations").select("*").eq("entity_type", entity_type);
 
     if (userId) {
       query = query.eq("user_id", userId);
     }
 
-    if (source) {
+    if (source && source !== "all") {
       query = query.eq("source", source);
     }
 
@@ -3644,10 +3673,12 @@ app.post("/get_schema_recommendations", async (req, res) => {
       query = query.eq("status", status);
     }
 
-    const { data: recommendations, error } = await query.order("confidence", { ascending: false });
+    const { data: recommendations, error } = await query
+      .order("confidence_score", { ascending: false })
+      .order("created_at", { ascending: false });
 
     if (error) {
-      logError("SupabaseError:get_schema_recommendations", req, error);
+      logError("DbError:get_schema_recommendations", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
@@ -3689,7 +3720,7 @@ app.post("/update_schema_incremental", async (req, res) => {
     } = parsed.data;
 
     // Get current schema
-    let query = supabase
+    let query = db
       .from("schema_registry")
       .select("*")
       .eq("entity_type", entity_type)
@@ -3704,7 +3735,7 @@ app.post("/update_schema_incremental", async (req, res) => {
     const { data: currentSchema, error: fetchError } = await query.single();
 
     if (fetchError && fetchError.code !== "PGRST116") {
-      logError("SupabaseError:update_schema_incremental", req, fetchError);
+      logError("DbError:update_schema_incremental", req, fetchError);
       return sendError(res, 500, "DB_QUERY_FAILED", fetchError.message);
     }
 
@@ -3726,7 +3757,7 @@ app.post("/update_schema_incremental", async (req, res) => {
     };
 
     // Insert new schema version
-    const { data: newSchemaVersion, error: insertError } = await supabase
+    const { data: newSchemaVersion, error: insertError } = await db
       .from("schema_registry")
       .insert({
         entity_type,
@@ -3741,20 +3772,24 @@ app.post("/update_schema_incremental", async (req, res) => {
       .single();
 
     if (insertError) {
-      logError("SupabaseError:update_schema_incremental", req, insertError);
+      logError("DbError:update_schema_incremental", req, insertError);
       return sendError(res, 500, "DB_QUERY_FAILED", insertError.message);
     }
 
     // Deactivate old schema if activating new one
     if (activate && currentSchema) {
-      await supabase.from("schema_registry").update({ active: false }).eq("id", currentSchema.id);
+      await db.from("schema_registry").update({ active: false }).eq("id", currentSchema.id);
     }
 
     logDebug("Success:update_schema_incremental", req, {
       entity_type,
       fields_added: fields_to_add.length,
     });
-    return res.json({ success: true, schema: newSchemaVersion });
+    return res.json({
+      success: true,
+      schema: newSchemaVersion,
+      schema_version: newSchemaVersion.schema_version,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -3789,7 +3824,7 @@ app.post("/register_schema", async (req, res) => {
     } = parsed.data;
 
     // Insert new schema
-    const { data: newSchema, error } = await supabase
+    const { data: newSchema, error } = await db
       .from("schema_registry")
       .insert({
         entity_type,
@@ -3804,25 +3839,29 @@ app.post("/register_schema", async (req, res) => {
       .single();
 
     if (error) {
-      logError("SupabaseError:register_schema", req, error);
+      logError("DbError:register_schema", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
     // If activating, deactivate other schemas for this entity type
     if (activate) {
-      await supabase
+      await db
         .from("schema_registry")
         .update({ active: false })
         .eq("entity_type", entity_type)
         .not("id", "eq", newSchema.id);
 
       if (user_specific) {
-        await supabase.from("schema_registry").update({ active: false }).eq("user_id", userId);
+        await db.from("schema_registry").update({ active: false }).eq("user_id", userId);
       }
     }
 
     logDebug("Success:register_schema", req, { entity_type, schema_version });
-    return res.json({ success: true, schema: newSchema });
+    return res.json({
+      success: true,
+      schema: newSchema,
+      schema_version: newSchema.schema_version,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -3834,6 +3873,116 @@ app.post("/register_schema", async (req, res) => {
     );
   }
 });
+
+async function runReinterpretForSource(
+  sourceId: string,
+  interpretationConfig: Record<string, unknown> | undefined,
+  userId?: string
+): Promise<{ interpretationId: string; observationsCreated: number; userId: string }> {
+  // Get source
+  let sourceQuery = db.from("sources").select("*").eq("id", sourceId);
+  if (userId) {
+    sourceQuery = sourceQuery.eq("user_id", userId);
+  }
+  const { data: source, error: srcError } = await sourceQuery.single();
+
+  if (srcError || !source) {
+    throw new Error("Source not found");
+  }
+
+  // Re-extract from source.raw_text based on mime_type
+  let extractedData: Array<Record<string, unknown>> = [];
+  if (typeof source.raw_text === "string" && source.raw_text.trim().length > 0) {
+    const mimeType = source.mime_type || "text/plain";
+    const fileName = source.original_filename;
+
+    // Import extraction functions
+    const { extractWithLLM } = await import("./services/llm_extraction.js");
+
+    // Get model ID from config or use default
+    const modelId =
+      interpretationConfig && typeof interpretationConfig.model_id === "string"
+        ? interpretationConfig.model_id
+        : "gpt-4o";
+
+    // Handle CSV files with chunking support
+    if (mimeType === "text/csv" || fileName?.toLowerCase().endsWith(".csv")) {
+      const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
+      extractedData = extractEntitiesFromCsvRows(Buffer.from(source.raw_text, "utf8"), fileName);
+    } else {
+      // Non-CSV files - use standard extraction
+      const extractionResult = await extractWithLLM(source.raw_text, fileName, mimeType, modelId);
+      const { entity_type, fields } = extractionResult;
+      extractedData = [
+        {
+          entity_type,
+          ...fields,
+        },
+      ];
+    }
+  }
+
+  const { runInterpretation } = await import("./services/interpretation.js");
+  const result = await runInterpretation({
+    userId: source.user_id,
+    sourceId,
+    extractedData,
+    config: (interpretationConfig || {}) as any,
+  });
+
+  return {
+    interpretationId: result.interpretationId,
+    observationsCreated: result.observationsCreated,
+    userId: source.user_id,
+  };
+}
+
+async function listUninterpretedSourceIds(userId: string, limit: number): Promise<string[]> {
+  const interpretedSet = new Set<string>();
+  const { data: interpretedData, error: interpretedError } = await db
+    .from("interpretations")
+    .select("source_id")
+    .eq("user_id", userId);
+  if (interpretedError) {
+    throw interpretedError;
+  }
+  for (const row of interpretedData || []) {
+    if (row.source_id) interpretedSet.add(row.source_id);
+  }
+
+  const pageSize = Math.max(100, limit * 3);
+  const sourceIds: string[] = [];
+  let offset = 0;
+
+  while (sourceIds.length < limit) {
+    const { data: sourcePage, error: sourceError } = await db
+      .from("sources")
+      .select("id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (sourceError) {
+      throw sourceError;
+    }
+    if (!sourcePage || sourcePage.length === 0) {
+      break;
+    }
+
+    for (const source of sourcePage) {
+      if (sourceIds.length >= limit) break;
+      if (interpretedSet.has(source.id)) continue;
+      sourceIds.push(source.id);
+    }
+
+    if (sourcePage.length < pageSize) {
+      break;
+    }
+    offset += sourcePage.length;
+  }
+
+  return sourceIds;
+}
 
 // POST /reinterpret - Re-run AI interpretation on existing source
 app.post("/reinterpret", async (req, res) => {
@@ -3851,7 +4000,7 @@ app.post("/reinterpret", async (req, res) => {
 
     // Look up source_id from interpretation if not provided directly
     if (!source_id && interpretation_id) {
-      const { data: interp, error: interpError } = await supabase
+      const { data: interp, error: interpError } = await db
         .from("interpretations")
         .select("source_id")
         .eq("id", interpretation_id)
@@ -3866,84 +4015,7 @@ app.post("/reinterpret", async (req, res) => {
       return sendError(res, 400, "VALIDATION_ERROR", "source_id is required");
     }
 
-    // Get source
-    const { data: source, error: srcError } = await supabase
-      .from("sources")
-      .select("*")
-      .eq("id", source_id)
-      .single();
-
-    if (srcError || !source) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
-    }
-
-    // Re-extract from source.raw_text based on mime_type
-    let extractedData: Array<Record<string, unknown>> = [];
-
-    if (source.raw_text) {
-      const mimeType = source.mime_type || "text/plain";
-      const fileName = source.original_filename;
-
-      // Import extraction functions
-      const { extractWithLLM, extractFromCSVWithChunking } =
-        await import("./services/llm_extraction.js");
-
-      // Get model ID from config or use default
-      const modelId =
-        interpretation_config && typeof interpretation_config.model_id === "string"
-          ? interpretation_config.model_id
-          : "gpt-4o";
-
-      // Handle CSV files with chunking support
-      if (mimeType === "text/csv" || fileName?.toLowerCase().endsWith(".csv")) {
-        const extractionResult = await extractFromCSVWithChunking(
-          source.raw_text,
-          fileName,
-          mimeType,
-          modelId
-        );
-
-        // Handle both single-entity and multi-entity results
-        if ("entities" in extractionResult) {
-          // Multi-entity result from CSV chunking
-          extractedData = extractionResult.entities.map((entity) => ({
-            entity_type: entity.entity_type,
-            ...entity.fields,
-          }));
-        } else {
-          // Single entity result
-          const { entity_type, fields } = extractionResult;
-          extractedData = [
-            {
-              entity_type,
-              ...fields,
-            },
-          ];
-        }
-      } else {
-        // Non-CSV files - use standard extraction
-        const extractionResult = await extractWithLLM(source.raw_text, fileName, mimeType, modelId);
-
-        const { entity_type, fields } = extractionResult;
-        extractedData = [
-          {
-            entity_type,
-            ...fields,
-          },
-        ];
-      }
-    }
-
-    const { runInterpretation } = await import("./services/interpretation.js");
-
-    // Re-run interpretation with re-extracted data
-    const result = await runInterpretation({
-      userId: source.user_id,
-      sourceId: source_id,
-      extractedData,
-      config: (interpretation_config || {}) as any,
-    });
-
+    const result = await runReinterpretForSource(source_id, interpretation_config);
     logDebug("Success:reinterpret", req, { source_id });
     return res.json({
       success: true,
@@ -3951,6 +4023,9 @@ app.post("/reinterpret", async (req, res) => {
       observations_created: result.observationsCreated,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "Source not found") {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Source not found");
+    }
     return handleApiError(
       req,
       res,
@@ -3958,6 +4033,79 @@ app.post("/reinterpret", async (req, res) => {
       "Failed to reinterpret source",
       "DB_QUERY_FAILED",
       "APIError:reinterpret"
+    );
+  }
+});
+
+// POST /interpret-uninterpreted - Re-run interpretation for sources without prior interpretations
+app.post("/interpret-uninterpreted", async (req, res) => {
+  const parsed = InterpretUninterpretedRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    logWarn("ValidationError:interpret_uninterpreted", req, {
+      issues: parsed.error.issues,
+    });
+    return sendValidationError(res, parsed.error.issues);
+  }
+
+  try {
+    const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
+    const limit = parsed.data.limit ?? 50;
+    const dryRun = parsed.data.dry_run ?? false;
+    const interpretationConfig = parsed.data.interpretation_config;
+    const sourceIds = await listUninterpretedSourceIds(userId, limit);
+
+    if (dryRun) {
+      return res.json({
+        dry_run: true,
+        count: sourceIds.length,
+        would_interpret: sourceIds,
+      });
+    }
+
+    const interpreted: Array<{
+      source_id: string;
+      interpretation_id: string;
+      observations_created: number;
+    }> = [];
+    const errors: Array<{ source_id: string; error: string }> = [];
+
+    for (const sourceId of sourceIds) {
+      try {
+        const result = await runReinterpretForSource(sourceId, interpretationConfig, userId);
+        interpreted.push({
+          source_id: sourceId,
+          interpretation_id: result.interpretationId,
+          observations_created: result.observationsCreated,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim().length > 0
+            ? error.message
+            : "Failed to reinterpret source";
+        errors.push({ source_id: sourceId, error: message });
+      }
+    }
+
+    logDebug("Success:interpret_uninterpreted", req, {
+      user_id: userId,
+      processed: interpreted.length,
+      errors: errors.length,
+      limit,
+    });
+    return res.json({
+      dry_run: false,
+      count: interpreted.length,
+      interpreted,
+      errors,
+    });
+  } catch (error) {
+    return handleApiError(
+      req,
+      res,
+      error,
+      "Failed to interpret uninterpreted sources",
+      "DB_QUERY_FAILED",
+      "APIError:interpret_uninterpreted"
     );
   }
 });
@@ -3980,16 +4128,17 @@ app.post("/correct", async (req, res) => {
     const correctionSourceId = `correction_${idempotency_key}`;
 
     // Insert correction observation with highest priority
-    const { data: observation, error } = await supabase
+    const { data: observation, error } = await db
       .from("observations")
       .insert({
         entity_id,
         entity_type,
-        field,
-        value,
+        schema_version: "1.0",
+        fields: { [field]: value },
         source_id: correctionSourceId,
         source_priority: 1000, // Highest priority for manual corrections
         user_id: userId,
+        observed_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       })
       .select()
@@ -4000,7 +4149,7 @@ app.post("/correct", async (req, res) => {
         // Duplicate key - idempotent
         return res.json({ success: true, message: "Correction already applied" });
       }
-      logError("SupabaseError:correct", req, error);
+      logError("DbError:correct", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
@@ -4054,20 +4203,20 @@ app.post("/health_check_snapshots", async (req, res) => {
     const { auto_fix } = parsed.data;
 
     // Query for stale snapshots (observation_count=0 but observations exist)
-    const { data: staleSnapshots, error } = await supabase
+    const { data: staleSnapshots, error } = await db
       .from("entity_snapshots")
       .select("entity_id, entity_type, observation_count")
       .eq("observation_count", 0);
 
     if (error) {
-      logError("SupabaseError:health_check_snapshots", req, error);
+      logError("DbError:health_check_snapshots", req, error);
       return sendError(res, 500, "DB_QUERY_FAILED", error.message);
     }
 
     // Check if these entities actually have observations
     const staleEntities = [];
     for (const snapshot of staleSnapshots || []) {
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations, error: obsError } = await db
         .from("observations")
         .select("id")
         .eq("entity_id", snapshot.entity_id)
@@ -4086,7 +4235,7 @@ app.post("/health_check_snapshots", async (req, res) => {
       for (const entity of staleEntities) {
         try {
           // Get all observations for this entity
-          const { data: observations } = await supabase
+          const { data: observations } = await db
             .from("observations")
             .select("*")
             .eq("entity_id", entity.entity_id)
@@ -4158,8 +4307,13 @@ app.post("/health_check_snapshots", async (req, res) => {
 app.get("/openapi.yaml", (req, res) => {
   const openApiPath = path.join(process.cwd(), "openapi.yaml");
   const openApiContent = fs.readFileSync(openApiPath, "utf-8");
+  const spec = yaml.load(openApiContent) as { servers?: Array<{ url: string; description?: string }> };
+  const baseUrl = (config.apiBase || "").replace(/\/$/, "");
+  if (spec.servers?.length && baseUrl) {
+    spec.servers[0] = { ...spec.servers[0], url: baseUrl };
+  }
   res.setHeader("Content-Type", "application/yaml");
-  res.send(openApiContent);
+  res.send(yaml.dump(spec, { lineWidth: -1 }));
 });
 
 // Documentation routes (FU-301) - must be before SPA fallback
@@ -4187,8 +4341,9 @@ export async function startHTTPServer() {
   // Initialize encryption service
   await initServerKeys();
 
-  const basePort = process.env.HTTP_PORT
-    ? parseInt(process.env.HTTP_PORT, 10)
+  const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
+  const basePort = httpPortEnv
+    ? parseInt(httpPortEnv, 10)
     : config.httpPort || 8080;
   const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
   const maxTries = 20;
@@ -4196,7 +4351,7 @@ export async function startHTTPServer() {
   for (let offset = 0; offset < maxTries; offset++) {
     const port = basePort + offset;
     try {
-      await tryListen(port);
+      const { server } = await tryListen(port);
       if (portFile) {
         fs.writeFileSync(portFile, String(port), "utf-8");
       }
@@ -4207,7 +4362,7 @@ export async function startHTTPServer() {
       import("./services/mcp_oauth.js").then((oauth) => {
         oauth.startStateCleanupJob();
       });
-      return;
+      return { server, port };
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException)?.code;
       if (code === "EADDRINUSE" && offset < maxTries - 1) {

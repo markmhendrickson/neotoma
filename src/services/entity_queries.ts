@@ -1,7 +1,7 @@
 // FU-134: Query Updates
 // Provenance chain, merged entity exclusion
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 
 export interface EntityQueryOptions {
   userId?: string;
@@ -58,7 +58,7 @@ export async function queryEntities(
   } = options;
 
   // Build query for entities
-  let entityQuery = supabase
+  let entityQuery = db
     .from("entities")
     .select("id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at");
 
@@ -97,7 +97,7 @@ export async function queryEntities(
   // Get snapshots for entities
   let entities = entitiesData;
   const entityIds = entities.map((e: any) => e.id);
-  const { data: snapshots, error: snapshotsError } = await supabase
+  const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
     .select("*")
     .in("entity_id", entityIds);
@@ -110,7 +110,7 @@ export async function queryEntities(
   let filteredEntityIds = entityIds;
   if (!includeDeleted) {
     // Check for deletion observations (highest priority with _deleted: true)
-    const { data: deletionObservations } = await supabase
+    const { data: deletionObservations } = await db
       .from("observations")
       .select("entity_id, source_priority, observed_at, fields")
       .in("entity_id", entityIds)
@@ -158,7 +158,7 @@ export async function queryEntities(
   );
 
   // Get raw_fragments for all entities (batch query)
-  const { data: allObservations } = await supabase
+  const { data: allObservations } = await db
     .from("observations")
     .select("entity_id, source_id, user_id")
     .in("entity_id", filteredEntityIds)
@@ -216,7 +216,7 @@ export async function queryEntities(
 
       if (sourceIdsForType.size > 0) {
         const defaultUserId = "00000000-0000-0000-0000-000000000000";
-        let fragmentQuery = supabase
+        let fragmentQuery = db
           .from("raw_fragments")
           .select("fragment_key, fragment_value, last_seen, source_id")
           .eq("entity_type", entityType)
@@ -309,7 +309,7 @@ export async function getEntityWithProvenance(
   includeDeleted: boolean = false
 ): Promise<EntityWithProvenance | null> {
   // Get entity
-  const { data: entity, error: entityError } = await supabase
+  const { data: entity, error: entityError } = await db
     .from("entities")
     .select("*")
     .eq("id", entityId)
@@ -326,7 +326,7 @@ export async function getEntityWithProvenance(
 
   // Check if entity is deleted (unless explicitly requested)
   if (!includeDeleted) {
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("observations")
       .select("source_priority, observed_at, fields")
       .eq("entity_id", entityId)
@@ -344,7 +344,7 @@ export async function getEntityWithProvenance(
   }
 
   // Get snapshot (treat non-PGRST116 errors as "no snapshot" so entity detail still returns)
-  const { data: snapshot, error: snapshotError } = await supabase
+  const { data: snapshot, error: snapshotError } = await db
     .from("entity_snapshots")
     .select("*")
     .eq("entity_id", entityId)
@@ -358,7 +358,7 @@ export async function getEntityWithProvenance(
 
   // Get raw_fragments for this entity
   // Find all sources that have observations for this entity
-  const { data: observations } = await supabase
+  const { data: observations } = await db
     .from("observations")
     .select("source_id, user_id")
     .eq("entity_id", entityId)
@@ -373,7 +373,7 @@ export async function getEntityWithProvenance(
     const defaultUserId = "00000000-0000-0000-0000-000000000000";
 
     // Query raw_fragments for these sources with matching entity_type
-    let fragmentQuery = supabase
+    let fragmentQuery = db
       .from("raw_fragments")
       .select("fragment_key, fragment_value, last_seen, first_seen, source_id")
       .eq("entity_type", entity.entity_type)
@@ -441,7 +441,7 @@ export async function getEntityWithProvenance(
  * Get source metadata for provenance chain
  */
 export async function getSourceMetadata(sourceId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("sources")
     .select("id, content_hash, mime_type, file_size, original_filename, created_at")
     .eq("id", sourceId)
@@ -458,7 +458,7 @@ export async function getSourceMetadata(sourceId: string) {
  * Get interpretation run metadata for provenance chain
  */
 export async function getInterpretationMetadata(runId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("interpretations")
     .select("id, interpretation_config, status, started_at, completed_at, observations_created")
     .eq("id", runId)
@@ -476,7 +476,7 @@ export async function getInterpretationMetadata(runId: string) {
  */
 export async function getObservationProvenance(observationId: string) {
   // Get observation
-  const { data: observation, error: obsError } = await supabase
+  const { data: observation, error: obsError } = await db
     .from("observations")
     .select("*")
     .eq("id", observationId)

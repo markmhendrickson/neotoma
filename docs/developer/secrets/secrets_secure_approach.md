@@ -15,7 +15,7 @@ Passing credentials in conversation text (even base64-encoded) is insecure becau
 **Approach:**
 - Don't pass credentials to agents at all
 - Agents mark integration/E2E tests as skipped when credentials unavailable
-- Unit tests can still run (many don't require Supabase)
+- Unit tests can still run (many don't require database)
 - Status file records which tests were skipped and why
 
 **Pros:**
@@ -64,7 +64,7 @@ Passing credentials in conversation text (even base64-encoded) is insecure becau
 ### Option 4: Agents Create Test Credentials
 
 **Approach:**
-- Agents use Supabase CLI to create temporary test projects
+- Agents use local SQLite for integration tests (no external credentials)
 - Or use publicly available test credentials
 - No production credentials needed
 
@@ -73,7 +73,7 @@ Passing credentials in conversation text (even base64-encoded) is insecure becau
 - ✅ Isolated test environment
 
 **Cons:**
-- ❌ Requires Supabase CLI access
+- ❌ May have setup complexity for some test scenarios
 - ❌ May have rate limits
 - ❌ More setup complexity
 

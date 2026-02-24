@@ -47,7 +47,7 @@ This document helps agents and developers debug Neotoma file import, AI interpre
 
 **Root cause:** Database schema out of sync with code (e.g. migrations not applied).
 
-**Fix:** Run migrations and ensure the `interpretations` table has all required columns. See `supabase/migrations/` and `docs/private/migration/migrations_lifecycle.md`.
+**Fix:** Run migrations and ensure the `interpretations` table has all required columns. See `migrations/` and `docs/private/migration/migrations_lifecycle.md`.
 
 ## 5. Related docs and MCP tools
 

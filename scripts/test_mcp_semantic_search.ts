@@ -2,7 +2,7 @@
 /**
  * Test semantic search via MCP retrieve_entities with search param.
  * Run: NEOTOMA_ENV=production npx tsx scripts/test_mcp_semantic_search.ts
- * Or with prod local DB: NEOTOMA_STORAGE_BACKEND=local NEOTOMA_SQLITE_PATH=./data/neotoma.prod.db NEOTOMA_ENV=production npx tsx scripts/test_mcp_semantic_search.ts
+ * Or with prod local DB: NEOTOMA_SQLITE_PATH=./data/neotoma.prod.db NEOTOMA_ENV=production npx tsx scripts/test_mcp_semantic_search.ts
  */
 import dotenv from "dotenv";
 dotenv.config();

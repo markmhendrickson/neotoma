@@ -74,9 +74,12 @@ describe("CLI source commands", () => {
       const result1 = JSON.parse(page1);
       const result2 = JSON.parse(page2);
 
-      if (result1.sources.length > 0 && result2.sources.length > 0) {
-        expect(result1.sources[0].id).not.toBe(result2.sources[0].id);
-      }
+      expect(result1).toHaveProperty("sources");
+      expect(result2).toHaveProperty("sources");
+      expect(result1.offset).toBe(0);
+      expect(result2.offset).toBe(2);
+      expect(result1.limit).toBe(2);
+      expect(result2.limit).toBe(2);
     });
 
     it("should combine user filtering with pagination", async () => {
@@ -105,7 +108,8 @@ describe("CLI source commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result.source.id).toBe(testSourceId);
+      // sources get returns a flat source object (not wrapped in { source: ... })
+      expect(result.id).toBe(testSourceId);
     });
 
     it("should include file URL in response", async () => {
@@ -114,7 +118,7 @@ describe("CLI source commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result.source).toBeDefined();
+      expect(result.id).toBeDefined();
     });
 
     it("should handle invalid source ID", async () => {
@@ -130,8 +134,8 @@ describe("CLI source commands", () => {
         `${CLI_PATH} sources get --source-id "${testSourceId}"`
       );
 
-      const result = JSON.parse(stdout);
-      expect(result.source.id).toBe(testSourceId);
+      // Without --json, output is a pretty-printed table (not JSON)
+      expect(stdout).toContain(testSourceId);
     });
   });
 
@@ -142,8 +146,9 @@ describe("CLI source commands", () => {
       );
 
       const result = JSON.parse(stdout);
-      expect(result.source).toBeDefined();
-      expect(result.source.id).toBe(testSourceId);
+      // sources get returns a flat source object (not wrapped in { source: ... })
+      expect(result.id).toBeDefined();
+      expect(result.id).toBe(testSourceId);
     });
 
     it("should show file path in list response", async () => {

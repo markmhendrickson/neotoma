@@ -5,7 +5,7 @@
  * Designed to run as a daily cron job.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 
 export interface DeadlineAlert {
   deletion_request_id: string;
@@ -30,7 +30,7 @@ export async function checkDeletionDeadlines(
   const alerts: DeadlineAlert[] = [];
 
   // Get pending/in_progress deletion requests
-  const { data: requests, error } = await supabase
+  const { data: requests, error } = await db
     .from("deletion_requests")
     .select("*")
     .in("status", ["pending", "in_progress", "extended"])
@@ -95,7 +95,7 @@ export async function processOverdueRequests(
   };
 
   for (const alert of overdueAlerts) {
-    const { data: request } = await supabase
+    const { data: request } = await db
       .from("deletion_requests")
       .select("*")
       .eq("id", alert.deletion_request_id)
@@ -143,7 +143,7 @@ async function escalateDeletionRequest(
   console.warn(`ESCALATED: ${alert.message}`);
 
   // Update request notes
-  const { error } = await supabase
+  const { error } = await db
     .from("deletion_requests")
     .update({
       reason: `${alert.message}. Manual review required.`,
@@ -174,7 +174,7 @@ export async function checkRetentionExpirations(): Promise<{
   };
 
   // Get soft-deleted requests with retention periods that have expired
-  const { data: requests, error } = await supabase
+  const { data: requests, error } = await db
     .from("deletion_requests")
     .select("*")
     .eq("deletion_method", "soft_only")
@@ -200,7 +200,7 @@ export async function checkRetentionExpirations(): Promise<{
         const { processDeletionRequest } = await import("./gdpr_deletion.js");
 
         // Update deletion method to physical deletion
-        await supabase
+        await db
           .from("deletion_requests")
           .update({ deletion_method: "physical_deletion" })
           .eq("id", request.id);
@@ -235,7 +235,7 @@ export async function generateMonitoringReport(): Promise<{
 }> {
   const alerts = await checkDeletionDeadlines();
 
-  const { data: statusCounts } = await supabase
+  const { data: statusCounts } = await db
     .from("deletion_requests")
     .select("status")
     .in("status", ["pending", "in_progress", "completed"]);
@@ -251,7 +251,7 @@ export async function generateMonitoringReport(): Promise<{
 
   // Count retention expirations
   const now = new Date();
-  const { data: retentionRequests } = await supabase
+  const { data: retentionRequests } = await db
     .from("deletion_requests")
     .select("soft_deleted_at, retention_period_days")
     .eq("deletion_method", "soft_only")

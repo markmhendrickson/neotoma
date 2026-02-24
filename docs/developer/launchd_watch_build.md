@@ -14,7 +14,7 @@ This installs `~/Library/LaunchAgents/com.neotoma.watch-build.plist`, loads it s
 
 ## What runs
 
-The agent runs `npm run watch:build` (i.e. `tsc --watch`). It does not start the API or tunnel; it only compiles TypeScript so the global `neotoma` stays current. If the watch process exits (e.g. after a fatal error), the script restarts it after a short delay so the watcher is always running.
+At startup the agent runs `npm run build:server` once (full TypeScript compile plus PDF worker copy), then runs `npm run watch:build` (i.e. `tsc --watch`) so `dist/` stays in sync with source. It does not start the API or tunnel. If the watch process exits (e.g. after a fatal error), the script restarts it after a short delay so the watcher is always running.
 
 ## Commands
 
@@ -34,4 +34,4 @@ rm ~/Library/LaunchAgents/com.neotoma.watch-build.plist
 
 ## Scope
 
-macOS only. The plist runs the script at `scripts/run_watch_build_launchd.sh`, which executes `npm run watch:build` in the repo.
+macOS only. The plist runs the script at `scripts/run_watch_build_launchd.sh`, which runs `npm run build:server` once then `npm run watch:build` in the repo.

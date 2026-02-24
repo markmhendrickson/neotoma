@@ -6,7 +6,7 @@
  * full audit trail and immutability guarantees.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { createHash } from "node:crypto";
 
 export interface DeletionObservation extends Record<string, unknown> {
@@ -67,6 +67,29 @@ export async function softDeleteEntity(
   reason?: string,
   timestamp?: string
 ): Promise<DeletionResult> {
+  // Verify entity exists and belongs to user before creating deletion observation
+  const { data: existing, error: fetchError } = await db
+    .from("entities")
+    .select("id")
+    .eq("id", entityId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (fetchError) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: `Failed to verify entity: ${fetchError.message}`,
+    };
+  }
+  if (!existing) {
+    return {
+      success: false,
+      entity_id: entityId,
+      error: "Entity not found",
+    };
+  }
+
   const deletedAt = timestamp || new Date().toISOString();
 
   // Create deterministic observation ID
@@ -92,7 +115,7 @@ export async function softDeleteEntity(
   };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("observations")
       .insert([deletionObservation])
       .select()
@@ -178,7 +201,7 @@ export async function softDeleteRelationship(
   };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("relationship_observations")
       .insert(deletionObservation)
       .select()
@@ -248,7 +271,7 @@ export async function restoreEntity(
   };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("observations")
       .insert([restorationObservation])
       .select()
@@ -334,7 +357,7 @@ export async function restoreRelationship(
   };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("relationship_observations")
       .insert(restorationObservation)
       .select()
@@ -373,7 +396,7 @@ export async function isEntityDeleted(
   entityId: string,
   userId: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("observations")
     .select("fields, source_priority, observed_at")
     .eq("entity_id", entityId)
@@ -408,7 +431,7 @@ export async function isRelationshipDeleted(
   relationshipKey: string,
   userId: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("relationship_observations")
     .select("metadata")
     .eq("relationship_key", relationshipKey)

@@ -1,7 +1,6 @@
 ---
-description: "Ensures checkpoints are automatically updated in status.md when their trigger batches complete"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when executing release workflow or updating release status: after a batch completes, mark any checkpoint triggered by that batch as completed in status.md; ensure Checkpoint 2 is completed when all batches done."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/checkpoint_management.mdc -->

@@ -1,12 +1,12 @@
 # Neotoma Authentication and Authorization
 *(Auth Flows, Permissions, and Access Control)*
 ## Authentication
-**Provider:** Supabase Auth
+**Provider:** Local auth (built-in) or OAuth
 **Flows:**
-- Email/password
-- OAuth (Google, GitHub)
-- Magic link
-**Token:** JWT issued by Supabase, validated on every request.
+- Local dev stub (no credentials)
+- OAuth (when configured)
+- Key-derived Bearer token (when encryption enabled)
+**Token:** JWT or Bearer token, validated on every request.
 ## Authorization
 **MVP:** All authenticated users can access all records (no per-user isolation).
 **Future:** Row-Level Security (RLS) by `user_id`.
@@ -26,9 +26,9 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 
 1. MCP client initiates OAuth via `POST /api/mcp/oauth/initiate` with `connection_id`
 2. Backend generates PKCE challenge and returns authorization URL
-3. User opens authorization URL in browser and signs in via Supabase Auth
+3. User opens authorization URL in browser and signs in
 4. User approves connection
-5. Supabase redirects to callback URL with authorization code
+5. Auth provider redirects to callback URL with authorization code
 6. Backend exchanges code for access token and refresh token
 7. Backend stores encrypted refresh token in database
 8. MCP client polls `GET /api/mcp/oauth/status` until status is "active"
@@ -63,11 +63,11 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 - Access tokens are cached and automatically refreshed
 - Users can revoke connections via UI
 - OAuth state expires after 10 minutes
-- All tokens validated via Supabase Auth
+- All tokens validated via auth provider
 
 ### Local Auth (Local Backend)
 
-Local mode uses a built-in auth provider and does not call Supabase. OAuth endpoints remain the same, but the authorization step is handled by a local login page.
+Local mode uses a built-in auth provider. OAuth endpoints remain the same, but the authorization step is handled by a local login page.
 
 **Local flow summary (encryption off):**
 
@@ -85,7 +85,7 @@ Local mode uses a built-in auth provider and does not call Supabase. OAuth endpo
 
 **Base URL when running locally:**
 
-The redirect to the local login page uses `API_BASE_URL` (or the default `http://localhost:8080` in development). If your `.env` has `API_BASE_URL=https://dev.neotoma.io`, the browser will open dev.neotoma.io for login even when the API process is running on your machine. For local-only use, set `API_BASE_URL=http://localhost:8080` or leave it unset, and point Cursor at `http://localhost:8080/mcp`.
+The redirect to the local login page uses `NEOTOMA_HOST_URL` (or the default `http://localhost:8080` in development). If your `.env` has `NEOTOMA_HOST_URL=https://dev.neotoma.io`, the browser will open dev.neotoma.io for login even when the API process is running on your machine. For local-only use, set `NEOTOMA_HOST_URL=http://localhost:8080` or leave it unset, and point Cursor at `http://localhost:8080/mcp`.
 
 **Deployment with multiple instances (local backend):**
 
@@ -129,10 +129,10 @@ Three separate keys are derived from the root secret using HKDF (RFC 5869):
 
 **Authentication Flow:**
 
-1. User signs in via Supabase Auth (frontend)
-2. Frontend obtains `access_token` (JWT) from Supabase session
+1. User signs in (frontend)
+2. Frontend obtains `access_token` (JWT) from session
 3. MCP client passes session token in environment variable during initialization
-4. MCP server validates token using Supabase Auth
+4. MCP server validates token
 5. MCP server extracts `user_id` from validated token
 6. All subsequent MCP actions use authenticated `user_id`
 
@@ -142,7 +142,7 @@ Three separate keys are derived from the root secret using HKDF (RFC 5869):
 // MCP initialization with session token (deprecated)
 {
   "env": {
-    "NEOTOMA_SESSION_TOKEN": "supabase_access_token_here"
+    "NEOTOMA_SESSION_TOKEN": "access_token_here"
   }
 }
 ```

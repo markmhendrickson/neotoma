@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { supabase, getServiceRoleClient } from "../../src/db.js";
+import { db, getServiceRoleClient } from "../../src/db.js";
 import { queryEntities, type EntityQueryOptions } from "../../src/services/entity_queries.js";
 
 const serviceRoleClient = getServiceRoleClient();
@@ -17,7 +17,7 @@ describe("Entity Queries Service", () => {
   beforeEach(async () => {
     // Clean up test data
     if (testEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", testEntityIds);
+      await db.from("entities").delete().in("id", testEntityIds);
       testEntityIds.length = 0;
     }
   });
@@ -25,7 +25,7 @@ describe("Entity Queries Service", () => {
   afterEach(async () => {
     // Final cleanup
     if (testEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", testEntityIds);
+      await db.from("entities").delete().in("id", testEntityIds);
     }
   });
 

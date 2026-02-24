@@ -112,7 +112,7 @@ echo "  - This means you've reached your SendGrid account's email sending limit"
 echo "  - SendGrid uses 1 credit per email sent"
 echo "  - Free tier: 100 credits/day"
 echo "  - Paid plans: Based on your monthly limit"
-echo "  - This is NOT a Supabase configuration issue"
+echo "  - This is NOT a database configuration issue"
 echo ""
 
 echo "📋 Quick Links:"

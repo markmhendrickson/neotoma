@@ -25,7 +25,7 @@ import { fileURLToPath } from "url";
 import {
   ENTITY_TYPE_SCHEMAS,
 } from "../src/services/schema_definitions.js";
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SNAPSHOTS_DIR = join(__dirname, "../docs/subsystems/schema_snapshots");
@@ -89,7 +89,7 @@ async function getAllSchemas(): Promise<SchemaSnapshot[]> {
 
   // 2. Get ALL versions from database (including historic)
   try {
-    const { data: dbSchemas, error } = await supabase
+    const { data: dbSchemas, error } = await db
       .from("schema_registry")
       .select("*")
       .order("entity_type", { ascending: true })

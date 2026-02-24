@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { processAutoEnhancementQueue } from "../../src/services/auto_enhancement_processor.js";
 import fs from "fs";
@@ -129,7 +129,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       }
 
       // 6. Verify queue entries were created (best-effort, may not always succeed)
-      const { data: queueItems } = await supabase
+      const { data: queueItems } = await db
         .from("auto_enhancement_queue")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -206,7 +206,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       expect(typeof processResult.skipped).toBe("number");
 
       // 6. Check for schema recommendations (may be auto_applied or skipped)
-      const { data: recommendations } = await supabase
+      const { data: recommendations } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", testEntityType);
@@ -370,7 +370,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
   describe("Coverage Gaps - Foreign Key Constraints", () => {
     it("should allow queue items with null user_id", async () => {
       // Test FK constraint with null user_id (should succeed)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("auto_enhancement_queue")
         .insert({
           entity_type: testEntityType,
@@ -388,7 +388,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
       // Cleanup
       if (data && data[0]) {
-        await supabase
+        await db
           .from("auto_enhancement_queue")
           .delete()
           .eq("id", data[0].id);
@@ -397,7 +397,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
     it("should allow queue items with default UUID", async () => {
       // Test FK constraint with default UUID
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("auto_enhancement_queue")
         .insert({
           entity_type: testEntityType,
@@ -414,7 +414,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
       // Cleanup
       if (data && data[0]) {
-        await supabase
+        await db
           .from("auto_enhancement_queue")
           .delete()
           .eq("id", data[0].id);
@@ -423,7 +423,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
     it("should reject queue items with non-existent user_id", async () => {
       // Test FK constraint violation (should fail)
-      const { error } = await supabase
+      const { error } = await db
         .from("auto_enhancement_queue")
         .insert({
           entity_type: testEntityType,
@@ -442,7 +442,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
   describe("Coverage Gaps - User ID Handling", () => {
     it("should query fragments with null user_id", async () => {
       // Insert test fragment with null user_id
-      const { data: insertData, error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -457,7 +457,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       expect(insertData).toBeDefined();
 
       // Query with .is("user_id", null)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("raw_fragments")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -470,7 +470,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
       // Cleanup
       if (insertData && insertData[0]) {
-        await supabase
+        await db
           .from("raw_fragments")
           .delete()
           .eq("id", insertData[0].id);
@@ -479,7 +479,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
     it("should query fragments with default UUID", async () => {
       // Insert test fragment with default UUID
-      const { data: insertData, error: insertError } = await supabase
+      const { data: insertData, error: insertError } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -494,7 +494,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       expect(insertData).toBeDefined();
 
       // Query with .eq("user_id", testUserId)
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("raw_fragments")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -507,7 +507,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
       // Cleanup
       if (insertData && insertData[0]) {
-        await supabase
+        await db
           .from("raw_fragments")
           .delete()
           .eq("id", insertData[0].id);
@@ -516,7 +516,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
     it("should query fragments with both null and default UUID", async () => {
       // Insert fragments with both null and default UUID
-      const { data: insertData1 } = await supabase
+      const { data: insertData1 } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -527,7 +527,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
         })
         .select();
 
-      const { data: insertData2 } = await supabase
+      const { data: insertData2 } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -539,7 +539,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
         .select();
 
       // Query with .or() for both null and default UUID
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("raw_fragments")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -551,13 +551,13 @@ describe("MCP Auto-Enhancement - Integration", () => {
 
       // Cleanup
       if (insertData1 && insertData1[0]) {
-        await supabase
+        await db
           .from("raw_fragments")
           .delete()
           .eq("id", insertData1[0].id);
       }
       if (insertData2 && insertData2[0]) {
-        await supabase
+        await db
           .from("raw_fragments")
           .delete()
           .eq("id", insertData2[0].id);
@@ -596,7 +596,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       await waitForAutoEnhancementProcessor();
 
       // Verify actual database state - queue items were created
-      const { data: queueItems, error } = await supabase
+      const { data: queueItems, error } = await db
         .from("auto_enhancement_queue")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -640,7 +640,7 @@ describe("MCP Auto-Enhancement - Integration", () => {
       await waitForAutoEnhancementProcessor();
 
       // Verify actual database state - fragments were created
-      const { data: fragments, error } = await supabase
+      const { data: fragments, error } = await db
         .from("raw_fragments")
         .select("*")
         .eq("entity_type", testEntityType)

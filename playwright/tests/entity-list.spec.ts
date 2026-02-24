@@ -6,7 +6,7 @@
 
 import { expect } from "@playwright/test";
 import { test } from "../fixtures/servers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 test.describe("Entity List Component", () => {
   const testUserId = "test-user-entity-list";
@@ -15,7 +15,7 @@ test.describe("Entity List Component", () => {
   test.afterAll(async () => {
     // Cleanup
     if (createdEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
     }
   });
 
@@ -40,7 +40,7 @@ test.describe("Entity List Component", () => {
   test("should paginate entity list", async ({ page }) => {
     // Create test entities
     for (let i = 0; i < 15; i++) {
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entities")
         .insert({
           user_id: testUserId,
@@ -86,7 +86,7 @@ test.describe("Entity List Component", () => {
     const types = ["company", "person", "invoice"];
     
     for (const type of types) {
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entities")
         .insert({
           user_id: testUserId,
@@ -119,7 +119,7 @@ test.describe("Entity List Component", () => {
       await page.waitForLoadState("networkidle");
       
       // Results should be filtered (verified via database query)
-      const { data: filtered } = await supabase
+      const { data: filtered } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "company")
@@ -139,7 +139,7 @@ test.describe("Entity List Component", () => {
     const names = ["Alpha Company", "Beta Company", "Charlie Company"];
     
     for (const name of names) {
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entities")
         .insert({
           user_id: testUserId,
@@ -171,7 +171,7 @@ test.describe("Entity List Component", () => {
       await page.waitForLoadState("networkidle");
       
       // Verify sort order via database query
-      const { data: sorted } = await supabase
+      const { data: sorted } = await db
         .from("entities")
         .select("*")
         .eq("user_id", testUserId)
@@ -223,7 +223,7 @@ test.describe("Entity List Component", () => {
 
   test("should click entity to view details", async ({ page }) => {
     // Create test entity
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -260,7 +260,7 @@ test.describe("Entity List Component", () => {
 
     // Cleanup
     if (entity) {
-      await supabase.from("entities").delete().eq("id", entity.id);
+      await db.from("entities").delete().eq("id", entity.id);
     }
   });
 });

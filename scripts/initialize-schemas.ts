@@ -39,7 +39,7 @@ async function checkSchemaExists(
   } catch (error: any) {
     // If error is due to missing config, return null to indicate unknown
     if (
-      error.message?.includes("Missing Supabase") ||
+      error.message?.includes("Missing database") ||
       error.message?.includes("configuration") ||
       error.code === "PGRST301" // Connection error
     ) {
@@ -170,7 +170,7 @@ async function loadSchemaRegistry(): Promise<any | null> {
     return schemaRegistry;
   } catch (error: any) {
     if (
-      error.message?.includes("Missing Supabase") ||
+      error.message?.includes("Missing database") ||
       error.message?.includes("configuration")
     ) {
       return null;
@@ -189,7 +189,7 @@ async function checkDatabaseAccessible(schemaRegistry: any): Promise<boolean> {
     return true;
   } catch (error: any) {
     if (
-      error.message?.includes("Missing Supabase") ||
+      error.message?.includes("Missing database") ||
       error.message?.includes("configuration") ||
       error.code === "PGRST301"
     ) {
@@ -221,20 +221,20 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
         "⚠️  Database not accessible - showing all schemas that would be registered\n"
       );
       console.log(
-        "   (Configure SUPABASE_PROJECT_ID and SUPABASE_SERVICE_KEY to check existing schemas)\n"
+        "   (Configure NEOTOMA_SQLITE_PATH or data directory to check existing schemas)\n"
       );
     } else {
       console.error(
-        "❌ Error: Database not accessible. Please configure Supabase credentials.\n"
+        "❌ Error: Database not accessible. Please configure NEOTOMA_SQLITE_PATH or data directory.\n"
       );
       console.error(
         "   Required environment variables:\n"
       );
       console.error(
-        "   - SUPABASE_PROJECT_ID (or SUPABASE_URL)\n"
+        "   - NEOTOMA_SQLITE_PATH (for local SQLite)\n"
       );
       console.error(
-        "   - SUPABASE_SERVICE_KEY\n"
+        "   - Or NEOTOMA_DATA_DIR with writable data directory\n"
       );
       console.error(
         "\n   Options to configure:\n"
@@ -252,10 +252,10 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
         "   2. Manually add to .env file:\n"
       );
       console.error(
-        "      SUPABASE_PROJECT_ID=your-project-id\n"
+        "      NEOTOMA_SQLITE_PATH=./data/neotoma.db\n"
       );
       console.error(
-        "      SUPABASE_SERVICE_KEY=your-service-key\n"
+        "      NEOTOMA_DATA_DIR=./data\n"
       );
       console.error(
         "\n   💡 Tip: Run 'npm run schema:init:dry-run' to preview schemas without database access.\n"

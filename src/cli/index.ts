@@ -4,37 +4,36 @@ import { createHash, randomBytes } from "node:crypto";
 import { exec, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { createWriteStream, mkdirSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { realpathSync } from "node:fs";
 import * as readline from "node:readline";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
+import { LOCAL_DEV_USER_ID } from "../services/local_auth.js";
 import { createApiClient } from "../shared/api_client.js";
 import { getOpenApiOperationMapping } from "../shared/contract_mappings.js";
 import { getEntityDisplayName } from "../shared/entity_display_name.js";
 import { getRecordDisplaySummary } from "../shared/record_display_summary.js";
 import {
-  API_LOG_PATH,
-  API_LOGS_DIR,
-  API_PID_PATH,
-  BACKGROUND_SERVERS_PATH,
-  CLI_LOG_PATH,
   CONFIG_DIR,
   CONFIG_PATH,
   CANDIDATE_API_PORTS,
   clearConfig,
-  detectRunningApiPorts,
+  discoverApiInstances,
   isTokenExpired,
   isProd,
   readConfig,
+  rememberKnownApiPort,
   resolveBaseUrl,
   waitForApiReady,
   waitForHealth,
   writeConfig,
+  type ApiInstance,
   type Config,
 } from "./config.js";
 import {
@@ -51,13 +50,13 @@ import {
   computeBoxInnerWidth,
   dim,
   displayWidth,
+  error as _errorStyle,
   getTerminalWidth,
   heading,
   keyValue,
   nl,
   numbered,
   padToDisplayWidth,
-  panel,
   pathStyle,
   subHeading,
   success,
@@ -98,6 +97,10 @@ export type SessionHistoryRef = { history: string[]; indexRef: { current: number
 
 const MAX_SESSION_HISTORY = 100;
 
+export function getPromptPlaceholder(buffer: string, placeholderText = "/ for commands"): string {
+  return placeholderText.length > 0 && buffer.length === 0 ? placeholderText : "";
+}
+
 /**
  * Ask for one line with live "/" command list: when line starts with "/", suggestions
  * (name + description) are shown and updated on every keypress. Uses raw mode.
@@ -109,22 +112,35 @@ function askWithLiveSlash(
   onLine: (line: string | null) => void,
   bufferRef?: BufferRef,
   suggestionLinesRef?: SuggestionLinesRef,
-  historyRef?: SessionHistoryRef
+  historyRef?: SessionHistoryRef,
+  placeholderText = "/ for commands"
 ): void {
   const stdin = process.stdin;
   const wasPaused = stdin.isPaused();
   if (suggestionLinesRef) suggestionLinesRef.current = 0;
   const useReadline =
-    !stdin.isTTY || process.env.NEOTOMA_USE_READLINE === "1" || process.env.NEOTOMA_USE_READLINE === "true";
+    !stdin.isTTY ||
+    process.env.NEOTOMA_USE_READLINE === "1" ||
+    process.env.NEOTOMA_USE_READLINE === "true";
   if (useReadline) {
     const rl = readline.createInterface({ input: stdin, output: process.stdout });
     if (historyRef && Array.isArray(historyRef.history) && historyRef.history.length > 0) {
       (rl as readline.ReadLine & { history?: string[] }).history = [...historyRef.history];
     }
-    rl.question(promptPrefix, (line) => {
+    const initialHint = getPromptPlaceholder("", placeholderText);
+    const readlinePrompt =
+      initialHint.length > 0 ? `${promptPrefix}\n${initialHint}\n${promptPrefix}` : promptPrefix;
+    let responded = false;
+    const done = (line: string | null): void => {
+      if (responded) return;
+      responded = true;
       rl.close();
       if (bufferRef) bufferRef.current = "";
       onLine(line?.trim() ?? null);
+    };
+    rl.on("close", () => done(null));
+    rl.question(readlinePrompt, (line) => {
+      done(line ?? null);
     });
     return;
   }
@@ -138,7 +154,7 @@ function askWithLiveSlash(
   /** 0 = normal, 1 = saw ESC, 2 = saw ESC [ (expect A/B/C/D). */
   let escapeState: 0 | 1 | 2 = 0;
 
-  /** Redraw prompt line and, when line starts with "/", show command list below so Tab can complete. */
+  /** Redraw prompt line; show "/ for commands" below when empty, or command matches when line starts with "/". */
   function redrawSuggestions(): void {
     const toClear = lastSuggestionLinesRef.current;
     if (toClear > 0) {
@@ -152,10 +168,27 @@ function askWithLiveSlash(
     const trimmed = buffer.trimStart();
     if (trimmed.startsWith("/")) {
       const filter = trimmed.slice(1).trim();
-      const { text, lines } = getSessionCommandsBlock(prog, filter);
-      process.stdout.write(text);
-      lastSuggestionLinesRef.current = lines;
-      process.stdout.write(BANNER_ANSI.up(lines));
+      const matches = getSessionCommands(prog, filter);
+      const maxInline = 6;
+      const names = matches.slice(0, maxInline).map((c) => c.name);
+      const more = matches.length > maxInline;
+      const preview =
+        names.length === 0
+          ? dim("No command matches. Press Enter for help.")
+          : dim("Matches: ") + pathStyle(names.join(", ")) + (more ? dim(", …") : "");
+      const hintLine = truncateToDisplayWidth(preview, getTerminalWidth(2));
+      process.stdout.write("\r\n" + hintLine);
+      lastSuggestionLinesRef.current = 1;
+      process.stdout.write(BANNER_ANSI.up(1));
+      process.stdout.write("\r" + promptPrefix + buffer);
+    } else if (buffer.length === 0) {
+      const hint = getPromptPlaceholder(buffer, placeholderText);
+      if (hint) {
+        process.stdout.write("\n" + hint);
+        lastSuggestionLinesRef.current = 1;
+        process.stdout.write(BANNER_ANSI.up(1));
+        process.stdout.write("\r" + promptPrefix);
+      }
     }
   }
 
@@ -178,6 +211,10 @@ function askWithLiveSlash(
     for (let i = 0; i < k.length; i++) {
       const c = k[i]!;
       if (escapeState === 1) {
+        if (c === "d" && buffer.length === 0) {
+          finish(null);
+          return;
+        }
         escapeState = c === "[" ? 2 : 0;
         continue;
       }
@@ -256,6 +293,13 @@ function askWithLiveSlash(
 
   if (bufferRef) bufferRef.current = "";
   process.stdout.write(promptPrefix);
+  const initialHint = getPromptPlaceholder("", placeholderText);
+  if (initialHint) {
+    process.stdout.write("\n" + initialHint);
+    lastSuggestionLinesRef.current = 1;
+    process.stdout.write(BANNER_ANSI.up(1));
+    process.stdout.write("\r" + promptPrefix);
+  }
   stdin.on("data", onData);
 }
 
@@ -513,7 +557,13 @@ async function validateNeotomaRepo(dir: string): Promise<string | null> {
   }
 }
 
-async function loadNpmScripts(): Promise<{ repoRoot: string; scripts: NpmScript[] }> {
+const INIT_REQUIRED_MESSAGE =
+  "Neotoma setup is required. Run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT.";
+
+async function resolveRepoRootFromInitContext(): Promise<{
+  config: Config;
+  repoRoot: string | null;
+}> {
   const config = await readConfig();
   let repoRoot: string | null = null;
   if (config.repo_root) {
@@ -525,16 +575,50 @@ async function loadNpmScripts(): Promise<{ repoRoot: string; scripts: NpmScript[
   if (!repoRoot) {
     repoRoot = await findRepoRoot(process.cwd());
   }
+  return { config, repoRoot };
+}
+
+async function persistRepoRootIfMissing(config: Config, repoRoot: string): Promise<void> {
+  if (config.repo_root) return;
+  await writeConfig({ ...config, repo_root: repoRoot });
+  process.stderr.write(dim("Saved repo path to config: ") + pathStyle(CONFIG_PATH) + "\n");
+}
+
+async function resolveAndPersistRepoRootFromInitContext(): Promise<string | null> {
+  const { config, repoRoot } = await resolveRepoRootFromInitContext();
+  if (!repoRoot) return null;
+  await persistRepoRootIfMissing(config, repoRoot);
+  return repoRoot;
+}
+
+async function maybeRunInitForMissingRepo(promptEnabled: boolean): Promise<string | null> {
+  let repoRoot = await resolveAndPersistRepoRootFromInitContext();
+  if (repoRoot) return repoRoot;
+  if (!promptEnabled) return null;
+
+  const runInit = await askYesNo(
+    "Neotoma is not initialized in this shell. Run " +
+      pathStyle("neotoma init") +
+      " now to set it up? (y/n) "
+  );
+  if (!runInit) return null;
+
+  const child = spawn(process.argv[0], [process.argv[1], "init"], {
+    cwd: process.cwd(),
+    stdio: "inherit",
+    env: { ...process.env },
+  });
+  const exitCode = await new Promise<number | null>((res) => child.on("close", res));
+  if (exitCode !== 0) return null;
+  repoRoot = await resolveAndPersistRepoRootFromInitContext();
+  return repoRoot;
+}
+
+async function loadNpmScripts(): Promise<{ repoRoot: string; scripts: NpmScript[] }> {
+  const repoRoot = await resolveAndPersistRepoRootFromInitContext();
   if (!repoRoot) {
     throw new Error(
       "Not a Neotoma repo. Run from the repo root (package.json name must be 'neotoma'), run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT."
-    );
-  }
-  // Auto-persist repo root when we discovered it from cwd or env and config does not have it
-  if (!config.repo_root) {
-    await writeConfig({ ...config, repo_root: repoRoot });
-    process.stderr.write(
-      dim("Saved repo path to config: ") + pathStyle(CONFIG_PATH) + "\n"
     );
   }
   const pkgPath = path.join(repoRoot, "package.json");
@@ -744,13 +828,13 @@ function humanReadableApiError(err: unknown, sessionContext?: boolean): string {
     if (sessionContext) {
       return (
         "Server not reachable. API may still be starting. Check data/logs/session-dev.log or session-prod.log. " +
-        "Retry with `neotoma --env=prod` if the server crashed."
+        "Retry with `neotoma --env prod` if the server crashed."
       );
     }
-    return "Server not reachable. Is the API running? Try `neotoma api start`. If the API is on port 8180 (e.g. npm run dev:prod), use --base-url http://localhost:8180";
+    return "Server not reachable. Is the API running? Try `neotoma api start --env dev`. If the API is on port 8180 (e.g. npm run dev:prod), use --base-url http://localhost:8180 or --env prod";
   }
   if (code === "ENOTFOUND") {
-    return "Host not found. Check --base-url.";
+    return "Host not found. Check --base-url or --env.";
   }
   if (msg.includes("timeout") || (err instanceof Error && err.name === "AbortError")) {
     return "Request timed out.";
@@ -828,7 +912,7 @@ export function buildOAuthAuthorizeUrl(params: {
   clientId: string;
   devStub?: boolean;
 }): string {
-  const authUrl = new URL(`${params.baseUrl}/api/mcp/oauth/authorize`);
+  const authUrl = new URL(`${params.baseUrl}/mcp/oauth/authorize`);
   authUrl.searchParams.set("redirect_uri", params.redirectUri);
   authUrl.searchParams.set("state", params.state);
   authUrl.searchParams.set("code_challenge", params.codeChallenge);
@@ -903,7 +987,7 @@ async function exchangeToken(
   body.set("grant_type", "authorization_code");
   body.set("code", code);
 
-  const response = await fetch(`${baseUrl}/api/mcp/oauth/token`, {
+  const response = await fetch(`${baseUrl}/mcp/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -958,11 +1042,34 @@ async function runLoginFlow(baseUrl: string, devStub: boolean = false): Promise<
     expires_at: expiresAt,
     connection_id: code,
   });
-  writeMessage("Authentication successful.", outputMode);
+  let me: { user_id?: string; email?: string } | null = null;
+  try {
+    const res = await fetch(`${baseUrl}/me`, {
+      headers: { Authorization: `Bearer ${token.access_token}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (res.ok) me = (await res.json()) as { user_id?: string; email?: string };
+  } catch {
+    // Omit user details if /me fails
+  }
+  if (outputMode === "json") {
+    writeOutput(
+      {
+        message: "Authentication successful.",
+        user_id: me?.user_id ?? null,
+        email: me?.email ?? null,
+      },
+      outputMode
+    );
+  } else {
+    writeMessage("Authentication successful.", outputMode);
+    if (me?.user_id) writeMessage("User ID: " + me.user_id, outputMode);
+    if (me?.email) writeMessage("Email: " + me.email, outputMode);
+  }
 }
 
 /**
- * Ensure we have an active session; if GET /api/me returns 401 and we're in a TTY, run OAuth login.
+ * Ensure we have an active session; if GET /me returns 401 and we're in a TTY, run OAuth login.
  * When encryption is off and no token is sent, the API accepts the request as default user (no login needed).
  * Retries up to 3 times to tolerate brief server restarts (e.g. during tsx/tsc watch).
  */
@@ -979,7 +1086,7 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
   const retryDelayMs = 1200;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(`${baseUrl}/api/me`, {
+      const res = await fetch(`${baseUrl}/me`, {
         headers,
         signal: AbortSignal.timeout(10000),
       });
@@ -1002,7 +1109,7 @@ async function ensureSessionOrAuth(baseUrl: string): Promise<void> {
 
 /**
  * Resolve CLI auth token using same patterns as MCP.
- * Encryption off: NEOTOMA_BEARER_TOKEN only, or no token (API treats no Bearer as dev-local).
+ * Encryption off: NEOTOMA_BEARER_TOKEN env, then stored OAuth token from config, or no token (API treats no Bearer as dev-local).
  * Encryption on: key-derived token (requires NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC).
  */
 async function getCliToken(): Promise<string | undefined> {
@@ -1016,6 +1123,8 @@ async function getCliToken(): Promise<string | undefined> {
     return token;
   }
   if (process.env.NEOTOMA_BEARER_TOKEN) return process.env.NEOTOMA_BEARER_TOKEN;
+  const config = await readConfig();
+  if (config.access_token?.trim()) return config.access_token;
   return undefined;
 }
 
@@ -1033,7 +1142,7 @@ const NEST_ART_PLAIN = [
 ].join("\n");
 
 /** Nest + mice art: accent for nest/mice, dim for tagline. */
-function nestArt(): string {
+function _nestArt(): string {
   const tagline = "Truth layer for AI memory";
   return NEST_ART_PLAIN.split("\n")
     .map((line) => {
@@ -1150,27 +1259,27 @@ const WATCH_CONCURRENTLY_ARGS_TUNNEL = [
 ];
 
 const TUNNEL_DEV_URL_FILE = "/tmp/ngrok-mcp-dev-url.txt";
-const TUNNEL_DEV_PID_FILE = "/tmp/ngrok-mcp-dev.pid";
 const TUNNEL_PROD_URL_FILE = "/tmp/ngrok-mcp-prod-url.txt";
-const TUNNEL_PROD_PID_FILE = "/tmp/ngrok-mcp-prod.pid";
 
 /** Tunnel URL, PID, and log paths under repo data/logs (consolidated with session and CLI logs). */
 function getTunnelUrlFile(repoRoot: string, env: "dev" | "prod"): string {
-  return path.join(repoRoot, "data", "logs", env === "dev" ? "tunnel-dev-url.txt" : "tunnel-prod-url.txt");
+  return path.join(
+    repoRoot,
+    "data",
+    "logs",
+    env === "dev" ? "tunnel-dev-url.txt" : "tunnel-prod-url.txt"
+  );
 }
 function getTunnelPidFile(repoRoot: string, env: "dev" | "prod"): string {
   return path.join(repoRoot, "data", "logs", env === "dev" ? "tunnel-dev.pid" : "tunnel-prod.pid");
 }
-/** Path to tunnel script stdout/stderr log (setup-https-tunnel.sh writes NGROK_URL_FILE with .txt → .log). */
-function getTunnelLogPath(repoRoot: string, env: "dev" | "prod"): string {
-  return path.join(repoRoot, "data", "logs", env === "dev" ? "tunnel-dev-url.log" : "tunnel-prod-url.log");
-}
-
 const TUNNEL_POLL_MS = 1200;
 const TUNNEL_POLL_ATTEMPTS = 10;
 
 /** Poll tunnel URL files; returns { dev, prod } with base URLs or null. Uses repo data/logs when repoRoot given, else /tmp fallback. */
-async function readTunnelUrls(repoRoot?: string | null): Promise<{ dev: string | null; prod: string | null }> {
+async function readTunnelUrls(
+  repoRoot?: string | null
+): Promise<{ dev: string | null; prod: string | null }> {
   const devFile = repoRoot ? getTunnelUrlFile(repoRoot, "dev") : TUNNEL_DEV_URL_FILE;
   const prodFile = repoRoot ? getTunnelUrlFile(repoRoot, "prod") : TUNNEL_PROD_URL_FILE;
   async function readOne(file: string): Promise<string | null> {
@@ -1233,122 +1342,6 @@ async function _writeServerUrlSections(devPort: number, prodPort: number): Promi
     );
   }
   process.stdout.write("\n");
-}
-
-/** Spawn dev and prod API + build watch processes; optionally with HTTPS tunnel. Caller must kill them on session exit. */
-function _spawnDevProdServers(
-  repoRoot: string,
-  devPort: number,
-  prodPort: number,
-  withTunnel: boolean
-): { dev: ReturnType<typeof spawn>; prod: ReturnType<typeof spawn> } {
-  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = withTunnel ? WATCH_CONCURRENTLY_ARGS_TUNNEL : WATCH_CONCURRENTLY_ARGS;
-  const devEnv = {
-    ...process.env,
-    HTTP_PORT: String(devPort),
-    ...(withTunnel && {
-      TUNNEL_NONINTERACTIVE: "1",
-      NGROK_URL_FILE: TUNNEL_DEV_URL_FILE,
-      NGROK_PID_FILE: TUNNEL_DEV_PID_FILE,
-    }),
-  };
-  const prodEnv = {
-    ...process.env,
-    HTTP_PORT: String(prodPort),
-    NEOTOMA_ENV: "production",
-    ...(withTunnel && {
-      TUNNEL_NONINTERACTIVE: "1",
-      NGROK_URL_FILE: TUNNEL_PROD_URL_FILE,
-      NGROK_PID_FILE: TUNNEL_PROD_PID_FILE,
-    }),
-  };
-  const devChild = spawn(npxCmd, ["concurrently", ...args], {
-    cwd: repoRoot,
-    stdio: "pipe",
-    env: devEnv,
-    shell: false,
-  });
-  const prodChild = spawn(npxCmd, ["concurrently", ...args], {
-    cwd: repoRoot,
-    stdio: "pipe",
-    env: prodEnv,
-    shell: false,
-  });
-  devChild.on("error", (err) => {
-    process.stderr.write(`neotoma: dev server error: ${err.message}\n`);
-  });
-  prodChild.on("error", (err) => {
-    process.stderr.write(`neotoma: prod server error: ${err.message}\n`);
-  });
-  return { dev: devChild, prod: prodChild };
-}
-
-/** Background servers state written by --background and read by stop. */
-type BackgroundServersState = {
-  devPid: number;
-  prodPid: number;
-  devPort: number;
-  prodPort: number;
-  repoRoot: string;
-  startedAt: string;
-};
-
-/** Spawn dev and prod servers detached (background); optionally with tunnel. Returns PIDs; caller writes state file and exits. */
-function spawnDevProdServersDetached(
-  repoRoot: string,
-  devPort: number,
-  prodPort: number,
-  withTunnel: boolean
-): { devPid: number; prodPid: number } {
-  if (withTunnel) {
-    try {
-      mkdirSync(path.join(repoRoot, "data", "logs"), { recursive: true });
-    } catch {
-      // ignore
-    }
-  }
-  const npxCmd = process.platform === "win32" ? "npx.cmd" : "npx";
-  const args = withTunnel ? WATCH_CONCURRENTLY_ARGS_TUNNEL : WATCH_CONCURRENTLY_ARGS;
-  const devEnv = {
-    ...process.env,
-    HTTP_PORT: String(devPort),
-    ...(withTunnel && {
-      TUNNEL_NONINTERACTIVE: "1",
-      NGROK_URL_FILE: getTunnelUrlFile(repoRoot, "dev"),
-      NGROK_PID_FILE: getTunnelPidFile(repoRoot, "dev"),
-    }),
-  };
-  const prodEnv = {
-    ...process.env,
-    HTTP_PORT: String(prodPort),
-    NEOTOMA_ENV: "production",
-    ...(withTunnel && {
-      TUNNEL_NONINTERACTIVE: "1",
-      NGROK_URL_FILE: getTunnelUrlFile(repoRoot, "prod"),
-      NGROK_PID_FILE: getTunnelPidFile(repoRoot, "prod"),
-    }),
-  };
-  const devChild = spawn(npxCmd, ["concurrently", ...args], {
-    cwd: repoRoot,
-    stdio: "ignore",
-    env: devEnv,
-    shell: false,
-    detached: true,
-  });
-  const prodChild = spawn(npxCmd, ["concurrently", ...args], {
-    cwd: repoRoot,
-    stdio: "ignore",
-    env: prodEnv,
-    shell: false,
-    detached: true,
-  });
-  devChild.unref();
-  prodChild.unref();
-  return {
-    devPid: devChild.pid ?? 0,
-    prodPid: prodChild.pid ?? 0,
-  };
 }
 
 /** Parse a line into argv-style tokens; respects double-quoted segments. */
@@ -1448,22 +1441,31 @@ function _sessionCompleter(prog: Command, line: string): [string[], string] {
   return [names, filter];
 }
 
-/** Return command list as table text and line count (for live redraw). */
+/** Return command list as table text and line count (for live redraw). Lines are capped to terminal width so the block does not wrap and cursor-up math stays correct. */
 function getSessionCommandsBlock(prog: Command, filter?: string): { text: string; lines: number } {
   const commands = getSessionCommands(prog, filter);
+  const maxLineWidth = getTerminalWidth(2);
   if (commands.length === 0) {
     const msg = dim("No commands match. Type ") + pathStyle("/") + dim(" to see all.") + "\n\n";
-    return { text: msg, lines: 2 };
+    return { text: truncateToDisplayWidth(msg.trim(), maxLineWidth) + "\n\n", lines: 2 };
   }
   const nameWidth = Math.max(...commands.map((c) => displayWidth(c.name)), displayWidth("Command"));
   const gap = "  ";
   const lineArr: string[] = [];
-  lineArr.push(dim("Commands (type name to run):"));
+  lineArr.push(truncateToDisplayWidth(dim("Commands (type name to run):"), maxLineWidth));
   lineArr.push("");
-  lineArr.push(bold(padToDisplayWidth("Command", nameWidth)) + gap + bold("Description"));
-  lineArr.push(dim("-".repeat(nameWidth) + gap + "-".repeat(11)));
+  lineArr.push(
+    truncateToDisplayWidth(
+      bold(padToDisplayWidth("Command", nameWidth)) + gap + bold("Description"),
+      maxLineWidth
+    )
+  );
+  lineArr.push(
+    truncateToDisplayWidth(dim("-".repeat(nameWidth) + gap + "-".repeat(11)), maxLineWidth)
+  );
   for (const c of commands) {
-    lineArr.push(padToDisplayWidth(pathStyle(c.name), nameWidth) + gap + dim(c.description));
+    const line = padToDisplayWidth(pathStyle(c.name), nameWidth) + gap + dim(c.description);
+    lineArr.push(truncateToDisplayWidth(line, maxLineWidth));
   }
   lineArr.push("");
   const text = lineArr.join("\n") + "\n";
@@ -1483,19 +1485,12 @@ program
   .option("--base-url <url>", "API base URL (default: auto-detect 8180 or 8080)")
   .option("--json", "Output machine-readable JSON")
   .option("--pretty", "Output formatted JSON for humans")
+  .option("--no-session", "With no args: show intro then command menu (>); no servers")
   .option(
-    "--no-session",
-    "With no args: show intro then command menu (>); no servers"
+    "--no-servers",
+    "With no args: use existing API only (no start). Same as --servers=use-existing."
   )
-  .option("--no-servers", "With no args: use existing API only (no start). Same as --servers=use-existing.")
-  .option(
-    "--servers <policy>",
-    "Server policy: start (start API if needed) or use-existing (connect only; fail if unreachable). Non-TTY defaults to use-existing."
-  )
-  .option(
-    "--background",
-    "With no args: start dev and prod servers in background and exit (stop with neotoma stop)"
-  )
+  .option("--servers <policy>", "Server policy: use-existing (connect only; fail if unreachable).")
   .option(
     "--env <env>",
     "Preferred environment for this run: dev or prod (overrides config when starting session)"
@@ -1548,67 +1543,393 @@ program
 
 // ── Session (interactive REPL) ─────────────────────────────────────────────
 
-/** Ask a y/n question; returns true for y/yes, false otherwise. */
+import { InitAbortError } from "./init_abort.js";
+
+export { InitAbortError };
+
+/** Ask a y/n question; returns true for y/yes, false otherwise. Rejects with InitAbortError on EOF (Cmd+D). */
 function askYesNo(question: string): Promise<boolean> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
     rl.question(question, (answer) => {
-      rl.close();
-      const a = answer.trim().toLowerCase();
-      resolve(a === "y" || a === "yes");
+      if (!settled) {
+        settled = true;
+        rl.close();
+        const a = (answer ?? "").trim().toLowerCase();
+        resolve(a === "y" || a === "yes");
+      }
     });
   });
 }
 
-/** Ask for a single line of input; returns trimmed string or empty. */
+/** Ask for a single line of input; returns trimmed string or empty. Rejects with InitAbortError on EOF (Cmd+D). */
 function askQuestion(question: string): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
     rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer.trim());
+      if (!settled) {
+        settled = true;
+        rl.close();
+        resolve((answer ?? "").trim());
+      }
     });
   });
+}
+
+type InitAuthMode = "dev_local" | "oauth" | "key_derived" | "skip";
+
+type InitAuthSummary = {
+  mode: InitAuthMode;
+  oauthCompleted: boolean;
+  oauthDeferredReason?: string;
+};
+
+function normalizeInitAuthMode(input?: string): InitAuthMode | null {
+  const normalized = (input || "").trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "1" || normalized === "dev_local" || normalized === "dev-local") {
+    return "dev_local";
+  }
+  if (
+    normalized === "2" ||
+    normalized === "3" ||
+    normalized === "key_derived" ||
+    normalized === "key-derived"
+  ) {
+    return "key_derived";
+  }
+  if (normalized === "oauth") {
+    return "oauth";
+  }
+  if (normalized === "4" || normalized === "skip") {
+    return "skip";
+  }
+  return null;
+}
+
+function initAuthModeLabel(mode: InitAuthMode): string {
+  if (mode === "dev_local") return "Dev local (no login)";
+  if (mode === "oauth") return "OAuth login";
+  if (mode === "key_derived") return "Key-derived token";
+  return "Skipped";
+}
+
+/** Detect auth mode from .env/config. Returns null if none configured. */
+async function detectConfiguredAuthMode(
+  envPath: string | null
+): Promise<{ mode: InitAuthMode; source: string } | null> {
+  if (envPath) {
+    try {
+      const raw = await fs.readFile(envPath, "utf-8");
+      const lines = raw.split("\n");
+      let encryptionEnabled = false;
+      let keyFilePathSet = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith("#") || !trimmed) continue;
+        const eq = trimmed.indexOf("=");
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+        if (key === "NEOTOMA_ENCRYPTION_ENABLED") encryptionEnabled = val === "true";
+        if (key === "NEOTOMA_KEY_FILE_PATH") keyFilePathSet = val.length > 0;
+      }
+      if (encryptionEnabled || keyFilePathSet) return { mode: "key_derived", source: envPath };
+    } catch {
+      // no .env or unreadable
+    }
+  }
+  try {
+    const config = await readConfig();
+    if ((config.access_token ?? config.connection_id) != null) {
+      return { mode: "oauth", source: CONFIG_PATH };
+    }
+    if (config.init_auth_mode === "dev_local") {
+      return { mode: "dev_local", source: CONFIG_PATH };
+    }
+  } catch {
+    // no config
+  }
+  return null;
+}
+
+function backupTimestamp(): string {
+  // Compact local timestamp: 20260224-153012
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    now.getFullYear().toString() +
+    pad(now.getMonth() + 1) +
+    pad(now.getDate()) +
+    "-" +
+    pad(now.getHours()) +
+    pad(now.getMinutes()) +
+    pad(now.getSeconds())
+  );
+}
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function movePathToTimestampBackup(srcPath: string, ts: string): Promise<string | null> {
+  if (!(await pathExists(srcPath))) return null;
+  let backupPath = `${srcPath}.backup.${ts}`;
+  let suffix = 1;
+  while (await pathExists(backupPath)) {
+    backupPath = `${srcPath}.backup.${ts}.${suffix++}`;
+  }
+  try {
+    await fs.rename(srcPath, backupPath);
+  } catch (err: unknown) {
+    const code = err && typeof err === "object" && "code" in err ? (err as NodeJS.ErrnoException).code : undefined;
+    if (code === "EXDEV") {
+      await fs.cp(srcPath, backupPath, { recursive: true });
+      await fs.rm(srcPath, { recursive: true, force: true });
+    } else {
+      throw err;
+    }
+  }
+  if (await pathExists(srcPath)) return null;
+  return backupPath;
+}
+
+async function readEnvFileVars(envPath: string): Promise<Record<string, string>> {
+  try {
+    const raw = await fs.readFile(envPath, "utf-8");
+    const out: Record<string, string> = {};
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
+      out[key] = val;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function userLevelMcpConfigPaths(): string[] {
+  const home = os.homedir();
+  const platform = process.platform;
+  const out = [path.join(home, ".cursor", "mcp.json"), path.join(home, ".codex", "config.toml")];
+  if (platform === "darwin") {
+    out.push(path.join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"));
+  } else if (platform === "linux") {
+    out.push(path.join(home, ".config", "Claude", "claude_desktop_config.json"));
+  } else if (platform === "win32" && process.env.APPDATA) {
+    out.push(path.join(process.env.APPDATA, "Claude", "claude_desktop_config.json"));
+  }
+  if (platform === "darwin" || platform === "linux") {
+    out.push(path.join(home, ".codeium", "windsurf", "mcp_config.json"));
+  } else if (platform === "win32" && process.env.APPDATA) {
+    out.push(path.join(process.env.APPDATA, "Codeium", "Windsurf", "mcp_config.json"));
+  }
+  return out;
+}
+
+async function removeNeotomaServersFromJsonMcpConfig(configPath: string): Promise<boolean> {
+  let parsed: { mcpServers?: Record<string, unknown> };
+  try {
+    const raw = await fs.readFile(configPath, "utf-8");
+    parsed = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+  } catch {
+    return false;
+  }
+  if (!parsed.mcpServers || typeof parsed.mcpServers !== "object") return false;
+  const nextServers = { ...parsed.mcpServers };
+  const hadDev = Object.prototype.hasOwnProperty.call(nextServers, "neotoma-dev");
+  const hadProd = Object.prototype.hasOwnProperty.call(nextServers, "neotoma");
+  if (!hadDev && !hadProd) return false;
+  delete nextServers["neotoma-dev"];
+  delete nextServers.neotoma;
+  parsed.mcpServers = nextServers;
+  await writeFileAtomic(configPath, JSON.stringify(parsed, null, 2) + "\n");
+  return true;
+}
+
+async function writeFileAtomic(filePath: string, content: string): Promise<void> {
+  const tmpPath = `${filePath}.neotoma-reset.${process.pid}`;
+  await fs.writeFile(tmpPath, content);
+  await fs.rename(tmpPath, filePath);
+}
+
+async function removeNeotomaCodexMarkerBlock(configPath: string): Promise<boolean> {
+  if (!(await pathExists(configPath))) return false;
+  let content: string;
+  try {
+    content = await fs.readFile(configPath, "utf-8");
+  } catch {
+    return false;
+  }
+  let next = content;
+  const neotomaMarker = "# --- Neotoma MCP servers (do not edit by hand) ---";
+  const neotomaMarkerEnd = "# --- end Neotoma MCP servers ---";
+  if (next.includes(neotomaMarker)) {
+    next = next.replace(
+      new RegExp(neotomaMarker + "[\\s\\S]*?" + neotomaMarkerEnd, "gm"),
+      ""
+    );
+  }
+  const syncMarker = "# --- MCP servers synced from .cursor/mcp.json (do not edit by hand) ---";
+  const syncMarkerEnd = "# --- end synced MCP servers ---";
+  const syncBlockRegex = new RegExp(
+    syncMarker + "[\\s\\S]*?" + syncMarkerEnd,
+    "gm"
+  );
+  next = next.replace(syncBlockRegex, (block) => {
+    if (
+      block.includes("[mcp_servers.neotoma]") ||
+      block.includes("[mcp_servers.neotoma-dev]")
+    ) {
+      return "";
+    }
+    return block;
+  });
+  next = next.replace(/\n{3,}/g, "\n\n").trimEnd();
+  if (next && !next.endsWith("\n")) next += "\n";
+  if (next === content) return false;
+  await writeFileAtomic(configPath, next);
+  return true;
+}
+
+function parsePortFromBaseUrl(baseUrl: string): number {
+  const parsed = new URL(baseUrl);
+  if (parsed.port) return parseInt(parsed.port, 10);
+  return parsed.protocol === "https:" ? 443 : 80;
+}
+
+function isLocalHost(baseUrl: string): boolean {
+  const parsed = new URL(baseUrl);
+  return parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost";
+}
+
+async function isApiReachable(baseUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!response.ok) return false;
+    const payload = (await response.json()) as { ok?: boolean };
+    return payload.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+async function startTemporaryApiForInit(params: {
+  repoRoot: string;
+  baseUrl: string;
+  outputMode: OutputMode;
+  /** Message after API is ready (default: " for OAuth setup.") */
+  startedMessage?: string;
+}): Promise<{ child: ReturnType<typeof spawn>; logPath: string }> {
+  const port = parsePortFromBaseUrl(params.baseUrl);
+  const actionsPath = path.join(params.repoRoot, "dist", "actions.js");
+  try {
+    await fs.access(actionsPath);
+  } catch {
+    throw new Error(
+      "Could not start temporary API because dist/actions.js was not found. Build first with `npm run build:server`."
+    );
+  }
+
+  const logsDir = path.join(params.repoRoot, "data", "logs");
+  await fs.mkdir(logsDir, { recursive: true });
+  const logPath = path.join(logsDir, `init-api.${Date.now()}.log`);
+  const logStream = createWriteStream(logPath, { flags: "a" });
+  const envName = port === 8180 ? "production" : "development";
+  const child = spawn(process.execPath, [actionsPath], {
+    cwd: params.repoRoot,
+    env: {
+      ...process.env,
+      HTTP_PORT: String(port),
+      NEOTOMA_ENV: envName,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout?.pipe(logStream);
+  child.stderr?.pipe(logStream);
+
+  const onExit = new Promise<never>((_, reject) => {
+    child.once("exit", (code) => {
+      reject(
+        new Error(
+          `Temporary API exited before becoming ready (code ${code ?? "unknown"}). Check logs: ${logPath}`
+        )
+      );
+    });
+  });
+
+  const onReady = (async () => {
+    const healthy = await waitForHealth(port, { timeoutMs: 45000, intervalMs: 800 });
+    if (!healthy) {
+      throw new Error(`Temporary API did not become healthy in time. Check logs: ${logPath}`);
+    }
+    const ready = await waitForApiReady(port, { timeoutMs: 20000, intervalMs: 500 });
+    if (!ready) {
+      throw new Error(`Temporary API did not become request-ready in time. Check logs: ${logPath}`);
+    }
+  })();
+
+  await Promise.race([onExit, onReady]);
+  writeMessage(
+    "Temporary API started" + (params.startedMessage ?? " for OAuth setup."),
+    params.outputMode
+  );
+  return { child, logPath };
+}
+
+async function stopTemporaryApiForInit(child: ReturnType<typeof spawn>): Promise<void> {
+  if (child.killed || child.exitCode != null) return;
+  child.kill("SIGTERM");
+  await Promise.race([
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    }),
+    new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (!child.killed && child.exitCode == null) child.kill("SIGKILL");
+        resolve();
+      }, 3000);
+    }),
+  ]);
 }
 
 /** Server policy: start (spawn API if needed) or use-existing (connect only). */
 type ServerPolicy = "start" | "use-existing";
 
-/** Resolve server policy: flags, config, non-TTY default, or TTY prompt. Persists choice when user is prompted. Only offers "Use existing" when at least one API is reachable. */
+/** Resolve server policy. Interactive startup always uses existing servers. */
 async function resolveServerPolicy(
   noServers: boolean,
   serversOpt: string | undefined
 ): Promise<ServerPolicy> {
-  if (noServers) return "use-existing";
-  const v = String(serversOpt ?? "").toLowerCase();
-  if (v === "start" || v === "use-existing") return v as ServerPolicy;
-  if (!process.stdout.isTTY) return "use-existing";
-  const config = await readConfig();
-  if (config.server_policy === "start" || config.server_policy === "use-existing") {
-    return config.server_policy;
-  }
-  const runningPorts = await detectRunningApiPorts();
-  const sortedPorts = [...runningPorts].sort((a, b) => a - b);
-  process.stdout.write("\n" + bold("API servers") + "\n");
-  process.stdout.write(
-    dim("  1) Start – start API for this session if needed (dev or prod)\n")
-  );
-  if (sortedPorts.length > 0) {
-    const portList = sortedPorts.map((p) => `${p} (${p === 8180 ? "prod" : "dev"})`).join(", ");
-    process.stdout.write(
-      dim(`  2) Use existing – connect to one of: ${portList}\n`)
-    );
-  }
-  const prompt = sortedPorts.length > 0 ? dim("  [1/2] > ") : dim("  [1] > ");
-  const answer = await askQuestion(prompt);
-  const choice =
-    sortedPorts.length > 0 &&
-    (answer.trim() === "2" || answer.toLowerCase().startsWith("e") || answer.toLowerCase().includes("existing"))
-      ? "use-existing"
-      : "start";
-  config.server_policy = choice;
-  await writeConfig(config);
-  return choice;
+  void noServers;
+  void serversOpt;
+  return "use-existing";
 }
 
 /** Session watch: stream of DB changes when in session. Toggled by watch command. */
@@ -1620,6 +1941,8 @@ type WatchEvent = {
   actionLabel: string;
   /** Entity type for tables that reference entities (e.g. contact, company). Omitted for live watch. */
   entityType?: string;
+  /** Environment when events are merged from multiple envs (e.g. watch --env all). */
+  env?: "dev" | "prod";
   /** Optional IDs from the row for "view details": entity get, sources get, relationships list. */
   entity_id?: string;
   source_entity_id?: string;
@@ -1742,13 +2065,23 @@ function truncateToDisplayWidth(s: string, maxWidth: number): string {
 /** Last N watch events shown in the Recent events box; used so session REPL can interpret row numbers (e.g. "3") as "view details for row 3". */
 let lastShownWatchEvents: WatchEvent[] | null = null;
 
-/** Format watch events as a table (# | Time | Type | Action | ID | Summary). Returns lines including header and separator. Row numbers 1..N allow "view details" by entering the number at the prompt. */
+const WATCH_TABLE_ENV_WIDTH = 4;
+
+/** Format watch events as a table (# | Env | Time | Type | Action | ID | Summary). Returns lines including header and separator. Row numbers 1..N allow "view details" by entering the number at the prompt. Env column always shown (dev/prod or "-"). */
 function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
   if (events.length === 0) return [];
-  const { num: wNum, time: wTime, type: wType, action: wAction, id: wId, summary: wSummary } =
-    WATCH_TABLE_COLUMNS;
+  const {
+    num: wNum,
+    time: wTime,
+    type: wType,
+    action: wAction,
+    id: wId,
+    summary: wSummary,
+  } = WATCH_TABLE_COLUMNS;
   const header =
     bold(padToDisplayWidth("#", wNum)) +
+    WATCH_TABLE_GAP +
+    bold(padToDisplayWidth("Env", WATCH_TABLE_ENV_WIDTH)) +
     WATCH_TABLE_GAP +
     bold(padToDisplayWidth("Time", wTime)) +
     WATCH_TABLE_GAP +
@@ -1762,6 +2095,8 @@ function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
   const sep =
     dim("-".repeat(wNum)) +
     WATCH_TABLE_GAP +
+    dim("-".repeat(WATCH_TABLE_ENV_WIDTH)) +
+    WATCH_TABLE_GAP +
     dim("-".repeat(wTime)) +
     WATCH_TABLE_GAP +
     dim("-".repeat(wType)) +
@@ -1773,6 +2108,7 @@ function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
     dim("-".repeat(wSummary));
   const rows = events.map((e, i) => {
     const numStr = String(i + 1);
+    const envStr = e.env ?? "-";
     const ago = truncateToDisplayWidth(timeAgo(e.ts, ref), wTime);
     const typeStr = e.entityType ?? "-";
     const typeShort = truncateToDisplayWidth(typeStr, wType);
@@ -1781,6 +2117,8 @@ function formatWatchTable(events: WatchEvent[], ref: Date): string[] {
     const summaryShort = truncateToDisplayWidth(e.summary, wSummary);
     return (
       dim(padToDisplayWidth(numStr, wNum)) +
+      WATCH_TABLE_GAP +
+      dim(padToDisplayWidth(envStr, WATCH_TABLE_ENV_WIDTH)) +
       WATCH_TABLE_GAP +
       dim(padToDisplayWidth(ago, wTime)) +
       WATCH_TABLE_GAP +
@@ -1850,7 +2188,7 @@ async function startSessionWatch(
   if (sessionPort) {
     try {
       const token = await getCliToken();
-      const res = await fetch(`http://127.0.0.1:${sessionPort}/api/me`, {
+      const res = await fetch(`http://127.0.0.1:${sessionPort}/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -1940,14 +2278,18 @@ async function startSessionWatch(
   ): string {
     const str = (k: string) => (row[k] != null ? String(row[k]).trim() : "");
     if (table === "entities") return str("entity_type") || "entity";
-    if (table === "observations") return str("entity_type") || entityTypes.get(str("entity_id")) || "-";
-    if (table === "entity_snapshots") return str("entity_type") || entityTypes.get(str("entity_id")) || "-";
+    if (table === "observations")
+      return str("entity_type") || entityTypes.get(str("entity_id")) || "-";
+    if (table === "entity_snapshots")
+      return str("entity_type") || entityTypes.get(str("entity_id")) || "-";
     if (table === "raw_fragments") return str("entity_type") || "-";
     if (table === "timeline_events") return str("event_type") || "event";
     if (table === "relationship_observations" || table === "relationship_snapshots")
       return str("relationship_type") || "relationship";
     if (table === "entity_merges")
-      return entityTypes.get(str("from_entity_id")) || entityTypes.get(str("to_entity_id")) || "merge";
+      return (
+        entityTypes.get(str("from_entity_id")) || entityTypes.get(str("to_entity_id")) || "merge"
+      );
     if (table === "sources") return str("mime_type") || "source";
     if (table === "interpretations") return "interpretation";
     return "-";
@@ -2115,10 +2457,33 @@ async function runSessionLoop(opts?: {
       if (!state.enabled) return;
       state.liveLines.push(event);
       if (state.liveLines.length > WATCH_LIVE_MAX) state.liveLines.shift();
+      const toClear = suggestionLinesRef.current;
+      if (toClear > 0) {
+        for (let i = 0; i < toClear; i++) {
+          process.stdout.write(BANNER_ANSI.down(1) + BANNER_ANSI.clearLineFull);
+        }
+        process.stdout.write(BANNER_ANSI.up(toClear));
+      }
+      suggestionLinesRef.current = 0;
       const line = _formatWatchLiveLine(event, new Date());
       process.stdout.write(
-        "\r" + BANNER_ANSI.clearLineFull + "\n" + line + "\n" + bold("neotoma> ") + lineBufferRef.current
+        "\r" +
+          BANNER_ANSI.clearLineFull +
+          "\n" +
+          line +
+          "\n" +
+          bold("neotoma> ") +
+          lineBufferRef.current
       );
+      if (lineBufferRef.current.length === 0) {
+        const hint = getPromptPlaceholder("", "/ for commands");
+        if (hint) {
+          process.stdout.write("\n" + hint);
+          suggestionLinesRef.current = 1;
+          process.stdout.write(BANNER_ANSI.up(1));
+          process.stdout.write("\r" + bold("neotoma> "));
+        }
+      }
     };
     sessionWatchState = state;
   }
@@ -2128,10 +2493,15 @@ async function runSessionLoop(opts?: {
     historyIndexRef.current = sessionHistory.length;
     const phrase = SESSION_READY_PHRASES[sessionReadyPhraseIndex++ % SESSION_READY_PHRASES.length];
     lastReadyPhraseRef.current = phrase;
-    process.stdout.write(
-      success("●") + " " + dim(phrase) + " " + dim("Type / for commands. Up/Down: history.") + "\n"
+    process.stdout.write(success("●") + " " + dim(phrase) + "\n");
+    askWithLiveSlash(
+      program,
+      bold("neotoma> "),
+      onLine,
+      lineBufferRef,
+      suggestionLinesRef,
+      historyRef
     );
-    askWithLiveSlash(program, bold("neotoma> "), onLine, lineBufferRef, suggestionLinesRef, historyRef);
   };
 
   let sigwinchCleanup: (() => void) | undefined;
@@ -2153,10 +2523,18 @@ async function runSessionLoop(opts?: {
         process.stdout.write(BANNER_ANSI.up(totalLines));
         process.stdout.write("\x1b[0J");
         opts.redrawStatusBlock!(lineBufferRef.current);
-        const readyLine =
-          success("●") + " " + dim(lastReadyPhraseRef.current) + " " + dim("Type / for commands.");
+        const readyLine = success("●") + " " + dim(lastReadyPhraseRef.current);
         process.stdout.write("\n" + readyLine + "\n");
         process.stdout.write(bold("neotoma> ") + lineBufferRef.current);
+        if (lineBufferRef.current.length === 0) {
+          const hint = getPromptPlaceholder("", "/ for commands");
+          if (hint) {
+            process.stdout.write("\n" + hint);
+            suggestionLinesRef.current = 1;
+            process.stdout.write(BANNER_ANSI.up(1));
+            process.stdout.write("\r" + bold("neotoma> "));
+          }
+        }
       }, 100);
     };
     process.on("SIGWINCH", onResize);
@@ -2235,18 +2613,17 @@ async function runSessionLoop(opts?: {
       }
       if (rowNum > lastShownWatchEvents.length) {
         process.stdout.write(
-          dim("  Enter a row number between 1 and " + lastShownWatchEvents.length + " to view details.") +
-            "\n"
+          dim(
+            "  Enter a row number between 1 and " +
+              lastShownWatchEvents.length +
+              " to view details."
+          ) + "\n"
         );
         prompt();
         return;
       }
     }
-    if (
-      rowNum >= 1 &&
-      lastShownWatchEvents &&
-      rowNum <= lastShownWatchEvents.length
-    ) {
+    if (rowNum >= 1 && lastShownWatchEvents && rowNum <= lastShownWatchEvents.length) {
       const event = lastShownWatchEvents[rowNum - 1]!;
       let argv: string[] | null = null;
       if (event.table === "entities") {
@@ -2273,22 +2650,15 @@ async function runSessionLoop(opts?: {
       } else if (
         (event.table === "entity_snapshots" ||
           event.table === "observations" ||
-          event.table === "raw_fragments"      ) &&
+          event.table === "raw_fragments") &&
         event.entity_id
       ) {
         argv = [process.argv[0], process.argv[1], "entities", "get", event.entity_id];
       } else if (
-        (event.table === "relationship_observations" ||
-          event.table === "relationship_snapshots") &&
+        (event.table === "relationship_observations" || event.table === "relationship_snapshots") &&
         event.source_entity_id
       ) {
-        argv = [
-          process.argv[0],
-          process.argv[1],
-          "relationships",
-          "list",
-          event.source_entity_id,
-        ];
+        argv = [process.argv[0], process.argv[1], "relationships", "list", event.source_entity_id];
       } else if (event.table === "entity_merges" && event.to_entity_id) {
         argv = [process.argv[0], process.argv[1], "entities", "get", event.to_entity_id];
       } else if (event.table === "interpretations" && event.source_id) {
@@ -2296,9 +2666,7 @@ async function runSessionLoop(opts?: {
       }
       if (argv !== null) {
         const entityIdForFallback =
-          event.table === "entities"
-            ? event.id
-            : event.entity_id ?? event.to_entity_id;
+          event.table === "entities" ? event.id : (event.entity_id ?? event.to_entity_id);
         const isEntityGet =
           argv[2] === "entities" && argv[3] === "get" && typeof entityIdForFallback === "string";
         process.stdout.write("\n");
@@ -2310,8 +2678,7 @@ async function runSessionLoop(opts?: {
           } else {
             const errMsg = err instanceof Error ? err.message : String(err);
             const is404EntityNotFound =
-              isEntityGet &&
-              (errMsg.includes("404") || errMsg.includes("Entity not found"));
+              isEntityGet && (errMsg.includes("404") || errMsg.includes("Entity not found"));
             if (
               is404EntityNotFound &&
               opts?.repoRoot &&
@@ -2335,7 +2702,9 @@ async function runSessionLoop(opts?: {
               } else {
                 writeCliError(err);
                 process.stdout.write(
-                  dim("  Recent events are from local DB. If the API uses a different backend, the entity may exist only locally.\n")
+                  dim(
+                    "  Recent events are from local DB. If the API uses a different backend, the entity may exist only locally.\n"
+                  )
                 );
                 process.exitCode = 1;
               }
@@ -2349,7 +2718,9 @@ async function runSessionLoop(opts?: {
         return;
       }
       process.stdout.write(
-        dim("  ID: " + event.id + " — run neotoma " + event.table.replace(/_/g, " ") + " for list.") + "\n"
+        dim(
+          "  ID: " + event.id + " — run neotoma " + event.table.replace(/_/g, " ") + " for list."
+        ) + "\n"
       );
       prompt();
       return;
@@ -2390,7 +2761,6 @@ async function runCommandMenuLoop(): Promise<void> {
   }
 
   const ask = () => {
-    process.stdout.write(dim("Type / for commands.") + "\n");
     askWithLiveSlash(program, bold("> "), onLine);
   };
   rl.on("close", () => doExit());
@@ -2473,9 +2843,10 @@ program
     const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
     const preferredEnv: "dev" | "prod" =
       sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : "dev";
+    const activePortStr = process.env.NEOTOMA_SESSION_API_PORT;
     const portEnvVar =
       preferredEnv === "dev" ? "NEOTOMA_SESSION_DEV_PORT" : "NEOTOMA_SESSION_PROD_PORT";
-    const portStr = process.env[portEnvVar];
+    const portStr = activePortStr ?? process.env[portEnvVar];
 
     if (portStr == null) {
       process.stdout.write(
@@ -2529,20 +2900,32 @@ program
     "Initialize Neotoma for first-time use (create directories, database, optional encryption keys)"
   )
   .option("--data-dir <path>", "Data directory path (default: ./data or ~/neotoma/data)")
-  .option("--generate-keys", "Generate encryption keys for privacy-first mode")
   .option("--force", "Overwrite existing configuration")
   .option("--skip-db", "Skip database initialization")
+  .option("--skip-env", "Skip interactive .env creation and variable prompts")
+  .option(
+    "--auth-mode <mode>",
+    "Auth setup mode: dev_local, oauth, or key_derived (non-interactive shortcut)"
+  )
   .action(
     async (opts: {
       dataDir?: string;
-      generateKeys?: boolean;
       force?: boolean;
       skipDb?: boolean;
+      skipEnv?: boolean;
+      authMode?: string;
     }) => {
+      try {
       const outputMode = resolveOutputMode();
+      /** Temporary API started at start of init (TTY), stopped at end of init */
+      let temporaryApiForInit: { child: ReturnType<typeof spawn>; logPath: string } | null = null;
 
-      // Resolve repo root so we can persist it and add to .env.example
-      const repoRoot = await findRepoRoot(process.cwd());
+      // Resolve repo root consistently (config -> NEOTOMA_REPO_ROOT -> cwd), then persist when missing.
+      const { config: initConfig, repoRoot } = await resolveRepoRootFromInitContext();
+      if (repoRoot) {
+        await persistRepoRootIfMissing(initConfig, repoRoot);
+      }
+      const envRepoRoot: string | null = repoRoot;
 
       // Determine data directory
       let dataDir = opts.dataDir;
@@ -2606,40 +2989,19 @@ program
         steps.push({ name: "database", status: "skipped" });
       }
 
-      // 3. Generate encryption keys (optional)
+      // 3. Encryption key: created later via prompt when user chooses key_derived auth
       let keyPath: string | undefined;
-      if (opts.generateKeys) {
-        const keysDir = path.join(dataDir, "..", "keys");
-        keyPath = path.join(keysDir, "neotoma.key");
 
-        try {
-          await fs.access(keyPath);
-          if (opts.force) {
-            await fs.mkdir(keysDir, { recursive: true });
-            const keyBytes = randomBytes(32);
-            await fs.writeFile(keyPath, keyBytes.toString("hex"), { mode: 0o600 });
-            steps.push({ name: "encryption-key", status: "created", path: keyPath });
-          } else {
-            steps.push({ name: "encryption-key", status: "exists", path: keyPath });
-          }
-        } catch {
-          await fs.mkdir(keysDir, { recursive: true });
-          const keyBytes = randomBytes(32);
-          await fs.writeFile(keyPath, keyBytes.toString("hex"), { mode: 0o600 });
-          steps.push({ name: "encryption-key", status: "created", path: keyPath });
-        }
-      }
-
-      // 4. Create .env.example if it doesn't exist
-      const envExamplePath = path.join(dataDir, "..", ".env.example");
-      const repoRootEnvLine = repoRoot
-        ? `# Repo root (allows starting servers from any cwd)\nNEOTOMA_REPO_ROOT=${repoRoot}\n\n`
+      // 4. .env only in repo: use envRepoRoot (cwd repo or stored config repo) so global CLI can add .env there
+      const envExamplePath = envRepoRoot ? path.join(envRepoRoot, ".env.example") : null;
+      const envPath = envRepoRoot ? path.join(envRepoRoot, ".env") : null;
+      const repoRootEnvLine = envRepoRoot
+        ? `# Repo root (allows starting servers from any cwd)\nNEOTOMA_REPO_ROOT=${envRepoRoot}\n\n`
         : "# Optional: set to Neotoma repo path to start servers from any cwd\n# NEOTOMA_REPO_ROOT=/path/to/neotoma\n\n";
+      const mcpTokenEncryptionKey = randomBytes(32).toString("hex");
       const envContent = `# Neotoma Environment Configuration
-# Copy to .env and customize
 
-${repoRootEnvLine}# Storage backend: local or supabase
-NEOTOMA_STORAGE_BACKEND=local
+${repoRootEnvLine}
 
 # Data directory (defaults to ./data)
 NEOTOMA_DATA_DIR=${dataDir}
@@ -2651,7 +3013,10 @@ NEOTOMA_SQLITE_PATH=${dbPath}
 NEOTOMA_ENV=development
 
 # HTTP API port
-HTTP_PORT=8080
+NEOTOMA_HTTP_PORT=8080
+
+# MCP OAuth local login: encrypts tokens (set by init)
+NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
 # Encryption (optional - for privacy-first mode)
 # NEOTOMA_ENCRYPTION_ENABLED=true
@@ -2661,12 +3026,16 @@ HTTP_PORT=8080
 # OPENAI_API_KEY=sk-...
 `;
 
-      try {
-        await fs.access(envExamplePath);
-        steps.push({ name: ".env.example", status: "exists", path: envExamplePath });
-      } catch {
-        await fs.writeFile(envExamplePath, envContent);
-        steps.push({ name: ".env.example", status: "created", path: envExamplePath });
+      // .env.example is the repo template; init never creates or overwrites it
+      if (envExamplePath) {
+        try {
+          await fs.access(envExamplePath);
+          steps.push({ name: ".env.example", status: "exists", path: envExamplePath });
+        } catch {
+          steps.push({ name: ".env.example", status: "skipped", path: envExamplePath });
+        }
+      } else {
+        steps.push({ name: ".env.example", status: "skipped" });
       }
 
       // 5. MCP config scan (project-local)
@@ -2679,28 +3048,59 @@ HTTP_PORT=8080
       };
       try {
         const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
-        mcpScan = await scanForMcpConfigs(repoRoot ?? process.cwd());
+        mcpScan = await scanForMcpConfigs(repoRoot ?? process.cwd(), {
+          includeUserLevel: true,
+          userLevelFirst: false,
+          neotomaRepoRoot: repoRoot ?? null,
+        });
       } catch {
         // Non-fatal; init succeeds without MCP scan
       }
       const mcpMissingAny =
         mcpScan.configs.some((c) => !c.hasDev || !c.hasProd) || mcpScan.configs.length === 0;
+      const authModeFromFlag = normalizeInitAuthMode(opts.authMode);
+      if (opts.authMode && (!authModeFromFlag || authModeFromFlag === "skip")) {
+        throw new Error("Invalid --auth-mode. Use dev_local, oauth, or key_derived.");
+      }
+      const defaultInitAuthMode: InitAuthMode = "dev_local";
+      const initAuthSummary: InitAuthSummary = {
+        mode: authModeFromFlag ?? defaultInitAuthMode,
+        oauthCompleted: false,
+      };
 
       // Output results
       if (outputMode === "json") {
         const nextSteps = [
           "Copy .env.example to .env and configure",
-          "Start the API: neotoma api start",
+          "Start the API: neotoma api start --env dev",
           "Configure MCP: neotoma mcp config",
+          "Run neotoma cli-instructions check to add the rule to Cursor, Claude, and Codex",
         ];
         if (mcpMissingAny) {
           nextSteps.push("Run neotoma mcp check to scan and add dev/prod servers to MCP configs");
+        }
+        if (initAuthSummary.mode === "oauth") {
+          nextSteps.push(
+            "OAuth setup skipped in --json mode. Start the API, then run neotoma auth login."
+          );
+        } else if (initAuthSummary.mode === "key_derived") {
+          nextSteps.push(
+            "Enable key-derived auth: set NEOTOMA_ENCRYPTION_ENABLED=true and NEOTOMA_KEY_FILE_PATH in .env."
+          );
+        } else if (initAuthSummary.mode === "dev_local") {
+          nextSteps.push(
+            "Using dev-local mode (no login). Run neotoma auth login to switch later."
+          );
         }
         writeOutput(
           {
             success: true,
             data_dir: dataDir,
             steps,
+            auth_setup: {
+              mode: initAuthSummary.mode,
+              oauth_completed: initAuthSummary.oauthCompleted,
+            },
             mcp_scan: {
               configs: mcpScan.configs.map((c) => ({
                 path: c.path,
@@ -2717,29 +3117,421 @@ HTTP_PORT=8080
         return;
       }
 
-      process.stdout.write(nl() + heading("Neotoma initialized!") + nl() + nl());
-      process.stdout.write(heading("Setup steps") + nl());
-      for (const step of steps) {
-        const statusText =
-          step.status === "created"
-            ? success("created")
-            : step.status === "exists"
-              ? dim("exists")
-              : step.status === "skipped"
-                ? dim("skipped")
-                : success("done");
-        const pathPart = step.path ? " " + pathStyle(`(${step.path})`) : "";
-        process.stdout.write(bullet(`${step.name}: ${statusText}${pathPart}`) + "\n");
-      }
-      process.stdout.write(nl());
-      process.stdout.write(heading("Next steps") + nl());
-      process.stdout.write(numbered(1, "Copy .env.example to .env and configure") + "\n");
-      process.stdout.write(numbered(2, "Start the API: " + pathStyle("neotoma api start")) + "\n");
-      process.stdout.write(
-        numbered(3, "Configure MCP for Cursor: " + pathStyle("neotoma mcp config")) + "\n"
-      );
+      if (process.stdout.isTTY) {
+        const createdCount = steps.filter((s) => s.status === "created").length;
+        const existingCount = steps.filter((s) => s.status === "exists").length;
+        const summary =
+          createdCount > 0 && existingCount > 0
+            ? success("✓") + ` ${createdCount} created, ${existingCount} already existed.`
+            : createdCount > 0
+              ? success("✓") + ` ${createdCount} created.`
+              : existingCount > 0
+                ? success("✓") + ` All ${existingCount} items already existed.`
+                : success("✓") + " Directories and files ready.";
+        process.stdout.write("\n" + summary + "\n");
+        for (const step of steps) {
+          const statusText =
+            step.status === "created"
+              ? success("created")
+              : step.status === "exists"
+                ? dim("already exists")
+                : step.status === "skipped"
+                  ? dim("skipped")
+                  : success("done");
+          const pathPart = step.path ? " " + pathStyle(`(${step.path})`) : "";
+          process.stdout.write(bullet(`${step.name}: ${statusText}${pathPart}`) + "\n");
+        }
+        process.stdout.write(nl());
 
-      if (opts.generateKeys && keyPath) {
+        // Start temporary API once at start of init if needed (OAuth or dev_local); stop at end of init
+        try {
+          const config = await readConfig();
+          const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+          if (!(await isApiReachable(baseUrl)) && repoRoot && isLocalHost(baseUrl)) {
+            writeMessage("API is not running. Starting temporary API for init...", outputMode);
+            temporaryApiForInit = await startTemporaryApiForInit({
+              repoRoot,
+              baseUrl,
+              outputMode,
+              startedMessage: ".",
+            });
+          }
+        } catch {
+          // Non-fatal; auth steps may defer or skip
+        }
+
+        const configuredAuth = await detectConfiguredAuthMode(envPath);
+        if (configuredAuth && !authModeFromFlag) {
+          initAuthSummary.mode = configuredAuth.mode;
+          process.stdout.write(
+            nl() +
+              heading("Authentication: ") +
+              initAuthModeLabel(configuredAuth.mode) +
+              dim(" (already configured in ") +
+              pathStyle(configuredAuth.source) +
+              dim(")") +
+              nl()
+          );
+        } else {
+          process.stdout.write(nl() + heading("Choose authentication mode") + nl());
+          if (!authModeFromFlag) {
+            const optW = 6;
+            const modeW = 36;
+            const encW = 10;
+            const header =
+              dim(
+                padToDisplayWidth("Option", optW) +
+                  "  " +
+                  padToDisplayWidth("Mode", modeW) +
+                  "  " +
+                  padToDisplayWidth("Encrypted", encW)
+              ) +
+              "\n" +
+              dim(
+                padToDisplayWidth("------", optW) +
+                  "  " +
+                  "-".repeat(modeW) +
+                  "  " +
+                  "-".repeat(encW)
+              );
+            process.stdout.write(header + "\n");
+            process.stdout.write(
+              padToDisplayWidth("1", optW) +
+                "  " +
+                padToDisplayWidth("Default user (no login)", modeW) +
+                "  " +
+                padToDisplayWidth("No", encW) +
+                "\n"
+            );
+            process.stdout.write(
+              padToDisplayWidth("2", optW) +
+                "  " +
+                padToDisplayWidth("Key-derived user", modeW) +
+                "  " +
+                padToDisplayWidth("Yes", encW) +
+                "\n"
+            );
+            const authChoice = await askQuestion("Choose auth mode [1-2] (default: 1): ");
+            initAuthSummary.mode = normalizeInitAuthMode(authChoice) ?? defaultInitAuthMode;
+          }
+        }
+
+        if (initAuthSummary.mode === "oauth") {
+          const config = await readConfig();
+          const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+          if (configuredAuth?.mode === "oauth" && !authModeFromFlag) {
+            // Already configured — skip opening browser; show user ID if API is up
+            try {
+              const token = await getCliToken();
+              if (token) {
+                const res = await fetch(`${baseUrl}/me`, {
+                  headers: { Authorization: `Bearer ${token}` },
+                  signal: AbortSignal.timeout(10000),
+                });
+                if (res.ok) {
+                  const me = (await res.json()) as { user_id?: string };
+                  process.stdout.write(
+                    bullet(success("✓") + " User ID: " + (me.user_id ?? "—") + nl())
+                  );
+                }
+              }
+            } catch {
+              // Non-fatal: API may be down or token invalid
+            }
+          } else {
+            const apiAlreadyRunning = await isApiReachable(baseUrl);
+            if (!apiAlreadyRunning) {
+              if (!repoRoot) {
+                initAuthSummary.oauthDeferredReason =
+                  "OAuth selected but no repo root found for temporary API startup.";
+              } else if (!isLocalHost(baseUrl)) {
+                initAuthSummary.oauthDeferredReason =
+                  "OAuth selected but base URL is not local. Start your API manually, then run neotoma auth login.";
+              }
+            }
+            if (!initAuthSummary.oauthDeferredReason) {
+              try {
+                await runLoginFlow(baseUrl, false);
+                initAuthSummary.oauthCompleted = true;
+              } catch (error) {
+                initAuthSummary.oauthDeferredReason = formatCliError(error);
+              }
+            }
+          }
+        } else if (initAuthSummary.mode === "key_derived") {
+          process.stdout.write(nl());
+          const keyChoice = await askQuestion(
+            "Create new key [1] or enter path to existing key [2] (default: 1): "
+          );
+          const wantCreate = keyChoice.trim() === "" || keyChoice.trim() === "1";
+          if (wantCreate) {
+            const keysDir = path.join(dataDir, "..", "keys");
+            keyPath = path.join(keysDir, "neotoma.key");
+            try {
+              await fs.access(keyPath);
+              process.stdout.write(
+                bullet("Key already exists at " + pathStyle(keyPath) + ". Using it.") + "\n"
+              );
+              steps.push({ name: "encryption-key", status: "exists", path: keyPath });
+            } catch {
+              await fs.mkdir(keysDir, { recursive: true });
+              const keyBytes = randomBytes(32);
+              await fs.writeFile(keyPath, keyBytes.toString("hex"), { mode: 0o600 });
+              steps.push({ name: "encryption-key", status: "created", path: keyPath });
+              process.stdout.write(
+                bullet("Created encryption key at " + pathStyle(keyPath)) + "\n"
+              );
+            }
+          } else {
+            const existingPath = await askQuestion("Path to existing key file: ");
+            const resolved = existingPath.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
+            if (!resolved) {
+              process.stdout.write(
+                bullet(warn("No path entered. Set NEOTOMA_KEY_FILE_PATH in .env later.")) + "\n"
+              );
+            } else {
+              try {
+                await fs.access(resolved);
+                keyPath = path.resolve(resolved);
+                steps.push({ name: "encryption-key", status: "exists", path: keyPath });
+                process.stdout.write(bullet("Using existing key at " + pathStyle(keyPath)) + "\n");
+              } catch {
+                process.stdout.write(
+                  bullet(
+                    warn(
+                      "File not found: " +
+                        resolved +
+                        ". Set NEOTOMA_KEY_FILE_PATH in .env when ready."
+                    )
+                  ) + "\n"
+                );
+              }
+            }
+          }
+        }
+        // Show user ID for dev_local (API already started at start of init if needed)
+        if (initAuthSummary.mode === "dev_local") {
+          try {
+            const config = await readConfig();
+            const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+            const res = await fetch(`${baseUrl.replace(/\/$/, "")}/me`, {
+              signal: AbortSignal.timeout(15000),
+            });
+            if (res.ok) {
+              const me = (await res.json()) as { user_id?: string };
+              if (me.user_id)
+                writeMessage("\n" + success("✓") + " User ID: " + me.user_id, outputMode);
+            }
+          } catch {
+            // Skip showing user ID on error (e.g. API not reachable)
+          }
+        }
+      }
+
+      let _envCreated = false;
+      let _envConfigured = false;
+
+      const INIT_ENV_VARS = [
+        "NEOTOMA_REPO_ROOT",
+        "NEOTOMA_DATA_DIR",
+        "NEOTOMA_SQLITE_PATH",
+        "NEOTOMA_ENV",
+        "NEOTOMA_HTTP_PORT",
+        "NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY",
+        "OPENAI_API_KEY",
+      ] as const;
+      const SECRET_ENV_VARS = new Set(["OPENAI_API_KEY", "NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY"]);
+
+      const parseEnvFile = (content: string): Record<string, string> => {
+        const out: Record<string, string> = {};
+        for (const line of content.split("\n")) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) continue;
+          const eq = trimmed.indexOf("=");
+          if (eq <= 0) continue;
+          const key = trimmed.slice(0, eq).trim();
+          let val = trimmed.slice(eq + 1).trim();
+          if (
+            (val.startsWith('"') && val.endsWith('"')) ||
+            (val.startsWith("'") && val.endsWith("'"))
+          ) {
+            val = val.slice(1, -1);
+          }
+          if (!key) continue;
+          out[key] = val;
+        }
+        return out;
+      };
+
+      const maskSecret = (value: string): string => {
+        if (value.length <= 8) return "***";
+        return value.slice(0, 6) + "…***";
+      };
+
+      if (process.stdout.isTTY && !opts.skipEnv && envPath && envExamplePath) {
+        const envPathStr = envPath;
+        let envExists = false;
+        try {
+          await fs.access(envPathStr);
+          envExists = true;
+        } catch {
+          envExists = false;
+        }
+
+        const knownDefaults: Record<string, string> = {
+          NEOTOMA_DATA_DIR: dataDir,
+          NEOTOMA_SQLITE_PATH: dbPath,
+          NEOTOMA_ENV: "development",
+          NEOTOMA_HTTP_PORT: "8080",
+          NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY: mcpTokenEncryptionKey,
+          ...(envRepoRoot ? { NEOTOMA_REPO_ROOT: envRepoRoot } : {}),
+        };
+
+        const ensureKnownVarsInEnv = async (): Promise<void> => {
+          let envText: string;
+          try {
+            envText = await fs.readFile(envPathStr, "utf-8");
+          } catch {
+            return;
+          }
+          const parsed = parseEnvFile(envText);
+          let changed = false;
+          for (const [key, value] of Object.entries(knownDefaults)) {
+            const current = parsed[key];
+            if (current == null || String(current).trim() === "") {
+              const keyLine = new RegExp(
+                `^#?\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`,
+                "m"
+              );
+              if (keyLine.test(envText)) {
+                envText = envText.replace(keyLine, key + "=" + value);
+              } else {
+                envText = envText.trimEnd() + "\n" + key + "=" + value + "\n";
+              }
+              changed = true;
+            }
+          }
+          if (changed) {
+            await fs.writeFile(envPathStr, envText);
+          }
+        }
+
+        if (envExists) {
+          await ensureKnownVarsInEnv();
+        }
+
+        const resolved: Record<string, string | undefined> = { ...process.env };
+        if (envExists) {
+          try {
+            const envText = await fs.readFile(envPathStr, "utf-8");
+            Object.assign(resolved, parseEnvFile(envText));
+          } catch {
+            // keep process.env only
+          }
+        }
+        // When .env does not exist, do not merge knownDefaults into resolved so we show
+        // "not set" for vars that are not in process.env; after creating .env we write defaults via envContent.
+
+        process.stdout.write(heading("\n" + "Set environment variables") + " " + dim(pathStyle(envPathStr)) + nl());
+        for (const name of INIT_ENV_VARS) {
+          const value = resolved[name];
+          const set = value != null && String(value).trim() !== "";
+          const display = set
+            ? SECRET_ENV_VARS.has(name)
+              ? maskSecret(String(value))
+              : String(value)
+            : "";
+          const defaultVal = knownDefaults[name];
+          const defaultHint =
+            defaultVal != null && SECRET_ENV_VARS.has(name)
+              ? dim("(set by init when creating .env)")
+              : defaultVal != null
+                ? dim(`(default: ${defaultVal})`)
+                : dim("(not set)");
+          const status = set
+            ? success("already set") + (display ? " " + dim(`(${display})`) : "")
+            : dim("optional") + " " + defaultHint;
+          process.stdout.write(bullet(`${pathStyle(name)}: ${status}`) + "\n");
+        }
+        process.stdout.write(nl());
+
+        if (!envExists) {
+          const createEnv = await askYesNo(
+            "Create .env from .env.example and configure now? (y/n): "
+          );
+          if (createEnv) {
+            let contentToWrite = envContent;
+            if (envRepoRoot) {
+              contentToWrite = contentToWrite.replace(
+                "# Optional: set to Neotoma repo path to start servers from any cwd\n# NEOTOMA_REPO_ROOT=/path/to/neotoma\n\n",
+                "# Repo root (allows starting servers from any cwd)\nNEOTOMA_REPO_ROOT=" +
+                  envRepoRoot +
+                  "\n\n"
+              );
+            }
+            await fs.writeFile(envPathStr, contentToWrite);
+            _envCreated = true;
+            process.stdout.write(
+              bullet(success(".env created with detected paths and defaults.")) + "\n"
+            );
+            process.stdout.write(bullet(dim("Path: ") + pathStyle(envPathStr)) + "\n");
+          }
+        }
+
+        const openAiSet =
+          resolved.OPENAI_API_KEY != null && String(resolved.OPENAI_API_KEY).trim() !== "";
+        if (!openAiSet) {
+          const setOpenAi = await askYesNo(
+            "Set OPENAI_API_KEY now? (optional, for LLM extraction) (y/n): "
+          );
+          if (setOpenAi) {
+            const keyVal = await askQuestion("OPENAI_API_KEY value: ");
+            if (keyVal) {
+              let envText: string;
+              try {
+                envText = await fs.readFile(envPathStr, "utf-8");
+              } catch {
+                envText = await fs.readFile(envExamplePath, "utf-8");
+              }
+              const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
+              if (openAiLine.test(envText)) {
+                envText = envText.replace(
+                  openAiLine,
+                  "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
+                );
+              } else {
+                envText =
+                  envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
+              }
+              await fs.writeFile(envPathStr, envText);
+              process.stdout.write(bullet(success("OPENAI_API_KEY saved to .env.")) + "\n");
+              _envConfigured = true;
+            }
+          }
+        } else if (envExists) {
+          const updateOpenAi = await askYesNo("Update OPENAI_API_KEY in .env? (y/n): ");
+          if (updateOpenAi) {
+            const keyVal = await askQuestion("OPENAI_API_KEY value: ");
+            if (keyVal) {
+              let envText = await fs.readFile(envPathStr, "utf-8");
+              const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
+              if (openAiLine.test(envText)) {
+                envText = envText.replace(
+                  openAiLine,
+                  "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
+                );
+              } else {
+                envText =
+                  envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
+              }
+              await fs.writeFile(envPathStr, envText);
+              process.stdout.write(bullet(success("OPENAI_API_KEY updated in .env.")) + "\n");
+              _envConfigured = true;
+            }
+          }
+        }
+      }
+      if (keyPath) {
         process.stdout.write(nl() + heading("Encryption enabled") + nl());
         process.stdout.write(keyValue("Key file", keyPath, true) + "\n");
         process.stdout.write(
@@ -2754,10 +3546,11 @@ HTTP_PORT=8080
       }
 
       // MCP config: offer to add dev/prod servers if scan found configs missing them
+      let mcpInstallResult: { scope?: "project" | "user" | "both" } | undefined;
       if (mcpMissingAny && mcpScan.repoRoot) {
         try {
           const { offerInstall } = await import("./mcp_config_scan.js");
-          await offerInstall(mcpScan.configs, mcpScan.repoRoot);
+          mcpInstallResult = await offerInstall(mcpScan.configs, mcpScan.repoRoot);
         } catch {
           process.stdout.write(
             nl() +
@@ -2766,6 +3559,33 @@ HTTP_PORT=8080
               dim(" later to scan and add dev/prod servers to your MCP configs.") +
               nl()
           );
+        }
+      }
+
+      if (outputMode === "pretty" && process.stdout.isTTY && mcpScan.repoRoot) {
+        try {
+          const { scanAgentInstructions, offerAddPreferCliRule } =
+            await import("./agent_instructions_scan.js");
+          const scanResult = await scanAgentInstructions(mcpScan.repoRoot, {
+            includeUserLevel: true,
+          });
+          if (scanResult.missingInApplied || scanResult.needsUpdateInApplied) {
+            const { added, skipped } = await offerAddPreferCliRule(scanResult, {
+              nonInteractive: false,
+              scope: mcpInstallResult?.scope,
+            });
+            if (added.length > 0) {
+              process.stdout.write(
+                success("✓ ") + "Added CLI instructions to: " + added.join(", ") + nl()
+              );
+            } else if (skipped) {
+              process.stdout.write(
+                dim("CLI instructions are already up to date for the selected scope.") + nl()
+              );
+            }
+          }
+        } catch {
+          process.stdout.write(dim("Could not check CLI instructions.") + nl());
         }
       }
 
@@ -2783,14 +3603,185 @@ HTTP_PORT=8080
           if (validated) configRepoRoot = validated;
         }
       }
-      if (configRepoRoot) {
+      {
         const config = await readConfig();
-        await writeConfig({ ...config, repo_root: configRepoRoot });
+        const nextConfig: Config = {
+          ...config,
+          ...(configRepoRoot ? { repo_root: configRepoRoot } : {}),
+          ...(initAuthSummary.mode !== "skip" ? { init_auth_mode: initAuthSummary.mode } : {}),
+        };
+        await writeConfig(nextConfig);
       }
 
       process.stdout.write(nl());
+
+      if (temporaryApiForInit) {
+        await stopTemporaryApiForInit(temporaryApiForInit.child);
+        writeMessage("Stopped temporary API.", outputMode);
+      }
+
+      process.stdout.write(nl() + heading("Neotoma initialized!") + nl());
+      if (!envRepoRoot) {
+        process.stdout.write(
+          bullet(
+            dim(
+              ".env is only created when run from the repo or when a repo path is saved in config. Data is under ~/neotoma/data."
+            )
+          ) + "\n"
+        );
+      }
+      } catch (err) {
+        if (err instanceof InitAbortError) {
+          process.stdout.write("\n");
+          process.exit(0);
+        }
+        throw err;
+      }
     }
   );
+
+let resetCompletionPrinted = false;
+
+program
+  .command("reset")
+  .description(
+    "Reset local Neotoma init state: backup config/data/env and CLI instruction copies, remove Neotoma MCP installs from user and repo configs"
+  )
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(async (opts: { yes?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    const { repoRoot } = await resolveRepoRootFromInitContext();
+    const ts = backupTimestamp();
+
+    // Core candidates: always show in "Skipped (not present)" if missing
+    const coreBackupCandidates: string[] = [CONFIG_DIR];
+    // Optional candidates: only show in skipped if they actually existed at some point (move-if-present only, silent otherwise)
+    const optionalBackupCandidates: string[] = [];
+    if (repoRoot) {
+      const envPath = path.join(repoRoot, ".env");
+      const envVars = await readEnvFileVars(envPath);
+      const envDataDir = envVars.NEOTOMA_DATA_DIR?.trim();
+      const resolvedDataDir =
+        envDataDir != null && envDataDir.length > 0
+          ? path.isAbsolute(envDataDir)
+            ? envDataDir
+            : path.resolve(repoRoot, envDataDir)
+          : path.join(repoRoot, "data");
+      coreBackupCandidates.push(resolvedDataDir);
+      optionalBackupCandidates.push(path.join(repoRoot, "keys"), envPath);
+    }
+    const backupCandidates = [...coreBackupCandidates, ...optionalBackupCandidates];
+
+    const cliInstructionPaths: string[] = [];
+    if (repoRoot) {
+      const { PROJECT_APPLIED_RULE_PATHS } = await import("./agent_instructions_scan.js");
+      for (const rel of Object.values(PROJECT_APPLIED_RULE_PATHS)) {
+        cliInstructionPaths.push(path.join(repoRoot, rel));
+      }
+    }
+    const userRulePaths = (await import("./agent_instructions_scan.js")).getUserAppliedRulePaths();
+    if (userRulePaths) {
+      cliInstructionPaths.push(userRulePaths.cursor, userRulePaths.claude, userRulePaths.codex);
+    }
+
+    const mcpConfigTargets = new Set<string>(userLevelMcpConfigPaths());
+    if (repoRoot) {
+      mcpConfigTargets.add(path.join(repoRoot, ".cursor", "mcp.json"));
+      mcpConfigTargets.add(path.join(repoRoot, ".mcp.json"));
+      mcpConfigTargets.add(path.join(repoRoot, ".codex", "config.toml"));
+    }
+
+    if (process.stdout.isTTY && !opts.yes && outputMode !== "json") {
+      process.stdout.write(heading("Neotoma reset") + nl() + nl());
+      process.stdout.write("This will:" + nl());
+      process.stdout.write(
+        bullet("Back up local config, data, and env to timestamped copies.") + nl()
+      );
+      process.stdout.write(
+        bullet("Back up neotoma_cli instruction files in user and repo.") + nl()
+      );
+      process.stdout.write(
+        bullet("Remove Neotoma MCP entries from user and repo configs.") + nl()
+      );
+      process.stdout.write(nl());
+      const ok = await askYesNo("Continue with reset? (y/n): ");
+      if (!ok) {
+        process.stdout.write("Reset cancelled." + nl());
+        return;
+      }
+    }
+
+    const cliInstructionPathSet = new Set(cliInstructionPaths);
+    const allBackupSources = [...backupCandidates, ...cliInstructionPaths];
+    const moved: Array<{ from: string; to: string }> = [];
+    for (const src of allBackupSources) {
+      const to = await movePathToTimestampBackup(src, ts);
+      if (to) moved.push({ from: src, to });
+    }
+    const movedFromSet = new Set(moved.map((m) => m.from));
+    // Only report skipped for core paths; optional paths (keys, .env) are moved if present and silently skipped if not
+    const skippedBackupCandidates = coreBackupCandidates.filter((src) => !movedFromSet.has(src));
+    const movedCliCount = moved.filter((m) => cliInstructionPathSet.has(m.from)).length;
+
+    const mcpCleaned: string[] = [];
+    for (const configPath of mcpConfigTargets) {
+      const isCodexToml = configPath.endsWith("config.toml");
+      const changed = isCodexToml
+        ? await removeNeotomaCodexMarkerBlock(configPath)
+        : await removeNeotomaServersFromJsonMcpConfig(configPath);
+      if (changed) mcpCleaned.push(configPath);
+    }
+
+    if (outputMode === "json") {
+      writeOutput(
+        {
+          success: true,
+          repo_root: repoRoot,
+          timestamp: ts,
+          backups_moved: moved,
+          mcp_configs_updated: mcpCleaned,
+        },
+        outputMode
+      );
+      return;
+    }
+
+    if (!resetCompletionPrinted) {
+      resetCompletionPrinted = true;
+      // Backups
+      if (moved.length > 0) {
+        process.stdout.write(nl() + bold("Backed up:") + nl());
+        for (const item of moved) {
+          process.stdout.write(bullet(pathStyle(item.from) + " -> " + pathStyle(item.to)) + nl());
+        }
+      }
+      if (skippedBackupCandidates.length > 0) {
+        process.stdout.write(nl() + bold("Not present:") + nl());
+        for (const src of skippedBackupCandidates) {
+          process.stdout.write(bullet(dim(pathStyle(src))) + nl());
+        }
+      }
+      if (moved.length === 0 && skippedBackupCandidates.length === 0) {
+        process.stdout.write(nl() + bullet(dim("Nothing to back up.")) + nl());
+      }
+
+      process.stdout.write(nl());
+      if (cliInstructionPaths.length > 0 && movedCliCount === 0) {
+        process.stdout.write(bullet(dim("No neotoma_cli instruction files found.")) + nl());
+      }
+      if (mcpCleaned.length > 0) {
+        process.stdout.write(bold("MCP configs cleaned:") + nl());
+        for (const p of mcpCleaned) {
+          process.stdout.write(bullet(pathStyle(p)) + nl());
+        }
+      } else {
+        process.stdout.write(bullet(dim("No Neotoma MCP entries to clean.")) + nl());
+      }
+
+      process.stdout.write(nl() + heading("Neotoma reset complete.") + nl());
+      process.stdout.write(dim("Next step: ") + pathStyle("neotoma init") + nl());
+    }
+  });
 
 const authCommand = program.command("auth").description("Authentication commands");
 
@@ -2799,8 +3790,44 @@ const authLoginCommand = authCommand
   .description("Login using OAuth PKCE")
   .option("--dev-stub", "Use local dev stub authentication (local backend only)")
   .action(async () => {
+    const outputMode = resolveOutputMode();
     const config = await readConfig();
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    let token: string | undefined;
+    try {
+      token = await getCliToken();
+    } catch {
+      token = undefined;
+    }
+    if (token) {
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+      try {
+        const res = await fetch(`${baseUrl}/me`, { headers, signal: AbortSignal.timeout(10000) });
+        if (res.ok) {
+          const me = (await res.json()) as { user_id?: string; email?: string };
+          if (outputMode === "json") {
+            writeOutput(
+              {
+                message: "Already signed in",
+                base_url: baseUrl,
+                user_id: me.user_id,
+                email: me.email,
+              },
+              outputMode
+            );
+          } else {
+            process.stdout.write("Already signed in");
+            if (me.user_id ?? me.email) {
+              process.stdout.write(` (${[me.email, me.user_id].filter(Boolean).join(", ")})`);
+            }
+            process.stdout.write(".\n");
+          }
+          return;
+        }
+      } catch {
+        // Fall through to login if /me fails (e.g. server down)
+      }
+    }
     const loginOptions = authLoginCommand.opts();
     await runLoginFlow(baseUrl, Boolean(loginOptions.devStub));
   });
@@ -2830,14 +3857,14 @@ authCommand
     try {
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
-      const res = await fetch(`${baseUrl}/api/me`, { headers });
+      const res = await fetch(`${baseUrl}/me`, { headers });
       if (res.ok) {
         const me = (await res.json()) as { user_id?: string; email?: string };
         if (me.user_id) status.user_id = me.user_id;
         if (me.email != null) status.email = me.email;
       }
     } catch {
-      // Omit user details if /api/me fails (e.g. server unreachable)
+      // Omit user details if /me fails (e.g. server unreachable)
     }
     writeOutput(status, outputMode);
   });
@@ -3069,9 +4096,7 @@ mcpCommand
 
       if (configs.length === 0) {
         process.stdout.write(heading("MCP config check") + nl() + nl());
-        process.stdout.write(
-          "No MCP config files found (user-level or project-level)." + nl()
-        );
+        process.stdout.write("No MCP config files found (user-level or project-level)." + nl());
         process.stdout.write(nl());
       } else {
         process.stdout.write(heading("MCP config check") + nl() + nl());
@@ -3100,6 +4125,38 @@ mcpCommand
       } else if (result.message !== "Dev and prod Neotoma servers are already configured.") {
         process.stdout.write(result.message + nl());
       }
+
+      if (result.installed && process.stdout.isTTY && repoRoot) {
+        try {
+          const { scanAgentInstructions, offerAddPreferCliRule } =
+            await import("./agent_instructions_scan.js");
+          const scanResult = await scanAgentInstructions(repoRoot, { includeUserLevel: true });
+          if (scanResult.missingInApplied || scanResult.needsUpdateInApplied) {
+            const { added, skipped } = await offerAddPreferCliRule(scanResult, {
+              nonInteractive: false,
+              scope: result.scope,
+            });
+            if (added.length > 0) {
+              process.stdout.write(
+                success("✓ ") + "Added CLI instructions to: " + added.join(", ") + nl()
+              );
+            } else if (skipped) {
+              process.stdout.write(
+                dim("CLI instructions are already up to date for the selected scope.") + nl()
+              );
+            }
+          }
+        } catch {
+          process.stdout.write(dim("Could not check CLI instructions.") + nl());
+        }
+      }
+
+      process.stdout.write(
+        dim("Tip: Run ") +
+          pathStyle("neotoma cli-instructions check") +
+          dim(" to add the rule to Cursor, Claude, and Codex.") +
+          nl()
+      );
     } catch (err) {
       if (outputMode === "json") {
         writeOutput({ error: err instanceof Error ? err.message : String(err) }, outputMode);
@@ -3118,7 +4175,9 @@ const agentInstructionsCommand = program
 
 agentInstructionsCommand
   .command("config")
-  .description("Show guidance for adding 'prefer MCP when available, CLI as backup' to Cursor, Claude, and Codex")
+  .description(
+    "Show guidance for adding 'prefer MCP when available, CLI as backup' to Cursor, Claude, and Codex"
+  )
   .action(() => {
     const outputMode = resolveOutputMode();
     if (outputMode === "json") {
@@ -3148,9 +4207,12 @@ agentInstructionsCommand
       heading("CLI instructions: prefer MCP when available, CLI as backup") + nl() + nl()
     );
     process.stdout.write(
-      "Add the rule so it is applied in Cursor, Claude Code, and Codex (only paths each IDE loads count)." + nl()
+      "Add the rule so it is applied in Cursor, Claude Code, and Codex (only paths each IDE loads count)." +
+        nl()
     );
-    process.stdout.write(dim("Rule content source: ") + pathStyle("docs/developer/cli_agent_instructions.md") + nl());
+    process.stdout.write(
+      dim("Rule content source: ") + pathStyle("docs/developer/cli_agent_instructions.md") + nl()
+    );
     process.stdout.write(nl());
     process.stdout.write(bold("Project (this repo):") + nl());
     process.stdout.write("  Cursor: " + pathStyle(".cursor/rules/neotoma_cli.mdc") + nl());
@@ -3163,14 +4225,21 @@ agentInstructionsCommand
     process.stdout.write("  " + pathStyle("~/.codex/neotoma_cli.md") + " (Codex)" + nl());
     process.stdout.write(nl());
     process.stdout.write(
-      dim("Run ") + pathStyle("neotoma cli-instructions check") + dim(" to add to missing environments.") + nl()
+      dim("Run ") +
+        pathStyle("neotoma cli-instructions check") +
+        dim(" to add to missing environments.") +
+        nl()
     );
-    process.stdout.write(dim("Docs: ") + pathStyle("docs/developer/agent_cli_configuration.md") + nl());
+    process.stdout.write(
+      dim("Docs: ") + pathStyle("docs/developer/agent_cli_configuration.md") + nl()
+    );
   });
 
 agentInstructionsCommand
   .command("check")
-  .description("Scan for 'prefer MCP when available, CLI as backup' in Cursor, Claude, and Codex applied paths; offer to add if missing")
+  .description(
+    "Scan for 'prefer MCP when available, CLI as backup' in Cursor, Claude, and Codex applied paths; offer to add if missing"
+  )
   .option("--user-level", "Include user-level paths in scan", true)
   .option("--no-user-level", "Scan project only")
   .option("--yes", "Non-interactive: only report, do not offer to add")
@@ -3219,9 +4288,7 @@ agentInstructionsCommand
         return;
       }
 
-      process.stdout.write(
-        heading("CLI instructions check") + nl() + nl()
-      );
+      process.stdout.write(heading("CLI instructions check") + nl() + nl());
       process.stdout.write("Project root: " + pathStyle(result.projectRoot) + nl() + nl());
 
       const fmtStatus = (ok: boolean, sym: boolean) =>
@@ -3233,22 +4300,60 @@ agentInstructionsCommand
 
       process.stdout.write("  " + bold("Project") + nl());
       const projEntries = [
-        { label: "Cursor", ok: result.appliedProject.cursor, sym: result.symlinkProject.cursor, relPath: PROJECT_APPLIED_RULE_PATHS.cursor },
-        { label: "Claude", ok: result.appliedProject.claude, sym: result.symlinkProject.claude, relPath: PROJECT_APPLIED_RULE_PATHS.claude },
-        { label: "Codex",  ok: result.appliedProject.codex,  sym: result.symlinkProject.codex,  relPath: PROJECT_APPLIED_RULE_PATHS.codex },
+        {
+          label: "Cursor",
+          ok: result.appliedProject.cursor,
+          sym: result.symlinkProject.cursor,
+          relPath: PROJECT_APPLIED_RULE_PATHS.cursor,
+        },
+        {
+          label: "Claude",
+          ok: result.appliedProject.claude,
+          sym: result.symlinkProject.claude,
+          relPath: PROJECT_APPLIED_RULE_PATHS.claude,
+        },
+        {
+          label: "Codex",
+          ok: result.appliedProject.codex,
+          sym: result.symlinkProject.codex,
+          relPath: PROJECT_APPLIED_RULE_PATHS.codex,
+        },
       ];
       for (const e of projEntries) {
         process.stdout.write(
-          "    " + fmtStatus(e.ok, e.sym) + "  " + e.label + "  " + dim(path.join(projRoot, e.relPath)) + nl()
+          "    " +
+            fmtStatus(e.ok, e.sym) +
+            "  " +
+            e.label +
+            "  " +
+            dim(path.join(projRoot, e.relPath)) +
+            nl()
         );
       }
 
       process.stdout.write("  " + bold("User") + nl());
-      const userEntries = userPaths ? [
-        { label: "Cursor", ok: result.appliedUser.cursor, sym: result.symlinkUser.cursor, p: userPaths.cursor },
-        { label: "Claude", ok: result.appliedUser.claude, sym: result.symlinkUser.claude, p: userPaths.claude },
-        { label: "Codex",  ok: result.appliedUser.codex,  sym: result.symlinkUser.codex,  p: userPaths.codex },
-      ] : [];
+      const userEntries = userPaths
+        ? [
+            {
+              label: "Cursor",
+              ok: result.appliedUser.cursor,
+              sym: result.symlinkUser.cursor,
+              p: userPaths.cursor,
+            },
+            {
+              label: "Claude",
+              ok: result.appliedUser.claude,
+              sym: result.symlinkUser.claude,
+              p: userPaths.claude,
+            },
+            {
+              label: "Codex",
+              ok: result.appliedUser.codex,
+              sym: result.symlinkUser.codex,
+              p: userPaths.codex,
+            },
+          ]
+        : [];
       for (const e of userEntries) {
         process.stdout.write(
           "    " + fmtStatus(e.ok, e.sym) + "  " + e.label + "  " + dim(e.p) + nl()
@@ -3279,7 +4384,9 @@ agentInstructionsCommand
       }
 
       const missingProject =
-        !result.appliedProject.cursor || !result.appliedProject.claude || !result.appliedProject.codex;
+        !result.appliedProject.cursor ||
+        !result.appliedProject.claude ||
+        !result.appliedProject.codex;
       const missingUser =
         !result.appliedUser.cursor || !result.appliedUser.claude || !result.appliedUser.codex;
       const needsUpdate = result.needsUpdateInApplied;
@@ -3299,7 +4406,11 @@ agentInstructionsCommand
           if (!result.appliedUser.cursor) missingEnvs.push("Cursor");
           if (!result.appliedUser.claude) missingEnvs.push("Claude");
           if (!result.appliedUser.codex) missingEnvs.push("Codex");
-          parts.push("Not applied at user level in: " + missingEnvs.join(", ") + " (user rules apply to all projects)");
+          parts.push(
+            "Not applied at user level in: " +
+              missingEnvs.join(", ") +
+              " (user rules apply to all projects)"
+          );
         }
         if (needsUpdate) {
           const staleEnvs: string[] = [];
@@ -3310,9 +4421,7 @@ agentInstructionsCommand
             parts.push("Outdated in: " + staleEnvs.join(", "));
           }
         }
-        process.stdout.write(
-          warn(parts.join(". ") + ".") + nl()
-        );
+        process.stdout.write(warn(parts.join(". ") + ".") + nl());
         if (process.stdin.isTTY && !opts.yes) {
           const { added, skipped } = await offerAddPreferCliRule(result, { nonInteractive: false });
           if (added.length > 0) {
@@ -3321,7 +4430,9 @@ agentInstructionsCommand
               process.stdout.write("  " + pathStyle(p) + nl());
             }
           } else if (skipped) {
-            process.stdout.write(dim("Already up to date for the chosen scope. Nothing written.") + nl());
+            process.stdout.write(
+              dim("Already up to date for the chosen scope. Nothing written.") + nl()
+            );
           }
         } else if (opts.yes) {
           process.stdout.write(dim("Paths to add or update (run without --yes to apply):") + nl());
@@ -3335,13 +4446,17 @@ agentInstructionsCommand
             process.stdout.write("  " + pathStyle(PROJECT_APPLIED_RULE_PATHS.codex) + nl());
           }
           const snippetBody = await loadCliAgentInstructions(result.projectRoot);
-          process.stdout.write(nl() + dim("Source: docs/developer/cli_agent_instructions.md") + nl());
+          process.stdout.write(
+            nl() + dim("Source: docs/developer/cli_agent_instructions.md") + nl()
+          );
           process.stdout.write(dim("Snippet:") + nl() + nl());
           process.stdout.write(snippetBody.trim().slice(0, 400) + "…" + nl());
         }
       } else {
         process.stdout.write(
-          success("Instruction applied and up to date at project and user level (Cursor, Claude, Codex).") + nl()
+          success(
+            "Instruction applied and up to date at project and user level (Cursor, Claude, Codex)."
+          ) + nl()
         );
       }
     } catch (err) {
@@ -3359,392 +4474,482 @@ agentInstructionsCommand
   });
 
 program
-  .command("watch")
+  .command("watch [env]")
   .description("Stream record changes from the database as they happen (local backend only).")
-  .option("--env <env>", "Environment to watch (dev or prod); required when running outside a session")
+  .option("--env <env>", "Environment: dev, prod, or all (same as first argument)")
   .option("--interval <ms>", "Polling interval in ms", "400")
   .option("--json", "Output NDJSON (one JSON object per line)")
   .option("--human", "Output one plain line per change (no timestamps, emoji, or IDs)")
   .option("--tail", "Only show changes from now (skip existing records)")
-  .action(async (opts: { env?: string; interval?: string; json?: boolean; human?: boolean; tail?: boolean }) => {
-    if (sessionWatchState) {
-      sessionWatchState.enabled = true;
-      const events = await getLastNWatchEntries(
-        sessionWatchState.repoRoot,
-        sessionWatchState.preferredEnv,
-        sessionWatchState.userId,
-        WATCH_INITIAL_EVENT_LIMIT
-      );
-      lastShownWatchEvents = events.length > 0 ? events : null;
-      if (events.length > 0) {
-        const watchLines = formatWatchTable(events, new Date());
-        sessionWatchDisplayRef = { watchLines, watchEventCount: events.length };
-        const sessionBoxWidth = getTerminalWidth();
-        process.stdout.write(
-          "\n" +
-            blackBox(watchLines, {
-              title: " Recent events ",
-              borderColor: "green",
-              padding: 1,
-              sessionBoxWidth,
-            }) +
-            "\n"
-        );
-        process.stdout.write(
-          dim("  View details: enter row number (1–" + events.length + ") at the prompt after exiting.") +
-            "\n"
-        );
-      } else {
-        sessionWatchDisplayRef = null;
-        process.stdout.write("\n" + dim("No recent events.") + "\n");
-      }
-      sessionWatchState.stop = await startSessionWatch(
-        sessionWatchState.repoRoot,
-        sessionWatchState.onEvent,
-        sessionWatchState.preferredEnv
-      );
-      process.stdout.write(
-        dim("Watch mode. Streaming new events. Press ") +
-          pathStyle("Enter") +
-          dim(" or ") +
-          pathStyle("q") +
-          dim(" to exit to prompt.") +
-          "\n"
-      );
-      await runWatchModeExit();
-      sessionWatchState.enabled = false;
-      sessionWatchState.stop();
-      sessionWatchState.stop = () => {};
-      sessionWatchDisplayRef = null;
-      process.stdout.write("\n" + dim("Exited watch mode.") + "\n");
-      return;
-    }
-
-    const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
-    if (storageBackend !== "local") {
-      process.stderr.write(
-        "neotoma watch requires local backend. Set NEOTOMA_STORAGE_BACKEND=local or use Supabase Realtime for remote.\n"
-      );
-      process.exit(1);
-    }
-
-    const config = await readConfig();
-    let token: string | undefined;
-    try {
-      token = await getCliToken();
-    } catch {
-      process.stderr.write(
-        "neotoma watch requires auth. Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC when encryption is on.\n"
-      );
-      process.exit(1);
-    }
-    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    let userId: string;
-    try {
-      const res = await fetch(`${baseUrl}/api/me`, { headers });
-      if (!res.ok) {
+  .action(
+    async (
+      envArg: string | undefined,
+      optsOrCmd:
+        | { env?: string; interval?: string; json?: boolean; human?: boolean; tail?: boolean }
+        | Command
+    ) => {
+      const opts =
+        typeof (optsOrCmd as Command).opts === "function"
+          ? ((optsOrCmd as Command).opts() as {
+              env?: string;
+              interval?: string;
+              json?: boolean;
+              human?: boolean;
+              tail?: boolean;
+            })
+          : (optsOrCmd as {
+              env?: string;
+              interval?: string;
+              json?: boolean;
+              human?: boolean;
+              tail?: boolean;
+            });
+      const watchEnvFlag = (envArg ?? opts.env)?.toLowerCase();
+      if (watchEnvFlag !== "dev" && watchEnvFlag !== "prod" && watchEnvFlag !== "all") {
         process.stderr.write(
-          "neotoma watch: could not resolve user. Run `neotoma auth login` and ensure the API is running.\n"
+          "neotoma watch: specify environment as first argument (e.g. watch dev) or --env dev, --env prod, or --env all.\n"
         );
         process.exit(1);
       }
-      const me = (await res.json()) as { user_id?: string };
-      if (!me.user_id) {
-        process.stderr.write(
-          "neotoma watch: API did not return user_id. Ensure the API is running and you are authenticated.\n"
-        );
-        process.exit(1);
-      }
-      userId = me.user_id;
-    } catch (err) {
-      process.stderr.write(
-        "neotoma watch: could not reach API to resolve user. " +
-          (err instanceof Error ? err.message : String(err)) +
-          ". Run `neotoma auth login` and ensure the API is running.\n"
-      );
-      process.exit(1);
-    }
-
-    let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
-    if (!projectRoot) {
-      try {
-        const pkgPath = path.join(process.cwd(), "package.json");
-        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
-        if (pkg.name === "neotoma") projectRoot = process.cwd();
-      } catch {
-        // not in neotoma repo
-      }
-    }
-    const dataDir =
-      process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const watchEnvFlag = opts.env;
-    const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
-    let watchEnv: "dev" | "prod";
-    if (watchEnvFlag === "dev" || watchEnvFlag === "prod") {
-      watchEnv = watchEnvFlag;
-    } else if (sessionEnv === "dev" || sessionEnv === "prod") {
-      watchEnv = sessionEnv;
-    } else if (!process.env.NEOTOMA_SQLITE_PATH) {
-      process.stderr.write(
-        "neotoma watch: no environment specified. Use --env dev or --env prod, or set NEOTOMA_SQLITE_PATH.\n"
-      );
-      process.exit(1);
-      watchEnv = "dev"; // unreachable; satisfy TypeScript
-    } else {
-      watchEnv = "dev"; // NEOTOMA_SQLITE_PATH is set; env is irrelevant
-    }
-    const defaultDbFile = watchEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
-    const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
-
-    const resolvedPath = path.isAbsolute(sqlitePath)
-      ? sqlitePath
-      : path.join(process.cwd(), sqlitePath);
-    try {
-      await fs.access(resolvedPath);
-    } catch {
-      process.stderr.write(
-        `neotoma watch: SQLite DB not found at ${resolvedPath}. Start the API and ingest data first.\n`
-      );
-      process.exit(1);
-    }
-
-    // Open read-write so we can attach to WAL/shm; we only run SELECT. Opening readonly
-    // while the API has the DB in WAL mode often causes "disk I/O error" (readers need shm access).
-    const { default: Database } = await import("better-sqlite3");
-    const db = new Database(resolvedPath);
-    db.pragma("busy_timeout = 2000");
-
-    type TableDef = {
-      table: string;
-      idCol: string;
-      tsCol: string;
-      userFilter?: "user_id" | "source_user";
-    };
-    const tableDefs: TableDef[] = [
-      { table: "sources", idCol: "id", tsCol: "created_at" },
-      { table: "entities", idCol: "id", tsCol: "created_at" },
-      { table: "observations", idCol: "id", tsCol: "created_at" },
-      { table: "relationship_observations", idCol: "id", tsCol: "created_at" },
-      { table: "timeline_events", idCol: "id", tsCol: "created_at" },
-      { table: "interpretations", idCol: "id", tsCol: "started_at", userFilter: "source_user" },
-      { table: "entity_snapshots", idCol: "entity_id", tsCol: "computed_at" },
-      { table: "raw_fragments", idCol: "id", tsCol: "created_at" },
-      { table: "entity_merges", idCol: "id", tsCol: "created_at" },
-      { table: "relationship_snapshots", idCol: "relationship_key", tsCol: "computed_at" },
-    ];
-
-    const TABLE_EMOJI: Record<string, string> = {
-      sources: "📄",
-      entities: "👤",
-      observations: "👁️",
-      relationship_observations: "🔗",
-      timeline_events: "📅",
-      interpretations: "🔄",
-      entity_snapshots: "📊",
-      raw_fragments: "📝",
-      entity_merges: "🔀",
-      relationship_snapshots: "🔗",
-    };
-
-    function fetchEntityNames(entityIds: Set<string>, forUserId: string): Map<string, string> {
-      const map = new Map<string, string>();
-      if (entityIds.size === 0) return map;
-      try {
-        const placeholders = Array.from(entityIds)
-          .map(() => "?")
-          .join(",");
-        const stmt = db.prepare(
-          `SELECT id, canonical_name FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
-        );
-        const rows = stmt.all(...entityIds, forUserId) as { id: string; canonical_name: string }[];
-        for (const r of rows) map.set(r.id, r.canonical_name);
-      } catch {
-        // entities table may not exist or may lack user_id
-      }
-      return map;
-    }
-
-    function formatWatchSummary(
-      table: string,
-      row: Record<string, unknown>,
-      entityNames: Map<string, string>
-    ): string {
-      const name = (id: string) => entityNames.get(id) ?? id.slice(0, 12) + "…";
-      return getRecordDisplaySummary(table, row, { getEntityDisplayName: name });
-    }
-
-    function formatWatchSentence(
-      table: string,
-      row: Record<string, unknown>,
-      entityNames: Map<string, string>
-    ): string {
-      const v = (k: string) => String(row[k] ?? "").trim();
-      const q = (s: string) => (s ? `"${s}"` : "");
-      const name = (id: string) => entityNames.get(id) || id.slice(0, 12) + "…";
-      const relPerson = (id: string) => {
-        const n = entityNames.get(id);
-        return n ? `person "${n}"` : `"${id.slice(0, 12)}…"`;
-      };
-      const entityWithType = (id: string, entityType: string) => {
-        const n = entityNames.get(id);
-        return n ? `${entityType} "${n}"` : `"${id.slice(0, 12)}…"`;
-      };
-      switch (table) {
-        case "sources":
-          return `Created source ${q(v("original_filename") || v("mime_type") || "unknown")}`;
-        case "entities": {
-          const type = v("entity_type") || "entity";
-          return `Created ${type} ${q(v("canonical_name"))}`;
-        }
-        case "observations": {
-          const entityType = v("entity_type") || "entity";
-          return `Created observation for ${entityWithType(v("entity_id"), entityType)}`;
-        }
-        case "relationship_observations":
-          return `Created relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
-        case "timeline_events":
-          return `Created timeline event ${q(v("event_type"))} at ${v("event_timestamp") || "unknown"}`;
-        case "interpretations":
-          return `Created interpretation for source ${q(String(v("source_id")).slice(0, 12) + "…")}`;
-        case "entity_snapshots":
-          return `Updated snapshot for ${relPerson(v("entity_id"))} (${row.observation_count ?? 0} observations)`;
-        case "raw_fragments":
-          return `Created fragment ${q(v("entity_type") + "." + v("fragment_key"))}`;
-        case "entity_merges":
-          return `Merged ${q(name(v("from_entity_id")))} into ${q(name(v("to_entity_id")))}`;
-        case "relationship_snapshots":
-          return `Updated relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
-        default:
-          return `Created ${table} record`;
-      }
-    }
-
-    const now = new Date().toISOString();
-    const intervalMs = Math.max(100, parseInt(opts.interval ?? "400", 10) || 400);
-    const jsonMode = Boolean(opts.json);
-    const humanMode = Boolean(opts.human);
-    const skipInitial =
-      Boolean(opts.tail) || jsonMode || humanMode;
-
-    if (!jsonMode && !humanMode) {
-      process.stderr.write(
-        heading("Streaming record changes") + " " + dim("(Ctrl+C to stop)") + "\n"
-      );
-      process.stderr.write(keyValue("DB", resolvedPath, true) + "\n");
-      process.stderr.write(keyValue("User", userId) + "\n");
-      process.stderr.write(keyValue("Poll interval", `${intervalMs} ms`) + "\n");
-      process.stderr.write(dim("---") + "\n");
-    }
-
-    let cursors: Record<string, string>;
-    if (skipInitial) {
-      cursors = Object.fromEntries(tableDefs.map((t) => [t.table, now]));
-    } else {
-      const repoRoot = projectRoot ?? process.cwd();
-      const initialEvents = await getLastNWatchEntries(
-        repoRoot,
-        watchEnv,
-        userId,
-        WATCH_INITIAL_EVENT_LIMIT
-      );
-      let maxTs = "1970-01-01T00:00:00Z";
-      for (const e of initialEvents) {
-        if (e.ts && e.ts > maxTs) maxTs = e.ts;
-      }
-      cursors = Object.fromEntries(tableDefs.map((t) => [t.table, maxTs]));
-      for (const e of initialEvents) {
-        const emoji = TABLE_EMOJI[e.table] ?? "•";
-        const tsStr = e.ts ? new Date(e.ts).toISOString() : "";
-        process.stdout.write(`[${tsStr}] ${emoji} ${e.table} ${e.id}  ${e.summary}\n`);
-      }
-    }
-
-    function collectEntityIds(table: string, rows: Record<string, unknown>[]): Set<string> {
-      const ids = new Set<string>();
-      for (const row of rows) {
-        const add = (k: string) => {
-          const val = row[k];
-          if (val && typeof val === "string") ids.add(val);
-        };
-        if (table === "observations") add("entity_id");
-        else if (table === "relationship_observations" || table === "relationship_snapshots") {
-          add("source_entity_id");
-          add("target_entity_id");
-        } else if (table === "entity_snapshots") add("entity_id");
-        else if (table === "entity_merges") {
-          add("from_entity_id");
-          add("to_entity_id");
-        }
-      }
-      return ids;
-    }
-
-    function poll(): void {
-      for (const { table, idCol, tsCol, userFilter } of tableDefs) {
-        try {
-          const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
-          const userClause =
-            userFilter === "source_user"
-              ? "source_id IN (SELECT id FROM sources WHERE user_id = ?)"
-              : "user_id = ?";
-          const stmt = db.prepare(
-            `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
+      if (watchEnvFlag === "all") {
+        const showCrossEnvRecent = async (
+          repoRoot: string,
+          userId: string | null
+        ): Promise<void> => {
+          const events = await getLastNWatchEntriesAcrossEnvs(
+            repoRoot,
+            userId,
+            WATCH_INITIAL_EVENT_LIMIT
           );
-          const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
-          const entityNames = fetchEntityNames(collectEntityIds(table, rows), userId);
-
-          for (const row of rows) {
-            const ts = String(row[tsCol] ?? "");
-            if (ts && (!cursors[table] || ts > cursors[table])) {
-              cursors[table] = ts;
+          lastShownWatchEvents = events.length > 0 ? events : null;
+          if (events.length > 0) {
+            const watchLines = formatWatchTable(events, new Date());
+            const sessionBoxWidth = getTerminalWidth();
+            process.stdout.write(
+              "\n" +
+                blackBox(watchLines, {
+                  title: " Recent events (dev + prod) ",
+                  borderColor: "green",
+                  padding: 1,
+                  sessionBoxWidth,
+                }) +
+                "\n"
+            );
+            if (sessionWatchState) {
+              sessionWatchDisplayRef = { watchLines, watchEventCount: events.length };
+              process.stdout.write(
+                dim("  View details: enter row number (1–" + events.length + ") at the prompt.") +
+                  "\n"
+              );
             }
-            const id = row[idCol];
-            const payload = sortKeys(row) as Record<string, unknown>;
-            const summary = formatWatchSummary(table, row, entityNames);
-            const event = {
-              table,
-              emoji: TABLE_EMOJI[table] ?? "•",
-              summary,
-              operation: "insert",
-              id: id ?? null,
-              ts_col: tsCol,
-              ts: ts || null,
-              payload,
-            };
-
-            if (jsonMode) {
-              process.stdout.write(JSON.stringify(event) + "\n");
-            } else if (humanMode) {
-              const line = formatWatchSentence(table, row, entityNames);
-              process.stdout.write(line + "\n");
-            } else {
-              const emoji = TABLE_EMOJI[table] ?? "•";
-              const tsStr = ts ? new Date(ts).toISOString() : "";
-              process.stdout.write(`[${tsStr}] ${emoji} ${table} ${String(id)}  ${summary}\n`);
-            }
+          } else {
+            if (sessionWatchState) sessionWatchDisplayRef = null;
+            process.stdout.write("\n" + dim("No recent events.") + "\n");
           }
-        } catch (err) {
-          // Table may not exist or column may differ
-          const msg = err instanceof Error ? err.message : String(err);
-          if (!msg.includes("no such table")) {
-            process.stderr.write(`neotoma watch: ${table}: ${msg}\n`);
+          process.stdout.write(
+            dim("Live stream is per-environment. Use --env dev or --env prod to stream.") + "\n"
+          );
+        };
+        if (sessionWatchState) {
+          await showCrossEnvRecent(sessionWatchState.repoRoot, sessionWatchState.userId);
+          return;
+        }
+        const config = await readConfig();
+        let token: string | undefined;
+        try {
+          token = await getCliToken();
+        } catch {
+          process.stderr.write(
+            "neotoma watch --env all requires auth to resolve user. Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC when encryption is on.\n"
+          );
+          process.exit(1);
+        }
+        const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+        let userId: string | null = null;
+        try {
+          const res = await fetch(`${baseUrl}/me`, { headers });
+          if (res.ok) {
+            const me = (await res.json()) as { user_id?: string };
+            if (me.user_id) userId = me.user_id;
+          }
+        } catch {
+          // ignore
+        }
+        let repoRoot = process.env.NEOTOMA_PROJECT_ROOT ?? process.cwd();
+        try {
+          const pkgPath = path.join(process.cwd(), "package.json");
+          const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+          if (pkg.name === "neotoma") repoRoot = process.cwd();
+        } catch {
+          // not in neotoma repo
+        }
+        await showCrossEnvRecent(repoRoot, userId);
+        return;
+      }
+      if (sessionWatchState) {
+        sessionWatchState.enabled = true;
+        const events = await getLastNWatchEntries(
+          sessionWatchState.repoRoot,
+          watchEnvFlag,
+          sessionWatchState.userId,
+          WATCH_INITIAL_EVENT_LIMIT,
+          watchEnvFlag
+        );
+        lastShownWatchEvents = events.length > 0 ? events : null;
+        if (events.length > 0) {
+          const watchLines = formatWatchTable(events, new Date());
+          sessionWatchDisplayRef = { watchLines, watchEventCount: events.length };
+          const sessionBoxWidth = getTerminalWidth();
+          process.stdout.write(
+            "\n" +
+              blackBox(watchLines, {
+                title: " Recent events ",
+                borderColor: "green",
+                padding: 1,
+                sessionBoxWidth,
+              }) +
+              "\n"
+          );
+          process.stdout.write(
+            dim(
+              "  View details: enter row number (1–" +
+                events.length +
+                ") at the prompt after exiting."
+            ) + "\n"
+          );
+        } else {
+          sessionWatchDisplayRef = null;
+          process.stdout.write("\n" + dim("No recent events.") + "\n");
+        }
+        sessionWatchState.stop = await startSessionWatch(
+          sessionWatchState.repoRoot,
+          sessionWatchState.onEvent,
+          watchEnvFlag
+        );
+        process.stdout.write(
+          dim("Watch mode. Streaming new events. Press ") +
+            pathStyle("Enter") +
+            dim(" or ") +
+            pathStyle("q") +
+            dim(" to exit to prompt.") +
+            "\n"
+        );
+        await runWatchModeExit();
+        sessionWatchState.enabled = false;
+        sessionWatchState.stop();
+        sessionWatchState.stop = () => {};
+        sessionWatchDisplayRef = null;
+        process.stdout.write("\n" + dim("Exited watch mode.") + "\n");
+        return;
+      }
+
+      const config = await readConfig();
+      let token: string | undefined;
+      try {
+        token = await getCliToken();
+      } catch {
+        process.stderr.write(
+          "neotoma watch requires auth. Set NEOTOMA_KEY_FILE_PATH or NEOTOMA_MNEMONIC when encryption is on.\n"
+        );
+        process.exit(1);
+      }
+      const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      let userId: string;
+      try {
+        const res = await fetch(`${baseUrl}/me`, { headers });
+        if (!res.ok) {
+          process.stderr.write(
+            "neotoma watch: could not resolve user. Run `neotoma auth login` and ensure the API is running.\n"
+          );
+          process.exit(1);
+        }
+        const me = (await res.json()) as { user_id?: string };
+        if (!me.user_id) {
+          process.stderr.write(
+            "neotoma watch: API did not return user_id. Ensure the API is running and you are authenticated.\n"
+          );
+          process.exit(1);
+        }
+        userId = me.user_id;
+      } catch (err) {
+        process.stderr.write(
+          "neotoma watch: could not reach API to resolve user. " +
+            (err instanceof Error ? err.message : String(err)) +
+            ". Run `neotoma auth login` and ensure the API is running.\n"
+        );
+        process.exit(1);
+      }
+
+      let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
+      if (!projectRoot) {
+        try {
+          const pkgPath = path.join(process.cwd(), "package.json");
+          const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
+          if (pkg.name === "neotoma") projectRoot = process.cwd();
+        } catch {
+          // not in neotoma repo
+        }
+      }
+      const dataDir =
+        process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
+      const watchEnv: "dev" | "prod" = watchEnvFlag;
+      const defaultDbFile = watchEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
+      const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
+
+      const resolvedPath = path.isAbsolute(sqlitePath)
+        ? sqlitePath
+        : path.join(process.cwd(), sqlitePath);
+      try {
+        await fs.access(resolvedPath);
+      } catch {
+        process.stderr.write(
+          `neotoma watch: SQLite DB not found at ${resolvedPath}. Start the API and ingest data first.\n`
+        );
+        process.exit(1);
+      }
+
+      // Open read-write so we can attach to WAL/shm; we only run SELECT. Opening readonly
+      // while the API has the DB in WAL mode often causes "disk I/O error" (readers need shm access).
+      const { default: Database } = await import("better-sqlite3");
+      const db = new Database(resolvedPath);
+      db.pragma("busy_timeout = 2000");
+
+      type TableDef = {
+        table: string;
+        idCol: string;
+        tsCol: string;
+        userFilter?: "user_id" | "source_user";
+      };
+      const tableDefs: TableDef[] = [
+        { table: "sources", idCol: "id", tsCol: "created_at" },
+        { table: "entities", idCol: "id", tsCol: "created_at" },
+        { table: "observations", idCol: "id", tsCol: "created_at" },
+        { table: "relationship_observations", idCol: "id", tsCol: "created_at" },
+        { table: "timeline_events", idCol: "id", tsCol: "created_at" },
+        { table: "interpretations", idCol: "id", tsCol: "started_at", userFilter: "source_user" },
+        { table: "entity_snapshots", idCol: "entity_id", tsCol: "computed_at" },
+        { table: "raw_fragments", idCol: "id", tsCol: "created_at" },
+        { table: "entity_merges", idCol: "id", tsCol: "created_at" },
+        { table: "relationship_snapshots", idCol: "relationship_key", tsCol: "computed_at" },
+      ];
+
+      const TABLE_EMOJI: Record<string, string> = {
+        sources: "📄",
+        entities: "👤",
+        observations: "👁️",
+        relationship_observations: "🔗",
+        timeline_events: "📅",
+        interpretations: "🔄",
+        entity_snapshots: "📊",
+        raw_fragments: "📝",
+        entity_merges: "🔀",
+        relationship_snapshots: "🔗",
+      };
+
+      function fetchEntityNames(entityIds: Set<string>, forUserId: string): Map<string, string> {
+        const map = new Map<string, string>();
+        if (entityIds.size === 0) return map;
+        try {
+          const placeholders = Array.from(entityIds)
+            .map(() => "?")
+            .join(",");
+          const stmt = db.prepare(
+            `SELECT id, canonical_name FROM entities WHERE id IN (${placeholders}) AND user_id = ?`
+          );
+          const rows = stmt.all(...entityIds, forUserId) as {
+            id: string;
+            canonical_name: string;
+          }[];
+          for (const r of rows) map.set(r.id, r.canonical_name);
+        } catch {
+          // entities table may not exist or may lack user_id
+        }
+        return map;
+      }
+
+      function formatWatchSummary(
+        table: string,
+        row: Record<string, unknown>,
+        entityNames: Map<string, string>
+      ): string {
+        const name = (id: string) => entityNames.get(id) ?? id.slice(0, 12) + "…";
+        return getRecordDisplaySummary(table, row, { getEntityDisplayName: name });
+      }
+
+      function formatWatchSentence(
+        table: string,
+        row: Record<string, unknown>,
+        entityNames: Map<string, string>
+      ): string {
+        const v = (k: string) => String(row[k] ?? "").trim();
+        const q = (s: string) => (s ? `"${s}"` : "");
+        const name = (id: string) => entityNames.get(id) || id.slice(0, 12) + "…";
+        const relPerson = (id: string) => {
+          const n = entityNames.get(id);
+          return n ? `person "${n}"` : `"${id.slice(0, 12)}…"`;
+        };
+        const entityWithType = (id: string, entityType: string) => {
+          const n = entityNames.get(id);
+          return n ? `${entityType} "${n}"` : `"${id.slice(0, 12)}…"`;
+        };
+        switch (table) {
+          case "sources":
+            return `Created source ${q(v("original_filename") || v("mime_type") || "unknown")}`;
+          case "entities": {
+            const type = v("entity_type") || "entity";
+            return `Created ${type} ${q(v("canonical_name"))}`;
+          }
+          case "observations": {
+            const entityType = v("entity_type") || "entity";
+            return `Created observation for ${entityWithType(v("entity_id"), entityType)}`;
+          }
+          case "relationship_observations":
+            return `Created relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
+          case "timeline_events":
+            return `Created timeline event ${q(v("event_type"))} at ${v("event_timestamp") || "unknown"}`;
+          case "interpretations":
+            return `Created interpretation for source ${q(String(v("source_id")).slice(0, 12) + "…")}`;
+          case "entity_snapshots":
+            return `Updated snapshot for ${relPerson(v("entity_id"))} (${row.observation_count ?? 0} observations)`;
+          case "raw_fragments":
+            return `Created fragment ${q(v("entity_type") + "." + v("fragment_key"))}`;
+          case "entity_merges":
+            return `Merged ${q(name(v("from_entity_id")))} into ${q(name(v("to_entity_id")))}`;
+          case "relationship_snapshots":
+            return `Updated relationship ${q(v("relationship_type"))} for ${relPerson(v("source_entity_id"))} with ${relPerson(v("target_entity_id"))}`;
+          default:
+            return `Created ${table} record`;
+        }
+      }
+
+      const now = new Date().toISOString();
+      const intervalMs = Math.max(100, parseInt(opts.interval ?? "400", 10) || 400);
+      const jsonMode = Boolean(opts.json);
+      const humanMode = Boolean(opts.human);
+      const skipInitial = Boolean(opts.tail) || jsonMode || humanMode;
+
+      if (!jsonMode && !humanMode) {
+        process.stderr.write(
+          heading("Streaming record changes") + " " + dim("(Ctrl+C to stop)") + "\n"
+        );
+        process.stderr.write(keyValue("DB", resolvedPath, true) + "\n");
+        process.stderr.write(keyValue("User", userId) + "\n");
+        process.stderr.write(keyValue("Poll interval", `${intervalMs} ms`) + "\n");
+        process.stderr.write(dim("---") + "\n");
+      }
+
+      let cursors: Record<string, string>;
+      if (skipInitial) {
+        cursors = Object.fromEntries(tableDefs.map((t) => [t.table, now]));
+      } else {
+        const repoRoot = projectRoot ?? process.cwd();
+        const initialEvents = await getLastNWatchEntries(
+          repoRoot,
+          watchEnv,
+          userId,
+          WATCH_INITIAL_EVENT_LIMIT
+        );
+        let maxTs = "1970-01-01T00:00:00Z";
+        for (const e of initialEvents) {
+          if (e.ts && e.ts > maxTs) maxTs = e.ts;
+        }
+        cursors = Object.fromEntries(tableDefs.map((t) => [t.table, maxTs]));
+        for (const e of initialEvents) {
+          const emoji = TABLE_EMOJI[e.table] ?? "•";
+          const tsStr = e.ts ? new Date(e.ts).toISOString() : "";
+          process.stdout.write(`[${tsStr}] ${emoji} ${e.table} ${e.id}  ${e.summary}\n`);
+        }
+      }
+
+      function collectEntityIds(table: string, rows: Record<string, unknown>[]): Set<string> {
+        const ids = new Set<string>();
+        for (const row of rows) {
+          const add = (k: string) => {
+            const val = row[k];
+            if (val && typeof val === "string") ids.add(val);
+          };
+          if (table === "observations") add("entity_id");
+          else if (table === "relationship_observations" || table === "relationship_snapshots") {
+            add("source_entity_id");
+            add("target_entity_id");
+          } else if (table === "entity_snapshots") add("entity_id");
+          else if (table === "entity_merges") {
+            add("from_entity_id");
+            add("to_entity_id");
+          }
+        }
+        return ids;
+      }
+
+      function poll(): void {
+        for (const { table, idCol, tsCol, userFilter } of tableDefs) {
+          try {
+            const cursor = cursors[table] ?? "1970-01-01T00:00:00Z";
+            const userClause =
+              userFilter === "source_user"
+                ? "source_id IN (SELECT id FROM sources WHERE user_id = ?)"
+                : "user_id = ?";
+            const stmt = db.prepare(
+              `SELECT * FROM ${table} WHERE ${tsCol} IS NOT NULL AND ${tsCol} > ? AND ${userClause} ORDER BY ${tsCol} ASC LIMIT 100`
+            );
+            const rows = stmt.all(cursor, userId) as Record<string, unknown>[];
+            const entityNames = fetchEntityNames(collectEntityIds(table, rows), userId);
+
+            for (const row of rows) {
+              const ts = String(row[tsCol] ?? "");
+              if (ts && (!cursors[table] || ts > cursors[table])) {
+                cursors[table] = ts;
+              }
+              const id = row[idCol];
+              const payload = sortKeys(row) as Record<string, unknown>;
+              const summary = formatWatchSummary(table, row, entityNames);
+              const event = {
+                table,
+                emoji: TABLE_EMOJI[table] ?? "•",
+                summary,
+                operation: "insert",
+                id: id ?? null,
+                ts_col: tsCol,
+                ts: ts || null,
+                payload,
+              };
+
+              if (jsonMode) {
+                process.stdout.write(JSON.stringify(event) + "\n");
+              } else if (humanMode) {
+                const line = formatWatchSentence(table, row, entityNames);
+                process.stdout.write(line + "\n");
+              } else {
+                const emoji = TABLE_EMOJI[table] ?? "•";
+                const tsStr = ts ? new Date(ts).toISOString() : "";
+                process.stdout.write(`[${tsStr}] ${emoji} ${table} ${String(id)}  ${summary}\n`);
+              }
+            }
+          } catch (err) {
+            // Table may not exist or column may differ
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!msg.includes("no such table")) {
+              process.stderr.write(`neotoma watch: ${table}: ${msg}\n`);
+            }
           }
         }
       }
-    }
 
-    poll();
-    const interval = setInterval(poll, intervalMs);
-    const onExit = () => {
-      clearInterval(interval);
-      db.close();
-      process.exit(0);
-    };
-    process.on("SIGINT", onExit);
-    process.on("SIGTERM", onExit);
-  });
+      poll();
+      const interval = setInterval(poll, intervalMs);
+      const onExit = () => {
+        clearInterval(interval);
+        db.close();
+        process.exit(0);
+      };
+      process.on("SIGINT", onExit);
+      process.on("SIGTERM", onExit);
+    }
+  );
 
 const storageCommand = program.command("storage").description("Storage locations and file paths");
 
@@ -3756,7 +4961,7 @@ storageCommand
     const config = await readConfig();
     const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
 
-    const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
+    const storageBackend = "local";
     let projectRoot: string | undefined = process.env.NEOTOMA_PROJECT_ROOT;
     if (!projectRoot) {
       try {
@@ -3770,8 +4975,7 @@ storageCommand
 
     const dataDir =
       process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const isProd =
-      (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const isProd = (process.env.NEOTOMA_ENV || "development") === "production";
     const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
     const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
     const rawStorageSubdir = isProd ? "sources_prod" : "sources";
@@ -3799,21 +5003,15 @@ storageCommand
       server_url: baseUrl,
       server_description: "API base URL (your data is served from this backend).",
       storage_backend: storageBackend,
-      storage_paths:
-        storageBackend === "local"
-          ? {
-              data_dir: dataDir,
-              sqlite_db: sqlitePath,
-              raw_sources: rawStorageDir,
-              event_log: eventLogDir,
-              logs: logsDir,
-              description:
-                "Local backend: SQLite DB and raw files under data/. Defaults are env-specific (dev: data/sources, data/events, data/logs, neotoma.db; prod: data/sources_prod, data/events_prod, data/logs_prod, neotoma.prod.db). Override with NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_DIR, NEOTOMA_LOGS_DIR, NEOTOMA_PROJECT_ROOT.",
-            }
-          : {
-              description:
-                "Supabase backend: data is stored in your Supabase project (Postgres + Storage bucket 'sources').",
-            },
+      storage_paths: {
+        data_dir: dataDir,
+        sqlite_db: sqlitePath,
+        raw_sources: rawStorageDir,
+        event_log: eventLogDir,
+        logs: logsDir,
+        description:
+          "Local backend: SQLite DB and raw files under data/. Defaults are env-specific (dev: data/sources, data/events, data/logs, neotoma.db; prod: data/sources_prod, data/events_prod, data/logs_prod, neotoma.prod.db). Override with NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_DIR, NEOTOMA_LOGS_DIR, NEOTOMA_PROJECT_ROOT.",
+      },
     };
 
     if (outputMode === "json") {
@@ -3827,11 +5025,7 @@ storageCommand
     process.stdout.write(keyValue("Server", String(info.server_url), true) + "\n");
     process.stdout.write(bullet(String(info.server_description)) + nl());
     process.stdout.write(keyValue("Backend", storageBackend) + "\n");
-    if (
-      storageBackend === "local" &&
-      info.storage_paths &&
-      typeof info.storage_paths === "object"
-    ) {
+    if (info.storage_paths && typeof info.storage_paths === "object") {
       const paths = info.storage_paths as Record<string, unknown>;
       if (paths.data_dir)
         process.stdout.write(keyValue("data_dir", String(paths.data_dir), true) + "\n");
@@ -3842,13 +5036,6 @@ storageCommand
       if (paths.event_log)
         process.stdout.write(keyValue("event_log", String(paths.event_log), true) + "\n");
       if (paths.logs) process.stdout.write(keyValue("logs", String(paths.logs), true) + "\n");
-      if (paths.description) process.stdout.write(bullet(String(paths.description)) + "\n");
-    } else if (
-      storageBackend === "supabase" &&
-      info.storage_paths &&
-      typeof info.storage_paths === "object"
-    ) {
-      const paths = info.storage_paths as Record<string, unknown>;
       if (paths.description) process.stdout.write(bullet(String(paths.description)) + "\n");
     }
   });
@@ -3878,8 +5065,7 @@ backupCommand
 
     const dataDir =
       process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const isProd =
-      (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const isProd = (process.env.NEOTOMA_ENV || "development") === "production";
     const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
     const sqlitePath = process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, defaultDbFile);
     const rawStorageSubdir = isProd ? "sources_prod" : "sources";
@@ -4098,8 +5284,7 @@ logsCommand
 
     const dataDir =
       process.env.NEOTOMA_DATA_DIR || (projectRoot ? path.join(projectRoot, "data") : "data");
-    const isProd =
-      (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+    const isProd = (process.env.NEOTOMA_ENV || "development") === "production";
     const logsSubdir = isProd ? "logs_prod" : "logs";
     const eventLogSubdir = isProd ? "events_prod" : "events";
 
@@ -4230,10 +5415,13 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
         for (const pid of pids) {
           let cmd = "";
           try {
-            const wmic = execSync(`wmic process where processid=${pid} get commandline /format:list`, {
-              encoding: "utf-8",
-              stdio: ["pipe", "pipe", "pipe"],
-            });
+            const wmic = execSync(
+              `wmic process where processid=${pid} get commandline /format:list`,
+              {
+                encoding: "utf-8",
+                stdio: ["pipe", "pipe", "pipe"],
+              }
+            );
             const cm = wmic.match(/CommandLine=(.+)/);
             cmd = cm ? cm[1].trim().replace(/\r?\n/g, " ").slice(0, 120) : "";
           } catch {
@@ -4280,6 +5468,29 @@ function listNeotomaServerProcesses(): NeotomaProcessRow[] {
     }
   }
   return rows;
+}
+
+/**
+ * Detect Neotoma MCP stdio server processes (e.g. spawned by Cursor via run_neotoma_mcp_stdio.sh).
+ * Uses pgrep on Unix; returns 0 on Windows or on error. Does not count this CLI process.
+ */
+async function detectNeotomaMcpStdioProcessCount(): Promise<number> {
+  if (process.platform === "win32") return 0;
+  try {
+    const out = execSync('pgrep -f "run_neotoma_mcp_stdio"', {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    const pids = out
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((s) => parseInt(s, 10))
+      .filter((n) => Number.isFinite(n) && n > 0 && n !== process.pid);
+    return pids.length;
+  } catch {
+    return 0;
+  }
 }
 
 const apiCommand = program.command("api").description("API runtime status and management");
@@ -4341,56 +5552,66 @@ apiCommand
   )
   .action(async (opts: { background?: boolean }) => {
     const outputMode = resolveOutputMode();
-    const cwd = process.cwd();
+    const envOpt = (program.opts() as { env?: string }).env;
+    if (envOpt !== "dev" && envOpt !== "prod") {
+      const error = "Specify --env dev or --env prod for server commands.";
+      if (outputMode === "json") {
+        writeOutput({ ok: false, error }, outputMode);
+        return;
+      }
+      process.stderr.write(`neotoma api start: ${error}\n`);
+      return;
+    }
+    const effectiveEnv = envOpt === "prod" ? "production" : "development";
+    const apiLogsDir = path.join(CONFIG_DIR, effectiveEnv === "production" ? "logs_prod" : "logs");
+    const apiLogPath = path.join(apiLogsDir, "api.log");
+    const apiPidPath = path.join(
+      CONFIG_DIR,
+      effectiveEnv === "production" ? "api_prod.pid" : "api.pid"
+    );
 
     if (opts.background) {
-      let isNeotomaRepo = false;
-      try {
-        const pkgPath = path.join(cwd, "package.json");
-        const pkg = JSON.parse(await fs.readFile(pkgPath, "utf-8")) as { name?: string };
-        isNeotomaRepo = pkg.name === "neotoma";
-      } catch {
-        // ignore
-      }
-      if (!isNeotomaRepo) {
+      const repoRoot = await maybeRunInitForMissingRepo(
+        process.stdout.isTTY && outputMode !== "json"
+      );
+      if (!repoRoot) {
         if (outputMode === "json") {
           writeOutput(
             {
               ok: false,
-              error:
-                "Not a Neotoma repo (package.json name must be 'neotoma'). Run from the repo root.",
+              error: INIT_REQUIRED_MESSAGE,
             },
             outputMode
           );
           return;
         }
-        process.stderr.write(
-          "Not a Neotoma repo. Run 'neotoma api start --background' from the Neotoma repo root.\n"
-        );
+        process.stderr.write(INIT_REQUIRED_MESSAGE + "\n");
         return;
       }
 
-      await fs.mkdir(API_LOGS_DIR, { recursive: true });
-      const logStream = (await fs.open(API_LOG_PATH, "a")).createWriteStream();
+      await fs.mkdir(apiLogsDir, { recursive: true });
+      const logStream = (await fs.open(apiLogPath, "a")).createWriteStream();
       const logLine = "\n--- neotoma api start (" + new Date().toISOString() + ") ---\n";
       logStream.write(logLine);
 
       const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
-      const child = spawn(npmCmd, ["run", "dev:server"], {
-        cwd,
+      const childScript = envOpt === "prod" ? "dev:prod" : "dev:server";
+      const child = spawn(npmCmd, ["run", childScript], {
+        cwd: repoRoot,
         detached: true,
         stdio: ["ignore", logStream, logStream],
-        env: { ...process.env },
+        env: { ...process.env, NEOTOMA_ENV: effectiveEnv },
       });
       child.unref();
-      await fs.writeFile(API_PID_PATH, String(child.pid ?? ""));
+      await fs.writeFile(apiPidPath, String(child.pid ?? ""));
 
       if (outputMode === "json") {
         writeOutput(
           {
             ok: true,
             pid: child.pid,
-            log_file: API_LOG_PATH,
+            env: envOpt,
+            log_file: apiLogPath,
             message: "API server started in background. Use 'neotoma api logs' to view logs.",
           },
           outputMode
@@ -4399,7 +5620,8 @@ apiCommand
       }
       process.stdout.write(heading("API server started in background.") + nl());
       process.stdout.write(keyValue("PID", String(child.pid ?? "unknown")) + "\n");
-      process.stdout.write(keyValue("Logs", API_LOG_PATH, true) + "\n");
+      process.stdout.write(keyValue("Env", envOpt) + "\n");
+      process.stdout.write(keyValue("Logs", apiLogPath, true) + "\n");
       process.stdout.write(
         bullet("View logs: " + pathStyle("neotoma api logs") + " (use --follow to stream)") + "\n"
       );
@@ -4417,7 +5639,7 @@ apiCommand
           },
           ports: { default: 8080, prod: 8180 },
           message:
-            "Run in a separate terminal from the Neotoma repo. CLI defaults to port 8080; for 8180 use --base-url http://localhost:8180",
+            "Run in a separate terminal from the Neotoma repo. Use --env dev or --env prod for server commands.",
         },
         outputMode
       );
@@ -4442,12 +5664,16 @@ apiCommand
       bullet(pathStyle("npm run start:api:prod") + dim("  (production, port 8180)")) + "\n"
     );
     process.stdout.write(
-      nl() + bullet("Or start in background: " + pathStyle("neotoma api start --background")) + nl()
+      nl() +
+        bullet("Or start in background: " + pathStyle("neotoma api start --background --env dev")) +
+        nl()
     );
     process.stdout.write(
       nl() +
         dim("CLI defaults to port 8080. If the API is on 8180, use: ") +
         pathStyle("neotoma --base-url http://localhost:8180 <command>") +
+        dim(" or ") +
+        pathStyle("neotoma --env prod <command>") +
         nl()
     );
   });
@@ -4457,19 +5683,17 @@ apiCommand
   .description("Stop the API server process on the configured port")
   .action(async () => {
     const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
-    let port = 8080;
-    try {
-      const u = new URL(baseUrl);
-      if (u.port) port = parseInt(u.port, 10);
-      else port = u.protocol === "https:" ? 443 : 80;
-    } catch {
-      // keep default 8080
+    const envOpt = (program.opts() as { env?: string }).env;
+    if (envOpt !== "dev" && envOpt !== "prod") {
+      const error = "Specify --env dev or --env prod for server commands.";
+      if (outputMode === "json") {
+        writeOutput({ ok: false, error }, outputMode);
+        return;
+      }
+      process.stderr.write(`neotoma api stop: ${error}\n`);
+      return;
     }
-    if (!Number.isFinite(port) || port < 1 || port > 65535) {
-      port = 8080;
-    }
+    const port = envOpt === "prod" ? 8180 : 8080;
 
     const scriptDir = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = path.join(scriptDir, "..", "..");
@@ -4495,6 +5719,7 @@ apiCommand
     if (outputMode === "json") {
       writeOutput(
         {
+          env: envOpt,
           port,
           stop_ran: ran,
           message: ran
@@ -4526,16 +5751,15 @@ apiCommand
     const outputMode = resolveOutputMode();
     const rows = listNeotomaServerProcesses();
     if (outputMode === "json") {
-      writeOutput(
-        { processes: rows, ports_checked: CANDIDATE_API_PORTS },
-        outputMode
-      );
+      writeOutput({ processes: rows, ports_checked: CANDIDATE_API_PORTS }, outputMode);
       return;
     }
     process.stdout.write(heading("Neotoma API server processes") + nl());
     process.stdout.write(dim("Ports checked: " + CANDIDATE_API_PORTS.join(", ") + nl()));
     if (rows.length === 0) {
-      process.stdout.write(dim("No processes listening on " + CANDIDATE_API_PORTS.join(" or ") + ".") + nl());
+      process.stdout.write(
+        dim("No processes listening on " + CANDIDATE_API_PORTS.join(" or ") + ".") + nl()
+      );
       return;
     }
     const wPid = 8;
@@ -4557,17 +5781,22 @@ apiCommand
       process.stdout.write(
         padToDisplayWidth(String(r.pid), wPid) +
           gap +
-        padToDisplayWidth(String(r.port), wPort) +
+          padToDisplayWidth(String(r.port), wPort) +
           gap +
-        padToDisplayWidth(r.label, wLabel) +
+          padToDisplayWidth(r.label, wLabel) +
           gap +
-        dim(r.command) +
-        nl()
+          dim(r.command) +
+          nl()
       );
     }
     process.stdout.write(nl());
     process.stdout.write(
-      dim("To stop a process: ") + pathStyle("neotoma api stop") + dim(" (configured port) or ") + pathStyle("node scripts/kill-port.js <port>") + dim(" from repo root.") + nl()
+      dim("To stop a process: ") +
+        pathStyle("neotoma api stop") +
+        dim(" (configured port) or ") +
+        pathStyle("node scripts/kill-port.js <port>") +
+        dim(" from repo root.") +
+        nl()
     );
   });
 
@@ -4579,10 +5808,23 @@ apiCommand
   .action(async (opts: { lines?: string; follow?: boolean }) => {
     const outputMode = resolveOutputMode();
     const lines = Math.max(1, parseInt(opts.lines ?? "50", 10) || 50);
+    const envOpt = (program.opts() as { env?: string }).env;
+    if (envOpt !== "dev" && envOpt !== "prod") {
+      const error = "Specify --env dev or --env prod for server commands.";
+      if (outputMode === "json") {
+        writeOutput({ ok: false, error }, outputMode);
+        return;
+      }
+      process.stderr.write(`neotoma api logs: ${error}\n`);
+      return;
+    }
+    const effectiveEnv = envOpt === "prod" ? "production" : "development";
+    const apiLogsDir = path.join(CONFIG_DIR, effectiveEnv === "production" ? "logs_prod" : "logs");
+    const apiLogPath = path.join(apiLogsDir, "api.log");
 
     let exists = false;
     try {
-      await fs.access(API_LOG_PATH);
+      await fs.access(apiLogPath);
       exists = true;
     } catch {
       // file missing
@@ -4592,9 +5834,10 @@ apiCommand
       if (outputMode === "json") {
         writeOutput(
           {
-            log_file: API_LOG_PATH,
+            env: envOpt,
+            log_file: apiLogPath,
             error:
-              "No log file. Start the API with 'neotoma api start --background' to capture logs.",
+              "No log file. Start the API with 'neotoma api start --background --env dev' to capture logs.",
           },
           outputMode
         );
@@ -4602,23 +5845,23 @@ apiCommand
       }
       process.stderr.write("No log file found.\n");
       process.stderr.write(
-        "Start the API in the background to capture logs: neotoma api start --background\n"
+        "Start the API in the background to capture logs: neotoma api start --background --env dev\n"
       );
       return;
     }
 
     if (outputMode === "json" && !opts.follow) {
-      const content = await fs.readFile(API_LOG_PATH, "utf-8");
+      const content = await fs.readFile(apiLogPath, "utf-8");
       const allLines = content.split("\n");
       const tail = allLines.slice(-lines);
       writeOutput(
-        { log_file: API_LOG_PATH, lines: tail.length, content: tail.join("\n") },
+        { env: envOpt, log_file: apiLogPath, lines: tail.length, content: tail.join("\n") },
         outputMode
       );
       return;
     }
 
-    const content = await fs.readFile(API_LOG_PATH, "utf-8");
+    const content = await fs.readFile(apiLogPath, "utf-8");
     const allLines = content.split("\n");
     const tail = allLines.slice(-lines);
     process.stdout.write(tail.join("\n"));
@@ -4628,12 +5871,12 @@ apiCommand
 
     if (opts.follow) {
       process.stdout.write("--- following (Ctrl+C to stop) ---\n");
-      let lastSize = (await fs.stat(API_LOG_PATH)).size;
+      let lastSize = (await fs.stat(apiLogPath)).size;
       const interval = setInterval(async () => {
         try {
-          const stat = await fs.stat(API_LOG_PATH);
+          const stat = await fs.stat(apiLogPath);
           if (stat.size > lastSize) {
-            const fd = await fs.open(API_LOG_PATH, "r");
+            const fd = await fs.open(apiLogPath, "r");
             const buf = Buffer.alloc(stat.size - lastSize);
             await fd.read(buf, 0, buf.length, lastSize);
             fd.close();
@@ -4651,70 +5894,6 @@ apiCommand
       process.on("SIGINT", onExit);
       process.on("SIGTERM", onExit);
       return;
-    }
-  });
-
-program
-  .command("stop")
-  .description("Stop dev and prod servers started with neotoma --background")
-  .action(async () => {
-    const outputMode = resolveOutputMode();
-    let raw: string;
-    try {
-      raw = await fs.readFile(BACKGROUND_SERVERS_PATH, "utf-8");
-    } catch {
-      if (outputMode === "json") {
-        writeOutput({ ok: false, error: "No background servers found." }, outputMode);
-        return;
-      }
-      process.stdout.write(dim("No background servers found.") + "\n");
-      return;
-    }
-    let state: BackgroundServersState;
-    try {
-      state = JSON.parse(raw) as BackgroundServersState;
-    } catch {
-      if (outputMode === "json") {
-        writeOutput({ ok: false, error: "Invalid background servers state file." }, outputMode);
-        return;
-      }
-      process.stderr.write("Invalid background servers state file.\n");
-      await fs.unlink(BACKGROUND_SERVERS_PATH).catch(() => {});
-      return;
-    }
-    const { devPid, prodPid, devPort, prodPort } = state;
-    const killOne = (pid: number): boolean => {
-      if (!pid) return false;
-      try {
-        process.kill(pid, "SIGTERM");
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    const devKilled = killOne(devPid);
-    const prodKilled = killOne(prodPid);
-    await fs.unlink(BACKGROUND_SERVERS_PATH).catch(() => {});
-
-    if (outputMode === "json") {
-      writeOutput(
-        {
-          ok: true,
-          dev_pid: devPid,
-          prod_pid: prodPid,
-          dev_killed: devKilled,
-          prod_killed: prodKilled,
-        },
-        outputMode
-      );
-      return;
-    }
-    process.stdout.write(success("Background servers stopped.") + "\n");
-    if (devKilled || prodKilled) {
-      process.stdout.write(
-        dim(`Dev ${devPid} (port ${devPort}), prod ${prodPid} (port ${prodPort}) sent SIGTERM.`) +
-          "\n"
-      );
     }
   });
 
@@ -4775,7 +5954,7 @@ entitiesCommand
     // Without entityId: (command)
     // With entityId: (entityId, command)
     const cmd = args[args.length - 1] as Command;
-    const entityId = args.length > 1 ? args[0] as string | undefined : undefined;
+    const entityId = args.length > 1 ? (args[0] as string | undefined) : undefined;
 
     const opts = cmd.opts() as {
       type?: string;
@@ -4804,7 +5983,7 @@ entitiesCommand
       }
     }
     if (id && /^ent_[a-f0-9]+$/i.test(id)) {
-      const { data, error, response } = await api.GET("/api/entities/{id}", {
+      const { data, error, response } = await api.GET("/entities/{id}", {
         params: { path: { id } },
       });
       const status = response?.status;
@@ -4820,7 +5999,7 @@ entitiesCommand
         process.stdout.write(
           formatEntityPropertiesTable((data ?? {}) as Record<string, unknown>) + "\n"
         );
-        const { data: relData } = await api.GET("/api/entities/{id}/relationships", {
+        const { data: relData } = await api.GET("/entities/{id}/relationships", {
           params: { path: { id } },
         });
         const relSection =
@@ -4838,7 +6017,7 @@ entitiesCommand
     // If positional arg is provided and doesn't look like an entity ID, treat it as entity type
     const positionalEntityType = id && !/^ent_[a-f0-9]+$/i.test(id) ? id : undefined;
     const entityType = opts.entityType ?? opts.type ?? positionalEntityType ?? undefined;
-    const { data, error, response } = await api.POST("/api/entities/query", {
+    const { data, error, response } = await api.POST("/entities/query", {
       body: {
         entity_type: entityType,
         search: opts.search,
@@ -4872,7 +6051,7 @@ entitiesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error, response } = await api.GET("/api/entities/{id}", {
+    const { data, error, response } = await api.GET("/entities/{id}", {
       params: { path: { id } },
     });
     const status = response?.status;
@@ -4888,7 +6067,7 @@ entitiesCommand
       process.stdout.write(
         formatEntityPropertiesTable((data ?? {}) as Record<string, unknown>) + "\n"
       );
-      const { data: relData } = await api.GET("/api/entities/{id}/relationships", {
+      const { data: relData } = await api.GET("/entities/{id}/relationships", {
         params: { path: { id } },
       });
       const relSection =
@@ -4910,25 +6089,31 @@ entitiesCommand
   .option("--identifier <id>", "Identifier to search for (alternative to positional argument)")
   .option("--entity-type <type>", "Limit search to specific entity type")
   .option("--user-id <userId>", "User ID")
-  .action(async (identifierArg: string | undefined, opts: { identifier?: string; entityType?: string; userId?: string }) => {
-    const identifier = opts.identifier ?? identifierArg;
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    if (!identifier) throw new Error("identifier is required (positional argument or --identifier)");
-    const { data, error } = await api.POST("/retrieve_entity_by_identifier", {
-      body: {
-        identifier,
-        entity_type: opts.entityType,
-      },
-    });
-    if (error) throw new Error("Failed to search entity");
-    writeOutput(data, outputMode);
-  });
+  .action(
+    async (
+      identifierArg: string | undefined,
+      opts: { identifier?: string; entityType?: string; userId?: string }
+    ) => {
+      const identifier = opts.identifier ?? identifierArg;
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      if (!identifier)
+        throw new Error("identifier is required (positional argument or --identifier)");
+      const { data, error } = await api.POST("/retrieve_entity_by_identifier", {
+        body: {
+          identifier,
+          entity_type: opts.entityType,
+        },
+      });
+      if (error) throw new Error("Failed to search entity");
+      writeOutput(data, outputMode);
+    }
+  );
 
 entitiesCommand
   .command("related")
@@ -5005,25 +6190,32 @@ entitiesCommand
   .option("--entity-type <type>", "Entity type (alternative to positional argument)")
   .option("--reason <reason>", "Optional reason for deletion")
   .option("--user-id <userId>", "User ID")
-  .action(async (entityId: string, entityTypeArg: string | undefined, opts: { entityType?: string; reason?: string; userId?: string }) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const entityType = opts.entityType ?? entityTypeArg;
-    const { data, error } = await api.POST("/delete_entity", {
-      body: {
-        entity_id: entityId,
-        entity_type: entityType ?? "unknown",
-        reason: opts.reason,
-      },
-    });
-    if (error) throw new Error("Failed to delete entity");
-    writeOutput(data, outputMode);
-  });
+  .action(
+    async (
+      entityId: string,
+      entityTypeArg: string | undefined,
+      opts: { entityType?: string; reason?: string; userId?: string }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const entityType = opts.entityType ?? entityTypeArg;
+      const { data, error } = await api.POST("/delete_entity", {
+        body: {
+          entity_id: entityId,
+          entity_type: entityType ?? "unknown",
+          reason: opts.reason,
+          user_id: opts.userId,
+        },
+      });
+      if (error) throw new Error("Failed to delete entity");
+      writeOutput(data, outputMode);
+    }
+  );
 
 entitiesCommand
   .command("restore")
@@ -5033,25 +6225,32 @@ entitiesCommand
   .option("--entity-type <type>", "Entity type (alternative to positional argument)")
   .option("--reason <reason>", "Optional reason for restoration")
   .option("--user-id <userId>", "User ID")
-  .action(async (entityId: string, entityTypeArg: string | undefined, opts: { entityType?: string; reason?: string; userId?: string }) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const entityType = opts.entityType ?? entityTypeArg;
-    const { data, error } = await api.POST("/restore_entity", {
-      body: {
-        entity_id: entityId,
-        entity_type: entityType ?? "unknown",
-        reason: opts.reason,
-      },
-    });
-    if (error) throw new Error("Failed to restore entity");
-    writeOutput(data, outputMode);
-  });
+  .action(
+    async (
+      entityId: string,
+      entityTypeArg: string | undefined,
+      opts: { entityType?: string; reason?: string; userId?: string }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const entityType = opts.entityType ?? entityTypeArg;
+      const { data, error } = await api.POST("/restore_entity", {
+        body: {
+          entity_id: entityId,
+          entity_type: entityType ?? "unknown",
+          reason: opts.reason,
+          user_id: opts.userId,
+        },
+      });
+      if (error) throw new Error("Failed to restore entity");
+      writeOutput(data, outputMode);
+    }
+  );
 
 sourcesCommand
   .command("get")
@@ -5068,7 +6267,7 @@ sourcesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error, response } = await api.GET("/api/sources/{id}", {
+    const { data, error, response } = await api.GET("/sources/{id}", {
       params: { path: { id } },
     });
     const status = response?.status;
@@ -5104,7 +6303,7 @@ sourcesCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/sources", {
+    const { data, error } = await api.GET("/sources", {
       params: {
         query: {
           search: opts.search,
@@ -5132,7 +6331,7 @@ observationsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.POST("/api/observations/query", {
+    const { data, error } = await api.POST("/observations/query", {
       body: {
         observation_id: opts.observationId,
         limit: 1,
@@ -5163,7 +6362,7 @@ observationsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.POST("/api/observations/query", {
+    const { data, error } = await api.POST("/observations/query", {
       body: {
         entity_id: opts.entityId,
         entity_type: opts.entityType,
@@ -5237,7 +6436,7 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/relationships", {
+    const { data, error } = await api.GET("/relationships", {
       params: {
         query: {
           source_entity_id: opts.sourceEntityId,
@@ -5245,8 +6444,8 @@ relationshipsCommand
           relationship_type: opts.relationshipType,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
-        },
-      },
+        } as any,
+      } as any,
     });
     if (error) throw new Error("Failed to list relationships");
     writeOutput(data, outputMode);
@@ -5265,7 +6464,7 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/relationships/{id}", {
+    const { data, error } = await api.GET("/relationships/{id}", {
       params: { path: { id: encodeURIComponent(opts.relationshipId) } },
     });
     if (error) throw new Error("Failed to get relationship");
@@ -5275,8 +6474,14 @@ relationshipsCommand
 relationshipsCommand
   .command("delete")
   .description("Delete a relationship (creates deletion observation, reversible)")
-  .option("--relationship-id <id>", "Relationship ID (relationship_key, format: type:source:target)")
-  .option("--source-entity-id <id>", "Source entity ID (use with --target-entity-id and --relationship-type)")
+  .option(
+    "--relationship-id <id>",
+    "Relationship ID (relationship_key, format: type:source:target)"
+  )
+  .option(
+    "--source-entity-id <id>",
+    "Source entity ID (use with --target-entity-id and --relationship-type)"
+  )
   .option("--target-entity-id <id>", "Target entity ID")
   .option("--relationship-type <type>", "Relationship type")
   .option("--user-id <userId>", "User ID")
@@ -5292,13 +6497,16 @@ relationshipsCommand
       targetEntityId = opts.targetEntityId;
     } else if (opts.relationshipId) {
       const parts = opts.relationshipId.split(":");
-      if (parts.length < 3) throw new Error("Invalid relationship ID format (expected type:source:target)");
+      if (parts.length < 3)
+        throw new Error("Invalid relationship ID format (expected type:source:target)");
       const [type, ...rest] = parts;
       relationshipType = type;
       targetEntityId = rest.pop() as string;
       sourceEntityId = rest.join(":");
     } else {
-      throw new Error("Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)");
+      throw new Error(
+        "Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)"
+      );
     }
     const config = await readConfig();
     const token = await getCliToken();
@@ -5333,9 +6541,17 @@ relationshipsCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.POST("/api/relationships/snapshot", {
+    const { data, error } = await api.POST("/relationships/snapshot", {
       body: {
-        relationship_type: relationshipType as "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS",
+        relationship_type: relationshipType as
+          | "PART_OF"
+          | "CORRECTS"
+          | "REFERS_TO"
+          | "SETTLES"
+          | "DUPLICATE_OF"
+          | "DEPENDS_ON"
+          | "SUPERSEDES"
+          | "EMBEDS",
         source_entity_id: sourceEntityId,
         target_entity_id: targetEntityId,
       },
@@ -5347,8 +6563,14 @@ relationshipsCommand
 relationshipsCommand
   .command("restore")
   .description("Restore a deleted relationship (creates restoration observation)")
-  .option("--relationship-id <id>", "Relationship ID (relationship_key, format: type:source:target)")
-  .option("--source-entity-id <id>", "Source entity ID (use with --target-entity-id and --relationship-type)")
+  .option(
+    "--relationship-id <id>",
+    "Relationship ID (relationship_key, format: type:source:target)"
+  )
+  .option(
+    "--source-entity-id <id>",
+    "Source entity ID (use with --target-entity-id and --relationship-type)"
+  )
   .option("--target-entity-id <id>", "Target entity ID")
   .option("--relationship-type <type>", "Relationship type")
   .option("--user-id <userId>", "User ID")
@@ -5364,13 +6586,16 @@ relationshipsCommand
       targetEntityId = opts.targetEntityId;
     } else if (opts.relationshipId) {
       const parts = opts.relationshipId.split(":");
-      if (parts.length < 3) throw new Error("Invalid relationship ID format (expected type:source:target)");
+      if (parts.length < 3)
+        throw new Error("Invalid relationship ID format (expected type:source:target)");
       const [type, ...rest] = parts;
       relationshipType = type;
       targetEntityId = rest.pop() as string;
       sourceEntityId = rest.join(":");
     } else {
-      throw new Error("Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)");
+      throw new Error(
+        "Provide --relationship-id OR (--source-entity-id, --target-entity-id, --relationship-type)"
+      );
     }
     const config = await readConfig();
     const token = await getCliToken();
@@ -5398,6 +6623,7 @@ timelineCommand
   .option("--end-date <date>", "Filter end date")
   .option("--event-type <type>", "Filter by event type")
   .option("--entity-id <id>", "Filter by entity ID")
+  .option("--user-id <userId>", "Filter by user ID (default: authenticated user)")
   .option("--limit <n>", "Limit", "100")
   .option("--offset <n>", "Offset", "0")
   .action(async (opts) => {
@@ -5408,13 +6634,14 @@ timelineCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/timeline", {
+    const { data, error } = await api.GET("/timeline", {
       params: {
         query: {
           start_date: opts.startDate,
           end_date: opts.endDate,
           event_type: opts.eventType,
           entity_id: opts.entityId,
+          user_id: opts.userId,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
         },
@@ -5422,6 +6649,36 @@ timelineCommand
     });
     if (error) throw new Error("Failed to list timeline events");
     writeOutput(data, outputMode);
+  });
+
+timelineCommand
+  .command("get")
+  .description("Get one timeline event by ID")
+  .option("--event-id <id>", "Timeline event ID (required)")
+  .option("--user-id <userId>", "User ID (default: authenticated user)")
+  .action(async (opts: { eventId?: string; userId?: string }) => {
+    const outputMode = resolveOutputMode();
+    if (!opts.eventId) throw new Error("--event-id is required");
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.GET("/timeline/{id}", {
+      params: {
+        path: {
+          id: opts.eventId,
+        },
+        query: {
+          user_id: opts.userId,
+        },
+      },
+    });
+    if (error) throw new Error("Failed to get timeline event");
+    const event = (data as { event?: { id?: string } } | null)?.event;
+    if (!event) throw new Error("Timeline event not found");
+    writeOutput({ event }, outputMode);
   });
 
 schemasCommand
@@ -5440,14 +6697,14 @@ schemasCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/schemas", {
+    const { data, error } = await api.GET("/schemas", {
       params: {
         query: {
           entity_type: opts.entityType,
           limit: Number(opts.limit),
           offset: Number(opts.offset),
-        },
-      },
+        } as any,
+      } as any,
     });
     if (error) throw new Error("Failed to list schemas");
     writeOutput(data, outputMode);
@@ -5467,14 +6724,23 @@ schemasCommand
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/schemas/{entity_type}", {
+    const { data, error } = await api.GET("/schemas/{entity_type}", {
       params: {
         path: { entity_type: opts.entityType },
-        query: { user_id: opts.userId },
-      },
+        query: { user_id: opts.userId } as any,
+      } as any,
     });
     if (error) throw new Error("Failed to fetch schema");
-    writeOutput({ schema: data }, outputMode);
+    const schemaData = data as Record<string, unknown> | null;
+    const normalized = schemaData
+      ? {
+          ...schemaData,
+          fields:
+            (schemaData["schema_definition"] as Record<string, unknown> | undefined)?.["fields"] ??
+            schemaData["fields"],
+        }
+      : schemaData;
+    writeOutput({ schema: normalized }, outputMode);
   });
 
 schemasCommand
@@ -5485,27 +6751,32 @@ schemasCommand
   .option("--user-id <userId>", "User ID")
   .option("--min-confidence <n>", "Minimum confidence score 0-1", "0.8")
   .option("--min-frequency <n>", "Minimum frequency threshold", "5")
-  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string; minConfidence?: string; minFrequency?: string }) => {
-    const outputMode = resolveOutputMode();
-    const entityTypeResolved = opts.entityType ?? entityTypeArg;
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const { data, error } = await api.POST("/analyze_schema_candidates", {
-      body: {
-        entity_type: entityTypeResolved,
-        user_id: opts.userId,
-        min_confidence: Number(opts.minConfidence),
-        min_frequency: Number(opts.minFrequency),
-      },
-    });
-    if (error) throw new Error("Failed to analyze schema candidates");
-    const result = data as any;
-    writeOutput({ analysis: result?.candidates ?? result }, outputMode);
-  });
+  .action(
+    async (
+      entityTypeArg: string | undefined,
+      opts: { entityType?: string; userId?: string; minConfidence?: string; minFrequency?: string }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const entityTypeResolved = opts.entityType ?? entityTypeArg;
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const { data, error } = await api.POST("/analyze_schema_candidates", {
+        body: {
+          entity_type: entityTypeResolved,
+          user_id: opts.userId,
+          min_confidence: Number(opts.minConfidence),
+          min_frequency: Number(opts.minFrequency),
+        },
+      });
+      if (error) throw new Error("Failed to analyze schema candidates");
+      const result = data as any;
+      writeOutput({ analysis: result?.candidates ?? result }, outputMode);
+    }
+  );
 
 schemasCommand
   .command("recommend")
@@ -5515,27 +6786,33 @@ schemasCommand
   .option("--user-id <userId>", "User ID")
   .option("--source <source>", "Recommendation source: raw_fragments, agent, inference, all", "all")
   .option("--status <status>", "Filter by status: pending, approved, rejected", "pending")
-  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; userId?: string; source?: string; status?: string }) => {
-    const outputMode = resolveOutputMode();
-    const entityTypeResolved = opts.entityType ?? entityTypeArg;
-    if (!entityTypeResolved) throw new Error("entity type is required (positional argument or --entity-type)");
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const { data, error } = await api.POST("/get_schema_recommendations", {
-      body: {
-        entity_type: entityTypeResolved,
-        user_id: opts.userId,
-        source: opts.source as any,
-        status: opts.status as any,
-      },
-    });
-    if (error) throw new Error("Failed to get schema recommendations");
-    writeOutput(data, outputMode);
-  });
+  .action(
+    async (
+      entityTypeArg: string | undefined,
+      opts: { entityType?: string; userId?: string; source?: string; status?: string }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const entityTypeResolved = opts.entityType ?? entityTypeArg;
+      if (!entityTypeResolved)
+        throw new Error("entity type is required (positional argument or --entity-type)");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const { data, error } = await api.POST("/get_schema_recommendations", {
+        body: {
+          entity_type: entityTypeResolved,
+          user_id: opts.userId,
+          source: opts.source as any,
+          status: opts.status as any,
+        },
+      });
+      if (error) throw new Error("Failed to get schema recommendations");
+      writeOutput(data, outputMode);
+    }
+  );
 
 schemasCommand
   .command("update")
@@ -5548,45 +6825,75 @@ schemasCommand
   .option("--migrate-existing", "Migrate existing raw_fragments to observations", false)
   .option("--schema-version <version>", "New schema version (auto-increments if not provided)")
   .option("--user-specific", "Create user-specific schema variant", false)
-  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; fields?: string; userId?: string; activate?: boolean; migrateExisting?: boolean; schemaVersion?: string; userSpecific?: boolean }) => {
-    const outputMode = resolveOutputMode();
-    const entityType = opts.entityType ?? entityTypeArg;
-    if (!entityType) throw new Error("entity type is required (positional argument or --entity-type)");
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    if (!opts.fields) {
-      throw new Error("--fields is required (JSON object or array of field definitions)");
+  .action(
+    async (
+      entityTypeArg: string | undefined,
+      opts: {
+        entityType?: string;
+        fields?: string;
+        userId?: string;
+        activate?: boolean;
+        migrateExisting?: boolean;
+        schemaVersion?: string;
+        userSpecific?: boolean;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const entityType = opts.entityType ?? entityTypeArg;
+      if (!entityType)
+        throw new Error("entity type is required (positional argument or --entity-type)");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      if (!opts.fields) {
+        throw new Error("--fields is required (JSON object or array of field definitions)");
+      }
+      let fieldsToAdd: any[];
+      const parsedFields = JSON.parse(opts.fields);
+      if (Array.isArray(parsedFields)) {
+        fieldsToAdd = parsedFields;
+      } else {
+        fieldsToAdd = Object.entries(parsedFields).map(([field_name, def]: [string, any]) => ({
+          field_name,
+          field_type: def.type ?? "string",
+          required: def.required ?? false,
+          reducer_strategy: def.reducer,
+        }));
+      }
+      const { data, error } = await api.POST("/update_schema_incremental", {
+        body: {
+          entity_type: entityType,
+          fields_to_add: fieldsToAdd,
+          user_id: opts.userId,
+          activate: opts.activate,
+          migrate_existing: opts.migrateExisting,
+          schema_version: opts.schemaVersion,
+          user_specific: opts.userSpecific,
+        },
+      });
+      if (error) throw new Error("Failed to update schema");
+      const updateResult = data as Record<string, unknown> | null;
+      if (
+        updateResult &&
+        typeof updateResult["schema"] === "object" &&
+        updateResult["schema"] !== null
+      ) {
+        const schemaObj = updateResult["schema"] as Record<string, unknown>;
+        const normalizedSchema = {
+          ...schemaObj,
+          fields:
+            (schemaObj["schema_definition"] as Record<string, unknown> | undefined)?.["fields"] ??
+            schemaObj["fields"],
+        };
+        writeOutput({ ...updateResult, schema: normalizedSchema }, outputMode);
+      } else {
+        writeOutput(data, outputMode);
+      }
     }
-    let fieldsToAdd: any[];
-    const parsedFields = JSON.parse(opts.fields);
-    if (Array.isArray(parsedFields)) {
-      fieldsToAdd = parsedFields;
-    } else {
-      fieldsToAdd = Object.entries(parsedFields).map(([field_name, def]: [string, any]) => ({
-        field_name,
-        field_type: def.type ?? "string",
-        required: def.required ?? false,
-        reducer_strategy: def.reducer,
-      }));
-    }
-    const { data, error } = await api.POST("/update_schema_incremental", {
-      body: {
-        entity_type: entityType,
-        fields_to_add: fieldsToAdd,
-        user_id: opts.userId,
-        activate: opts.activate,
-        migrate_existing: opts.migrateExisting,
-        schema_version: opts.schemaVersion,
-        user_specific: opts.userSpecific,
-      },
-    });
-    if (error) throw new Error("Failed to update schema");
-    writeOutput(data, outputMode);
-  });
+  );
 
 schemasCommand
   .command("register")
@@ -5600,58 +6907,89 @@ schemasCommand
   .option("--activate", "Activate schema immediately", false)
   .option("--migrate-existing", "Migrate existing data", false)
   .option("--user-specific", "Create user-specific schema", false)
-  .action(async (entityTypeArg: string | undefined, opts: { entityType?: string; fields?: string; schema?: string; userId?: string; schemaVersion?: string; activate?: boolean; migrateExisting?: boolean; userSpecific?: boolean }) => {
-    const outputMode = resolveOutputMode();
-    const entityType = opts.entityType ?? entityTypeArg;
-    if (!entityType) throw new Error("entity type is required (positional argument or --entity-type)");
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const fieldsJson = opts.fields ?? opts.schema;
-    if (!fieldsJson) {
-      throw new Error("--fields or --schema is required (JSON object of field definitions)");
-    }
-    const parsedFields = JSON.parse(fieldsJson);
-    let schemaFields: Record<string, any>;
-    if (Array.isArray(parsedFields)) {
-      schemaFields = {};
-      parsedFields.forEach((f: any) => {
-        schemaFields[f.field_name] = { type: f.field_type, required: f.required ?? false };
+  .action(
+    async (
+      entityTypeArg: string | undefined,
+      opts: {
+        entityType?: string;
+        fields?: string;
+        schema?: string;
+        userId?: string;
+        schemaVersion?: string;
+        activate?: boolean;
+        migrateExisting?: boolean;
+        userSpecific?: boolean;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const entityType = opts.entityType ?? entityTypeArg;
+      if (!entityType)
+        throw new Error("entity type is required (positional argument or --entity-type)");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
       });
-    } else if (parsedFields.fields) {
-      // Already a schema definition object
-      schemaFields = parsedFields.fields;
-    } else {
-      schemaFields = Object.fromEntries(
-        Object.entries(parsedFields).map(([name, def]: [string, any]) => [
-          name,
-          { type: def.type ?? "string", required: def.required ?? false },
-        ])
-      );
+      const fieldsJson = opts.fields ?? opts.schema;
+      if (!fieldsJson) {
+        throw new Error("--fields or --schema is required (JSON object of field definitions)");
+      }
+      const parsedFields = JSON.parse(fieldsJson);
+      let schemaFields: Record<string, any>;
+      if (Array.isArray(parsedFields)) {
+        schemaFields = {};
+        parsedFields.forEach((f: any) => {
+          schemaFields[f.field_name] = { type: f.field_type, required: f.required ?? false };
+        });
+      } else if (parsedFields.fields) {
+        // Already a schema definition object
+        schemaFields = parsedFields.fields;
+      } else {
+        schemaFields = Object.fromEntries(
+          Object.entries(parsedFields).map(([name, def]: [string, any]) => [
+            name,
+            { type: def.type ?? "string", required: def.required ?? false },
+          ])
+        );
+      }
+      const schemaDefinition = { fields: schemaFields };
+      const reducerConfig = {};
+      const { data, error } = await api.POST("/register_schema", {
+        body: {
+          entity_type: entityType,
+          schema_definition: schemaDefinition,
+          reducer_config: reducerConfig,
+          schema_version: opts.schemaVersion,
+          activate: opts.activate,
+          user_id: opts.userId,
+          user_specific: opts.userSpecific,
+        },
+      });
+      if (error) throw new Error("Failed to register schema");
+      const registerResult = data as Record<string, unknown> | null;
+      if (
+        registerResult &&
+        typeof registerResult["schema"] === "object" &&
+        registerResult["schema"] !== null
+      ) {
+        const schemaObj = registerResult["schema"] as Record<string, unknown>;
+        const normalizedSchema = {
+          ...schemaObj,
+          fields:
+            (schemaObj["schema_definition"] as Record<string, unknown> | undefined)?.["fields"] ??
+            schemaObj["fields"],
+        };
+        writeOutput({ ...registerResult, schema: normalizedSchema }, outputMode);
+      } else {
+        writeOutput(data, outputMode);
+      }
     }
-    const schemaDefinition = { fields: schemaFields };
-    const reducerConfig = {};
-    const { data, error } = await api.POST("/register_schema", {
-      body: {
-        entity_type: entityType,
-        schema_definition: schemaDefinition,
-        reducer_config: reducerConfig,
-        schema_version: opts.schemaVersion,
-        activate: opts.activate,
-        user_id: opts.userId,
-        user_specific: opts.userSpecific,
-      },
-    });
-    if (error) throw new Error("Failed to register schema");
-    writeOutput(data, outputMode);
-  });
+  );
 
 program
   .command("store")
-  .description("Store a file or structured entities; routes based on options provided")
+  .description("Store structured entities, unstructured files, or both in one request")
   .option("--entities <json>", "Inline JSON array of entities (legacy structured store)")
   .option("--file <path>", "Path to JSON file containing entity array (legacy structured store)")
   .option("--file-path <path>", "Path to any file to store (unstructured pipeline)")
@@ -5660,6 +6998,10 @@ program
   .option("--interpret <bool>", "Run AI interpretation after store (default: false)", "false")
   .option("--source-priority <level>", "Source priority level (default: 100)")
   .option("--idempotency-key <key>", "Idempotency key to prevent duplicate stores")
+  .option(
+    "--file-idempotency-key <key>",
+    "Optional idempotency key for file path in combined store"
+  )
   .action(async (opts) => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
@@ -5669,8 +7011,22 @@ program
       token,
     });
 
-    if (opts.filePath || opts.fileContent) {
-      // New file-based store: send to unstructured pipeline
+    let entities: unknown;
+    if (opts.entities) {
+      entities = JSON.parse(opts.entities as string);
+    } else if (opts.file) {
+      const raw = await fs.readFile(opts.file, "utf-8");
+      entities = JSON.parse(raw);
+    }
+    const hasStructured = Array.isArray(entities);
+    const hasUnstructured = Boolean(opts.filePath || opts.fileContent);
+
+    if (!hasStructured && !hasUnstructured) {
+      throw new Error("Provide --file-path, --file-content, --entities, or --file");
+    }
+
+    let unstructuredBody: Record<string, unknown> = {};
+    if (hasUnstructured) {
       let fileBuffer: Buffer;
       let originalFilename: string | undefined;
       if (opts.filePath) {
@@ -5695,42 +7051,65 @@ program
       const mimeType = mimeMap[ext] ?? "application/octet-stream";
       const shouldInterpret = opts.interpret === "true" || opts.interpret === true;
       const contentBase64 = fileBuffer.toString("base64");
-      const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
-
-      const { data, error } = await api.POST("/api/store/unstructured", {
-        body: {
-          file_content: contentBase64,
-          mime_type: mimeType,
-          original_filename: originalFilename,
-          interpret: shouldInterpret,
-          idempotency_key: idempotencyKey,
-        },
-      });
-      if (error) throw new Error(`Failed to store file: ${JSON.stringify(error)}`);
-      writeOutput(data, outputMode);
-      return;
+      unstructuredBody = {
+        file_content: contentBase64,
+        mime_type: mimeType,
+        original_filename: originalFilename,
+        interpret: shouldInterpret,
+      };
+      if (opts.fileIdempotencyKey) {
+        unstructuredBody.file_idempotency_key = opts.fileIdempotencyKey;
+      } else if (!hasStructured && opts.idempotencyKey) {
+        unstructuredBody.idempotency_key = opts.idempotencyKey;
+      }
     }
 
-    // Legacy structured entities store
-    let entities: unknown;
-    if (opts.entities) {
-      entities = JSON.parse(opts.entities as string);
-    } else if (opts.file) {
-      const raw = await fs.readFile(opts.file, "utf-8");
-      entities = JSON.parse(raw);
-    } else {
-      throw new Error("Provide --file-path, --file-content, --entities, or --file");
-    }
-
-    if (!Array.isArray(entities)) {
+    if (entities && !Array.isArray(entities)) {
       throw new Error("Entities must be an array");
     }
 
-    const idempotencyKey = createIdempotencyKey({ entities });
-    const { data, error } = await api.POST("/api/store", {
-      body: { entities, idempotency_key: idempotencyKey },
+    const structuredBody: Record<string, unknown> = {};
+    if (hasStructured) {
+      const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ entities });
+      structuredBody.entities = entities;
+      structuredBody.idempotency_key = idempotencyKey;
+      if (opts.sourcePriority) {
+        const parsedPriority = parseInt(opts.sourcePriority as string, 10);
+        if (!Number.isNaN(parsedPriority)) {
+          structuredBody.source_priority = parsedPriority;
+        }
+      }
+    }
+
+    const { data, error } = await api.POST("/store", {
+      body: {
+        ...structuredBody,
+        ...unstructuredBody,
+        interpret: false,
+        user_id: opts.userId,
+      },
     });
-    if (error) throw new Error("Failed to store entities");
+    if (error) throw new Error(`Failed to store payload: ${JSON.stringify(error)}`);
+    const storeResult = data as Record<string, unknown> | null;
+
+    if (storeResult && hasStructured && !hasUnstructured) {
+      const entitiesList = Array.isArray((storeResult as any).entities)
+        ? ((storeResult as any).entities as any[])
+        : [];
+      const created = entitiesList
+        .map((e) => ({ id: (e?.entity_id ?? e?.id) as string | undefined }))
+        .filter((e) => typeof e.id === "string" && e.id.length > 0);
+      writeOutput(
+        {
+          ...storeResult,
+          entities_created_count: (storeResult as any).entities_created,
+          entities_created: created,
+        },
+        outputMode
+      );
+      return;
+    }
+
     writeOutput(data, outputMode);
   });
 
@@ -5793,16 +7172,37 @@ program
     const sourcePriority = opts.sourcePriority ? parseInt(opts.sourcePriority as string, 10) : 100;
     const idempotencyKey = createIdempotencyKey({ entities: entityArray });
 
-    const { data, error } = await api.POST("/api/store", {
+    const { data, error } = await api.POST("/store", {
       body: {
         entities: entityArray,
         idempotency_key: idempotencyKey,
         source_priority: sourcePriority,
         original_filename: originalFilename,
+        interpret: false,
+        user_id: opts.userId,
       },
     });
     if (error) throw new Error("Failed to store structured data");
-    writeOutput(data, outputMode);
+    const storeResult = data as Record<string, unknown> | null;
+    const entitiesList =
+      storeResult && Array.isArray((storeResult as any).entities)
+        ? ((storeResult as any).entities as any[])
+        : [];
+    const created = entitiesList
+      .map((e) => ({ id: (e?.entity_id ?? e?.id) as string | undefined }))
+      .filter((e) => typeof e.id === "string" && e.id.length > 0);
+    if (storeResult) {
+      writeOutput(
+        {
+          ...storeResult,
+          entities_created_count: (storeResult as any).entities_created,
+          entities_created: created,
+        },
+        outputMode
+      );
+    } else {
+      writeOutput(data, outputMode);
+    }
   });
 
 program
@@ -5850,13 +7250,14 @@ program
     const contentBase64 = fileBuffer.toString("base64");
     const idempotencyKey = opts.idempotencyKey ?? createIdempotencyKey({ content: contentBase64 });
 
-    const { data, error } = await api.POST("/api/store/unstructured", {
+    const { data, error } = await api.POST("/store/unstructured", {
       body: {
         file_content: contentBase64,
         mime_type: mimeType,
         original_filename: originalFilename,
         interpret: shouldInterpret,
         idempotency_key: idempotencyKey,
+        user_id: opts.userId,
       },
     });
     if (error) throw new Error(`Failed to store unstructured content: ${JSON.stringify(error)}`);
@@ -5870,136 +7271,156 @@ program
   .option("--idempotency-key <key>", "Idempotency key (default: content hash)")
   .option("--mime-type <type>", "MIME type (default: inferred from extension)")
   .option("--local", "Run store and interpretation in-process (no API server required)")
-  .action(async (filePath: string, opts: { interpret?: boolean; idempotencyKey?: string; mimeType?: string; local?: boolean }) => {
-    const outputMode = resolveOutputMode();
+  .action(
+    async (
+      filePath: string,
+      opts: { interpret?: boolean; idempotencyKey?: string; mimeType?: string; local?: boolean }
+    ) => {
+      const outputMode = resolveOutputMode();
 
-    const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-    const stat = await fs.stat(resolvedPath).catch(() => null);
-    if (!stat?.isFile()) {
-      throw new Error(`File not found or not a file: ${resolvedPath}`);
-    }
+      const resolvedPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.resolve(process.cwd(), filePath);
+      const stat = await fs.stat(resolvedPath).catch(() => null);
+      if (!stat?.isFile()) {
+        throw new Error(`File not found or not a file: ${resolvedPath}`);
+      }
 
-    const fileBuffer = await fs.readFile(resolvedPath);
-    const originalFilename = path.basename(resolvedPath);
-    const ext = path.extname(resolvedPath).toLowerCase();
-    const mimeMap: Record<string, string> = {
-      ".pdf": "application/pdf",
-      ".txt": "text/plain",
-      ".csv": "text/csv",
-      ".json": "application/json",
-      ".md": "text/markdown",
-      ".html": "text/html",
-      ".xml": "application/xml",
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".png": "image/png",
-      ".gif": "image/gif",
-    };
-    const mimeType = opts.mimeType ?? mimeMap[ext] ?? "application/octet-stream";
+      const fileBuffer = await fs.readFile(resolvedPath);
+      const originalFilename = path.basename(resolvedPath);
+      const ext = path.extname(resolvedPath).toLowerCase();
+      const mimeMap: Record<string, string> = {
+        ".pdf": "application/pdf",
+        ".txt": "text/plain",
+        ".csv": "text/csv",
+        ".json": "application/json",
+        ".md": "text/markdown",
+        ".html": "text/html",
+        ".xml": "application/xml",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+      };
+      const mimeType = opts.mimeType ?? mimeMap[ext] ?? "application/octet-stream";
 
-    if (opts.local) {
-      // Run the store+interpretation pipeline in-process without an API server.
-      try {
-        const { storeRawContent } = await import("../services/raw_storage.js");
-        const { ensureLocalDevUser } = await import("../services/local_auth.js");
+      if (opts.local) {
+        // Run the store+interpretation pipeline in-process without an API server.
+        try {
+          const { storeRawContent } = await import("../services/raw_storage.js");
+          const { ensureLocalDevUser } = await import("../services/local_auth.js");
 
-        const userRow = ensureLocalDevUser();
-        const userId = userRow.id;
+          const userRow = ensureLocalDevUser();
+          const userId = userRow.id;
 
-        const idempotencyKey =
-          opts.idempotencyKey ??
-          (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
+          const idempotencyKey =
+            opts.idempotencyKey ??
+            (await import("node:crypto")).createHash("sha256").update(fileBuffer).digest("hex");
 
-        const storageResult = await storeRawContent({
-          userId,
-          fileBuffer,
-          mimeType,
-          originalFilename: originalFilename.trim() || undefined,
-          idempotencyKey,
-          provenance: { upload_method: "cli_upload_local", client: "cli" },
-        });
+          const storageResult = await storeRawContent({
+            userId,
+            fileBuffer,
+            mimeType,
+            originalFilename: originalFilename.trim() || undefined,
+            idempotencyKey,
+            provenance: { upload_method: "cli_upload_local", client: "cli" },
+          });
 
-        const response: {
-          source_id: string;
-          content_hash: string;
-          file_size: number;
-          deduplicated?: boolean;
-          interpretation?: unknown;
-          interpretation_debug?: Record<string, unknown>;
-          entity_ids?: string[];
-        } = {
-          source_id: storageResult.sourceId,
-          content_hash: storageResult.contentHash,
-          file_size: storageResult.fileSize,
-          deduplicated: storageResult.deduplicated,
-        };
-
-        const interpret = opts.interpret !== false;
-        if (interpret && storageResult.sourceId) {
-          const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
-            await import("../services/file_text_extraction.js");
-          const {
-            extractWithLLM,
-            extractWithLLMFromImage,
-            extractFromCSVWithChunking,
-            isLLMExtractionAvailable,
-          } = await import("../services/llm_extraction.js");
-          const { runInterpretation } = await import("../services/interpretation.js");
-
-          const rawText = await extractTextFromBuffer(fileBuffer, mimeType, originalFilename || "file");
-
-          if (!isLLMExtractionAvailable()) {
-            response.interpretation = {
-              skipped: true,
-              reason: "openai_not_configured",
-              message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
-            };
-            writeOutput(response, outputMode);
-            return;
-          }
-
-          const isCsv = mimeType?.toLowerCase() === "text/csv";
-          const isPdf =
-            mimeType.toLowerCase().includes("pdf") || originalFilename.toLowerCase().endsWith(".pdf");
-          const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
-
-          const pdfDebug = getPdfWorkerDebug();
-          const interpretationDebug: Record<string, unknown> = {
-            raw_text_length: rawTextLength,
-            pdf_worker_wrapper_used: pdfDebug.configured,
-            pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
-            pdf_worker_set_worker_error: pdfDebug.set_worker_error,
+          const response: {
+            source_id: string;
+            content_hash: string;
+            file_size: number;
+            deduplicated?: boolean;
+            interpretation?: unknown;
+            interpretation_debug?: Record<string, unknown>;
+            entity_ids?: string[];
+          } = {
+            source_id: storageResult.sourceId,
+            content_hash: storageResult.contentHash,
+            file_size: storageResult.fileSize,
+            deduplicated: storageResult.deduplicated,
           };
 
-          let extractionResult:
-            | Awaited<ReturnType<typeof extractWithLLM>>
-            | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
+          const interpret = opts.interpret !== false;
+          if (interpret && storageResult.sourceId) {
+            const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
+              await import("../services/file_text_extraction.js");
+            const {
+              extractWithLLM,
+              extractWithLLMFromImage,
+              extractFromCSVWithChunking,
+              isLLMExtractionAvailable,
+            } = await import("../services/llm_extraction.js");
+            const { runInterpretation } = await import("../services/interpretation.js");
 
-          if (rawTextLength === 0 && isPdf) {
-            interpretationDebug.vision_fallback_attempted = true;
-            const imageResult = await getPdfFirstPageImageDataUrl(
+            const rawText = await extractTextFromBuffer(
               fileBuffer,
               mimeType,
-              originalFilename || "file",
-              { returnError: true }
+              originalFilename || "file"
             );
-            const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
-            if (typeof imageResult === "object" && imageResult.error) {
-              interpretationDebug.vision_fallback_image_error = imageResult.error;
+
+            if (!isLLMExtractionAvailable()) {
+              response.interpretation = {
+                skipped: true,
+                reason: "openai_not_configured",
+                message: "Set OPENAI_API_KEY in .env to enable AI interpretation",
+              };
+              writeOutput(response, outputMode);
+              return;
             }
-            interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
-            if (imageDataUrl) {
-              try {
-                extractionResult = await extractWithLLMFromImage(
-                  imageDataUrl,
-                  originalFilename || "file",
-                  mimeType,
-                  "gpt-4o"
-                );
-                interpretationDebug.used_vision_fallback = true;
-              } catch (visionErr) {
-                interpretationDebug.vision_fallback_error =
-                  visionErr instanceof Error ? visionErr.message : String(visionErr);
+
+            const isCsv = mimeType?.toLowerCase() === "text/csv";
+            const isPdf =
+              mimeType.toLowerCase().includes("pdf") ||
+              originalFilename.toLowerCase().endsWith(".pdf");
+            const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
+
+            const pdfDebug = getPdfWorkerDebug();
+            const interpretationDebug: Record<string, unknown> = {
+              raw_text_length: rawTextLength,
+              pdf_worker_wrapper_used: pdfDebug.configured,
+              pdf_worker_wrapper_path_tried: pdfDebug.wrapper_path_tried,
+              pdf_worker_set_worker_error: pdfDebug.set_worker_error,
+            };
+
+            let extractionResult:
+              | Awaited<ReturnType<typeof extractWithLLM>>
+              | Awaited<ReturnType<typeof extractFromCSVWithChunking>>;
+
+            if (rawTextLength === 0 && isPdf) {
+              interpretationDebug.vision_fallback_attempted = true;
+              const imageResult = await getPdfFirstPageImageDataUrl(
+                fileBuffer,
+                mimeType,
+                originalFilename || "file",
+                { returnError: true }
+              );
+              const imageDataUrl =
+                typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
+              if (typeof imageResult === "object" && imageResult.error) {
+                interpretationDebug.vision_fallback_image_error = imageResult.error;
+              }
+              interpretationDebug.vision_fallback_image_got = Boolean(imageDataUrl);
+              if (imageDataUrl) {
+                try {
+                  extractionResult = await extractWithLLMFromImage(
+                    imageDataUrl,
+                    originalFilename || "file",
+                    mimeType,
+                    "gpt-4o"
+                  );
+                  interpretationDebug.used_vision_fallback = true;
+                } catch (visionErr) {
+                  interpretationDebug.vision_fallback_error =
+                    visionErr instanceof Error ? visionErr.message : String(visionErr);
+                  extractionResult = await extractWithLLM(
+                    rawText,
+                    originalFilename || "file",
+                    mimeType,
+                    "gpt-4o"
+                  );
+                }
+              } else {
                 extractionResult = await extractWithLLM(
                   rawText,
                   originalFilename || "file",
@@ -6008,94 +7429,93 @@ program
                 );
               }
             } else {
-              extractionResult = await extractWithLLM(
-                rawText,
-                originalFilename || "file",
-                mimeType,
-                "gpt-4o"
-              );
+              extractionResult = isCsv
+                ? await extractFromCSVWithChunking(
+                    rawText,
+                    originalFilename || "file",
+                    mimeType,
+                    "gpt-4o"
+                  )
+                : await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
             }
-          } else {
-            extractionResult = isCsv
-              ? await extractFromCSVWithChunking(rawText, originalFilename || "file", mimeType, "gpt-4o")
-              : await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
-          }
 
-          let extractedData: Array<Record<string, unknown>>;
-          if ("entities" in extractionResult) {
-            extractedData = extractionResult.entities.map((e) => ({
-              entity_type: e.entity_type,
-              ...e.fields,
-            }));
-          } else {
-            const { entity_type, fields } = extractionResult;
-            extractedData = [{ entity_type, ...fields }];
-          }
-
-          const defaultConfig = {
-            provider: "openai",
-            model_id: "gpt-4o",
-            temperature: 0,
-            prompt_hash: "llm_extraction_v2_idempotent",
-            code_version: "v0.2.0",
-          };
-          interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
-            Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
-          );
-          response.interpretation_debug = interpretationDebug;
-
-          try {
-            const interpretationResult = await runInterpretation({
-              userId,
-              sourceId: storageResult.sourceId,
-              extractedData,
-              config: defaultConfig,
-            });
-            response.interpretation = interpretationResult;
-            if (interpretationResult.entities?.length) {
-              response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
+            let extractedData: Array<Record<string, unknown>>;
+            if ("entities" in extractionResult) {
+              extractedData = extractionResult.entities.map((e) => ({
+                entity_type: e.entity_type,
+                ...e.fields,
+              }));
+            } else {
+              const { entity_type, fields } = extractionResult;
+              extractedData = [{ entity_type, ...fields }];
             }
-          } catch (interpretError) {
-            response.interpretation = {
-              error: interpretError instanceof Error ? interpretError.message : String(interpretError),
-              skipped: true,
+
+            const defaultConfig = {
+              provider: "openai",
+              model_id: "gpt-4o",
+              temperature: 0,
+              prompt_hash: "llm_extraction_v2_idempotent",
+              code_version: "v0.2.0",
             };
+            interpretationDebug.extraction_field_keys = extractedData.flatMap((d) =>
+              Object.keys(d).filter((k) => k !== "entity_type" && k !== "type")
+            );
+            response.interpretation_debug = interpretationDebug;
+
+            try {
+              const interpretationResult = await runInterpretation({
+                userId,
+                sourceId: storageResult.sourceId,
+                extractedData,
+                config: defaultConfig,
+              });
+              response.interpretation = interpretationResult;
+              if (interpretationResult.entities?.length) {
+                response.entity_ids = interpretationResult.entities.map((e) => e.entityId);
+              }
+            } catch (interpretError) {
+              response.interpretation = {
+                error:
+                  interpretError instanceof Error ? interpretError.message : String(interpretError),
+                skipped: true,
+              };
+            }
           }
+
+          writeOutput(response, outputMode);
+        } catch (localError) {
+          const msg = localError instanceof Error ? localError.message : String(localError);
+          throw new Error(
+            `Local mode failed: ${msg}\nEnsure .env and DB path are configured.`
+          );
         }
-
-        writeOutput(response, outputMode);
-      } catch (localError) {
-        const msg = localError instanceof Error ? localError.message : String(localError);
-        throw new Error(
-          `Local mode failed: ${msg}\nEnsure .env and backend (NEOTOMA_STORAGE_BACKEND, DB path or Supabase) are configured.`
-        );
+        return;
       }
-      return;
+
+      // Default: send to API server.
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+
+      const base64 = fileBuffer.toString("base64");
+      const body = {
+        file_content: base64,
+        mime_type: mimeType,
+        original_filename: originalFilename,
+        interpret: opts.interpret !== false,
+      };
+      if (opts.idempotencyKey) {
+        (body as { idempotency_key?: string }).idempotency_key = opts.idempotencyKey;
+      }
+
+      const { data, error } = await api.POST("/store/unstructured", { body });
+      if (error) throw new Error("Failed to upload file");
+      writeOutput(data, outputMode);
     }
-
-    // Default: send to API server.
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-
-    const base64 = fileBuffer.toString("base64");
-    const body = {
-      file_content: base64,
-      mime_type: mimeType,
-      original_filename: originalFilename,
-      interpret: opts.interpret !== false,
-    };
-    if (opts.idempotencyKey) {
-      (body as { idempotency_key?: string }).idempotency_key = opts.idempotencyKey;
-    }
-
-    const { data, error } = await api.POST("/api/store/unstructured", { body });
-    if (error) throw new Error("Failed to upload file");
-    writeOutput(data, outputMode);
-  });
+  );
 
 /** Dashboard stats response shape for table formatting. */
 interface StatsData {
@@ -6224,39 +7644,94 @@ interpretationsCommand
   .option("--interpretation-id <id>", "Interpretation ID (looks up source automatically)")
   .option("--interpretation-config <json>", "Optional interpretation configuration JSON")
   .option("--user-id <userId>", "User ID")
-  .action(async (sourceIdArg: string | undefined, opts: { sourceId?: string; interpretationId?: string; interpretationConfig?: string; userId?: string }) => {
-    const outputMode = resolveOutputMode();
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const interpretationConfig = opts.interpretationConfig
-      ? JSON.parse(opts.interpretationConfig)
-      : undefined;
+  .action(
+    async (
+      sourceIdArg: string | undefined,
+      opts: {
+        sourceId?: string;
+        interpretationId?: string;
+        interpretationConfig?: string;
+        userId?: string;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const interpretationConfig = opts.interpretationConfig
+        ? JSON.parse(opts.interpretationConfig)
+        : undefined;
 
-    const sourceId = opts.sourceId ?? sourceIdArg;
+      const sourceId = opts.sourceId ?? sourceIdArg;
 
-    if (!sourceId && !opts.interpretationId) throw new Error("source ID or --interpretation-id is required");
+      if (!sourceId && !opts.interpretationId)
+        throw new Error("source ID or --interpretation-id is required");
 
-    const reinterpretBody: Record<string, unknown> = {
-      interpretation_config: interpretationConfig,
-    };
-    if (sourceId) reinterpretBody["source_id"] = sourceId;
-    if (opts.interpretationId) reinterpretBody["interpretation_id"] = opts.interpretationId;
+      const reinterpretBody: Record<string, unknown> = {
+        interpretation_config: interpretationConfig,
+      };
+      if (sourceId) reinterpretBody["source_id"] = sourceId;
+      if (opts.interpretationId) reinterpretBody["interpretation_id"] = opts.interpretationId;
 
-    const { data, error } = await api.POST("/reinterpret", {
-      body: reinterpretBody as any,
-    });
-    if (error) throw new Error("Failed to reinterpret source");
-    const result = data as any;
-    writeOutput({
-      interpretation_id: result?.interpretation_id ?? opts.interpretationId,
-      reinterpreted: result?.success ?? true,
-      observations_created: result?.observations_created ?? 0,
-    }, outputMode);
-  });
+      const { data, error } = await api.POST("/reinterpret", {
+        body: reinterpretBody as any,
+      });
+      if (error) throw new Error("Failed to reinterpret source");
+      const result = data as any;
+      writeOutput(
+        {
+          interpretation_id: result?.interpretation_id ?? opts.interpretationId,
+          reinterpreted: result?.success ?? true,
+          observations_created: result?.observations_created ?? 0,
+        },
+        outputMode
+      );
+    }
+  );
+
+interpretationsCommand
+  .command("interpret-uninterpreted")
+  .description("Interpret sources that do not yet have any interpretations")
+  .option("--limit <n>", "Maximum uninterpreted sources to process", "50")
+  .option("--dry-run", "Only list source IDs that would be interpreted")
+  .option("--interpretation-config <json>", "Optional interpretation configuration JSON")
+  .option("--user-id <userId>", "User ID")
+  .action(
+    async (opts: {
+      limit?: string;
+      dryRun?: boolean;
+      interpretationConfig?: string;
+      userId?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const parsedLimit = Number(opts.limit ?? "50");
+      if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+        throw new Error("--limit must be a positive number");
+      }
+      const interpretationConfig = opts.interpretationConfig
+        ? JSON.parse(opts.interpretationConfig)
+        : undefined;
+      const { data, error } = await api.POST("/interpret-uninterpreted", {
+        body: {
+          limit: Math.trunc(parsedLimit),
+          dry_run: Boolean(opts.dryRun),
+          interpretation_config: interpretationConfig,
+          user_id: opts.userId,
+        } as any,
+      });
+      if (error) throw new Error("Failed to interpret uninterpreted sources");
+      writeOutput(data, outputMode);
+    }
+  );
 
 // Add new corrections command (after interpretations command)
 const correctionsCommand = program.command("corrections").description("Correction commands");
@@ -6271,34 +7746,51 @@ correctionsCommand
   .option("--corrected-value <value>", "Corrected value (required)")
   .option("--user-id <userId>", "User ID")
   .option("--idempotency-key <key>", "Idempotency key (auto-generated if not provided)")
-  .action(async (entityIdArg: string | undefined, opts: { entityId?: string; entityType?: string; fieldName?: string; correctedValue?: string; userId?: string; idempotencyKey?: string }) => {
-    const outputMode = resolveOutputMode();
-    const entityId = opts.entityId ?? entityIdArg;
-    if (!entityId) throw new Error("entity ID is required (positional argument or --entity-id)");
-    if (!opts.fieldName) throw new Error("--field-name is required");
-    if (opts.correctedValue === undefined) throw new Error("--corrected-value is required");
-    const config = await readConfig();
-    const token = await getCliToken();
-    const api = createApiClient({
-      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
-      token,
-    });
-    const idempotencyKey = opts.idempotencyKey || createIdempotencyKey({ entityId, field: opts.fieldName, value: opts.correctedValue });
-    const { data, error } = await api.POST("/correct", {
-      body: {
-        entity_id: entityId,
-        entity_type: opts.entityType ?? "unknown",
-        field: opts.fieldName,
-        value: opts.correctedValue,
-        idempotency_key: idempotencyKey,
-        user_id: opts.userId,
-      },
-    });
-    if (error) throw new Error("Failed to create correction");
-    const result = data as any;
-    const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
-    writeOutput({ correction_id: correctionId, entity_id: entityId, success: result?.success ?? true }, outputMode);
-  });
+  .action(
+    async (
+      entityIdArg: string | undefined,
+      opts: {
+        entityId?: string;
+        entityType?: string;
+        fieldName?: string;
+        correctedValue?: string;
+        userId?: string;
+        idempotencyKey?: string;
+      }
+    ) => {
+      const outputMode = resolveOutputMode();
+      const entityId = opts.entityId ?? entityIdArg;
+      if (!entityId) throw new Error("entity ID is required (positional argument or --entity-id)");
+      if (!opts.fieldName) throw new Error("--field-name is required");
+      if (opts.correctedValue === undefined) throw new Error("--corrected-value is required");
+      const config = await readConfig();
+      const token = await getCliToken();
+      const api = createApiClient({
+        baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+        token,
+      });
+      const idempotencyKey =
+        opts.idempotencyKey ||
+        createIdempotencyKey({ entityId, field: opts.fieldName, value: opts.correctedValue });
+      const { data, error } = await api.POST("/correct", {
+        body: {
+          entity_id: entityId,
+          entity_type: opts.entityType ?? "unknown",
+          field: opts.fieldName,
+          value: opts.correctedValue,
+          idempotency_key: idempotencyKey,
+          user_id: opts.userId,
+        },
+      });
+      if (error) throw new Error("Failed to create correction");
+      const result = data as any;
+      const correctionId = result?.observation?.id ?? result?.correction_id ?? idempotencyKey;
+      writeOutput(
+        { correction_id: correctionId, entity_id: entityId, success: result?.success ?? true },
+        outputMode
+      );
+    }
+  );
 
 const statsCmd = program.command("stats").description("Dashboard and entity statistics");
 statsCmd.action(async () => {
@@ -6309,7 +7801,7 @@ statsCmd.action(async () => {
     baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
     token,
   });
-  const { data, error } = await api.GET("/api/stats", {});
+  const { data, error } = await api.GET("/stats", {});
   if (error) throw new Error("Failed to fetch stats");
   if (outputMode === "json") {
     writeOutput(data, outputMode);
@@ -6328,7 +7820,7 @@ statsCmd
       baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
       token,
     });
-    const { data, error } = await api.GET("/api/stats", {});
+    const { data, error } = await api.GET("/stats", {});
     if (error) throw new Error("Failed to fetch stats");
     const stats = (data ?? {}) as StatsData;
     if (outputMode === "json") {
@@ -6366,6 +7858,34 @@ snapshotsCommand
     });
     if (error) throw new Error("Failed to check snapshots");
     writeOutput(data, outputMode);
+  });
+
+snapshotsCommand
+  .command("request")
+  .description("Request snapshot recomputation for stale snapshots")
+  .option("--dry-run", "Check only, do not recompute stale snapshots", false)
+  .action(async (opts: { dryRun?: boolean }) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+    const { data, error } = await api.POST("/health_check_snapshots", {
+      body: {
+        auto_fix: !opts.dryRun,
+      },
+    });
+    if (error) throw new Error("Failed to request snapshot recomputation");
+    writeOutput(
+      {
+        requested: true,
+        auto_fix: !opts.dryRun,
+        ...(data as Record<string, unknown>),
+      },
+      outputMode
+    );
   });
 
 program
@@ -6455,13 +7975,13 @@ async function ensureDevCommands(): Promise<void> {
 }
 
 /** Fetch and format storage summary for intro (no args). Returns null if API down or stats fail. */
-async function fetchStorageSummary(): Promise<string | null> {
+async function _fetchStorageSummary(): Promise<string | null> {
   try {
     const config = await readConfig();
     const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
     const token = await getCliToken();
     const api = createApiClient({ baseUrl, token });
-    const { data, error } = await api.GET("/api/stats", {});
+    const { data, error } = await api.GET("/stats", {});
     if (error || !data) return null;
     const stats = data as {
       sources_count?: number;
@@ -6495,9 +8015,7 @@ async function fetchStorageSummary(): Promise<string | null> {
 const INTRO_PACK_RAT_LINES = ["(\\__/)", "(•ㅅ•)", "/ 　 づ"];
 const INTRO_PACK_RAT_FACE_WINK = "(-ㅅ•)";
 const INTRO_WINK_MS = 180;
-const INTRO_PACK_RAT_DISPLAY_WIDTH = Math.max(
-  ...INTRO_PACK_RAT_LINES.map((s) => displayWidth(s))
-);
+const INTRO_PACK_RAT_DISPLAY_WIDTH = Math.max(...INTRO_PACK_RAT_LINES.map((s) => displayWidth(s)));
 
 /** Minimum content width so the box fits all summary stats (e.g. "N entities, N relationships, N sources"). */
 const INTRO_MIN_WIDTH = 52;
@@ -6544,10 +8062,7 @@ function runUpdateNotifier(): void {
 
   void (async () => {
     try {
-      const [current, packageName] = await Promise.all([
-        getCliVersion(),
-        getPackageName(),
-      ]);
+      const [current, packageName] = await Promise.all([getCliVersion(), getPackageName()]);
       if (!current || current === "?") return;
 
       let latest: string | null = null;
@@ -6650,10 +8165,9 @@ async function getLocalIntroStats(
   total_relationships: number;
   total_sources: number;
   total_events: number;
+  total_observations: number;
+  total_interpretations: number;
 } | null> {
-  if (process.env.NEOTOMA_STORAGE_BACKEND && process.env.NEOTOMA_STORAGE_BACKEND !== "local") {
-    return null;
-  }
   if (!userId) return null;
   const dataDir = path.join(repoRoot, "data");
   const dbFile = preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
@@ -6680,19 +8194,34 @@ async function getLocalIntroStats(
       "SELECT count(*) FROM entities WHERE user_id = ? AND merged_to_entity_id IS NULL",
       userId
     );
-    const relationships =
-      getCount("SELECT count(*) FROM relationship_snapshots WHERE user_id = ?", userId);
+    const relationships = getCount(
+      "SELECT count(*) FROM relationship_snapshots WHERE user_id = ?",
+      userId
+    );
     const sources = getCount("SELECT count(*) FROM sources WHERE user_id = ?", userId);
     const events = getCount(
       "SELECT count(*) FROM timeline_events WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
       userId
     );
+    let observations = 0;
+    let interpretations = 0;
+    try {
+      observations = getCount("SELECT count(*) FROM observations WHERE user_id = ?", userId);
+      interpretations = getCount(
+        "SELECT count(*) FROM interpretations WHERE source_id IN (SELECT id FROM sources WHERE user_id = ?)",
+        userId
+      );
+    } catch {
+      // observations or interpretations table may not exist in older DBs
+    }
     db.close();
     return {
       total_entities: entities,
       total_relationships: relationships,
       total_sources: sources,
       total_events: events,
+      total_observations: observations,
+      total_interpretations: interpretations,
     };
   } catch {
     return null;
@@ -6709,9 +8238,6 @@ async function getEntityFromLocalDb(
   userId: string,
   entityId: string
 ): Promise<Record<string, unknown> | null> {
-  if (process.env.NEOTOMA_STORAGE_BACKEND && process.env.NEOTOMA_STORAGE_BACKEND !== "local") {
-    return null;
-  }
   const dataDir = path.join(repoRoot, "data");
   const dbFile = preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
   const dbPath = path.join(dataDir, dbFile);
@@ -6724,22 +8250,27 @@ async function getEntityFromLocalDb(
   type DbInstance = {
     close: () => void;
     pragma: (sql: string) => void;
-    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined; all: (...args: unknown[]) => Row[] };
+    prepare: (sql: string) => {
+      get: (...args: unknown[]) => Row | undefined;
+      all: (...args: unknown[]) => Row[];
+    };
   };
   const { default: Database } = await import("better-sqlite3");
   const db = new Database(dbPath) as unknown as DbInstance;
   db.pragma("busy_timeout = 2000");
   try {
-    const entity = db.prepare(
-      "SELECT id, entity_type, canonical_name, merged_to_entity_id FROM entities WHERE id = ? AND user_id = ?"
-    ).get(entityId, userId) as Row | undefined;
+    const entity = db
+      .prepare(
+        "SELECT id, entity_type, canonical_name, merged_to_entity_id FROM entities WHERE id = ? AND user_id = ?"
+      )
+      .get(entityId, userId) as Row | undefined;
     if (!entity) return null;
     const resolvedId = (entity.merged_to_entity_id as string) || entityId;
     let snapshot: Record<string, unknown> | null = null;
     try {
-      const snap = db.prepare(
-        "SELECT snapshot FROM entity_snapshots WHERE entity_id = ? AND user_id = ?"
-      ).get(resolvedId, userId) as { snapshot?: unknown } | undefined;
+      const snap = db
+        .prepare("SELECT snapshot FROM entity_snapshots WHERE entity_id = ? AND user_id = ?")
+        .get(resolvedId, userId) as { snapshot?: unknown } | undefined;
       if (snap?.snapshot && typeof snap.snapshot === "object" && !Array.isArray(snap.snapshot)) {
         snapshot = snap.snapshot as Record<string, unknown>;
       }
@@ -6757,21 +8288,20 @@ async function getEntityFromLocalDb(
   }
 }
 
-const WATCH_INITIAL_EVENT_LIMIT = 50;
+const WATCH_INITIAL_EVENT_LIMIT = 10;
 
 /**
  * Last N watch entries: sourced from the local SQLite DB (same tables the watch command polls).
  * Returns WatchEvent[] for display with formatWatchTable (Recent events box).
+ * When tagEnv is set, each event is tagged with that env (for cross-env merged display).
  */
 async function getLastNWatchEntries(
   repoRoot: string,
   preferredEnv: "dev" | "prod",
   userId: string | null,
-  limit = 20
+  limit = 20,
+  tagEnv?: "dev" | "prod"
 ): Promise<WatchEvent[]> {
-  if (process.env.NEOTOMA_STORAGE_BACKEND && process.env.NEOTOMA_STORAGE_BACKEND !== "local") {
-    return [];
-  }
   if (!userId) return [];
   const dataDir = path.join(repoRoot, "data");
   const dbFile = preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
@@ -6834,16 +8364,20 @@ async function getLastNWatchEntries(
       const ph = Array.from(entityIds)
         .map(() => "?")
         .join(",");
-      const entityRows = db.prepare(
-        `SELECT id, entity_type, canonical_name FROM entities WHERE id IN (${ph}) AND user_id = ?`
-      ).all(...entityIds, userId) as { id: string; entity_type: string; canonical_name: string }[];
+      const entityRows = db
+        .prepare(
+          `SELECT id, entity_type, canonical_name FROM entities WHERE id IN (${ph}) AND user_id = ?`
+        )
+        .all(...entityIds, userId) as { id: string; entity_type: string; canonical_name: string }[];
       for (const r of entityRows) {
         entityMeta.set(r.id, { entity_type: r.entity_type, canonical_name: r.canonical_name });
       }
       try {
-        const snapshotRows = db.prepare(
-          `SELECT entity_id, snapshot FROM entity_snapshots WHERE entity_id IN (${ph}) AND user_id = ?`
-        ).all(...entityIds, userId) as { entity_id: string; snapshot: unknown }[];
+        const snapshotRows = db
+          .prepare(
+            `SELECT entity_id, snapshot FROM entity_snapshots WHERE entity_id IN (${ph}) AND user_id = ?`
+          )
+          .all(...entityIds, userId) as { entity_id: string; snapshot: unknown }[];
         for (const r of snapshotRows) {
           if (r.snapshot && typeof r.snapshot === "object" && !Array.isArray(r.snapshot)) {
             entitySnapshot.set(r.entity_id, r.snapshot as Record<string, unknown>);
@@ -6872,7 +8406,8 @@ async function getLastNWatchEntries(
       const meta = (entityId: string) => entityMeta.get(entityId)?.entity_type;
       if (table === "entities") return str("entity_type") || "entity";
       if (table === "observations") return (str("entity_type") || meta(str("entity_id"))) ?? "-";
-      if (table === "entity_snapshots") return (str("entity_type") || meta(str("entity_id"))) ?? "-";
+      if (table === "entity_snapshots")
+        return (str("entity_type") || meta(str("entity_id"))) ?? "-";
       if (table === "raw_fragments") return str("entity_type") || "-";
       if (table === "timeline_events") return str("event_type") || "event";
       if (table === "relationship_observations" || table === "relationship_snapshots")
@@ -6895,13 +8430,11 @@ async function getLastNWatchEntries(
         summary: formatSummary(table, row),
         actionLabel: TABLE_ACTION_LABEL[table] ?? table,
         entityType: entityTypeForRow(table, row),
+        ...(tagEnv ? { env: tagEnv } : {}),
       };
       if (table === "observations" || table === "entity_snapshots" || table === "raw_fragments") {
         out.entity_id = strVal(row, "entity_id");
-      } else if (
-        table === "relationship_observations" ||
-        table === "relationship_snapshots"
-      ) {
+      } else if (table === "relationship_observations" || table === "relationship_snapshots") {
         out.source_entity_id = strVal(row, "source_entity_id");
         out.target_entity_id = strVal(row, "target_entity_id");
       } else if (table === "entity_merges") {
@@ -6915,6 +8448,28 @@ async function getLastNWatchEntries(
   } finally {
     db.close();
   }
+}
+
+/**
+ * Last N watch entries across dev and prod local DBs (no API). Merges and sorts by ts descending, returns top N.
+ * Use when showing "Recent events" from both environments (e.g. watch --env all).
+ */
+async function getLastNWatchEntriesAcrossEnvs(
+  repoRoot: string,
+  userId: string | null,
+  limit = 20
+): Promise<WatchEvent[]> {
+  if (!userId) return [];
+  const perEnv = Math.ceil(limit * 1.5);
+  const [devEvents, prodEvents] = await Promise.all([
+    getLastNWatchEntries(repoRoot, "dev", userId, perEnv, "dev"),
+    getLastNWatchEntries(repoRoot, "prod", userId, perEnv, "prod"),
+  ]);
+  const merged = [...devEvents, ...prodEvents]
+    .sort((a, b) => (b.ts < a.ts ? -1 : b.ts > a.ts ? 1 : 0))
+    .slice(0, limit)
+    .reverse();
+  return merged;
 }
 
 async function _getDirSizeBytes(dirPath: string): Promise<number> {
@@ -6952,7 +8507,7 @@ async function fetchIntroStats(baseUrlOrPort?: string): Promise<{
       : (await resolveBaseUrl(program.opts().baseUrl, await readConfig())).replace(/\/$/, "");
     const token = await getCliToken();
     const api = createApiClient({ baseUrl, token });
-    const { data, error } = await api.GET("/api/stats", {});
+    const { data, error } = await api.GET("/stats", {});
     if (error || !data) return null;
     const stats = data as {
       total_entities?: number;
@@ -6969,6 +8524,141 @@ async function fetchIntroStats(baseUrlOrPort?: string): Promise<{
   } catch {
     return null;
   }
+}
+
+type IntroStats = {
+  total_entities: number;
+  total_relationships: number;
+  total_sources: number;
+  total_events: number;
+  total_observations: number;
+  total_interpretations: number;
+};
+
+/** Prod and dev intro stats for dual-column intro box. */
+export type DualEnvIntroStats = { prod: IntroStats | null; dev: IntroStats | null };
+
+async function getDualEnvIntroStats(
+  repoRoot: string,
+  userId: string | null
+): Promise<DualEnvIntroStats> {
+  const effectiveUserId = userId ?? LOCAL_DEV_USER_ID;
+  const [prod, dev] = await Promise.all([
+    getLocalIntroStats(repoRoot, "prod", effectiveUserId),
+    getLocalIntroStats(repoRoot, "dev", effectiveUserId),
+  ]);
+  return { prod, dev };
+}
+
+export function buildApiBoxLines(instances: ApiInstance[], mcpStdioCount?: number): string[] {
+  if (instances.length === 0) {
+    const lines: string[] = ["No running Neotoma HTTP APIs detected (ports 8080, 8180)."];
+    if (mcpStdioCount !== undefined && mcpStdioCount > 0) {
+      lines.push(`Neotoma MCP (stdio): ${mcpStdioCount} process(es) running (e.g. Cursor).`);
+    } else {
+      lines.push("MCP servers run by Cursor use stdio and are detected separately when running.");
+    }
+    return lines;
+  }
+  const envRank = (envHint: ApiInstance["envHint"]): number => {
+    if (envHint === "prod") return 0;
+    if (envHint === "dev") return 1;
+    return 2;
+  };
+  const sorted = [...instances].sort((a, b) => {
+    const rank = envRank(a.envHint) - envRank(b.envHint);
+    if (rank !== 0) return rank;
+    return a.port - b.port;
+  });
+  return sorted.map((instance) => {
+    const envLabel =
+      instance.envHint === "prod"
+        ? "Production API"
+        : instance.envHint === "dev"
+          ? "Development API"
+          : "Custom API";
+    return `${envLabel}: ${instance.url} (${instance.latencyMs} ms)`;
+  });
+}
+
+type CliInstructionScanSummary = {
+  appliedProject: { cursor: boolean; claude: boolean; codex: boolean };
+  appliedUser: { cursor: boolean; claude: boolean; codex: boolean };
+};
+
+export function buildInstallationBoxLines(
+  mcpConfigs: McpConfigStatus[],
+  cliScan: CliInstructionScanSummary | null
+): string[] {
+  const mark = (ok: boolean): string => (ok ? "✅" : "❌");
+  const hasPath = (value: string): boolean =>
+    mcpConfigs.some((config) => config.path.toLowerCase().includes(value));
+  const hasAnyMcpForPlatform = (value: string): boolean =>
+    mcpConfigs.some(
+      (config) => config.path.toLowerCase().includes(value) && (config.hasDev || config.hasProd)
+    );
+
+  const mcpComplete = mcpConfigs.length === 0 || mcpConfigs.every((c) => c.hasDev && c.hasProd);
+  const cliComplete =
+    cliScan == null
+      ? true
+      : (hasPath(".cursor") ? cliScan.appliedProject.cursor || cliScan.appliedUser.cursor : true) &&
+        (hasPath("claude") ? cliScan.appliedProject.claude || cliScan.appliedUser.claude : true) &&
+        (hasPath(".codex") ? cliScan.appliedProject.codex || cliScan.appliedUser.codex : true);
+  const initializationComplete = mcpComplete && cliComplete;
+
+  const lines: string[] = [
+    "Initialization: " + (initializationComplete ? "✅ complete" : "❌ incomplete"),
+    "",
+    "MCP status by config:",
+  ];
+  if (mcpConfigs.length === 0) {
+    lines.push("  No MCP config files detected.");
+  } else {
+    for (const config of mcpConfigs) {
+      lines.push(`  ${config.path}`);
+      lines.push(`    Dev: ${mark(config.hasDev)}  Prod: ${mark(config.hasProd)}`);
+    }
+  }
+
+  const platformWarnings: string[] = [];
+  if (hasPath(".cursor") && !hasAnyMcpForPlatform(".cursor")) {
+    platformWarnings.push("Warning: Cursor config found, Neotoma MCP is not installed.");
+  }
+  if (hasPath("claude") && !hasAnyMcpForPlatform("claude")) {
+    platformWarnings.push("Warning: Claude config found, Neotoma MCP is not installed.");
+  }
+  if (hasPath(".codex") && !hasAnyMcpForPlatform(".codex")) {
+    platformWarnings.push("Warning: Codex config found, Neotoma MCP is not installed.");
+  }
+
+  lines.push("CLI instructions status:");
+  if (cliScan == null) {
+    lines.push("  Unable to scan CLI instruction status.");
+  } else {
+    const p = cliScan.appliedProject;
+    const u = cliScan.appliedUser;
+    lines.push(
+      `  Project: Cursor ${mark(p.cursor)}, Claude ${mark(p.claude)}, Codex ${mark(p.codex)}`
+    );
+    lines.push(
+      `  User: Cursor ${mark(u.cursor)}, Claude ${mark(u.claude)}, Codex ${mark(u.codex)}`
+    );
+    if (!p.cursor && !u.cursor && hasPath(".cursor")) {
+      platformWarnings.push("Warning: Cursor is installed, Neotoma CLI instructions are missing.");
+    }
+    if (!p.claude && !u.claude && hasPath("claude")) {
+      platformWarnings.push("Warning: Claude is installed, Neotoma CLI instructions are missing.");
+    }
+    if (!p.codex && !u.codex && hasPath(".codex")) {
+      platformWarnings.push("Warning: Codex is installed, Neotoma CLI instructions are missing.");
+    }
+  }
+
+  if (platformWarnings.length > 0) {
+    lines.push(...platformWarnings);
+  }
+  return lines;
 }
 
 function writeStatusLine(spinnerChar: string, status: string): void {
@@ -7029,9 +8719,7 @@ function installInitCancelListener(onCancel: () => void): () => void {
  * When deferApiStats is true, skips API-dependent steps (checkApiStatusForIntro, fetchIntroStats).
  * Use deferApiStats when we will start the server or resolve the port later; intro is then
  * fetched after the server is up or the port is known. */
-async function runInitWithStatus(options?: {
-  deferApiStats?: boolean;
-}): Promise<{
+async function runInitWithStatus(options?: { deferApiStats?: boolean }): Promise<{
   version: string;
   intro: {
     total_entities: number;
@@ -7075,42 +8763,75 @@ async function runInitWithStatus(options?: {
 
 type IntroBoxContent = { lines: string[]; title: string };
 
-function buildIntroBoxContent(
+const INTRO_STAT_LABEL_WIDTH = 18;
+const INTRO_STAT_VALUE_WIDTH = 10;
+
+function formatIntroStatValue(n: number | null): string {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
+export function buildIntroBoxContent(
   version: string,
-  intro: {
-    total_entities: number;
-    total_relationships: number;
-    total_sources: number;
-    total_events: number;
-  } | null,
-  serverLines?: string[],
+  summaryLinesOrStats: string[] | DualEnvIntroStats,
   env?: "dev" | "prod"
 ): IntroBoxContent {
   const versionPart = dim(`v${version}`);
   const envPart = env != null ? dim(` ${env} `) : " ";
   const title = black(bold(" Neotoma ") + versionPart + envPart);
-  const formatInt = (n: number): string =>
-    Number.isFinite(n) ? n.toLocaleString("en-US", { maximumFractionDigits: 0 }) : String(n);
-  const statsLine =
-    intro === null
-      ? "Data unavailable"
-      : `${formatInt(intro.total_entities)} entities, ${formatInt(intro.total_relationships)} relationships, ${formatInt(intro.total_sources)} sources, ${formatInt(intro.total_events)} timeline events`;
   const ratW = INTRO_PACK_RAT_DISPLAY_WIDTH;
   const ratSep = "  " + black("│") + " ";
   const blankRat = padToDisplayWidth("", ratW) + ratSep;
-  // Stats on its own row (no art); then three art rows for Local, Tunnel, User so each server line appears once
+
+  const isStats = (x: string[] | DualEnvIntroStats): x is DualEnvIntroStats =>
+    typeof x === "object" && x !== null && "prod" in x && "dev" in x;
+
+  if (isStats(summaryLinesOrStats)) {
+    const { prod, dev } = summaryLinesOrStats;
+    const pad = (s: string, w: number) => padToDisplayWidth(s, w);
+    const rows: [string, number | null, number | null][] = [
+      ["entities", prod?.total_entities ?? null, dev?.total_entities ?? null],
+      ["relationships", prod?.total_relationships ?? null, dev?.total_relationships ?? null],
+      ["sources", prod?.total_sources ?? null, dev?.total_sources ?? null],
+      ["timeline events", prod?.total_events ?? null, dev?.total_events ?? null],
+      ["observations", prod?.total_observations ?? null, dev?.total_observations ?? null],
+      ["interpretations", prod?.total_interpretations ?? null, dev?.total_interpretations ?? null],
+    ];
+    const headerLine =
+      blankRat +
+      bold(pad("Record type", INTRO_STAT_LABEL_WIDTH)) +
+      WATCH_TABLE_GAP +
+      bold(pad("Prod", INTRO_STAT_VALUE_WIDTH)) +
+      WATCH_TABLE_GAP +
+      bold(pad("Dev", INTRO_STAT_VALUE_WIDTH));
+    const ratLines = [
+      padToDisplayWidth(INTRO_PACK_RAT_LINES[0], ratW) + ratSep,
+      padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep,
+      padToDisplayWidth(INTRO_PACK_RAT_LINES[2], ratW) + ratSep,
+    ];
+    const dataLines = rows.map(([label, pVal, dVal], i) => {
+      const rat = i < ratLines.length ? ratLines[i]! : blankRat;
+      const labelPart = dim(pad(label, INTRO_STAT_LABEL_WIDTH));
+      const prodPart = dim(pad(formatIntroStatValue(pVal), INTRO_STAT_VALUE_WIDTH));
+      const devPart = dim(pad(formatIntroStatValue(dVal), INTRO_STAT_VALUE_WIDTH));
+      return rat + labelPart + WATCH_TABLE_GAP + prodPart + WATCH_TABLE_GAP + devPart;
+    });
+    const contentLines: string[] = [blankRat, headerLine, ...dataLines];
+    const withInnerPadding = [...contentLines, blankRat];
+    return { lines: withInnerPadding, title };
+  }
+
+  const normalizedSummary =
+    summaryLinesOrStats.length > 0
+      ? summaryLinesOrStats
+      : ["Production data: unavailable", "Development data: unavailable"];
   const contentLines: string[] = [
     blankRat,
-    blankRat + dim(statsLine),
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[0], ratW) + ratSep + (serverLines?.[0] ?? ""),
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + (serverLines?.[1] ?? ""),
-    padToDisplayWidth(INTRO_PACK_RAT_LINES[2], ratW) + ratSep + (serverLines?.[2] ?? ""),
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[0], ratW) + ratSep,
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep,
+    padToDisplayWidth(INTRO_PACK_RAT_LINES[2], ratW) + ratSep,
+    ...normalizedSummary.map((line) => blankRat + dim(line)),
   ];
-  if (serverLines != null && serverLines.length > 3) {
-    for (let i = 3; i < serverLines.length; i++) {
-      contentLines.push(padToDisplayWidth("", ratW) + ratSep + serverLines[i]);
-    }
-  }
   const withInnerPadding = [...contentLines, blankRat];
   return { lines: withInnerPadding, title };
 }
@@ -7121,13 +8842,13 @@ type McpConfigStatus = { path: string; hasDev: boolean; hasProd: boolean };
  * Build the status block string (intro + optional watch + optional MCP) for redraw on SIGWINCH.
  * Returns output and line count so we know how many lines to clear before redraw.
  */
-function buildStatusBlockOutput(
+export function buildStatusBlockOutput(
   opts: {
     introContent: IntroBoxContent;
+    apiLines?: string[];
     watchLines?: string[];
     watchEventCount?: number;
-    mcpConfigs?: McpConfigStatus[] | null;
-    formatMcpBox: (configs: McpConfigStatus[], width?: number) => string;
+    installationLines?: string[];
   },
   sessionBoxWidth: number
 ): { output: string; lineCount: number } {
@@ -7143,6 +8864,18 @@ function buildStatusBlockOutput(
     }) +
     "\n";
   parts.push(introStr);
+  if (opts.apiLines != null && opts.apiLines.length > 0) {
+    parts.push(
+      "\n" +
+        blackBox(opts.apiLines, {
+          title: " APIs ",
+          borderColor: "cyan",
+          padding: 1,
+          sessionBoxWidth,
+        }) +
+        "\n"
+    );
+  }
   if (opts.watchLines != null && opts.watchLines.length > 0) {
     parts.push(
       "\n" +
@@ -7156,12 +8889,22 @@ function buildStatusBlockOutput(
     );
     if (opts.watchEventCount != null) {
       parts.push(
-        dim("  View details: enter row number (1–" + opts.watchEventCount + ") at the prompt.") + "\n\n"
+        dim("  View details: enter row number (1–" + opts.watchEventCount + ") at the prompt.") +
+          "\n\n"
       );
     }
   }
-  if (opts.mcpConfigs != null && opts.mcpConfigs.length > 0) {
-    parts.push("\n" + opts.formatMcpBox(opts.mcpConfigs, sessionBoxWidth) + "\n");
+  if (opts.installationLines != null && opts.installationLines.length > 0) {
+    parts.push(
+      "\n" +
+        blackBox(opts.installationLines, {
+          title: " Installation ",
+          borderColor: "cyan",
+          padding: 1,
+          sessionBoxWidth,
+        }) +
+        "\n"
+    );
   }
   const output = parts.join("");
   const lineCount = output.split("\n").length;
@@ -7170,20 +8913,18 @@ function buildStatusBlockOutput(
 
 async function printIntroBlock(
   version: string,
-  intro: {
-    total_entities: number;
-    total_relationships: number;
-    total_sources: number;
-    total_events: number;
-  } | null,
-  serverLines?: string[],
+  summaryLines: string[],
   env?: "dev" | "prod",
-  options?: { sessionBoxWidth?: number; contentLines?: string[]; title?: string }
+  options?: {
+    sessionBoxWidth?: number;
+    contentLines?: string[];
+    title?: string;
+  }
 ): Promise<void> {
   const { lines: withInnerPadding, title } =
     options?.contentLines != null && options?.title != null
       ? { lines: options.contentLines, title: options.title }
-      : buildIntroBoxContent(version, intro, serverLines, env);
+      : buildIntroBoxContent(version, summaryLines, env);
   const boxStr =
     "\n" +
     blackBox(withInnerPadding, {
@@ -7196,7 +8937,7 @@ async function printIntroBlock(
     "\n";
   process.stdout.write(boxStr);
 
-  if (process.stdout.isTTY && serverLines != null && serverLines.length > 1) {
+  if (process.stdout.isTTY) {
     const pad = 2;
     const ratW = INTRO_PACK_RAT_DISPLAY_WIDTH;
     const ratSep = "  " + black("│") + " ";
@@ -7204,13 +8945,9 @@ async function printIntroBlock(
     const contentWidth = rawContentWidth + 2 * pad;
     const titleLen = visibleLength(title);
     const innerWidth =
-      options?.sessionBoxWidth ??
-      Math.max(contentWidth, titleLen + 2, INTRO_MIN_WIDTH + 2 * pad);
-    // (o.o) row is now Tunnel (serverLines[1])
-    const faceContentOpen =
-      padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep + serverLines[1];
-    const faceContentWink =
-      padToDisplayWidth(INTRO_PACK_RAT_FACE_WINK, ratW) + ratSep + serverLines[1];
+      options?.sessionBoxWidth ?? Math.max(contentWidth, titleLen + 2, INTRO_MIN_WIDTH + 2 * pad);
+    const faceContentOpen = padToDisplayWidth(INTRO_PACK_RAT_LINES[1], ratW) + ratSep;
+    const faceContentWink = padToDisplayWidth(INTRO_PACK_RAT_FACE_WINK, ratW) + ratSep;
     const boxVertical = black("│");
     const padLeft = " ".repeat(pad);
     const buildFaceLine = (content: string) =>
@@ -7222,7 +8959,7 @@ async function printIntroBlock(
     const faceLineOpen = buildFaceLine(faceContentOpen);
     const faceLineWink = buildFaceLine(faceContentWink);
     const totalBoxLines = withInnerPadding.length + 2;
-    // (o.o) line is output line index 4 (0=top border). From line after bottom border, go up to reach it.
+    // Face (•ㅅ•) is the second data row (index 3): blank, header, row0, row1=face. So output line 4 (0=top border).
     const faceOutputLineIndex = 4;
     const linesUpToFace = totalBoxLines - faceOutputLineIndex;
     process.stdout.write(BANNER_ANSI.up(linesUpToFace));
@@ -7275,7 +9012,8 @@ function teeToLogFile(logFilePath: string): void {
         return origStdoutWrite(chunk as string, encodingOrCallback as (err?: Error | null) => void);
       }
       const enc = typeof encodingOrCallback === "string" ? encodingOrCallback : undefined;
-      const cb = typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
+      const cb =
+        typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
       if (enc !== undefined) {
         return origStdoutWrite(chunk as string, enc as BufferEncoding, cb);
       }
@@ -7291,7 +9029,8 @@ function teeToLogFile(logFilePath: string): void {
         return origStderrWrite(chunk as string, encodingOrCallback as (err?: Error | null) => void);
       }
       const enc = typeof encodingOrCallback === "string" ? encodingOrCallback : undefined;
-      const cb = typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
+      const cb =
+        typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
       if (enc !== undefined) {
         return origStderrWrite(chunk as string, enc as BufferEncoding, cb);
       }
@@ -7311,53 +9050,68 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       : null;
   const repoRootForLog = await findRepoRoot(process.cwd());
   const cliLogBasename = `cli.${process.pid}.log`;
+  const isResetCommand = argv.includes("reset");
+  const isInitCommand = argv.includes("init");
   const defaultLogPath =
-    isProd ? null : repoRootForLog
-      ? path.join(repoRootForLog, "data", "logs", cliLogBasename)
-      : path.join(CONFIG_DIR, cliLogBasename);
-  const logFilePath = noLogFile ? null : explicitLogPath ?? defaultLogPath;
+    isProd || isResetCommand || isInitCommand
+      ? null
+      : repoRootForLog
+        ? path.join(repoRootForLog, "data", "logs", cliLogBasename)
+        : path.join(CONFIG_DIR, cliLogBasename);
+  const logFilePath = noLogFile ? null : (explicitLogPath ?? defaultLogPath);
   if (logFilePath) {
     await fs.mkdir(path.dirname(logFilePath), { recursive: true }).catch(() => {});
     teeToLogFile(logFilePath);
   }
 
   let version: string | null = null;
-  let intro: {
-    total_entities: number;
-    total_relationships: number;
-    total_sources: number;
-    total_events: number;
-  } | null = null;
 
   program.parseOptions(argv);
-  const args = (program.args && program.args.length > 0) ? program.args : argv.slice(2);
+  const args = program.args && program.args.length > 0 ? program.args : argv.slice(2);
   const noSession = argv.includes("--no-session");
   const noServers = argv.includes("--no-servers");
   const serversOpt = (program.opts() as { servers?: string }).servers;
-  const background = argv.includes("--background");
   const tunnel = argv.includes("--tunnel");
   const noArgs = hasNoCommand(args);
 
-  runUpdateNotifier();
+  // `neotoma --help` and `neotoma --version` must never enter interactive/session mode.
+  // This is required for scripting and piping (e.g. `neotoma --help | head`).
+  const wantsHelp = argv.includes("--help") || argv.includes("-h");
+  const wantsVersion = argv.includes("--version") || argv.includes("-V");
+  if (noArgs && (wantsHelp || wantsVersion)) {
+    if (wantsVersion) {
+      const v = await getCliVersion();
+      process.stdout.write(v + "\n");
+      return;
+    }
+    program.outputHelp();
+    return;
+  }
+
+  if (!isResetCommand && !isInitCommand) {
+    runUpdateNotifier();
+  }
 
   const serverPolicy =
-    noArgs && !background && !noSession
-      ? await resolveServerPolicy(noServers, serversOpt)
-      : null;
+    noArgs && !noSession ? await resolveServerPolicy(noServers, serversOpt) : null;
   const startServers = serverPolicy === "start";
-  const deferApiStats =
-    serverPolicy === "start" || serverPolicy === "use-existing";
+  const deferApiStats = serverPolicy === "start" || serverPolicy === "use-existing";
 
-  if (process.stdout.isTTY) {
+  // Apply --env early so resolveBaseUrl and use-existing logic respect it for both session and direct commands.
+  const envOpt = (program.opts() as { env?: string }).env;
+  if (envOpt === "dev" || envOpt === "prod") {
+    process.env.NEOTOMA_SESSION_ENV = envOpt;
+  }
+
+  if (process.stdout.isTTY && !isResetCommand && !isInitCommand) {
     const cleanupCancel = installInitCancelListener(() => process.exit(0));
     try {
       const init = await runInitWithStatus({ deferApiStats });
       version = init.version;
-      intro = init.intro;
     } finally {
       cleanupCancel();
     }
-  } else {
+  } else if (!isResetCommand && !isInitCommand) {
     await ensureDevCommands();
   }
 
@@ -7374,119 +9128,63 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    if (background) {
-      const repoResult = await loadNpmScripts().catch(() => null);
-      if (!repoResult) {
-        process.stderr.write(
-          "Not a Neotoma repo. Run from the repo root (package.json name must be 'neotoma').\n"
-        );
-        return;
-      }
-      const { repoRoot } = repoResult;
-      const [devPort, prodPort] = await pickSessionPorts(repoRoot);
-      const { devPid, prodPid } = spawnDevProdServersDetached(repoRoot, devPort, prodPort, tunnel);
-      const state: BackgroundServersState = {
-        devPid,
-        prodPid,
-        devPort,
-        prodPort,
-        repoRoot,
-        startedAt: new Date().toISOString(),
-      };
-      await fs.mkdir(path.dirname(BACKGROUND_SERVERS_PATH), { recursive: true });
-      await fs.writeFile(BACKGROUND_SERVERS_PATH, JSON.stringify(state, null, 2));
-      process.stdout.write(success("Servers started in background.") + "\n");
-      process.stdout.write(
-        dim("Dev ") +
-          pathStyle(`http://127.0.0.1:${devPort}`) +
-          dim(" (PID ") +
-          String(devPid) +
-          dim(")") +
-          "\n"
-      );
-      process.stdout.write(
-        dim("Prod ") +
-          pathStyle(`http://127.0.0.1:${prodPort}`) +
-          dim(" (PID ") +
-          String(prodPid) +
-          dim(")") +
-          "\n"
-      );
-      process.stdout.write(
-        dim("MCP (HTTP):") +
-          pathStyle(`http://127.0.0.1:${devPort}/mcp`) +
-          dim("  Prod MCP :") +
-          pathStyle(`http://127.0.0.1:${prodPort}/mcp`) +
-          "\n"
-      );
-      if (tunnel) {
-        const logsDir = path.join(repoRoot, "data", "logs");
-        process.stdout.write(
-          dim("Tunnel: dev and prod each start an HTTPS tunnel; URLs and logs in ") +
-            pathStyle(logsDir) +
-            dim(" (tunnel-dev-url.txt, tunnel-prod-url.txt, *.log).") +
-            "\n"
-        );
-      } else {
-        process.stdout.write(dim("Tunnel: off (use ") + pathStyle("neotoma --tunnel") + dim(" to enable).") + "\n");
-      }
-      process.stdout.write(dim("Stop with: ") + pathStyle("neotoma stop") + "\n");
-      return;
-    }
-
     if (noSession) {
       debugLog("No-session mode: showing intro panel and command menu (no REPL)");
-      const apiStatus = await checkApiStatusForIntro();
-      const apiLine =
-        apiStatus.ok && apiStatus.baseUrl != null
-          ? bold("API: ") +
-            success("up") +
-            " " +
-            pathStyle(apiStatus.baseUrl) +
-            (apiStatus.latencyMs != null ? dim(` ${apiStatus.latencyMs} ms`) : "")
-          : bold("API: ") +
-            warn("down") +
-            (apiStatus.baseUrl ? " " + pathStyle(apiStatus.baseUrl) : "") +
-            (apiStatus.error ? " " + dim(apiStatus.error) : "");
-
-      const summary = apiStatus.ok ? await fetchStorageSummary() : null;
-      const cwd = pathStyle(process.cwd());
-
-      const panelLines: string[] = [];
-      panelLines.push(...nestArt().split("\n"));
-      panelLines.push("");
-      panelLines.push(apiLine);
-      if (summary) {
-        panelLines.push("");
-        panelLines.push(subHeading("Storage summary"));
-        panelLines.push(...summary.split("\n"));
-      }
-      panelLines.push("");
-      panelLines.push(subHeading("Tips for getting started"));
-      panelLines.push(
-        bullet(
-          "Run " +
-            pathStyle("neotoma <command>") +
-            " (e.g. " +
-            pathStyle("neotoma storage info") +
-            ")"
-        )
+      const v = version ?? (await getCliVersion());
+      const repoRootForLocal = await findRepoRoot(process.cwd());
+      const introStatsOrFallback = repoRootForLocal
+        ? await getDualEnvIntroStats(repoRootForLocal, LOCAL_DEV_USER_ID)
+        : ["Production data: unavailable", "Development data: unavailable"];
+      const recentEvents = repoRootForLocal
+        ? await getLastNWatchEntriesAcrossEnvs(
+            repoRootForLocal,
+            LOCAL_DEV_USER_ID,
+            WATCH_INITIAL_EVENT_LIMIT
+          )
+        : [];
+      const watchLines =
+        recentEvents.length > 0 ? formatWatchTable(recentEvents, new Date()) : undefined;
+      const introContent = buildIntroBoxContent(v, introStatsOrFallback, undefined);
+      const mcpStdioCount = await detectNeotomaMcpStdioProcessCount();
+      const apiLines = buildApiBoxLines([], mcpStdioCount);
+      const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
+      const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
+      const { configs: mcpConfigs } = await scanForMcpConfigs(process.cwd(), {
+        includeUserLevel: true,
+        userLevelFirst: true,
+        neotomaRepoRoot: repoRootForLocal,
+      });
+      const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
+        includeUserLevel: true,
+      });
+      const installationLines = buildInstallationBoxLines(mcpConfigs, agentScan);
+      const rawSessionBoxWidth = Math.max(
+        computeBoxInnerWidth(introContent.lines, { title: introContent.title, padding: 2 }),
+        computeBoxInnerWidth(apiLines, { title: " APIs ", padding: 1 }),
+        watchLines != null
+          ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
+          : 0,
+        computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
       );
-      panelLines.push(bullet("Start API: " + pathStyle("neotoma api start")));
-      panelLines.push(bullet("Configure MCP: " + pathStyle("neotoma mcp config")));
-      panelLines.push("");
-      panelLines.push(dim("Cwd: ") + cwd);
-
-      process.stdout.write(panel(panelLines, { title: "Neotoma", padding: 2, width: 52 }) + "\n\n");
+      const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+      const { output } = buildStatusBlockOutput(
+        {
+          introContent,
+          apiLines,
+          watchLines,
+          watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+          installationLines,
+        },
+        sessionBoxWidth
+      );
+      process.stdout.write(output);
       await runCommandMenuLoop();
       return;
     }
 
     if (isDebug()) {
       process.stderr.write(
-        dim(
-          `[debug] Server policy: ${serverPolicy}, startServers: ${startServers}\n`
-        )
+        dim(`[debug] Server policy: ${serverPolicy}, startServers: ${startServers}\n`)
       );
     }
     let devChild: ReturnType<typeof spawn> | null = null;
@@ -7494,18 +9192,17 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     let sessionRepoRoot: string | undefined;
     /** When this run started the server, path to that run's session log (session.<pid>.log). */
     let currentSessionLogPath: string | undefined;
-    /** User ID from /api/me, used for watch events and local-DB fallback in session. */
+    /** User ID from /me, used for watch events and local-DB fallback in session. */
     let userIdForWatch: string | null = null;
-    let storedMcpConfigs: { path: string; hasDev: boolean; hasProd: boolean }[] | null = null;
-    let storedMcpRepoRoot: string | null = null;
     let storedSessionBoxWidth: number | undefined;
     let storedStatusBlockRedrawData: {
       introContent: IntroBoxContent;
+      apiLines: string[];
       watchLines?: string[];
       watchEventCount?: number;
-      mcpConfigs: McpConfigStatus[];
-      baseSessionBoxWidth: number;
-      formatMcpBox: (configs: McpConfigStatus[], width?: number) => string;
+      installationLines: string[];
+      /** Content-driven max width (before terminal cap). Redraw uses min(this, getTerminalWidth()) so boxes resize with viewport. */
+      rawSessionBoxWidth: number;
     } | null = null;
 
     // Preferred environment: from --env flag, or always prompt (no saved default)
@@ -7528,9 +9225,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         }
         debugLog(`User selected: ${preferredEnv}`);
       } else {
-        process.stderr.write(
-          "neotoma: no environment specified. Use --env dev or --env prod.\n"
-        );
+        process.stderr.write("neotoma: no environment specified. Use --env dev or --env prod.\n");
         process.exit(1);
         preferredEnv = "dev"; // unreachable; satisfy TypeScript
       }
@@ -7540,33 +9235,33 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     }
     process.env.NEOTOMA_SESSION_ENV = preferredEnv;
 
+    if (!startServers) {
+      const repoResult = await loadNpmScripts().catch(() => null);
+      if (repoResult) {
+        sessionRepoRoot = repoResult.repoRoot;
+      }
+    }
+
     if (startServers) {
+      const initReadyRepo = await maybeRunInitForMissingRepo(process.stdout.isTTY);
+      if (!initReadyRepo) {
+        process.stderr.write(INIT_REQUIRED_MESSAGE + "\n");
+        process.exitCode = 1;
+        return;
+      }
       debugLog("Loading project (package.json, npm scripts)…");
       const loadRepo = (): Promise<{ repoRoot: string; scripts: NpmScript[] } | null> =>
         loadNpmScripts().catch(() => null);
-      let repoResult = process.stdout.isTTY
+      const repoResult = process.stdout.isTTY
         ? await runWithSpinner("Loading project…", loadRepo)
         : await loadRepo();
       if (repoResult) {
         debugLog(`Repo root: ${repoResult.repoRoot}`);
       }
       if (!repoResult) {
-        const runInit = await askYesNo(
-          "No Neotoma repo found. Run " +
-            pathStyle("neotoma init") +
-            " now to set up and set repo path? (y/n) "
-        );
-        if (runInit) {
-          const child = spawn(process.argv[0], [process.argv[1], "init"], {
-            cwd: process.cwd(),
-            stdio: "inherit",
-            env: { ...process.env },
-          });
-          const exitCode = await new Promise<number | null>((res) => child.on("close", res));
-          if (exitCode === 0) {
-            repoResult = await loadNpmScripts().catch(() => null);
-          }
-        }
+        process.stderr.write(INIT_REQUIRED_MESSAGE + "\n");
+        process.exitCode = 1;
+        return;
       }
       if (repoResult) {
         const { repoRoot } = repoResult;
@@ -7598,6 +9293,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const devEnv: NodeJS.ProcessEnv = {
             ...process.env,
             HTTP_PORT: String(devPort),
+            NEOTOMA_HTTP_PORT: String(devPort),
             NEOTOMA_SESSION_PORT_FILE: sessionPortPath,
             ...(tunnel && {
               TUNNEL_NONINTERACTIVE: "1",
@@ -7608,6 +9304,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const prodEnv: NodeJS.ProcessEnv = {
             ...process.env,
             HTTP_PORT: String(prodPort),
+            NEOTOMA_HTTP_PORT: String(prodPort),
             NEOTOMA_SESSION_PORT_FILE: sessionPortPath,
             NEOTOMA_ENV: "production",
             ...(tunnel && {
@@ -7680,7 +9377,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           : await waitForHealth(actualPort, { timeoutMs: 45000, intervalMs: 800 });
         let ready = healthy;
         if (healthy) {
-          debugLog("Health ok; waiting for API to serve /api/me (timeout 20s, interval 500ms)");
+          debugLog("Health ok; waiting for API to serve /me (timeout 20s, interval 500ms)");
           ready = process.stdout.isTTY
             ? await runWithSpinner(`Waiting for API (${result.env})…`, () =>
                 waitForApiReady(actualPort, { timeoutMs: 20000, intervalMs: 500 })
@@ -7689,11 +9386,10 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         }
         debugLog(
           ready
-            ? "Server and API ready (health + /api/me responded)"
+            ? "Server and API ready (health + /me responded)"
             : "Server did not become ready in time"
         );
         if (!ready) {
-          intro = null;
           process.stderr.write(
             warn("Server did not become ready in time. Commands may fail until it is up.\n")
           );
@@ -7708,7 +9404,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           process.stderr.write(dim("Full log: ") + pathStyle(sessionLogPath) + "\n");
         } else if (version != null) {
           debugLog("Fetching intro stats (entities, relationships, sources)…");
-          intro = await fetchIntroStats(String(actualPort));
+          await fetchIntroStats(String(actualPort));
         }
         let tunnelUrl: string | null = null;
         if (tunnel && sessionRepoRoot) {
@@ -7736,38 +9432,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               : "Tunnel URL file not ready (intro shows unreachable)"
           );
         }
-        const localLabel =
-          dim("Local: ") +
-          pathStyle(`127.0.0.1:${actualPort}`) +
-          (ready ? "" : " " + dim("(unreachable)"));
-        const serverLines: string[] = [localLabel];
-        if (tunnel) {
-          if (tunnelUrl != null) {
-            serverLines.push(dim("Tunnel: ") + pathStyle(tunnelUrl));
-          } else {
-            const tunnelLogPath =
-              sessionRepoRoot ? getTunnelLogPath(sessionRepoRoot, result.env) : null;
-            serverLines.push(
-              dim("Tunnel: ") +
-                dim("(not ready)") +
-                (tunnelLogPath
-                  ? dim(" — check ") + pathStyle(tunnelLogPath)
-                  : dim(" — check tunnel script output"))
-            );
-          }
-        } else {
-          serverLines.push(
-            dim("Tunnel: ") + dim("off") + dim(" (use ") + pathStyle("neotoma --tunnel") + dim(" to enable)")
-          );
-        }
-        let userLine: string;
         try {
-          debugLog("Resolving CLI token for /api/me…");
+          debugLog("Resolving CLI token for /me…");
           const token = await getCliToken();
           const meHeaders: Record<string, string> = {};
           if (token) meHeaders.Authorization = `Bearer ${token}`;
-          debugLog(`Fetching http://127.0.0.1:${actualPort}/api/me`);
-          const meRes = await fetch(`http://127.0.0.1:${actualPort}/api/me`, {
+          debugLog(`Fetching http://127.0.0.1:${actualPort}/me`);
+          const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
             headers: meHeaders,
           });
           if (meRes.ok) {
@@ -7775,17 +9446,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
             if (me.user_id) {
               debugLog(`User id: ${me.user_id}`);
               userIdForWatch = me.user_id;
-              userLine = dim("User: ") + pathStyle(me.user_id);
             } else {
-              debugLog("API /api/me ok but no user_id in response");
-              userLine = dim("User: ") + dim("(none: no user_id in response)");
+              debugLog("API /me ok but no user_id in response");
             }
           } else if (meRes.status === 401) {
-            debugLog("API /api/me returned 401 (not signed in)");
-            userLine = dim("User: ") + dim("(none: not signed in)");
+            debugLog("API /me returned 401 (not signed in)");
           } else {
-            debugLog(`API /api/me returned ${meRes.status}`);
-            userLine = dim("User: ") + dim(`(none: API ${meRes.status})`);
+            debugLog(`API /me returned ${meRes.status}`);
           }
         } catch (err) {
           const reason =
@@ -7793,99 +9460,97 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               ? "no auth"
               : "API unreachable";
           debugLog(`User id failed: ${err instanceof Error ? err.message : String(err)}`);
-          userLine = dim("User: ") + dim(`(none: ${reason})`);
+          debugLog(`User fallback reason: ${reason}`);
         }
-        serverLines.push(userLine);
         if (sessionRepoRoot) {
-          const dataDir = process.env.NEOTOMA_DATA_DIR || path.join(sessionRepoRoot, "data");
-          const dbFile = result.env === "prod" ? "neotoma.prod.db" : "neotoma.db";
-          const dbPathRaw =
-            process.env.NEOTOMA_SQLITE_PATH || path.join(dataDir, dbFile);
-          const dbPath = path.isAbsolute(dbPathRaw)
-            ? dbPathRaw
-            : path.join(sessionRepoRoot, dbPathRaw);
-          serverLines.push(dim("DB: ") + pathStyle(dbPath));
-          const sessionLogPath =
-            currentSessionLogPath ??
-            path.join(sessionRepoRoot, "data", "logs", `session-${result.env}.log`);
-          serverLines.push(dim("Server log: ") + pathStyle(sessionLogPath));
-          serverLines.push(dim("CLI log: ") + pathStyle(logFilePath ?? CLI_LOG_PATH));
-        }
-        if (version != null && sessionRepoRoot) {
-          const apiAllZeros =
-            intro != null &&
-            intro.total_entities === 0 &&
-            intro.total_relationships === 0 &&
-            intro.total_sources === 0 &&
-            intro.total_events === 0;
-          if (apiAllZeros && userIdForWatch) {
-            const localIntro = await getLocalIntroStats(
-              sessionRepoRoot,
-              result.env,
-              userIdForWatch
-            );
-            if (localIntro) intro = localIntro;
-          }
-          const introContent = buildIntroBoxContent(
-            version,
-            intro,
-            serverLines,
-            result.env
+          const effectiveUserId = userIdForWatch ?? LOCAL_DEV_USER_ID;
+          const introStats = await getDualEnvIntroStats(sessionRepoRoot, effectiveUserId);
+          const recentEvents = await getLastNWatchEntriesAcrossEnvs(
+            sessionRepoRoot,
+            effectiveUserId,
+            WATCH_INITIAL_EVENT_LIMIT
           );
-          const {
-            scanForMcpConfigs,
-            getMcpStatusBoxLines,
-            formatMcpStatusBox,
-            MCP_STATUS_BOX_TITLE,
-          } = await import("./mcp_config_scan.js");
+          lastShownWatchEvents = recentEvents.length > 0 ? recentEvents : null;
+          const watchLines =
+            recentEvents.length > 0 ? formatWatchTable(recentEvents, new Date()) : undefined;
+          if (watchLines != null && recentEvents.length > 0) {
+            sessionWatchDisplayRef = { watchLines, watchEventCount: recentEvents.length };
+          } else {
+            sessionWatchDisplayRef = null;
+          }
+
+          const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
+          const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
           const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
           const prodPortEnv = process.env.NEOTOMA_SESSION_PROD_PORT;
           const devPort =
-            devPortEnv && /^\d+$/.test(devPortEnv)
-              ? parseInt(devPortEnv, 10)
-              : undefined;
+            devPortEnv && /^\d+$/.test(devPortEnv) ? parseInt(devPortEnv, 10) : undefined;
           const prodPort =
-            prodPortEnv && /^\d+$/.test(prodPortEnv)
-              ? parseInt(prodPortEnv, 10)
-              : undefined;
-          const { configs: mcpConfigs, repoRoot: mcpRepoRoot } =
-            await scanForMcpConfigs(process.cwd(), {
-              includeUserLevel: true,
-              userLevelFirst: true,
-              devPort,
-              prodPort,
-              neotomaRepoRoot: sessionRepoRoot,
-            });
-          const mcpLines = getMcpStatusBoxLines(mcpConfigs);
+            prodPortEnv && /^\d+$/.test(prodPortEnv) ? parseInt(prodPortEnv, 10) : undefined;
+          const activePortEnv = process.env.NEOTOMA_SESSION_API_PORT;
+          const activePort =
+            activePortEnv && /^\d+$/.test(activePortEnv) ? parseInt(activePortEnv, 10) : undefined;
+          const { configs: mcpConfigs } = await scanForMcpConfigs(process.cwd(), {
+            includeUserLevel: true,
+            userLevelFirst: true,
+            devPort,
+            prodPort,
+            activePort,
+            activeEnv: preferredEnv,
+            neotomaRepoRoot: sessionRepoRoot,
+          });
+          const configured = await readConfig();
+          const discoveredInstances = await discoverApiInstances({ config: configured });
+          const mcpStdioCount = await detectNeotomaMcpStdioProcessCount();
+          const apiLines = buildApiBoxLines(discoveredInstances, mcpStdioCount);
+          const agentScan = await scanAgentInstructions(sessionRepoRoot, {
+            includeUserLevel: true,
+          });
+          const installationLines = buildInstallationBoxLines(mcpConfigs, agentScan);
+          const currentVersion = version ?? (await getCliVersion());
+          const introContent = buildIntroBoxContent(currentVersion, introStats, result.env);
           const rawSessionBoxWidth = Math.max(
             computeBoxInnerWidth(introContent.lines, {
               title: introContent.title,
               padding: 2,
             }),
-            mcpLines.length > 0
-              ? computeBoxInnerWidth(mcpLines, {
-                  title: MCP_STATUS_BOX_TITLE,
-                  padding: 1,
-                })
-              : 0
+            computeBoxInnerWidth(apiLines, { title: " APIs ", padding: 1 }),
+            watchLines != null
+              ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
+              : 0,
+            computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
           );
           const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
-          await printIntroBlock(version, intro, serverLines, result.env, {
-            sessionBoxWidth,
-            contentLines: introContent.lines,
-            title: introContent.title,
-          });
-          storedMcpConfigs = mcpConfigs;
-          storedMcpRepoRoot = mcpRepoRoot;
+          const { output } = buildStatusBlockOutput(
+            {
+              introContent,
+              apiLines,
+              watchLines,
+              watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+              installationLines,
+            },
+            sessionBoxWidth
+          );
+          process.stdout.write(output);
           storedSessionBoxWidth = sessionBoxWidth;
           storedStatusBlockRedrawData = {
             introContent,
-            mcpConfigs,
-            baseSessionBoxWidth: sessionBoxWidth,
-            formatMcpBox: formatMcpStatusBox,
+            apiLines,
+            watchLines,
+            watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+            installationLines,
+            rawSessionBoxWidth,
           };
         } else if (version != null) {
-          await printIntroBlock(version, intro, serverLines, result.env);
+          const introContent = buildIntroBoxContent(
+            version,
+            ["Production data: unavailable", "Development data: unavailable"],
+            undefined
+          );
+          await printIntroBlock(version, [], result.env, {
+            contentLines: introContent.lines,
+            title: introContent.title,
+          });
         }
         if (ready) {
           const baseUrl = `http://127.0.0.1:${actualPort}`;
@@ -7902,80 +9567,320 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       } else {
         sessionRepoRoot = undefined;
         debugLog("No Neotoma repo found; session only (no servers)");
-        if (version != null) await printIntroBlock(version, intro, undefined, preferredEnv);
+        if (version != null) {
+          const introContent = buildIntroBoxContent(
+            version,
+            ["Production data: unavailable", "Development data: unavailable"],
+            undefined
+          );
+          await printIntroBlock(version, [], preferredEnv, {
+            contentLines: introContent.lines,
+            title: introContent.title,
+          });
+        }
         process.stdout.write(
-          dim("Not in a Neotoma repo. Session only (no servers). Run from repo root, run ") +
-            pathStyle("neotoma init") +
-            dim(", or set NEOTOMA_REPO_ROOT to start dev/prod servers.") +
-            "\n\n"
+          dim("Not in a Neotoma repo. Session only, servers are not started.") + "\n\n"
         );
       }
     } else {
-      sessionRepoRoot = undefined;
-      debugLog("Use-existing: probing for running API on 8180, 8080");
-      const runningPorts = await detectRunningApiPorts();
-      if (runningPorts.length === 0) {
-        process.stderr.write(
-          warn("No API reachable on 8180 or 8080. ") +
-            "Start with " +
-            pathStyle("neotoma api start") +
-            " or run with " +
-            pathStyle("--servers=start") +
-            " to start for this session.\n"
+      debugLog("Use-existing: probing for running API instances");
+      const configured = await readConfig();
+      const discoveredInstances = await discoverApiInstances({ config: configured });
+      if (discoveredInstances.length === 0) {
+        const version = await getCliVersion();
+        const mcpStdioCount = await detectNeotomaMcpStdioProcessCount();
+        const apiLines = buildApiBoxLines(discoveredInstances, mcpStdioCount);
+        const repoRootForLocal = await findRepoRoot(process.cwd());
+        const introStatsOrFallback = repoRootForLocal
+          ? await getDualEnvIntroStats(repoRootForLocal, LOCAL_DEV_USER_ID)
+          : ["Production data: unavailable", "Development data: unavailable"];
+        const recentEvents = repoRootForLocal
+          ? await getLastNWatchEntriesAcrossEnvs(
+              repoRootForLocal,
+              LOCAL_DEV_USER_ID,
+              WATCH_INITIAL_EVENT_LIMIT
+            )
+          : [];
+        const watchLines =
+          recentEvents.length > 0 ? formatWatchTable(recentEvents, new Date()) : undefined;
+        const introContent = buildIntroBoxContent(version, introStatsOrFallback, undefined);
+        const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
+        const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
+        const { configs: mcpConfigs } = await scanForMcpConfigs(process.cwd(), {
+          includeUserLevel: true,
+          userLevelFirst: true,
+          neotomaRepoRoot: repoRootForLocal,
+        });
+        const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
+          includeUserLevel: true,
+        });
+        const installationLines = buildInstallationBoxLines(mcpConfigs, agentScan);
+        const rawSessionBoxWidth = Math.max(
+          computeBoxInnerWidth(introContent.lines, { title: introContent.title, padding: 2 }),
+          computeBoxInnerWidth(apiLines, { title: " APIs ", padding: 1 }),
+          watchLines != null
+            ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
+            : 0,
+          computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
         );
-        process.exit(1);
+        const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+        const { output } = buildStatusBlockOutput(
+          {
+            introContent,
+            apiLines,
+            watchLines,
+            watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+            installationLines,
+          },
+          sessionBoxWidth
+        );
+        process.stdout.write(output);
+        storedSessionBoxWidth = sessionBoxWidth;
+        storedStatusBlockRedrawData = {
+          introContent,
+          apiLines,
+          watchLines,
+          watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+          installationLines,
+          rawSessionBoxWidth,
+        };
+        const suggestionLinesRef = { current: 0 };
+        const lastReadyPhraseRef = { current: SESSION_READY_PHRASES[0]! };
+        const data = storedStatusBlockRedrawData;
+        const redrawStatusBlock: RedrawStatusBlockFn = () => {
+          const newWidth = Math.min(data.rawSessionBoxWidth, getTerminalWidth());
+          const { output: redrawOutput } = buildStatusBlockOutput(data, newWidth);
+          process.stdout.write(redrawOutput);
+        };
+        const { lineCount: statusBlockLineCount } = buildStatusBlockOutput(
+          storedStatusBlockRedrawData,
+          storedSessionBoxWidth ?? getTerminalWidth()
+        );
+        await runSessionLoop({
+          onExit: () => {},
+          repoRoot: repoRootForLocal ?? undefined,
+          preferredEnv: "dev",
+          userId: LOCAL_DEV_USER_ID,
+          redrawStatusBlock,
+          statusBlockLineCount,
+          suggestionLinesRef,
+          lastReadyPhraseRef,
+        });
+        return;
       }
-      const sortedPorts = [...runningPorts].sort((a, b) => a - b);
-      let preferredPort: number;
-      if (sortedPorts.length === 1) {
-        preferredPort = sortedPorts[0]!;
+      const preferredEnvFromFlag = (program.opts() as { env?: string }).env;
+      const envPreference: "dev" | "prod" | null =
+        preferredEnvFromFlag === "dev" || preferredEnvFromFlag === "prod"
+          ? preferredEnvFromFlag
+          : null;
+
+      let candidates = discoveredInstances;
+      if (envPreference != null) {
+        const envMatched = discoveredInstances.filter(
+          (instance) => instance.envHint === envPreference
+        );
+        if (envMatched.length > 0) candidates = envMatched;
+      }
+
+      let selectedInstance: ApiInstance;
+      if (candidates.length === 1) {
+        selectedInstance = candidates[0]!;
       } else {
         process.stdout.write("\n" + bold("Which instance?") + "\n");
-        sortedPorts.forEach((p, i) => {
-          const label = p === 8180 ? "prod" : "dev";
-          process.stdout.write(dim(`  ${i + 1}) `) + pathStyle(`127.0.0.1:${p}`) + dim(` (${label})\n`));
+        candidates.forEach((instance, i) => {
+          const label = instance.envHint === "unknown" ? "custom" : instance.envHint;
+          process.stdout.write(
+            dim(`  ${i + 1}) `) +
+              pathStyle(`127.0.0.1:${instance.port}`) +
+              dim(` (${label}, ${instance.latencyMs} ms)\n`)
+          );
         });
-        const which = await askQuestion(dim(`  [1-${sortedPorts.length}] > `));
+        const which = await askQuestion(dim(`  [1-${candidates.length}] > `));
         const idx = parseInt(which.trim(), 10);
-        const oneBased = Number.isFinite(idx) && idx >= 1 && idx <= sortedPorts.length ? idx - 1 : 0;
-        preferredPort = sortedPorts[oneBased]!;
+        const oneBased = Number.isFinite(idx) && idx >= 1 && idx <= candidates.length ? idx - 1 : 0;
+        selectedInstance = candidates[oneBased]!;
       }
-      const useExistingEnv = preferredPort === 8180 ? "prod" : "dev";
+
+      const preferredPort = selectedInstance.port;
+      process.env.NEOTOMA_SESSION_API_PORT = String(preferredPort);
+      const useExistingEnv: "dev" | "prod" =
+        selectedInstance.envHint === "dev"
+          ? "dev"
+          : selectedInstance.envHint === "prod"
+            ? "prod"
+            : (envPreference ?? "dev");
       if (useExistingEnv === "dev") {
         process.env.NEOTOMA_SESSION_DEV_PORT = String(preferredPort);
+        delete process.env.NEOTOMA_SESSION_PROD_PORT;
       } else {
         process.env.NEOTOMA_SESSION_PROD_PORT = String(preferredPort);
+        delete process.env.NEOTOMA_SESSION_DEV_PORT;
       }
+      await rememberKnownApiPort(preferredPort);
       const actualPort = preferredPort;
-      intro = await fetchIntroStats(String(actualPort));
-      const localLabel =
-        dim("Local: ") + pathStyle(`127.0.0.1:${actualPort}`) + dim(" (use-existing)");
-      const serverLines: string[] = [
-        localLabel,
-        dim("Tunnel: ") + dim("off") + dim(" (use ") + pathStyle("neotoma --tunnel") + dim(" to enable)"),
-      ];
-      let userLine: string;
+      await fetchIntroStats(String(actualPort));
       try {
         const token = await getCliToken();
-        const meRes = await fetch(`http://127.0.0.1:${actualPort}/api/me`, {
+        const meRes = await fetch(`http://127.0.0.1:${actualPort}/me`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         if (meRes.ok) {
           const me = (await meRes.json()) as { user_id?: string };
-          userLine = me.user_id
-            ? dim("User: ") + pathStyle(me.user_id)
-            : dim("User: ") + dim("(none: no user_id in response)");
-        } else if (meRes.status === 401) {
-          userLine = dim("User: ") + dim("(none: not signed in)");
-        } else {
-          userLine = dim("User: ") + dim(`(none: API ${meRes.status})`);
+          if (me.user_id) userIdForWatch = me.user_id;
         }
       } catch {
-        userLine = dim("User: ") + dim("(none: API unreachable)");
+        // ignore
       }
-      serverLines.push(userLine);
       if (version != null) {
-        await printIntroBlock(version, intro, serverLines, useExistingEnv);
+        const apiLines = buildApiBoxLines(discoveredInstances);
+        if (sessionRepoRoot) {
+          const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
+          const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
+          const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
+          const prodPortEnv = process.env.NEOTOMA_SESSION_PROD_PORT;
+          const devPort =
+            devPortEnv && /^\d+$/.test(devPortEnv) ? parseInt(devPortEnv, 10) : undefined;
+          const prodPort =
+            prodPortEnv && /^\d+$/.test(prodPortEnv) ? parseInt(prodPortEnv, 10) : undefined;
+          const activePortEnv = process.env.NEOTOMA_SESSION_API_PORT;
+          const activePort =
+            activePortEnv && /^\d+$/.test(activePortEnv) ? parseInt(activePortEnv, 10) : undefined;
+          const { configs: mcpConfigs } = await scanForMcpConfigs(process.cwd(), {
+            includeUserLevel: true,
+            userLevelFirst: true,
+            devPort,
+            prodPort,
+            activePort,
+            activeEnv: useExistingEnv,
+            neotomaRepoRoot: sessionRepoRoot,
+          });
+          const effectiveUserId = userIdForWatch ?? LOCAL_DEV_USER_ID;
+          const introStats = await getDualEnvIntroStats(sessionRepoRoot, effectiveUserId);
+          const recentEvents = await getLastNWatchEntriesAcrossEnvs(
+            sessionRepoRoot,
+            effectiveUserId,
+            WATCH_INITIAL_EVENT_LIMIT
+          );
+          lastShownWatchEvents = recentEvents.length > 0 ? recentEvents : null;
+          const watchLines =
+            recentEvents.length > 0 ? formatWatchTable(recentEvents, new Date()) : undefined;
+          if (watchLines != null && recentEvents.length > 0) {
+            sessionWatchDisplayRef = { watchLines, watchEventCount: recentEvents.length };
+          } else {
+            sessionWatchDisplayRef = null;
+          }
+          const introContent = buildIntroBoxContent(version, introStats, useExistingEnv);
+          const agentScan = await scanAgentInstructions(sessionRepoRoot, {
+            includeUserLevel: true,
+          });
+          const installationLines = buildInstallationBoxLines(mcpConfigs, agentScan);
+          const rawSessionBoxWidth = Math.max(
+            computeBoxInnerWidth(introContent.lines, {
+              title: introContent.title,
+              padding: 2,
+            }),
+            computeBoxInnerWidth(apiLines, { title: " APIs ", padding: 1 }),
+            watchLines != null
+              ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
+              : 0,
+            computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
+          );
+          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+          const { output } = buildStatusBlockOutput(
+            {
+              introContent,
+              apiLines,
+              watchLines,
+              watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+              installationLines,
+            },
+            sessionBoxWidth
+          );
+          process.stdout.write(output);
+          storedSessionBoxWidth = sessionBoxWidth;
+          storedStatusBlockRedrawData = {
+            introContent,
+            apiLines,
+            watchLines,
+            watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+            installationLines,
+            rawSessionBoxWidth,
+          };
+        } else {
+          // No sessionRepoRoot (e.g. cwd not in Neotoma repo) but we have API instances: still show full status block.
+          // Resolve repo from cwd for direct local DB reads (intro + recent events) when possible.
+          const repoRootForLocal = await findRepoRoot(process.cwd());
+          const effectiveUserId = userIdForWatch ?? LOCAL_DEV_USER_ID;
+          const introStatsOrFallback = repoRootForLocal
+            ? await getDualEnvIntroStats(repoRootForLocal, effectiveUserId)
+            : ["Production data: unavailable", "Development data: unavailable"];
+          const recentEvents = repoRootForLocal
+            ? await getLastNWatchEntriesAcrossEnvs(
+                repoRootForLocal,
+                effectiveUserId,
+                WATCH_INITIAL_EVENT_LIMIT
+              )
+            : [];
+          const watchLines =
+            recentEvents.length > 0 ? formatWatchTable(recentEvents, new Date()) : undefined;
+          const introContent = buildIntroBoxContent(version, introStatsOrFallback, useExistingEnv);
+          const { scanForMcpConfigs } = await import("./mcp_config_scan.js");
+          const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
+          const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
+          const prodPortEnv = process.env.NEOTOMA_SESSION_PROD_PORT;
+          const devPort =
+            devPortEnv && /^\d+$/.test(devPortEnv) ? parseInt(devPortEnv, 10) : undefined;
+          const prodPort =
+            prodPortEnv && /^\d+$/.test(prodPortEnv) ? parseInt(prodPortEnv, 10) : undefined;
+          const activePortEnv = process.env.NEOTOMA_SESSION_API_PORT;
+          const activePort =
+            activePortEnv && /^\d+$/.test(activePortEnv) ? parseInt(activePortEnv, 10) : undefined;
+          const { configs: mcpConfigs } = await scanForMcpConfigs(process.cwd(), {
+            includeUserLevel: true,
+            userLevelFirst: true,
+            devPort,
+            prodPort,
+            activePort,
+            activeEnv: useExistingEnv,
+            neotomaRepoRoot: repoRootForLocal,
+          });
+          const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
+            includeUserLevel: true,
+          });
+          const installationLines = buildInstallationBoxLines(mcpConfigs, agentScan);
+          const rawSessionBoxWidth = Math.max(
+            computeBoxInnerWidth(introContent.lines, {
+              title: introContent.title,
+              padding: 2,
+            }),
+            computeBoxInnerWidth(apiLines, { title: " APIs ", padding: 1 }),
+            watchLines != null
+              ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
+              : 0,
+            computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
+          );
+          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+          const { output } = buildStatusBlockOutput(
+            {
+              introContent,
+              apiLines,
+              watchLines,
+              watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+              installationLines,
+            },
+            sessionBoxWidth
+          );
+          process.stdout.write(output);
+          storedSessionBoxWidth = sessionBoxWidth;
+          storedStatusBlockRedrawData = {
+            introContent,
+            apiLines,
+            watchLines,
+            watchEventCount: recentEvents.length > 0 ? recentEvents.length : undefined,
+            installationLines,
+            rawSessionBoxWidth,
+          };
+        }
       }
       try {
         await ensureSessionOrAuth(`http://127.0.0.1:${actualPort}`);
@@ -7987,75 +9892,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       process.env.NEOTOMA_SESSION_ENV = useExistingEnv;
     }
 
-    if (process.stdout.isTTY && sessionRepoRoot) {
-      try {
-        const { scanForMcpConfigs, offerInstall, formatMcpStatusBox } = await import(
-          "./mcp_config_scan.js"
-        );
-        const devPortEnv = process.env.NEOTOMA_SESSION_DEV_PORT;
-        const prodPortEnv = process.env.NEOTOMA_SESSION_PROD_PORT;
-        const devPort =
-          devPortEnv && /^\d+$/.test(devPortEnv) ? parseInt(devPortEnv, 10) : undefined;
-        const prodPort =
-          prodPortEnv && /^\d+$/.test(prodPortEnv) ? parseInt(prodPortEnv, 10) : undefined;
-        let configs = storedMcpConfigs;
-        let repoRoot = storedMcpRepoRoot;
-        const sessionBoxWidth = storedSessionBoxWidth;
-        if (configs == null || repoRoot == null) {
-          const scan = await scanForMcpConfigs(process.cwd(), {
-            includeUserLevel: true,
-            userLevelFirst: true,
-            devPort,
-            prodPort,
-            neotomaRepoRoot: sessionRepoRoot,
-          });
-          configs = scan.configs;
-          repoRoot = scan.repoRoot;
-        }
-        // Always show MCP config status when we have configs; only prompt to install when current env is missing
-        if (configs.length > 0) {
-          process.stdout.write(
-            formatMcpStatusBox(configs, sessionBoxWidth ?? undefined) + "\n"
-          );
-          const missingAny = configs.some((c) =>
-            preferredEnv === "dev" ? !c.hasDev : !c.hasProd
-          );
-          if (missingAny) {
-            await offerInstall(configs, repoRoot, {
-              devPort,
-              prodPort,
-              cwd: process.cwd(),
-              boxAlreadyShown: true,
-              currentEnv: preferredEnv,
-            });
-          }
-        }
-      } catch {
-        // Non-fatal; session continues
-      }
-    }
-
-    // cli-instructions auto-check: silently update env section in existing rule files;
-    // offer to add if no rule file is present yet (TTY only).
+    // cli-instructions auto-check: silently update env section in existing rule files.
     if (sessionRepoRoot) {
       try {
         const { autoUpdateCliInstructionsEnv } = await import("./agent_instructions_scan.js");
         await autoUpdateCliInstructionsEnv(sessionRepoRoot, preferredEnv);
       } catch {
         // Non-fatal; session continues
-      }
-      if (process.stdout.isTTY) {
-        try {
-          const { scanAgentInstructions, offerAddPreferCliRule } = await import(
-            "./agent_instructions_scan.js"
-          );
-          const agentScan = await scanAgentInstructions(sessionRepoRoot);
-          if (agentScan.missingInApplied) {
-            await offerAddPreferCliRule(agentScan, { env: preferredEnv });
-          }
-        } catch {
-          // Non-fatal; session continues
-        }
       }
     }
 
@@ -8067,7 +9910,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     if (storedStatusBlockRedrawData != null) {
       const data = storedStatusBlockRedrawData;
       redrawStatusBlock = (_currentBuffer: string) => {
-        const newWidth = Math.min(data.baseSessionBoxWidth, getTerminalWidth());
+        const newWidth = Math.min(data.rawSessionBoxWidth, getTerminalWidth());
         const dataWithWatch =
           sessionWatchDisplayRef != null
             ? {
@@ -8092,7 +9935,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       },
       repoRoot: sessionRepoRoot,
       preferredEnv,
-      userId: userIdForWatch ?? undefined,
+      userId: userIdForWatch ?? LOCAL_DEV_USER_ID,
       redrawStatusBlock,
       statusBlockLineCount,
       suggestionLinesRef,

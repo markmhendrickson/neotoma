@@ -81,7 +81,7 @@ export function EventDialog({ open, onClose, onSave }: EventDialogProps) {
         source_priority: 100,
         user_id: user?.id,
       });
-      const { data, error } = await api.POST("/api/store", {
+      const { data, error } = await api.POST("/store", {
         body: {
           entities: [eventData],
           idempotency_key: idempotencyKey,

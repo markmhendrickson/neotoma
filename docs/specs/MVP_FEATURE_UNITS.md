@@ -41,7 +41,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Complexity:** Medium
 - **Dependencies:** None
 - **Deliverables:**
-  - `supabase/schema.sql` with `records`, `record_relationships`, `plaid_items`, `plaid_sync_runs`, `external_connectors`, `external_sync_runs` tables
+  - Database schema with `records`, `record_relationships`, `plaid_items`, `plaid_sync_runs`, `external_connectors`, `external_sync_runs` tables
   - RLS policies
   - Indexes (GIN, B-tree, ivfflat)
   - Migration scripts
@@ -486,7 +486,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Dependencies:** FU-100 (file analysis), FU-200 (MCP core), FU-050 (Event-Sourcing Foundation), FU-051 (Repository Abstractions)
 - **Deliverables:**
   - File path validation
-  - Upload to storage (Supabase Storage or S3)
+  - Upload to storage (cloud storage or S3)
   - Trigger file analysis (optional)
   - Create record with extracted fields (uses `store_record` internally, inherits event-sourcing)
   - Use `StateRepository` and `EventRepository` when creating records
@@ -873,7 +873,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Complexity:** Medium
 - **Dependencies:** None
 - **Deliverables:**
-  - Supabase Auth integration
+  - OAuth integration
   - Signup/signin UI
   - Password reset
   - OAuth providers (Google, GitHub)
@@ -883,7 +883,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - E2E: Full auth flow
   - Security: Token validation, session expiry
 - **Acceptance:** Users can signup/signin, sessions secure
-- **Status:** 🔨 Partial (Supabase Auth integrated, UI TBD)
+- **Status:** 🔨 Partial (OAuth integrated, UI TBD)
 #### FU-701: Row-Level Security (RLS)
 - **Priority:** P0 (Required for MVP — enables team data isolation)
 - **Risk:** High (data isolation)
@@ -1168,7 +1168,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 5. **FU-303:** Build timeline view UI
 6. **FU-304:** Dedicated upload UI with bulk upload support
 7. **FU-400-403:** Complete onboarding flow (4 Feature Units)
-8. **FU-700:** Authentication UI (Supabase Auth)
+8. **FU-700:** Authentication UI (OAuth)
 9. **FU-701:** Row-Level Security (RLS) for data isolation (MVP-critical for privacy/control positioning)
 **Note:** FU-703 (Local Storage / Offline Mode) is already complete.
 **Competitive Rationale:** FU-101 (Entity Resolution) and FU-102 (Timelines) are MVP-critical because they validate Neotoma's competitive differentiation. Provider memory (ChatGPT, Claude, Gemini) is conversation-only and doesn't offer entity resolution or timelines across personal data. These features demonstrate Neotoma's structured personal data memory vs. conversation-only provider memory.
@@ -1536,7 +1536,7 @@ Estimates account for:
   - Password reset flow
   - OAuth buttons
   - Session management
-  - **Agent Estimate:** 4-5 hours (Supabase Auth integration)
+  - **Agent Estimate:** 4-5 hours (OAuth integration)
   - **Rationale:** Enables Tier 1 small team ICP; individual adoption → team expansion; supports mid-market ACVs (€3k–€15k/yr)
 - **FU-701: RLS Implementation** — ⏳ NEW
   - Add user_id column to records
@@ -1682,7 +1682,7 @@ Estimates account for:
 | FU-401 | Processing Indicator         | Low        | 2-3         | Progress UI + accessibility               |
 | FU-402 | Extraction Results           | Medium     | 3-4         | Layout + data display                     |
 | FU-403 | Onboarding State             | Low        | 2-3         | State hook + persistence                  |
-| FU-700 | Authentication UI            | Medium     | 4-5         | Supabase Auth integration                 |
+| FU-700 | Authentication UI            | Medium     | 4-5         | OAuth integration                 |
 | FU-701 | RLS Implementation           | High       | 5-6         | Schema migration + RLS policies           |
 | FU-703 | Local Storage / Offline Mode | High       | 0           | Already complete                          |
 | FU-702 | Billing and Subscription     | High       | 12-16       | Stripe integration + UI + usage tracking  |
@@ -1708,7 +1708,7 @@ Estimates account for:
 | FU     | Name            | Complexity | Agent Hours | Notes                              |
 | ------ | --------------- | ---------- | ----------- | ---------------------------------- |
 | FU-601 | Entity Explorer | Medium     | 5-6         | New feature area                   |
-| FU-700 | Auth UI         | Medium     | 4-5         | Supabase Auth forms                |
+| FU-700 | Auth UI         | Medium     | 4-5         | OAuth forms                |
 | FU-701 | RLS             | High       | 5-6         | Schema migration + testing         |
 | FU-702 | Billing         | High       | 12-16       | Stripe integration + UI            |
 | FU-802 | Tracing         | Medium     | 6-7         | OpenTelemetry setup                |

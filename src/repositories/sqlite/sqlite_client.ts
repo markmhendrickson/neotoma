@@ -52,6 +52,7 @@ const SCHEMA_STATEMENTS = [
     entity_id TEXT PRIMARY KEY,
     entity_type TEXT NOT NULL,
     schema_version TEXT NOT NULL,
+    canonical_name TEXT,
     snapshot TEXT,
     computed_at TEXT,
     observation_count INTEGER,
@@ -67,6 +68,8 @@ const SCHEMA_STATEMENTS = [
     created_at TEXT,
     updated_at TEXT,
     user_id TEXT,
+    first_seen_at TEXT,
+    last_seen_at TEXT,
     merged_to_entity_id TEXT,
     merged_at TEXT
   )`,
@@ -74,6 +77,7 @@ const SCHEMA_STATEMENTS = [
     id TEXT PRIMARY KEY,
     event_type TEXT NOT NULL,
     event_timestamp TEXT NOT NULL,
+    event_date TEXT,
     source_id TEXT,
     source_field TEXT,
     entity_id TEXT,
@@ -220,6 +224,14 @@ const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS auto_enhancement_queue (
     id TEXT PRIMARY KEY,
     entity_type TEXT,
+    fragment_key TEXT,
+    frequency_count INTEGER,
+    confidence_score REAL,
+    priority INTEGER DEFAULT 100,
+    retry_count INTEGER DEFAULT 0,
+    processed_at TEXT,
+    last_retry_at TEXT,
+    error_message TEXT,
     field_name TEXT,
     field_type TEXT,
     payload TEXT,
@@ -310,6 +322,18 @@ function ensureSchema(db: Database.Database): void {
     addColumnIfMissing(db, "interpretations", "unknown_fields_count", "INTEGER");
     addColumnIfMissing(db, "observations", "canonical_hash", "TEXT");
     addColumnIfMissing(db, "timeline_events", "entity_id", "TEXT");
+    addColumnIfMissing(db, "entity_snapshots", "canonical_name", "TEXT");
+    addColumnIfMissing(db, "entities", "first_seen_at", "TEXT");
+    addColumnIfMissing(db, "entities", "last_seen_at", "TEXT");
+    addColumnIfMissing(db, "timeline_events", "event_date", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "fragment_key", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "frequency_count", "INTEGER");
+    addColumnIfMissing(db, "auto_enhancement_queue", "confidence_score", "REAL");
+    addColumnIfMissing(db, "auto_enhancement_queue", "priority", "INTEGER");
+    addColumnIfMissing(db, "auto_enhancement_queue", "retry_count", "INTEGER");
+    addColumnIfMissing(db, "auto_enhancement_queue", "processed_at", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "last_retry_at", "TEXT");
+    addColumnIfMissing(db, "auto_enhancement_queue", "error_message", "TEXT");
 
     // Parity with Postgres: unique constraint on (content_hash, user_id) for deduplication
     db.prepare(

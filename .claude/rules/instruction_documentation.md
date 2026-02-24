@@ -1,10 +1,10 @@
 ---
-description: "Defines how agents MUST document important instructions, constraints, and guidelines in appropriate files"
-globs: ["**/*"]
-alwaysApply: true
+description: "When user says 'always X' or 'never Y', or when creating/editing rule or command files: document the instruction in the correct rule file (foundation vs repo), use RFC 2119, run setup_cursor_copies after editing. Load when documenting constraints, adding rules, or editing .cursor/rules or foundation/agent_instructions sources."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/instruction_documentation.mdc -->
+
 
 # Instruction Documentation Rule
 
@@ -19,12 +19,14 @@ This document defines how agents MUST document important instructions, constrain
 ## Scope
 
 This rule covers:
+
 - When and how to document "always" and "never" instructions
 - Where to place rules (global vs repository-specific)
 - How rules are discovered via symlink structure
 - Format standards for rule files
 
 This rule does NOT cover:
+
 - Content of specific rules (covered by individual rule files)
 - Documentation standards for non-rule documentation (see `foundation/conventions/documentation_standards.md`)
 
@@ -38,16 +40,16 @@ cursor_rules:
   global:
     enabled: true
     location: "foundation/agent_instructions/cursor_rules/"
-  
+
   # Repository-specific rules (for this repo only)
   repository:
     enabled: true
     # Examples of common locations (choose appropriate docs/ subdirectory based on topic):
     example_locations:
-      - "docs/conventions/"           # Code and documentation conventions
-      - "docs/foundation/"             # Foundation and architectural rules
+      - "docs/conventions/" # Code and documentation conventions
+      - "docs/foundation/" # Foundation and architectural rules
       - "docs/feature_units/standards/" # Feature unit workflow rules
-      - "docs/developer/"              # Development workflow rules
+      - "docs/developer/" # Development workflow rules
 ```
 
 **Note:** All `*_rules.md` files in `docs/` are automatically symlinked to `.claude/rules/` via the setup script. No central reference file is needed. Rules are discoverable via the symlink structure.
@@ -57,11 +59,13 @@ cursor_rules:
 Agents MUST document instructions immediately during the same conversation, before proceeding with other work.
 
 **High-priority triggers:**
+
 - "always do X" or "never do Y"
 - "remember to" or "make sure to"
 - "all agents should" or "everyone must"
 
 **Standard triggers:**
+
 - Code style, patterns, conventions
 - Architectural constraints or boundaries
 - Workflow processes or procedures
@@ -88,6 +92,7 @@ When user says "always X" or "never Y", agents MUST:
 4. Update references (foundation README for global rules, repo docs for repository rules)
 
 **Decision tree:**
+
 - Benefits ALL repos using foundation → Global rule (`foundation/agent_instructions/cursor_rules/`)
 - Generic agent behavior → Global rule (`foundation/agent_instructions/cursor_rules/`)
 - Repository-specific domain/architecture → Repository rule (appropriate `docs/` subdirectory)
@@ -98,11 +103,13 @@ When user says "always X" or "never Y", agents MUST:
 Rules are classified by scope and topic:
 
 **Global rules:**
+
 - Location: `foundation/agent_instructions/cursor_rules/`
 - Scope: All repos using foundation
 - Examples: Generic agent behavior, cross-repo patterns
 
 **Repository rules:**
+
 - Location: Appropriate `docs/` subdirectory based on topic
 - Scope: This repo only
 - Examples:
@@ -114,11 +121,13 @@ Rules are classified by scope and topic:
 ## Documenting Instructions
 
 **For repository-wide agent instructions:**
+
 1. Search `docs/` for existing `*_rules.md` files that match the instruction topic
 2. Add instruction to appropriate rule file using RFC 2119 directive language
 3. Create new rule file if no appropriate existing file exists (see "For Cursor rules" below)
 
 **For Cursor rules (all rules are Cursor rules):**
+
 1. Determine scope:
    - **Global rule** (all repos) → `foundation/agent_instructions/cursor_rules/{topic}.mdc` (MUST use `.mdc` extension)
    - **Repository rule** (this repo) → `docs/{appropriate_subdirectory}/{topic}_rules.md` based on topic
@@ -128,13 +137,14 @@ Rules are classified by scope and topic:
        - Feature unit workflows → `docs/feature_units/standards/`
        - Development workflows → `docs/developer/`
 2. MUST NOT use `.claude/rules/` directly
-3. Use filename: 
+3. Use filename:
    - Foundation rules: `{topic}.mdc` or `{topic}_management.mdc` (MUST use `.mdc`)
    - Repository rules: `{topic}_rules.md` or `{topic}_management.md`
 4. Follow existing rule format (Purpose, Trigger Patterns, Agent Actions, Constraints)
 5. Update references if applicable
 
 **For documentation-only instructions (not rules):**
+
 1. Document in appropriate `docs/` subdirectory based on topic
 2. MUST NOT store documentation in repo root
 3. Store temporary assessment/analysis files in `tmp/` directory
@@ -169,6 +179,7 @@ When [conditions], agents MUST [action].
 ```
 
 **Language requirements:**
+
 - Use RFC 2119 terminology: MUST, MUST NOT, SHOULD, SHOULD NOT, MAY
 - Use directive tone: clear, unambiguous statements
 - MUST NOT use vague qualifiers: "maybe", "perhaps", "possibly"
@@ -192,18 +203,21 @@ When user provides instructions (especially "always" or "never"), agents MUST:
 6. Confirm completion with details
 
 **MUST NOT:**
+
 - Skip documentation and proceed with other work
 - Promise to document "later" or in future conversation
 - Document only in conversation memory
 - Assume instruction is temporary
 
 **Before starting work:**
+
 1. Load required rules (rule files from symlinked locations)
 2. Verify instructions are current
 
 ## Constraints
 
 Agents MUST:
+
 - Document "always" and "never" instructions immediately during same conversation
 - Classify instruction type before documenting
 - Use directive language per RFC 2119 (MUST/SHOULD/MUST NOT/ALWAYS/NEVER)
@@ -212,6 +226,7 @@ Agents MUST:
 - Store temporary assessment/analysis files in `tmp/` directory
 
 Agents MUST NOT:
+
 - Defer documentation to future conversation
 - Document only in conversation memory
 - Duplicate instructions across multiple files without cross-references
@@ -234,6 +249,7 @@ Cursor agents automatically have access to all rules via symlink structure:
 ### When to Load This Document
 
 Load this document when:
+
 - User provides "always" or "never" instructions
 - Creating or updating rule files
 - Determining where to place new instructions

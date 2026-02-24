@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { generateEntityId } from "../../src/services/entity_resolution.js";
 import {
   softDeleteEntity,
@@ -35,24 +35,24 @@ describe("GDPR Deletion Integration Tests", () => {
 
   beforeEach(async () => {
     // Clean up test data
-    await supabase.from("observations").delete().eq("user_id", userId);
-    await supabase.from("entity_snapshots").delete().eq("user_id", userId);
-    await supabase.from("entities").delete().eq("user_id", userId);
-    await supabase.from("deletion_requests").delete().eq("user_id", userId);
+    await db.from("observations").delete().eq("user_id", userId);
+    await db.from("entity_snapshots").delete().eq("user_id", userId);
+    await db.from("entities").delete().eq("user_id", userId);
+    await db.from("deletion_requests").delete().eq("user_id", userId);
   });
 
   afterEach(async () => {
     // Clean up test data
-    await supabase.from("observations").delete().eq("user_id", userId);
-    await supabase.from("entity_snapshots").delete().eq("user_id", userId);
-    await supabase.from("entities").delete().eq("user_id", userId);
-    await supabase.from("deletion_requests").delete().eq("user_id", userId);
+    await db.from("observations").delete().eq("user_id", userId);
+    await db.from("entity_snapshots").delete().eq("user_id", userId);
+    await db.from("entities").delete().eq("user_id", userId);
+    await db.from("deletion_requests").delete().eq("user_id", userId);
   });
 
   describe("Complete Soft Deletion Workflow", () => {
     it("should soft delete entity and filter from queries", async () => {
       // Create entity
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -60,7 +60,7 @@ describe("GDPR Deletion Integration Tests", () => {
       });
 
       // Create regular observation
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         entity_id: testEntityId,
         entity_type: testEntityType,
         schema_version: "1.0",
@@ -104,7 +104,7 @@ describe("GDPR Deletion Integration Tests", () => {
 
     it("should return null snapshot for deleted entity", async () => {
       // Create entity and observations
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -123,10 +123,10 @@ describe("GDPR Deletion Integration Tests", () => {
         },
       ];
 
-      await supabase.from("observations").insert(observations);
+      await db.from("observations").insert(observations);
 
       // Compute snapshot before deletion
-      let result = await supabase
+      let result = await db
         .from("observations")
         .select("*")
         .eq("entity_id", testEntityId);
@@ -142,7 +142,7 @@ describe("GDPR Deletion Integration Tests", () => {
       await softDeleteEntity(testEntityId, testEntityType, userId);
 
       // Compute snapshot after deletion (should return null)
-      result = await supabase
+      result = await db
         .from("observations")
         .select("*")
         .eq("entity_id", testEntityId);
@@ -187,7 +187,7 @@ describe("GDPR Deletion Integration Tests", () => {
 
     it("should process deletion request (soft + hard deletion)", async () => {
       // Create entity
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -222,7 +222,7 @@ describe("GDPR Deletion Integration Tests", () => {
 
     it("should handle retention period correctly", async () => {
       // Create entity
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -289,14 +289,14 @@ describe("GDPR Deletion Integration Tests", () => {
   describe("Cryptographic Erasure", () => {
     it("should encrypt observations and delete encryption key", async () => {
       // Create entity and observation
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
         user_id: userId,
       });
 
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         entity_id: testEntityId,
         entity_type: testEntityType,
         schema_version: "1.0",
@@ -307,7 +307,7 @@ describe("GDPR Deletion Integration Tests", () => {
       });
 
       // Get original observation
-      let { data: beforeObs } = await supabase
+      let { data: beforeObs } = await db
         .from("observations")
         .select("fields")
         .eq("entity_id", testEntityId);
@@ -319,7 +319,7 @@ describe("GDPR Deletion Integration Tests", () => {
       await cryptographicErasure(userId, testEntityId);
 
       // Get encrypted observation
-      let { data: afterObs } = await supabase
+      let { data: afterObs } = await db
         .from("observations")
         .select("fields")
         .eq("entity_id", testEntityId);
@@ -338,7 +338,7 @@ describe("GDPR Deletion Integration Tests", () => {
       const deadline = new Date();
       deadline.setDate(deadline.getDate() + 5);
 
-      await supabase.from("deletion_requests").insert({
+      await db.from("deletion_requests").insert({
         user_id: userId,
         entity_id: testEntityId,
         deletion_type: "entity",
@@ -359,7 +359,7 @@ describe("GDPR Deletion Integration Tests", () => {
       const deadline = new Date();
       deadline.setDate(deadline.getDate() - 5);
 
-      await supabase.from("deletion_requests").insert({
+      await db.from("deletion_requests").insert({
         user_id: userId,
         entity_id: testEntityId,
         deletion_type: "entity",
@@ -380,7 +380,7 @@ describe("GDPR Deletion Integration Tests", () => {
       const softDeletedAt = new Date();
       softDeletedAt.setDate(softDeletedAt.getDate() - 10); // 10 days ago
 
-      await supabase.from("deletion_requests").insert({
+      await db.from("deletion_requests").insert({
         user_id: userId,
         entity_id: testEntityId,
         deletion_type: "entity",
@@ -405,7 +405,7 @@ describe("GDPR Deletion Integration Tests", () => {
       const deadline2 = new Date();
       deadline2.setDate(deadline2.getDate() - 2);
 
-      await supabase.from("deletion_requests").insert([
+      await db.from("deletion_requests").insert([
         {
           user_id: userId,
           entity_id: testEntityId,

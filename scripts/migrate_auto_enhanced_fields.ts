@@ -1,5 +1,5 @@
 import { schemaRegistry } from '../src/services/schema_registry.js';
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 
 /**
  * One-time migration script to migrate raw_fragments to observations
@@ -9,7 +9,7 @@ async function migrateAutoEnhancedFields() {
   console.log('Migrating auto-enhanced fields from raw_fragments to observations...\n');
 
   // Get all auto-applied schema recommendations for task entity
-  const { data: recommendations } = await supabase
+  const { data: recommendations } = await db
     .from('schema_recommendations')
     .select('fields_to_add, entity_type, user_id')
     .eq('entity_type', 'task')

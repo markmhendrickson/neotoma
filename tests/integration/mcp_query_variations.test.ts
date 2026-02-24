@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 describe("MCP query actions - parameter variations", () => {
@@ -8,7 +8,7 @@ describe("MCP query actions - parameter variations", () => {
 
   beforeAll(async () => {
     // Seed test data for query operations
-    const { data: source, error: sourceError } = await supabase
+    const { data: source, error: sourceError } = await db
       .from("sources")
         .insert({
           user_id: testUserId,
@@ -30,7 +30,7 @@ describe("MCP query actions - parameter variations", () => {
       const entityId = `ent_query_${Date.now()}_${i}`;
 
       // Insert directly into entities table for testing
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: entityId,
         entity_type: "task",
         canonical_name: `Task ${i}`,
@@ -49,7 +49,7 @@ describe("MCP query actions - parameter variations", () => {
 
   describe("pagination variations", () => {
     it("should paginate with default limit", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -62,7 +62,7 @@ describe("MCP query actions - parameter variations", () => {
 
     it("should paginate with custom limit", async () => {
       const customLimit = 5;
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -77,7 +77,7 @@ describe("MCP query actions - parameter variations", () => {
       const limit = 5;
       const offset = 10;
 
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -90,7 +90,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should paginate with min limit (1)", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -103,7 +103,7 @@ describe("MCP query actions - parameter variations", () => {
 
     it("should paginate with max limit boundary", async () => {
       const maxLimit = 100;
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -116,7 +116,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should handle offset beyond data", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -129,7 +129,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should paginate deterministically (same order on multiple calls)", async () => {
-      const { data: page1_call1 } = await supabase
+      const { data: page1_call1 } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -137,7 +137,7 @@ describe("MCP query actions - parameter variations", () => {
         .order("id")
         .limit(5);
 
-      const { data: page1_call2 } = await supabase
+      const { data: page1_call2 } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -151,7 +151,7 @@ describe("MCP query actions - parameter variations", () => {
 
   describe("filtering variations", () => {
     it("should filter by entity_type", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -161,7 +161,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should filter by user_id", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("user_id", testUserId);
@@ -171,7 +171,7 @@ describe("MCP query actions - parameter variations", () => {
 
     it("should filter by user_id: null", async () => {
       // Create entity with null user_id
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: null,
@@ -189,7 +189,7 @@ describe("MCP query actions - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       const entityId = `ent_null_filter_${Date.now()}`;
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         id: entityId,
         entity_type: "task",
@@ -202,7 +202,7 @@ describe("MCP query actions - parameter variations", () => {
 
       tracker.trackEntity(entityId);
 
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .is("user_id", null);
@@ -212,7 +212,7 @@ describe("MCP query actions - parameter variations", () => {
 
     it("should search by canonical_name with ILIKE", async () => {
       // Query entities table which has canonical_name as a column
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("user_id", testUserId)
@@ -223,7 +223,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should combine multiple filters", async () => {
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -238,7 +238,7 @@ describe("MCP query actions - parameter variations", () => {
 
   describe("sorting variations", () => {
     it("should sort by id ascending", async () => {
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -257,7 +257,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should sort by id descending", async () => {
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -276,7 +276,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should sort by canonical_name", async () => {
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -297,7 +297,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should sort by multiple columns", async () => {
-      const { data: entities, error } = await supabase
+      const { data: entities, error } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -312,7 +312,7 @@ describe("MCP query actions - parameter variations", () => {
     });
 
     it("should maintain deterministic order", async () => {
-      const { data: call1, error: error1 } = await supabase
+      const { data: call1, error: error1 } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -320,7 +320,7 @@ describe("MCP query actions - parameter variations", () => {
         .order("id")
         .limit(10);
 
-      const { data: call2, error: error2 } = await supabase
+      const { data: call2, error: error2 } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -341,7 +341,7 @@ describe("MCP query actions - parameter variations", () => {
       const limit = 5;
       const offset = 0;
 
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -366,7 +366,7 @@ describe("MCP query actions - parameter variations", () => {
 
   describe("include_merged variations", () => {
     it("should exclude merged entities by default", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")
@@ -379,7 +379,7 @@ describe("MCP query actions - parameter variations", () => {
 
     it("should include merged entities when requested", async () => {
       // This would include entities with merged_into set
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("entity_type", "task")

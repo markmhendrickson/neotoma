@@ -3,7 +3,7 @@ import { useCallback, useSyncExternalStore } from 'react';
 export interface Settings {
   apiBase: string;
   bearerToken: string; // Derived from Ed25519 public key
-  cloudStorageEnabled: boolean; // Whether to store files in Supabase
+  cloudStorageEnabled: boolean; // Whether to store files in cloud storage
 }
 
 function getStorage(): Storage | null {

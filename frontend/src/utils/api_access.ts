@@ -13,7 +13,7 @@ export function isApiAccessEnabled(settings: Settings | undefined | null): boole
 
 export function getApiAccessDisabledMessage(action?: string): string {
   const actionPrefix = action ? `${action} unavailable while Cloud Storage is disabled. ` : '';
-  return `${actionPrefix}Enable "Cloud Storage" in Settings to access Supabase-hosted files.`;
+  return `${actionPrefix}Enable "Cloud Storage" in Settings to access cloud-hosted files.`;
 }
 
 export function assertApiAccess(settings: Settings, action?: string): void {

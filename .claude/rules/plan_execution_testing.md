@@ -1,7 +1,6 @@
 ---
-description: "Ensures agents always implement tests as part of plan execution, not just create skeleton test files"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when executing a plan that includes test tasks: implement full test logic and assertions, not skeleton TODOs; run tests; mark test todos complete only after tests are implemented."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/plan_execution_testing.mdc -->

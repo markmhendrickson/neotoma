@@ -8,18 +8,18 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { compilePayload } from "../../../src/services/payload_compiler.js";
 import { getCapability } from "../../../src/services/capability_registry.js";
 import type { PayloadEnvelope } from "../../../src/services/payload_schema.js";
-import { supabase } from "../../../src/db.js";
+import { db } from "../../../src/db.js";
 
 describe("Payload Submission Integration Tests", () => {
   const testUserId = "00000000-0000-0000-0000-000000000000";
 
   beforeAll(async () => {
     // Clean up test data
-    await supabase
+    await db
       .from("observations")
       .delete()
       .neq("id", "00000000-0000-0000-0000-000000000000");
-    await supabase
+    await db
       .from("payload_submissions")
       .delete()
       .neq("id", "00000000-0000-0000-0000-000000000000");
@@ -27,11 +27,11 @@ describe("Payload Submission Integration Tests", () => {
 
   afterAll(async () => {
     // Clean up test data
-    await supabase
+    await db
       .from("observations")
       .delete()
       .neq("id", "00000000-0000-0000-0000-000000000000");
-    await supabase
+    await db
       .from("payload_submissions")
       .delete()
       .neq("id", "00000000-0000-0000-0000-000000000000");
@@ -79,7 +79,7 @@ describe("Payload Submission Integration Tests", () => {
       expect(result.created).toBe(true);
 
       // Verify payload in database
-      const { data: payload } = await supabase
+      const { data: payload } = await db
         .from("payload_submissions")
         .select("*")
         .eq("id", result.payload_id)
@@ -171,7 +171,7 @@ describe("Payload Submission Integration Tests", () => {
       const result = await compilePayload(envelope, { userId: testUserId });
 
       // Verify observations created
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_payload_id", result.payload_id);
@@ -204,7 +204,7 @@ describe("Payload Submission Integration Tests", () => {
       const result = await compilePayload(envelope, { userId: testUserId });
 
       // Verify observations created
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_payload_id", result.payload_id);
@@ -241,7 +241,7 @@ describe("Payload Submission Integration Tests", () => {
       const result = await compilePayload(envelope, { userId: testUserId });
 
       // Verify observations created
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_payload_id", result.payload_id);

@@ -76,7 +76,7 @@ Both products address fragmented personal data, but serve fundamentally differen
 - **Security:** Sandboxed plugins, privacy-first design
 ### Neotoma
 - **Architecture:** Five-layer architecture (External → Infrastructure → Domain → Application → Presentation)
-- **Storage:** Supabase (PostgreSQL) with row-level security
+- **Storage:** PostgreSQL with row-level security
 - **Processing:** Deterministic extraction (regex/parsing), no LLM in MVP
 - **Extensibility:** MCP actions, external providers (Gmail, Plaid)
 - **Security:** Encryption, immutable truth layer, full provenance

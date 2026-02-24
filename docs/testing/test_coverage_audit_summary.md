@@ -287,8 +287,8 @@ All tests follow requirements from:
 
 ### 1. Real Database Operations
 
-**Before**: Integration tests heavily mocked Supabase queries
-**After**: Integration tests use real database operations per `.cursor/rules/testing_test_quality_enforcement_rules.mdc`
+**Before**: Integration tests heavily mocked database queries
+**After**: Integration tests use real database operations
 
 ### 2. Strong Assertions
 
@@ -315,7 +315,7 @@ All tests follow requirements from:
 **Enhanced validation in** `src/services/__tests__/mcp_oauth.test.ts`:
 - Parse OAuth URLs and validate parameters
 - Test for invalid parameters (e.g., `provider: "oauth"`)
-- Validate against Supabase OAuth 2.1 Server spec
+- Validate against OAuth 2.1 Server spec
 - Negative test cases
 
 ## Coverage Requirements Status
@@ -398,17 +398,14 @@ Some integration tests require additional setup:
 
 **Before:**
 ```typescript
-vi.spyOn(supabase, "from").mockReturnValue({
-  select: vi.fn().mockResolvedValue({ data: fragments }),
-});
+vi.spyOn(db, "query").mockReturnValue({ data: fragments });
 ```
 
 **After:**
 ```typescript
-const { data: fragments, error } = await supabase
-  .from("raw_fragments")
-  .select("*")
-  .eq("entity_type", testEntityType);
+const { data: fragments, error } = await db.query("raw_fragments", {
+  entity_type: testEntityType,
+});
 
 expect(error).toBeNull();
 expect(fragments).toBeDefined();
@@ -427,10 +424,9 @@ expect(processResult.succeeded).toBeGreaterThan(0);
 expect(processResult.failed).toBe(0);
 
 // Verify actual database state
-const { data: recommendations } = await supabase
-  .from("schema_recommendations")
-  .select("*")
-  .eq("entity_type", testEntityType);
+const recommendations = await db.query("schema_recommendations", {
+  entity_type: testEntityType,
+});
 
 expect(recommendations?.length).toBeGreaterThan(0);
 expect(recommendations![0].status).toBe("auto_applied");
@@ -441,32 +437,21 @@ expect(recommendations![0].status).toBe("auto_applied");
 **User ID Handling:**
 ```typescript
 // Test null user_id
-const { data: insertData1 } = await supabase
-  .from("raw_fragments")
-  .insert({ entity_type: type, user_id: null, ... });
+await db.insert("raw_fragments", { entity_type: type, user_id: null, ... });
 
 // Test default UUID
-const { data: insertData2 } = await supabase
-  .from("raw_fragments")
-  .insert({ entity_type: type, user_id: "00000000-0000-0000-0000-000000000000", ... });
+await db.insert("raw_fragments", { entity_type: type, user_id: "00000000-0000-0000-0000-000000000000", ... });
 
-// Query both with .or()
-const { data } = await supabase
-  .from("raw_fragments")
-  .select("*")
-  .eq("entity_type", type)
-  .or(`user_id.is.null,user_id.eq.${testUserId}`);
+// Query both
+const data = await db.query("raw_fragments", { entity_type: type }, { user_id: [null, testUserId] });
 ```
 
 **Foreign Key Constraints:**
 ```typescript
 it("should reject queue items with non-existent user_id", async () => {
-  const { error } = await supabase
-    .from("auto_enhancement_queue")
-    .insert({ user_id: "non-existent-uuid", ... });
-
-  expect(error).toBeDefined();
-  expect(error!.code).toBe("23503"); // FK violation
+  await expect(
+    db.insert("auto_enhancement_queue", { user_id: "non-existent-uuid", ... })
+  ).rejects.toThrow(); // FK violation
 });
 ```
 
@@ -474,7 +459,7 @@ it("should reject queue items with non-existent user_id", async () => {
 
 **Validates actual API requirements:**
 ```typescript
-it("creates URL matching Supabase OAuth 2.1 Server requirements", async () => {
+it("creates URL matching OAuth 2.1 Server requirements", async () => {
   const url = await createAuthUrl(state, codeChallenge, redirectUri);
   const parsedUrl = new URL(url);
   
@@ -512,7 +497,7 @@ it("creates URL matching Supabase OAuth 2.1 Server requirements", async () => {
 
 ### ✅ Mandatory Requirements Met
 
-1. **Real Database Operations**: Integration tests use actual Supabase queries (no mocks)
+1. **Real Database Operations**: Integration tests use actual database queries (no mocks)
 2. **Strong Assertions**: Tests verify correct outcomes, not just absence of errors
 3. **Edge Case Coverage**: Null, default UUID, invalid values tested
 4. **FK Constraint Testing**: Explicit tests for foreign key behavior
@@ -522,7 +507,7 @@ it("creates URL matching Supabase OAuth 2.1 Server requirements", async () => {
 
 ### ✅ Forbidden Patterns Eliminated
 
-1. **No Mocked Supabase Queries**: Integration tests use real operations
+1. **No Mocked Database Queries**: Integration tests use real operations
 2. **No Weak Assertions**: Replaced with strong outcome verification
 3. **No Skipped Edge Cases**: Comprehensive user_id, FK, null value tests
 4. **No Assumed Success**: Explicit database state verification

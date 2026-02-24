@@ -56,7 +56,7 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
 
-  // Prefer Supabase session token, fallback to keys token, then settings
+  // Prefer session token, fallback to keys token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch timeline events
@@ -70,7 +70,7 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
       setLoading(true);
       try {
         const api = getApiClient(bearerToken);
-        const { data, error } = await api.GET("/api/timeline", {
+        const { data, error } = await api.GET("/timeline", {
           params: {
             query: {
               limit,

@@ -111,6 +111,33 @@ describe("CLI admin commands", () => {
     });
   });
 
+  describe("snapshots request", () => {
+    it("should request snapshot recomputation with --json", async () => {
+      const { stdout } = await execAsync(
+        `${CLI_PATH} snapshots request --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("requested");
+      expect(result.requested).toBe(true);
+      expect(result).toHaveProperty("auto_fix");
+      expect(result.auto_fix).toBe(true);
+      expect(result).toHaveProperty("healthy");
+    });
+
+    it("should support dry-run mode", async () => {
+      const { stdout } = await execAsync(
+        `${CLI_PATH} snapshots request --dry-run --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("requested");
+      expect(result.requested).toBe(true);
+      expect(result).toHaveProperty("auto_fix");
+      expect(result.auto_fix).toBe(false);
+    });
+  });
+
   describe("exit codes", () => {
     it("should return exit code 0 on success for whoami", async () => {
       try {
@@ -127,6 +154,17 @@ describe("CLI admin commands", () => {
       try {
         await execAsync(
           `${CLI_PATH} snapshots check --json`
+        );
+        expect(true).toBe(true);
+      } catch {
+        throw new Error("Should not throw on success");
+      }
+    });
+
+    it("should return exit code 0 on success for snapshots request", async () => {
+      try {
+        await execAsync(
+          `${CLI_PATH} snapshots request --json`
         );
         expect(true).toBe(true);
       } catch {

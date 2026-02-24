@@ -1,7 +1,7 @@
 /**
  * Signin Form Component (FU-700)
  * 
- * User signin with email/password or magic link via Supabase Auth
+ * User signin with email/password or magic link via auth
  */
 
 import { useState } from "react";
@@ -33,11 +33,11 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
     setLoading(true);
 
     try {
-      const { supabase } = await import("@/lib/supabase");
+      const { auth } = await import("@/lib/auth");
       
       if (useMagicLink) {
         // Send magic link
-        const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        const { error: magicLinkError } = await auth.auth.signInWithOtp({
           email,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
@@ -45,7 +45,7 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
         });
         
         if (magicLinkError) {
-          logError(magicLinkError, "Supabase Magic Link");
+          logError(magicLinkError, "Magic Link");
           const errorMessage = extractErrorMessage(magicLinkError, "Failed to send magic link");
           console.error("[Magic Link Error] Extracted message:", errorMessage);
           throw new Error(errorMessage);
@@ -55,13 +55,13 @@ export function SigninForm({ onSuccess, onSwitchToSignup, onForgotPassword }: Si
         setMagicLinkSent(true);
       } else {
         // Sign in with password
-        const { data, error: signinError } = await supabase.auth.signInWithPassword({
+        const { data, error: signinError } = await auth.auth.signInWithPassword({
           email,
           password,
         });
         
         if (signinError) {
-          logError(signinError, "Supabase Sign In");
+          logError(signinError, "Sign In");
           const errorMessage = extractErrorMessage(signinError, "Sign in failed");
           console.error("[Sign In Error] Extracted message:", errorMessage);
           throw new Error(errorMessage);

@@ -22,7 +22,7 @@ export function useMCPConfig() {
       try {
         const apiBase = import.meta.env.VITE_API_BASE_URL || "";
         const isDev = import.meta.env.DEV || apiBase === window.location.origin || !apiBase;
-        const apiUrl = isDev ? "/api/server-info" : `${apiBase}/api/server-info`;
+        const apiUrl = isDev ? "/server-info" : `${apiBase}/server-info`;
         const response = await fetch(apiUrl);
         if (response.ok) {
           const data = await response.json();
@@ -48,8 +48,8 @@ export function useMCPConfig() {
         const apiBase = import.meta.env.VITE_API_BASE_URL || "";
         const isDev = import.meta.env.DEV || apiBase === window.location.origin || !apiBase;
         const apiUrl = isDev
-          ? "/api/mcp/oauth/connections"
-          : `${apiBase}/api/mcp/oauth/connections`;
+          ? "/mcp/oauth/connections"
+          : `${apiBase}/mcp/oauth/connections`;
 
         const response = await fetch(apiUrl, {
           credentials: "include",

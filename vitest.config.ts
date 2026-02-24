@@ -4,8 +4,8 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-/** When set to "1", run Supabase-dependent tests (integration, migrations). Default: local-only. */
-const runSupabaseTests = process.env.RUN_SUPABASE_TESTS === "1";
+/** When set to "1", run remote-dependent tests. Default: local-only (SQLite). */
+const runRemoteTests = process.env.RUN_REMOTE_TESTS === "1";
 
 /** When set to "1", run React/frontend tests (jsdom). Default: excluded to avoid ESM/worker issues in default run. */
 const runFrontendTests = process.env.RUN_FRONTEND_TESTS === "1";
@@ -25,16 +25,19 @@ export default defineConfig({
       ["frontend/src/**/*.test.ts", "jsdom"],
     ],
     setupFiles: ["./vitest.setup.ts"],
+    globalSetup: ["./vitest.global_setup.ts"],
     env: {
       NODE_ENV: "test",
     },
     exclude: [
       ...configDefaults.exclude,
       "playwright/tests/**/*",
-      // Imported app tests (data/imports): run only with RUN_SUPABASE_TESTS=1
-      ...(!runSupabaseTests ? ["data/imports/**"] : []),
-      // Integration/service tests that fail on local SQLite (run with RUN_SUPABASE_TESTS=1)
-      ...(!runSupabaseTests
+      // Backup folders (do not run tests from data.backup.*)
+      "data.backup.*/**",
+      // Imported app tests (data/imports): run only with RUN_REMOTE_TESTS=1
+      ...(!runRemoteTests ? ["data/imports/**"] : []),
+      // Integration/service tests that fail on local SQLite (run with RUN_REMOTE_TESTS=1)
+      ...(!runRemoteTests
         ? [
             "tests/integration/entity_queries.test.ts",
             "tests/integration/field_converters.test.ts",

@@ -91,4 +91,29 @@ describe("refineEntityTypeFromExtractedFields", () => {
     const keys = ["merchant_name", "amount_total", "currency"];
     expect(refineEntityTypeFromExtractedFields("note", keys, dynamicCandidates)).toBe("receipt");
   });
+
+  it("keeps receipt when refinement could otherwise pick fixed_cost (trusted domain type)", () => {
+    const keys = [
+      "merchant",
+      "transaction_date",
+      "posting_date",
+      "amount",
+      "category",
+      "account",
+      "status",
+      "transaction_id",
+      "schema_version",
+    ];
+    expect(refineEntityTypeFromExtractedFields("receipt", keys)).toBe("receipt");
+  });
+
+  it("keeps invoice when current type is invoice (trusted domain type)", () => {
+    const keys = ["merchant_name", "amount_total", "currency", "date_purchased"];
+    expect(refineEntityTypeFromExtractedFields("invoice", keys)).toBe("invoice");
+  });
+
+  it("refines unregistered current type when extracted fields strongly match a known schema", () => {
+    const keys = ["merchant_name", "amount_total", "currency", "date_purchased"];
+    expect(refineEntityTypeFromExtractedFields("unknown_document", keys)).toBe("receipt");
+  });
 });

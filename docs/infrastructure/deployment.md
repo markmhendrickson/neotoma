@@ -14,7 +14,7 @@ This document does NOT cover:
 ## Prerequisites
 - Fly.io account (free tier available)
 - Fly CLI installed (`brew install flyctl` or see https://fly.io/docs/hands-on/install-flyctl/)
-- Supabase production project (or use dev for testing)
+- Database (PostgreSQL or SQLite for local)
 - Domain name (optional, for custom domain)
 ## Step 1: Install Fly CLI
 ### macOS
@@ -47,7 +47,7 @@ cd neotoma
 flyctl launch --no-deploy --name neotoma --region <closest-region>
 ```
 **Region Selection:**
-- Choose region closest to your Supabase project
+- Choose region closest to your database
 - Common regions: `iad` (Washington DC), `sjc` (San Jose), `lhr` (London))
 - List all regions: `flyctl regions list`
 **What This Creates:**
@@ -57,10 +57,10 @@ flyctl launch --no-deploy --name neotoma --region <closest-region>
 ## Step 4: Configure Environment Variables
 ### Set Secrets (Never Commit)
 ```bash
-# Set Supabase credentials
+# Set database credentials (if using remote backend)
 flyctl secrets set \
-  SUPABASE_URL="https://your-project.supabase.co" \
-  SUPABASE_SERVICE_KEY="your-service-role-key"
+  NEOTOMA_SQLITE_PATH="" \
+  NEOTOMA_DATA_DIR=""
 # Set bearer token for API auth
 flyctl secrets set \
   ACTIONS_BEARER_TOKEN="your-strong-random-token"

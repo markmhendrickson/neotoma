@@ -408,23 +408,25 @@ function spawnCommand(command, commandArgs, ports, options = {}) {
   });
 }
 
-function parsePortEnv(name, base) {
-  const raw = process.env[name];
+function parsePortEnv(neotoma, legacy, base) {
+  const raw = process.env[neotoma] || process.env[legacy];
   if (!raw) {
-    throw new Error(`[with-branch-ports] Missing ${name} in environment for nested invocation`);
+    throw new Error(
+      `[with-branch-ports] Missing ${neotoma} or ${legacy} in environment for nested invocation`
+    );
   }
   const port = Number(raw);
   if (Number.isNaN(port)) {
-    throw new Error(`[with-branch-ports] Invalid ${name} value "${raw}"`);
+    throw new Error(`[with-branch-ports] Invalid ${legacy} value "${raw}"`);
   }
   return { port, offset: port - base };
 }
 
 function buildPortsFromEnv() {
   return {
-    http: parsePortEnv('HTTP_PORT', BASE_HTTP_PORT),
-    vite: parsePortEnv('VITE_PORT', BASE_VITE_PORT),
-    ws: parsePortEnv('WS_PORT', BASE_WS_PORT),
+    http: parsePortEnv('NEOTOMA_HTTP_PORT', 'HTTP_PORT', BASE_HTTP_PORT),
+    vite: parsePortEnv('VITE_PORT', 'VITE_PORT', BASE_VITE_PORT),
+    ws: parsePortEnv('NEOTOMA_WS_PORT', 'WS_PORT', BASE_WS_PORT),
   };
 }
 
@@ -459,8 +461,10 @@ async function main() {
   const { http, vite, ws } = await assignPorts(previousState?.ports);
 
   process.env.HTTP_PORT = String(http.port);
+  process.env.NEOTOMA_HTTP_PORT = String(http.port);
   process.env.VITE_PORT = String(vite.port);
   process.env.WS_PORT = String(ws.port);
+  process.env.NEOTOMA_WS_PORT = String(ws.port);
   process.env.VITE_WS_PORT = String(ws.port); // Expose to Vite frontend
   process.env.PORT = String(vite.port);
   process.env.BRANCH_PORTS_FILE = STATE_FILE;

@@ -23,10 +23,6 @@ config({ override: true });
 
 // Credentials to migrate
 const credentialsToMigrate = [
-  "SUPABASE_URL",
-  "SUPABASE_SERVICE_KEY",
-  "DEV_SUPABASE_URL",
-  "DEV_SUPABASE_SERVICE_KEY",
   "DEV_OPENAI_API_KEY",
   "PROD_OPENAI_API_KEY",
   "ACTIONS_BEARER_TOKEN",

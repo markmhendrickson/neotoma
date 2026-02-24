@@ -6,7 +6,7 @@
 
 import { expect } from "@playwright/test";
 import { test } from "../fixtures/servers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 test.describe("Entity Detail Component", () => {
   const testUserId = "test-user-entity-detail";
@@ -16,16 +16,16 @@ test.describe("Entity Detail Component", () => {
   test.afterAll(async () => {
     // Cleanup
     if (createdEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
     }
   });
 
   test("should render entity detail view", async ({ page }) => {
     // Create test entity
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -50,7 +50,7 @@ test.describe("Entity Detail Component", () => {
 
   test("should display entity relationships", async ({ page }) => {
     // Create entities with relationship
-    const { data: entity1 } = await supabase
+    const { data: entity1 } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -64,7 +64,7 @@ test.describe("Entity Detail Component", () => {
       createdEntityIds.push(entity1.id);
     }
 
-    const { data: entity2 } = await supabase
+    const { data: entity2 } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -79,7 +79,7 @@ test.describe("Entity Detail Component", () => {
     }
 
     // Create relationship
-    const { data: relationship } = await supabase
+    const { data: relationship } = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -97,7 +97,7 @@ test.describe("Entity Detail Component", () => {
     
     // Verify relationships section exists (implementation dependent)
     // For now, verify relationship exists in database
-    const { data: relationships } = await supabase
+    const { data: relationships } = await db
       .from("relationships")
       .select("*")
       .eq("source_entity_id", entity1!.id);
@@ -108,13 +108,13 @@ test.describe("Entity Detail Component", () => {
 
     // Cleanup
     if (relationship) {
-      await supabase.from("relationships").delete().eq("id", relationship.id);
+      await db.from("relationships").delete().eq("id", relationship.id);
     }
   });
 
   test("should display entity observations", async ({ page }) => {
     // Create test source
-    const { data: source } = await supabase
+    const { data: source } = await db
       .from("sources")
       .insert({
         user_id: testUserId,
@@ -131,7 +131,7 @@ test.describe("Entity Detail Component", () => {
     }
 
     // Create entity
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -146,7 +146,7 @@ test.describe("Entity Detail Component", () => {
     }
 
     // Create observation
-    const { data: observation } = await supabase
+    const { data: observation } = await db
       .from("observations")
       .insert({
         entity_id: entity!.id,
@@ -166,7 +166,7 @@ test.describe("Entity Detail Component", () => {
     await page.waitForLoadState("networkidle");
     
     // Verify observations exist in database
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("observations")
       .select("*")
       .eq("entity_id", entity!.id);
@@ -176,12 +176,12 @@ test.describe("Entity Detail Component", () => {
     expect(observations![0].id).toBe(observation!.id);
 
     // Cleanup
-    await supabase.from("observations").delete().eq("id", observation!.id);
+    await db.from("observations").delete().eq("id", observation!.id);
   });
 
   test("should support entity correction workflow", async ({ page }) => {
     // Create test entity
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -230,7 +230,7 @@ test.describe("Entity Detail Component", () => {
 
   test("should navigate back to list from detail", async ({ page }) => {
     // Create test entity
-    const { data: entity } = await supabase
+    const { data: entity } = await db
       .from("entities")
       .insert({
         user_id: testUserId,

@@ -1,7 +1,6 @@
 ---
-description: "Ensures the README.md file always reflects the current status of all releases, maintaining accurate project status visibility"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when release status.md changes: pre-commit hook updates README release section; or run scripts/update_readme_release_status.py manually; use exact status values from workflow."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/release_status_readme_update.mdc -->

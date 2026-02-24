@@ -4,8 +4,11 @@
 
 // Set required environment variables BEFORE any imports
 // Config module reads env vars at import time, so this must be set first
-process.env.SUPABASE_OAUTH_CLIENT_ID = "test-client-id";
-process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.NEOTOMA_OAUTH_CLIENT_ID = "test-client-id";
+const testEncryptionKey =
+  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = testEncryptionKey;
+process.env.MCP_TOKEN_ENCRYPTION_KEY = testEncryptionKey;
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import {
@@ -20,11 +23,12 @@ import path from "path";
 import { rmSync } from "fs";
 
 async function loadLocalOAuthModule(tempDir: string) {
-  process.env.NEOTOMA_STORAGE_BACKEND = "local";
   process.env.NEOTOMA_DATA_DIR = tempDir;
   process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
-  process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = key;
+  process.env.MCP_TOKEN_ENCRYPTION_KEY = key;
 
   const moduleUrl = new URL("../mcp_oauth.js", import.meta.url).href;
   const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
@@ -32,11 +36,12 @@ async function loadLocalOAuthModule(tempDir: string) {
 }
 
 async function loadLocalAuthModule(tempDir: string) {
-  process.env.NEOTOMA_STORAGE_BACKEND = "local";
   process.env.NEOTOMA_DATA_DIR = tempDir;
   process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
-  process.env.MCP_TOKEN_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = key;
+  process.env.MCP_TOKEN_ENCRYPTION_KEY = key;
 
   const moduleUrl = new URL("../local_auth.js", import.meta.url).href;
   const cacheBustUrl = `${moduleUrl}?cacheBust=${Date.now()}`;
@@ -77,13 +82,13 @@ describe("MCP OAuth Service", () => {
     const originalEnv = { ...process.env };
 
     beforeEach(() => {
-      // Ensure SUPABASE_OAUTH_CLIENT_ID is set (required for OAuth 2.1 Server)
-      process.env.SUPABASE_OAUTH_CLIENT_ID = "test-client-id";
-      process.env.DEV_SUPABASE_URL = "https://test-project.supabase.co";
+      // Ensure NEOTOMA_OAUTH_CLIENT_ID is set (required for OAuth 2.1 Server)
+      process.env.NEOTOMA_OAUTH_CLIENT_ID = "test-client-id";
+      process.env.DEV_AUTH_URL = "https://test-project.example.co";
     });
 
     afterEach(() => {
-      // Restore original env, but keep SUPABASE_OAUTH_CLIENT_ID if it was set
+      // Restore original env, but keep NEOTOMA_OAUTH_CLIENT_ID if it was set
       Object.keys(process.env).forEach(key => {
         if (!(key in originalEnv)) {
           delete process.env[key];
@@ -91,14 +96,14 @@ describe("MCP OAuth Service", () => {
           process.env[key] = originalEnv[key];
         }
       });
-      // Ensure SUPABASE_OAUTH_CLIENT_ID is always set for tests
-      process.env.SUPABASE_OAUTH_CLIENT_ID = "test-client-id";
+      // Ensure NEOTOMA_OAUTH_CLIENT_ID is always set for tests
+      process.env.NEOTOMA_OAUTH_CLIENT_ID = "test-client-id";
     });
 
     it("creates valid OAuth authorization URL", async () => {
       const state = "test-state-123";
       const codeChallenge = "test-challenge-456";
-      const redirectUri = "http://localhost:8080/api/mcp/oauth/callback";
+      const redirectUri = "http://localhost:8080/mcp/oauth/callback";
 
       const url = await createAuthUrl(state, codeChallenge, redirectUri);
       const parsedUrl = new URL(url);
@@ -109,7 +114,7 @@ describe("MCP OAuth Service", () => {
         expect(parsedUrl.searchParams.get("state")).toBe("test-state-123");
         return;
       }
-      // Supabase backend: OAuth 2.1 Server endpoint
+      // OAuth 2.1 Server endpoint
       expect(parsedUrl.pathname).toBe("/auth/v1/oauth/authorize");
       expect(parsedUrl.searchParams.get("client_id")).toBe("test-client-id");
       expect(parsedUrl.searchParams.get("state")).toBe("test-state-123");
@@ -147,7 +152,7 @@ describe("MCP OAuth Service", () => {
       expect(provider).toBeNull();
     });
 
-    it("creates URL matching Supabase OAuth 2.1 Server requirements", async () => {
+    it("creates URL matching OAuth 2.1 Server requirements", async () => {
       const url = await createAuthUrl("valid-state-10ch", "challenge", "http://localhost/callback");
       const parsedUrl = new URL(url);
       if (parsedUrl.pathname.endsWith("/local-login")) {
@@ -175,7 +180,7 @@ describe("MCP OAuth Service", () => {
       expect(parsedUrl.searchParams.get("client_id")).toBe("test-client-id");
     });
 
-    it("uses configured SUPABASE_OAUTH_CLIENT_ID when set", async () => {
+    it("uses configured NEOTOMA_OAUTH_CLIENT_ID when set", async () => {
       const url = await createAuthUrl("valid-state-10ch", "challenge", "http://localhost/callback");
       const parsedUrl = new URL(url);
       if (parsedUrl.pathname.endsWith("/local-login")) {
@@ -311,11 +316,12 @@ describe("MCP OAuth Service", () => {
 
   describe("Encryption Key Validation", () => {
     it("validates encryption key format", () => {
-      // Encryption key validation happens at module import time
-      // This test verifies the key is set correctly
-      expect(process.env.MCP_TOKEN_ENCRYPTION_KEY).toBeDefined();
-      expect(process.env.MCP_TOKEN_ENCRYPTION_KEY?.length).toBe(64);
-      expect(process.env.MCP_TOKEN_ENCRYPTION_KEY).toMatch(/^[0-9a-fA-F]{64}$/);
+      // Service reads NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY || MCP_TOKEN_ENCRYPTION_KEY
+      const key =
+        process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY || process.env.MCP_TOKEN_ENCRYPTION_KEY;
+      expect(key).toBeDefined();
+      expect(key!.length).toBe(64);
+      expect(key).toMatch(/^[0-9a-fA-F]{64}$/);
     });
   });
 

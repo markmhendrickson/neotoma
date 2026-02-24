@@ -342,7 +342,7 @@ const snapshot = await relationshipsService.getRelationshipSnapshot(
 
 // Trace amount field to its source
 const amountObservationId = snapshot.provenance.amount;
-const { data: observation } = await supabase
+const { data: observation } = await db
   .from("relationship_observations")
   .select("source_id, observed_at, metadata")
   .eq("id", amountObservationId)

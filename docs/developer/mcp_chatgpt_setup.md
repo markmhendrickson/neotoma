@@ -30,7 +30,7 @@ The Neotoma HTTP server exposes REST endpoints that ChatGPT can call as Actions.
 ### Option B: Production Deployment
 Deploy the HTTP server to a cloud provider (see `docs/infrastructure/deployment.md`). Ensure:
 - Server is accessible via HTTPS
-- Environment variables are configured (`SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, etc.)
+- Environment variables are configured (see [Getting started](getting_started.md))
 - Server is running on the configured port
 ## Step 2: Configure Authentication
 Neotoma uses bearer token authentication. You have two options:
@@ -119,7 +119,7 @@ The OpenAPI schema includes these actions:
 ### Issue: Actions appear but don't work
 **Solutions:**
 - Check server logs for errors
-- Verify Supabase credentials are configured
+- Verify environment and storage are configured
 - Test endpoints directly: `curl -H "Authorization: Bearer YOUR_TOKEN" https://your-server/store_record`
 - Review OpenAPI schema matches server implementation
 ## Differences: Cursor vs ChatGPT
@@ -141,8 +141,6 @@ npm run build:server
 # Start HTTP server
 npm run dev:server
 # Set environment variables
-export SUPABASE_URL="https://your-project-id.supabase.co"
-export SUPABASE_SERVICE_KEY="your-service-role-key-here"
 export ACTIONS_BEARER_TOKEN=your-token-here
 # Create tunnel (local development)
 ngrok http 8080

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 import fs from "fs/promises";
 import path from "path";
@@ -131,7 +131,7 @@ describe("Field Converters Integration", () => {
     });
 
     // Create observation with converted values
-    const { data: observation, error: obsError } = await supabase
+    const { data: observation, error: obsError } = await db
       .from("observations")
       .insert({
         entity_id: entityId,
@@ -150,7 +150,7 @@ describe("Field Converters Integration", () => {
 
     // Store original values in raw_fragments
     for (const [key, value] of Object.entries(validationResult.originalValues)) {
-      await supabase.from("raw_fragments").insert({
+      await db.from("raw_fragments").insert({
         source_id: storageResult.sourceId,
         user_id: TEST_USER_ID,
         entity_type: entityType,
@@ -165,7 +165,7 @@ describe("Field Converters Integration", () => {
     }
 
     // Verify raw_fragments contain original numeric timestamps
-    const { data: fragments } = await supabase
+    const { data: fragments } = await db
       .from("raw_fragments")
       .select("*")
       .eq("source_id", storageResult.sourceId)
@@ -188,9 +188,9 @@ describe("Field Converters Integration", () => {
     expect(updatedAtFragment!.fragment_envelope.converted_to).toBe("2025-01-16T00:00:00.000Z");
 
     // Cleanup
-    await supabase.from("observations").delete().eq("id", observation!.id);
-    await supabase.from("raw_fragments").delete().eq("source_id", storageResult.sourceId);
-    await supabase.from("sources").delete().eq("id", storageResult.sourceId);
+    await db.from("observations").delete().eq("id", observation!.id);
+    await db.from("raw_fragments").delete().eq("source_id", storageResult.sourceId);
+    await db.from("sources").delete().eq("id", storageResult.sourceId);
   });
 
   it("handles multiple timestamp formats with different converters", async () => {

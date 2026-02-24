@@ -1,5 +1,5 @@
 // Unit tests for local entity embedding (sqlite-vec)
-// Requires NEOTOMA_STORAGE_BACKEND=local and OPENAI_API_KEY set (vitest.setup provides these)
+// Requires OPENAI_API_KEY set (vitest.setup provides this)
 
 import { describe, it, expect, beforeEach } from "vitest";
 import {

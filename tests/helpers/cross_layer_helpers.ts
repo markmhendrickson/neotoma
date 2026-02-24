@@ -109,6 +109,22 @@ export function extractSourceId(result: Record<string, unknown>): string {
  * Extract entity IDs created during a store operation
  */
 export function extractCreatedEntityIds(result: Record<string, unknown>): string[] {
-  const entities = result.entities_created as Array<{ id: string }> | undefined;
-  return entities?.map((e) => e.id) ?? [];
+  const legacy = result.entities_created as Array<{ id?: unknown }> | number | undefined;
+  if (Array.isArray(legacy)) {
+    return legacy
+      .map((e) => (typeof e?.id === "string" ? e.id : null))
+      .filter((id): id is string => id !== null);
+  }
+
+  const entities = result.entities as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(entities)) {
+    return entities
+      .map((e) => {
+        const candidate = e["entity_id"] ?? e["entityId"] ?? e["id"];
+        return typeof candidate === "string" ? candidate : null;
+      })
+      .filter((id): id is string => id !== null && id.length > 0);
+  }
+
+  return [];
 }

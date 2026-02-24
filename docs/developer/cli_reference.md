@@ -29,24 +29,25 @@ The global `neotoma` runs the built files in `dist/`, not the TypeScript source.
 
 ### Environment: `neotoma dev` / `neotoma prod`
 
-To start the CLI in a specific environment, pass `dev` or `prod` as the first argument. This sets `NEOTOMA_ENV` (and `NODE_ENV`) before any config is loaded, so API ports, data paths, and session preference match that environment.
+To target a specific API environment, pass `dev` or `prod` as the first argument or use `--env`.
 
-- `neotoma dev` — development (default port 8080, dev data paths).
-- `neotoma prod` — production (port 8180, prod data paths).
+- `neotoma dev` — development API (port 8080).
+- `neotoma prod` — production API (port 8180).
 
-Examples: `neotoma prod`, `neotoma dev`, `neotoma prod storage info`. Equivalent to using the `--env` option for the session; the positional form also affects config and server startup when the CLI starts servers.
+Examples: `neotoma prod`, `neotoma dev`, `neotoma prod storage info`. Equivalent to using `--env`.
 
-### Default: interactive session with servers (no arguments)
+### Default: interactive session (use-existing only)
 
 When you run `neotoma` with **no arguments**, the CLI finds the repo from the current directory, from `~/.config/neotoma/config.json` (set by `neotoma init`), or from `NEOTOMA_REPO_ROOT`. If no repo is found, it prompts to run `neotoma init` (which can set the repo path so future runs work from any cwd). With a repo, the CLI:
 
-1. Asks for **server policy** (unless already set by flag or config): **(s) Start** API for this session, or **(e) Use existing** (connect only; fail if nothing reachable on 8080/8180). The choice is saved to config for next run.
-2. If Start: picks two free ports, starts dev and prod API servers in watch mode, then enters the session.
-3. If Use existing: probes 8180 and 8080; if none respond, exits with a clear message. Otherwise connects to the first reachable and enters the session.
-4. Enters an **interactive session** with a `neotoma> ` prompt. Commands use the session server (or existing one).
-5. When you type `exit`, `quit`, or press Ctrl+D, the session ends and any servers started by this run are stopped.
+1. Uses **use-existing** policy only (no automatic server start).
+2. Discovers running API instances from session ports, default ports (`8080`, `8180`), remembered ports, and optional extra configured ports.
+3. Applies `--env` as a preference when selecting among multiple detected instances.
+4. If multiple candidates remain, prompts you to choose the instance.
+5. If none respond, shows fallback startup guidance and the command menu.
+6. Enters an **interactive session** with a `neotoma> ` prompt.
 
-**Non-interactive (e.g. agents):** When stdout is not a TTY, the CLI does **not** prompt. It defaults to **use-existing** (connect only). To start servers from a script or agent, pass `--servers=start`. To force connect-only, pass `--no-servers` or `--servers=use-existing`. If **no command** is given and stdout is not a TTY (e.g. an agent runs `neotoma` with no args), the CLI prints: "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options." and exits with code 1.
+**Non-interactive (e.g. agents):** When stdout is not a TTY, the CLI does **not** prompt. It uses **use-existing** (connect only). If **no command** is given and stdout is not a TTY (e.g. an agent runs `neotoma` with no args), the CLI prints: "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options." and exits with code 1.
 
 **Direct invocation and session parity:** Every action available at the interactive `neotoma>` prompt is available as a direct CLI call: `neotoma <top-level> [subcommand] [options] [args]`. Examples: `neotoma entities list`, `neotoma relationships list <entityId>`, `neotoma storage info`. Agents and scripts should always use direct invocation; do not depend on entering the interactive session. See [CLI overview](cli_overview.md) and the command sections below for the full command tree.
 
@@ -58,15 +59,12 @@ To show the intro and then a **command menu** (prompt `> ` and `? for shortcuts`
 To enter a session without starting any servers (connect to an already-running API):
 
 - `neotoma --no-servers` or `neotoma --servers=use-existing`  
-  Probes 8180 then 8080; if none respond, exits with instructions. Otherwise enters the session using that port.
+  Connect-only startup. Detects all available local API instances (not only `8080`/`8180`), prefers `--env` matches when available, and prompts when multiple candidates remain.
 
-To start dev and prod servers in the **background** and exit (for tools like Claude Code that invoke the CLI non-interactively):
+To start the API in the **background**:
 
-- `neotoma --background`  
-  Picks ports, starts both servers detached, writes PIDs and ports to `~/.config/neotoma/background_servers.json`, prints URLs and PIDs, then exits. By default no HTTPS tunnel is started; add `--tunnel` to enable (ngrok/cloudflared). Stop them with:
-
-- `neotoma stop`  
-  Reads the state file, sends SIGTERM to the dev and prod processes, then removes the state file. Use after `neotoma --background`.
+- `neotoma api start --background --env dev` (or `--env prod`)  
+  Starts the selected environment only and writes env-specific PID/log files.
 
 ## npm scripts summary
 
@@ -121,7 +119,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 |--------|-------------|
 | `test` | Run Vitest |
 | `test:unit` | Vitest, skip migrations |
-| `test:supabase` | Vitest with Supabase tests |
+| `test:remote` | Vitest with remote DB tests (RUN_REMOTE_TESTS=1) |
 | `test:frontend` | Vitest for frontend |
 | `test:integration` | Integration tests |
 | `test:agent-mcp` | Agent MCP tests |
@@ -134,7 +132,7 @@ Scripts that start servers use the port(s) above when free; if a port is in use,
 | `validate:coverage` | Validate coverage map |
 | `validate:doc-deps` | Validate doc dependencies |
 | `doctor` | Project health check |
-| `check:advisors` | Supabase advisors (RLS, etc.) |
+| `check:advisors` | Database advisors (RLS, etc.) |
 
 ### Database and schema
 
@@ -172,26 +170,21 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 
 ### Global options
 - `--base-url <url>`: Override API base URL.
+- `--env <env>`: Environment selector (`dev` or `prod`). Required for server commands such as `api start`, `api stop`, `api logs`, and `watch`.
 - `--json`: Output machine readable JSON.
 - `--pretty`: Output formatted JSON.
 - `--no-session`: With no arguments, show intro then command menu (prompt `> `, `? for shortcuts`). No servers started.
-- `--no-servers`: With no arguments, enter session without starting dev/prod servers.
-- `--background`: With no arguments, start dev and prod servers in the background and exit; stop with `neotoma stop`.
-- `--tunnel`: Start HTTPS tunnel (ngrok/cloudflared) with dev/prod servers. Off by default; use with no args (session) or with `--background` to enable remote MCP access.
+- `--no-servers`: With no arguments, enter session with connect-only behavior.
+- `--tunnel`: Start HTTPS tunnel (ngrok/cloudflared) with server start commands.
 - `--no-update-check`: Disable the update availability check. When enabled (default), the CLI checks the npm registry for a newer version and, if available, prints a one-line notice to stderr. The notice is never shown when `--json` is used.
 
 ### Update check (stderr notice)
 
 When the CLI runs in an interactive context (TTY, not `--json`), it may check the npm registry for a newer version of the package. If an update is available, it writes one or two lines to **stderr only** (e.g. "Update available: neotoma 0.2.15 → 0.2.16" and "Run: npm i -g neotoma@latest"). The check is fire-and-forget and does not block startup. To disable: set `NO_UPDATE_NOTIFIER=1` or pass `--no-update-check`. The check is also skipped when `CI` is set. Cache: `~/.config/neotoma/update_check.json` with a 24-hour TTL so the registry is not queried on every run.
 
-### stop
-
-- `neotoma stop`: Stop dev and prod servers started with `neotoma --background`. Reads `~/.config/neotoma/background_servers.json`, sends SIGTERM to the stored PIDs, then removes the file. If the file is missing or invalid, prints "No background servers found."
-
 ### Session (interactive prompt)
 
-- `neotoma session`: Start an interactive session with a persistent `neotoma> ` prompt. Run subcommands (e.g. `storage info`, `api status`) without restarting the CLI. Similar to a native shell or IDE command prompt. Does **not** start servers by default.
-  - `--servers`: Start dev and prod API servers in watch mode; they stop when you exit the session.
+- `neotoma session`: Start an interactive session with a persistent `neotoma> ` prompt. Run subcommands (e.g. `storage info`, `api status`) without restarting the CLI. Similar to a native shell or IDE command prompt. Does **not** start servers automatically.
   - Type `help` to list commands.
   - Type `exit` or `quit`, or press Ctrl+D, to end the session.
   - Arguments with spaces can be quoted: `request --operation "GET /api/entities"`.
@@ -210,11 +203,12 @@ neotoma session --servers
 
 ### Initialization
 
-- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and optionally generates encryption keys. If run from the repo (or a subdirectory), saves the repo path to `~/.config/neotoma/config.json` and adds `NEOTOMA_REPO_ROOT` to `.env.example` so `neotoma` can start servers from any cwd. If run from outside the repo, prompts for an optional repo path to save.
+- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and optionally generates encryption keys. If run from the repo (or a subdirectory), saves the repo path to `~/.config/neotoma/config.json` and adds `NEOTOMA_REPO_ROOT` to `.env.example` so `neotoma` can start servers from any cwd. If run from outside the repo, prompts for an optional repo path to save. In interactive mode (TTY), init prompts to create `.env` from `.env.example` when `.env` is missing, then optionally to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
   - `--data-dir <path>`: Custom data directory path. Default: `./data` (if in repo) or `~/neotoma/data` (if installed globally).
   - `--generate-keys`: Generate encryption keys for privacy-first mode.
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
+  - `--skip-env`: Skip interactive `.env` creation and variable prompts (e.g. for CI or non-interactive use).
 
 **Example:**
 ```bash
@@ -264,15 +258,16 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
     - **Windsurf:** `mcp_config.json` (project or user-level with `--user-level`):
       - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
       - Windows: `%APPDATA%\Codeium\Windsurf\mcp_config.json`
-  - For each found config, checks for `neotoma-dev` and `neotoma-prod` server entries (based on `command` script names or `url` patterns).
+  - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns).
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
   - Uses Neotoma repo root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`.
+  - After install, shows a reminder to run `neotoma cli-instructions check`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
 
 **Dev vs Prod detection patterns:**
 
-- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh` or `run_neotoma_mcp_stdio_dev_watch.sh`, or `url` contains `localhost:8080/mcp` or `127.0.0.1:8080/mcp`.
-- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh` or `run_neotoma_mcp_stdio_prod_watch.sh`, or `url` contains `localhost:8180/mcp`, `127.0.0.1:8180/mcp`, or `neotoma.fly.dev/mcp`.
+- **Dev:** `command` contains `run_neotoma_mcp_stdio.sh` or `run_neotoma_mcp_stdio_dev_watch.sh`, or `url` contains `localhost:8080/mcp` or `127.0.0.1:8080/mcp`. During connect-only sessions, the currently selected instance port is also considered for dev if the active env is dev.
+- **Prod:** `command` contains `run_neotoma_mcp_stdio_prod.sh` or `run_neotoma_mcp_stdio_prod_watch.sh`, or `url` contains `localhost:8180/mcp`, `127.0.0.1:8180/mcp`, or `neotoma.fly.dev/mcp`. During connect-only sessions, the currently selected instance port is also considered for prod if the active env is prod.
 
 **Example workflow:**
 
@@ -332,12 +327,24 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--start-date <date>`
   - `--end-date <date>`
   - `--event-type <type>`
+  - `--entity-id <id>`: Filter by entity ID
+  - `--user-id <userId>`: Filter by user ID (default: authenticated user)
   - `--limit <n>`
   - `--offset <n>`
 
 ### Schemas
 - `neotoma schemas list`
 - `neotoma schemas get <entityType>`
+
+### Interpretations
+- `neotoma interpretations reinterpret [sourceId]`:
+  - `--source-id <id>`: Source ID to reinterpret.
+  - `--interpretation-id <id>`: Resolve source from an existing interpretation.
+  - `--interpretation-config <json>`: Override interpretation settings for this run.
+- `neotoma interpretations interpret-uninterpreted`:
+  - `--limit <n>`: Max number of sources to process (default: 50).
+  - `--dry-run`: Return source IDs that would be interpreted without running interpretation.
+  - `--interpretation-config <json>`: Optional settings applied to each backfill run.
 
 ### Store
 - `neotoma store`:
@@ -367,8 +374,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 ### Storage
 - `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).
-  - With local backend (`NEOTOMA_STORAGE_BACKEND=local` or unset): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
-  - With Supabase backend: notes that data is in Supabase (Postgres + Storage bucket `sources`).
+  - Local backend (only supported backend): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
 
 ### Backup and restore
 - `neotoma backup create`: Create a backup of the local database, sources, and logs.
@@ -395,7 +401,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 ### Debugging and testing (e.g. with an agent)
 - **When debugging CLI-related issues, always check the CLI log first.** In dev the default path is `~/.config/neotoma/cli.log`. If the user passed `--log-file`, check that path. For session server output, check `<repo>/data/logs/session-dev.log` or `session-prod.log`. For background API, check `neotoma api logs` or `~/.config/neotoma/logs/api.log`. See **Where to look for what (logs)** in `docs/operations/troubleshooting.md` for a per-component log map.
 - **Dev** (default): CLI appends stdout and stderr to `~/.config/neotoma/cli.log`. Use `--no-log-file` to disable.
-- **Prod** (`NEOTOMA_ENV=production` or `NODE_ENV=production`): No log file by default; use `--log-file <path>` to enable.
+- **Prod** (`NEOTOMA_ENV=production`): No log file by default; use `--log-file <path>` to enable.
 - `--log-file <path>`: Append CLI output to this path (overrides env default).
 - `--no-log-file`: Do not write to the log file (dev only; prod has no default log file).
 - `--debug`: Emit detailed initialization logs to stderr when starting a session.

@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import fs from "fs";
 import path from "path";
@@ -34,9 +34,9 @@ describe("MCP Store with Unstructured Files - Integration", () => {
   beforeEach(async () => {
     // Cleanup test data
     if (createdSourceIds.length > 0) {
-      await supabase.from("observations").delete().in("source_id", createdSourceIds);
-      await supabase.from("raw_fragments").delete().in("source_id", createdSourceIds);
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("observations").delete().in("source_id", createdSourceIds);
+      await db.from("raw_fragments").delete().in("source_id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
     
@@ -56,9 +56,9 @@ describe("MCP Store with Unstructured Files - Integration", () => {
   afterAll(async () => {
     // Final cleanup
     if (createdSourceIds.length > 0) {
-      await supabase.from("observations").delete().in("source_id", createdSourceIds);
-      await supabase.from("raw_fragments").delete().in("source_id", createdSourceIds);
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("observations").delete().in("source_id", createdSourceIds);
+      await db.from("raw_fragments").delete().in("source_id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
     }
     
     for (const file of tempFiles) {

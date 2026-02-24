@@ -1,7 +1,6 @@
 ---
-description: "Automatically detects release intent from user patterns and triggers the release creation workflow"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when user mentions new release, internal release, create release, release vX.Y.Z, split out features, prior release, or version numbers in release context: confirm then run release workflow."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/release_detection.mdc -->

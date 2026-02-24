@@ -1,7 +1,6 @@
 ---
-description: "Automatically detects bug fix intent from user patterns and triggers the bug fix workflow"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when user mentions bug, error, fix, broken, not working, failing, issue, regression, or provides error messages/stack traces: run bug fix workflow (identify feature, classify, add regression test, fix)."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/bug_fix_detection.mdc -->

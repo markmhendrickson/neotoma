@@ -32,7 +32,7 @@ flowchart LR
     MCP[MCP Server<br/>Neotoma]
     App[Application Layer<br/>Actions/Workflows]
     Domain[Domain Layer<br/>Services]
-    DB[(PostgreSQL<br/>Supabase)]
+    DB[(PostgreSQL<br/>Database)]
     AI -->|MCP Protocol| MCP
     MCP -->|Validate & Route| App
     App -->|Orchestrate| Domain
@@ -89,8 +89,8 @@ flowchart LR
 3. **Backend initiates** OAuth flow via `POST /api/mcp/oauth/initiate`
 4. **Backend returns** authorization URL with PKCE challenge
 5. **User opens** authorization URL in browser
-6. **User signs in** via Supabase Auth and approves connection
-7. **Supabase redirects** to callback URL with authorization code
+6. **User signs in** via auth provider and approves connection
+7. **Auth provider redirects** to callback URL with authorization code
 8. **Backend exchanges** code for access token and refresh token
 9. **Backend stores** encrypted refresh token in database
 10. **MCP client polls** `GET /api/mcp/oauth/status` until status is "active"
@@ -129,11 +129,11 @@ flowchart LR
 
 **Authentication Flow:**
 
-1. **User signs in** to Neotoma web UI via Supabase Auth
-2. **Frontend obtains** `access_token` (JWT) from Supabase session
+1. **User signs in** to Neotoma web UI via auth provider
+2. **Frontend obtains** `access_token` (JWT) from auth session
 3. **User copies** session token from MCP Setup page
 4. **MCP client passes** session token in environment variable
-5. **MCP server validates** token using Supabase Auth
+5. **MCP server validates** token using auth provider
 6. **MCP server extracts** `user_id` from validated token
 7. **All subsequent actions** use authenticated `user_id`
 
@@ -143,7 +143,7 @@ flowchart LR
 // Set in MCP client configuration (deprecated)
 {
   "env": {
-    "NEOTOMA_SESSION_TOKEN": "supabase_access_token_here"
+    "NEOTOMA_SESSION_TOKEN": "access_token_here"
   }
 }
 ```
@@ -254,12 +254,13 @@ flowchart LR
 
 ### 2.6 Correction and Re-[interpretation](../vocabulary/canonical_terms.md#interpretation) Operations
 
-| Action        | Purpose                                                                                                                                   | Consistency | Deterministic | MVP Status |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
-| `correct`     | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)                                               | Strong      | Yes           | MVP        |
-| `reinterpret` | Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) | Strong      | Yes           | MVP        |
+| Action                  | Purpose                                                                                                                                   | Consistency | Deterministic | MVP Status |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------------- | ---------- |
+| `correct`               | Create high-priority correction [observation](../vocabulary/canonical_terms.md#observation)                                               | Strong      | Yes           | MVP        |
+| `reinterpret`           | Re-run AI [interpretation](../vocabulary/canonical_terms.md#interpretation) on existing [source](../vocabulary/canonical_terms.md#source) | Strong      | Yes           | MVP        |
+| `interpret_uninterpreted` | Interpret stored [sources](../vocabulary/canonical_terms.md#source) with zero prior [interpretation](../vocabulary/canonical_terms.md#interpretation) runs (supports `limit` and `dry_run`) | Strong      | Yes           | MVP        |
 
-**Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override AI [extraction](../vocabulary/canonical_terms.md#extraction). `reinterpret` creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones.
+**Note:** `correct` creates priority-1000 [observations](../vocabulary/canonical_terms.md#observation) that override AI [extraction](../vocabulary/canonical_terms.md#extraction). `reinterpret` creates new [observations](../vocabulary/canonical_terms.md#observation) without modifying existing ones. `interpret_uninterpreted` orchestrates repeated `reinterpret` runs for sources that do not have any prior interpretation records.
 
 ### 2.6 Using the Unified `store` Action
 
@@ -313,6 +314,29 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 }
 ```
 
+**Combined Request (Structured + Unstructured in one call):**
+
+```typescript
+{
+  idempotency_key: string;            // Structured path idempotency key
+  entities: Array<{ entity_type: string; ... }>;
+  file_path?: string;                 // OR file_content + mime_type
+  file_content?: string;
+  mime_type?: string;
+  file_idempotency_key?: string;      // Optional separate idempotency key for file path
+  interpret?: boolean;
+}
+```
+
+When both structured and unstructured inputs are present, the response includes both sections:
+
+```typescript
+{
+  structured: StoreStructuredResponse;
+  unstructured: StoreUnstructuredResponse;
+}
+```
+
 Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/canonical_terms.md#source) → [Entity schema](../vocabulary/canonical_terms.md#entity-schema) processing → [Observations](../vocabulary/canonical_terms.md#observation) (schema fields) + [raw_fragments](../subsystems/schema.md#210-raw_fragments-table) (unknown fields)
 
 **Filename for agent-provided structured data:** When storing via `store` with an `entities` array (e.g. data from chat or another MCP, not from a file), agents SHOULD omit `original_filename`. The source then has no filename (null), which correctly reflects that there was no file. Pass `original_filename` only when mirroring a real file name or when a display label is explicitly desired.
@@ -323,6 +347,7 @@ Flow: [Store](../vocabulary/canonical_terms.md#storing) [source](../vocabulary/c
 
 1. **File- or resource-sourced** (user attachment or a file/blob to preserve) → Use `store` with `file_content`+`mime_type` or `file_path`.
 2. **Conversation- or tool-sourced** (what the user said or structured data from another MCP) → Use `store` with `entities` array containing `entity_type`. Omit `original_filename`.
+3. **Turn with both extracted entities and attachment** → Use one `store` call containing both `entities` and file input, then create `EMBEDS` using IDs from `response.structured` and `response.unstructured`.
 
 **Conversation and turn storage (restore-turns, idempotency_key):**  
 When storing conversation and agent_message entities (iterative chat store), use a stable `conversation_id` (prefer host-provided: conversation_id, thread_id, or session_id from context; when host does not provide, use entity id from first turn's store if re-exposed, or a deterministic derivative; best-effort). For **idempotency_key** when storing each turn: include a **per-store unique** value so each store creates a new observation, e.g. `conversation-{conversation_id}-{turn_id}-{timestamp_ms}` or `conversation-{conversation_id}-{turn_id}-{uuid}`. Overwriting between branches is acceptable; current state is the snapshot (latest); users can query observation history (`list_observations`) to view historical turns or branches. The message entity MUST include a stable turn identity (e.g. `turn_key` or `id` = `conversation_id:turn_id`) so the same logical turn resolves to the same entity and multiple observations form history. Link message to conversation with relationship type **PART_OF** (message PART_OF conversation); link attachments with **EMBEDS**; for reverted turns optionally use **SUPERSEDES** (new message SUPERSEDES previous). See [docs/proposals/conversation_turn_identity_reverts_forks.md](../proposals/conversation_turn_identity_reverts_forks.md).
@@ -577,6 +602,36 @@ Clients can subscribe to resource updates:
 **Purpose:** Unified [storing](../vocabulary/canonical_terms.md#storing) for all [source](../vocabulary/canonical_terms.md#source). Accepts unstructured (files) or structured (JSON with [entity types](../vocabulary/canonical_terms.md#entity-type)). Content-addressed storage with SHA-256 deduplication per user.
 
 **Atomic alternatives:** Prefer `store_structured` for structured entities and `store_unstructured` for raw files when you do not need the unified tool.
+
+**Combined Request Schema (both in one call):**
+
+```typescript
+{
+  user_id?: string;
+  idempotency_key?: string;
+  entities?: Array<Record<string, unknown>>;
+  relationships?: Array<{ relationship_type: string; source_index: number; target_index: number }>;
+  source_priority?: number;
+  file_content?: string;
+  file_path?: string;
+  mime_type?: string;
+  original_filename?: string;
+  interpret?: boolean;
+  interpretation_config?: Record<string, unknown>;
+  file_idempotency_key?: string;
+}
+```
+
+Validation: at least one of `entities`, `file_path`, or (`file_content` + `mime_type`) is required. Both structured and unstructured inputs may be present together.
+
+**Combined Response Schema:**
+
+```typescript
+{
+  structured?: StoreStructuredResponse;
+  unstructured?: StoreUnstructuredResponse;
+}
+```
 
 **Request Schema (Unstructured - Base64):**
 
@@ -1077,7 +1132,7 @@ This enables full explainability: for any fact in the system, you can trace it b
 }
 ```
 
-**Semantic search behavior:** When `search` is provided and embeddings are configured (`OPENAI_API_KEY` set), uses vector similarity over entity snapshots within structural filters. Supabase: pgvector. Local: sqlite-vec (vec0 KNN). Falls back to keyword substring match on `canonical_name` when embeddings unavailable. Structural filters (user_id, entity_type, merged) always applied. Deterministic: same query + DB state → same ordering.
+**Semantic search behavior:** When `search` is provided and embeddings are configured (`OPENAI_API_KEY` set), uses vector similarity over entity snapshots within structural filters. PostgreSQL: pgvector. Local: sqlite-vec (vec0 KNN). Falls back to keyword substring match on `canonical_name` when embeddings unavailable. Structural filters (user_id, entity_type, merged) always applied. Deterministic: same query + DB state → same ordering.
 
 **Response Schema:**
 

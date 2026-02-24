@@ -1,14 +1,8 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
-import App from './App';
-import './index.css';
-import { AuthProvider } from './contexts/AuthContext';
-import { RealtimeProvider } from './contexts/RealtimeContext';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { useAuth } from './contexts/AuthContext';
-import { LogOut, FileText, Calendar, BarChart, Upload, Database, Network } from "lucide-react";
-import { Button } from './components/ui/button';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import App from "./App";
+import "./index.css";
 
 // Initialize theme on app load
 function initializeTheme() {
@@ -26,44 +20,10 @@ function initializeTheme() {
 // Initialize theme before React renders
 initializeTheme();
 
-// Wrapper component to provide auth context to ErrorBoundary
-function AppWithErrorBoundary() {
-  const { user, signOut } = useAuth();
-  
-  const menuItems = [
-    { path: "/", label: "Dashboard", icon: BarChart },
-    { path: "/sources", label: "Sources", icon: FileText },
-    { path: "/schemas", label: "Schemas", icon: Database },
-    { path: "/relationships", label: "Relationships", icon: Network },
-    { path: "/timeline", label: "Timeline", icon: Calendar },
-    { path: "/upload", label: "Upload", icon: Upload },
-  ];
-
-  const headerActions = (
-    <>
-      <span className="text-sm text-muted-foreground">{user?.email}</span>
-      <Button variant="ghost" size="sm" onClick={signOut}>
-        <LogOut className="h-4 w-4 mr-2" />
-        Sign Out
-      </Button>
-    </>
-  );
-
-  return (
-    <ErrorBoundary showLayout={true} menuItems={menuItems} headerActions={headerActions}>
-      <App />
-    </ErrorBoundary>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <RealtimeProvider>
-          <AppWithErrorBoundary />
-        </RealtimeProvider>
-      </AuthProvider>
+      <App />
     </BrowserRouter>
   </React.StrictMode>
 );

@@ -58,7 +58,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/server-info": {
+    "/server-info": {
         parameters: {
             query?: never;
             header?: never;
@@ -75,7 +75,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/initiate": {
+    "/mcp/oauth/initiate": {
         parameters: {
             query?: never;
             header?: never;
@@ -92,7 +92,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/authorize": {
+    "/mcp/oauth/authorize": {
         parameters: {
             query?: never;
             header?: never;
@@ -109,7 +109,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/token": {
+    "/mcp/oauth/token": {
         parameters: {
             query?: never;
             header?: never;
@@ -126,7 +126,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me": {
+    "/me": {
         parameters: {
             query?: never;
             header?: never;
@@ -143,7 +143,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/status": {
+    "/mcp/oauth/status": {
         parameters: {
             query?: never;
             header?: never;
@@ -160,7 +160,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/connections": {
+    "/mcp/oauth/connections": {
         parameters: {
             query?: never;
             header?: never;
@@ -177,7 +177,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/mcp/oauth/connections/{connection_id}": {
+    "/mcp/oauth/connections/{connection_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -194,7 +194,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/entities/query": {
+    "/entities/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -211,7 +211,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/entities/{id}": {
+    "/entities/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -228,7 +228,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/entities/{id}/observations": {
+    "/entities/{id}/observations": {
         parameters: {
             query?: never;
             header?: never;
@@ -245,7 +245,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/entities/{id}/relationships": {
+    "/entities/{id}/relationships": {
         parameters: {
             query?: never;
             header?: never;
@@ -262,7 +262,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/entities/merge": {
+    "/entities/merge": {
         parameters: {
             query?: never;
             header?: never;
@@ -279,7 +279,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources": {
+    "/sources": {
         parameters: {
             query?: never;
             header?: never;
@@ -296,7 +296,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sources/{id}": {
+    "/sources/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -313,7 +313,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observations": {
+    "/observations": {
         parameters: {
             query?: never;
             header?: never;
@@ -330,7 +330,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observations/query": {
+    "/observations/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -347,7 +347,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/observations/create": {
+    "/observations/create": {
         parameters: {
             query?: never;
             header?: never;
@@ -364,16 +364,9 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/relationships": {
+    "/relationships": {
         parameters: {
-            query?: {
-                source_entity_id?: string;
-                target_entity_id?: string;
-                relationship_type?: string;
-                direction?: string;
-                limit?: number;
-                offset?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -388,7 +381,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/relationships/{id}": {
+    "/relationships/{id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -405,7 +398,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/relationships/snapshot": {
+    "/relationships/snapshot": {
         parameters: {
             query?: never;
             header?: never;
@@ -422,7 +415,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/timeline": {
+    "/timeline": {
         parameters: {
             query?: never;
             header?: never;
@@ -439,12 +432,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/schemas": {
+    "/timeline/{id}": {
         parameters: {
-            query?: {
-                user_id?: string;
-                entity_type?: string;
-            };
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get timeline event by ID */
+        get: operations["getTimelineById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/schemas": {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -459,11 +466,9 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/schemas/{entity_type}": {
+    "/schemas/{entity_type}": {
         parameters: {
-            query?: {
-                user_id?: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -478,7 +483,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/interpretations": {
+    "/interpretations": {
         parameters: {
             query?: never;
             header?: never;
@@ -495,7 +500,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/stats": {
+    "/stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -512,7 +517,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/store": {
+    "/store": {
         parameters: {
             query?: never;
             header?: never;
@@ -521,7 +526,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Store structured entities */
+        /** Store structured entities, unstructured files, or both */
         post: operations["storeStructured"];
         delete?: never;
         options?: never;
@@ -529,7 +534,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/store/unstructured": {
+    "/store/unstructured": {
         parameters: {
             query?: never;
             header?: never;
@@ -871,6 +876,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/interpret-uninterpreted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Interpret uninterpreted sources
+         * @description Re-run AI interpretation for sources that have no prior interpretation runs
+         */
+        post: operations["interpretUninterpreted"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/correct": {
         parameters: {
             query?: never;
@@ -1060,6 +1085,41 @@ export interface components {
             observations?: number;
             relationships?: number;
             timeline_events?: number;
+        };
+        /** @description Unified store payload. Supports structured only, unstructured only, or both in one request. */
+        StoreRequest: {
+            entities?: {
+                [key: string]: unknown;
+            }[];
+            /** @description Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based). */
+            relationships?: {
+                /** @enum {string} */
+                relationship_type: "PART_OF" | "CORRECTS" | "REFERS_TO" | "SETTLES" | "DUPLICATE_OF" | "DEPENDS_ON" | "SUPERSEDES" | "EMBEDS";
+                source_index: number;
+                target_index: number;
+            }[];
+            source_priority?: number;
+            /** @description Required for structured path, optional for unstructured-only path. */
+            idempotency_key?: string;
+            /** @description Optional idempotency key for file path when sending structured + unstructured in one call. */
+            file_idempotency_key?: string;
+            /** @description Base64-encoded file content (unstructured path) */
+            file_content?: string;
+            /** @description Local file path for server-local environments */
+            file_path?: string;
+            /** @description Required with file_content, optional with file_path */
+            mime_type?: string;
+            original_filename?: string;
+            /** @default true */
+            interpret: boolean;
+            interpretation_config?: {
+                [key: string]: unknown;
+            };
+            user_id?: string;
+        };
+        StoreResponse: {
+            structured?: components["schemas"]["StoreStructuredResponse"];
+            unstructured?: components["schemas"]["StoreUnstructuredResponse"];
         };
         StoreStructuredRequest: {
             entities: {
@@ -1778,14 +1838,7 @@ export interface operations {
     };
     listRelationships: {
         parameters: {
-            query?: {
-                source_entity_id?: string;
-                target_entity_id?: string;
-                relationship_type?: string;
-                direction?: string;
-                limit?: number;
-                offset?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -1880,11 +1933,36 @@ export interface operations {
             };
         };
     };
+    getTimelineById: {
+        parameters: {
+            query?: {
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Timeline event */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        event?: components["schemas"]["TimelineEvent"];
+                    };
+                };
+            };
+        };
+    };
     listSchemas: {
         parameters: {
             query?: {
                 user_id?: string;
-                entity_type?: string;
             };
             header?: never;
             path?: never;
@@ -1907,9 +1985,7 @@ export interface operations {
     };
     getSchemaByEntityType: {
         parameters: {
-            query?: {
-                user_id?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 entity_type: string;
@@ -1987,7 +2063,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["StoreStructuredRequest"];
+                "application/json": components["schemas"]["StoreRequest"];
             };
         };
         responses: {
@@ -1997,7 +2073,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StoreStructuredResponse"];
+                    "application/json": components["schemas"]["StoreStructuredResponse"] | components["schemas"]["StoreUnstructuredResponse"] | components["schemas"]["StoreResponse"];
                 };
             };
         };
@@ -2584,6 +2660,41 @@ export interface operations {
         };
         responses: {
             /** @description Source reinterpreted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    interpretUninterpreted: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    /** @default 50 */
+                    limit?: number;
+                    /** @default false */
+                    dry_run?: boolean;
+                    user_id?: string;
+                    interpretation_config?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Uninterpreted sources processed */
             200: {
                 headers: {
                     [name: string]: unknown;

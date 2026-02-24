@@ -4,7 +4,7 @@
  * Manages config-driven entity schemas, versions, and merge policies.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -162,7 +162,7 @@ export class SchemaRegistryService {
 
     const scope = config.user_specific ? "user" : "global";
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("schema_registry")
       .insert({
         entity_type: config.entity_type,
@@ -218,7 +218,7 @@ export class SchemaRegistryService {
    * a dynamic set of types (e.g. field-based type refinement).
    */
   async listActiveSchemas(userId?: string): Promise<SchemaRegistryEntry[]> {
-    const base = supabase
+    const base = db
       .from("schema_registry")
       .select("id, entity_type, schema_version, schema_definition, reducer_config, active, created_at, user_id, scope, metadata")
       .eq("active", true);
@@ -239,7 +239,7 @@ export class SchemaRegistryService {
     entityType: string,
     userId: string,
   ): Promise<SchemaRegistryEntry | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("schema_registry")
       .select("*")
       .eq("entity_type", entityType)
@@ -267,7 +267,7 @@ export class SchemaRegistryService {
   async loadGlobalSchema(
     entityType: string,
   ): Promise<SchemaRegistryEntry | null> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("schema_registry")
       .select("*")
       .eq("entity_type", entityType)
@@ -496,7 +496,7 @@ export class SchemaRegistryService {
 
       while (hasMore) {
         // Get batch of raw_fragments
-        let query = supabase
+        let query = db
           .from("raw_fragments")
           .select("*")
           .eq("entity_type", options.entity_type)
@@ -553,7 +553,7 @@ export class SchemaRegistryService {
           // For structured data (parquet), interpretation_id may be null, so match on source_id only
           let entityId: string | null = null;
           if (sourceId) {
-            let obsQuery = supabase
+            let obsQuery = db
               .from("observations")
               .select("entity_id")
               .eq("source_id", sourceId)
@@ -612,7 +612,7 @@ export class SchemaRegistryService {
             // Create new observation with promoted fields
             // Use the same source_id and interpretation_id for provenance
             const observedAt = new Date().toISOString();
-            const { error: obsError } = await supabase
+            const { error: obsError } = await db
               .from("observations")
               .insert({
                 entity_id: entityId,
@@ -645,7 +645,7 @@ export class SchemaRegistryService {
               // Recompute snapshot to include migrated fields
               try {
                 const { observationReducer } = await import("../reducers/observation_reducer.js");
-                const { data: allObservations } = await supabase
+                const { data: allObservations } = await db
                   .from("observations")
                   .select("*")
                   .eq("entity_id", entityId)
@@ -831,7 +831,7 @@ export class SchemaRegistryService {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async activate(entityType: string, version: string, _userId?: string): Promise<void> {
     // Load the schema to get its scope and user_id
-    const { data: schema } = await supabase
+    const { data: schema } = await db
       .from("schema_registry")
       .select("scope, user_id")
       .eq("entity_type", entityType)
@@ -846,7 +846,7 @@ export class SchemaRegistryService {
     const schemaUserId = schema.user_id;
 
     // Deactivate all other versions for this entity type and scope/user_id
-    let deactivateQuery = supabase
+    let deactivateQuery = db
       .from("schema_registry")
       .update({ active: false })
       .eq("entity_type", entityType)
@@ -861,7 +861,7 @@ export class SchemaRegistryService {
     await deactivateQuery;
 
     // Activate specified version
-    const { error } = await supabase
+    const { error } = await db
       .from("schema_registry")
       .update({ active: true })
       .eq("entity_type", entityType)
@@ -879,7 +879,7 @@ export class SchemaRegistryService {
    * Deactivate schema version
    */
   async deactivate(entityType: string, version: string): Promise<void> {
-    const { error } = await supabase
+    const { error } = await db
       .from("schema_registry")
       .update({ active: false })
       .eq("entity_type", entityType)
@@ -897,7 +897,7 @@ export class SchemaRegistryService {
    * Get all entity schema versions for entity type
    */
   async getSchemaVersions(entityType: string): Promise<SchemaRegistryEntry[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("schema_registry")
       .select("*")
       .eq("entity_type", entityType)
@@ -968,7 +968,7 @@ export class SchemaRegistryService {
     match_type?: "keyword" | "vector";
   }>> {
     // Get all active schemas from database
-    const query = supabase
+    const query = db
       .from("schema_registry")
       .select("entity_type, schema_version, schema_definition")
       .eq("active", true);
@@ -1321,7 +1321,7 @@ export class SchemaRegistryService {
       icon: iconMetadata,
     };
     
-    const { error } = await supabase
+    const { error } = await db
       .from("schema_registry")
       .update({ metadata: updatedMetadata })
       .eq("id", schema.id);

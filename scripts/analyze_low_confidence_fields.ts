@@ -1,4 +1,4 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 import { SchemaRecommendationService } from '../src/services/schema_recommendation.js';
 
 const service = new SchemaRecommendationService();
@@ -9,7 +9,7 @@ async function analyzeField(fieldName: string) {
   console.log('='.repeat(80));
 
   // Get actual sample values from raw_fragments
-  const { data: fragments } = await supabase
+  const { data: fragments } = await db
     .from('raw_fragments')
     .select('fragment_value, frequency_count')
     .eq('entity_type', 'task')

@@ -1,7 +1,7 @@
 /**
  * OAuth Buttons Component (FU-700)
  * 
- * OAuth provider buttons (Google, GitHub) for Supabase Auth
+ * OAuth provider buttons (Google, GitHub) for auth
  */
 
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,8 @@ interface OAuthButtonsProps {
 }
 
 async function handleGoogleSignin() {
-  const { supabase } = await import("@/lib/supabase");
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { auth } = await import("@/lib/auth");
+  const { error } = await auth.auth.signInWithOAuth({
     provider: "google",
     options: {
       redirectTo: `${window.location.origin}/auth/callback`,
@@ -27,8 +27,8 @@ async function handleGoogleSignin() {
 }
 
 async function handleGithubSignin() {
-  const { supabase } = await import("@/lib/supabase");
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { auth } = await import("@/lib/auth");
+  const { error } = await auth.auth.signInWithOAuth({
     provider: "github",
     options: {
       redirectTo: `${window.location.origin}/auth/callback`,

@@ -15,6 +15,9 @@ playwright/test-results/
 docs/private/
 data.vite/
 data
+data/
+data*
+data.backup.*/
 public/assets/
 .cursor/mcp.json
 .cursor/error_reports/
@@ -27,5 +30,3 @@ backups/
 # Vite build artifacts
 frontend/.vite/deps/
 
-# Supabase temp files
-supabase/.temp/

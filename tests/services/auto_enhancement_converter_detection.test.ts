@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { schemaRecommendationService } from "../../src/services/schema_recommendation.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
 
@@ -18,26 +18,26 @@ const TEST_SOURCE_2 = "00000000-0000-0000-0000-000000000002";
 describe("Auto-Enhancement Converter Detection", () => {
   beforeEach(async () => {
     // Clean up test data
-    await supabase
+    await db
       .from("raw_fragments")
       .delete()
       .eq("user_id", TEST_USER_ID);
-    await supabase
+    await db
       .from("schema_registry")
       .delete()
       .eq("entity_type", "test_converter_task");
-    await supabase
+    await db
       .from("schema_recommendations")
       .delete()
       .eq("entity_type", "test_converter_task");
-    await supabase
+    await db
       .from("auto_enhancement_queue")
       .delete()
       .eq("entity_type", "test_converter_task");
-    await supabase.from("sources").delete().in("id", [TEST_SOURCE_1, TEST_SOURCE_2]);
+    await db.from("sources").delete().in("id", [TEST_SOURCE_1, TEST_SOURCE_2]);
 
     // Create test sources (required for foreign key constraint)
-    await supabase.from("sources").insert([
+    await db.from("sources").insert([
       {
         id: TEST_SOURCE_1,
         content_hash: "test-hash-1",
@@ -78,7 +78,7 @@ describe("Auto-Enhancement Converter Detection", () => {
 
       // Create raw_fragments with nanosecond timestamps
       const nanosTimestamp = 1766102400000000000; // 2026-01-20 in nanoseconds
-      const { data: insertResult, error: insertError } = await supabase
+      const { data: insertResult, error: insertError } = await db
         .from("raw_fragments")
         .insert([
           {
@@ -154,7 +154,7 @@ describe("Auto-Enhancement Converter Detection", () => {
 
       // Create raw_fragments with millisecond timestamps
       const msTimestamp = 1766102400000; // 2026-01-20 in milliseconds
-      await supabase.from("raw_fragments").insert([
+      await db.from("raw_fragments").insert([
         {
           entity_type: "test_converter_task",
           fragment_key: "updated_at",
@@ -216,7 +216,7 @@ describe("Auto-Enhancement Converter Detection", () => {
       });
 
       // Create raw_fragments with numeric strings
-      await supabase.from("raw_fragments").insert([
+      await db.from("raw_fragments").insert([
         {
           entity_type: "test_converter_task",
           fragment_key: "amount",
@@ -276,7 +276,7 @@ describe("Auto-Enhancement Converter Detection", () => {
       });
 
       // Create raw_fragments with ISO date strings (already matches type)
-      await supabase.from("raw_fragments").insert([
+      await db.from("raw_fragments").insert([
         {
           entity_type: "test_converter_task",
           fragment_key: "date_field",
@@ -358,7 +358,7 @@ describe("Auto-Enhancement Converter Detection", () => {
       expect(recommendation).toBeDefined();
 
       // Verify recommendation was created with add_converters type
-      const { data: storedRec } = await supabase
+      const { data: storedRec } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", "test_converter_task")
@@ -404,7 +404,7 @@ describe("Auto-Enhancement Converter Detection", () => {
       expect(recommendation).toBeDefined();
 
       // Verify recommendation was created with add_fields type
-      const { data: storedRec } = await supabase
+      const { data: storedRec } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", "test_converter_task")
@@ -585,7 +585,7 @@ describe("Auto-Enhancement Converter Detection", () => {
 
       // Create raw_fragments with nanosecond timestamps
       const nanosTimestamp = 1766102400000000000;
-      await supabase.from("raw_fragments").insert([
+      await db.from("raw_fragments").insert([
         {
           entity_type: "test_converter_task",
           fragment_key: "created_at",

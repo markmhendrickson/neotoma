@@ -54,8 +54,8 @@ export async function checkFunctionExists(functionName, filePattern = "src/**/*.
 export async function checkDatabaseColumn(columnName, tableName) {
   try {
     const searchPaths = [
-      "supabase/schema.sql",
-      "supabase/migrations/*.sql",
+      "docs/releases",
+      "docs",
     ];
     
     const evidence = [];
@@ -98,8 +98,8 @@ export async function checkDatabaseColumn(columnName, tableName) {
 export async function checkDatabaseTable(tableName) {
   try {
     const searchPaths = [
-      "supabase/schema.sql",
-      "supabase/migrations/*.sql",
+      "docs/releases",
+      "docs",
     ];
     
     const evidence = [];

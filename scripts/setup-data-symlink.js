@@ -12,7 +12,7 @@ const REPO_ROOT = resolve(__dirname, '..');
 const DATA_LINK_PATH = join(REPO_ROOT, 'data');
 
 // Load environment-specific .env files (same pattern as config.ts)
-const env = process.env.NODE_ENV || 'development';
+const env = process.env.NEOTOMA_ENV || 'development';
 
 if (env === 'production') {
   dotenv.config({ path: '.env.production' });

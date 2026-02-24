@@ -67,4 +67,62 @@ describe("Command Detection Debug", () => {
       process.stdout.write = origWrite;
     }
   });
+
+  it("should not enter session for --version (TTY)", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const stdoutWrites: string[] = [];
+    const origWrite = process.stdout.write;
+    process.stdout.write = ((chunk: any) => {
+      stdoutWrites.push(String(chunk));
+      return true;
+    }) as any;
+
+    try {
+      vi.resetModules();
+      const cli = await import("../../src/cli/index.ts");
+
+      await cli.runCli(["node", "cli", "--version", "--no-log-file"]);
+
+      const out = stdoutWrites.join("");
+      expect(out).toMatch(/\d+\.\d+\.\d+/);
+      expect(out).not.toContain("Nest is warm");
+      expect(out).not.toContain("neotoma>");
+    } finally {
+      process.stdout.write = origWrite;
+    }
+  });
+
+  it("should not enter session for --help (TTY)", async () => {
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const stdoutWrites: string[] = [];
+    const origWrite = process.stdout.write;
+    process.stdout.write = ((chunk: any) => {
+      stdoutWrites.push(String(chunk));
+      return true;
+    }) as any;
+
+    try {
+      vi.resetModules();
+      const cli = await import("../../src/cli/index.ts");
+
+      await cli.runCli(["node", "cli", "--help", "--no-log-file"]);
+
+      const out = stdoutWrites.join("");
+      expect(out).toContain("Usage:");
+      expect(out).not.toContain("Nest is warm");
+      expect(out).not.toContain("neotoma>");
+    } finally {
+      process.stdout.write = origWrite;
+    }
+  });
 });

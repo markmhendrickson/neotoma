@@ -63,7 +63,7 @@ export function ObservationList({
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch observations from API
@@ -78,7 +78,7 @@ export function ObservationList({
       try {
         const api = getApiClient(bearerToken);
         const userId = user?.id;
-        const { data, error } = await api.POST("/api/observations/query", {
+        const { data, error } = await api.POST("/observations/query", {
           body: {
             entity_type: selectedEntityType || undefined,
             limit,

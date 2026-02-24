@@ -46,8 +46,7 @@ We process your personal data based on:
 ## 5. Data Sharing and Disclosure
 ### 5.1 Third-Party Processors
 We share data with:
-- **Supabase:** Database, authentication, file storage (US, with Standard Contractual Clauses)
-- **Fly.io:** Application hosting (US, with Standard Contractual Clauses)
+- **Hosting (when deployed):** Database, storage, application hosting (location depends on vendor; Standard Contractual Clauses when outside EU)
 - **Stripe:** Payment processing (US, with DPA and Standard Contractual Clauses)
 - **Gmail API:** Email attachment import (if you connect Gmail, via Google DPA)
 ### 5.2 AI Agents (via MCP)
@@ -84,7 +83,7 @@ We implement security measures to protect your data:
 **However, no method of transmission or storage is 100% secure. We cannot guarantee absolute security.**
 ## 9. International Data Transfers
 Your data may be transferred to and processed in:
-- **United States:** Supabase (database), Fly.io (hosting), Stripe (payments)
+- **United States:** Hosting (when deployed), Stripe (payments)
 - **Safeguards:** Standard Contractual Clauses (SCCs) with vendors
 - **Adequacy:** No adequacy decision for US transfers; SCCs provide safeguards
 ## 10. Children's Privacy

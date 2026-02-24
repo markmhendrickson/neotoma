@@ -17,14 +17,7 @@ Generated: 2026-01-08
 
 ### ❌ Missing Required Variables (Based on src/config.ts)
 
-#### Supabase Configuration (REQUIRED - Code will fail without these)
-- `DEV_SUPABASE_PROJECT_ID` - **MISSING** ⚠️ **CRITICAL**
-- `DEV_SUPABASE_SERVICE_KEY` - **MISSING** ⚠️ **CRITICAL**
-- `SUPABASE_ACCESS_TOKEN` - Missing (optional, for Supabase CLI)
-- `PROD_SUPABASE_PROJECT_ID` - Missing (optional, if using production)
-- `PROD_SUPABASE_SERVICE_KEY` - Missing (optional, if using production)
-
-#### Connector Configuration (REQUIRED - Code will fail without this)
+#### Connector Configuration (REQUIRED when using OAuth connectors)
 - `DEV_CONNECTOR_SECRET_KEY` - **MISSING** ⚠️ **CRITICAL**
 - `PROD_CONNECTOR_SECRET_KEY` - Missing (optional, if using production)
 
@@ -53,10 +46,8 @@ These are intentionally excluded via `foundation-config.yaml` as they're local d
 ## Action Items
 
 ### 🔴 Critical Priority (Required for Neotoma to work)
-These must be added or the application will fail to start:
-1. **Add `DEV_SUPABASE_PROJECT_ID` mapping** - Required by `src/config.ts`
-2. **Add `DEV_SUPABASE_SERVICE_KEY` mapping** - Required by `src/config.ts`
-3. **Add `DEV_CONNECTOR_SECRET_KEY` mapping** - Required by `src/config.ts`
+These must be added when using OAuth connectors:
+1. **Add `DEV_CONNECTOR_SECRET_KEY` mapping** - Required when using OAuth connectors
 
 ### 🟡 High Priority (Recommended for full functionality)
 4. ✅ **OPENAI_API_KEY** - Already configured and code updated to use it
@@ -64,10 +55,7 @@ These must be added or the application will fail to start:
    - Code now uses `OPENAI_API_KEY` (with backward compatibility fallback)
 
 ### 🟢 Medium Priority (Optional but useful)
-5. Add `SUPABASE_ACCESS_TOKEN` mapping (if using Supabase CLI for migrations)
-6. Add production environment mappings if deploying to production:
-   - `PROD_SUPABASE_PROJECT_ID`
-   - `PROD_SUPABASE_SERVICE_KEY`
+5. Add production environment mappings if deploying to production:
    - `PROD_CONNECTOR_SECRET_KEY`
    - Note: `OPENAI_API_KEY` already handles production via environment-based selection
 
@@ -82,15 +70,15 @@ See [SETUP_ENV_MAPPINGS.md](SETUP_ENV_MAPPINGS.md) for detailed instructions.
 
 Quick example:
 ```javascript
-// Add DEV_SUPABASE_SERVICE_KEY
+// Add DEV_CONNECTOR_SECRET_KEY
 {
   "data_type": "env_var_mappings",
   "record": {
-    "env_var": "DEV_SUPABASE_SERVICE_KEY",
+    "env_var": "DEV_CONNECTOR_SECRET_KEY",
     "op_reference": "op://Private/your-item-id/field-id",
     "vault": "Private",
-    "item_name": "Neotoma Supabase",
-    "service": "Supabase",
+    "item_name": "Neotoma Connector",
+    "service": "Connector",
     "is_optional": false,
     "environment_based": false
   }

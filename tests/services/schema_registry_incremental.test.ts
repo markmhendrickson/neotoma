@@ -4,11 +4,11 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { SchemaRegistryService } from "../../src/services/schema_registry.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 // Mock the database module
 vi.mock("../../src/db.js", () => ({
-  supabase: {
+  db: {
     from: vi.fn(),
     rpc: vi.fn(),
   },
@@ -37,7 +37,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
       }
     });
     
-    // Make the mock awaitable (thenable) - Supabase queries are awaitable
+    // Make the mock awaitable (thenable) - DB queries are awaitable
     mock.then = vi.fn((resolve) => {
       // Default resolution if no custom then handler
       if (methods.then) {
@@ -119,7 +119,7 @@ describe("SchemaRegistryService - Incremental Updates", () => {
   beforeEach(() => {
     service = new SchemaRegistryService();
     mockFrom = vi.fn();
-    (supabase.from as any) = mockFrom;
+    (db.from as any) = mockFrom;
   });
 
   afterEach(() => {

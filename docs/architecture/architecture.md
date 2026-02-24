@@ -76,7 +76,7 @@ Major architectural transformation to local-first, end-to-end encrypted architec
 - Encrypted WebSocket bridge for MCP communication
 - Public key authentication (bearer token = Ed25519 public key)
 - Dual-mode operation (plaintext + encrypted) for backward compatibility
-- Migration tooling for existing Supabase records
+- Migration tooling for existing cloud records
 - Optional multi-device sync via encrypted deltas
 See `docs/releases/v2.0.0/` and `docs/architecture/local_first_e2ee_architecture.md` for detailed architecture and release plan.
 **v2.1.0:** GDPR & US State Privacy Compliance
@@ -302,7 +302,7 @@ flowchart TD
         MCP[MCP Server]
         Gmail[Gmail API]
         OpenAI[OpenAI API]
-        Supabase[Supabase DB]
+        PG[(PostgreSQL)]
         Storage[File Storage]
     end
     subgraph Infrastructure["Infrastructure Layer"]
@@ -352,8 +352,8 @@ flowchart TD
 - MCP client connections (from ChatGPT, Claude, Cursor)
 - Gmail API for attachment retrieval
 - OpenAI API for embeddings (deterministic, not extraction)
-- Local SQLite database by default, Supabase PostgreSQL when configured
-- File storage (local by default, Supabase Storage or S3 when configured)
+- Local SQLite database by default, PostgreSQL when configured
+- File storage (local by default, S3 when configured)
 **Constraints:**
 - MUST NOT contain business logic
 - MUST be swappable (abstracted by Infrastructure layer)
@@ -371,7 +371,7 @@ flowchart TD
 #### Layer 3: Domain Layer
 **Responsibility:** Core Truth Layer business logic — ingestion, extraction, entity resolution, graph construction.
 **Components:**
-- **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, Supabase Storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
+- **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, cloud storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
 - **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
 - **[Observation](../vocabulary/canonical_terms.md#observation) Storage:** Store granular, source-specific facts [extracted](../vocabulary/canonical_terms.md#extraction) from [source](../vocabulary/canonical_terms.md#source) with [provenance](../vocabulary/canonical_terms.md#provenance) (source_id, interpretation_id)
 - **Reducer Engine:** Compute entity snapshots from observations using deterministic merge strategies
@@ -646,7 +646,7 @@ Application layer MUST distinguish and signal retry eligibility.
 | MCP tool calls        | 50/sec  | Per user         |
 ### 6.3 Scalability Constraints
 **Vertical Scaling (MVP):**
-- Single-instance Supabase PostgreSQL
+- Single-instance PostgreSQL
 - Local or S3 file storage
 - No horizontal scaling in MVP
 **Future Horizontal Scaling:**
@@ -656,7 +656,7 @@ Application layer MUST distinguish and signal retry eligibility.
 ## 7. Security Boundaries
 ### 7.1 Authentication and Authorization
 **Authentication:**
-- User authentication via Supabase Auth
+- User authentication via OAuth
 - MCP connections authenticated via session tokens
 - No anonymous access
 **Authorization:**
@@ -665,7 +665,7 @@ Application layer MUST distinguish and signal retry eligibility.
 - Application layer enforces user_id filtering
 ### 7.2 Data Security
 **At Rest:**
-- Database encryption via Supabase
+- Database encryption at rest
 - File storage encryption (S3 server-side encryption)
 **In Transit:**
 - HTTPS for all HTTP API calls

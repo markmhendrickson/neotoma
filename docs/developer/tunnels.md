@@ -13,7 +13,7 @@ This document is the canonical reference for using HTTPS tunnels with the Neotom
 - Configuration and verification
 - Troubleshooting
 
-It does not cover: MCP protocol details, OAuth flows (see [mcp_oauth_redirect_uri_config.md](mcp_oauth_redirect_uri_config.md)), or production deployment without tunnels.
+It does not cover: MCP protocol details, OAuth flows (see [mcp_oauth_implementation.md](mcp_oauth_implementation.md)), or production deployment without tunnels.
 
 ---
 
@@ -75,9 +75,9 @@ NEOTOMA_TUNNEL_PROVIDER=ngrok        # use ngrok
 | `npm run watch:server+api` | 8080 | Tunnel + API + `tsc --watch`       | Dev + tunnel + rebuild            |
 | `npm run watch:prod:tunnel` | 8180 | Tunnel + API + `tsc --watch` (prod) | Prod env + remote MCP             |
 
-Port is controlled by `HTTP_PORT` (default 8080 for dev, 8180 for prod scripts). The tunnel forwards HTTPS to `http://localhost:${HTTP_PORT}`.
+Port is controlled by `NEOTOMA_HTTP_PORT` or `HTTP_PORT` (default 8080 for dev, 8180 for prod scripts). The tunnel forwards HTTPS to `http://localhost:${HTTP_PORT}`. Prefer `NEOTOMA_HTTP_PORT` when running Neotoma as MCP inside a host workspace to avoid port conflicts.
 
-**Combined commands** (e.g. `dev:api`, `watch:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `HOST_URL` export. Ctrl+C stops both.
+**Combined commands** (e.g. `dev:api`, `watch:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `NEOTOMA_HOST_URL`. Ctrl+C stops both.
 
 ---
 
@@ -85,14 +85,16 @@ Port is controlled by `HTTP_PORT` (default 8080 for dev, 8180 for prod scripts).
 
 | Variable | Purpose |
 |----------|---------|
-| `HOST_URL` | Base URL for API and MCP (OAuth, discovery, "Add to Cursor"). If not set, server auto-discovers from `/tmp/ngrok-mcp-url.txt`. **Preferred.** |
-| `API_BASE_URL` | **Deprecated.** Legacy alias for `HOST_URL`. Use `HOST_URL` instead. |
+| `NEOTOMA_HOST_URL` | Base URL for API and MCP (OAuth, discovery, "Add to Cursor"). If unset, server auto-discovers from `/tmp/ngrok-mcp-url.txt`. |
 | `NEOTOMA_TUNNEL_PROVIDER` | Force provider: `cloudflare` or `ngrok`. |
-| `HTTP_PORT` | Port the server listens on; tunnel forwards to this (default 8080; prod scripts use 8180). |
+| `NEOTOMA_HTTP_PORT` | Port the server listens on; prefer when running inside a host workspace (avoids conflicts). |
+| `HTTP_PORT` | Legacy; tunnel forwards to this (default 8080; prod scripts use 8180). |
 | `TUNNEL_NONINTERACTIVE=1` | Used by npm scripts to skip "port not in use" prompt. |
-| `MCP_PROXY_URL` | Override MCP URL only when it must differ from host (rare). |
+| `NEOTOMA_MCP_PROXY_URL` | Override MCP URL only when it must differ from host (rare). Prefer when running inside a host workspace. |
+| `MCP_PROXY_URL` | Legacy alias for `NEOTOMA_MCP_PROXY_URL`. |
 | `TUNNEL_TOKEN` or `CLOUDFLARE_TUNNEL_TOKEN` | Optional; for Cloudflare named tunnels. Not required for quick tunnels. |
-| `OAUTH_REDIRECT_BASE_URL` | **Advanced.** Override OAuth callback base (defaults to `HOST_URL`). Only needed if Supabase is registered with different URL. |
+| `NEOTOMA_OAUTH_REDIRECT_BASE_URL` | **Advanced.** Override OAuth callback base (defaults to `NEOTOMA_HOST_URL`). Prefer when running inside a host workspace. |
+| `OAUTH_REDIRECT_BASE_URL` | Legacy alias for `NEOTOMA_OAUTH_REDIRECT_BASE_URL`. |
 
 ---
 
@@ -150,7 +152,7 @@ ngrok config add-authtoken YOUR_AUTHTOKEN
 - PID: `/tmp/ngrok-mcp.pid`
 - URL: `/tmp/ngrok-mcp-url.txt`
 - Web UI: `http://localhost:4040` (when ngrok is running)
-- Optional fixed domain: if `HOST_URL` in `.env` contains a hostname, the script uses it for `ngrok http --domain=...` (requires ngrok reserved/custom domain).
+- Optional fixed domain: if `NEOTOMA_HOST_URL` in `.env` contains a hostname, the script uses it for `ngrok http --domain=...` (requires ngrok reserved/custom domain).
 
 **Verification:**
 
@@ -169,24 +171,23 @@ tail -f /tmp/ngrok.log
 
 ## Tunnel URL Auto-Discovery
 
-**The server automatically discovers the tunnel URL** when `HOST_URL` is not set:
+**The server automatically discovers the tunnel URL** when `NEOTOMA_HOST_URL` is not set:
 
 1. **Tunnel script** (`setup-https-tunnel.sh`) writes URL to `/tmp/ngrok-mcp-url.txt`
-2. **Server** (`src/config.ts`) reads this file on startup if `HOST_URL` not in environment
+2. **Server** (`src/config.ts`) reads this file on startup if `NEOTOMA_HOST_URL` not in environment
 3. **OAuth and discovery** automatically use the tunnel URL
 
 **Priority order for `config.apiBase`:**
-1. `HOST_URL` (explicit environment variable)
-2. `API_BASE_URL` (deprecated, but supported for backward compatibility)
-3. Auto-discovered from `/tmp/ngrok-mcp-url.txt`
-4. `http://localhost:${httpPort}` (fallback)
+1. `NEOTOMA_HOST_URL` (explicit environment variable)
+2. Auto-discovered from `/tmp/ngrok-mcp-url.txt`
+3. `http://localhost:${httpPort}` (fallback)
 
 **This means:**
 - Combined scripts (`dev:api`, `watch:prod:tunnel`) work without manual URL configuration
 - Starting tunnel first, then server separately works automatically
 - No `.env` changes needed for most tunnel use cases
 
-**To use a fixed domain:** Set `HOST_URL` in `.env` to your reserved ngrok domain or custom URL.
+**To use a fixed domain:** Set `NEOTOMA_HOST_URL` in `.env` to your reserved ngrok domain or custom URL.
 
 ---
 
@@ -196,8 +197,8 @@ tail -f /tmp/ngrok.log
    From script output or `cat /tmp/ngrok-mcp-url.txt`.
 
 2. **Server base URL**  
-   **Auto-discovery (no action needed):** Combined scripts (`dev:api`, `watch:prod:tunnel`) set `HOST_URL` from the tunnel file. If you start server separately, it auto-discovers from `/tmp/ngrok-mcp-url.txt`.  
-   **Manual:** Set `HOST_URL` to the tunnel URL and restart the server.
+   **Auto-discovery (no action needed):** Combined scripts (`dev:api`, `watch:prod:tunnel`) write the tunnel URL to a file; the server auto-discovers from `/tmp/ngrok-mcp-url.txt`. If you start server separately, it reads that file on startup.  
+   **Manual:** Set `NEOTOMA_HOST_URL` to the tunnel URL and restart the server.
 
 3. **Cursor / MCP client**  
    Use `https://<tunnel-url>/mcp` in `.cursor/mcp.json` or the Neotoma UI "Add to Cursor" flow.
@@ -224,7 +225,7 @@ tail -f /tmp/ngrok.log
 ### Connection refused to tunnel URL
 
 - **Tunnel not running:** Start it again (`npm run tunnel:https` or a combined command). Use the **current** URL from the script or `cat /tmp/ngrok-mcp-url.txt`.
-- **Stale URL:** Free-tier URLs change each run. Update `HOST_URL` (if set explicitly in .env) and Cursor config with the new URL. If using auto-discovery, restart the server to pick up the new URL.
+- **Stale URL:** Free-tier URLs change each run. Update `NEOTOMA_HOST_URL` (if set explicitly in .env) and Cursor config with the new URL. If using auto-discovery, restart the server to pick up the new URL.
 - **ngrok free-tier:** Open the tunnel URL in a browser and accept "Visit Site" if shown, then retry.
 - **Port:** Ensure the server is listening on the port the tunnel uses (8080 or 8180). Check with `lsof -i :8080` (or 8180).
 
@@ -243,8 +244,8 @@ If `curl -v` shows the tunnel host resolving to `127.0.0.1`, a local DNS overrid
 
 ### OAuth / discovery issues
 
-- Server auto-discovers tunnel URL from `/tmp/ngrok-mcp-url.txt`. If using explicit `HOST_URL` in `.env`, ensure it matches the tunnel URL exactly and restart the server after changing it.
-- See [mcp_oauth_redirect_uri_config.md](mcp_oauth_redirect_uri_config.md) and [mcp_oauth_troubleshooting.md](mcp_oauth_troubleshooting.md).
+- Server auto-discovers tunnel URL from `/tmp/ngrok-mcp-url.txt`. If using explicit `NEOTOMA_HOST_URL` in `.env`, ensure it matches the tunnel URL exactly and restart the server after changing it.
+- See [mcp_oauth_implementation.md](mcp_oauth_implementation.md) and [mcp_oauth_troubleshooting.md](mcp_oauth_troubleshooting.md).
 
 ### Verification commands (summary)
 
@@ -269,7 +270,7 @@ curl -s -H "ngrok-skip-browser-warning: 1" "https://YOUR-TUNNEL-URL/.well-known/
 - [mcp_https_tunnel_status.md](mcp_https_tunnel_status.md) — Current status and quick troubleshooting
 - [mcp_https_testing.md](mcp_https_testing.md) — HTTPS testing for MCP/Cursor Connect
 - [mcp_cursor_setup.md](mcp_cursor_setup.md) — Cursor MCP setup and tunnel usage
-- [mcp_oauth_redirect_uri_config.md](mcp_oauth_redirect_uri_config.md) — OAuth redirect and base URL
+- [mcp_oauth_implementation.md](mcp_oauth_implementation.md) — OAuth redirect and base URL
 - [getting_started.md](getting_started.md) — Server and tunnel commands overview
 - [cli_reference.md](cli_reference.md) — npm scripts summary
 
@@ -284,14 +285,14 @@ Load when adding or changing tunnel behavior, documenting tunnel scripts or env 
 ### Required Co-Loaded Documents
 
 - [getting_started.md](getting_started.md) for server/tunnel command context
-- [mcp_oauth_redirect_uri_config.md](mcp_oauth_redirect_uri_config.md) when editing OAuth or base URL behavior
+- [mcp_oauth_implementation.md](mcp_oauth_implementation.md) when editing OAuth or base URL behavior
 
 ### Constraints Agents Must Enforce
 
 1. Tunnel provider selection must match `scripts/setup-https-tunnel.sh`: Cloudflare when cloudflared installed, else ngrok when installed and authenticated.
 2. Document both Cloudflare and ngrok for install, verification, and troubleshooting.
-3. Use `HOST_URL` as the primary base URL config; `API_BASE_URL` is deprecated but supported for backward compatibility.
-4. Server auto-discovers tunnel URL from `/tmp/ngrok-mcp-url.txt` if `HOST_URL` not set.
+3. Use `NEOTOMA_HOST_URL` as the base URL config.
+4. Server auto-discovers tunnel URL from `/tmp/ngrok-mcp-url.txt` if `NEOTOMA_HOST_URL` not set.
 
 ### Forbidden Patterns
 

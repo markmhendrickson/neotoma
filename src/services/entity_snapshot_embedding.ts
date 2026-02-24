@@ -3,7 +3,7 @@
 
 import { config } from "../config.js";
 import { generateEmbedding, getEntitySearchableText } from "../embeddings.js";
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { storeLocalEntityEmbedding } from "./local_entity_embedding.js";
 
 export interface EntitySnapshotRowForEmbedding {
@@ -26,7 +26,7 @@ export interface EntitySnapshotRowWithEmbedding extends EntitySnapshotRowForEmbe
  * Fetch canonical_name for an entity from the entities table.
  */
 async function fetchCanonicalName(entityId: string): Promise<string | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("entities")
     .select("canonical_name")
     .eq("id", entityId)
@@ -47,7 +47,7 @@ export async function prepareEntitySnapshotWithEmbedding(
   snapshotRow: EntitySnapshotRowForEmbedding,
   canonicalName?: string | null,
 ): Promise<EntitySnapshotRowWithEmbedding> {
-  // Generate embedding for both Supabase (pgvector) and local (sqlite-vec)
+  // Generate embedding for both pgvector and local (sqlite-vec)
   // Skip only when OPENAI_API_KEY is not configured
   const name =
     canonicalName ?? (await fetchCanonicalName(snapshotRow.entity_id));
@@ -75,7 +75,7 @@ export async function upsertEntitySnapshotWithEmbedding(
   row: EntitySnapshotRowWithEmbedding,
 ): Promise<void> {
   const payload = getEntitySnapshotUpsertPayload(row);
-  await supabase.from("entity_snapshots").upsert(
+  await db.from("entity_snapshots").upsert(
     payload as Record<string, unknown>,
     { onConflict: "entity_id" }
   );

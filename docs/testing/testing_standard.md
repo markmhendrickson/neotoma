@@ -46,12 +46,7 @@ test('record insert creates entities', async () => {
   expect(entities[0].canonical_name).toBe('acme corp');
   
   // Verify database state
-  const { data: stored, error } = await supabase
-    .from("entities")
-    .select("*")
-    .eq("id", entities[0].id)
-    .single();
-  expect(error).toBeNull();
+  const stored = await db.queryOne("entities", { id: entities[0].id });
   expect(stored).toBeDefined();
 });
 ```
@@ -124,7 +119,7 @@ See `docs/testing/automated_test_catalog.md` for a full, file level inventory of
 **See `foundation/conventions/testing_conventions.md` for generic principles.**
 
 **See `docs/testing/integration_test_quality_rules.mdc` for Neotoma-specific applications:**
-- Applying foundation principles to Supabase/PostgreSQL
+- Applying foundation principles to database layer
 - Testing Neotoma's default UUID and null handling
 - Testing Neotoma-specific tables (raw_fragments, auto_enhancement_queue, etc.)
 - Testing Neotoma-specific workflows (auto-enhancement, queue processing, etc.)
@@ -142,7 +137,7 @@ Constraints:
 - All tests MUST be deterministic
 - Unit tests MUST be fast (<10ms)
 - Integration tests MUST follow foundation conventions (see `foundation/conventions/testing_conventions.md`)
-- Integration tests MUST use real database operations (no mocked Supabase queries)
+- Integration tests MUST use real database operations (no mocked queries)
 - Integration tests MUST use strong assertions that verify correct outcomes
 - Integration tests MUST test edge cases (null, default UUID, invalid values)
 - Integration tests MUST test foreign key constraints explicitly

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { verifyEntityExists, computeEntitySnapshot } from "../helpers/database_verifiers.js";
 
@@ -15,7 +15,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     it("should create correction observation for string field", async () => {
       // Create entity
       const entityId = `ent_correct_string_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -32,7 +32,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
           entity_id: entityId,
         entity_type: "task",
@@ -49,7 +49,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction, error: correctionError } = await supabase
+      const { data: correction, error: correctionError } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -76,7 +76,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should create correction observation for number field", async () => {
       const entityId = `ent_correct_number_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -93,7 +93,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -111,7 +111,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction } = await supabase
+      const { data: correction } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -133,7 +133,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should create correction observation for date field", async () => {
       const entityId = `ent_correct_date_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -150,7 +150,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -168,7 +168,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction } = await supabase
+      const { data: correction } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -190,7 +190,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should create correction observation for boolean field", async () => {
       const entityId = `ent_correct_bool_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -207,7 +207,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -225,7 +225,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction } = await supabase
+      const { data: correction } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -247,7 +247,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should create correction observation for array field", async () => {
       const entityId = `ent_correct_array_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -264,7 +264,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -282,7 +282,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction } = await supabase
+      const { data: correction } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -304,7 +304,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should create correction observation for object field", async () => {
       const entityId = `ent_correct_object_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -321,7 +321,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -339,7 +339,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create correction
-      const { data: correction } = await supabase
+      const { data: correction } = await db
         .from("observations")
         .insert({
           entity_id: entityId,
@@ -364,7 +364,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
     it("should verify correction wins in snapshot computation", async () => {
       const entityId = `ent_verify_correction_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -382,7 +382,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // Create original observation
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -399,8 +399,9 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       tracker.trackEntity(entityId);
 
-      // Create correction
-      await supabase.from("observations")
+      // Create correction with later observed_at so default last-write-wins picks it
+      const laterTime = new Date(Date.now() + 2000).toISOString();
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -411,7 +412,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
         user_id: testUserId,
         source_priority: 1000, // Correction priority (higher),
           schema_version: "1.0",
-          observed_at: new Date().toISOString()
+          observed_at: laterTime
       });
 
       // Compute entity snapshot from observations
@@ -423,7 +424,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       }
 
       // Verify entity snapshot uses correction
-      const { data: snapshot, error: snapshotError } = await supabase
+      const { data: snapshot, error: snapshotError } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityId)
@@ -441,7 +442,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
   describe("reinterpret action variations", () => {
     it("should reinterpret source with default interpretation_config", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -464,7 +465,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     });
 
     it("should reinterpret source with custom model", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -492,7 +493,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     });
 
     it("should reinterpret source with custom temperature", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -518,7 +519,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     });
 
     it("should reinterpret source with custom max_tokens", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -544,7 +545,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     });
 
     it("should create new observations after reinterpretation", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -563,7 +564,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       // Create initial observation
       const entityId = `ent_reinterpret_${Date.now()}`;
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -580,7 +581,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Reinterpretation would create new observations (not modify existing)
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_id", source!.id);
@@ -589,7 +590,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
     });
 
     it("should not modify existing observations during reinterpretation", async () => {
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -608,7 +609,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
 
       // Create initial observation
       const entityId = `ent_immutable_${Date.now()}`;
-      const { data: originalObs } = await supabase
+      const { data: originalObs } = await db
         .from("observations")
     .insert({
           entity_id: entityId,
@@ -628,7 +629,7 @@ describe("MCP correction and reinterpretation - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Verify observation is immutable
-      const { data: retrievedObs } = await supabase
+      const { data: retrievedObs } = await db
         .from("observations")
         .select("*")
         .eq("id", originalObs!.id)

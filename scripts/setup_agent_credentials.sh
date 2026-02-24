@@ -21,8 +21,6 @@ echo "$DECODED" > .env.agent.tmp
 export $(grep -v '^#' .env.agent.tmp | xargs)
 
 echo "[INFO] Credentials loaded from encoded input"
-echo "[INFO] SUPABASE_URL: ${SUPABASE_URL:+set}"
-echo "[INFO] SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:+set}"
 
 
 

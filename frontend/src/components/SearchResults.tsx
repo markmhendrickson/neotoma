@@ -76,7 +76,7 @@ export function SearchResults() {
 
       // Search entities
       try {
-        const { data: entitiesData } = await api.POST("/api/entities/query", {
+        const { data: entitiesData } = await api.POST("/entities/query", {
           body: {
             search: searchQuery,
             limit: 100,
@@ -98,7 +98,7 @@ export function SearchResults() {
 
       // Search sources
       try {
-        const { data: sourcesData } = await api.GET("/api/sources", {
+        const { data: sourcesData } = await api.GET("/sources", {
           params: { query: userId ? { user_id: userId } : {} },
         });
         const sources = (sourcesData?.sources || [])
@@ -121,7 +121,7 @@ export function SearchResults() {
 
       // Search observations
       try {
-        const { data: observationsData } = await api.POST("/api/observations/query", {
+        const { data: observationsData } = await api.POST("/observations/query", {
           body: {
             limit: 100,
             user_id: userId,
@@ -148,7 +148,7 @@ export function SearchResults() {
 
       // Search interpretations
       try {
-        const { data: interpretationsData } = await api.GET("/api/interpretations", {
+        const { data: interpretationsData } = await api.GET("/interpretations", {
           params: { query: userId ? { user_id: userId } : {} },
         });
         const interpretations = (interpretationsData?.interpretations || [])

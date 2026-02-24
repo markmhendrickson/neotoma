@@ -41,7 +41,7 @@ The existing codebase has a **solid foundation** (100% complete) and **working M
 7. **FU-303:** Build timeline view UI
 8. **FU-304:** Dedicated upload UI (extract from ChatPanel)
 9. **FU-400-403:** Onboarding flow (4 FUs, all new)
-10. **FU-700:** Authentication UI (Supabase Auth integration)
+10. **FU-700:** Authentication UI (OAuth integration)
 11. **FU-701:** RLS Implementation (enforce user isolation)
 **Estimated Effort:** 11-14 days for MVP gaps (includes design system completion) + 1-2 days cleanup = **2-3 weeks total**
 ### Post-MVP Features to Disable/Flag
@@ -296,7 +296,7 @@ grep -E "(budget|subscription|goal|exercise|measurement|meal|sleep_session|media
 # Two-tier check (should return 0 schema family names in code)
 grep -rE "\"Financial\"|\"Productivity\"|\"Knowledge\"|\"Legal\"|\"Travel\"|\"Identity\"" src/ --exclude-dir=node_modules | grep -v "// documentation"
 # Immutability check (should have trigger)
-grep -r "prevent_type_update\|prevent_records_type_update" supabase/schema.sql
+grep -r "prevent_type_update\|prevent_records_type_update" migrations/
 # Field validation check
 grep -r "validateFieldsForType\|validateExtractedFields" src/services/
 # Extraction metadata check
@@ -601,13 +601,13 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 - **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
 - **Cursor Command:** `Create New Feature Unit` (spec + UX) → `Create Prototype` → `Run Feature Workflow` → `Final Review`
 - **Manual Time:** 1.5-2h (UX input, prototype review, auth security review)
-- **Agent Time:** 4-5h (prototype, Supabase Auth integration, forms)
+- **Agent Time:** 4-5h (prototype, OAuth integration, forms)
 - **Risk:** High (security)
 - **Dependencies:** None
 **Steps:**
 1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-700` → dependency validation passes
 2. **Agent:** If spec doesn't exist, interactively collect spec details (Checkpoint 0)
-3. **Human:** Review auth spec (Supabase Auth integration)
+3. **Human:** Review auth spec (OAuth integration)
 4. **Agent:** Use `Create Prototype` to build interactive prototype with mocked APIs (autonomous, after Checkpoint 0)
 5. **Human:** Review and approve prototype (Checkpoint 1) — auth flows, security patterns
 6. **Agent:** Use `Run Feature Workflow` to implement signup/signin forms, password reset, OAuth

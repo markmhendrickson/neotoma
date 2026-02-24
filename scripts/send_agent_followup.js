@@ -19,30 +19,9 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Collect environment variables for agents (use environment-specific variables only)
+// Collect environment variables for agents (local-only mode)
 const envVars = [];
-const env = process.env.NODE_ENV || "development";
-const supabaseUrl = env === "production"
-  ? (process.env.PROD_SUPABASE_PROJECT_ID ? `https://${process.env.PROD_SUPABASE_PROJECT_ID}.supabase.co` : process.env.PROD_SUPABASE_URL)
-  : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL);
-const supabaseKey = env === "production"
-  ? process.env.PROD_SUPABASE_SERVICE_KEY
-  : process.env.DEV_SUPABASE_SERVICE_KEY;
-
-if (supabaseUrl) {
-  if (env === "production") {
-    envVars.push(`PROD_SUPABASE_URL=${supabaseUrl}`);
-  } else {
-    envVars.push(`DEV_SUPABASE_URL=${supabaseUrl}`);
-  }
-}
-if (supabaseKey) {
-  if (env === "production") {
-    envVars.push(`PROD_SUPABASE_SERVICE_KEY=${supabaseKey}`);
-  } else {
-    envVars.push(`DEV_SUPABASE_SERVICE_KEY=${supabaseKey}`);
-  }
-}
+const env = process.env.NEOTOMA_ENV || "development";
 if (env === "production") {
   if (process.env.PROD_OPENAI_API_KEY) {
     envVars.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
@@ -81,12 +60,12 @@ const followupInstructions = `**URGENT: Code Changes Pushed - Pull Latest and Re
 
 2. **Export environment variables** before running tests:
    \`\`\`bash
-   ${envVars.length > 0 ? envVars.join('\nexport ') : '# No Supabase credentials configured - tests may fail'}
+   ${envVars.length > 0 ? envVars.join('\nexport ') : '# Local mode - tests use local SQLite'}
    \`\`\`
 
 3. **Re-run test suites** with the fixes:
    - Unit tests: \`npm run test\`
-   - Integration tests: \`npm run test:integration\` (requires Supabase credentials above)
+   - Integration tests: \`npm run test:integration\` (uses local SQLite)
    - E2E tests: \`npm run test:e2e\` (CSV fix should resolve parsing errors)
 
 4. **Update status file**: \`docs/releases/in_progress/v0.2.0/agent_status.json\`
@@ -147,7 +126,7 @@ async function sendFollowup(agent) {
 }
 
 console.log('[INFO] Sending follow-up instructions to agents about resolved blockers...');
-console.log('[INFO] Blockers resolved: CSV fixture loader, Supabase credentials documented');
+console.log('[INFO] Blockers resolved: CSV fixture loader, local mode documented');
 
 for (const agent of agentIds) {
   await sendFollowup(agent);

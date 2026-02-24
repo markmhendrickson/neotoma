@@ -19,71 +19,46 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const instructionMessage = `**Environment Variables and Database Setup**
+const instructionMessage = `**Environment Variables and Database Setup (Local-Only Mode)**
 
 **Step 1: Check if environment variables are already set**
 
-Run this command to check if Supabase credentials are available:
+Run this command to check if credentials are available:
 \`\`\`bash
-env | grep -E "SUPABASE|OPENAI" || echo "No Supabase/OpenAI env vars found"
+env | grep -E "OPENAI|NEOTOMA" || echo "No env vars found"
 \`\`\`
 
 **Step 2: If environment variables are NOT set, you have options:**
 
-**Option A: Use Supabase CLI to link to the project**
+**Option A: Use local SQLite (default)**
 
-If you need to run migrations or integration tests, link the Supabase CLI:
+Tests use local SQLite by default. No remote credentials needed.
 
-\`\`\`bash
-# Check if Supabase CLI is installed
-which supabase || npm install -g supabase
+**Option B: Skip integration/E2E tests if needed**
 
-# Link to the project (you'll need the project reference ID)
-# The project reference is: htczllkfgrqjyqxygymh
-supabase link --project-ref htczllkfgrqjyqxygymh
-
-# After linking, environment variables should be available
-# Run migrations if needed
-npx supabase db push
-\`\`\`
-
-**Option B: Skip integration/E2E tests if credentials unavailable**
-
-If credentials cannot be obtained, update the status file with:
+If tests cannot be run, update the status file with:
 \`\`\`json
 {
   "tests": {
     "unit": { "passed": true, "command": "npm run test" },
-    "integration": { "passed": null, "skipped": true, "reason": "Supabase credentials not available" },
-    "e2e": { "passed": null, "skipped": true, "reason": "Supabase credentials not available" }
+    "integration": { "passed": null, "skipped": true, "reason": "Skipped" },
+    "e2e": { "passed": null, "skipped": true, "reason": "Skipped" }
   }
 }
 \`\`\`
 
-**Step 3: Running tests with available credentials**
+**Step 3: Running tests**
 
-If environment variables ARE set, verify they work:
 \`\`\`bash
-# Test Supabase connection
-curl -H "apikey: \${SUPABASE_SERVICE_KEY}" \${SUPABASE_URL}/rest/v1/
-
-# Run tests
 npm run test
-npm run test:integration  # Only if credentials available
-npm run test:e2e  # Only if credentials available
+npm run test:integration  # Uses local SQLite
+npm run test:e2e
 \`\`\`
 
 **Important Notes:**
 - DO NOT export credentials from conversation text if they contain actual secrets
-- Check for environment variables first (they may have been set when the agent was spawned)
-- Use Supabase CLI linking as a fallback if credentials aren't in environment
-- Mark tests as skipped if credentials cannot be obtained (don't block on this)
-- Update status file with actual test results (passed/skipped/failed)
-
-**Security Policy Compliance:**
-- If credentials are provided in conversation text with actual secrets, you should NOT export them
-- Use environment variables that are already set, or use Supabase CLI to link
-- If neither works, mark tests as skipped and proceed with unit tests only`;
+- Tests use local SQLite by default
+- Update status file with actual test results (passed/skipped/failed)`;
 
 async function sendInstruction(agent) {
   const endpoint = `${apiUrl}/v0/agents/${agent.id}/followup`;
@@ -115,14 +90,10 @@ async function sendInstruction(agent) {
 }
 
 console.log('[INFO] Sending environment check instructions to agents...');
-console.log('[INFO] Instructions include: check env vars, Supabase CLI linking, skip tests if needed');
+console.log('[INFO] Instructions include: check env vars, local mode setup');
 
 for (const agent of agentIds) {
   await sendInstruction(agent);
 }
 
 console.log('\n[INFO] Instructions sent to all agents');
-
-
-
-

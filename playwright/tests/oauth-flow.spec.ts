@@ -5,11 +5,11 @@
  * 
  * Routes tested:
  * - /oauth - Main OAuth connections management page
- * - /oauth/consent - OAuth consent page (redirected from Supabase)
- * 
- * Note: Full OAuth callback testing with Supabase OAuth approval requires integration tests
+ * - /oauth/consent - OAuth consent page (redirected from auth provider)
+ *
+ * Note: Full OAuth callback testing with auth approval requires integration tests
  * (see tests/integration/mcp_oauth_flow.test.ts) or manual testing due to the need to
- * interact with real Supabase OAuth flow.
+ * interact with real OAuth flow.
  * 
  * These E2E tests focus on:
  * - OAuth page UI elements and interactions
@@ -70,7 +70,7 @@ test.describe('OAuth Page (/oauth)', () => {
       await page.waitForFunction(() => {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && (key.includes('supabase') || key.includes('auth'))) {
+          if (key && key.includes('auth')) {
             const value = localStorage.getItem(key);
             if (value && (value.includes('access_token') || value.includes('session') || value.includes('user'))) {
               return true;
@@ -226,7 +226,7 @@ test.describe('OAuth Page (/oauth)', () => {
     let capturedAuthUrl = '';
     await page.route('**/api/mcp/oauth/initiate', async (route) => {
       const mockResponse = {
-        authUrl: `https://example.supabase.co/auth/v1/oauth/authorize?state=test-state&code_challenge=test-challenge`,
+        authUrl: `http://127.0.0.1:54321/auth/v1/oauth/authorize?state=test-state&code_challenge=test-challenge`,
         connectionId: connectionId,
         expiresAt: new Date(Date.now() + 600000).toISOString(),
       };
@@ -307,7 +307,7 @@ test.describe('OAuth Flow Integration (Requires Auth)', () => {
     let capturedAuthUrl = '';
     await page.route('**/api/mcp/oauth/initiate', async (route) => {
       const mockResponse = {
-        authUrl: `https://example.supabase.co/auth/v1/oauth/authorize?state=test-state&code_challenge=test-challenge`,
+        authUrl: `http://127.0.0.1:54321/auth/v1/oauth/authorize?state=test-state&code_challenge=test-challenge`,
         connectionId: connectionId,
         expiresAt: new Date(Date.now() + 600000).toISOString(),
       };
@@ -334,7 +334,7 @@ test.describe('OAuth Flow Integration (Requires Auth)', () => {
    *
    * Preconditions:
    * - App server running at http://localhost:5195
-   * - Supabase OAuth server enabled (Allow Dynamic OAuth Apps)
+   * - Local auth server enabled (Allow Dynamic OAuth Apps)
    *
    * Steps:
    * 1) Open app home
@@ -344,11 +344,11 @@ test.describe('OAuth Flow Integration (Requires Auth)', () => {
    * 5) Click "Approve"
    * 7) Verify redirect to /mcp-setup?status=success
    */
-  test('completes full OAuth flow via Supabase consent', async ({ page, uiBaseUrl }) => {
+  test('completes full OAuth flow via consent page', async ({ page, uiBaseUrl }) => {
     // Set up mock function
     await page.addInitScript(() => {
       if (typeof window !== 'undefined') {
-        (window as any).__mockSupabaseOAuthApprove = async (authorizationId: string) => {
+        (window as any).__mockOAuthApprove = async (authorizationId: string) => {
           return {
             data: {
               redirect_to: `${window.location.origin}/oauth?connection_id=test-connection&status=success`,
@@ -397,7 +397,7 @@ test.describe('OAuth Flow Integration (Requires Auth)', () => {
 
     expect(authUrl).toContain('/auth/v1/oauth/authorize');
 
-    // Navigate to auth URL (may be Supabase or our app)
+    // Navigate to auth URL (may be auth provider or our app)
     await page.goto(authUrl, { waitUntil: 'domcontentloaded' });
 
     // Handle guest auth if needed
@@ -425,7 +425,7 @@ test.describe('OAuth Flow Integration (Requires Auth)', () => {
       throw new Error(`Did not reach OAuth consent page. Current URL: ${currentUrl}`);
     }
 
-    // Inject mock into Supabase client before clicking approve
+    // Inject mock into auth client before clicking approve
     await injectOAuthMock(page);
 
     // Wait for approve button to be visible
@@ -450,21 +450,21 @@ const injectOAuthMock = async (page: any) => {
   await page.evaluate(() => {
     // Function to inject mock
     const inject = () => {
-      const supabase = (window as any).supabase;
-      if (supabase?.auth) {
-        if (!supabase.auth.oauth) {
-          supabase.auth.oauth = {};
+      const authClient = (window as any).authClient;
+      if (authClient?.auth) {
+        if (!authClient.auth.oauth) {
+          authClient.auth.oauth = {};
         }
-        supabase.auth.oauth.approveAuthorization = (window as any).__mockSupabaseOAuthApprove;
+        authClient.auth.oauth.approveAuthorization = (window as any).__mockOAuthApprove;
       }
     };
-    
+
     // Inject immediately
     inject();
-    
+
     // Also intercept property access
-    const originalSupabase = (window as any).supabase;
-    if (originalSupabase) {
+    const originalAuthClient = (window as any).authClient;
+    if (originalAuthClient) {
       inject();
     }
   });
@@ -498,7 +498,7 @@ test.describe('OAuth Consent Page (/oauth/consent)', () => {
       }
     });
     
-    // Mock Supabase OAuth authorization details endpoint
+    // Mock OAuth authorization details endpoint
     await page.route('**/auth/v1/oauth/authorizations/*', async (route) => {
       const url = route.request().url();
       const authorizationId = url.split('/').pop()?.split('?')[0];
@@ -517,7 +517,7 @@ test.describe('OAuth Consent Page (/oauth/consent)', () => {
       });
     });
     
-    // Mock Supabase OAuth approve endpoint (fallback when approveAuthorization method doesn't exist)
+    // Mock OAuth approve endpoint (fallback when approveAuthorization method doesn't exist)
     await page.route('**/auth/v1/oauth/authorize', async (route) => {
       if (route.request().method() === 'POST') {
         await route.fulfill({
@@ -531,10 +531,10 @@ test.describe('OAuth Consent Page (/oauth/consent)', () => {
       }
     });
     
-    // Inject mock Supabase OAuth client before page loads
+    // Inject mock OAuth client before page loads
     await page.addInitScript(() => {
       // Store mock in window for later injection
-      (window as any).__mockSupabaseOAuthApprove = async (authorizationId: string) => {
+      (window as any).__mockOAuthApprove = async (authorizationId: string) => {
         return {
           data: {
             redirect_to: `${window.location.origin}/mcp-setup?connection_id=test-connection&status=success`,
@@ -563,7 +563,7 @@ test.describe('OAuth Consent Page (/oauth/consent)', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    // Re-inject mock after navigation (in case Supabase reinitialized)
+    // Re-inject mock after navigation (in case auth client reinitialized)
     await injectOAuthMock(page);
     
     // Verify consent page renders (should show approval screen or error)

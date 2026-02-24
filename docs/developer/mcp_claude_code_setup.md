@@ -33,7 +33,7 @@ This integration validates the localhost agent paradigm: agents running on your 
 
 1. **Claude Code installed** - Desktop application with MCP support
 2. **Node.js** v18.x or v20.x installed
-3. **Supabase project** set up with schema applied (see `docs/developer/getting_started.md`)
+3. **Local storage** initialized (see `docs/developer/getting_started.md`)
 4. **Environment variables** configured in `.env`
 
 ## Step 1: Build the MCP Server
@@ -50,21 +50,7 @@ This compiles TypeScript to JavaScript in the `dist/` directory.
 
 ## Step 2: Configure Environment Variables
 
-Create `.env` in the project root with your Supabase credentials:
-
-```bash
-# Supabase Configuration (preferred: use Project ID)
-DEV_SUPABASE_PROJECT_ID=your-project-id
-DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
-
-# Alternative: Full URL (also supported)
-# DEV_SUPABASE_URL=https://your-project-id.supabase.co
-# DEV_SUPABASE_SERVICE_KEY=your-service-role-key-here
-```
-
-**Where to find credentials:**
-- **Project ID**: Supabase Dashboard → Settings → General → Project ID (preferred)
-- **Service Role Key**: Supabase Dashboard → Settings → API → service_role key (NOT anon key)
+Create `.env` in the project root if needed. For local storage, no env vars are required (defaults: `./data`, `./data/neotoma.db`, `./data/sources`). See [Getting started](getting_started.md) for optional overrides.
 
 **Security Note:** Never commit `.env` to git. It's already in `.gitignore`.
 
@@ -107,7 +93,7 @@ Use the same stdio config as Cursor and Codex. Add to `.cursor/mcp.json` in the 
 
 ```bash
 cd /path/to/neotoma
-# Add neotoma-dev and neotoma-prod to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
+# Add neotoma-dev and neotoma to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
 npm run sync:mcp
 ```
 
@@ -128,7 +114,7 @@ Claude Code config location:
     "neotoma-dev": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
     },
-    "neotoma-prod": {
+    "neotoma": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
     }
   }
@@ -411,21 +397,13 @@ The session token is invalid or expired. **OAuth is recommended** to avoid this 
 4. Check node executable: `which node`
 5. Verify `cwd` points to Neotoma project root
 
-### Issue: "Invalid supabaseUrl" or "Missing SUPABASE_URL"
+### Issue: "Database connection failed" or "Invalid configuration"
 
 **Solutions:**
-1. Verify `.env` file exists in project root (not in `dist/`)
+1. Verify `.env` file exists in project root (not in `dist/`) if using custom paths
 2. Check `cwd` in config points to project root (where `.env` is)
-3. Verify credentials in `.env` are correct
-4. Test database connection: `npm test`
-
-### Issue: "Database connection failed"
-
-**Solutions:**
-1. Verify Supabase project is active (not paused)
-2. Check that `supabase/schema.sql` has been applied
-3. Verify service_role key (not anon key)
-4. Test connection manually: `npm test`
+3. Run `neotoma init` to create data directory and database
+4. Test connection: `npm test`
 
 ### Issue: MCP actions not appearing in Claude Code
 
@@ -490,7 +468,7 @@ If you use Claude Code from different machines or profiles:
    ```
    Keep this running to watch for changes.
 
-All instances will share the same Neotoma database via Supabase.
+All instances will share the same Neotoma database (local SQLite).
 
 ## Privacy and Security Notes
 
@@ -498,13 +476,11 @@ All instances will share the same Neotoma database via Supabase.
 - All MCP communication happens locally via stdin/stdout
 - No network requests for memory access
 - User-controlled memory with encryption
-- Data never leaves your computer except for Supabase sync
+- Data stays on your computer (local storage)
 
 **Security Best Practices:**
-- Never share your service_role key
-- Use environment variables for credentials
+- Use environment variables for credentials when needed
 - Keep `.env` out of version control
-- Use row-level security in Supabase for multi-user scenarios
 
 ## Additional Resources
 

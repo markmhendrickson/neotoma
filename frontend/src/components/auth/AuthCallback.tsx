@@ -1,12 +1,12 @@
 /**
  * Auth Callback Handler
  * 
- * Handles OAuth and magic link authentication callbacks from Supabase
+ * Handles OAuth and magic link authentication callbacks
  */
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { auth } from "@/lib/auth";
 import { useToast } from "@/components/ui/use-toast";
 import { Loader2 } from "lucide-react";
 
@@ -19,7 +19,7 @@ export function AuthCallback() {
     // Handle the callback
     const handleCallback = async () => {
       try {
-        // Get the hash parameters (Supabase uses hash for magic links and OAuth)
+        // Get the hash parameters (auth uses hash for magic links and OAuth)
         const hashParams = new URLSearchParams(window.location.hash.substring(1));
         
         // Check for error in hash
@@ -38,7 +38,7 @@ export function AuthCallback() {
 
         if (accessToken && refreshToken) {
           // Exchange the tokens for a session
-          const { data, error: sessionError } = await supabase.auth.setSession({
+          const { data, error: sessionError } = await auth.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });

@@ -8,14 +8,13 @@ import { fileURLToPath } from "node:url";
 // Load .env file before setting any defaults
 dotenv.config(); // Load .env
 
-// When Supabase is not enabled, run integration/service/unit tests against local SQLite DB
-const runSupabaseTests = process.env.RUN_SUPABASE_TESTS === "1";
-if (!runSupabaseTests) {
+// Local-only mode: run integration/service/unit tests against local SQLite DB
+const useLocalDb = process.env.RUN_REMOTE_TESTS !== "1";
+if (useLocalDb) {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
   const testDataDir = path.join(projectRoot, ".vitest", "data");
   const testSourcesDir = path.join(testDataDir, "sources");
   mkdirSync(testSourcesDir, { recursive: true });
-  process.env.NEOTOMA_STORAGE_BACKEND = "local";
   process.env.NEOTOMA_SQLITE_PATH = path.join(projectRoot, ".vitest", "neotoma.db");
   process.env.NEOTOMA_DATA_DIR = testDataDir;
   process.env.NEOTOMA_RAW_STORAGE_DIR = testSourcesDir;
@@ -26,16 +25,20 @@ if (!process.env.OPENAI_API_KEY) {
   process.env.OPENAI_API_KEY = "test-openai-key";
 }
 
+// Disable icon generation in tests (avoids network calls and OpenAI dependency).
+if (!process.env.ICON_GENERATION_ENABLED) {
+  process.env.ICON_GENERATION_ENABLED = "false";
+}
+
 // Set test encryption key for OAuth token encryption tests (if not already set)
-if (!process.env.MCP_TOKEN_ENCRYPTION_KEY) {
-  // Generate a test encryption key (32 bytes = 64 hex characters)
+if (!process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY && !process.env.MCP_TOKEN_ENCRYPTION_KEY) {
   const testKey = randomBytes(32).toString("hex");
-  process.env.MCP_TOKEN_ENCRYPTION_KEY = testKey;
+  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = testKey;
 }
 
 // Set test OAuth client ID for OAuth 2.1 Server tests (if not already set)
-if (!process.env.SUPABASE_OAUTH_CLIENT_ID) {
-  process.env.SUPABASE_OAUTH_CLIENT_ID = "test-client-id";
+if (!process.env.NEOTOMA_OAUTH_CLIENT_ID) {
+  process.env.NEOTOMA_OAUTH_CLIENT_ID = "test-client-id";
 }
 
 // Set test MCP authentication (for MCP server action tests)
@@ -44,14 +47,15 @@ if (!process.env.NEOTOMA_CONNECTION_ID && !process.env.NEOTOMA_SESSION_TOKEN) {
   process.env.NEOTOMA_CONNECTION_ID = "test-connection-bypass";
 }
 
-// Run database migrations before tests (skip when VITEST_SKIP_MIGRATIONS=1 or RUN_SUPABASE_TESTS not set)
+// Run database migrations before tests (skip when VITEST_SKIP_MIGRATIONS=1; local mode uses SQLite, no remote migrations)
 const MIGRATION_TIMEOUT_MS = 20000;
 
 (async () => {
   if (process.env.VITEST_SKIP_MIGRATIONS === "1") {
     return;
   }
-  if (process.env.RUN_SUPABASE_TESTS !== "1") {
+  // Local-only: skip remote migration setup
+  if (process.env.RUN_REMOTE_TESTS !== "1") {
     return;
   }
   try {

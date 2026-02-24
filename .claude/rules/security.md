@@ -1,7 +1,6 @@
 ---
-description: "Prevents accidental commits of private, sensitive, or confidential documentation and data."
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when committing, configuring pre-commit, or adding protected paths: security audit blocks commits of protected_paths, .env*, data/; gitleaks scans for credentials; do not bypass hooks."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/security.mdc -->

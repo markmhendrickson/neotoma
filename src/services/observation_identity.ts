@@ -6,7 +6,7 @@
  */
 
 import { createHash } from "crypto";
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 
 export interface Observation {
   id: string;
@@ -86,7 +86,7 @@ export async function checkObservationExists(
   observationId: string,
   userId: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("observations")
     .select("id")
     .eq("id", observationId)
@@ -108,7 +108,7 @@ export async function getExistingObservation(
   observationId: string,
   userId: string
 ): Promise<Observation | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("observations")
     .select("*")
     .eq("id", observationId)
@@ -138,7 +138,7 @@ export async function checkObservationExistsByHash(
   canonicalHash: string,
   userId: string
 ): Promise<Observation | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("observations")
     .select("*")
     .eq("source_id", sourceId)

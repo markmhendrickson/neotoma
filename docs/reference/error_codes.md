@@ -30,7 +30,7 @@ interface ErrorEnvelope {
 | `INGESTION_EXTRACTION_FAILED` | 500 | No | Field extraction failed (schema error) |
 | `INGESTION_NORMALIZATION_FAILED` | 500 | Yes | File format conversion failed |
 | `INGESTION_SCHEMA_DETECTION_FAILED` | 500 | No | Could not detect document schema |
-| `INGESTION_STORAGE_FAILED` | 500 | Yes | Failed to store file in Supabase Storage |
+| `INGESTION_STORAGE_FAILED` | 500 | Yes | Failed to store file in storage |
 **Common Causes:**
 - `INGESTION_FILE_TOO_LARGE`: File >50MB
 - `INGESTION_UNSUPPORTED_TYPE`: File is not PDF, JPG, or PNG
@@ -50,7 +50,7 @@ interface ErrorEnvelope {
 ## Database Errors
 | Code | HTTP | Retry? | Description |
 |------|------|--------|-------------|
-| `DB_CONNECTION_FAILED` | 503 | Yes | Cannot connect to Supabase |
+| `DB_CONNECTION_FAILED` | 503 | Yes | Cannot connect to database |
 | `DB_QUERY_FAILED` | 500 | Yes | Query execution failed |
 | `DB_CONSTRAINT_VIOLATION` | 409 | No | Unique constraint violated (duplicate record) |
 | `DB_TRANSACTION_FAILED` | 500 | Yes | Transaction rollback failed |
@@ -61,7 +61,7 @@ interface ErrorEnvelope {
 |------|------|--------|---------|
 | `RESOURCE_NOT_FOUND` | 404 | No | Requested resource does not exist |
 **Common Causes:**
-- `DB_CONNECTION_FAILED`: Supabase project paused or network issue
+- `DB_CONNECTION_FAILED`: Database unavailable or network issue
 - `DB_CONSTRAINT_VIOLATION`: Attempting to create duplicate record
 - `DB_TIMEOUT`: Query taking too long (large dataset or missing index)
 ## Entity Resolution Errors
@@ -86,11 +86,11 @@ interface ErrorEnvelope {
 | Code | HTTP | Retry? | Description |
 |------|------|--------|-------------|
 | `STORAGE_BUCKET_NOT_FOUND` | 404 | No | Storage bucket doesn't exist |
-| `STORAGE_UPLOAD_FAILED` | 500 | Yes | File upload to Supabase Storage failed |
+| `STORAGE_UPLOAD_FAILED` | 500 | Yes | File upload to storage failed |
 | `STORAGE_DELETE_FAILED` | 500 | Yes | File deletion from storage failed |
 | `STORAGE_SIGNED_URL_FAILED` | 500 | Yes | Failed to generate signed URL |
 **Common Causes:**
-- `STORAGE_BUCKET_NOT_FOUND`: Bucket `files` not created in Supabase
+- `STORAGE_BUCKET_NOT_FOUND`: Storage bucket not configured
 - `STORAGE_UPLOAD_FAILED`: Network issue or storage quota exceeded
 ## Integration Errors
 ### Plaid Errors
@@ -131,7 +131,7 @@ interface ErrorEnvelope {
 | `OAUTH_DECRYPTION_FAILED` | 500 | No | Failed to decrypt refresh token |
 | `OAUTH_USER_INFO_FAILED` | 500 | Yes | Failed to get user info from access token |
 **Common Causes:**
-- `OAUTH_CLIENT_REGISTRATION_FAILED`: Dynamic OAuth Apps not enabled in Supabase Dashboard, or missing SUPABASE_OAUTH_CLIENT_ID env var
+- `OAUTH_CLIENT_REGISTRATION_FAILED`: OAuth client not configured or missing env var
 - `OAUTH_STATE_INVALID`: State token not found in database or already consumed
 - `OAUTH_STATE_EXPIRED`: State created more than 10 minutes ago
 - `OAUTH_TOKEN_REFRESH_FAILED`: Refresh token expired or invalid, user needs to re-authenticate
@@ -166,7 +166,7 @@ interface ErrorEnvelope {
 | `NOT_IMPLEMENTED` | 501 | No | Feature not yet implemented |
 **Common Causes:**
 - `INTERNAL_ERROR`: Unexpected exception (check logs with trace_id)
-- `SERVICE_UNAVAILABLE`: Supabase or external service down
+- `SERVICE_UNAVAILABLE`: Database or external service down
 ## Retry Guidelines
 ### Retry Eligible (Yes)
 - Network errors (`DB_CONNECTION_FAILED`, `TIMEOUT`)

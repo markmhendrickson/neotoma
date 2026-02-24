@@ -2,14 +2,14 @@
 /**
  * Backfill entity embeddings for semantic search.
  * Processes all entity_snapshots, generates embeddings via OpenAI, and stores them.
- * Requires OPENAI_API_KEY. Works with both Supabase and local SQLite backends.
+ * Requires OPENAI_API_KEY. Works with both remote PostgreSQL and local SQLite backends.
  *
  * Usage: npx tsx scripts/backfill_entity_embeddings.ts [--limit N] [--dry-run]
  */
 
 import "dotenv/config";
 import { config } from "../src/config.js";
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   if (limit) console.log(`Limit: ${limit}`);
 
   // Fetch entity_snapshots (optionally limited)
-  const query = supabase
+  const query = db
     .from("entity_snapshots")
     .select("entity_id, entity_type, schema_version, snapshot, computed_at, observation_count, last_observation_at, provenance, user_id");
 

@@ -24,12 +24,12 @@ It does not cover:
 
 ### Local development
 
-1. **Prerequisites:** Node.js v18/v20, npm 9+. Optional: Supabase project if using remote backend.
-2. **Environment:** Copy or create `.env` (see [Getting started](../developer/getting_started.md)). For local storage, no env vars are required (defaults: local backend, `./data`, `./data/neotoma.db`, `./data/sources`). For Supabase: set `NEOTOMA_STORAGE_BACKEND=supabase`, `DEV_SUPABASE_PROJECT_ID`, and `DEV_SUPABASE_SERVICE_KEY`.
+1. **Prerequisites:** Node.js v18/v20, npm 9+.
+2. **Environment:** Copy or create `.env` (see [Getting started](../developer/getting_started.md)). For local storage, no env vars are required (defaults: local backend, `./data`, `./data/neotoma.db`, `./data/sources`).
 3. **Install and migrate:**
    ```bash
    npm install
-   npm run migrate   # when using Supabase
+   npm run migrate
    ```
 4. **Start services:**
    - MCP server (stdio): `npm run dev`
@@ -41,8 +41,8 @@ It does not cover:
 ### Production
 
 1. Build: `npm run build:server`.
-2. Set production env (storage backend, Supabase credentials, HTTPS, OAuth config).
-3. Run migrations: `npm run migrate` (Supabase) or ensure local DB path is correct.
+2. Set production env (data paths, HTTPS, OAuth config).
+3. Run migrations: `npm run migrate` or ensure local DB path is correct.
 4. Start: `node dist/actions.js` (API) or `node dist/index.js` (stdio MCP). Use a process manager (e.g. systemd, PM2) and HTTPS in front.
 5. Verify health: `npm run doctor` and smoke-test critical endpoints.
 
@@ -51,7 +51,7 @@ It does not cover:
 ## Health Checks
 
 - **Primary:** Run `npm run doctor` for environment, database, RLS, storage, migrations, and security checks. See [Health check](health_check.md).
-- **Manual:** Run tests (`npm test`, `npm run test:integration`), type-check (`npm run type-check`), and lint (`npm run lint`). For Supabase, run schema advisors: `npm run check:advisors`.
+- **Manual:** Run tests (`npm test`, `npm run test:integration`), type-check (`npm run type-check`), and lint (`npm run lint`).
 - **Runtime:** Hit API health/readiness endpoints if configured; confirm MCP server starts (e.g. stdio mode).
 
 ---
@@ -66,8 +66,8 @@ It does not cover:
 ## Common Operations
 
 - **Migrations:** Apply with `npm run migrate`. Dry-run: `npm run migrate:dry-run`. See [Troubleshooting](troubleshooting.md) for "relation does not exist" and RLS issues.
-- **Backups:** For local SQLite, copy `NEOTOMA_SQLITE_PATH` (default `./data/neotoma.db` in dev, `./data/neotoma.prod.db` in prod), `NEOTOMA_RAW_STORAGE_DIR` (default `./data/sources` in dev, `./data/sources_prod` in prod), `NEOTOMA_EVENT_LOG_DIR` (default `./data/events` in dev, `./data/events_prod` in prod), and `NEOTOMA_LOGS_DIR` (default `./data/logs` in dev, `./data/logs_prod` in prod). For Supabase, use Supabase backup and storage export.
-- **User and access:** Auth is via Supabase Auth; user management and RLS are in [Auth](docs/subsystems/auth.md).
+- **Backups:** For local SQLite, copy `NEOTOMA_SQLITE_PATH` (default `./data/neotoma.db` in dev, `./data/neotoma.prod.db` in prod), `NEOTOMA_RAW_STORAGE_DIR` (default `./data/sources` in dev, `./data/sources_prod` in prod), `NEOTOMA_EVENT_LOG_DIR` (default `./data/events` in dev, `./data/events_prod` in prod), and `NEOTOMA_LOGS_DIR` (default `./data/logs` in dev, `./data/logs_prod` in prod).
+- **User and access:** Auth and user management are in [Auth](docs/subsystems/auth.md).
 
 ---
 

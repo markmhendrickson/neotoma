@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { randomUUID } from "crypto";
 import fs from "fs";
@@ -66,26 +66,26 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
     // Cleanup between tests
     if (createdEntityIds.length > 0) {
       // Reset merged state before deleting
-      await supabase
+      await db
         .from("entities")
         .update({ merged_to_entity_id: null, merged_at: null })
         .in("id", createdEntityIds);
       
-      await supabase.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
     
     if (createdSourceIds.length > 0) {
-      await supabase.from("observations").delete().in("source_id", createdSourceIds);
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("observations").delete().in("source_id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
 
     if (createdRelationshipIds.length > 0) {
-      await supabase.from("relationship_observations").delete().in("relationship_key", createdRelationshipIds);
-      await supabase.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
-      await supabase.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationship_observations").delete().in("relationship_key", createdRelationshipIds);
+      await db.from("relationship_snapshots").delete().in("relationship_key", createdRelationshipIds);
+      await db.from("relationships").delete().in("id", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     
@@ -593,7 +593,7 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         expect(responseData.target_entity_id).toBe(entity2Id);
         expect(responseData.created_at).toBeDefined();
 
-        const { data: snapshot, error: snapshotError } = await supabase
+        const { data: snapshot, error: snapshotError } = await db
           .from("relationship_snapshots")
           .select("*")
           .eq("relationship_key", responseData.id)

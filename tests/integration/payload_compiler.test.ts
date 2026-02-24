@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { compilePayload, getPayloadById } from "../../src/services/payload_compiler.js";
 import type { PayloadEnvelope } from "../../src/services/payload_schema.js";
 
@@ -17,11 +17,11 @@ describe("Payload Compiler Service", () => {
   beforeEach(async () => {
     // Clean up test data
     if (createdPayloadIds.length > 0) {
-      await supabase.from("payloads").delete().in("id", createdPayloadIds);
+      await db.from("payloads").delete().in("id", createdPayloadIds);
       createdPayloadIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
   });
@@ -29,17 +29,17 @@ describe("Payload Compiler Service", () => {
   afterEach(async () => {
     // Final cleanup
     if (createdPayloadIds.length > 0) {
-      await supabase.from("payloads").delete().in("id", createdPayloadIds);
+      await db.from("payloads").delete().in("id", createdPayloadIds);
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
     }
   });
 
   describe("compilePayload", () => {
     it("should compile invoice payload", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -77,7 +77,7 @@ describe("Payload Compiler Service", () => {
       createdPayloadIds.push(result.payload_id);
 
       // Verify payload was stored
-      const { data: payload, error } = await supabase
+      const { data: payload, error } = await db
         .from("payloads")
         .select("*")
         .eq("id", result.payload_id)
@@ -90,7 +90,7 @@ describe("Payload Compiler Service", () => {
 
     it("should deduplicate identical payloads", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -132,7 +132,7 @@ describe("Payload Compiler Service", () => {
 
     it("should apply canonicalization rules", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -187,7 +187,7 @@ describe("Payload Compiler Service", () => {
 
     it("should skip observations when requested", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -223,7 +223,7 @@ describe("Payload Compiler Service", () => {
       createdPayloadIds.push(result.payload_id);
 
       // Verify payload exists but no observations created
-      const { data: payload } = await supabase
+      const { data: payload } = await db
         .from("payloads")
         .select("*")
         .eq("id", result.payload_id)
@@ -239,7 +239,7 @@ describe("Payload Compiler Service", () => {
   describe("getPayloadById", () => {
     it("should retrieve payload by ID", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -288,7 +288,7 @@ describe("Payload Compiler Service", () => {
   describe("Entity Extraction", () => {
     it("should extract entities from payload", async () => {
       // Create test source
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -328,7 +328,7 @@ describe("Payload Compiler Service", () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Query entities that were created
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("user_id", testUserId)

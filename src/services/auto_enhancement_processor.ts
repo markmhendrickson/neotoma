@@ -5,7 +5,7 @@
  * Processes queued fields for auto-enhancement in batches to avoid blocking storage operations.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { schemaRecommendationService } from "./schema_recommendation.js";
 import { schemaRegistry } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
@@ -36,7 +36,7 @@ export async function processAutoEnhancementQueue(): Promise<{
 
   try {
     // 1. Get pending items (limit 10 per run)
-    const { data: pendingItems, error: fetchError } = await supabase
+    const { data: pendingItems, error: fetchError } = await db
       .from("auto_enhancement_queue")
       .select("*")
       .in("status", ["pending", "failed"])
@@ -58,7 +58,7 @@ export async function processAutoEnhancementQueue(): Promise<{
 
       try {
         // Mark as processing
-        await supabase
+        await db
           .from("auto_enhancement_queue")
           .update({ status: "processing" })
           .eq("id", item.id);
@@ -75,7 +75,7 @@ export async function processAutoEnhancementQueue(): Promise<{
 
         if (!eligibility.eligible) {
           // Mark as skipped
-          await supabase
+          await db
             .from("auto_enhancement_queue")
             .update({
               status: "skipped",
@@ -132,7 +132,7 @@ export async function processAutoEnhancementQueue(): Promise<{
         }
 
         // Mark as completed
-        await supabase
+        await db
           .from("auto_enhancement_queue")
           .update({
             status: "completed",
@@ -156,7 +156,7 @@ export async function processAutoEnhancementQueue(): Promise<{
         const retryCount = (item.retry_count || 0) + 1;
         const maxRetries = 3;
 
-        await supabase
+        await db
           .from("auto_enhancement_queue")
           .update({
             status: retryCount < maxRetries ? "failed" : "failed",
@@ -217,7 +217,7 @@ export async function cleanupOldQueueItems(
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
 
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("auto_enhancement_queue")
     .delete()
     .in("status", ["completed", "skipped"])

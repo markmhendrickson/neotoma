@@ -53,7 +53,7 @@ export function RecentActivityFeed({ refreshKey }: RecentActivityFeedProps) {
     setLoading(true);
     try {
       const api = getApiClient(bearerToken);
-      const { data, error } = await api.GET("/api/timeline", {
+      const { data, error } = await api.GET("/timeline", {
         params: { query: { limit: 10 } },
       });
 

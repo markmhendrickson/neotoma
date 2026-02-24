@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { verifyEntityExists, computeEntitySnapshot } from "../helpers/database_verifiers.js";
 
@@ -7,7 +7,7 @@ describe("MCP entity actions - parameter variations", () => {
   const tracker = new TestIdTracker();
   const testUserId = "test-user-entity";
 
-  afterEach(async () => {
+  afterAll(async () => {
     await tracker.cleanup();
   });
 
@@ -15,7 +15,7 @@ describe("MCP entity actions - parameter variations", () => {
     it("should retrieve entity by entity_id", async () => {
       // Create test entity
       const entityId = `ent_test_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -32,7 +32,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      const { data: observation } = await supabase
+      const { data: observation } = await db
         .from("observations")
     .insert({
           entity_id: entityId,
@@ -52,7 +52,7 @@ describe("MCP entity actions - parameter variations", () => {
       await computeEntitySnapshot(entityId);
 
       // Retrieve entity
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityId)
@@ -64,7 +64,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should return null for non-existent entity_id", async () => {
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", "non-existent-entity-id")
@@ -77,7 +77,7 @@ describe("MCP entity actions - parameter variations", () => {
   describe("retrieve_entities variations", () => {
     beforeAll(async () => {
       // Seed multiple test entities
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -96,7 +96,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       for (let i = 0; i < 15; i++) {
         const entityId = `ent_bulk_${Date.now()}_${i}`;
-        await supabase.from("observations")
+        await db.from("observations")
     .insert({
           entity_id: entityId,
           entity_type: "task",
@@ -112,7 +112,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should paginate with limit and offset", async () => {
-      const { data: page1 } = await supabase
+      const { data: page1 } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_type", "task")
@@ -123,7 +123,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       expect(page1).toHaveLength(5);
 
-      const { data: page2 } = await supabase
+      const { data: page2 } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_type", "task")
@@ -142,7 +142,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should filter by entity_type", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_type", "task")
@@ -152,7 +152,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should filter by user_id", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("user_id", testUserId);
@@ -163,7 +163,7 @@ describe("MCP entity actions - parameter variations", () => {
     it("should filter by user_id: null", async () => {
       // Create entity with null user_id
       const entityId = `ent_null_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: null,
@@ -180,7 +180,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -195,7 +195,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       await computeEntitySnapshot(entityId);
 
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entity_snapshots")
         .select("*")
         .is("user_id", null);
@@ -204,7 +204,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should search by canonical_name", async () => {
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("user_id", testUserId)
@@ -219,7 +219,7 @@ describe("MCP entity actions - parameter variations", () => {
       const canonicalName = `Unique Task ${Date.now()}`;
       const entityId = `ent_unique_${Date.now()}`;
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -236,7 +236,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -251,7 +251,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       await computeEntitySnapshot(entityId);
 
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("canonical_name", canonicalName)
@@ -262,7 +262,7 @@ describe("MCP entity actions - parameter variations", () => {
     });
 
     it("should return null for non-existent identifier", async () => {
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("canonical_name", "Non Existent Entity")
@@ -275,7 +275,7 @@ describe("MCP entity actions - parameter variations", () => {
   describe("merge_entities variations", () => {
     it("should merge two entities", async () => {
       // Create source and target entities
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -295,7 +295,12 @@ describe("MCP entity actions - parameter variations", () => {
       const sourceEntityId = `ent_source_${Date.now()}`;
       const targetEntityId = `ent_target_${Date.now()}`;
 
-      await supabase.from("observations").insert([
+      await db.from("entities").insert([
+        { id: sourceEntityId, entity_type: "task", canonical_name: "Source", user_id: testUserId },
+        { id: targetEntityId, entity_type: "task", canonical_name: "Target", user_id: testUserId },
+      ]);
+
+      await db.from("observations").insert([
         {
           entity_id: sourceEntityId,
           entity_type: "task",
@@ -319,8 +324,8 @@ describe("MCP entity actions - parameter variations", () => {
       await computeEntitySnapshot(targetEntityId);
       // Merge would be handled by application layer
       // Here we verify entities exist
-      await verifyEntityExists(sourceEntityId);
-      await verifyEntityExists(targetEntityId);
+      await verifyEntityExists(sourceEntityId, { entity_type: "task", canonical_name: "Source" });
+      await verifyEntityExists(targetEntityId, { entity_type: "task", canonical_name: "Target" });
     });
   });
 
@@ -328,7 +333,7 @@ describe("MCP entity actions - parameter variations", () => {
     it("should delete entity with deletion observation", async () => {
       const entityId = `ent_delete_${Date.now()}`;
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -345,7 +350,7 @@ describe("MCP entity actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -359,7 +364,7 @@ describe("MCP entity actions - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Create deletion observation
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -372,7 +377,7 @@ describe("MCP entity actions - parameter variations", () => {
       });
 
       // Verify entity marked as deleted
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityId)
@@ -387,7 +392,7 @@ describe("MCP entity actions - parameter variations", () => {
     it("should restore deleted entity with restoration observation", async () => {
       const entityId = `ent_restore_${Date.now()}`;
 
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -405,7 +410,7 @@ describe("MCP entity actions - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // Create entity
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -419,7 +424,7 @@ describe("MCP entity actions - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Delete it
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -432,7 +437,7 @@ describe("MCP entity actions - parameter variations", () => {
       });
 
       // Restore it
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",

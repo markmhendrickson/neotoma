@@ -56,13 +56,13 @@ All operations MUST emit:
 - Performance metrics (file size, duration)
 ### 22.2 Security
 **Authentication:**
-- Supabase Auth (email/password, OAuth)
-- JWT tokens validated on every request
+- Local auth (dev stub or key-based when encryption enabled)
+- OAuth for MCP client connections
 **Authorization:**
-- Row-Level Security (RLS) in PostgreSQL
+- Row-Level Security (RLS) when applicable
 - MVP: All authenticated users see all records (single-user)
 - Future: Per-user isolation via `user_id` column + RLS policies
 **Data Protection:**
-- Database encryption at rest (Supabase default)
+- Database encryption at rest (optional, key file or mnemonic)
 - HTTPS for all API calls
 - WSS (WebSocket Secure) for MCP connections

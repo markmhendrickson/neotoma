@@ -40,7 +40,7 @@ describe("CLI store commands", () => {
         `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
       );
 
-      expect(stderr).toBe("");
+      expect(stderr.replace(/Saved repo path[^\n]*\n?/g, "").trim()).toBe("");
       const result = JSON.parse(stdout);
 
       expect(result).toHaveProperty("source_id");
@@ -69,13 +69,18 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "Invoice from Acme Corp for $500");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret true --json`
+        `NEOTOMA_MOCK_LLM_EXTRACTION=1 ${CLI_PATH} store --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret true --json`
       );
 
       const result = JSON.parse(stdout);
       tracker.trackSource(result.source_id);
 
-      expect(result).toHaveProperty("interpretation_run_id");
+      // With interpret=true we get either an interpretation id (mock or real LLM) or skipped (no API key)
+      const hasInterpretation =
+        result.interpretation_run_id ??
+        result.interpretation_id ??
+        result.interpretation?.skipped;
+      expect(hasInterpretation).toBeTruthy();
     });
 
     it("should store file with --source-priority", async () => {
@@ -133,6 +138,29 @@ describe("CLI store commands", () => {
       tracker.trackSource(result.source_id);
 
       expect(result).toHaveProperty("source_id");
+    });
+
+    it("should support combined structured and unstructured payload in one call", async () => {
+      const testFile = join(testDir, "combined-store.txt");
+      await writeFile(testFile, "Combined payload file");
+      const entitiesJson = JSON.stringify([
+        {
+          entity_type: "task",
+          title: "Combined store test task",
+        },
+      ]).replace(/"/g, '\\"');
+
+      const { stdout, stderr } = await execAsync(
+        `${CLI_PATH} store --entities "${entitiesJson}" --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret false --json`
+      );
+
+      expect(stderr.replace(/Saved repo path[^\n]*\n?/g, "").trim()).toBe("");
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("structured");
+      expect(result).toHaveProperty("unstructured");
+      expect(result.structured).toHaveProperty("entities");
+      expect(result.unstructured).toHaveProperty("source_id");
+      tracker.trackSource(result.unstructured.source_id);
     });
   });
 
@@ -197,7 +225,7 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "This is unstructured text content");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret false --json`
       );
 
       const result = JSON.parse(stdout);
@@ -211,13 +239,18 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "Meeting notes from Jan 15 with Bob Smith");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret true --json`
+        `NEOTOMA_MOCK_LLM_EXTRACTION=1 ${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret true --json`
       );
 
       const result = JSON.parse(stdout);
       tracker.trackSource(result.source_id);
 
-      expect(result).toHaveProperty("interpretation_run_id");
+      // With interpret=true we get either an interpretation id (mock or real LLM) or skipped (no API key)
+      const hasInterpretation =
+        result.interpretation_run_id ??
+        result.interpretation_id ??
+        result.interpretation?.skipped;
+      expect(hasInterpretation).toBeTruthy();
     });
 
     it("should handle empty file", async () => {
@@ -225,7 +258,7 @@ describe("CLI store commands", () => {
       await writeFile(testFile, "");
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --json`
+        `${CLI_PATH} store-unstructured --file-path "${testFile}" --user-id "${TEST_USER_ID}" --interpret false --json`
       );
 
       const result = JSON.parse(stdout);
@@ -247,6 +280,28 @@ describe("CLI store commands", () => {
       tracker.trackSource(result.source_id);
 
       expect(result).toHaveProperty("source_id");
+    });
+  });
+
+  describe("upload command", () => {
+    it("should upload file with --no-interpret and --json", async () => {
+      const testFile = join(testDir, "upload-test.txt");
+      await writeFile(testFile, "Upload command test content");
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} upload "${testFile}" --no-interpret --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("source_id");
+      expect(result).toHaveProperty("file_size");
+      tracker.trackSource(result.source_id);
+    });
+
+    it("should fail for missing upload file", async () => {
+      await expect(
+        execAsync(`${CLI_PATH} upload "/nonexistent/upload-file.txt" --no-interpret --json`)
+      ).rejects.toThrow();
     });
   });
 

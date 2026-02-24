@@ -1,7 +1,6 @@
 ---
-description: "All filenames and folder names must use underscores (snake_case), not kebab-case (dashes)."
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when creating or renaming files or folders: use underscores (snake_case) for all names; use when referencing paths in documentation; symlinks may use foundation_ prefix."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/file_naming.mdc -->

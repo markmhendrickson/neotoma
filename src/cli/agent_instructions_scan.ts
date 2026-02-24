@@ -698,7 +698,12 @@ export async function askWhereToAdd(
  */
 export async function offerAddPreferCliRule(
   result: AgentInstructionsScanResult,
-  options?: { nonInteractive?: boolean; env?: "dev" | "prod" }
+  options?: {
+    nonInteractive?: boolean;
+    env?: "dev" | "prod";
+    /** When set, use this scope without prompting (e.g. reuse MCP install choice). */
+    scope?: "project" | "user" | "both";
+  }
 ): Promise<{ added: string[]; skipped?: boolean }> {
   const added: string[] = [];
   if (options?.nonInteractive) return { added };
@@ -713,9 +718,8 @@ export async function offerAddPreferCliRule(
     (!result.appliedUser.codex || result.staleUser.codex);
   if (!needProject && !needUser) return { added };
 
-  // Default to the scope that actually needs work
-  const defaultChoice: "1" | "2" | "3" = needProject && needUser ? "3" : needUser ? "2" : "1";
-  const where = await askWhereToAdd(defaultChoice);
+  const where =
+    options?.scope ?? (await askWhereToAdd(needProject && needUser ? "3" : needUser ? "2" : "1"));
   if (where === null) return { added };
 
   const root = result.projectRoot;

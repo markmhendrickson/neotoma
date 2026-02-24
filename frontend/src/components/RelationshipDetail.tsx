@@ -46,7 +46,7 @@ export function RelationshipDetail({
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken } = useAuth();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
@@ -67,7 +67,7 @@ export function RelationshipDetail({
           headers["Authorization"] = `Bearer ${bearerToken}`;
         }
 
-        const response = await fetch(`/api/relationships/${relationshipId}`, { headers });
+        const response = await fetch(`/relationships/${relationshipId}`, { headers });
 
         if (!response.ok) {
           if (response.status === 404) {

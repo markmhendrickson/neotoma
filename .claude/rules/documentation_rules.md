@@ -1,7 +1,6 @@
 ---
-description: "Rules for creating and maintaining documentation files to minimize context window usage while maintaining clarity"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when creating or maintaining documentation: minimize context use, reference files instead of inlining, keep rules under 500 lines, follow doc structure and writing style standards."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/documentation_rules.mdc -->

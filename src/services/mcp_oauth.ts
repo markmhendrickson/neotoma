@@ -5,15 +5,15 @@
  */
 
 import { randomBytes, createHash, createCipheriv, createDecipheriv, randomUUID } from "node:crypto";
-import { SupabaseClient } from "@supabase/supabase-js";
-import { getServiceRoleClient, supabase } from "../db.js";
+import { getServiceRoleClient, db } from "../db.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
 import { OAuthError, createOAuthError } from "./mcp_oauth_errors.js";
 import { clearSqliteCache, getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
+import type { LocalDbClient } from "../repositories/sqlite/local_db_adapter.js";
 
 // Cached service role client instance
-let cachedServiceRoleClient: SupabaseClient | null = null;
+let cachedServiceRoleClient: LocalDbClient | null = null;
 
 /**
  * Get service role client for OAuth operations (bypasses RLS)
@@ -23,9 +23,9 @@ let cachedServiceRoleClient: SupabaseClient | null = null;
  * - mcp_oauth_connections operations (bypasses RLS)
  * - Dynamic OAuth client registration
  */
-function getServiceRoleSupabaseClient(): SupabaseClient {
+function getServiceRoleDbClient(): LocalDbClient {
   if (!cachedServiceRoleClient) {
-    cachedServiceRoleClient = getServiceRoleClient() as SupabaseClient;
+    cachedServiceRoleClient = getServiceRoleClient();
   }
   return cachedServiceRoleClient;
 }
@@ -65,7 +65,10 @@ const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000; // Refresh 5 minutes before expiry
 
 // Encryption key for refresh tokens (use environment variable or config)
-const ENCRYPTION_KEY = process.env.MCP_TOKEN_ENCRYPTION_KEY || config.mcpTokenEncryptionKey;
+const ENCRYPTION_KEY =
+  process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
+  process.env.MCP_TOKEN_ENCRYPTION_KEY ||
+  config.mcpTokenEncryptionKey;
 const isLocalBackend = config.storageBackend === "local";
 
 interface LocalOAuthStateRow {
@@ -397,13 +400,13 @@ export function decryptRefreshToken(encrypted: string): string {
 }
 
 /**
- * Register OAuth client dynamically using Supabase admin API
+ * Register OAuth client dynamically using auth admin API
  *
  * This function registers an OAuth client when "Allow Dynamic OAuth Apps" is enabled.
  * The client_id is cached in memory to avoid re-registering on every request.
  *
- * Note: This requires "Allow Dynamic OAuth Apps" to be enabled in Supabase Dashboard.
- * If dynamic registration fails, users should manually register a client and set SUPABASE_OAUTH_CLIENT_ID.
+ * Note: This requires "Allow Dynamic OAuth Apps" to be enabled in auth server.
+ * If dynamic registration fails, users should manually register a client and set NEOTOMA_OAUTH_CLIENT_ID.
  */
 async function registerOAuthClient(redirectUri: string): Promise<string> {
   // If registration is already in progress, wait for it
@@ -443,17 +446,17 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
       }
 
       const clientName = "Neotoma MCP Client";
-      const supabaseUrl = config.supabaseUrl;
-      const serviceKey = config.supabaseKey;
+      const authServerUrl = config.authServerUrl;
+      const authServiceKey = config.authServiceKey;
 
-      if (!supabaseUrl || !serviceKey) {
+      if (!authServerUrl || !authServiceKey) {
         throw createOAuthError.clientRegistrationFailed(
-          "Supabase URL or service key not configured"
+          "Auth server URL or service key not configured"
         );
       }
 
       // Try JavaScript client method first (if available)
-      const adminClient = getServiceRoleSupabaseClient();
+      const adminClient = getServiceRoleDbClient();
       const adminApi = adminClient.auth.admin as any;
 
       if (typeof adminApi.createOAuthClient === "function") {
@@ -479,20 +482,20 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
 
       // Fallback: Use REST API directly
       // This works even if the JavaScript client doesn't have the method
-      // Note: The exact endpoint may vary - Supabase OAuth 2.1 Server is in beta
+      // Note: The exact endpoint may vary - OAuth 2.1 Server is in beta
       // If this fails, manual registration is recommended
       logger.info(`[MCP OAuth] Attempting OAuth client registration via REST API...`);
 
       // Try the admin API endpoint for OAuth client registration
       // This endpoint may not be publicly documented yet (OAuth 2.1 Server is in beta)
-      const registrationUrl = `${supabaseUrl}/auth/v1/admin/oauth/clients`;
+      const registrationUrl = `${authServerUrl}/auth/v1/admin/oauth/clients`;
 
       const response = await fetch(registrationUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${serviceKey}`,
-          apikey: serviceKey,
+          Authorization: `Bearer ${authServiceKey}`,
+          apikey: authServiceKey,
         },
         body: JSON.stringify({
           name: clientName,
@@ -522,16 +525,16 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
         ) {
           throw createOAuthError.clientRegistrationFailed(
             `Dynamic OAuth client registration is not enabled or not permitted. ` +
-              `Enable "Allow Dynamic OAuth Apps" in Supabase Dashboard > Authentication > OAuth Server, ` +
-              `or manually register a client and set SUPABASE_OAUTH_CLIENT_ID environment variable.`,
+              `Enable "Allow Dynamic OAuth Apps" in auth server, ` +
+              `or manually register a client and set NEOTOMA_OAUTH_CLIENT_ID environment variable.`,
             { errorMessage }
           );
         }
 
         throw createOAuthError.clientRegistrationFailed(
           `Failed to register OAuth client dynamically: ${errorMessage}. ` +
-            `Ensure "Allow Dynamic OAuth Apps" is enabled in Supabase Dashboard, ` +
-            `or manually register a client and set SUPABASE_OAUTH_CLIENT_ID environment variable.`,
+            `Ensure "Allow Dynamic OAuth Apps" is enabled in auth server, ` +
+            `or manually register a client and set NEOTOMA_OAUTH_CLIENT_ID environment variable.`,
           { errorMessage }
         );
       }
@@ -567,7 +570,7 @@ async function registerOAuthClient(redirectUri: string): Promise<string> {
  * Get OAuth client_id, registering dynamically if needed
  *
  * This function:
- * 1. First checks if SUPABASE_OAUTH_CLIENT_ID is set in config (manual registration)
+ * 1. First checks if NEOTOMA_OAUTH_CLIENT_ID is set in config (manual registration)
  * 2. If not, attempts to register a client dynamically (requires "Allow Dynamic OAuth Apps")
  * 3. Caches the client_id to avoid re-registration
  */
@@ -592,8 +595,8 @@ async function getOrRegisterClientId(redirectUri: string): Promise<string> {
     throw createOAuthError.clientRegistrationFailed(
       `OAuth client_id not configured and dynamic registration failed. ` +
         `Error: ${error.message}. ` +
-        `Options: 1) Set SUPABASE_OAUTH_CLIENT_ID in .env file, or ` +
-        `2) Enable "Allow Dynamic OAuth Apps" in Supabase Dashboard > Authentication > OAuth Server.`,
+        `Options: 1) Set NEOTOMA_OAUTH_CLIENT_ID in .env file, or ` +
+        `2) Enable "Allow Dynamic OAuth Apps" in auth server.`,
       { originalError: error.message }
     );
   }
@@ -638,20 +641,19 @@ export async function handleDynamicRegistration(body: {
 }
 
 /**
- * Create Supabase OAuth authorization URL
+ * Create OAuth authorization URL
  *
- * Uses Supabase's PKCE flow for OAuth 2.0 Authorization Code flow.
- * Note: This uses Supabase Auth's own authentication, not a third-party provider.
+ * Uses PKCE flow for OAuth 2.0 Authorization Code flow.
  *
  * **Automatic Client Registration:**
- * - If `SUPABASE_OAUTH_CLIENT_ID` is not set, this function will attempt to register a client
- *   dynamically using `supabase.auth.admin.createOAuthClient()`
- * - This requires "Allow Dynamic OAuth Apps" to be enabled in Supabase Dashboard
+ * - If `NEOTOMA_OAUTH_CLIENT_ID` is not set, this function will attempt to register a client
+ *   dynamically using auth admin createOAuthClient()
+ * - This requires "Allow Dynamic OAuth Apps" to be enabled in auth server
  * - The registered `client_id` is cached in memory to avoid re-registration
  * - If dynamic registration fails, a clear error message is provided with instructions
  *
  * **Manual Client Registration (Alternative):**
- * - Set `SUPABASE_OAUTH_CLIENT_ID` in `.env` file to use a manually registered client
+ * - Set `NEOTOMA_OAUTH_CLIENT_ID` in `.env` file to use a manually registered client
  * - Manual registration takes precedence over dynamic registration
  */
 export async function createAuthUrl(
@@ -664,23 +666,23 @@ export async function createAuthUrl(
   validateRedirectUri(redirectUri);
 
   if (isLocalBackend) {
-    const localAuthUrl = new URL(`${config.apiBase}/api/mcp/oauth/local-login`);
+    const localAuthUrl = new URL(`${config.apiBase}/mcp/oauth/local-login`);
     localAuthUrl.searchParams.set("state", state);
     return localAuthUrl.toString();
   }
 
-  // Use config.supabaseUrl instead of process.env directly
-  const supabaseUrl = config.supabaseUrl;
+  // Use config.authServerUrl instead of process.env directly
+  const authServerUrl = config.authServerUrl;
 
-  if (!supabaseUrl) {
-    throw createOAuthError.clientRegistrationFailed("Supabase URL not configured");
+  if (!authServerUrl) {
+    throw createOAuthError.clientRegistrationFailed("Auth server URL not configured");
   }
 
   // Get or register client_id
   const clientId = await getOrRegisterClientId(redirectUri);
 
   // Use OAuth 2.1 Server endpoint (requires client_id)
-  const authUrl = new URL(`${supabaseUrl}/auth/v1/oauth/authorize`);
+  const authUrl = new URL(`${authServerUrl}/auth/v1/oauth/authorize`);
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("redirect_uri", redirectUri);
@@ -704,7 +706,7 @@ async function cleanupExpiredStates(): Promise<void> {
     }
 
     // Use service role client to bypass RLS (mcp_oauth_state only allows service_role)
-    const { error, count } = await getServiceRoleSupabaseClient()
+    const { error, count } = await getServiceRoleDbClient()
       .from("mcp_oauth_state")
       .delete()
       .lt("expires_at", new Date().toISOString());
@@ -785,6 +787,8 @@ export function startStateCleanupJob(): void {
       logger.error(`[MCP OAuth] Scheduled state cleanup failed: ${error.message}`);
     });
   }, CLEANUP_INTERVAL_MS);
+  // Do not keep the process alive (important for tests and CLI utilities).
+  cleanupInterval.unref?.();
 }
 
 /**
@@ -840,7 +844,10 @@ export async function initiateOAuthFlow(
   const state = generateState();
 
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
-  const frontendBase = process.env.FRONTEND_URL || "http://localhost:5195";
+  const frontendBase =
+    process.env.NEOTOMA_FRONTEND_URL ||
+    process.env.FRONTEND_URL ||
+    "http://localhost:5195";
   const finalRedirectUri = redirectUri ?? `${frontendBase}/oauth`;
 
   if (isLocalBackend) {
@@ -868,21 +875,23 @@ export async function initiateOAuthFlow(
     };
   }
 
-  // Supabase always redirects to our callback; we then redirect to finalRedirectUri (e.g. cursor://) if set
-  // IMPORTANT: OAuth redirect URI must match what's registered in Supabase exactly
-  // Default to HOST_URL (or discovered tunnel URL) so OAuth callbacks are reachable from internet
-  // Still allow explicit OAUTH_REDIRECT_BASE_URL override for edge cases (e.g. Supabase registered with localhost)
+  // Auth server always redirects to our callback; we then redirect to finalRedirectUri (e.g. cursor://) if set
+  // IMPORTANT: OAuth redirect URI must match what's registered in auth server exactly
+  // Default to NEOTOMA_HOST_URL (or discovered tunnel URL) so OAuth callbacks are reachable from internet
+  // Still allow explicit NEOTOMA_OAUTH_REDIRECT_BASE_URL or OAUTH_REDIRECT_BASE_URL override for edge cases
   const oauthRedirectBase =
-    process.env.OAUTH_REDIRECT_BASE_URL || config.apiBase;
-  const supabaseRedirectUri = `${oauthRedirectBase}/api/mcp/oauth/callback`;
+    process.env.NEOTOMA_OAUTH_REDIRECT_BASE_URL ||
+    process.env.OAUTH_REDIRECT_BASE_URL ||
+    config.apiBase;
+  const oauthRedirectUri = `${oauthRedirectBase}/mcp/oauth/callback`;
 
-  const { error } = await getServiceRoleSupabaseClient()
+  const { error } = await getServiceRoleDbClient()
     .from("mcp_oauth_state")
     .insert({
       state,
       connection_id: connectionId,
       code_verifier: codeVerifier,
-      redirect_uri: supabaseRedirectUri, // Store the OAuth redirect URI (must match authorization URL)
+      redirect_uri: oauthRedirectUri, // Store the OAuth redirect URI (must match authorization URL)
       final_redirect_uri: finalRedirectUri ?? null, // Store the client's final redirect URI (e.g., cursor://)
       client_state: clientState ?? null,
       expires_at: expiresAt.toISOString(),
@@ -894,7 +903,7 @@ export async function initiateOAuthFlow(
     // Provide helpful error message for schema cache issues
     if (error.message?.includes("Could not find") && error.message?.includes("column")) {
       throw createOAuthError.stateInvalid(
-        `Database schema issue: ${error.message}. This usually means migrations haven't been applied or Supabase schema cache is stale. Run 'npm run migrate' to apply migrations.`,
+        `Database schema issue: ${error.message}. This usually means migrations haven't been applied or schema cache is stale. Run 'npm run migrate' to apply migrations.`,
         { originalError: error.message }
       );
     }
@@ -904,7 +913,7 @@ export async function initiateOAuthFlow(
     });
   }
 
-  const authUrl = await createAuthUrl(state, codeChallenge, supabaseRedirectUri);
+  const authUrl = await createAuthUrl(state, codeChallenge, oauthRedirectUri);
 
   logger.info(`[MCP OAuth] Initiated OAuth flow for connection: ${connectionId}`);
 
@@ -972,7 +981,7 @@ export async function completeLocalAuthorization(
   const stateData = getLocalOAuthState(state);
   if (!stateData) {
     throw createOAuthError.stateInvalid(
-      "This authorization link has expired or was already used. If you have not used it before, more than one server instance may be running and state was stored on a different instance. Use a single instance or enable sticky sessions for /api/mcp/oauth so the same instance handles the full flow. Otherwise, click Connect again in Cursor to start a new authorization."
+      "This authorization link has expired or was already used. If you have not used it before, more than one server instance may be running and state was stored on a different instance. Use a single instance or enable sticky sessions for /mcp/oauth so the same instance handles the full flow. Otherwise, click Connect again in Cursor to start a new authorization."
     );
   }
 
@@ -1024,19 +1033,19 @@ async function exchangeCodeForTokens(
 ): Promise<OAuthTokens> {
   if (isLocalBackend) {
     throw createOAuthError.tokenExchangeFailed(
-      "Local OAuth callback is disabled. Use /api/mcp/oauth/local-login for local auth."
+      "Local OAuth callback is disabled. Use /mcp/oauth/local-login for local auth."
     );
   }
 
   try {
     // Use OAuth 2.1 Server token endpoint with PKCE
-    const tokenUrl = `${config.supabaseUrl}/auth/v1/oauth/token`;
+    const tokenUrl = `${config.authServerUrl}/auth/v1/oauth/token`;
 
     const tokenResponse = await fetch(tokenUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        apikey: config.supabaseKey,
+        apikey: config.authServiceKey,
       },
       body: new URLSearchParams({
         grant_type: "authorization_code",
@@ -1121,7 +1130,7 @@ export async function handleOAuthCallback(
 }> {
   if (isLocalBackend) {
     throw createOAuthError.stateInvalid(
-      "Local OAuth callback is disabled. Use /api/mcp/oauth/local-login."
+      "Local OAuth callback is disabled. Use /mcp/oauth/local-login."
     );
   }
   // Validate inputs
@@ -1132,7 +1141,7 @@ export async function handleOAuthCallback(
 
   // Get and consume OAuth state
   // Use service role client to ensure we bypass RLS (mcp_oauth_state only allows service_role)
-  const { data: stateData, error: stateError } = await getServiceRoleSupabaseClient()
+  const { data: stateData, error: stateError } = await getServiceRoleDbClient()
     .from("mcp_oauth_state")
     .select("*")
     .eq("state", state)
@@ -1145,7 +1154,7 @@ export async function handleOAuthCallback(
 
   // Delete state (consume it)
   // Use service role client to ensure we bypass RLS
-  await getServiceRoleSupabaseClient().from("mcp_oauth_state").delete().eq("state", state);
+  await getServiceRoleDbClient().from("mcp_oauth_state").delete().eq("state", state);
 
   // Check if state is expired
   if (new Date(stateData.expires_at) < new Date()) {
@@ -1154,7 +1163,7 @@ export async function handleOAuthCallback(
 
   // Get client_id (same one used during authorization)
   // Use the same redirect_uri to ensure we get the same client_id
-  // stateData.redirect_uri is the OAuth redirect URI (supabaseRedirectUri) stored during initiation
+  // stateData.redirect_uri is the OAuth redirect URI (oauthRedirectUri) stored during initiation
   const clientId = await getOrRegisterClientId(stateData.redirect_uri);
 
   // Exchange code for tokens
@@ -1167,7 +1176,7 @@ export async function handleOAuthCallback(
   );
 
   // Get user info from access token
-  const { data: userData, error: userError } = await supabase.auth.getUser(tokens.accessToken);
+  const { data: userData, error: userError } = await db.auth.getUser(tokens.accessToken);
 
   if (userError || !userData?.user) {
     logger.error(`[MCP OAuth] Failed to get user from token: ${userError?.message}`);
@@ -1181,7 +1190,7 @@ export async function handleOAuthCallback(
   // Store connection in database
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
-  const { error: insertError } = await supabase.from("mcp_oauth_connections").insert({
+  const { error: insertError } = await db.from("mcp_oauth_connections").insert({
     user_id: userId,
     connection_id: stateData.connection_id,
     refresh_token: encryptedRefreshToken,
@@ -1226,7 +1235,7 @@ export async function handleOAuthCallback(
  * @throws {OAuthError} If connection not found, revoked, or token refresh fails
  * @example
  * const { accessToken, userId } = await getAccessTokenForConnection("cursor-2025-01-27-abc123");
- * // Use accessToken for authenticated Supabase requests
+ * // Use accessToken for authenticated requests
  */
 export async function getAccessTokenForConnection(
   connectionId: string
@@ -1280,7 +1289,7 @@ export async function getAccessTokenForConnection(
   }
 
   // Get connection from database
-  const { data: connection, error } = await supabase
+  const { data: connection, error } = await db
     .from("mcp_oauth_connections")
     .select("*")
     .eq("connection_id", connectionId)
@@ -1301,7 +1310,7 @@ export async function getAccessTokenForConnection(
     new Date(connection.access_token_expires_at).getTime() - Date.now() > TOKEN_REFRESH_BUFFER_MS
   ) {
     // Update last_used_at
-    await supabase
+    await db
       .from("mcp_oauth_connections")
       .update({ last_used_at: new Date().toISOString() })
       .eq("connection_id", connectionId);
@@ -1312,55 +1321,27 @@ export async function getAccessTokenForConnection(
     };
   }
 
-  // Refresh access token
-  logger.info(`[MCP OAuth] Refreshing access token for connection: ${connectionId}`);
-
-  // Audit log
+  // Local-only fallback: mint a new local access token and persist.
+  logger.info(`[MCP OAuth] Refreshing local-only access token for connection: ${connectionId}`);
   auditLog("token_refresh_initiated", {
     connectionId,
     userId: connection.user_id,
     success: true,
   });
 
-  const decryptedRefreshToken = decryptRefreshToken(connection.refresh_token);
-
-  const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession({
-    refresh_token: decryptedRefreshToken,
+  const accessToken = generateLocalToken("local_access");
+  const newExpiresAt = new Date(Date.now() + 3600 * 1000);
+  upsertLocalConnection({
+    userId: connection.user_id,
+    connectionId,
+    refreshToken: connection.refresh_token,
+    accessToken,
+    accessTokenExpiresAt: newExpiresAt.toISOString(),
+    clientName: connection.client_name,
   });
 
-  if (refreshError || !refreshData?.session) {
-    logger.error(`[MCP OAuth] Failed to refresh token: ${refreshError?.message}`);
-
-    // Audit log
-    auditLog("token_refresh_failed", {
-      connectionId,
-      userId: connection.user_id,
-      success: false,
-      errorMessage: refreshError?.message || "Failed to refresh access token",
-    });
-
-    throw createOAuthError.tokenRefreshFailed(
-      connectionId,
-      refreshError?.message || "Failed to refresh access token"
-    );
-  }
-
-  const session = refreshData.session;
-  // Update connection with new tokens
-  const newExpiresAt = new Date(Date.now() + (session.expires_in || 3600) * 1000);
-
-  await supabase
-    .from("mcp_oauth_connections")
-    .update({
-      access_token: session.access_token,
-      access_token_expires_at: newExpiresAt.toISOString(),
-      refresh_token: encryptRefreshToken(session.refresh_token),
-      last_used_at: new Date().toISOString(),
-    })
-    .eq("connection_id", connectionId);
-
   return {
-    accessToken: session.access_token,
+    accessToken,
     userId: connection.user_id,
   };
 }
@@ -1402,7 +1383,7 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
     };
   }
 
-  const { data: row } = await supabase
+  const { data: row } = await db
     .from("mcp_oauth_connections")
     .select("access_token_expires_at")
     .eq("connection_id", connectionId)
@@ -1445,7 +1426,7 @@ export async function validateTokenAndGetConnectionId(
   }
 
   // Query mcp_oauth_connections for the access token
-  const { data: connection, error } = await supabase
+  const { data: connection, error } = await db
     .from("mcp_oauth_connections")
     .select("connection_id, user_id")
     .eq("access_token", accessToken)
@@ -1492,7 +1473,7 @@ export async function getConnectionStatus(
   }
 
   // Check if connection exists
-  const { data: connection, error } = await supabase
+  const { data: connection, error } = await db
     .from("mcp_oauth_connections")
     .select("revoked_at")
     .eq("connection_id", connectionId)
@@ -1501,7 +1482,7 @@ export async function getConnectionStatus(
   if (error || !connection) {
     // Check if pending in OAuth state
     // Use service role client to ensure we bypass RLS (mcp_oauth_state only allows service_role)
-    const { data: state } = await getServiceRoleSupabaseClient()
+    const { data: state } = await getServiceRoleDbClient()
       .from("mcp_oauth_state")
       .select("expires_at")
       .eq("connection_id", connectionId)
@@ -1556,7 +1537,7 @@ export async function listConnections(userId: string): Promise<
     }));
   }
 
-  const { data: connections, error } = await supabase
+  const { data: connections, error } = await db
     .from("mcp_oauth_connections")
     .select("connection_id, client_name, created_at, last_used_at")
     .eq("user_id", userId)
@@ -1604,7 +1585,7 @@ export async function revokeConnection(connectionId: string, userId: string): Pr
     return;
   }
 
-  const { error } = await supabase
+  const { error } = await db
     .from("mcp_oauth_connections")
     .update({ revoked_at: new Date().toISOString() })
     .eq("connection_id", connectionId)

@@ -22,7 +22,7 @@ const ED25519_PUBLIC_KEY_BYTES = 32;
 /**
  * Register a public key (derived from bearer token).
  * Only accepts tokens that decode to exactly 32 bytes (Ed25519 public key);
- * rejects JWTs and other non-key tokens so they are validated as Supabase session tokens.
+ * rejects JWTs and other non-key tokens so they are validated as session tokens.
  */
 export function registerPublicKey(bearerToken: string, userId?: string): void {
   try {

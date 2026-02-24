@@ -72,7 +72,7 @@ Start OAuth authorization flow for MCP client.
 
 ```json
 {
-  "auth_url": "https://your-project.supabase.co/auth/v1/authorize?...",
+  "auth_url": "https://your-server/api/mcp/oauth/authorize?...",
   "connection_id": "cursor-2025-01-21-abc123",
   "expires_at": "2025-01-21T10:10:00Z"
 }
@@ -91,7 +91,7 @@ Handles OAuth authorization callback.
 
 **Query Parameters:**
 
-- `code`: Authorization code from Supabase (required)
+- `code`: Authorization code from OAuth provider (required)
 - `state`: OAuth state token (required)
 
 **Response:** Redirects to frontend with connection status
@@ -282,7 +282,7 @@ curl -X POST http://localhost:8080/upload_file \
     "file_name": "document.pdf",
     "file_size": 102400
   },
-  "file_urls": ["https://storage.supabase.co/files/uuid/document.pdf"],
+  "file_urls": ["/api/files/uuid/document.pdf"],
   "created_at": "2024-01-01T12:00:00Z"
 }
 ```
@@ -316,7 +316,7 @@ Authorization: Bearer <token>
 
 ```json
 {
-  "url": "https://storage.supabase.co/files/uuid/document.pdf?token=...",
+  "url": "/api/files/uuid/document.pdf?token=...",
   "expires_at": "2024-01-01T14:00:00Z"
 }
 ```

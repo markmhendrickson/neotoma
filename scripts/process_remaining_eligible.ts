@@ -1,4 +1,4 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 import { schemaRecommendationService } from '../src/services/schema_recommendation.js';
 import { schemaRegistry } from '../src/services/schema_registry.js';
 

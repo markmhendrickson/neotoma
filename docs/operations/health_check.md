@@ -25,7 +25,7 @@ From the repository root:
 npm run doctor
 ```
 
-The command runs diagnostics for environment, database (when using Supabase), storage, migrations, security, and MCP startup. Output is printed to stdout with pass (✅), fail (❌), or warning (⚠️) per check.
+The command runs diagnostics for environment, database, storage, migrations, security, and MCP startup. Output is printed to stdout with pass (✅), fail (❌), or warning (⚠️) per check.
 
 ---
 
@@ -33,17 +33,17 @@ The command runs diagnostics for environment, database (when using Supabase), st
 
 | Category        | What is checked                                                                                    |
 | --------------- | -------------------------------------------------------------------------------------------------- |
-| **Environment** | Required variables present (e.g. storage backend, Supabase credentials when using remote backend). |
-| **Database**    | Connection and ping when backend is Supabase.                                                      |
+| **Environment** | Required variables present for your setup. |
+| **Database**    | Connection and ping (local SQLite).                |
 | **Tables**      | Required tables exist (sources, interpretations, observations, entities, entity_snapshots, etc.).  |
-| **RLS**         | Row-level security enabled on all user-facing tables.                                              |
-| **Storage**     | Local paths or Supabase buckets exist and are configured (e.g. private buckets).                   |
+| **RLS**         | Row-level security enabled on all user-facing tables (when applicable).                            |
+| **Storage**     | Local paths exist and are configured.                                                             |
 | **OAuth**       | OAuth configuration present (optional; warning if missing for production).                         |
 | **Migrations**  | Latest migration applied (version comparison).                                                     |
 | **MCP**         | MCP server can start (e.g. stdio mode).                                                            |
 | **Security**    | `.env` is gitignored; no service key in logs; `.env` present when required.                        |
 
-Implementation may vary by storage backend (local vs Supabase). See script output and code in `scripts/doctor.ts` for the exact checks in your version.
+See script output and code in `scripts/doctor.ts` for the exact checks in your version.
 
 ---
 
@@ -59,11 +59,11 @@ Implementation may vary by storage backend (local vs Supabase). See script outpu
 
 | Failure     | Typical fix                                                                                                                                                                              |
 | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Environment | Create or fix `.env`; set `NEOTOMA_STORAGE_BACKEND` and, for Supabase, `DEV_SUPABASE_PROJECT_ID` and `DEV_SUPABASE_SERVICE_KEY`. See [Getting started](../developer/getting_started.md). |
-| Database    | Verify Supabase project is active, credentials correct, network allows HTTPS. See [Troubleshooting – Database](troubleshooting.md#issue-database-connection-timeout).                    |
-| Tables      | Run migrations: `npm run migrate`. For Supabase, ensure schema and migrations have been applied.                                                                                         |
-| RLS         | Ensure RLS is enabled and policies exist (schema/migrations). Run `npm run check:advisors` for Supabase.                                                                                 |
-| Storage     | For Supabase, create required buckets (e.g. `files`, `sources`) and set them private. For local, ensure `NEOTOMA_DATA_DIR` / `NEOTOMA_RAW_STORAGE_DIR` exist and are writable.           |
+| Environment | Create or fix `.env`. See [Getting started](../developer/getting_started.md). |
+| Database    | Verify SQLite path is writable. See [Troubleshooting – Database](troubleshooting.md#issue-database-connection-timeout). |
+| Tables      | Run migrations: `npm run migrate`.                                                                                    |
+| RLS         | Ensure RLS is enabled and policies exist (schema/migrations) when applicable.                                        |
+| Storage     | Ensure `NEOTOMA_DATA_DIR` / `NEOTOMA_RAW_STORAGE_DIR` exist and are writable.                                         |
 | Security    | Ensure `.env` is not committed; remove any committed secrets. Do not log service keys.                                                                                                   |
 
 ---

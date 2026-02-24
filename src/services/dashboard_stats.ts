@@ -4,7 +4,7 @@
  * Provides aggregate statistics for main objects (not deprecated records)
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 
 export interface DashboardStats {
   sources_count: number;
@@ -33,7 +33,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   };
 
   // Get source count
-  let sourcesQuery = supabase
+  let sourcesQuery = db
     .from("sources")
     .select("*", { count: "exact", head: true });
   
@@ -45,7 +45,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   stats.sources_count = sourcesCount || 0;
 
   // Get entities by type
-  let entitiesQuery = supabase
+  let entitiesQuery = db
     .from("entities")
     .select("entity_type", { count: "exact" })
     .is("merged_to_entity_id", null); // Exclude merged entities
@@ -72,13 +72,13 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   // Note: timeline_events table doesn't have user_id column
   // User filtering should be done through source_id -> sources.user_id if needed
   // For now, we rely on RLS policies to enforce user isolation
-  const { count: eventsCount } = await supabase
+  const { count: eventsCount } = await db
     .from("timeline_events")
     .select("*", { count: "exact", head: true });
   stats.total_events = eventsCount || 0;
 
   // Get total observations count
-  let observationsQuery = supabase
+  let observationsQuery = db
     .from("observations")
     .select("*", { count: "exact", head: true });
   
@@ -90,7 +90,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   stats.total_observations = observationsCount || 0;
 
   // Get total relationships count (relationship_snapshots)
-  let relationshipsQuery = supabase
+  let relationshipsQuery = db
     .from("relationship_snapshots")
     .select("*", { count: "exact", head: true });
   if (userId) {
@@ -100,7 +100,7 @@ export async function getDashboardStats(userId?: string): Promise<DashboardStats
   stats.total_relationships = relationshipsCount || 0;
 
   // Get total interpretations count
-  let interpretationsQuery = supabase
+  let interpretationsQuery = db
     .from("interpretations")
     .select("*", { count: "exact", head: true });
   

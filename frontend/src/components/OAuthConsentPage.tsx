@@ -1,14 +1,14 @@
 /**
  * OAuth Consent Page
  *
- * Handles Supabase OAuth 2.1 Server consent flow
- * When Supabase redirects to /oauth/consent with authorization_id,
+ * Handles OAuth 2.1 Server consent flow
+ * When auth server redirects to /oauth/consent with authorization_id,
  * this page shows an approval screen and redirects to backend callback on approval
  */
 
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { auth } from "@/lib/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,8 +69,8 @@ export function OAuthConsentPage() {
       }
 
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const session = await supabase.auth.getSession();
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+        const session = await auth.auth.getSession();
 
         if (!session.data.session) {
           throw new Error("Not authenticated. Please sign in first.");
@@ -80,10 +80,10 @@ export function OAuthConsentPage() {
           throw new Error("Session token missing. Please sign in again.");
         }
 
-        // Use Supabase client library method to get authorization details
+        // Use auth client library method to get authorization details
         // This method handles CORS and authentication automatically
         const { data: authData, error: authError } =
-          await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
+          await auth.auth.oauth.getAuthorizationDetails(authorizationId);
 
         if (authError) {
           let errorMessage: string;
@@ -93,7 +93,7 @@ export function OAuthConsentPage() {
             errorMessage =
               `Authorization not found (404). This usually means:\n` +
               `- The authorization_id has expired (authorizations expire after 10 minutes)\n` +
-              `- Supabase OAuth 2.1 Server is not enabled in your Supabase project\n` +
+              `- OAuth 2.1 Server is not enabled in your auth project\n` +
               `- The authorization_id is invalid\n\n` +
               `Please try the OAuth flow again from the beginning.`;
           } else if (
@@ -108,12 +108,12 @@ export function OAuthConsentPage() {
         }
 
         if (!authData) {
-          throw new Error("No authorization data returned from Supabase");
+          throw new Error("No authorization data returned from auth server");
         }
 
         const details = authData;
 
-        // Extract redirect URL (Supabase uses redirect_url, not redirect_uri)
+        // Extract redirect URL (auth server uses redirect_url, not redirect_uri)
         const redirectUrl =
           details.redirect_url ||
           details.redirectUrl ||
@@ -125,7 +125,7 @@ export function OAuthConsentPage() {
         }
 
         // Check if redirect_url already contains authorization code
-        // If it does, Supabase has already generated the code and we should redirect directly
+        // If it does, auth server has already generated the code and we should redirect directly
         // This happens with public clients (PKCE) where the user is already authenticated
         const redirectUrlObj = new URL(redirectUrl);
         const hasCode = redirectUrlObj.searchParams.has("code");
@@ -242,8 +242,8 @@ export function OAuthConsentPage() {
     }
 
     try {
-      // Prefer Supabase OAuth client methods per docs
-      const oauthClient = (supabase.auth as any).oauth;
+      // Prefer OAuth client methods per docs
+      const oauthClient = (auth.auth as any).oauth;
       const hasApprove = typeof oauthClient?.approveAuthorization === "function";
 
       if (hasApprove) {
@@ -255,7 +255,7 @@ export function OAuthConsentPage() {
         }
 
         if (error) {
-          // Extract all available error details from Supabase AuthApiError
+          // Extract all available error details from AuthApiError
           const errorDetails: string[] = [];
 
           // Check for all possible error properties
@@ -328,22 +328,22 @@ export function OAuthConsentPage() {
         );
       }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const session = await supabase.auth.getSession();
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const session = await auth.auth.getSession();
 
       if (!session.data.session) {
         throw new Error("Not authenticated");
       }
 
-      // Supabase OAuth 2.1 consent approval: POST to /auth/v1/oauth/authorize with authorization_id
+      // OAuth 2.1 consent approval: POST to /auth/v1/oauth/authorize with authorization_id
       // This is the standard way to complete the consent flow
-      const authorizeUrl = `${supabaseUrl}/auth/v1/oauth/authorize`;
+      const authorizeUrl = `${apiBaseUrl}/auth/v1/oauth/authorize`;
 
       const authorizeResponse = await fetch(authorizeUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.data.session.access_token}`,
-          apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          apikey: import.meta.env.VITE_NEOTOMA_ANON_KEY || "",
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({
@@ -672,7 +672,7 @@ export function OAuthConsentPage() {
                   <code className="bg-muted px-1 rounded">npm run migrate</code>
                 </li>
                 <li>Ensure MCP_TOKEN_ENCRYPTION_KEY is set in .env</li>
-                <li>Check Supabase connection and OAuth client configuration</li>
+                <li>Check auth server connection and OAuth client configuration</li>
               </ul>
             </div>
             <Button variant="outline" onClick={() => navigate("/mcp-setup")}>

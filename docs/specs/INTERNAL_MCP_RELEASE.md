@@ -72,7 +72,7 @@
   - Response with confirmation
 - ✅ **FU-205:** MCP Action — `upload_file`
   - Upload file from local path
-  - Upload to storage (Supabase Storage or S3)
+  - Upload to storage (cloud storage or S3)
   - Trigger file analysis pipeline
   - Create record with extracted fields (uses `store_record` internally, inherits event-sourcing)
   - Use `StateRepository` and `EventRepository` when creating records
@@ -105,7 +105,7 @@
 - ❌ FU-306: Settings UI
 - ❌ FU-307: Chat/AI Panel
 **2. Multi-User Infrastructure**
-- ❌ FU-700: Authentication UI (Supabase Auth)
+- ❌ FU-700: Authentication UI (OAuth)
 - ❌ FU-701: Row-Level Security (RLS)
 - ❌ FU-702: Billing and Subscription Management
 - ❌ FU-703: Local Storage / Offline Mode (optional)
@@ -177,7 +177,7 @@ Cursor/ChatGPT → retrieve_records({
 - All tables from FU-000 schema
 - Indexes for search performance
 ### Storage
-- File storage (Supabase Storage or S3)
+- File storage (cloud storage or S3)
 - Signed URL generation for file access
 ### MCP Server
 - MCP protocol compliance
@@ -282,7 +282,7 @@ Once internal MCP release is validated:
    - Upload UI
    - Dashboard, settings, chat panel
 2. **Add Multi-User Support** (Phase 7 Feature Units)
-   - Authentication (Supabase Auth)
+   - Authentication (OAuth)
    - Row-Level Security (RLS)
    - Billing (Stripe)
 3. **Add Onboarding Flow** (Phase 4 Feature Units)

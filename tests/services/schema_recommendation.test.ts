@@ -4,11 +4,11 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { SchemaRecommendationService } from "../../src/services/schema_recommendation.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 // Mock the database module
 vi.mock("../../src/db.js", () => ({
-  supabase: {
+  db: {
     from: vi.fn(),
   },
 }));
@@ -27,7 +27,7 @@ describe("SchemaRecommendationService", () => {
   beforeEach(() => {
     service = new SchemaRecommendationService();
     mockFrom = vi.fn();
-    (supabase.from as any) = mockFrom;
+    (db.from as any) = mockFrom;
   });
 
   afterEach(() => {

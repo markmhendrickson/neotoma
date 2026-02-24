@@ -1,7 +1,6 @@
 ---
-description: "Ensures agents always describe manual test cases after completing a release build"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load after completing a release build: generate or update release report with Testing Guidance section; format manual test cases from integration_tests.md as user-facing steps; present test list to user."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/post_build_testing.mdc -->

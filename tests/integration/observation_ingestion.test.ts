@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { runInterpretation } from "../../src/services/interpretation.js";
 import type { InterpretationConfig } from "../../src/services/interpretation.js";
 import {
@@ -46,7 +46,7 @@ describe("Observation Ingestion Service - Integration", () => {
       });
 
       // 2. Create test source
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -103,7 +103,7 @@ describe("Observation Ingestion Service - Integration", () => {
       }
 
       // 5. Verify database state
-      const { data: observations, error } = await supabase
+      const { data: observations, error } = await db
         .from("observations")
         .select("*")
         .eq("source_id", source!.id);
@@ -121,7 +121,7 @@ describe("Observation Ingestion Service - Integration", () => {
       });
 
       // Create source
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -179,7 +179,7 @@ describe("Observation Ingestion Service - Integration", () => {
       });
 
       // Create source
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -261,7 +261,7 @@ describe("Observation Ingestion Service - Integration", () => {
 
     it("should handle empty extracted data", async () => {
       // Create source
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -310,7 +310,7 @@ describe("Observation Ingestion Service - Integration", () => {
       });
 
       // Create source with null user_id
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: null,

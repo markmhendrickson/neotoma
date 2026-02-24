@@ -348,10 +348,10 @@ async function analyzePlanImplementation(
   // Extract file paths mentioned in plan (more specific patterns)
   const filePatterns = [
     /`(src\/[a-z0-9_/.-]+\.(ts|tsx|js|jsx))`/gi,
-    /`(supabase\/[a-z0-9_/.-]+\.(sql|ts|tsx|js|jsx))`/gi,
+    /`(migrations\/[a-z0-9_/.-]+\.(sql|ts|tsx|js|jsx))`/gi,
     /`(frontend\/[a-z0-9_/.-]+\.(ts|tsx|js|jsx))`/gi,
     /File[:\s]+`?(src\/[a-z0-9_/.-]+\.(ts|tsx|js|jsx))`?/gi,
-    /File[:\s]+`?(supabase\/[a-z0-9_/.-]+\.(sql|ts|tsx|js|jsx))`?/gi,
+    /File[:\s]+`?(migrations\/[a-z0-9_/.-]+\.(sql|ts|tsx|js|jsx))`?/gi,
     /File[:\s]+`?(frontend\/[a-z0-9_/.-]+\.(ts|tsx|js|jsx))`?/gi,
     /###\s+.*\n\*\*File[:\s]+`?([a-z0-9_/.-]+\.(ts|tsx|js|jsx|sql))`?/gi,
   ];
@@ -399,7 +399,7 @@ async function analyzePlanImplementation(
     items.push({
       type: "migration",
       name: match[1],
-      path: `supabase/migrations/*${match[1]}*.sql`,
+      path: `**/migrations/*${match[1]}*.sql`,
     });
   }
 
@@ -439,7 +439,7 @@ async function analyzePlanImplementation(
         items.push({
           type: "table",
           name: name,
-          path: `supabase/schema.sql`,
+          path: `**/schema.sql`,
         });
       }
     }
@@ -472,7 +472,7 @@ async function analyzePlanImplementation(
           // Search for function in codebase
           try {
             const result = execSync(
-              `grep -r "function ${item.name}\\|const ${item.name}\\|export.*${item.name}" src/ supabase/ frontend/src/ 2>/dev/null | head -1`,
+              `grep -r "function ${item.name}\\|const ${item.name}\\|export.*${item.name}" src/ frontend/src/ 2>/dev/null | head -1`,
               { encoding: "utf-8", maxBuffer: 1024 * 1024 }
             );
             exists = result.trim().length > 0;
@@ -485,7 +485,7 @@ async function analyzePlanImplementation(
           // Check if migration file exists (pattern match)
           try {
             const result = execSync(
-              `find supabase/migrations -name "*${item.name}*.sql" 2>/dev/null | head -1`,
+              `find . -path "*/migrations/*${item.name}*.sql" 2>/dev/null | head -1`,
               { encoding: "utf-8", maxBuffer: 1024 * 1024 }
             );
             exists = result.trim().length > 0;
@@ -511,7 +511,7 @@ async function analyzePlanImplementation(
         case "column":
           // Check schema.sql
           try {
-            const schemaContent = readFileSync("supabase/schema.sql", "utf-8");
+            const schemaContent = readFileSync("docs/releases/v0.2.15/migrations/01_add_source_graph_edges.sql", "utf-8");
             exists =
               schemaContent.includes(`CREATE TABLE ${item.name}`) ||
               schemaContent.includes(`ALTER TABLE`) ||

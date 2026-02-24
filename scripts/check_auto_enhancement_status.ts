@@ -4,7 +4,7 @@
  * Shows queue status, recommendations, and schema changes
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 
 const entityType = process.argv[2] || "task";
 const userId = process.argv[3] || "00000000-0000-0000-0000-000000000000";
@@ -14,7 +14,7 @@ async function checkEnhancementStatus() {
 
   // 1. Check auto-enhancement queue (check all user_ids for this entity_type)
   console.log("📋 Auto-Enhancement Queue Status:");
-  const { data: queueItems, error: queueError } = await supabase
+  const { data: queueItems, error: queueError } = await db
     .from("auto_enhancement_queue")
     .select("*")
     .eq("entity_type", entityType)
@@ -50,7 +50,7 @@ async function checkEnhancementStatus() {
 
   // 2. Check schema recommendations (check all user_ids for this entity_type)
   console.log("\n📊 Schema Recommendations:");
-  const { data: recommendations, error: recError } = await supabase
+  const { data: recommendations, error: recError } = await db
     .from("schema_recommendations")
     .select("*")
     .eq("entity_type", entityType)
@@ -85,7 +85,7 @@ async function checkEnhancementStatus() {
 
   // 3. Check raw_fragments
   console.log("\n📦 Raw Fragments:");
-  const { data: fragments, error: fragError } = await supabase
+  const { data: fragments, error: fragError } = await db
     .from("raw_fragments")
     .select("fragment_key, frequency_count, entity_type")
     .eq("entity_type", entityType)
@@ -110,7 +110,7 @@ async function checkEnhancementStatus() {
 
   // 4. Check current schema
   console.log("\n📋 Current Schema:");
-  let schemaQuery = supabase
+  let schemaQuery = db
     .from("schema_registry")
     .select("schema_version, schema_definition")
     .eq("entity_type", entityType)
@@ -140,7 +140,7 @@ async function checkEnhancementStatus() {
 
   // 5. Check observations count and details
   console.log("\n👁️  Observations:");
-  const { data: observations, error: obsError } = await supabase
+  const { data: observations, error: obsError } = await db
     .from("observations")
     .select("id, source_id, entity_type, user_id")
     .eq("entity_type", entityType)
@@ -165,7 +165,7 @@ async function checkEnhancementStatus() {
   }
   
   // Also check count
-  const { count: obsCount } = await supabase
+  const { count: obsCount } = await db
     .from("observations")
     .select("id", { count: "exact", head: true })
     .eq("entity_type", entityType);
@@ -174,7 +174,7 @@ async function checkEnhancementStatus() {
   // 6. Check for source_id from recent store
   console.log("\n🔍 Recent Store Action Check:");
   const recentSourceId = "232dc440-3f12-410f-a815-1fb5070796e4"; // From store response
-  const { data: recentObs, error: recentObsError } = await supabase
+  const { data: recentObs, error: recentObsError } = await db
     .from("observations")
     .select("id, source_id, entity_type, user_id")
     .eq("source_id", recentSourceId)
@@ -194,7 +194,7 @@ async function checkEnhancementStatus() {
     });
     
     // Check raw_fragments for this source
-    const { data: recentFrags, error: fragError } = await supabase
+    const { data: recentFrags, error: fragError } = await db
       .from("raw_fragments")
       .select("fragment_key, frequency_count, source_id")
       .eq("source_id", recentSourceId)

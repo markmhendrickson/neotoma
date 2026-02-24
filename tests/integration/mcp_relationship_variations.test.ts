@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { computeEntitySnapshot, computeRelationshipSnapshot } from "../helpers/database_verifiers.js";
 
@@ -53,7 +53,7 @@ describe("MCP relationship actions - parameter variations", () => {
   });
 
   async function createTestEntities() {
-    const { data: source, error: sourceError } = await supabase
+    const { data: source, error: sourceError } = await db
       .from("sources")
         .insert({
           user_id: testUserId,
@@ -74,7 +74,7 @@ describe("MCP relationship actions - parameter variations", () => {
     const entity2Id = `ent_rel2_${Date.now()}`;
     const now = new Date().toISOString();
 
-    const { error: obsError } = await supabase.from("observations").insert([
+    const { error: obsError } = await db.from("observations").insert([
       {
         entity_id: entity1Id,
         entity_type: "task",
@@ -113,7 +113,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create PART_OF relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship, error: relError } = await supabase
+      const { data: relationship, error: relError } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(
           entity1Id,
@@ -139,7 +139,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create CORRECTS relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "CORRECTS", entity2Id, source.id, testUserId))
         .select()
@@ -151,7 +151,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create REFERS_TO relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId))
         .select()
@@ -163,7 +163,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create SETTLES relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "SETTLES", entity2Id, source.id, testUserId))
         .select()
@@ -175,7 +175,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create DUPLICATE_OF relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "DUPLICATE_OF", entity2Id, source.id, testUserId))
         .select()
@@ -187,7 +187,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create DEPENDS_ON relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "DEPENDS_ON", entity2Id, source.id, testUserId))
         .select()
@@ -199,7 +199,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create SUPERSEDES relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "SUPERSEDES", entity2Id, source.id, testUserId))
         .select()
@@ -211,7 +211,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should create EMBEDS relationship", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(entity1Id, "EMBEDS", entity2Id, source.id, testUserId))
         .select()
@@ -229,7 +229,7 @@ describe("MCP relationship actions - parameter variations", () => {
         custom_field: "custom value"
       };
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_observations")
         .insert(createRelationshipObservation(
           entity1Id,
@@ -250,12 +250,12 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should list relationships with direction: outbound", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
+      await db.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
 
       // Compute snapshot before querying
       await computeRelationshipSnapshot("REFERS_TO", entity1Id, entity2Id);
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id);
@@ -267,12 +267,12 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should list relationships with direction: inbound", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
+      await db.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
 
       // Compute snapshot before querying
       await computeRelationshipSnapshot("REFERS_TO", entity1Id, entity2Id);
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entity2Id);
@@ -284,7 +284,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should list relationships with direction: both", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert([
+      await db.from("relationship_observations").insert([
         createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId),
         createRelationshipObservation(entity2Id, "REFERS_TO", entity1Id, source.id, testUserId)
       ]);
@@ -293,12 +293,12 @@ describe("MCP relationship actions - parameter variations", () => {
       await computeRelationshipSnapshot("REFERS_TO", entity1Id, entity2Id);
       await computeRelationshipSnapshot("REFERS_TO", entity2Id, entity1Id);
 
-      const { data: outbound } = await supabase
+      const { data: outbound } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id);
 
-      const { data: inbound } = await supabase
+      const { data: inbound } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entity1Id);
@@ -310,7 +310,7 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should filter relationships by relationship_type", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert([
+      await db.from("relationship_observations").insert([
         {
           source_entity_id: entity1Id,
           relationship_type: "PART_OF",
@@ -327,7 +327,7 @@ describe("MCP relationship actions - parameter variations", () => {
         },
       ]);
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id)
@@ -341,12 +341,12 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should retrieve relationship snapshot", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
+      await db.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
 
       // Compute relationship snapshot
       await computeRelationshipSnapshot("REFERS_TO", entity1Id, entity2Id);
 
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id)
@@ -363,10 +363,10 @@ describe("MCP relationship actions - parameter variations", () => {
     it("should delete relationship with deletion observation", async () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
-      await supabase.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
+      await db.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
 
       // Create deletion observation
-      await supabase.from("relationship_observations").insert({
+      await db.from("relationship_observations").insert({
         source_entity_id: entity1Id,
         relationship_type: "REFERS_TO",
         target_entity_id: entity2Id,
@@ -377,7 +377,7 @@ describe("MCP relationship actions - parameter variations", () => {
       });
 
       // Verify relationship marked as deleted
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id)
@@ -394,10 +394,10 @@ describe("MCP relationship actions - parameter variations", () => {
       const { source, entity1Id, entity2Id } = await createTestEntities();
 
       // Create relationship
-      await supabase.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
+      await db.from("relationship_observations").insert(createRelationshipObservation(entity1Id, "REFERS_TO", entity2Id, source.id, testUserId));
 
       // Delete it
-      await supabase.from("relationship_observations").insert({
+      await db.from("relationship_observations").insert({
         source_entity_id: entity1Id,
         relationship_type: "REFERS_TO",
         target_entity_id: entity2Id,
@@ -408,7 +408,7 @@ describe("MCP relationship actions - parameter variations", () => {
       });
 
       // Restore it
-      await supabase.from("relationship_observations").insert({
+      await db.from("relationship_observations").insert({
         source_entity_id: entity1Id,
         relationship_type: "REFERS_TO",
         target_entity_id: entity2Id,
@@ -419,7 +419,7 @@ describe("MCP relationship actions - parameter variations", () => {
       });
 
       // Verify relationship restored
-      const { data: relationship } = await supabase
+      const { data: relationship } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entity1Id)

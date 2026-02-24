@@ -14,7 +14,7 @@ import {
   attachBrowserLogging,
   routeChatThroughMock,
 } from "./helpers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => {
   // Use null for user_id to test global schemas, or generate a valid UUID if user-specific schemas are needed
@@ -26,37 +26,37 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
 
   test.beforeEach(async () => {
     // Clean up test data
-    const { data: schemas } = await supabase
+    const { data: schemas } = await db
       .from("schema_registry")
       .select("id")
       .eq("entity_type", testEntityType);
     
     if (schemas) {
-      await supabase.from("schema_registry").delete().in("id", schemas.map(s => s.id));
+      await db.from("schema_registry").delete().in("id", schemas.map(s => s.id));
     }
     
-    const { data: recommendations } = await supabase
+    const { data: recommendations } = await db
       .from("schema_recommendations")
       .select("id")
       .eq("entity_type", testEntityType);
     
     if (recommendations) {
-      await supabase.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
+      await db.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
     }
   });
 
   test.afterEach(async () => {
     // Clean up test data
     if (createdRecommendationIds.length > 0) {
-      await supabase.from("schema_recommendations").delete().in("id", createdRecommendationIds);
+      await db.from("schema_recommendations").delete().in("id", createdRecommendationIds);
       createdRecommendationIds.length = 0;
     }
     if (createdSchemaIds.length > 0) {
-      await supabase.from("schema_registry").delete().in("id", createdSchemaIds);
+      await db.from("schema_registry").delete().in("id", createdSchemaIds);
       createdSchemaIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
   });
@@ -73,7 +73,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     await primeLocalSettings(page);
 
     // 1. Seed minimal schema (only has "title" field)
-    const { data: schema, error: schemaError } = await supabase
+    const { data: schema, error: schemaError } = await db
       .from("schema_registry")
       .insert({
         user_id: testUserId,
@@ -122,7 +122,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     expect(storeResult.unknown_fields_count).toBeGreaterThan(0);
 
     // 3. Verify raw_fragments were created
-    const { data: fragments, error: fragmentsError } = await supabase
+    const { data: fragments, error: fragmentsError } = await db
       .from("raw_fragments")
       .select("*")
       .eq("entity_type", testEntityType);
@@ -146,7 +146,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     }
 
     // 4. Verify auto-enhancement queue items were created
-    const { data: queueItems, error: queueError } = await supabase
+    const { data: queueItems, error: queueError } = await db
       .from("auto_enhancement_queue")
       .select("*")
       .eq("entity_type", testEntityType);
@@ -177,7 +177,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     await primeLocalSettings(page);
 
     // 1. Seed minimal schema
-    const { data: schema } = await supabase
+    const { data: schema } = await db
       .from("schema_registry")
       .insert({
         user_id: testUserId,
@@ -234,7 +234,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
       expect(processResult.succeeded + processResult.skipped).toBeGreaterThanOrEqual(0);
 
       // 4. Check for schema recommendations
-      const { data: recommendations } = await supabase
+      const { data: recommendations } = await db
         .from("schema_recommendations")
         .select("*")
         .eq("entity_type", testEntityType);
@@ -267,7 +267,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     await primeLocalSettings(page);
 
     // Create schema
-    const { data: schema } = await supabase
+    const { data: schema } = await db
       .from("schema_registry")
       .insert({
         user_id: testUserId,
@@ -318,7 +318,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
     });
 
     // Check if schema was updated (recommendations may be auto-applied)
-    const { data: recommendations } = await supabase
+    const { data: recommendations } = await db
       .from("schema_recommendations")
       .select("*")
       .eq("entity_type", testEntityType);
@@ -338,7 +338,7 @@ test.describe("E2E-005: Schema Recommendation and Auto-Enhancement Flow", () => 
       
       if (autoApplied.length > 0) {
         // Verify schema was updated
-        let query = supabase
+        let query = db
           .from("schema_registry")
           .select("*")
           .eq("entity_type", testEntityType)

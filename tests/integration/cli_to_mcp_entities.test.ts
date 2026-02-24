@@ -58,8 +58,8 @@ describe("Cross-layer: CLI entity commands → Database", () => {
       expect(result).toHaveProperty("success");
 
       // Entity should still exist in DB (soft delete) but snapshot reflects deletion
-      const { supabase } = await import("../../src/db.js");
-      const { data: snapshot } = await supabase
+      const { db } = await import("../../src/db.js");
+      const { data: snapshot } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityId)
@@ -71,8 +71,9 @@ describe("Cross-layer: CLI entity commands → Database", () => {
     });
 
     it("should fail to delete nonexistent entity", async () => {
+      const nonexistentId = `ent_nonexistent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const error = await execCliFail(
-        `entities delete "ent_nonexistent_cross_layer" --user-id "${TEST_USER_ID}"`
+        `entities delete "${nonexistentId}" --user-id "${TEST_USER_ID}"`
       );
       expect(error.code).toBeGreaterThan(0);
     });
@@ -150,11 +151,15 @@ describe("Cross-layer: CLI entity commands → Database", () => {
         `entities neighborhood "${existingEntityId}" --user-id "${TEST_USER_ID}"`
       );
 
-      // Should return graph data without error
+      // Should return graph data without error (API returns entity, relationships, etc.)
       const hasResult =
+        result.entity !== undefined ||
+        result.relationships !== undefined ||
         result.nodes !== undefined ||
         result.edges !== undefined ||
         result.entities !== undefined ||
+        result.outgoing !== undefined ||
+        result.incoming !== undefined ||
         Array.isArray(result);
       expect(hasResult).toBe(true);
     });
@@ -195,8 +200,12 @@ describe("Cross-layer: CLI entity commands → Database", () => {
 
 function extractListEntityIds(result: Record<string, unknown>): string[] {
   if (Array.isArray(result)) {
-    return result.map((e: { id: string }) => e.id);
+    return result.map(
+      (e: { id?: string; entity_id?: string }) => e.entity_id ?? e.id ?? ""
+    ).filter(Boolean);
   }
-  const entities = result.entities as Array<{ id: string }> | undefined;
-  return entities?.map((e) => e.id) ?? [];
+  const entities = result.entities as Array<{ id?: string; entity_id?: string }> | undefined;
+  return (entities?.map((e) => e.entity_id ?? e.id) ?? []).filter(
+    (id): id is string => typeof id === "string" && id.length > 0
+  );
 }

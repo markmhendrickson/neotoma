@@ -8,12 +8,12 @@ import {
   startAutoEnhancementProcessor,
   cleanupOldQueueItems,
 } from "../../src/services/auto_enhancement_processor.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { schemaRecommendationService } from "../../src/services/schema_recommendation.js";
 
 // Mock the database module
 vi.mock("../../src/db.js", () => ({
-  supabase: {
+  db: {
     from: vi.fn(),
   },
 }));
@@ -31,7 +31,7 @@ describe("AutoEnhancementProcessor", () => {
 
   beforeEach(() => {
     mockFrom = vi.fn();
-    (supabase.from as any) = mockFrom;
+    (db.from as any) = mockFrom;
     vi.clearAllMocks();
   });
 

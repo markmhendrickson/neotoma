@@ -75,7 +75,7 @@ Enables future hash chaining and Merkle root computation for blockchain anchorin
 **JSONB Schema Changes:**
 - None
 **Migration Required:** Yes
-**Migration File:** `supabase/migrations/YYYYMMDDHHMMSS_add_hash_fields_to_state_events.sql`
+**Migration File:** `migrations/YYYYMMDDHHMMSS_add_hash_fields_to_state_events.sql`
 **Migration Description:**
 - Add `previous_event_hash` and `event_hash` columns (nullable)
 - No data migration needed (new columns, nullable)

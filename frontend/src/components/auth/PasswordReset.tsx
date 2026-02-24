@@ -1,7 +1,7 @@
 /**
  * Password Reset Component (FU-700)
  * 
- * Password reset flow via Supabase Auth
+ * Password reset flow via auth
  */
 
 import { useState } from "react";
@@ -28,17 +28,17 @@ export function PasswordReset({ onSuccess, onBack }: PasswordResetProps) {
     setLoading(true);
 
     try {
-      const { supabase } = await import("@/lib/supabase");
+      const { auth } = await import("@/lib/auth");
       
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error: resetError } = await auth.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       
       if (resetError) {
         // Log full error details to console for debugging
-        logError(resetError, "Supabase Password Reset");
+        logError(resetError, "Password Reset");
         
-        // Extract the exact error message from Supabase (prioritizes error field which contains backend details)
+        // Extract the exact error message from auth (prioritizes error field which contains backend details)
         const errorMessage = extractErrorMessage(resetError, "Password reset failed");
         
         // Log the extracted message for verification

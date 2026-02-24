@@ -2,7 +2,7 @@
 
 ## Overview
 
-`CONNECTOR_SECRET_KEY` is a cryptographic key used to encrypt OAuth tokens for external connectors. Unlike other credentials (Supabase, OpenAI), this key is **generated locally** for each environment rather than synced from 1Password.
+`CONNECTOR_SECRET_KEY` is a cryptographic key used to encrypt OAuth tokens for external connectors. Unlike other credentials (e.g., OpenAI), this key is **generated locally** for each environment rather than synced from 1Password.
 
 ## Why Generate Locally?
 

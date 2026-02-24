@@ -71,7 +71,7 @@ describe("CLI entity commands", () => {
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes("/api/entities/query")) {
+          if (url.includes("/entities/query")) {
             return new Response(
               JSON.stringify({ entities: [{ id: testEntityId, entity_type: "company" }] }),
               { status: 200, headers: { "Content-Type": "application/json" } }
@@ -115,7 +115,7 @@ describe("CLI entity commands", () => {
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes("/api/entities/query")) {
+          if (url.includes("/entities/query")) {
             const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
             if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
             return new Response(
@@ -160,7 +160,7 @@ describe("CLI entity commands", () => {
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes("/api/entities/query")) {
+          if (url.includes("/entities/query")) {
             const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
             if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
             return new Response(
@@ -203,7 +203,7 @@ describe("CLI entity commands", () => {
         let capturedBody: Record<string, unknown> = {};
         const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes("/api/entities/query")) {
+          if (url.includes("/entities/query")) {
             const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
             if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
             return new Response(
@@ -250,7 +250,7 @@ describe("CLI entity commands", () => {
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes(`/api/entities/${testEntityId}`)) {
+          if (url.includes(`/entities/${testEntityId}`)) {
             return new Response(
               JSON.stringify({ entity: { id: testEntityId, entity_type: "company", canonical_name: "Test Company" } }),
               { status: 200, headers: { "Content-Type": "application/json" } }
@@ -292,7 +292,7 @@ describe("CLI entity commands", () => {
 
         const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
           const url = typeof input === "string" ? input : (input as Request).url;
-          if (url.includes("/api/entities/ent_invalid")) {
+          if (url.includes("/entities/ent_invalid")) {
             return new Response(
               JSON.stringify({ error: { error_code: "ENTITY_NOT_FOUND", message: "Entity not found" } }),
               { status: 404, headers: { "Content-Type": "application/json" } }

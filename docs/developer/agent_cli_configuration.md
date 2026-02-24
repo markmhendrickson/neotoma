@@ -9,13 +9,15 @@ This document describes how Neotoma keeps agent and CLI behavior in **user-level
 ## Prefer MCP when available, CLI as backup
 
 - **When MCP is installed and running:** Prefer **Neotoma MCP** for Neotoma operations. Use MCP tools (e.g. `store_structured`, `create_relationship`) per `docs/developer/mcp/instructions.md`.
-- **When MCP is not available:** Use the **Neotoma CLI** as backup. Invoke with dev by default (e.g. `neotoma dev entities list`, `neotoma dev store --json='...'`).
+- **When MCP is not available:** Use the **Neotoma CLI** as backup. Always pass `--servers=start` so the API starts if not running, and add `--env dev` or `--env prod` when targeting a specific environment (e.g. `neotoma --servers=start entities list`, `neotoma --servers=start --env dev store --json='...'`). The positional form `neotoma dev` or `neotoma prod` as first argument is valid and sets environment for the whole run, but agents should prefer explicit `--servers=start` and `--env` for direct commands.
 
 Agents get the same behaviors (chat persistence, entity extraction, conventions) either way; the rule instructs them to use MCP when it is available and to fall back to the CLI when it is not.
 
 The rule content is sourced from **`docs/developer/cli_agent_instructions.md`**, which mirrors the behavioral instructions in `docs/developer/mcp/instructions.md` (same chat persistence, entity extraction, and conventions), with MCP preferred when available and CLI equivalents as backup. When you run `neotoma cli-instructions check`, the CLI creates **symlinks** from both project paths (`.cursor/rules/`, `.claude/rules/`, `.codex/`) and user-level paths (`~/.cursor/rules/`, etc.) to that doc so the rule is always up to date. User symlinks use the absolute path to the doc in this repo; if you move the repo, re-run the check to recreate them.
 
 To add the rule so it is applied in Cursor, Claude Code, and Codex, run `neotoma cli-instructions check` from the repo root. The check only considers paths each IDE actually loads (e.g. `.cursor/rules/`, `.claude/`, `.codex/`); it will offer to add the rule to all three environments (project and/or user). Use `neotoma cli-instructions config` to print paths and the instruction source doc.
+
+`neotoma init` and `neotoma mcp check` also surface this workflow. They can remind you to run `neotoma cli-instructions check`, and in interactive runs they can offer to add missing CLI instructions after MCP setup.
 
 ## Configuration strategy
 
@@ -48,7 +50,7 @@ For local usage (Cursor, Claude Code, Codex on the same machine as the Neotoma r
     "neotoma-dev": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio.sh"
     },
-    "neotoma-prod": {
+    "neotoma": {
       "command": "/absolute/path/to/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
     }
   }
@@ -56,6 +58,8 @@ For local usage (Cursor, Claude Code, Codex on the same machine as the Neotoma r
 ```
 
 Replace `/absolute/path/to/neotoma` with your repo path. Run `npm run build:server` before first use. Stdio lets the client spawn the server, so after sleep you only need to toggle the MCP server off/on; no separate HTTP process to restart.
+
+To use both dev and prod, add two MCP servers (e.g. `neotoma-dev` and `neotoma`); each process has a fixed environment and cannot switch at runtime.
 
 For remote access (tunnel, ChatGPT, deployed server), use HTTP URLs instead. See [mcp_cursor_setup.md](mcp_cursor_setup.md) for the transport comparison and HTTP config.
 
@@ -72,7 +76,7 @@ Set permissions and default mode there. Example:
   "alwaysThinkingEnabled": false,
   "permissions": {
     "defaultMode": "acceptEdits",
-    "allow": ["Bash", "Edit(/**)", "Read(/**)", "Grep", "Glob", "mcp__parquet", "mcp__neotoma-prod"],
+    "allow": ["Bash", "Edit(/**)", "Read(/**)", "Grep", "Glob", "mcp__parquet", "mcp__neotoma"],
     "deny": ["Read(.env)", "Read(.env.*)", "Read(docs/private/**)", "Edit(.env)", "Edit(.env.*)", "Bash(rm -rf *)", "Bash(git push --force *)"]
   }
 }

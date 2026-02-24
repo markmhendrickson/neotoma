@@ -1009,7 +1009,7 @@ CREATE POLICY "Service role full access" ON entity_snapshots
 4. **Cross-user prevention**: All operations validate `user_id` match; merge cannot cross users
 ## 6. Schema Migration Protocol
 ### 6.1 Migration File Structure
-**Location:** `supabase/migrations/`
+**Location:** `migrations/`
 **Naming:** `YYYYMMDDHHMMSS_description.sql`
 **Example:** `20240115103000_add_file_name_to_sources.sql`
 **Template:**

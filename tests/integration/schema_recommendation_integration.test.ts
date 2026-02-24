@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { schemaRecommendationService } from "../../src/services/schema_recommendation.js";
 import { NeotomaServer } from "../../src/server.js";
 import {
@@ -39,7 +39,7 @@ describe("Schema Recommendation Service - Integration", () => {
   describe("checkAutoEnhancementEligibility - Real Database Queries", () => {
     it("should find fragments with null user_id", async () => {
       // Insert test fragment with null user_id
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -73,7 +73,7 @@ describe("Schema Recommendation Service - Integration", () => {
 
     it("should find fragments with default UUID", async () => {
       // Insert test fragment with default UUID
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -112,7 +112,7 @@ describe("Schema Recommendation Service - Integration", () => {
       });
 
       // Insert test entity
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entities")
         .insert({
           id: `ent_test_${Date.now()}`,
@@ -127,7 +127,7 @@ describe("Schema Recommendation Service - Integration", () => {
         createdEntityIds.push(entity.id);
 
         // Insert test observation
-        await supabase.from("observations").insert({
+        await db.from("observations").insert({
           entity_id: entity.id,
           entity_type: testEntityType,
           source_id: `src_test_${Date.now()}`,
@@ -137,7 +137,7 @@ describe("Schema Recommendation Service - Integration", () => {
       }
 
       // Insert fragment for eligibility check
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -176,7 +176,7 @@ describe("Schema Recommendation Service - Integration", () => {
       ];
 
       for (const frag of fragments) {
-        const { data: fragment } = await supabase
+        const { data: fragment } = await db
           .from("raw_fragments")
           .insert({
             entity_type: testEntityType,
@@ -214,7 +214,7 @@ describe("Schema Recommendation Service - Integration", () => {
 
     it("should handle fragments with null user_id", async () => {
       // Insert fragments with null user_id
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -245,7 +245,7 @@ describe("Schema Recommendation Service - Integration", () => {
     it("should use correct column names in queries", async () => {
       // This test verifies the entity_type column is used
 
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType, // Correct column name
@@ -283,7 +283,7 @@ describe("Schema Recommendation Service - Integration", () => {
       // 2. Insert fragments directly (simulating unknown fields)
       const unknownFields = ["field1", "field2", "field3"];
       for (const field of unknownFields) {
-        const { data: fragment } = await supabase
+        const { data: fragment } = await db
           .from("raw_fragments")
           .insert({
             entity_type: testEntityType,
@@ -301,7 +301,7 @@ describe("Schema Recommendation Service - Integration", () => {
       }
 
       // 3. Verify fragments were created
-      const { data: fragments, error: fragError } = await supabase
+      const { data: fragments, error: fragError } = await db
         .from("raw_fragments")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -314,7 +314,7 @@ describe("Schema Recommendation Service - Integration", () => {
 
       // 4. Queue items for auto-enhancement
       for (const field of unknownFields) {
-        await supabase.from("auto_enhancement_queue").insert({
+        await db.from("auto_enhancement_queue").insert({
           entity_type: testEntityType,
           fragment_key: field,
           user_id: testUserId,
@@ -324,7 +324,7 @@ describe("Schema Recommendation Service - Integration", () => {
       }
 
       // 5. Verify queue items created
-      const { data: queueItems, error: queueError } = await supabase
+      const { data: queueItems, error: queueError } = await db
         .from("auto_enhancement_queue")
         .select("*")
         .eq("entity_type", testEntityType)
@@ -361,7 +361,7 @@ describe("Schema Recommendation Service - Integration", () => {
     });
 
     it("should handle null values in fragments", async () => {
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,
@@ -389,7 +389,7 @@ describe("Schema Recommendation Service - Integration", () => {
     });
 
     it("should handle empty string values in fragments", async () => {
-      const { data: fragment } = await supabase
+      const { data: fragment } = await db
         .from("raw_fragments")
         .insert({
           entity_type: testEntityType,

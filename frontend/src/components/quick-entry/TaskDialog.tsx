@@ -83,7 +83,7 @@ export function TaskDialog({ open, onClose, onSave }: TaskDialogProps) {
         source_priority: 100,
         user_id: user?.id,
       });
-      const { data, error } = await api.POST("/api/store", {
+      const { data, error } = await api.POST("/store", {
         body: {
           entities: [taskData],
           idempotency_key: idempotencyKey,

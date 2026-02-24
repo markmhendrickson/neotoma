@@ -20,7 +20,7 @@ Entity semantic search embeds **structured output** (entity snapshots), not raw 
 
 **Searchable text format:** `entity_type` + `canonical_name` + snapshot JSON stringified
 **When generated:** At `entity_snapshots` upsert (interpretation, schema registry, health check, store, correct)
-**Storage:** Supabase: `entity_snapshots.embedding` (nullable `vector(1536)`). Local: sqlite-vec `entity_embeddings_vec` (vec0 virtual table) with `entity_embedding_rows` lookup.
+**Storage:** Local: sqlite-vec `entity_embeddings_vec` (vec0 virtual table) with `entity_embedding_rows` lookup.
 
 Embeddings require `OPENAI_API_KEY`. When unset, semantic search returns empty; keyword fallback remains available.
 
@@ -38,7 +38,7 @@ CREATE INDEX idx_records_embedding
   WITH (lists = 100);
 ```
 ## Entity Similarity Search
-Entity semantic search uses pgvector (Supabase) or sqlite-vec (local). Structural filters (`user_id`, `entity_type`, `merged`) are **always applied**. Used by `retrieve_entities` (when `search` param provided) and `retrieve_entity_by_identifier` (semantic fallback when keyword returns 0).
+Entity semantic search uses sqlite-vec. Structural filters (`user_id`, `entity_type`, `merged`) are **always applied**. Used by `retrieve_entities` (when `search` param provided) and `retrieve_entity_by_identifier` (semantic fallback when keyword returns 0).
 
 ### Local Mode (sqlite-vec)
 When `storageBackend === "local"` and `OPENAI_API_KEY` is set:
@@ -46,19 +46,6 @@ When `storageBackend === "local"` and `OPENAI_API_KEY` is set:
 - **Lookup table:** `entity_embedding_rows` (rowid, entity_id, user_id, entity_type, merged) maps vec rowids to entity metadata for filtering
 - Embeddings stored at upsert via `storeLocalEntityEmbedding`; queried via `searchLocalEntityEmbeddings` (KNN over vec0)
 - sqlite-vec is loaded lazily on first embedding write or search; load failure disables local semantic search (keyword fallback still works)
-
-### Supabase Mode (pgvector)
-```sql
--- RPC: search_entity_snapshots_by_embedding
-SELECT entity_id, 1 - (embedding <=> query_embedding) AS similarity
-FROM entity_snapshots
-WHERE embedding IS NOT NULL
-  AND user_id = p_user_id
-  AND (p_entity_type IS NULL OR entity_type = p_entity_type)
-  AND (p_include_merged OR merged_to_entity_id IS NULL)
-ORDER BY embedding <=> query_embedding
-LIMIT p_limit OFFSET p_offset;
-```
 
 ## Similarity Search (Records — Future)
 ```typescript

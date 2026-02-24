@@ -53,7 +53,7 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
@@ -84,7 +84,7 @@ export function RelationshipList({ onRelationshipClick, onNavigateToEntity }: Re
           params.append("user_id", user.id);
         }
 
-        const url = `/api/relationships?${params.toString()}`;
+        const url = `/relationships?${params.toString()}`;
 
         const response = await fetch(url, { headers });
 

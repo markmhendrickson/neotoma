@@ -42,7 +42,7 @@ export function Dashboard({
   const { user, sessionToken } = useAuth();
   const { subscribe } = useRealtime();
   
-  // Prefer Supabase session token, fallback to keys token, then settings
+  // Prefer session token, fallback to keys token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Helper function to fetch stats (using useCallback for reuse in subscriptions)
@@ -61,8 +61,8 @@ export function Dashboard({
       // Use relative URL to go through Vite proxy (which routes to correct backend port)
       const userId = user?.id;
       const url = userId 
-        ? `/api/stats?user_id=${userId}`
-        : `/api/stats`;
+        ? `/stats?user_id=${userId}`
+        : `/stats`;
 
       const response = await fetch(url, {
         headers,

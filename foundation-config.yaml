@@ -240,16 +240,12 @@ tooling:
       expected_variables:
         # Required for Neotoma to function (environment-based, set by 1Password sync)
         required:
-          - SUPABASE_PROJECT_ID  # Environment-based (dev/prod selected automatically)
-          - SUPABASE_URL  # Local Supabase uses full URL (local_development)
-          - SUPABASE_SERVICE_KEY  # Environment-based (dev/prod selected automatically)
+          - DATABASE_URL  # Environment-based (dev/prod selected automatically)
           # Run: npm run generate:connector-key
         # Recommended for full functionality
         recommended:
           - OPENAI_API_KEY  # Environment-based (dev/prod selected automatically)
-          - SUPABASE_ACCESS_TOKEN  # Optional, for Supabase CLI
           - ACTIONS_BEARER_TOKEN  # Environment-based (dev/prod selected automatically) - HTTP Actions API auth
-          # Note: MCP_AUTH_TOKEN removed - MCP uses Supabase session tokens, not a separate env var
           - CURSOR_CLOUD_API_KEY  # For multi-agent orchestration
           - NGROK_AUTHTOKEN  # For HTTPS tunneling (development environment)
         # Optional, feature-specific
@@ -258,17 +254,31 @@ tooling:
         # but deprecated in favor of environment-based single variable names
       # Alternative: Use flat list format instead of expected_variables
       # inclusions:
-      #   - DEV_SUPABASE_PROJECT_ID
-      #   - DEV_SUPABASE_SERVICE_KEY
+      #   - DATABASE_URL
       #   - OPENAI_API_KEY
-      #   - SUPABASE_ACCESS_TOKEN
       # Variables to exclude from 1Password sync (preserved from existing .env)
       # These are local development values that shouldn't be synced
       default_exclusions:
         # Local development variables (not secrets, should remain local)
         - PORT
+        - NEOTOMA_PORT
         - HTTP_PORT
+        - NEOTOMA_HTTP_PORT
         - WS_PORT
+        - NEOTOMA_WS_PORT
+        - NEOTOMA_HOST_URL
+        - FRONTEND_URL
+        - NEOTOMA_FRONTEND_URL
+        - MCP_PROXY_URL
+        - NEOTOMA_MCP_PROXY_URL
+        - OAUTH_REDIRECT_BASE_URL
+        - NEOTOMA_OAUTH_REDIRECT_BASE_URL
+        - MCP_TOKEN_ENCRYPTION_KEY
+        - NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY
+        - MCP_CMD
+        - NEOTOMA_MCP_CMD
+        - MCP_ARGS
+        - NEOTOMA_MCP_ARGS
         # Note: ACTIONS_BEARER_TOKEN is now managed by 1Password sync (removed from exclusions)
         - VITE_WS_PORT
         - VITE_LOCAL_MCP_URL
@@ -277,23 +287,30 @@ tooling:
         - VITE_AUTO_SEED_RECORDS
         - NEOTOMA_ENV
         - NODE_ENV
-        - MCP_CMD
-        - MCP_ARGS
         - NEOTOMA_ACTIONS_DISABLE_AUTOSTART
         - BRANCH_PORTS_FILE
+        # Icon generation (local dev)
+        - ICON_GENERATION_ENABLED
+        - NEOTOMA_ICON_GENERATION_ENABLED
+        - ICON_MATCH_CONFIDENCE_THRESHOLD
+        - NEOTOMA_ICON_MATCH_CONFIDENCE_THRESHOLD
+        - ICON_GENERATION_MODEL
+        - NEOTOMA_ICON_GENERATION_MODEL
+        - ICON_CACHE_TTL
+        - NEOTOMA_ICON_CACHE_TTL
       # Instance-specific exclusions go in foundation-config.local.yaml (gitignored)
   
   agent_setup:
     enabled: false
     database:
-      type: null  # "supabase", "postgres", "mysql", etc.
-      migration_command: null  # "supabase db push" or custom
+      type: null  # "postgres", "mysql", etc.
+      migration_command: null  # "npm run migrate" or custom
       fallback_script: null  # "scripts/apply_migrations.js"
     tools: []
       # - name: "playwright"
       #   install_command: "npx playwright install --with-deps chromium"
       # - name: "database_cli"
-      #   verify_command: "npx supabase --version"
+      #   verify_command: "psql --version"
   
   # Error reporting configuration
   error_reporting:
