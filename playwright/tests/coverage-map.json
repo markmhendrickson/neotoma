@@ -1,185 +1,129 @@
 {
-  "recordsLifecycle": {
-    "description": "Records table end-to-end CRUD, filtering, uploads, quota surfaces, and empty states.",
-    "components": [
-      "RecordsTable",
-      "RecordDetailsPanel",
-      "EmptyPlaceholder",
-      "useDatastore",
-      "useStorageQuota"
-    ],
-    "states": [
-      "empty datastore",
-      "seeded records (multiple types)",
-      "drag-and-drop upload",
-      "manual upload button",
-      "multi-select delete",
-      "quota threshold > 90%",
-      "empty state rendering",
-      "empty state button interactions",
-      "Learn more sections expand/collapse",
-      "filtered empty state (no matches)"
-    ],
-    "specFile": "records-lifecycle.spec.ts"
+  "autoEnhancement": {
+    "description": "Auto enhancement UI and workflow coverage.",
+    "components": ["AutoEnhancementPanel"],
+    "states": ["run enhancement flow"],
+    "specFile": "auto-enhancement.spec.ts"
   },
-  "recordDetails": {
-    "description": "Record details side panel interactions, status badges, file affordances, and persistence.",
-    "components": [
-      "RecordDetailsPanel",
-      "RecordsTable"
-    ],
-    "states": [
-      "panel opened via table row click",
-      "status badge transitions (uploading to ready)",
-      "file links (local + remote)",
-      "panel dismissal persistence",
-      "multiple record types display",
-      "file link interactions"
-    ],
-    "specFile": "record-details.spec.ts"
+  "designSystem": {
+    "description": "Design system page coverage.",
+    "components": ["StyleGuide"],
+    "states": ["view design tokens"],
+    "specFile": "design-system.spec.ts"
   },
-  "chatPanel": {
-    "description": "Chat message persistence, uploads, error handling, and inline record references.",
-    "components": [
-      "ChatPanel",
-      "useKeys",
-      "useSettings",
-      "useDatastore"
-    ],
-    "states": [
-      "intro message seed",
-      "encrypted history (keys ready)",
-      "file upload success",
-      "file upload failure + retry",
-      "recent records sidebar",
-      "upload network failures",
-      "upload server errors",
-      "error message formatting",
-      "multiple concurrent upload failures"
-    ],
-    "specFile": "chat-panel.spec.ts"
+  "entityDetail": {
+    "description": "Entity detail page coverage.",
+    "components": ["EntityDetail"],
+    "states": ["open entity detail"],
+    "specFile": "entity-detail.spec.ts"
   },
-  "settingsAndKeys": {
-    "description": "Floating settings button, key management dialog, import/export flows, Supabase toggles.",
-    "components": [
-      "FloatingSettingsButton",
-      "KeyManagementDialog",
-      "useSettings",
-      "useKeys"
-    ],
-    "states": [
-      "generate keys",
-      "export keys",
-      "import keys",
-      "cloud toggle on/off",
-      "bearer token validation",
-      "invalid key import handling",
-      "key management persistence"
-    ],
-    "specFile": "settings-keys.spec.ts"
-  },
-  "storageAndSchema": {
-    "description": "Seed helpers, schema migrations, worker health, quota banners, and cloud sync.",
-    "components": [
-      "store",
-      "worker",
-      "useStorageQuota",
-      "seedLocalRecords utilities"
-    ],
-    "states": [
-      "first-run schema initialization",
-      "seeded records via helper",
-      "quota usage < 50%",
-      "quota usage > 90%",
-      "background sync in-progress",
-      "cloud storage enabled sync state",
-      "seed marker persistence"
-    ],
-    "specFile": "storage-schema.spec.ts"
-  },
-  "recordsTableColumns": {
-    "description": "Column management: visibility toggles, drag-and-drop reordering, resizing, sorting, and localStorage persistence.",
-    "components": [
-      "RecordsTable",
-      "ColumnHeader",
-      "DropdownMenu"
-    ],
-    "states": [
-      "column visibility toggle via dropdown",
-      "column reordering via drag-and-drop",
-      "column resizing via resize handles",
-      "column sorting via sort buttons",
-      "persistence across page reloads",
-      "column state with filtering"
-    ],
-    "specFile": "records-table-columns.spec.ts"
-  },
-  "errorHandling": {
-    "description": "Error handling for uploads, quota exceeded, decryption failures, and datastore initialization.",
-    "components": [
-      "RecordsTable",
-      "useDatastore",
-      "useStorageQuota",
-      "useKeys"
-    ],
-    "states": [
-      "file upload network failure",
-      "file upload server error (500)",
-      "quota exceeded warning",
-      "decryption error toast",
-      "datastore initialization failure",
-      "error message differentiation",
-      "transient error recovery",
-      "error state persistence"
-    ],
-    "specFile": "error-handling.spec.ts"
-  },
-  "jsonViewer": {
-    "description": "JSON viewer with expand/collapse functionality for record properties.",
-    "components": [
-      "JsonViewer"
-    ],
-    "states": [
-      "primitive values display (strings, numbers, booleans)",
-      "object expand/collapse",
-      "array display with indices",
-      "null/undefined handling"
-    ],
-    "specFile": "json-viewer.spec.ts"
+  "entityList": {
+    "description": "Entity list page coverage.",
+    "components": ["EntityList"],
+    "states": ["list entities"],
+    "specFile": "entity-list.spec.ts"
   },
   "floatingSettingsButton": {
-    "description": "Floating action button for settings access with positioning and visibility.",
-    "components": [
-      "FloatingSettingsButton",
-      "KeyManagementDialog"
-    ],
-    "states": [
-      "button visibility and positioning",
-      "opens settings dialog",
-      "loading state (button hidden)",
-      "loaded state (button visible)"
-    ],
+    "description": "Floating settings button coverage.",
+    "components": ["FloatingSettingsButton"],
+    "states": ["open settings dialog"],
     "specFile": "floating-settings-button.spec.ts"
   },
-  "integration": {
-    "description": "End-to-end integration tests and edge cases across all features.",
-    "components": [
-      "RecordsTable",
-      "RecordDetailsPanel",
-      "ChatPanel",
-      "FloatingSettingsButton",
-      "useDatastore",
-      "useKeys",
-      "useSettings"
-    ],
-    "states": [
-      "complete record lifecycle (upload to delete)",
-      "key rotation scenarios",
-      "offline/online transitions",
-      "rapid successive operations",
-      "storage near capacity handling"
-    ],
-    "specFile": "integration.spec.ts"
+  "graphIntegrity": {
+    "description": "Graph integrity UI coverage.",
+    "components": ["GraphIntegrityView"],
+    "states": ["inspect graph checks"],
+    "specFile": "graph-integrity.spec.ts"
+  },
+  "interpretations": {
+    "description": "Interpretation page coverage.",
+    "components": ["InterpretationList"],
+    "states": ["view interpretations"],
+    "specFile": "interpretations.spec.ts"
+  },
+  "mcpConfiguration": {
+    "description": "MCP configuration page coverage.",
+    "components": ["McpConfiguration"],
+    "states": ["configure MCP connection"],
+    "specFile": "mcp-configuration.spec.ts"
+  },
+  "mcpRelationships": {
+    "description": "MCP relationships workflow coverage.",
+    "components": ["RelationshipView"],
+    "states": ["create and inspect relationships"],
+    "specFile": "mcp-relationships.spec.ts"
+  },
+  "mcpStoreRetrieve": {
+    "description": "MCP store/retrieve workflow coverage.",
+    "components": ["StoreRetrieveView"],
+    "states": ["store then retrieve records"],
+    "specFile": "mcp-store-retrieve.spec.ts"
+  },
+  "notFound": {
+    "description": "Not found route coverage.",
+    "components": ["NotFoundPage"],
+    "states": ["navigate to unknown route"],
+    "specFile": "not-found.spec.ts"
+  },
+  "oauthFlow": {
+    "description": "OAuth flow coverage.",
+    "components": ["OAuthCallback"],
+    "states": ["complete OAuth login"],
+    "specFile": "oauth-flow.spec.ts"
+  },
+  "observations": {
+    "description": "Observations page coverage.",
+    "components": ["ObservationList"],
+    "states": ["list observations"],
+    "specFile": "observations.spec.ts"
+  },
+  "relationshipDetail": {
+    "description": "Relationship detail page coverage.",
+    "components": ["RelationshipDetail"],
+    "states": ["open relationship detail"],
+    "specFile": "relationship-detail.spec.ts"
+  },
+  "relationshipsList": {
+    "description": "Relationships list page coverage.",
+    "components": ["RelationshipList"],
+    "states": ["list relationships"],
+    "specFile": "relationships-list.spec.ts"
+  },
+  "schemaDetail": {
+    "description": "Schema detail page coverage.",
+    "components": ["SchemaDetail"],
+    "states": ["open schema detail"],
+    "specFile": "schema-detail.spec.ts"
+  },
+  "schemasList": {
+    "description": "Schemas list page coverage.",
+    "components": ["SchemasList"],
+    "states": ["list schemas"],
+    "specFile": "schemas-list.spec.ts"
+  },
+  "searchFlow": {
+    "description": "Search flow coverage.",
+    "components": ["SearchPanel"],
+    "states": ["run search query"],
+    "specFile": "search-flow.spec.ts"
+  },
+  "sourceDetail": {
+    "description": "Source detail page coverage.",
+    "components": ["SourceDetail"],
+    "states": ["open source detail"],
+    "specFile": "source-detail.spec.ts"
+  },
+  "sourcesList": {
+    "description": "Sources list page coverage.",
+    "components": ["SourcesList"],
+    "states": ["list sources"],
+    "specFile": "sources-list.spec.ts"
+  },
+  "uploadFlow": {
+    "description": "Upload flow coverage.",
+    "components": ["UploadForm"],
+    "states": ["upload a file"],
+    "specFile": "upload-flow.spec.ts"
   }
 }
 

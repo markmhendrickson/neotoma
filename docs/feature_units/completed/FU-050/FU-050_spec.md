@@ -188,7 +188,7 @@ Enables complete audit trail of all record changes, time-travel queries (view re
 **JSONB Schema Changes:**
 - None (events use `payload` JSONB, no schema versioning needed)
 **Migration Required:** Yes
-**Migration File:** `supabase/migrations/YYYYMMDDHHMMSS_add_state_events_table_and_materialized_view.sql`
+**Migration File:** `migrations/YYYYMMDDHHMMSS_add_state_events_table_and_materialized_view.sql`
 **Migration Description:**
 - Create `state_events` table with all fields (crypto/hash fields nullable)
 - Create indexes for efficient querying

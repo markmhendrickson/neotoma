@@ -169,7 +169,7 @@ export function KeyManagementDialog({
               </Label>
             </div>
             <p className="text-xs text-muted-foreground ml-6">
-              When enabled, uploads are stored securely in Supabase after local encryption. Disable this to keep files confined to the browser.
+              When enabled, uploads are stored securely in cloud storage after local encryption. Disable this to keep files confined to the browser.
             </p>
           </div>
           <div>

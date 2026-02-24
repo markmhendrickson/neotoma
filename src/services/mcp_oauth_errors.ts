@@ -99,7 +99,7 @@ export const createOAuthError = {
   encryptionKeyMissing: () =>
     new OAuthError(
       OAuthErrorCode.ENCRYPTION_KEY_MISSING,
-      "MCP_TOKEN_ENCRYPTION_KEY not configured",
+      "NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY not configured (run neotoma init to set it)",
       500,
       false
     ),

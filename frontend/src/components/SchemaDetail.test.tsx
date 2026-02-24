@@ -40,7 +40,7 @@ describe("SchemaDetail", () => {
     });
 
     const [url, options] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toContain("/api/schemas/agent_message");
+    expect(url).toContain("/schemas/agent_message");
     expect(url).toContain("user_id=user-1");
     expect(options).toEqual(
       expect.objectContaining({

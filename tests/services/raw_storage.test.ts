@@ -5,11 +5,13 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import {
   computeContentHash,
   storeRawContent,
   getSourceMetadata,
+  downloadRawContent,
+  SourceFileNotFoundError,
 } from "../../src/services/raw_storage.js";
 
 describe("Raw Storage Service", () => {
@@ -19,7 +21,7 @@ describe("Raw Storage Service", () => {
   beforeEach(async () => {
     // Clean up test data
     if (testSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", testSourceIds);
+      await db.from("sources").delete().in("id", testSourceIds);
       testSourceIds.length = 0;
     }
   });
@@ -27,7 +29,7 @@ describe("Raw Storage Service", () => {
   afterEach(async () => {
     // Final cleanup
     if (testSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", testSourceIds);
+      await db.from("sources").delete().in("id", testSourceIds);
     }
   });
 
@@ -104,7 +106,7 @@ describe("Raw Storage Service", () => {
       expect(result.deduplicated).toBe(false);
       
       // Verify source record was created
-      const { data: source, error } = await supabase
+      const { data: source, error } = await db
         .from("sources")
         .select("*")
         .eq("id", result.sourceId)
@@ -189,7 +191,7 @@ describe("Raw Storage Service", () => {
       testSourceIds.push(result.sourceId);
       
       // Verify provenance stored
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .select("provenance")
         .eq("id", result.sourceId)
@@ -214,7 +216,7 @@ describe("Raw Storage Service", () => {
       
       testSourceIds.push(result.sourceId);
       
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .select("original_filename")
         .eq("id", result.sourceId)
@@ -244,7 +246,7 @@ describe("Raw Storage Service", () => {
         
         testSourceIds.push(result.sourceId);
         
-        const { data: source } = await supabase
+        const { data: source } = await db
           .from("sources")
           .select("mime_type")
           .eq("id", result.sourceId)
@@ -298,6 +300,17 @@ describe("Raw Storage Service", () => {
       await expect(
         getSourceMetadata("src_nonexistent")
       ).rejects.toThrow("Failed to get source metadata");
+    });
+  });
+
+  describe("downloadRawContent", () => {
+    it("should throw SourceFileNotFoundError when file is missing (ENOENT)", async () => {
+      const storageUrl = "nonexistent-user/nonexistent-hash-12345";
+      await expect(downloadRawContent(storageUrl)).rejects.toThrow(SourceFileNotFoundError);
+      await expect(downloadRawContent(storageUrl)).rejects.toMatchObject({
+        code: "SOURCE_FILE_NOT_FOUND",
+        storageUrl,
+      });
     });
   });
 

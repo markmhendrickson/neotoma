@@ -1,7 +1,6 @@
 ---
-description: "Ensures that when upstream documentation is updated, all downstream documentation that depends on it is also updated to maintain consistency"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when modifying foundation, architecture, specs, or subsystem docs: identify downstream dependencies via doc_dependencies.yaml, update all downstream docs that restate or depend on the change, run validation script."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/downstream_doc_updates.mdc -->

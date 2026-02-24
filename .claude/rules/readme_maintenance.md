@@ -1,7 +1,6 @@
 ---
-description: "Ensures that README.md remains synchronized with documentation changes, providing accurate and comprehensive representation of the repository"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when creating, modifying, or deleting documentation or making material doc changes: regenerate README from primary sources; update README in same batch as doc changes; verify links."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/readme_maintenance.mdc -->

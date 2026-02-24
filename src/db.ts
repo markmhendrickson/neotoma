@@ -1,32 +1,17 @@
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import { config } from "./config.js";
 import { logger } from "./utils/logger.js";
-import { createLocalSupabaseClient, LocalSupabaseClient } from "./repositories/sqlite/supabase_adapter.js";
+import { createLocalDbClient, LocalDbClient } from "./repositories/sqlite/local_db_adapter.js";
 
-const isLocalBackend = config.storageBackend === "local";
+export const db: LocalDbClient = createLocalDbClient();
 
-export const supabase: SupabaseClient | LocalSupabaseClient = isLocalBackend
-  ? createLocalSupabaseClient()
-  : createClient(config.supabaseUrl, config.supabaseKey);
-
-export function getServiceRoleClient(): SupabaseClient | LocalSupabaseClient {
-  if (isLocalBackend) {
-    return createLocalSupabaseClient();
-  }
-  return createClient(config.supabaseUrl, config.supabaseKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+export function getServiceRoleClient(): LocalDbClient {
+  return createLocalDbClient();
 }
 
 export async function initDatabase(): Promise<void> {
   // Run migrations before initializing database
   // Note: Migrations are skipped in MCP mode to avoid stdout pollution
   // Apply migrations manually via: npm run migrate
-  const skipMigrations =
-    isLocalBackend || process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
+  const skipMigrations = process.env.NEOTOMA_ACTIONS_DISABLE_AUTOSTART === "1";
   
   if (!skipMigrations) {
     try {
@@ -59,7 +44,7 @@ export async function initDatabase(): Promise<void> {
     ];
 
     for (const { table, columns, required } of tablesToCheck) {
-      const { error } = await supabase.from(table).select(columns).limit(1);
+      const { error } = await db.from(table).select(columns).limit(1);
       if (error) {
         // PGRST116 = table not found, PGRST205 = table not in schema cache
         if (error.code === "PGRST116" || error.code === "PGRST205") {

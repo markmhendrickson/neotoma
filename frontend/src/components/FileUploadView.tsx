@@ -37,7 +37,7 @@ export function FileUploadView({ onUploadComplete, hideTitle = false }: FileUplo
   const { bearerToken: keysBearerToken } = useKeys();
   const { sessionToken, user } = useAuth();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const handleFiles = useCallback(async (files: FileList | File[]) => {

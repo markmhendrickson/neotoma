@@ -111,7 +111,7 @@ export function EntityDetail({
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken, user } = useAuth();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
@@ -133,10 +133,10 @@ export function EntityDetail({
         }
 
         // Use relative URL to go through Vite proxy (which routes to correct backend port)
-        // The Vite proxy in vite.config.ts handles /api -> http://localhost:${HTTP_PORT}
+        // The Vite proxy in vite.config.ts forwards API endpoints to HTTP_PORT.
         
         // Fetch entity with provenance
-        const entityResponse = await fetch(`/api/entities/${entityId}`, { headers });
+        const entityResponse = await fetch(`/entities/${entityId}`, { headers });
         if (!entityResponse.ok) {
           if (entityResponse.status === 404) {
             setEntity(null);
@@ -149,7 +149,7 @@ export function EntityDetail({
 
         // Fetch observations
         const observationsResponse = await fetch(
-          `/api/entities/${entityId}/observations`,
+          `/entities/${entityId}/observations`,
           { headers }
         );
         if (!observationsResponse.ok) {
@@ -160,7 +160,7 @@ export function EntityDetail({
 
         // Fetch relationships
         const relationshipsResponse = await fetch(
-          `/api/entities/${entityId}/relationships`,
+          `/entities/${entityId}/relationships`,
           { headers }
         );
         if (!relationshipsResponse.ok) {
@@ -184,7 +184,7 @@ export function EntityDetail({
         if (uniqueSourceIds.length > 0) {
           try {
             const sourcesPromises = uniqueSourceIds.map(async (sourceId) => {
-              const sourceResponse = await fetch(`/api/sources/${sourceId}`, { headers });
+              const sourceResponse = await fetch(`/sources/${sourceId}`, { headers });
               if (sourceResponse.ok) {
                 return await sourceResponse.json();
               }
@@ -212,7 +212,7 @@ export function EntityDetail({
             // Get interpretations by source_id
             const interpretationPromises = uniqueSourceIds.map(async (sourceId) => {
               const interpretationResponse = await fetch(
-                `/api/interpretations?source_id=${sourceId}`,
+                `/interpretations?source_id=${sourceId}`,
                 { headers }
               );
               if (interpretationResponse.ok) {
@@ -247,7 +247,7 @@ export function EntityDetail({
           try {
             // Fetch recent timeline events and filter for this entity
             const timelineResponse = await fetch(
-              `/api/timeline?limit=200`,
+              `/timeline?limit=200`,
               { headers }
             );
             if (timelineResponse.ok) {
@@ -281,7 +281,7 @@ export function EntityDetail({
               schemaParams.append("user_id", user.id);
             }
             const schemaIndexResponse = await fetch(
-              `/api/schemas?${schemaParams.toString()}`,
+              `/schemas?${schemaParams.toString()}`,
               { headers }
             );
 
@@ -299,7 +299,7 @@ export function EntityDetail({
                 }
                 const detailQuery = detailParams.toString();
                 const schemaResponse = await fetch(
-                  `/api/schemas/${encodeURIComponent(entityData.entity_type)}${
+                  `/schemas/${encodeURIComponent(entityData.entity_type)}${
                     detailQuery ? `?${detailQuery}` : ""
                   }`,
                   { headers }

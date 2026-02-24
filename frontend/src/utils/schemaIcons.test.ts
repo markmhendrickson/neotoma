@@ -25,7 +25,7 @@ describe("schemaIcons metadata fetch", () => {
     expect(result).toEqual({ label: "Conversation" });
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      expect.stringContaining("/api/schemas"),
+      expect.stringContaining("/schemas"),
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: "Bearer token",

@@ -3,7 +3,6 @@ import { rmSync } from "fs";
 import path from "path";
 
 async function loadLocalAuthModule(tempDir: string) {
-  process.env.NEOTOMA_STORAGE_BACKEND = "local";
   process.env.NEOTOMA_DATA_DIR = tempDir;
   process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");

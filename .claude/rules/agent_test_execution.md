@@ -1,3 +1,8 @@
+---
+description: "Load after implementing code changes or before marking work complete: run type-check, lint, tests, integration tests; fix all failures before proceeding; retry after fixes."
+alwaysApply: false
+---
+
 <!-- Source: foundation/agent_instructions/cursor_rules/agent_test_execution.mdc -->
 
 # Agent Test Execution Rules

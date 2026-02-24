@@ -5,7 +5,7 @@
  * and base schemas from schema_definitions.ts
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import { generateIconForEntityType } from "../src/services/schema_icon_service.js";
 import { ENTITY_SCHEMAS } from "../src/services/schema_definitions.js";
 import type { SchemaMetadata } from "../src/services/schema_registry.js";
@@ -32,7 +32,7 @@ async function generateIconsForSchemas(options: {
   
   try {
     // Fetch all active schemas from database
-    const { data: schemas, error } = await supabase
+    const { data: schemas, error } = await db
       .from("schema_registry")
       .select("*")
       .eq("active", true);
@@ -83,7 +83,7 @@ async function generateIconsForSchemas(options: {
             icon: iconMetadata,
           };
           
-          const { error: updateError } = await supabase
+          const { error: updateError } = await db
             .from("schema_registry")
             .update({ metadata: updatedMetadata })
             .eq("id", schema.id);

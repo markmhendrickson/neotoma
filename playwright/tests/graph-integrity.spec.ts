@@ -12,7 +12,7 @@ import {
   attachBrowserLogging,
   routeChatThroughMock,
 } from "./helpers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { detectOrphanNodes, detectCycles } from "../../src/services/graph_builder.js";
 
 test.describe("E2E-009: Graph Integrity Checks", () => {
@@ -24,15 +24,15 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
   test.afterEach(async () => {
     // Clean up test data
     if (createdRelationshipIds.length > 0) {
-      await supabase.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationships").delete().in("id", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
   });
@@ -44,7 +44,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     await primeLocalSettings(page);
 
     // Create test source
-    const { data: source } = await supabase
+    const { data: source } = await db
       .from("sources")
       .insert({
         user_id: testUserId,
@@ -59,7 +59,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     createdSourceIds.push(source!.id);
 
     // Create entities
-    const entity1 = await supabase
+    const entity1 = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -72,7 +72,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     createdEntityIds.push(entity1.data!.id);
 
     // Create source_entity_edge to prevent orphan
-    await supabase
+    await db
       .from("source_entity_edges")
       .insert({
         source_id: source!.id,
@@ -88,7 +88,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     expect(orphans.orphanEvents).toBe(0);
 
     // Clean up edge
-    await supabase
+    await db
       .from("source_entity_edges")
       .delete()
       .eq("source_id", source!.id)
@@ -102,7 +102,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     await primeLocalSettings(page);
 
     // Create orphan entity (no source_entity_edges)
-    const entity = await supabase
+    const entity = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -128,7 +128,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     await primeLocalSettings(page);
 
     // Create three entities
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -140,7 +140,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -152,7 +152,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     
     createdEntityIds.push(entityB.data!.id);
 
-    const entityC = await supabase
+    const entityC = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -165,7 +165,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     createdEntityIds.push(entityC.data!.id);
 
     // Create cycle: A→B→C→A
-    const relAB = await supabase
+    const relAB = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -179,7 +179,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     
     if (relAB.data?.id) createdRelationshipIds.push(relAB.data.id);
 
-    const relBC = await supabase
+    const relBC = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -193,7 +193,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     
     if (relBC.data?.id) createdRelationshipIds.push(relBC.data.id);
 
-    const relCA = await supabase
+    const relCA = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -222,7 +222,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     await primeLocalSettings(page);
 
     // Create entities with relationship
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -234,7 +234,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -247,7 +247,7 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     createdEntityIds.push(entityB.data!.id);
 
     // Create relationship
-    const relationship = await supabase
+    const relationship = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -262,11 +262,11 @@ test.describe("E2E-009: Graph Integrity Checks", () => {
     if (relationship.data?.id) createdRelationshipIds.push(relationship.data.id);
 
     // Delete entity A
-    await supabase.from("entities").delete().eq("id", entityA.data!.id);
+    await db.from("entities").delete().eq("id", entityA.data!.id);
     createdEntityIds.splice(createdEntityIds.indexOf(entityA.data!.id), 1);
 
     // Verify relationship handling (cascade or orphan, depends on FK constraints)
-    const { data: remainingRels } = await supabase
+    const { data: remainingRels } = await db
       .from("relationships")
       .select("*")
       .eq("source_entity_id", entityA.data!.id);

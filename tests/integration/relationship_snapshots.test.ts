@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { createRelationshipObservations } from "../../src/services/interpretation.js";
 import { relationshipReducer } from "../../src/reducers/relationship_reducer.js";
 
@@ -12,11 +12,11 @@ describe("Relationship Snapshots Integration", () => {
 
   beforeEach(async () => {
     // Clean up test data
-    await supabase
+    await db
       .from("relationship_observations")
       .delete()
       .eq("user_id", userId);
-    await supabase
+    await db
       .from("relationship_snapshots")
       .delete()
       .eq("user_id", userId);
@@ -45,7 +45,7 @@ describe("Relationship Snapshots Integration", () => {
     );
 
     // Verify observation was created
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("relationship_observations")
       .select("*")
       .eq("relationship_type", "SETTLES")
@@ -60,7 +60,7 @@ describe("Relationship Snapshots Integration", () => {
     });
 
     // Verify snapshot was created
-    const { data: snapshot } = await supabase
+    const { data: snapshot } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", "SETTLES:test_payment_1:test_invoice_1")
@@ -116,7 +116,7 @@ describe("Relationship Snapshots Integration", () => {
     );
 
     // Verify observations were created
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("relationship_observations")
       .select("*")
       .eq("relationship_key", "SETTLES:test_payment_2:test_invoice_2")
@@ -125,7 +125,7 @@ describe("Relationship Snapshots Integration", () => {
     expect(observations).toHaveLength(2);
 
     // Verify snapshot merged both observations
-    const { data: snapshot } = await supabase
+    const { data: snapshot } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", "SETTLES:test_payment_2:test_invoice_2")
@@ -177,7 +177,7 @@ describe("Relationship Snapshots Integration", () => {
     );
 
     // Should only have one observation
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("relationship_observations")
       .select("*")
       .eq("relationship_key", "PART_OF:test_item_1:test_invoice_3");
@@ -185,7 +185,7 @@ describe("Relationship Snapshots Integration", () => {
     expect(observations).toHaveLength(1);
 
     // Snapshot should show single observation
-    const { data: snapshot } = await supabase
+    const { data: snapshot } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", "PART_OF:test_item_1:test_invoice_3")
@@ -214,7 +214,7 @@ describe("Relationship Snapshots Integration", () => {
       100,
     );
 
-    const { data: snapshot } = await supabase
+    const { data: snapshot } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", "REFERS_TO:test_doc_1:test_contract_1")

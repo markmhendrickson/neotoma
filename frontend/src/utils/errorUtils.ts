@@ -2,7 +2,7 @@
  * Error utility functions for extracting and displaying error messages
  * 
  * Provides consistent error message extraction across the application,
- * handling various error types including Supabase AuthError objects.
+ * handling various error types including AuthError objects.
  */
 
 /**
@@ -10,7 +10,7 @@
  * 
  * Handles:
  * - Standard Error objects
- * - Supabase AuthError objects (with detailed error extraction)
+ * - AuthError objects (with detailed error extraction)
  * - String errors
  * - Unknown error types
  * 
@@ -33,7 +33,7 @@ export function extractErrorMessage(
   }
   
   if (typeof err === "object" && err !== null) {
-    // Handle Supabase AuthError and other error objects
+    // Handle AuthError and other error objects
     const errorObj = err as {
       message?: string;
       status?: number | string;
@@ -41,7 +41,7 @@ export function extractErrorMessage(
       error?: string;
       error_description?: string;
       code?: string;
-      // Supabase AuthError may have nested error details
+      // AuthError may have nested error details
       details?: string;
       hint?: string;
       // Some errors have the actual error message in nested properties
@@ -52,8 +52,8 @@ export function extractErrorMessage(
     // 1. error field (often contains exact backend error, e.g., "451 Authentication failed: Maximum credits exceeded")
     // 2. error_description (OAuth-style error descriptions)
     // 3. message field (standard error message)
-    // 4. details (additional context from Supabase)
-    // 5. hint (helpful hints from Supabase)
+    // 4. details (additional context from auth)
+    // 5. hint (helpful hints from auth)
     // 6. statusText (HTTP status text)
     // 7. Constructed message with status code
     
@@ -88,7 +88,7 @@ export function extractErrorMessage(
  * Log error details to console for debugging
  * 
  * Logs the full error object with all properties to help diagnose issues.
- * This includes Supabase AuthError objects with nested error details.
+ * This includes AuthError objects with nested error details.
  * 
  * @param err - The error to log
  * @param context - Optional context string (e.g., "Signup", "Sign in")

@@ -58,7 +58,7 @@ In a **new terminal**, set the API base URL and restart the server:
 
 ```bash
 # Get the HTTPS URL from the tunnel script output
-export API_BASE_URL=https://abc123.ngrok-free.app
+export NEOTOMA_HOST_URL=https://abc123.ngrok-free.app
 
 # Restart the MCP server with HTTPS URL
 npm run dev:api
@@ -69,7 +69,7 @@ npm run dev:api
 Add to `.env`:
 
 ```bash
-API_BASE_URL=https://abc123.ngrok-free.app
+NEOTOMA_HOST_URL=https://abc123.ngrok-free.app
 ```
 
 Then restart the server.
@@ -120,22 +120,22 @@ Update `.cursor/mcp.json` to use the HTTPS URL:
 
 **Solution:** 
 - Use ngrok paid plan for static domains, OR
-- Update `.cursor/mcp.json` and `API_BASE_URL` each time you restart ngrok
+- Update `.cursor/mcp.json` and `NEOTOMA_HOST_URL` each time you restart ngrok
 
 ### OAuth Redirect URI Mismatch
 
-**Issue:** OAuth redirect fails because `API_BASE_URL` doesn't match ngrok URL.
+**Issue:** OAuth redirect fails because `NEOTOMA_HOST_URL` doesn't match ngrok URL.
 
 **Solution:**
-- Ensure `API_BASE_URL` environment variable matches the ngrok HTTPS URL exactly
-- Restart the MCP server after setting `API_BASE_URL`
+- Ensure `NEOTOMA_HOST_URL` environment variable matches the ngrok HTTPS URL exactly
+- Restart the MCP server after setting `NEOTOMA_HOST_URL`
 - Check server logs to verify discovery endpoints use HTTPS URL
 
 ### Connect Button Still Not Appearing
 
 **Check:**
 1. ✅ HTTPS URL is correct in `.cursor/mcp.json`
-2. ✅ `API_BASE_URL` is set and server restarted
+2. ✅ `NEOTOMA_HOST_URL` is set and server restarted (or server auto-discovers from tunnel file)
 3. ✅ Tunnel is active (ngrok terminal still running)
 4. ✅ Server is running on port 8080
 5. ✅ Cursor was restarted after config change

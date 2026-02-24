@@ -1,30 +1,48 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { TestIdTracker } from "../helpers/cleanup_helpers.js";
-import { createTestEntity } from "../helpers/test_data_helpers.js";
+import { mkdir, writeFile } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 
 const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
-const TEST_USER_ID = "test-user-cli-timeline";
 
 describe("CLI timeline commands", () => {
-  const tracker = new TestIdTracker();
   let testEntityId: string;
+  let authenticatedUserId: string;
 
   beforeAll(async () => {
-    // Create test entity (which creates timeline events)
-    testEntityId = await createTestEntity({
-      entity_type: "company",
-      canonical_name: "Timeline Test Company",
-      user_id: TEST_USER_ID,
-    });
-    tracker.trackEntity(testEntityId);
-  });
+    // Create test data via CLI (writes to API server DB) so timeline events exist
+    const testDir = join(tmpdir(), `neotoma-cli-timeline-test-${Date.now()}`);
+    await mkdir(testDir, { recursive: true });
 
-  afterEach(async () => {
-    await tracker.cleanup();
+    const entityFile = join(testDir, "timeline-entity.json");
+    await writeFile(
+      entityFile,
+      JSON.stringify({
+        entities: [
+          {
+            entity_type: "company",
+            canonical_name: "Timeline Test Company",
+            properties: { name: "Timeline Test Company" },
+          },
+        ],
+      })
+    );
+
+    const { stdout: storeStdout } = await execAsync(
+      `${CLI_PATH} store-structured --file-path "${entityFile}" --json`
+    );
+    const storeResult = JSON.parse(storeStdout);
+    testEntityId = storeResult.entities?.[0]?.entity_id;
+
+    const { stdout: sourcesStdout } = await execAsync(
+      `${CLI_PATH} sources list --limit 1 --json`
+    );
+    const sourcesResult = JSON.parse(sourcesStdout);
+    authenticatedUserId = sourcesResult.sources?.[0]?.user_id;
   });
 
   describe("timeline list", () => {
@@ -40,15 +58,17 @@ describe("CLI timeline commands", () => {
       expect(Array.isArray(result.events)).toBe(true);
     });
 
-    it.skip("should filter by --entity-id (not yet supported by CLI)", async () => {
-      // Note: --entity-id filtering is not yet implemented in timeline list command
+    it("should filter by --entity-id", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --json`
+        `${CLI_PATH} timeline list --entity-id "${testEntityId}" --json`
       );
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("events");
       expect(Array.isArray(result.events)).toBe(true);
+      result.events.forEach((event: any) => {
+        expect(event.entity_id).toBe(testEntityId);
+      });
     });
 
     it("should filter by --event-type", async () => {
@@ -62,10 +82,9 @@ describe("CLI timeline commands", () => {
       });
     });
 
-    it.skip("should filter by --user-id (not yet supported by CLI)", async () => {
-      // Note: --user-id filtering is not yet implemented in timeline list command
+    it("should filter by --user-id", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --json`
+        `${CLI_PATH} timeline list --user-id "${authenticatedUserId}" --json`
       );
 
       const result = JSON.parse(stdout);
@@ -143,45 +162,78 @@ describe("CLI timeline commands", () => {
     });
   });
 
-  describe.skip("timeline get (not yet implemented)", () => {
-    // Note: timeline get command is not yet implemented in CLI
-    it.skip("should get timeline event by ID with --json", async () => {
-      // Will be implemented when timeline get command is added
+  describe("timeline get", () => {
+    it("should get timeline event by ID with --json", async () => {
+      const { stdout: listStdout } = await execAsync(`${CLI_PATH} timeline list --limit 1 --json`);
+      const listResult = JSON.parse(listStdout);
+      expect(Array.isArray(listResult.events)).toBe(true);
+      if (listResult.events.length === 0) {
+        return;
+      }
+
+      const eventId = listResult.events[0]?.id;
+      expect(typeof eventId).toBe("string");
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} timeline get --event-id "${eventId}" --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("event");
+      expect(result.event.id).toBe(eventId);
     });
 
-    it.skip("should handle invalid event ID", async () => {
-      // Will be implemented when timeline get command is added
+    it("should handle invalid event ID", async () => {
+      await expect(
+        execAsync(`${CLI_PATH} timeline get --event-id "evt_invalid" --json`)
+      ).rejects.toThrow();
+    });
+
+    it("should output parseable response without --json", async () => {
+      const { stdout: listStdout } = await execAsync(`${CLI_PATH} timeline list --limit 1 --json`);
+      const listResult = JSON.parse(listStdout);
+      if (listResult.events.length === 0) {
+        return;
+      }
+      const eventId = listResult.events[0]?.id;
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} timeline get --event-id "${eventId}"`
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("event");
+      expect(result.event.id).toBe(eventId);
     });
   });
 
   describe("filtering combinations", () => {
-    it.skip("should combine entity and event type filtering (--entity-id not yet supported)", async () => {
-      // Note: --entity-id filtering is not yet implemented
+    it("should combine entity and event type filtering", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --event-type "entity.created" --json`
+        `${CLI_PATH} timeline list --entity-id "${testEntityId}" --event-type "entity.created" --json`
       );
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("events");
+      result.events.forEach((event: any) => {
+        expect(event.entity_id).toBe(testEntityId);
+        expect(event.event_type).toBe("entity.created");
+      });
     });
 
-    it.skip("should combine user and date range filtering (--user-id not yet supported)", async () => {
-      // Note: --user-id filtering is not yet implemented
+    it("should combine user and date range filtering", async () => {
       const startDate = "2025-01-01";
       const endDate = "2025-12-31";
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --start-date "${startDate}" --end-date "${endDate}" --json`
+        `${CLI_PATH} timeline list --user-id "${authenticatedUserId}" --start-date "${startDate}" --end-date "${endDate}" --json`
       );
 
       const result = JSON.parse(stdout);
       expect(result).toHaveProperty("events");
     });
 
-    it.skip("should combine all filters with pagination (--entity-id not yet supported)", async () => {
-      // Note: --entity-id filtering is not yet implemented
+    it("should combine all filters with pagination", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --event-type "entity.created" --limit 10 --json`
+        `${CLI_PATH} timeline list --entity-id "${testEntityId}" --event-type "entity.created" --limit 10 --json`
       );
 
       const result = JSON.parse(stdout);
@@ -190,15 +242,15 @@ describe("CLI timeline commands", () => {
   });
 
   describe("error handling", () => {
-    it.skip("should handle empty results gracefully (--entity-id not yet supported)", async () => {
-      // Note: --entity-id filtering is not yet implemented in timeline list command
-      // This test would verify empty results when filtering by non-existent entity
+    it("should handle empty results gracefully when filtering by non-existent entity", async () => {
       const { stdout } = await execAsync(
-        `${CLI_PATH} timeline list --json`
+        `${CLI_PATH} timeline list --entity-id "ent_nonexistent000000000000" --json`
       );
 
       const result = JSON.parse(stdout);
       expect(result.events).toBeDefined();
+      expect(Array.isArray(result.events)).toBe(true);
+      expect(result.events.length).toBe(0);
     });
 
     it("should handle invalid date formats", async () => {

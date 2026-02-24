@@ -19,30 +19,9 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Collect environment variables (use environment-specific variables only)
+// Collect environment variables (local-only mode: OpenAI and other non-remote vars)
 const envVars = [];
-const env = process.env.NODE_ENV || "development";
-const supabaseUrl = env === "production"
-  ? (process.env.PROD_SUPABASE_PROJECT_ID ? `https://${process.env.PROD_SUPABASE_PROJECT_ID}.supabase.co` : process.env.PROD_SUPABASE_URL)
-  : (process.env.DEV_SUPABASE_PROJECT_ID ? `https://${process.env.DEV_SUPABASE_PROJECT_ID}.supabase.co` : process.env.DEV_SUPABASE_URL);
-const supabaseKey = env === "production"
-  ? process.env.PROD_SUPABASE_SERVICE_KEY
-  : process.env.DEV_SUPABASE_SERVICE_KEY;
-
-if (supabaseUrl) {
-  if (env === "production") {
-    envVars.push(`PROD_SUPABASE_URL=${supabaseUrl}`);
-  } else {
-    envVars.push(`DEV_SUPABASE_URL=${supabaseUrl}`);
-  }
-}
-if (supabaseKey) {
-  if (env === "production") {
-    envVars.push(`PROD_SUPABASE_SERVICE_KEY=${supabaseKey}`);
-  } else {
-    envVars.push(`DEV_SUPABASE_SERVICE_KEY=${supabaseKey}`);
-  }
-}
+const env = process.env.NEOTOMA_ENV || "development";
 if (env === "production") {
   if (process.env.PROD_OPENAI_API_KEY) {
     envVars.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
@@ -68,25 +47,23 @@ export ${envVars.join('\nexport ')}
 **Usage:**
 1. Copy the export commands above
 2. Run them in your shell before executing test commands
-3. These variables are required for:
-   - Integration tests (Supabase credentials)
-   - E2E tests (Supabase credentials)
+3. These variables are used for:
+   - Integration tests (local SQLite)
+   - E2E tests (local mode)
    - Embedding generation (OpenAI API key, if needed)
 
 **Verification:**
 After exporting, verify with:
 \`\`\`bash
-echo "SUPABASE_URL: \${SUPABASE_URL:-not set}"
-echo "SUPABASE_SERVICE_KEY: \${SUPABASE_SERVICE_KEY:+set}"
+echo "OPENAI_API_KEY: \${OPENAI_API_KEY:+set}"
 \`\`\`
 `
   : `**WARNING: Environment Variables Not Configured**
 
-No Supabase credentials are available in the orchestrator environment. Integration and E2E tests will fail without these variables.
+No credentials available in the orchestrator environment. Tests use local SQLite by default.
 
 To configure, set in orchestrator's .env file:
-- DEV_SUPABASE_URL or SUPABASE_URL
-- DEV_SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_KEY
+- OPENAI_API_KEY (for embedding generation, if needed)
 `;
 
 async function sendFollowup(agent) {

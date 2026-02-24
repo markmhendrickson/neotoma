@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Selective Cursor rules install: only allowlisted rules are installed; rest are loaded on-demand via the router rule. Consumed by foundation setup script when manifest support is enabled.",
+  "always_on": {
+    "foundation_rules": [
+      "agent_constraints",
+      "autonomous_execution",
+      "cursor_rules_editing",
+      "cursor_rules_sync",
+      "cursor_rules_sync_requirement",
+      "document_loading_order",
+      "instruction_documentation",
+      "risk_management",
+      "security",
+      "configuration_management"
+    ],
+    "repo_rules": [
+      "docs/context/index_rules.mdc",
+      "docs/conventions/rule_router_rules.mdc",
+      "docs/foundation/agent_instructions_rules.mdc",
+    "docs/developer/agent_instructions_sync_rules.mdc"
+    ]
+  },
+  "commands": {
+    "foundation_commands": [],
+    "repo_commands": []
+  }
+}

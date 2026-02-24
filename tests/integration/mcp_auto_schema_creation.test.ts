@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { createTestParquetFile } from "../helpers/create_test_parquet.js";
 import { randomUUID } from "crypto";
@@ -35,14 +35,14 @@ describe("MCP Auto Schema Creation", () => {
   afterEach(async () => {
     // Cleanup: Delete created schemas
     for (const schemaId of createdSchemaIds) {
-      await supabase.from("schema_registry").delete().eq("id", schemaId);
+      await db.from("schema_registry").delete().eq("id", schemaId);
     }
 
     // Cleanup: Delete created sources and related data
     for (const sourceId of createdSourceIds) {
-      await supabase.from("observations").delete().eq("source_id", sourceId);
-      await supabase.from("raw_fragments").delete().eq("source_id", sourceId);
-      await supabase.from("sources").delete().eq("id", sourceId);
+      await db.from("observations").delete().eq("source_id", sourceId);
+      await db.from("raw_fragments").delete().eq("source_id", sourceId);
+      await db.from("sources").delete().eq("id", sourceId);
     }
 
     // Cleanup: Delete test file if created
@@ -92,7 +92,7 @@ describe("MCP Auto Schema Creation", () => {
       });
 
       // Verify schema doesn't exist before
-      const { data: schemaBefore } = await supabase
+      const { data: schemaBefore } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", unregisteredType)
@@ -117,7 +117,7 @@ describe("MCP Auto Schema Creation", () => {
       }
 
       // Verify schema was created (global scope for default test user)
-      const { data: schemaAfter } = await supabase
+      const { data: schemaAfter } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", unregisteredType)
@@ -194,7 +194,7 @@ describe("MCP Auto Schema Creation", () => {
       createdSourceIds.push(result1.source_id);
 
       // Get created schema ID (global scope for default test user)
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("id")
         .eq("entity_type", unregisteredType)
@@ -228,7 +228,7 @@ describe("MCP Auto Schema Creation", () => {
       createdSourceIds.push(result2.source_id);
 
       // Verify only one schema exists (global scope)
-      const { data: schemas, count } = await supabase
+      const { data: schemas, count } = await db
         .from("schema_registry")
         .select("*", { count: "exact" })
         .eq("entity_type", unregisteredType)
@@ -310,7 +310,7 @@ describe("MCP Auto Schema Creation", () => {
 
       // Verify at least one schema was created
       // (Race condition may create 2 schemas temporarily, but one should succeed)
-      const { data: schemas, count } = await supabase
+      const { data: schemas, count } = await db
         .from("schema_registry")
         .select("*", { count: "exact" })
         .eq("entity_type", unregisteredType)
@@ -386,7 +386,7 @@ describe("MCP Auto Schema Creation", () => {
       const actualEntityType = result.entities[0]?.entity_type || unregisteredType;
 
       // Track schema (global scope)
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", actualEntityType)
@@ -452,7 +452,7 @@ describe("MCP Auto Schema Creation", () => {
       const actualEntityType = result.entities[0]?.entity_type || unregisteredType;
 
       // Get created schema (global scope)
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", actualEntityType)
@@ -517,7 +517,7 @@ describe("MCP Auto Schema Creation", () => {
       const actualEntityType = result.entities[0]?.entity_type || unregisteredType;
 
       // Get created schema (global scope)
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", actualEntityType)
@@ -579,7 +579,7 @@ describe("MCP Auto Schema Creation", () => {
       createdSourceIds.push(result.source_id);
 
       // Verify no user-specific schema was created
-      const { data: userSchema } = await supabase
+      const { data: userSchema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", "task")
@@ -632,7 +632,7 @@ describe("MCP Auto Schema Creation", () => {
       const actualEntityType = result.entities[0]?.entity_type || unregisteredType;
 
       // Get created schema (global scope)
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", actualEntityType)

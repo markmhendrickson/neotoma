@@ -5,7 +5,7 @@
  * Verifies that frequency_count is incremented correctly
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import { randomUUID } from "node:crypto";
 
 const userId = "00000000-0000-0000-0000-000000000000";
@@ -14,7 +14,7 @@ async function testRawFragmentsIdempotence() {
   console.log("\n🧪 Testing raw_fragments idempotence...\n");
 
   // Get a valid source_id
-  const { data: sources } = await supabase
+  const { data: sources } = await db
     .from("sources")
     .select("id")
     .limit(1);
@@ -30,7 +30,7 @@ async function testRawFragmentsIdempotence() {
   console.log(`✅ Using source_id: ${sourceId}\n`);
 
   // Clean up any existing test fragments
-  await supabase
+  await db
     .from("raw_fragments")
     .delete()
     .eq("source_id", sourceId)
@@ -40,7 +40,7 @@ async function testRawFragmentsIdempotence() {
   // Test 1: Insert first fragment
   console.log("📝 Test 1: Insert first fragment");
   const fragmentId1 = randomUUID();
-  const { error: insert1Error } = await supabase
+  const { error: insert1Error } = await db
     .from("raw_fragments")
     .insert({
       id: fragmentId1,
@@ -64,7 +64,7 @@ async function testRawFragmentsIdempotence() {
   console.log("✅ First fragment inserted\n");
 
   // Verify it exists
-  const { data: check1, error: check1Error } = await supabase
+  const { data: check1, error: check1Error } = await db
     .from("raw_fragments")
     .select("*")
     .eq("source_id", sourceId)
@@ -80,7 +80,7 @@ async function testRawFragmentsIdempotence() {
   // Test 2: Try to insert duplicate (should fail with unique constraint violation)
   console.log("📝 Test 2: Try to insert duplicate (should fail with constraint)");
   const fragmentId2 = randomUUID();
-  const { error: insert2Error } = await supabase
+  const { error: insert2Error } = await db
     .from("raw_fragments")
     .insert({
       id: fragmentId2,
@@ -111,7 +111,7 @@ async function testRawFragmentsIdempotence() {
 
   // Test 3: Update existing fragment (increment frequency)
   console.log("\n📝 Test 3: Update existing fragment to increment frequency");
-  const { error: updateError } = await supabase
+  const { error: updateError } = await db
     .from("raw_fragments")
     .update({
       fragment_value: { test: "value2" },
@@ -127,7 +127,7 @@ async function testRawFragmentsIdempotence() {
   console.log("✅ Fragment updated\n");
 
   // Verify update
-  const { data: check2, error: check2Error } = await supabase
+  const { data: check2, error: check2Error } = await db
     .from("raw_fragments")
     .select("*")
     .eq("source_id", sourceId)
@@ -145,7 +145,7 @@ async function testRawFragmentsIdempotence() {
   console.log("✅ Last seen updated:", check2[0].last_seen > check2[0].first_seen);
 
   // Clean up
-  await supabase
+  await db
     .from("raw_fragments")
     .delete()
     .eq("id", check1[0].id);

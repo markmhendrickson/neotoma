@@ -12,7 +12,7 @@ import {
   attachBrowserLogging,
   routeChatThroughMock,
 } from "./helpers.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 test.describe("E2E-007: MCP Relationship Creation Flow", () => {
   const testUserId = "test-user-mcp-relationships";
@@ -22,11 +22,11 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
   test.afterEach(async () => {
     // Clean up test data
     if (createdRelationshipIds.length > 0) {
-      await supabase.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationships").delete().in("id", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdEntityIds.length > 0) {
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
   });
@@ -105,7 +105,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     expect(relationshipResult.relationship.target_entity_id).toBe(entityBId);
 
     // 3. Verify relationship was created in database
-    const { data: relationships, error: relError } = await supabase
+    const { data: relationships, error: relError } = await db
       .from("relationships")
       .select("*")
       .eq("source_entity_id", entityAId)
@@ -120,7 +120,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     }
 
     // 4. Verify relationship snapshot was computed
-    const { data: snapshot, error: snapshotError } = await supabase
+    const { data: snapshot, error: snapshotError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("source_entity_id", entityAId)
@@ -144,7 +144,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     await primeLocalSettings(page);
 
     // Create entities and relationships
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -156,7 +156,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -169,7 +169,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     createdEntityIds.push(entityB.data!.id);
 
     // Create relationship
-    const relationship = await supabase
+    const relationship = await db
       .from("relationships")
       .insert({
         user_id: testUserId,
@@ -186,7 +186,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     }
 
     // Create relationship snapshot
-    await supabase
+    await db
       .from("relationship_snapshots")
       .insert({
         relationship_key: `REFERS_TO:${entityA.data!.id}:${entityB.data!.id}`,
@@ -236,7 +236,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     await primeLocalSettings(page);
 
     // Create entities
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -248,7 +248,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -320,7 +320,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     }
 
     // Clean up relationships
-    const { data: rels } = await supabase
+    const { data: rels } = await db
       .from("relationships")
       .select("id")
       .eq("source_entity_id", entityA.data!.id);
@@ -409,7 +409,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     expect([200, 400, 409]).toContain(cycleResponse.status());
 
     // Clean up relationships
-    const { data: rels } = await supabase
+    const { data: rels } = await db
       .from("relationships")
       .select("id")
       .eq("user_id", testUserId);
@@ -469,7 +469,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     expect([200, 400, 409]).toContain(selfRefResponse.status());
 
     // Clean up if created
-    const { data: rels } = await supabase
+    const { data: rels } = await db
       .from("relationships")
       .select("id")
       .eq("source_entity_id", entityId)
@@ -492,7 +492,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     await primeLocalSettings(page);
 
     // Create two entities
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -504,7 +504,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -541,7 +541,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     }
 
     // Clean up relationships
-    const { data: rels } = await supabase
+    const { data: rels } = await db
       .from("relationships")
       .select("id")
       .eq("source_entity_id", entityA.data!.id);
@@ -565,7 +565,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     await primeLocalSettings(page);
 
     // Create entities
-    const entityA = await supabase
+    const entityA = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -577,7 +577,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     
     createdEntityIds.push(entityA.data!.id);
 
-    const entityB = await supabase
+    const entityB = await db
       .from("entities")
       .insert({
         user_id: testUserId,
@@ -615,7 +615,7 @@ test.describe("E2E-007: MCP Relationship Creation Flow", () => {
     expect(result.relationship.snapshot.metadata).toEqual(metadata);
 
     // Verify in database
-    const { data: relationship } = await supabase
+    const { data: relationship } = await db
       .from("relationships")
       .select("*")
       .eq("source_entity_id", entityA.data!.id)

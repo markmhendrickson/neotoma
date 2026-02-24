@@ -24,6 +24,28 @@ import {
 const TEST_USER_ID = "test-cross-layer-schema";
 const TEST_ENTITY_TYPE = `cross_layer_schema_${Date.now()}`;
 
+async function verifyWithRetry(
+  check: () => Promise<void>,
+  maxAttempts = 5,
+  initialDelayMs = 50
+): Promise<void> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await check();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        break;
+      }
+      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 describe("Cross-layer: CLI schema commands → Database", () => {
   const tracker = new TestIdTracker();
   const files = new TempFileManager();
@@ -55,9 +77,11 @@ describe("Cross-layer: CLI schema commands → Database", () => {
       expect(result).toHaveProperty("schema_version");
 
       const version = result.schema_version as string;
-      await verifySchemaVersionActive(entityType, version, {
-        user_id: TEST_USER_ID,
-        hasFields: ["name", "value"],
+      await verifyWithRetry(async () => {
+        await verifySchemaVersionActive(entityType, version, {
+          user_id: TEST_USER_ID,
+          hasFields: ["name", "value"],
+        });
       });
 
       // Cleanup this specific type
@@ -99,7 +123,7 @@ describe("Cross-layer: CLI schema commands → Database", () => {
 
       // Update with additional field
       const updateDef = JSON.stringify([
-        { field_name: "new_field", type: "string", required: false },
+        { field_name: "new_field", field_type: "string", required: false },
       ]);
 
       const updateResult = await execCliJson(
@@ -107,6 +131,19 @@ describe("Cross-layer: CLI schema commands → Database", () => {
       );
 
       expect(updateResult).toBeDefined();
+      const version = registerResult.schema_version as string;
+      await verifyWithRetry(async () => {
+        await verifySchemaVersionActive(entityType, version, {
+          user_id: TEST_USER_ID,
+          hasFields: ["base_field", "new_field"],
+        });
+      });
+      await verifyWithRetry(async () => {
+        await verifySchemaFieldExists(entityType, "new_field", {
+          type: "string",
+          required: false,
+        });
+      });
 
       await cleanupTestSchema(entityType, TEST_USER_ID);
     });

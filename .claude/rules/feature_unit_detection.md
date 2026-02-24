@@ -1,7 +1,6 @@
 ---
-description: "Automatically detects feature unit creation intent from user patterns and triggers the feature unit creation workflow"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when user mentions create feature, new feature, add feature, feature unit, or feature ID: check if FU exists; if not, confirm then run feature unit creation workflow with required docs."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/feature_unit_detection.mdc -->

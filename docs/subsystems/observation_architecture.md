@@ -341,7 +341,7 @@ async function createObservation(entityId: string, userId: string, fields: any) 
 Default queries should exclude merged entities:
 ```typescript
 async function queryEntities(userId: string, filters: any) {
-  return await supabase
+  return await db
     .from('entities')
     .select('*')
     .eq('user_id', userId)

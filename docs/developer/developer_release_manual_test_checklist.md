@@ -15,8 +15,7 @@ This document is a checklist of functionality across the repository that you sho
 ## Prerequisites
 
 - [ ] Pre-release validation checklist completed (`docs/developer/pre_release_validation_rules.mdc`): type-check, lint, build, migrations, test suite, MCP startup
-- [ ] `.env` (or `.env.dev`) configured for the backend you are testing (local SQLite or Supabase)
-- [ ] For Supabase: project created, schema applied, `sources` (and optionally `files`) storage buckets created, anonymous sign-in enabled if testing guest flows
+- [ ] `.env` (or `.env.dev`) configured for the backend you are testing (local SQLite)
 
 ---
 
@@ -28,7 +27,7 @@ This document is a checklist of functionality across the repository that you sho
 - [ ] `neotoma init` (from repo root) creates `data/`, SQLite DB, and `.env.example` (or prompts)
 - [ ] `neotoma init --generate-keys` creates encryption key when desired
 - [ ] `neotoma init --data-dir /path/to/custom` uses custom data directory
-- [ ] `neotoma storage info` shows correct backend (local vs Supabase) and paths
+- [ ] `neotoma storage info` shows correct backend and paths
 
 ### 1.2 From npm (user path)
 
@@ -38,8 +37,7 @@ This document is a checklist of functionality across the repository that you sho
 
 ### 1.3 Environment and backend
 
-- [ ] With `NEOTOMA_STORAGE_BACKEND=local` (or unset), server uses SQLite and local `data/sources/`
-- [ ] With Supabase env set (`DEV_SUPABASE_*` or `SUPABASE_*`), server uses Supabase; migrations applied and buckets exist
+- [ ] Server uses SQLite and local `data/sources/`
 - [ ] `npm run copy:env` (in worktree) copies env from main repo when documented
 
 ---
@@ -98,12 +96,12 @@ With MCP client connected:
 - [ ] `store` with `entities` array (e.g. one `contact` or `task`) creates source and entities
 - [ ] `store` with `file_content` (base64) + `mime_type` (e.g. PDF) creates source and runs interpretation when `interpret=true`
 - [ ] `retrieve_entities` with `entity_type` returns stored entities
-- [ ] `retrieve_entities` with `search` returns semantically similar entities when OPENAI_API_KEY set (Supabase + embeddings)
+- [ ] `retrieve_entities` with `search` returns semantically similar entities when OPENAI_API_KEY set (local embeddings)
 - [ ] `retrieve_entity_snapshot` for an entity ID returns snapshot and provenance
 - [ ] `list_observations` for an entity returns observations
 - [ ] `list_entity_types` returns schema list; optional keyword filter works
 - [ ] `retrieve_entity_by_identifier` finds entity by name/email when applicable
-- [ ] `retrieve_entity_by_identifier` semantic fallback when keyword returns 0 (Supabase + embeddings)
+- [ ] `retrieve_entity_by_identifier` semantic fallback when keyword returns 0 (local embeddings)
 - [ ] `retrieve_related_entities` and `retrieve_graph_neighborhood` return expected structure when data exists
 
 ### 3.3 Mutations and lifecycle
@@ -120,7 +118,7 @@ With MCP client connected:
 - [ ] Resource `neotoma://entity_types` (or equivalent) returns entity types
 - [ ] Resource for entity by ID returns expected payload
 
-### 3.5 Auth (Supabase / OAuth)
+### 3.5 Auth (OAuth)
 
 - [ ] When MCP OAuth is required, authorize flow completes and subsequent tool calls are scoped to user
 - [ ] Cross-user isolation: User B cannot see or modify User A’s entities/sources (see IT-006 in release report)
@@ -166,12 +164,6 @@ If the release includes UI changes or you want to validate the full stack:
 - [ ] After `store` (file), file exists under `sources/` with expected naming (e.g. by hash)
 - [ ] `neotoma backup create` includes DB, sources, logs; checksums in manifest
 
-### 6.2 Supabase backend
-
-- [ ] Sources stored in `sources` bucket; RLS or service role allows server access
-- [ ] `retrieve_file_url` (or equivalent) returns valid signed URL for a stored file
-- [ ] Migrations applied; no missing tables or columns in production schema
-
 ---
 
 ## 7. Release-Specific Manual Tests
@@ -191,7 +183,7 @@ Example flows often covered there: raw file ingestion (IT-001), deduplication (I
 After a full manual pass, a minimal smoke sequence:
 
 1. `npm run type-check && npm run lint && npm run build:server && npm run build:ui`
-2. `npm test` (and optionally `RUN_SUPABASE_TESTS=1 npm test` if Supabase configured)
+2. `npm test`
 3. Start API: `npm run start:api` (or `npm run dev:server`)
 4. CLI: `neotoma auth status`, `neotoma entities list --limit 5`, `neotoma stats`
 5. MCP: Connect Cursor; call `store` with one entity; call `retrieve_entities`; verify result

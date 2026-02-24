@@ -32,26 +32,12 @@ function run(): void {
     message: envExists ? "Config present (.env)" : ".env not found (optional for local defaults)",
   });
 
-  // Backend-specific required vars (when .env exists we could load it; here we use process.env as set by caller)
-  const backend = process.env.NEOTOMA_STORAGE_BACKEND ?? "local";
-  if (backend === "supabase") {
-    const hasSupabase =
-      (process.env.DEV_SUPABASE_PROJECT_ID || process.env.DEV_SUPABASE_URL) &&
-      process.env.DEV_SUPABASE_SERVICE_KEY;
-    results.push({
-      name: "Supabase config",
-      status: hasSupabase ? "ok" : "fail",
-      message: hasSupabase
-        ? "DEV_SUPABASE_* set"
-        : "Supabase backend requires DEV_SUPABASE_PROJECT_ID (or URL) and DEV_SUPABASE_SERVICE_KEY",
-    });
-  } else {
-    results.push({
-      name: "Storage backend",
-      status: "ok",
-      message: `Backend: ${backend}`,
-    });
-  }
+  const backend = "local";
+  results.push({
+    name: "Storage backend",
+    status: "ok",
+    message: `Backend: ${backend}`,
+  });
 
   // Security: .env should be gitignored
   let gitIgnored = false;

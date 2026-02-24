@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { readParquetFile } from "../../src/services/parquet_reader.js";
 import fs from "fs";
@@ -48,16 +48,16 @@ describe("MCP Store with Parquet Files - Integration", () => {
   beforeEach(async () => {
     // Cleanup test data
     if (createdObservationIds.length > 0) {
-      await supabase.from("observations").delete().in("id", createdObservationIds);
+      await db.from("observations").delete().in("id", createdObservationIds);
       createdObservationIds.length = 0;
     }
     if (createdEntityIds.length > 0) {
-      await supabase.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
     // Cleanup temp files
@@ -75,10 +75,10 @@ describe("MCP Store with Parquet Files - Integration", () => {
 
   afterAll(async () => {
     // Final cleanup
-    await supabase.from("observations").delete().eq("entity_type", testEntityType);
-    await supabase.from("entity_snapshots").delete().eq("entity_type", testEntityType);
-    await supabase.from("entities").delete().eq("entity_type", testEntityType);
-    await supabase.from("sources").delete().like("%test_parquet%");
+    await db.from("observations").delete().eq("entity_type", testEntityType);
+    await db.from("entity_snapshots").delete().eq("entity_type", testEntityType);
+    await db.from("entities").delete().eq("entity_type", testEntityType);
+    await db.from("sources").delete().like("%test_parquet%");
     
     // Cleanup temp files
     for (const file of tempFiles) {
@@ -247,7 +247,7 @@ describe("MCP Store with Parquet Files - Integration", () => {
 
       // Verify entities exist in database
       for (const entityInfo of responseData.entities) {
-        const { data: entity } = await supabase
+        const { data: entity } = await db
           .from("entities")
           .select("*")
           .eq("id", entityInfo.entity_id)

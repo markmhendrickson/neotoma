@@ -73,7 +73,7 @@ export function ContactDialog({ open, onClose, onSave }: ContactDialogProps) {
         source_priority: 100,
         user_id: user?.id,
       });
-      const { data, error } = await api.POST("/api/store", {
+      const { data, error } = await api.POST("/store", {
         body: {
           entities: [contactData],
           idempotency_key: idempotencyKey,

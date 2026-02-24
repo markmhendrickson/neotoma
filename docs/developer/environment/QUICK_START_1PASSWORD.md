@@ -25,23 +25,21 @@ You need to map your Neotoma environment variables to 1Password references. See 
 
 **Quick example using MCP tools:**
 ```javascript
-// Add a mapping for DEV_SUPABASE_SERVICE_KEY
+// Add a mapping for DEV_CONNECTOR_SECRET_KEY
 {
   "data_type": "env_var_mappings",
   "record": {
-    "env_var": "DEV_SUPABASE_SERVICE_KEY",
+    "env_var": "DEV_CONNECTOR_SECRET_KEY",
     "op_reference": "op://Private/your-item-id/field-id",
     "vault": "Private",
-    "item_name": "Neotoma Supabase",
-    "service": "Supabase",
+    "item_name": "Neotoma Connector",
+    "service": "Connector",
     "is_optional": false
   }
 }
 ```
 
-**Required variables to map:**
-- `DEV_SUPABASE_PROJECT_ID`
-- `DEV_SUPABASE_SERVICE_KEY`
+**Required variables to map (when using OAuth connectors):**
 - `DEV_CONNECTOR_SECRET_KEY`
 - `DEV_OPENAI_API_KEY` (or use existing `OPENAI_API_KEY` mappings)
 - `DEV_PLAID_CLIENT_ID` (if using Plaid)
@@ -64,7 +62,7 @@ npm run sync:env
 This will:
 - Create a backup of your `.env` file
 - Fetch values from 1Password (based on `ENVIRONMENT`, defaults to "development")
-- Update your `.env` file with single variable names (SUPABASE_PROJECT_ID, SUPABASE_SERVICE_KEY, etc.)
+- Update your `.env` file with single variable names (REMOTE_DB_PROJECT_ID, REMOTE_DB_SERVICE_KEY, etc.)
 - Preserve any unmanaged variables
 
 ## 📚 Documentation

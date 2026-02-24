@@ -56,7 +56,7 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { user, sessionToken } = useAuth();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Fetch sources from API
@@ -98,7 +98,7 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
 
         // Use relative URL to go through Vite proxy (which routes to correct backend port)
         // The Vite proxy in vite.config.ts handles /api -> http://localhost:${HTTP_PORT}
-        const response = await fetch(`/api/sources?${params}`, { headers });
+        const response = await fetch(`/sources?${params}`, { headers });
         
         if (!response.ok) {
           if (response.status === 401 || response.status === 403) {

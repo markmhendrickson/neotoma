@@ -1,7 +1,6 @@
 ---
-description: "Ensures agents stop and request human approval for high-risk changes that could impact system stability, security, or architectural integrity"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when considering schema changes, foundation doc changes, security/auth changes, or constraint violations: stop and request approval for high-risk changes; explain risk and get explicit confirmation before proceeding."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/risk_management.mdc -->

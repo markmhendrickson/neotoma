@@ -5,7 +5,7 @@
  * All functions handle FK constraints correctly and track created IDs.
  */
 
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 // =============================================================================
 // Entity Cleanup
@@ -23,20 +23,20 @@ export async function cleanupTestEntity(entityId: string): Promise<void> {
   // 5. Relationship snapshots (FK to entities)
   // 6. Entity itself
 
-  await supabase.from("timeline_events").delete().eq("entity_id", entityId);
-  await supabase.from("entity_snapshots").delete().eq("entity_id", entityId);
-  await supabase.from("observations").delete().eq("entity_id", entityId);
+  await db.from("timeline_events").delete().eq("entity_id", entityId);
+  await db.from("entity_snapshots").delete().eq("entity_id", entityId);
+  await db.from("observations").delete().eq("entity_id", entityId);
 
   // Relationship observations (as source or target)
-  await supabase.from("relationship_observations").delete().eq("source_entity_id", entityId);
-  await supabase.from("relationship_observations").delete().eq("target_entity_id", entityId);
+  await db.from("relationship_observations").delete().eq("source_entity_id", entityId);
+  await db.from("relationship_observations").delete().eq("target_entity_id", entityId);
 
   // Relationship snapshots (as source or target)
-  await supabase.from("relationship_snapshots").delete().eq("source_entity_id", entityId);
-  await supabase.from("relationship_snapshots").delete().eq("target_entity_id", entityId);
+  await db.from("relationship_snapshots").delete().eq("source_entity_id", entityId);
+  await db.from("relationship_snapshots").delete().eq("target_entity_id", entityId);
 
   // Finally delete the entity
-  await supabase.from("entities").delete().eq("id", entityId);
+  await db.from("entities").delete().eq("id", entityId);
 }
 
 /**
@@ -46,18 +46,18 @@ export async function cleanupTestEntities(entityIds: string[]): Promise<void> {
   if (entityIds.length === 0) return;
 
   // Batch delete related data
-  await supabase.from("timeline_events").delete().in("entity_id", entityIds);
-  await supabase.from("entity_snapshots").delete().in("entity_id", entityIds);
-  await supabase.from("observations").delete().in("entity_id", entityIds);
+  await db.from("timeline_events").delete().in("entity_id", entityIds);
+  await db.from("entity_snapshots").delete().in("entity_id", entityIds);
+  await db.from("observations").delete().in("entity_id", entityIds);
 
   // Relationships (as source or target)
-  await supabase.from("relationship_observations").delete().in("source_entity_id", entityIds);
-  await supabase.from("relationship_observations").delete().in("target_entity_id", entityIds);
-  await supabase.from("relationship_snapshots").delete().in("source_entity_id", entityIds);
-  await supabase.from("relationship_snapshots").delete().in("target_entity_id", entityIds);
+  await db.from("relationship_observations").delete().in("source_entity_id", entityIds);
+  await db.from("relationship_observations").delete().in("target_entity_id", entityIds);
+  await db.from("relationship_snapshots").delete().in("source_entity_id", entityIds);
+  await db.from("relationship_snapshots").delete().in("target_entity_id", entityIds);
 
   // Delete entities
-  await supabase.from("entities").delete().in("id", entityIds);
+  await db.from("entities").delete().in("id", entityIds);
 }
 
 // =============================================================================
@@ -75,13 +75,13 @@ export async function cleanupTestSource(sourceId: string): Promise<void> {
   // 4. Relationship observations (FK to sources)
   // 5. Source itself
 
-  await supabase.from("interpretations").delete().eq("source_id", sourceId);
-  await supabase.from("raw_fragments").delete().eq("source_id", sourceId);
-  await supabase.from("observations").delete().eq("source_id", sourceId);
-  await supabase.from("relationship_observations").delete().eq("source_id", sourceId);
+  await db.from("interpretations").delete().eq("source_id", sourceId);
+  await db.from("raw_fragments").delete().eq("source_id", sourceId);
+  await db.from("observations").delete().eq("source_id", sourceId);
+  await db.from("relationship_observations").delete().eq("source_id", sourceId);
 
   // Finally delete the source
-  await supabase.from("sources").delete().eq("id", sourceId);
+  await db.from("sources").delete().eq("id", sourceId);
 }
 
 /**
@@ -91,13 +91,13 @@ export async function cleanupTestSources(sourceIds: string[]): Promise<void> {
   if (sourceIds.length === 0) return;
 
   // Batch delete related data
-  await supabase.from("interpretations").delete().in("source_id", sourceIds);
-  await supabase.from("raw_fragments").delete().in("source_id", sourceIds);
-  await supabase.from("observations").delete().in("source_id", sourceIds);
-  await supabase.from("relationship_observations").delete().in("source_id", sourceIds);
+  await db.from("interpretations").delete().in("source_id", sourceIds);
+  await db.from("raw_fragments").delete().in("source_id", sourceIds);
+  await db.from("observations").delete().in("source_id", sourceIds);
+  await db.from("relationship_observations").delete().in("source_id", sourceIds);
 
   // Delete sources
-  await supabase.from("sources").delete().in("id", sourceIds);
+  await db.from("sources").delete().in("id", sourceIds);
 }
 
 // =============================================================================
@@ -113,7 +113,7 @@ export async function cleanupTestRelationship(
   targetEntityId: string
 ): Promise<void> {
   // Delete relationship observations first (FK to relationship_snapshots)
-  await supabase
+  await db
     .from("relationship_observations")
     .delete()
     .eq("relationship_type", relationshipType)
@@ -121,7 +121,7 @@ export async function cleanupTestRelationship(
     .eq("target_entity_id", targetEntityId);
 
   // Delete relationship snapshot
-  await supabase
+  await db
     .from("relationship_snapshots")
     .delete()
     .eq("relationship_type", relationshipType)
@@ -134,12 +134,12 @@ export async function cleanupTestRelationship(
  */
 export async function cleanupEntityRelationships(entityId: string): Promise<void> {
   // Delete relationship observations (as source or target)
-  await supabase.from("relationship_observations").delete().eq("source_entity_id", entityId);
-  await supabase.from("relationship_observations").delete().eq("target_entity_id", entityId);
+  await db.from("relationship_observations").delete().eq("source_entity_id", entityId);
+  await db.from("relationship_observations").delete().eq("target_entity_id", entityId);
 
   // Delete relationship snapshots (as source or target)
-  await supabase.from("relationship_snapshots").delete().eq("source_entity_id", entityId);
-  await supabase.from("relationship_snapshots").delete().eq("target_entity_id", entityId);
+  await db.from("relationship_snapshots").delete().eq("source_entity_id", entityId);
+  await db.from("relationship_snapshots").delete().eq("target_entity_id", entityId);
 }
 
 // =============================================================================
@@ -150,7 +150,7 @@ export async function cleanupEntityRelationships(entityId: string): Promise<void
  * Clean up test observation
  */
 export async function cleanupTestObservation(observationId: string): Promise<void> {
-  await supabase.from("observations").delete().eq("id", observationId);
+  await db.from("observations").delete().eq("id", observationId);
 }
 
 /**
@@ -158,21 +158,21 @@ export async function cleanupTestObservation(observationId: string): Promise<voi
  */
 export async function cleanupTestObservations(observationIds: string[]): Promise<void> {
   if (observationIds.length === 0) return;
-  await supabase.from("observations").delete().in("id", observationIds);
+  await db.from("observations").delete().in("id", observationIds);
 }
 
 /**
  * Clean up all observations for an entity
  */
 export async function cleanupEntityObservations(entityId: string): Promise<void> {
-  await supabase.from("observations").delete().eq("entity_id", entityId);
+  await db.from("observations").delete().eq("entity_id", entityId);
 }
 
 /**
  * Clean up all observations from a source
  */
 export async function cleanupSourceObservations(sourceId: string): Promise<void> {
-  await supabase.from("observations").delete().eq("source_id", sourceId);
+  await db.from("observations").delete().eq("source_id", sourceId);
 }
 
 // =============================================================================
@@ -186,7 +186,7 @@ export async function cleanupTestSchema(
   entityType: string,
   userId?: string | null
 ): Promise<void> {
-  let query = supabase
+  let query = db
     .from("schema_registry")
     .delete()
     .eq("entity_type", entityType);
@@ -209,7 +209,7 @@ export async function cleanupSchemaRecommendations(
   entityType: string,
   userId?: string | null
 ): Promise<void> {
-  let query = supabase
+  let query = db
     .from("schema_recommendations")
     .delete()
     .eq("entity_type", entityType);
@@ -236,7 +236,7 @@ export async function cleanupRawFragments(
   entityType: string,
   userId?: string | null
 ): Promise<void> {
-  let query = supabase
+  let query = db
     .from("raw_fragments")
     .delete()
     .eq("entity_type", entityType);
@@ -256,7 +256,7 @@ export async function cleanupRawFragments(
  * Clean up raw fragments from source
  */
 export async function cleanupSourceRawFragments(sourceId: string): Promise<void> {
-  await supabase.from("raw_fragments").delete().eq("source_id", sourceId);
+  await db.from("raw_fragments").delete().eq("source_id", sourceId);
 }
 
 // =============================================================================
@@ -270,7 +270,7 @@ export async function cleanupAutoEnhancementQueue(
   entityType: string,
   userId?: string | null
 ): Promise<void> {
-  let query = supabase
+  let query = db
     .from("auto_enhancement_queue")
     .delete()
     .eq("entity_type", entityType);
@@ -294,7 +294,7 @@ export async function cleanupAutoEnhancementQueue(
  * Clean up timeline events for entity
  */
 export async function cleanupTimelineEvents(entityId: string): Promise<void> {
-  await supabase.from("timeline_events").delete().eq("entity_id", entityId);
+  await db.from("timeline_events").delete().eq("entity_id", entityId);
 }
 
 /**
@@ -304,7 +304,7 @@ export async function cleanupTimelineEventsByType(
   eventType: string,
   entityId?: string
 ): Promise<void> {
-  let query = supabase
+  let query = db
     .from("timeline_events")
     .delete()
     .eq("event_type", eventType);
@@ -324,7 +324,7 @@ export async function cleanupTimelineEventsByType(
  * Clean up interpretations for source
  */
 export async function cleanupInterpretations(sourceId: string): Promise<void> {
-  await supabase.from("interpretations").delete().eq("source_id", sourceId);
+  await db.from("interpretations").delete().eq("source_id", sourceId);
 }
 
 // =============================================================================
@@ -335,7 +335,7 @@ export async function cleanupInterpretations(sourceId: string): Promise<void> {
  * Clean up entity snapshot
  */
 export async function cleanupEntitySnapshot(entityId: string): Promise<void> {
-  await supabase.from("entity_snapshots").delete().eq("entity_id", entityId);
+  await db.from("entity_snapshots").delete().eq("entity_id", entityId);
 }
 
 /**
@@ -346,7 +346,7 @@ export async function cleanupRelationshipSnapshot(
   sourceEntityId: string,
   targetEntityId: string
 ): Promise<void> {
-  await supabase
+  await db
     .from("relationship_snapshots")
     .delete()
     .eq("relationship_type", relationshipType)
@@ -367,7 +367,7 @@ export async function cleanupEntityType(
   userId?: string | null
 ): Promise<void> {
   // First, get all entity IDs for this type
-  let entityQuery = supabase
+  let entityQuery = db
     .from("entities")
     .select("id")
     .eq("entity_type", entityType);

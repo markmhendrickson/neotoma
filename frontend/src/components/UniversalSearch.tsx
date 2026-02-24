@@ -182,7 +182,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search entities (if we have space)
       if (allResults.length < 3) {
         try {
-          const { data: entitiesData } = await api.POST("/api/entities/query", {
+          const { data: entitiesData } = await api.POST("/entities/query", {
             body: {
               search: searchQuery,
               limit: 3 - allResults.length,
@@ -207,7 +207,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search sources (if we have space)
       if (allResults.length < 3) {
         try {
-          const { data: sourcesData } = await api.GET("/api/sources", {
+          const { data: sourcesData } = await api.GET("/sources", {
             params: { query: userId ? { user_id: userId } : {} },
           });
           const sources = (sourcesData?.sources || [])
@@ -232,7 +232,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search observations (if we have space)
       if (allResults.length < 3) {
         try {
-          const { data: observationsData } = await api.POST("/api/observations/query", {
+          const { data: observationsData } = await api.POST("/observations/query", {
             body: {
               limit: 3 - allResults.length,
               user_id: userId,
@@ -261,7 +261,7 @@ export function UniversalSearch({ className, fullWidth }: UniversalSearchProps) 
       // Search interpretations (if we have space)
       if (allResults.length < 3) {
         try {
-          const { data: interpretationsData } = await api.GET("/api/interpretations", {
+          const { data: interpretationsData } = await api.GET("/interpretations", {
             params: { query: userId ? { user_id: userId } : {} },
           });
           const interpretations = (interpretationsData?.interpretations || [])

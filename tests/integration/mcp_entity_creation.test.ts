@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import fs from "fs";
 import path from "path";
@@ -119,7 +119,7 @@ describe("MCP Entity Creation - Integration", () => {
         expect(observationExists).toBe(true);
 
         // Verify entity has correct fields
-        const { data: entity } = await supabase
+        const { data: entity } = await db
           .from("entities")
           .select("*")
           .eq("id", entityInfo.entity_id)
@@ -158,7 +158,7 @@ describe("MCP Entity Creation - Integration", () => {
 
       // Verify observations have known fields
       for (const entityInfo of responseData.entities) {
-        const { data: observation } = await supabase
+        const { data: observation } = await db
           .from("observations")
           .select("fields")
           .eq("id", entityInfo.observation_id)
@@ -207,7 +207,7 @@ describe("MCP Entity Creation - Integration", () => {
         const entityExists = await verifyEntityExists(entityInfo.entity_id);
         expect(entityExists).toBe(true);
 
-        const { data: entity } = await supabase
+        const { data: entity } = await db
           .from("entities")
           .select("*")
           .eq("id", entityInfo.entity_id)
@@ -240,7 +240,7 @@ describe("MCP Entity Creation - Integration", () => {
 
       // Verify all fields stored in observations
       for (const entityInfo of responseData.entities) {
-        const { data: observation } = await supabase
+        const { data: observation } = await db
           .from("observations")
           .select("fields")
           .eq("id", entityInfo.observation_id)
@@ -321,7 +321,7 @@ describe("MCP Entity Creation - Integration", () => {
       expect(secondEntityId).toBe(firstEntityId);
 
       // Verify only one entity in database
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entities")
         .select("*")
         .eq("id", firstEntityId);

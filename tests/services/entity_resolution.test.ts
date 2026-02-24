@@ -5,7 +5,11 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { generateEntityId, normalizeEntityValue } from "../../src/services/entity_resolution.js";
+import {
+  deriveCanonicalNameFromFields,
+  generateEntityId,
+  normalizeEntityValue,
+} from "../../src/services/entity_resolution.js";
 
 describe("Entity Resolution Service", () => {
   describe("generateEntityId", () => {
@@ -209,6 +213,35 @@ describe("Entity Resolution Service", () => {
         const allSame = normalized.every((v) => v === normalized[0]);
         expect(allSame).toBe(true);
       });
+    });
+  });
+
+  describe("deriveCanonicalNameFromFields", () => {
+    it("should prefer stable IDs over metadata fields (email_message)", () => {
+      const canonical = deriveCanonicalNameFromFields("email_message", {
+        source: "gmail",
+        message_id: "19c7482c87b8e406",
+        subject: "Your API usage limits have increased",
+      });
+
+      expect(canonical).toContain("19c7482c87b8e406");
+      expect(canonical).not.toBe("gmail");
+
+      const entityId = generateEntityId("email_message", canonical);
+      expect(entityId).toMatch(/^ent_[a-f0-9]{24}$/);
+    });
+
+    it("should produce different IDs for different message IDs (email_message)", () => {
+      const c1 = deriveCanonicalNameFromFields("email_message", {
+        source: "gmail",
+        message_id: "a",
+      });
+      const c2 = deriveCanonicalNameFromFields("email_message", {
+        source: "gmail",
+        message_id: "b",
+      });
+
+      expect(generateEntityId("email_message", c1)).not.toBe(generateEntityId("email_message", c2));
     });
   });
 

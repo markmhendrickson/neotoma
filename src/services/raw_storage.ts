@@ -1,8 +1,8 @@
 // FU-120: Raw Storage Service
-// Content-addressed storage with SHA-256 hashing and Supabase Storage
+// Content-addressed storage with SHA-256 hashing and local/cloud storage
 
 import crypto from "crypto";
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -47,7 +47,7 @@ export async function storeRawContent(
   const fileSize = fileBuffer.length;
 
   if (idempotencyKey) {
-    const { data: existingByKey, error: existingByKeyError } = await supabase
+    const { data: existingByKey, error: existingByKeyError } = await db
       .from("sources")
       .select("id, storage_url, content_hash, file_size, idempotency_key")
       .eq("user_id", userId)
@@ -77,7 +77,7 @@ export async function storeRawContent(
   }
 
   // Check for existing source (deduplication)
-  const { data: existing, error: checkError } = await supabase
+  const { data: existing, error: checkError } = await db
     .from("sources")
     .select("id, storage_url, idempotency_key")
     .eq("user_id", userId)
@@ -91,7 +91,7 @@ export async function storeRawContent(
   // If already exists, return existing source
   if (existing) {
     if (idempotencyKey && !existing.idempotency_key) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("sources")
         .update({ idempotency_key: idempotencyKey })
         .eq("id", existing.id);
@@ -111,7 +111,7 @@ export async function storeRawContent(
     };
   }
 
-  // Upload to Supabase Storage
+  // Upload to storage
   const storagePath = `${userId}/${contentHash}`;
   const bucketName = "sources";
 
@@ -119,7 +119,7 @@ export async function storeRawContent(
   const isTestEnv = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
   
   if (!isTestEnv) {
-    const { error: uploadError } = await supabase.storage
+    const { error: uploadError } = await db.storage
       .from(bucketName)
       .upload(storagePath, fileBuffer, {
         upsert: false,
@@ -132,7 +132,7 @@ export async function storeRawContent(
         uploadError.message?.toLowerCase().includes("file already exists") ||
         (uploadError as { code?: string }).code === "STORAGE_FILE_EXISTS";
       if (isAlreadyExists) {
-        const { data: existingAfterUpload, error: recheckError } = await supabase
+        const { data: existingAfterUpload, error: recheckError } = await db
           .from("sources")
           .select("id, storage_url")
           .eq("user_id", userId)
@@ -155,7 +155,7 @@ export async function storeRawContent(
   }
 
   // Create source record
-  const { data: source, error: insertError } = await supabase
+  const { data: source, error: insertError } = await db
     .from("sources")
     .insert({
       user_id: userId,
@@ -179,7 +179,7 @@ export async function storeRawContent(
       insertError.message?.toLowerCase().includes("unique") ||
       (insertError as { code?: string }).code === "23505";
     if (isDuplicate) {
-      const { data: existingSource, error: recheckError } = await supabase
+      const { data: existingSource, error: recheckError } = await db
         .from("sources")
         .select("id, storage_url")
         .eq("user_id", userId)
@@ -212,7 +212,7 @@ export async function storeRawContent(
  * Get source metadata by ID
  */
 export async function getSourceMetadata(sourceId: string) {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("sources")
     .select("*")
     .eq("id", sourceId)
@@ -225,6 +225,18 @@ export async function getSourceMetadata(sourceId: string) {
   return data;
 }
 
+/** Thrown when the stored file is missing (e.g. ENOENT on local storage). Callers can catch and skip or retry. */
+export class SourceFileNotFoundError extends Error {
+  readonly code = "SOURCE_FILE_NOT_FOUND";
+  constructor(
+    message: string,
+    public readonly storageUrl: string
+  ) {
+    super(message);
+    this.name = "SourceFileNotFoundError";
+  }
+}
+
 /**
  * Download raw content from storage
  */
@@ -232,12 +244,19 @@ export async function downloadRawContent(
   storageUrl: string,
   bucketName: string = "sources"
 ): Promise<Buffer> {
-  const { data, error } = await supabase.storage
+  const { data, error } = await db.storage
     .from(bucketName)
     .download(storageUrl);
 
   if (error || !data) {
-    throw new Error(`Failed to download content: ${error?.message}`);
+    const msg = error?.message ?? "Unknown error";
+    if (msg.includes("ENOENT") || msg.includes("no such file or directory")) {
+      throw new SourceFileNotFoundError(
+        `Source file not found: ${msg}`,
+        storageUrl
+      );
+    }
+    throw new Error(`Failed to download content: ${msg}`);
   }
 
   return Buffer.from(await data.arrayBuffer());

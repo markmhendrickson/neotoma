@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 describe("MCP graph actions - parameter variations", () => {
@@ -8,7 +8,7 @@ describe("MCP graph actions - parameter variations", () => {
 
   async function createGraphStructure() {
     // Create source
-    const { data: source, error: sourceError } = await supabase
+    const { data: source, error: sourceError } = await db
       .from("sources")
         .insert({
           user_id: testUserId,
@@ -30,7 +30,7 @@ describe("MCP graph actions - parameter variations", () => {
     const entityB = `ent_b_${Date.now()}`;
     const entityC = `ent_c_${Date.now()}`;
 
-    await supabase.from("observations").insert([
+    await db.from("observations").insert([
       {
         entity_id: entityA,
         entity_type: "task",
@@ -59,7 +59,7 @@ describe("MCP graph actions - parameter variations", () => {
     tracker.trackEntity(entityC);
 
     // Create relationships: A -> B -> C
-    await supabase.from("relationship_observations").insert([
+    await db.from("relationship_observations").insert([
       {
         source_entity_id: entityA,
         relationship_type: "REFERS_TO",
@@ -87,7 +87,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should traverse 1-hop outbound", async () => {
       const { entityA, entityB } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA);
@@ -99,7 +99,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should traverse 1-hop inbound", async () => {
       const { entityA, entityB } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entityB);
@@ -111,12 +111,12 @@ describe("MCP graph actions - parameter variations", () => {
     it("should traverse 1-hop both directions", async () => {
       const { entityB } = await createGraphStructure();
 
-      const { data: outbound } = await supabase
+      const { data: outbound } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityB);
 
-      const { data: inbound } = await supabase
+      const { data: inbound } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entityB);
@@ -129,7 +129,7 @@ describe("MCP graph actions - parameter variations", () => {
       const { entityA } = await createGraphStructure();
 
       // Get 1-hop neighbors
-      const { data: hop1 } = await supabase
+      const { data: hop1 } = await db
         .from("relationship_snapshots")
         .select("target_entity_id")
         .eq("source_entity_id", entityA);
@@ -138,7 +138,7 @@ describe("MCP graph actions - parameter variations", () => {
 
       // Get 2-hop neighbors
       if (hop1Ids.length > 0) {
-        const { data: hop2 } = await supabase
+        const { data: hop2 } = await db
           .from("relationship_snapshots")
           .select("target_entity_id")
           .in("source_entity_id", hop1Ids);
@@ -150,7 +150,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should filter by relationship_type: single type", async () => {
       const { entityA } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA)
@@ -163,7 +163,7 @@ describe("MCP graph actions - parameter variations", () => {
       const { source, entityA, entityB } = await createGraphStructure();
 
       // Add another relationship type
-      await supabase.from("relationship_observations").insert({
+      await db.from("relationship_observations").insert({
         source_entity_id: entityA,
         relationship_type: "PART_OF",
         target_entity_id: entityB,
@@ -171,7 +171,7 @@ describe("MCP graph actions - parameter variations", () => {
         user_id: testUserId
       });
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA)
@@ -183,7 +183,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should filter by relationship_types: empty (all types)", async () => {
       const { entityA } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA);
@@ -194,14 +194,14 @@ describe("MCP graph actions - parameter variations", () => {
     it("should return with include_entities: true", async () => {
       const { entityA } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA);
 
       // Get target entities
       const targetIds = relationships!.map((r) => r.target_entity_id);
-      const { data: entities } = await supabase
+      const { data: entities } = await db
         .from("entity_snapshots")
         .select("*")
         .in("entity_id", targetIds);
@@ -213,7 +213,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should return with include_entities: false", async () => {
       const { entityA } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("target_entity_id")
         .eq("source_entity_id", entityA);
@@ -227,7 +227,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should include relationships when include_relationships: true", async () => {
       const { entityB } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .or(`source_entity_id.eq.${entityB},target_entity_id.eq.${entityB}`);
@@ -239,7 +239,7 @@ describe("MCP graph actions - parameter variations", () => {
       // Just test that we can query without relationships
       const { entityB } = await createGraphStructure();
 
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityB)
@@ -252,7 +252,7 @@ describe("MCP graph actions - parameter variations", () => {
       const { source, entityB } = await createGraphStructure();
 
       // Get observations for entity
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("source_id")
         .eq("entity_id", entityB);
@@ -264,7 +264,7 @@ describe("MCP graph actions - parameter variations", () => {
       // Would check timeline_events table for events related to entity
       const { entityB } = await createGraphStructure();
 
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from("timeline_events")
         .select("*")
         .eq("entity_id", entityB);
@@ -276,7 +276,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should include observations when include_observations: true", async () => {
       const { entityB } = await createGraphStructure();
 
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityB);
@@ -287,7 +287,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should work with node_type: entity", async () => {
       const { entityB } = await createGraphStructure();
 
-      const { data: entity } = await supabase
+      const { data: entity } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", entityB)
@@ -299,7 +299,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should work with node_type: source", async () => {
       const { source } = await createGraphStructure();
 
-      const { data: sourceRecord } = await supabase
+      const { data: sourceRecord } = await db
         .from("sources")
         .select("*")
         .eq("source_id", source.id)
@@ -308,7 +308,7 @@ describe("MCP graph actions - parameter variations", () => {
       expect(sourceRecord).toBeDefined();
 
       // Get entities from this source
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("entity_id")
         .eq("source_id", source.id);
@@ -321,7 +321,7 @@ describe("MCP graph actions - parameter variations", () => {
     it("should handle max_hops: 1", async () => {
       const { entityA } = await createGraphStructure();
 
-      const { data: relationships } = await supabase
+      const { data: relationships } = await db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityA);
@@ -333,14 +333,14 @@ describe("MCP graph actions - parameter variations", () => {
       const { entityA } = await createGraphStructure();
 
       // Get 1-hop
-      const { data: hop1 } = await supabase
+      const { data: hop1 } = await db
         .from("relationship_snapshots")
         .select("target_entity_id")
         .eq("source_entity_id", entityA);
 
       // Get 2-hop
       if (hop1!.length > 0) {
-        const { data: hop2 } = await supabase
+        const { data: hop2 } = await db
           .from("relationship_snapshots")
           .select("target_entity_id")
           .in("source_entity_id", hop1!.map((r) => r.target_entity_id));
@@ -353,21 +353,21 @@ describe("MCP graph actions - parameter variations", () => {
       const { entityA } = await createGraphStructure();
 
       // Get 1-hop
-      const { data: hop1 } = await supabase
+      const { data: hop1 } = await db
         .from("relationship_snapshots")
         .select("target_entity_id")
         .eq("source_entity_id", entityA);
 
       if (hop1!.length > 0) {
         // Get 2-hop
-        const { data: hop2 } = await supabase
+        const { data: hop2 } = await db
           .from("relationship_snapshots")
           .select("target_entity_id")
           .in("source_entity_id", hop1!.map((r) => r.target_entity_id));
 
         if (hop2!.length > 0) {
           // Get 3-hop
-          const { data: hop3 } = await supabase
+          const { data: hop3 } = await db
             .from("relationship_snapshots")
             .select("target_entity_id")
             .in("source_entity_id", hop2!.map((r) => r.target_entity_id));

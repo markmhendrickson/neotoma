@@ -114,7 +114,7 @@ describe("CLI entity subcommands", () => {
         await setupConfig(homeDir);
         await withMockFetch(
           {
-            [`/api/entities/${FAKE_ENTITY_ID}`]: {
+            [`/entities/${FAKE_ENTITY_ID}`]: {
               id: FAKE_ENTITY_ID,
               entity_type: "company",
               canonical_name: "Test Company",
@@ -358,7 +358,7 @@ describe("CLI entity subcommands", () => {
       tracker.trackEntity(deleteId);
 
       const { stdout, stderr } = await execAsync(
-        `${CLI_PATH} entities delete "${deleteId}" task --json`
+        `${CLI_PATH} entities delete "${deleteId}" task --user-id "${TEST_USER_ID}" --json`
       );
       expect(stderr).toBe("");
       const result = JSON.parse(stdout);
@@ -374,7 +374,7 @@ describe("CLI entity subcommands", () => {
       tracker.trackEntity(deleteId);
 
       const { stdout } = await execAsync(
-        `${CLI_PATH} entities delete "${deleteId}" task --reason "test cleanup" --json`
+        `${CLI_PATH} entities delete "${deleteId}" task --user-id "${TEST_USER_ID}" --reason "test cleanup" --json`
       );
       const result = JSON.parse(stdout);
       expect(result).toBeDefined();
@@ -393,10 +393,10 @@ describe("CLI entity subcommands", () => {
       });
       tracker.trackEntity(restoreId);
 
-      await execAsync(`${CLI_PATH} entities delete "${restoreId}" task --json`);
+      await execAsync(`${CLI_PATH} entities delete "${restoreId}" task --user-id "${TEST_USER_ID}" --json`);
 
       const { stdout, stderr } = await execAsync(
-        `${CLI_PATH} entities restore "${restoreId}" task --json`
+        `${CLI_PATH} entities restore "${restoreId}" task --user-id "${TEST_USER_ID}" --json`
       );
       expect(stderr).toBe("");
       const result = JSON.parse(stdout);
@@ -411,9 +411,9 @@ describe("CLI entity subcommands", () => {
       });
       tracker.trackEntity(restoreId);
 
-      await execAsync(`${CLI_PATH} entities delete "${restoreId}" task --json`);
+      await execAsync(`${CLI_PATH} entities delete "${restoreId}" task --user-id "${TEST_USER_ID}" --json`);
       const { stdout } = await execAsync(
-        `${CLI_PATH} entities restore "${restoreId}" task --reason "undo deletion" --json`
+        `${CLI_PATH} entities restore "${restoreId}" task --user-id "${TEST_USER_ID}" --reason "undo deletion" --json`
       );
       const result = JSON.parse(stdout);
       expect(result).toBeDefined();

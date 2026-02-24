@@ -34,6 +34,25 @@ export interface LLMExtractionResult {
   attempts?: number; // Number of attempts before success
 }
 
+const MOCK_EXTRACTION_FLAG = "NEOTOMA_MOCK_LLM_EXTRACTION";
+
+function isMockLLMExtractionEnabled(): boolean {
+  return process.env[MOCK_EXTRACTION_FLAG] === "1";
+}
+
+function buildMockExtractionResult(text: string): LLMExtractionResult {
+  const compactText = text.replace(/\s+/g, " ").trim();
+  return {
+    entity_type: "note",
+    fields: {
+      title: "Mock interpreted document",
+      content: compactText.slice(0, 500),
+      schema_version: "1.0",
+    },
+    confidence: 0.99,
+  };
+}
+
 /**
  * Extract structured data from document text using LLM
  * Supports multiple languages and complex document structures
@@ -50,6 +69,10 @@ export async function extractWithLLM(
   mimeType?: string,
   modelId: string = "gpt-4o" // Default to GPT-4o for better accuracy
 ): Promise<LLMExtractionResult> {
+  if (isMockLLMExtractionEnabled()) {
+    return buildMockExtractionResult(text);
+  }
+
   if (!openai) {
     throw new Error("OpenAI API key not configured");
   }
@@ -135,6 +158,10 @@ export async function extractWithLLMFromImage(
   mimeType?: string,
   modelId: string = "gpt-4o"
 ): Promise<LLMExtractionResult> {
+  if (isMockLLMExtractionEnabled()) {
+    return buildMockExtractionResult("mock image extraction");
+  }
+
   if (!openai) {
     throw new Error("OpenAI API key not configured");
   }
@@ -194,7 +221,7 @@ export async function extractWithLLMFromImage(
  * Check if LLM extraction is available (OpenAI configured)
  */
 export function isLLMExtractionAvailable(): boolean {
-  return openai !== null;
+  return openai !== null || isMockLLMExtractionEnabled();
 }
 
 /**
@@ -490,10 +517,6 @@ export async function extractFromCSVWithChunking(
   // Log to file for debugging (MCP stdout is used for JSON-RPC)
   const logMsg = `[CSV Chunking] File size: ${fileSize} bytes, Rows per chunk: ${rowsPerChunk}, Total chunks: ${chunks.length}\n`;
   await fs.appendFile(logPath, logMsg).catch(() => {});
-
-  console.log(
-    `CSV file too large (${fileSize} bytes), chunking into ${chunks.length} chunks of ~${rowsPerChunk} rows each`
-  );
 
   // Process chunks in parallel
   const chunkResults = await Promise.all(

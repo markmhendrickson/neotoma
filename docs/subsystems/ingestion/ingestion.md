@@ -563,14 +563,12 @@ async function findEntityByExternalId(
   externalId: string,
   userId: string
 ): Promise<{ id: string } | null> {
-  const { data } = await supabase
-    .from('entities')
-    .select('id')
-    .eq('entity_type', entityType)
-    .eq('external_id', externalId)
-    .eq('user_id', userId)
-    .is('merged_to_entity_id', null)  // Exclude merged entities
-    .single();
+  const data = await db.queryOne("entities", {
+    entity_type: entityType,
+    external_id: externalId,
+    user_id: userId,
+    merged_to_entity_id: null,  // Exclude merged entities
+  }, ["id"]);
   return data;
 }
 ```

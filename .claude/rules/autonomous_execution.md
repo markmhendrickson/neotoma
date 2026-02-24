@@ -1,11 +1,9 @@
 ---
-description: "Autonomous execution rule: proceed without asking except for high-stakes architectural/design ambiguities"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when deciding whether to ask user: proceed without asking for routine implementation, tests, docs, lint; stop and ask only for unclear architectural/design choices with high stakes (schema, layer boundaries, consistency model)."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/autonomous_execution.mdc -->
-
 
 # Autonomous Execution Rule
 

@@ -102,7 +102,9 @@ function reportExistingDevServeIfRunning() {
 
 // Check if ports are already explicitly set via environment variables
 const hasExplicitPorts =
-  typeof process.env.HTTP_PORT === 'string' && process.env.HTTP_PORT.length > 0;
+  (typeof process.env.NEOTOMA_HTTP_PORT === 'string' &&
+    process.env.NEOTOMA_HTTP_PORT.length > 0) ||
+  (typeof process.env.HTTP_PORT === 'string' && process.env.HTTP_PORT.length > 0);
 
 const hasSharedPorts =
   hasExplicitPorts ||

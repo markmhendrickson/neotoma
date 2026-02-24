@@ -513,7 +513,7 @@ export async function startOAuthFlow(page: Page, connectionId: string): Promise<
 }
 
 /**
- * Mock OAuth callback (simulate Supabase redirect)
+ * Mock OAuth callback (simulate auth provider redirect)
  */
 export async function simulateOAuthCallback(
   page: Page,
@@ -521,7 +521,7 @@ export async function simulateOAuthCallback(
   code: string,
   state: string
 ): Promise<void> {
-  // Directly navigate to callback URL (simulates browser redirect from Supabase)
+  // Directly navigate to callback URL (simulates browser redirect from auth provider)
   const callbackUrl = `${apiBaseUrl}/mcp/oauth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
   await page.goto(callbackUrl);
 }

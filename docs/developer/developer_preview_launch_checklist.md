@@ -70,7 +70,7 @@ This document does not cover marketing, positioning, or post-preview roadmap; se
 
 | Criterion | Status | Evidence |
 |-----------|--------|----------|
-| Local-only stance documented | Done | [Developer preview storage](developer_preview_storage.md): preview supports local storage only (SQLite + local file storage); Supabase not supported in preview. |
+| Local-only stance documented | Done | [Developer preview storage](developer_preview_storage.md): preview supports local storage only (SQLite + local file storage); Remote backends not supported in preview. |
 | When to use local vs remote (future) | Done | Same doc: quick reference table; "when remote storage is reintroduced" and use cases (multi-user, hosted, etc.). |
 | README and getting started aligned | Done | README Developer preview section and [Getting started](getting_started.md) reference local-only for preview. |
 

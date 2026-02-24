@@ -1,10 +1,11 @@
 // Integration tests for v0.2.0 - Sources-First Ingestion
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { supabase } from "../../src/db";
+import { db } from "../../src/db";
 import { storeRawContent, computeContentHash } from "../../src/services/raw_storage";
 import { runInterpretation, checkInterpretationQuota } from "../../src/services/interpretation";
 import { queryEntities, getEntityWithProvenance } from "../../src/services/entity_queries";
+import { config } from "../../src/config";
 import { setupTestSchemas } from "./setup_v0.2.0_schemas";
 import { randomUUID } from "crypto";
 
@@ -16,11 +17,11 @@ describe("v0.2.0 Integration Tests", () => {
     await setupTestSchemas();
 
     // Clean up test data
-    await supabase.from("observations").delete().eq("user_id", TEST_USER_ID);
-    await supabase.from("entity_merges").delete().eq("user_id", TEST_USER_ID);
-    await supabase.from("interpretations").delete().eq("user_id", TEST_USER_ID);
-    await supabase.from("sources").delete().eq("user_id", TEST_USER_ID);
-    await supabase.from("entities").delete().eq("user_id", TEST_USER_ID);
+    await db.from("observations").delete().eq("user_id", TEST_USER_ID);
+    await db.from("entity_merges").delete().eq("user_id", TEST_USER_ID);
+    await db.from("interpretations").delete().eq("user_id", TEST_USER_ID);
+    await db.from("sources").delete().eq("user_id", TEST_USER_ID);
+    await db.from("entities").delete().eq("user_id", TEST_USER_ID);
   });
 
   describe("IT-001: Raw File Ingestion Flow", () => {
@@ -88,7 +89,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(interpretationResult.interpretationId).toBeDefined();
 
       // Verify observation has provenance links
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_id", storageResult.sourceId);
@@ -156,7 +157,7 @@ describe("v0.2.0 Integration Tests", () => {
         },
       });
 
-      const { data: obs1 } = await supabase
+      const { data: obs1 } = await db
         .from("observations")
         .select("*")
         .eq("interpretation_id", run1.interpretationId);
@@ -178,7 +179,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Verify first run observations unchanged
-      const { data: obs1After } = await supabase
+      const { data: obs1After } = await db
         .from("observations")
         .select("*")
         .eq("interpretation_id", run1.interpretationId);
@@ -186,7 +187,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(obs1After?.length).toBe(obs1Count);
 
       // Verify second run created new observations
-      const { data: obs2 } = await supabase
+      const { data: obs2 } = await db
         .from("observations")
         .select("*")
         .eq("interpretation_id", run2.interpretationId);
@@ -202,7 +203,7 @@ describe("v0.2.0 Integration Tests", () => {
       // Create entity with observation
       const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
       
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: entityId,
         entity_type: "note",
         canonical_name: "Test Entity",
@@ -210,7 +211,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Create initial observation
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         id: randomUUID(),
         entity_id: entityId,
         entity_type: "note",
@@ -222,7 +223,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Create correction observation
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         id: randomUUID(),
         entity_id: entityId,
         entity_type: "note",
@@ -234,7 +235,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Verify correction wins (would need reducer to compute snapshot)
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId)
@@ -251,7 +252,7 @@ describe("v0.2.0 Integration Tests", () => {
       const toEntityId = `ent_to_${randomUUID().substring(0, 8)}`;
 
       // Create two entities
-      await supabase.from("entities").insert([
+      await db.from("entities").insert([
         {
           id: fromEntityId,
           entity_type: "person",
@@ -268,7 +269,7 @@ describe("v0.2.0 Integration Tests", () => {
 
       // Create observation for source entity
       const obsId = randomUUID();
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         id: obsId,
         entity_id: fromEntityId,
         entity_type: "person",
@@ -280,13 +281,13 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Rewrite observations
-      await supabase
+      await db
         .from("observations")
         .update({ entity_id: toEntityId })
         .eq("entity_id", fromEntityId);
 
       // Mark source entity as merged
-      await supabase
+      await db
         .from("entities")
         .update({
           merged_to_entity_id: toEntityId,
@@ -295,7 +296,7 @@ describe("v0.2.0 Integration Tests", () => {
         .eq("id", fromEntityId);
 
       // Create merge audit log
-      await supabase.from("entity_merges").insert({
+      await db.from("entity_merges").insert({
         user_id: TEST_USER_ID,
         from_entity_id: fromEntityId,
         to_entity_id: toEntityId,
@@ -303,7 +304,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Verify merge
-      const { data: fromEntity } = await supabase
+      const { data: fromEntity } = await db
         .from("entities")
         .select("*")
         .eq("id", fromEntityId)
@@ -312,7 +313,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(fromEntity!.merged_to_entity_id).toBe(toEntityId);
 
       // Verify observation redirected
-      const { data: obs } = await supabase
+      const { data: obs } = await db
         .from("observations")
         .select("*")
         .eq("id", obsId)
@@ -359,7 +360,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(user1EntityIds.every((id) => !user2EntityIds.includes(id))).toBe(true);
 
       // Clean up user 2 data
-      await supabase.from("sources").delete().eq("user_id", user2);
+      await db.from("sources").delete().eq("user_id", user2);
     });
   });
 
@@ -370,7 +371,12 @@ describe("v0.2.0 Integration Tests", () => {
       expect(quota).toHaveProperty("allowed");
       expect(quota).toHaveProperty("current");
       expect(quota).toHaveProperty("limit");
-      expect(quota.limit).toBe(100);
+      if (config.storageBackend === "local") {
+        expect(quota.allowed).toBe(true);
+        expect(quota.limit).toBe(0);
+      } else {
+        expect(quota.limit).toBe(100);
+      }
     });
   });
 
@@ -380,7 +386,7 @@ describe("v0.2.0 Integration Tests", () => {
       const mergedEntityId = `ent_merged_${randomUUID().substring(0, 8)}`;
 
       // Create active entity
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: activeEntityId,
         entity_type: "person",
         canonical_name: "Active Person",
@@ -388,7 +394,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Create merged entity
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: mergedEntityId,
         entity_type: "person",
         canonical_name: "Merged Person",
@@ -452,7 +458,7 @@ describe("v0.2.0 Integration Tests", () => {
       });
 
       // Verify provenance chain: source → interpretation → observation
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("interpretation_id", interpretationResult.interpretationId);
@@ -465,7 +471,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(obs.interpretation_id).toBe(interpretationResult.interpretationId);
 
       // Verify source metadata
-      const { data: source } = await supabase
+      const { data: source } = await db
         .from("sources")
         .select("*")
         .eq("id", storageResult.sourceId)
@@ -475,7 +481,7 @@ describe("v0.2.0 Integration Tests", () => {
       expect(source!.content_hash).toBe(storageResult.contentHash);
 
       // Verify interpretation run metadata
-      const { data: run } = await supabase
+      const { data: run } = await db
         .from("interpretations")
         .select("*")
         .eq("id", interpretationResult.interpretationId)
@@ -492,7 +498,7 @@ describe("v0.2.0 Integration Tests", () => {
       const toEntityId = `ent_redirect_to_${randomUUID().substring(0, 8)}`;
 
       // Create entities
-      await supabase.from("entities").insert([
+      await db.from("entities").insert([
         {
           id: fromEntityId,
           entity_type: "person",

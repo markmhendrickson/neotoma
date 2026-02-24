@@ -179,12 +179,11 @@ async function executeMerge(
 By default, queries should **exclude merged entities**:
 ```typescript
 async function queryEntities(userId: string, filters: any) {
-  return await supabase
-    .from('entities')
-    .select('*')
-    .eq('user_id', userId)
-    .is('merged_to_entity_id', null)  // Exclude merged
-    .match(filters);
+  return await db.query("entities", {
+    user_id: userId,
+    merged_to_entity_id: null,  // Exclude merged
+    ...filters,
+  });
 }
 ```
 ### 5.2 Observation Redirect
@@ -192,15 +191,13 @@ If an observation is created targeting a merged entity, **redirect to the target
 ```typescript
 async function createObservation(entityId: string, userId: string, fields: any) {
   // Check if entity is merged
-  const entity = await supabase
-    .from('entities')
-    .select('id, merged_to_entity_id')
-    .eq('id', entityId)
-    .eq('user_id', userId)
-    .single();
+  const entity = await db.queryOne("entities", {
+    id: entityId,
+    user_id: userId,
+  }, ["id", "merged_to_entity_id"]);
   // Redirect if merged
-  const targetEntityId = entity.data?.merged_to_entity_id || entityId;
-  await supabase.from('observations').insert({
+  const targetEntityId = entity?.merged_to_entity_id || entityId;
+  await db.insert("observations", {
     entity_id: targetEntityId,
     user_id: userId,
     fields,
@@ -240,13 +237,12 @@ async function detectPotentialDuplicates(): Promise<void> {
   const users = await getDistinctUsers();
   
   for (const { user_id } of users) {
-    const merchants = await supabase
-      .from('entities')
-      .select('id, canonical_name')
-      .eq('entity_type', 'merchant')
-      .eq('user_id', user_id)
-      .is('merged_to_entity_id', null);
-    const candidates = findSimilarNames(merchants.data ?? [], 0.85);
+    const merchants = await db.query("entities", {
+      entity_type: "merchant",
+      user_id: user_id,
+      merged_to_entity_id: null,
+    }, ["id", "canonical_name"]);
+    const candidates = findSimilarNames(merchants ?? [], 0.85);
     
     logMetric('entity.potential_duplicates', candidates.length, { 
       entity_type: 'merchant',

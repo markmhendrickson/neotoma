@@ -72,7 +72,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken } = useAuth();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
@@ -94,7 +94,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
         }
 
         // Fetch source - use relative URL to go through Vite proxy
-        const sourceResponse = await fetch(`/api/sources/${sourceId}`, { headers });
+        const sourceResponse = await fetch(`/sources/${sourceId}`, { headers });
         if (!sourceResponse.ok) {
           if (sourceResponse.status === 404) {
             setSource(null);
@@ -107,7 +107,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
 
         // Fetch interpretations for this source
         const interpretationsResponse = await fetch(
-          `/api/interpretations?source_id=${sourceId}`,
+          `/interpretations?source_id=${sourceId}`,
           { headers }
         );
         if (!interpretationsResponse.ok) {
@@ -118,7 +118,7 @@ export function SourceDetail({ sourceId, onClose }: SourceDetailProps) {
 
         // Fetch observations for this source
         const observationsResponse = await fetch(
-          `/api/observations?source_id=${sourceId}`,
+          `/observations?source_id=${sourceId}`,
           { headers }
         );
         if (!observationsResponse.ok) {

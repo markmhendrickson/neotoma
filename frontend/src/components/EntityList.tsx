@@ -72,7 +72,7 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
   const { user, sessionToken } = useAuth();
   const { open, state } = useSidebar();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
   
   // Calculate left offset for pagination based on sidebar state
@@ -99,7 +99,7 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
       try {
         const api = getApiClient(bearerToken);
         const userId = user?.id;
-        const { data, error: apiError } = await api.POST("/api/entities/query", {
+        const { data, error: apiError } = await api.POST("/entities/query", {
           body: {
             entity_type: selectedType || undefined,
             search: searchQuery || undefined,
@@ -129,7 +129,7 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
         const schemaMap = new Map<string, SchemaInfo>();
 
         try {
-          const { data: schemaData } = await api.GET("/api/schemas", {
+          const { data: schemaData } = await api.GET("/schemas", {
             params: {
               query: userId ? { user_id: userId } : {},
             },

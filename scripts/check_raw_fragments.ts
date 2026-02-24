@@ -1,8 +1,8 @@
-import { supabase } from '../src/db.js';
+import { db } from "../src/db.js";
 
 async function check() {
   // Check raw_fragments for task
-  const { data: fragments, error } = await supabase
+  const { data: fragments, error } = await db
     .from('raw_fragments')
     .select('entity_type, fragment_key, source_id, interpretation_id, user_id')
     .eq('entity_type', 'task')
@@ -20,7 +20,7 @@ async function check() {
   console.log('Error:', error);
   
   // Count total
-  const { count } = await supabase
+  const { count } = await db
     .from('raw_fragments')
     .select('*', { count: 'exact', head: true })
     .eq('entity_type', 'task');
@@ -28,7 +28,7 @@ async function check() {
   console.log('Total fragments for task:', count);
   
   // Check for specific field
-  const { data: taskIdFrags } = await supabase
+  const { data: taskIdFrags } = await db
     .from('raw_fragments')
     .select('*')
     .eq('entity_type', 'task')

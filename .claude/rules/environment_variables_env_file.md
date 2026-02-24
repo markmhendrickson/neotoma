@@ -1,4 +1,10 @@
+---
+description: "Load when code/scripts need env vars, or troubleshooting config: check .env first before assuming unset; use values from .env; do not ask user for values that should be in .env."
+alwaysApply: false
+---
+
 <!-- Source: foundation/agent_instructions/cursor_rules/environment_variables_env_file.mdc -->
+
 
 # Environment Variables from .env File Rule
 

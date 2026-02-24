@@ -308,12 +308,6 @@ function loadCredentials() {
   const creds = [];
 
   // Load from environment variables (loaded from .env by dotenv at startup)
-  if (process.env.SUPABASE_URL) creds.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
-  if (process.env.SUPABASE_SERVICE_KEY)
-    creds.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
-  if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
-  if (process.env.DEV_SUPABASE_SERVICE_KEY)
-    creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
   if (process.env.DEV_OPENAI_API_KEY)
     creds.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
   if (process.env.PROD_OPENAI_API_KEY)
@@ -338,10 +332,6 @@ function generateAgentInstructions(fuId, batchId, releaseId) {
   // Load credentials to include in agent instructions
   const creds = loadCredentials();
 
-  // Extract project ref from SUPABASE_URL for linking
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.DEV_SUPABASE_URL || "";
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || "";
-
   // Build environment variable verification instructions
   // Note: Secrets are injected automatically via Cursor Cloud Agents Secrets configuration
   let envSetup = `\n**Environment Variables and Testing:**
@@ -350,7 +340,6 @@ function generateAgentInstructions(fuId, batchId, releaseId) {
 
 Environment variables should be automatically injected via Cursor Cloud Agents Secrets. Verify they're set:
 \`\`\`bash
-env | grep -E "SUPABASE.*=" || echo "No Supabase credentials found"
 env | grep -E "OPENAI_API_KEY|DEV_OPENAI_API_KEY|PROD_OPENAI_API_KEY" || echo "No OpenAI API key found"
 \`\`\`
 
@@ -365,8 +354,7 @@ chmod +x scripts/setup_agent_environment.sh
 \`\`\`
 
 This script will:
-- Link Supabase project (if not already linked)
-- Apply database migrations
+- Run database migrations (npm run migrate) if needed
 - Install Playwright browsers (if needed)
 - Verify npm dependencies
 
@@ -403,7 +391,7 @@ npm run test:e2e
 
 **Important:**
 - Environment variables are injected automatically via Cursor Secrets (no need to export manually)
-- Run the setup script to configure infrastructure (Supabase linking, migrations, Playwright)
+- Run the setup script to configure infrastructure (Playwright, npm deps)
 - Update status file with actual test results
 `;
 
@@ -420,7 +408,7 @@ ${envSetup}
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype
    - Run implementation workflow
-   - Run setup script: \`./scripts/setup_agent_environment.sh\` (applies migrations automatically)
+   - Run setup script: \`./scripts/setup_agent_environment.sh\`
    - Run tests (unit, integration, E2E) - **ALL TESTS MUST PASS**
    - If tests fail, fix issues and re-run until all pass
    - Update status file: \`${STATUS_FILE}\` with actual test results
@@ -434,7 +422,7 @@ ${envSetup}
 - Update status file atomically (use file locking)
 - Do not modify FUs assigned to other agents
 - Report failures immediately (don't retry indefinitely)
-- **Integration tests require Supabase credentials** - check for DEV_SUPABASE_URL and DEV_SUPABASE_SERVICE_KEY
+- **Integration tests use local SQLite** - no remote credentials required
 
 **Status File Location:** \`${STATUS_FILE}\`
 **Update Frequency:** Every 5-10 minutes
@@ -1247,14 +1235,6 @@ function checkPrerequisites(executionMode) {
   }
 
   // Recommended for integration tests
-  if (!process.env.DEV_SUPABASE_URL && !process.env.SUPABASE_URL) {
-    warnings.push("DEV_SUPABASE_URL or SUPABASE_URL not set - integration tests will fail");
-  }
-  if (!process.env.DEV_SUPABASE_SERVICE_KEY && !process.env.SUPABASE_SERVICE_KEY) {
-    warnings.push(
-      "DEV_SUPABASE_SERVICE_KEY or SUPABASE_SERVICE_KEY not set - integration tests will fail"
-    );
-  }
 
   if (errors.length > 0) {
     console.error("[ERROR] Missing required environment variables:");

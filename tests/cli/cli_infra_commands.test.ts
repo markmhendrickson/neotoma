@@ -9,6 +9,9 @@
 import { describe, it, expect } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { mkdtemp } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
@@ -79,12 +82,24 @@ describe("CLI infrastructure command smoke tests", () => {
       const out = await getHelp("mcp watch");
       expect(out).toMatch(/watch|Usage|Options/i);
     });
+
+    it("watch accepts env as first argument (e.g. watch dev)", async () => {
+      const out = await getHelp("watch dev");
+      expect(out).toMatch(/watch|Usage|Options|Stream/i);
+    });
+
+    it("watch without env reports specify environment", async () => {
+      const { stderr } = await execAsync(`${CLI_PATH} watch`, {
+        timeout: 2000,
+      }).catch((e: { stderr?: string }) => ({ stderr: e.stderr ?? "" }));
+      expect(stderr).toMatch(/specify (environment|--env)/i);
+    });
   });
 
   describe("storage commands", () => {
     it("storage --help lists subcommands", async () => {
       const out = await getHelp("storage");
-      expect(out).toMatch(/info|backup|restore/i);
+      expect(out).toMatch(/info/i);
     });
 
     it("storage info --help shows usage", async () => {
@@ -92,9 +107,9 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(out).toMatch(/info|Usage|Options|storage/i);
     });
 
-    it("storage backup --help shows usage", async () => {
-      const out = await getHelp("storage backup");
-      expect(out).toMatch(/backup|Usage|Options/i);
+    it("backup --help shows usage", async () => {
+      const out = await getHelp("backup");
+      expect(out).toMatch(/create|restore|Usage|Options/i);
     });
   });
 
@@ -126,6 +141,7 @@ describe("CLI infrastructure command smoke tests", () => {
     it("init --help shows usage", async () => {
       const out = await getHelp("init");
       expect(out).toMatch(/init|Usage|Options/i);
+      expect(out).toMatch(/auth-mode/i);
     });
 
     it("servers --help shows usage", async () => {
@@ -141,6 +157,119 @@ describe("CLI infrastructure command smoke tests", () => {
         // options may print to stdout and exit 0; either way it should produce output
         expect((err.stdout ?? "") + (err.stderr ?? "")).toBeDefined();
       }
+    });
+
+    it("options --json returns global option metadata", async () => {
+      const { stdout } = await execAsync(`${CLI_PATH} options --json`);
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("options");
+      expect(Array.isArray(result.options)).toBe(true);
+      expect(result.options.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("behavioral infrastructure flows", () => {
+    it("init should create initialization result with --json", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "neotoma-cli-init-"));
+      const dataDir = join(dir, "data");
+      const { stdout } = await execAsync(
+        `${CLI_PATH} init --data-dir "${dataDir}" --skip-db --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("success");
+      expect(result.success).toBe(true);
+      expect(result).toHaveProperty("steps");
+      expect(Array.isArray(result.steps)).toBe(true);
+      expect(result).toHaveProperty("auth_setup");
+      expect(result.auth_setup).toHaveProperty("mode");
+    });
+
+    it("init --json should defer oauth setup when oauth auth mode is requested", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "neotoma-cli-init-oauth-"));
+      const dataDir = join(dir, "data");
+      const { stdout } = await execAsync(
+        `${CLI_PATH} init --data-dir "${dataDir}" --skip-db --auth-mode oauth --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result.auth_setup.mode).toBe("oauth");
+      expect(Array.isArray(result.next_steps)).toBe(true);
+      const combined = result.next_steps.join(" ");
+      expect(combined).toMatch(/auth login/i);
+      expect(combined).toMatch(/skipped/i);
+    });
+
+    it("init should reject invalid auth mode values", async () => {
+      await expect(
+        execAsync(`${CLI_PATH} init --skip-db --auth-mode not-a-mode --json`)
+      ).rejects.toBeDefined();
+      await expect(
+        execAsync(`${CLI_PATH} init --skip-db --auth-mode skip --json`)
+      ).rejects.toBeDefined();
+    });
+
+    it("api start --background should return init guidance when repo is not configured", async () => {
+      const isolatedHome = await mkdtemp(join(tmpdir(), "neotoma-cli-home-"));
+      const isolatedCwd = await mkdtemp(join(tmpdir(), "neotoma-cli-cwd-"));
+      const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
+      const { stdout } = await execAsync(
+        `node "${cliPathAbsolute}" api start --background --env dev --json`,
+        {
+          cwd: isolatedCwd,
+          env: {
+            ...process.env,
+            HOME: isolatedHome,
+            USERPROFILE: isolatedHome,
+          },
+        }
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("ok", false);
+      expect(String(result.error ?? "")).toMatch(/neotoma init/i);
+    });
+
+    it("servers should report local URL when session env vars are set", async () => {
+      const { stdout } = await execAsync(
+        `NEOTOMA_SESSION_ENV=dev NEOTOMA_SESSION_DEV_PORT=8080 ${CLI_PATH} servers`
+      );
+      expect(stdout).toContain("http://127.0.0.1:8080/mcp");
+    });
+
+    it("servers should honor selected session instance port", async () => {
+      const { stdout } = await execAsync(
+        `NEOTOMA_SESSION_ENV=prod NEOTOMA_SESSION_API_PORT=9191 ${CLI_PATH} servers`
+      );
+      expect(stdout).toContain("http://127.0.0.1:9191/mcp");
+    });
+
+    it("storage info should return JSON payload", async () => {
+      const { stdout } = await execAsync(`${CLI_PATH} storage info --json`);
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("storage_backend");
+      expect(result).toHaveProperty("storage_paths");
+      expect(result.storage_paths).toHaveProperty("data_dir");
+      expect(result.storage_paths).toHaveProperty("sqlite_db");
+    });
+
+    it("storage backup create and restore should work with temporary directories", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-backup-"));
+      const dataDir = join(root, "data");
+      const outputDir = join(root, "out");
+      const restoreDir = join(root, "restore");
+      const { stdout: backupStdout } = await execAsync(
+        `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup create --output "${outputDir}" --json`
+      );
+      const backupResult = JSON.parse(backupStdout);
+      expect(backupResult).toHaveProperty("status");
+      expect(backupResult.status).toBe("complete");
+      expect(backupResult).toHaveProperty("backup_dir");
+
+      const { stdout: restoreStdout } = await execAsync(
+        `NEOTOMA_DATA_DIR="${dataDir}" ${CLI_PATH} backup restore --from "${backupResult.backup_dir}" --target "${restoreDir}" --json`
+      );
+      const restoreResult = JSON.parse(restoreStdout);
+      expect(restoreResult).toHaveProperty("status");
+      expect(restoreResult.status).toBe("restored");
+      expect(restoreResult).toHaveProperty("target_dir");
     });
   });
 

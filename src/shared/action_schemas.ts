@@ -117,6 +117,15 @@ export const ObservationsQueryRequestSchema = z.object({
 
 export const StoreStructuredRequestSchema = z.object({
   entities: z.array(z.record(z.unknown())),
+  relationships: z
+    .array(
+      z.object({
+        relationship_type: z.string(),
+        source_index: z.number().int().min(0),
+        target_index: z.number().int().min(0),
+      })
+    )
+    .optional(),
   source_priority: z.number().optional().default(100),
   idempotency_key: z.string().min(1),
   user_id: z.string().optional(),
@@ -130,8 +139,45 @@ export const StoreUnstructuredRequestSchema = z.object({
   idempotency_key: z.string().min(1).optional(),
   original_filename: z.string().optional(),
   interpret: z.boolean().optional().default(true),
+  interpretation_config: z.record(z.unknown()).optional(),
   user_id: z.string().optional(),
 });
+
+export const StoreRequestSchema = z
+  .object({
+    user_id: z.string().optional(),
+    entities: z.array(z.record(z.unknown())).optional(),
+    relationships: z
+      .array(
+        z.object({
+          relationship_type: z.string(),
+          source_index: z.number().int().min(0),
+          target_index: z.number().int().min(0),
+        })
+      )
+      .optional(),
+    source_priority: z.number().optional().default(100),
+    idempotency_key: z.string().min(1).optional(),
+    file_idempotency_key: z.string().min(1).optional(),
+    file_content: z.string().optional(),
+    file_path: z.string().optional(),
+    mime_type: z.string().min(1).optional(),
+    original_filename: z.string().optional(),
+    interpret: z.boolean().optional().default(true),
+    interpretation_config: z.record(z.unknown()).optional(),
+  })
+  .refine(
+    (data) => {
+      const hasEntities = Boolean(data.entities && data.entities.length > 0);
+      const hasFileContent = Boolean(data.file_content && data.mime_type);
+      const hasFilePath = Boolean(data.file_path);
+      return hasEntities || hasFileContent || hasFilePath;
+    },
+    {
+      message:
+        "Must provide either entities, file_path, or file_content with mime_type",
+    }
+  );
 
 export const MergeEntitiesRequestSchema = z.object({
   from_entity_id: z.string(),
@@ -185,6 +231,13 @@ export const ReinterpretRequestSchema = z.object({
   interpretation_config: z.record(z.unknown()).optional(),
 }).refine((data) => data.source_id || data.interpretation_id, {
   message: "Either source_id or interpretation_id is required",
+});
+
+export const InterpretUninterpretedRequestSchema = z.object({
+  limit: z.number().int().positive().max(100).optional().default(50),
+  dry_run: z.boolean().optional().default(false),
+  user_id: z.string().optional(),
+  interpretation_config: z.record(z.unknown()).optional(),
 });
 
 export const ListEntityTypesRequestSchema = z.object({

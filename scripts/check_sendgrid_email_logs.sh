@@ -111,7 +111,7 @@ try:
                 print("⚠️  No email requests found in the last 7 days")
                 print("   This could mean:")
                 print("   - No emails were sent via SendGrid")
-                print("   - Emails failed before reaching SendGrid (check Supabase logs)")
+                print("   - Emails failed before reaching SendGrid (check application logs)")
                 print("   - API access is limited on your plan")
         else:
             print("  No email activity data available")

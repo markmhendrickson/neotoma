@@ -1,3 +1,8 @@
+---
+description: "Load when scripts or config need env vars stored in 1Password: use sync command to load into .env first; scripts read from .env only; add mappings if missing; never fetch from 1Password at runtime."
+alwaysApply: false
+---
+
 <!-- Source: foundation/agent_instructions/cursor_rules/environment_variables_1password.mdc -->
 
 # Environment Variables from 1Password Rule
@@ -135,7 +140,7 @@ fi
 #!/bin/bash
 # Script reads from .env (variables loaded via sync command)
 if [ -f .env ]; then
-  SUPABASE_PROJECT_ID=$(grep "^SUPABASE_PROJECT_ID=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
+  DATABASE_URL=$(grep "^DATABASE_URL=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
   SENDGRID_API_KEY=$(grep "^SENDGRID_API_KEY=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
 fi
 ```

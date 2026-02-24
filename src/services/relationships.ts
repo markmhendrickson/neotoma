@@ -7,7 +7,7 @@
 
 import { createHash } from "node:crypto";
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
 
 export type RelationshipType =
@@ -125,7 +125,7 @@ export class RelationshipsService {
       const contentHashValue = `relationship_${contentHash.substring(0, 24)}`;
 
       // Try to find existing source first (handles idempotent re-creation after cleanup)
-      const { data: existing } = await supabase
+      const { data: existing } = await db
         .from("sources")
         .select("id")
         .eq("content_hash", contentHashValue)
@@ -135,7 +135,7 @@ export class RelationshipsService {
       if (existing) {
         sourceId = existing.id;
       } else {
-        const { data: source, error: sourceError } = await supabase
+        const { data: source, error: sourceError } = await db
           .from("sources")
           .insert({
             content_hash: contentHashValue,
@@ -179,7 +179,7 @@ export class RelationshipsService {
     );
 
     if (relationshipsCreated === 0) {
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("relationship_observations")
         .select("id")
         .eq("relationship_key", relationshipKey)
@@ -239,17 +239,17 @@ export class RelationshipsService {
     let query;
 
     if (direction === "outgoing") {
-      query = supabase
+      query = db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", entityId);
     } else if (direction === "incoming") {
-      query = supabase
+      query = db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", entityId);
     } else {
-      query = supabase
+      query = db
         .from("relationship_snapshots")
         .select("*")
         .or(`source_entity_id.eq.${entityId},target_entity_id.eq.${entityId}`);
@@ -270,7 +270,7 @@ export class RelationshipsService {
       const relationshipKeys = relationships.map((r) => r.relationship_key);
       
       // Check for deletion observations (highest priority with _deleted: true)
-      const { data: deletionObservations } = await supabase
+      const { data: deletionObservations } = await db
         .from("relationship_observations")
         .select("relationship_key, source_priority, observed_at, metadata")
         .in("relationship_key", relationshipKeys)
@@ -319,7 +319,7 @@ export class RelationshipsService {
     type: RelationshipType,
     includeDeleted: boolean = false,
   ): Promise<RelationshipSnapshot[]> {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_type", type)
@@ -335,7 +335,7 @@ export class RelationshipsService {
     if (!includeDeleted && relationships.length > 0) {
       const relationshipKeys = relationships.map((r) => r.relationship_key);
       
-      const { data: deletionObservations } = await supabase
+      const { data: deletionObservations } = await db
         .from("relationship_observations")
         .select("relationship_key, source_priority, observed_at, metadata")
         .in("relationship_key", relationshipKeys)
@@ -385,7 +385,7 @@ export class RelationshipsService {
   ): Promise<RelationshipSnapshot | null> {
     const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", relationshipKey)
@@ -400,7 +400,7 @@ export class RelationshipsService {
 
     // Check if relationship is deleted (unless explicitly requested)
     if (snapshot && !includeDeleted) {
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("relationship_observations")
         .select("source_priority, observed_at, metadata")
         .eq("relationship_key", relationshipKey)
@@ -435,7 +435,7 @@ export class RelationshipsService {
     const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
     // Get all observations for this relationship
-    const { data: observations, error: fetchError } = await supabase
+    const { data: observations, error: fetchError } = await db
       .from("relationship_observations")
       .select("*")
       .eq("relationship_key", relationshipKey)
@@ -457,7 +457,7 @@ export class RelationshipsService {
     );
 
     // Save snapshot
-    const { error: saveError } = await supabase
+    const { error: saveError } = await db
       .from("relationship_snapshots")
       .upsert(
         {

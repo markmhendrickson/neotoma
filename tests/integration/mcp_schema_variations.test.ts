@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 describe("MCP schema actions - parameter variations", () => {
@@ -10,7 +10,7 @@ describe("MCP schema actions - parameter variations", () => {
   afterEach(async () => {
     await tracker.cleanup();
     // Clean up test schemas
-    await supabase
+    await db
       .from("schema_registry")
       .delete()
       .eq("entity_type", testEntityType);
@@ -18,7 +18,7 @@ describe("MCP schema actions - parameter variations", () => {
 
   describe("list_entity_types variations", () => {
     it("should list all entity types", async () => {
-      const { data: entityTypes } = await supabase
+      const { data: entityTypes } = await db
         .from("schema_registry")
         .select("entity_type")
         .eq("active", true);
@@ -29,7 +29,7 @@ describe("MCP schema actions - parameter variations", () => {
 
     it("should filter entity types by user_id", async () => {
       // Create user-specific schema
-      await supabase.from("schema_registry").insert({
+      await db.from("schema_registry").insert({
         entity_type: testEntityType,
         schema_version: "1.0.0",
         schema_definition: {
@@ -44,7 +44,7 @@ describe("MCP schema actions - parameter variations", () => {
         user_id: testUserId
       });
 
-      const { data: entityTypes } = await supabase
+      const { data: entityTypes } = await db
         .from("schema_registry")
         .select("entity_type")
         .eq("user_id", testUserId);
@@ -55,7 +55,7 @@ describe("MCP schema actions - parameter variations", () => {
 
   describe("register_schema variations", () => {
     it("should register schema with minimal fields", async () => {
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .insert({
           entity_type: testEntityType,
@@ -79,7 +79,7 @@ describe("MCP schema actions - parameter variations", () => {
     });
 
     it("should register schema with all field types", async () => {
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .insert({
           entity_type: `${testEntityType}_all_types`,
@@ -109,7 +109,7 @@ describe("MCP schema actions - parameter variations", () => {
       const strategies = ["last_write", "highest_priority", "most_specific", "merge_array"];
 
       for (const strategy of strategies) {
-        const { data: schema } = await supabase
+        const { data: schema } = await db
           .from("schema_registry")
           .insert({
             entity_type: `${testEntityType}_${strategy}`,
@@ -130,7 +130,7 @@ describe("MCP schema actions - parameter variations", () => {
         expect(schema!.reducer_config.merge_policy).toBe(strategy);
 
         // Cleanup
-        await supabase
+        await db
           .from("schema_registry")
           .delete()
           .eq("entity_type", `${testEntityType}_${strategy}`);
@@ -138,7 +138,7 @@ describe("MCP schema actions - parameter variations", () => {
     });
 
     it("should register user-specific schema", async () => {
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .insert({
           entity_type: `${testEntityType}_user_specific`,
@@ -160,14 +160,14 @@ describe("MCP schema actions - parameter variations", () => {
       expect(schema!.user_id).toBe(testUserId);
 
       // Cleanup
-      await supabase
+      await db
         .from("schema_registry")
         .delete()
         .eq("entity_type", `${testEntityType}_user_specific`);
     });
 
     it("should register schema with activate: true", async () => {
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .insert({
           entity_type: `${testEntityType}_active`,
@@ -188,14 +188,14 @@ describe("MCP schema actions - parameter variations", () => {
       expect(schema!.active).toBe(true);
 
       // Cleanup
-      await supabase
+      await db
         .from("schema_registry")
         .delete()
         .eq("entity_type", `${testEntityType}_active`);
     });
 
     it("should register multiple schema versions", async () => {
-      await supabase.from("schema_registry").insert([
+      await db.from("schema_registry").insert([
         {
           entity_type: `${testEntityType}_versions`,
           schema_version: "1.0.0",
@@ -225,7 +225,7 @@ describe("MCP schema actions - parameter variations", () => {
         },
       ]);
 
-      const { data: schemas } = await supabase
+      const { data: schemas } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", `${testEntityType}_versions`)
@@ -237,7 +237,7 @@ describe("MCP schema actions - parameter variations", () => {
       expect(schemas![1].active).toBe(true);
 
       // Cleanup
-      await supabase
+      await db
         .from("schema_registry")
         .delete()
         .eq("entity_type", `${testEntityType}_versions`);
@@ -247,7 +247,7 @@ describe("MCP schema actions - parameter variations", () => {
   describe("update_schema_incremental variations", () => {
     it("should add new fields to existing schema", async () => {
       // Register initial schema
-      await supabase.from("schema_registry").insert({
+      await db.from("schema_registry").insert({
         entity_type: `${testEntityType}_incremental`,
         schema_version: "1.0.0",
         schema_definition: {
@@ -262,7 +262,7 @@ describe("MCP schema actions - parameter variations", () => {
       });
 
       // Update with new fields
-      await supabase.from("schema_registry").insert({
+      await db.from("schema_registry").insert({
         entity_type: `${testEntityType}_incremental`,
         schema_version: "1.1.0",
         schema_definition: {
@@ -278,7 +278,7 @@ describe("MCP schema actions - parameter variations", () => {
         active: true
       });
 
-      const { data: schema } = await supabase
+      const { data: schema } = await db
         .from("schema_registry")
         .select("*")
         .eq("entity_type", `${testEntityType}_incremental`)
@@ -288,7 +288,7 @@ describe("MCP schema actions - parameter variations", () => {
       expect(Object.keys(schema!.schema_definition.fields)).toHaveLength(3);
 
       // Cleanup
-      await supabase
+      await db
         .from("schema_registry")
         .delete()
         .eq("entity_type", `${testEntityType}_incremental`);
@@ -297,7 +297,7 @@ describe("MCP schema actions - parameter variations", () => {
     it("should update with migrate_existing: false", async () => {
       // This would be tested at application layer
       // Here we verify schema can be updated without migration flag
-      await supabase.from("schema_registry").insert({
+      await db.from("schema_registry").insert({
         entity_type: `${testEntityType}_no_migrate`,
         schema_version: "1.0.0",
         schema_definition: {
@@ -312,7 +312,7 @@ describe("MCP schema actions - parameter variations", () => {
       });
 
       // Cleanup
-      await supabase
+      await db
         .from("schema_registry")
         .delete()
         .eq("entity_type", `${testEntityType}_no_migrate`);
@@ -322,7 +322,7 @@ describe("MCP schema actions - parameter variations", () => {
   describe("analyze_schema_candidates variations", () => {
     it("should analyze raw_fragments for schema candidates", async () => {
       // Create test raw_fragments
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -339,7 +339,7 @@ describe("MCP schema actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("raw_fragments").insert([
+      await db.from("raw_fragments").insert([
         {
           source_id: source!.id,
           entity_type: testEntityType,
@@ -367,7 +367,7 @@ describe("MCP schema actions - parameter variations", () => {
       ]);
 
       // Analyze would return candidates with frequency > threshold
-      const { data: fragments, error: fragError } = await supabase
+      const { data: fragments, error: fragError } = await db
         .from("raw_fragments")
         .select("fragment_key, fragment_envelope")
         .eq("entity_type", testEntityType)
@@ -378,7 +378,7 @@ describe("MCP schema actions - parameter variations", () => {
       expect(fragments!.length).toBeGreaterThan(0);
 
       // Cleanup raw_fragments
-      await supabase
+      await db
         .from("raw_fragments")
         .delete()
         .eq("entity_type", testEntityType);

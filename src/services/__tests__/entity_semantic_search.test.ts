@@ -1,4 +1,4 @@
-// Unit tests for entity semantic search (local and Supabase paths)
+// Unit tests for entity semantic search (local and remote paths)
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { semanticSearchEntities } from "../entity_semantic_search.js";

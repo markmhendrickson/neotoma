@@ -10,7 +10,7 @@ import {
   InitializeRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import { supabase } from "./db.js";
+import { db } from "./db.js";
 import { logger } from "./utils/logger.js";
 import { z } from "zod";
 import { randomUUID } from "node:crypto";
@@ -36,6 +36,7 @@ import {
   DeleteRelationshipRequestSchema,
   RestoreEntityRequestSchema,
   RestoreRelationshipRequestSchema,
+  InterpretUninterpretedRequestSchema,
   ReinterpretRequestSchema,
   RelationshipSnapshotRequestSchema,
   RetrieveEntitiesRequestSchema,
@@ -380,8 +381,8 @@ export class NeotomaServer {
       id: "oauth2-neotoma",
       type: "oauth2",
       title: "Neotoma OAuth2",
-      authorizationUrl: `${config.apiBase}/api/mcp/oauth/authorize`,
-      tokenUrl: `${config.apiBase}/api/mcp/oauth/token`,
+      authorizationUrl: `${config.apiBase}/mcp/oauth/authorize`,
+      tokenUrl: `${config.apiBase}/mcp/oauth/token`,
       scopes: ["openid", "email"],
       pkce: true,
     };
@@ -402,8 +403,8 @@ export class NeotomaServer {
         // Declare OAuth authentication requirement so Cursor shows Connect button
         authentication: {
           type: "oauth2",
-          authorizationUrl: `${config.apiBase}/api/mcp/oauth/authorize`,
-          tokenUrl: `${config.apiBase}/api/mcp/oauth/token`,
+          authorizationUrl: `${config.apiBase}/mcp/oauth/authorize`,
+          tokenUrl: `${config.apiBase}/mcp/oauth/token`,
         },
       },
       serverInfo: {
@@ -480,10 +481,10 @@ export class NeotomaServer {
     });
 
     const parsed = schema.parse(args ?? {});
-    const { supabase } = await import("./db.js");
+    const { db } = await import("./db.js");
 
     // Get all entity snapshots with observation_count = 0
-    const { data: potentiallyStale, error: snapshotError } = await supabase
+    const { data: potentiallyStale, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("entity_id, entity_type, observation_count, computed_at")
       .eq("observation_count", 0)
@@ -514,7 +515,7 @@ export class NeotomaServer {
     }> = [];
 
     for (const snapshot of potentiallyStale) {
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations, error: obsError } = await db
         .from("observations")
         .select("id")
         .eq("entity_id", snapshot.entity_id);
@@ -543,7 +544,7 @@ export class NeotomaServer {
       for (const stale of staleSnapshots) {
         try {
           // Get all observations
-          const { data: observations } = await supabase
+          const { data: observations } = await db
             .from("observations")
             .select("*")
             .eq("entity_id", stale.entity_id)
@@ -657,15 +658,15 @@ export class NeotomaServer {
   }
 
   /**
-   * Validate Supabase session token and extract user_id
-   * @param token - Supabase access_token (JWT)
+   * Validate session token and extract user_id
+   * @param token - access_token (JWT)
    * @returns user_id extracted from token
    * @throws McpError if token is invalid
    */
-  private async validateSupabaseToken(token: string): Promise<string> {
+  private async validateSessionToken(token: string): Promise<string> {
     try {
-      const { validateSupabaseSessionToken } = await import("./services/mcp_auth.js");
-      const { userId } = await validateSupabaseSessionToken(token);
+      const { validateSessionToken } = await import("./services/mcp_auth.js");
+      const { userId } = await validateSessionToken(token);
       return userId;
     } catch (error: any) {
       throw new McpError(ErrorCode.InvalidParams, `Invalid session token: ${error.message}`);
@@ -1044,6 +1045,35 @@ export class NeotomaServer {
                 },
               },
               required: ["source_id"],
+            },
+          },
+          {
+            name: "interpret_uninterpreted",
+            description:
+              this.toolDescriptions.get("interpret_uninterpreted") ??
+              "Interpret stored sources that have no prior interpretation runs. Supports dry_run and limit.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                user_id: {
+                  type: "string",
+                  description: "Optional. Inferred from authentication if omitted.",
+                },
+                limit: {
+                  type: "number",
+                  description: "Maximum number of uninterpreted sources to process (default 50, max 100).",
+                  default: 50,
+                },
+                dry_run: {
+                  type: "boolean",
+                  description: "When true, return source IDs that would be interpreted without running interpretation.",
+                  default: false,
+                },
+                interpretation_config: {
+                  type: "object",
+                  description: "Optional AI interpretation configuration to apply to each source run.",
+                },
+              },
             },
           },
           {
@@ -1572,6 +1602,8 @@ export class NeotomaServer {
         return await this.store(args);
       case "reinterpret":
         return await this.reinterpret(args);
+      case "interpret_uninterpreted":
+        return await this.interpretUninterpreted(args);
       case "correct":
         return await this.correct(args);
       case "merge_entities":
@@ -1672,7 +1704,7 @@ export class NeotomaServer {
 
         // Get available timeline years and months
         try {
-          const { data: years, error: yearsError } = await supabase
+          const { data: years, error: yearsError } = await db
             .from("timeline_events")
             .select("event_timestamp")
             .order("event_timestamp", { ascending: false });
@@ -1738,16 +1770,16 @@ export class NeotomaServer {
 
         // Add generic collection resources (data-driven, always available)
         // Get counts for better descriptions
-        const { count: entityCount } = await supabase
+        const { count: entityCount } = await db
           .from("entities")
           .select("*", { count: "exact", head: true })
           .is("merged_to_entity_id", null);
 
-        const { count: relationshipCount } = await supabase
+        const { count: relationshipCount } = await db
           .from("relationship_snapshots")
           .select("*", { count: "exact", head: true });
 
-        const { count: sourceCount } = await supabase
+        const { count: sourceCount } = await db
           .from("sources")
           .select("*", { count: "exact", head: true });
 
@@ -1790,7 +1822,7 @@ export class NeotomaServer {
 
         // Get available relationship types
         try {
-          const { data: relationshipTypes, error: rtError } = await supabase
+          const { data: relationshipTypes, error: rtError } = await db
             .from("relationship_snapshots")
             .select("relationship_type")
             .order("relationship_type");
@@ -1928,7 +1960,7 @@ export class NeotomaServer {
     const path = pathParts.slice(1).join("/");
 
     const expiresIn = expires_in || 3600;
-    const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, expiresIn);
+    const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expiresIn);
 
     if (error || !data?.signedUrl) throw error ?? new Error("Failed to create signed URL");
 
@@ -1992,7 +2024,7 @@ export class NeotomaServer {
         }
 
         // Get all observations for this entity up to the specified timestamp
-        const { data: observations, error: obsError } = await supabase
+        const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", entity.entity_id)
@@ -2084,7 +2116,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
 
-    const { data: observations, error } = await supabase
+    const { data: observations, error } = await db
       .from("observations")
       .select("*")
       .eq("entity_id", parsed.entity_id)
@@ -2109,7 +2141,7 @@ export class NeotomaServer {
     const parsed = FieldProvenanceRequestSchema.parse(args ?? {});
 
     // Get the snapshot to extract provenance
-    const { data: snapshot, error: snapshotError } = await supabase
+    const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", parsed.entity_id)
@@ -2133,7 +2165,7 @@ export class NeotomaServer {
     }
 
     // Get the observation
-    const { data: observation, error: obsError } = await supabase
+    const { data: observation, error: obsError } = await db
       .from("observations")
       .select("*")
       .eq("id", observationId)
@@ -2151,7 +2183,7 @@ export class NeotomaServer {
       throw new McpError(ErrorCode.InternalError, `Observation does not have source_id`);
     }
 
-    const { data: sourceData, error: sourceError } = await supabase
+    const { data: sourceData, error: sourceError } = await db
       .from("sources")
       .select("id, mime_type, file_size, original_filename, created_at")
       .eq("id", observation.source_id)
@@ -2195,7 +2227,7 @@ export class NeotomaServer {
 
     // Check if relationship would create a cycle
     // Get all relationships to build the graph
-    const { data: allRelationships } = await supabase
+    const { data: allRelationships } = await db
       .from("relationship_snapshots")
       .select("source_entity_id, target_entity_id");
 
@@ -2238,7 +2270,7 @@ export class NeotomaServer {
 
     try {
       // Create a source for this relationship
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           content_hash: `relationship_${Date.now()}`,
@@ -2301,7 +2333,7 @@ export class NeotomaServer {
 
     // Query relationship_snapshots instead of relationships table
     if (normalizedDirection === "outbound" || normalizedDirection === "both") {
-      let outboundQuery = supabase
+      let outboundQuery = db
         .from("relationship_snapshots")
         .select("*")
         .eq("source_entity_id", parsed.entity_id);
@@ -2334,7 +2366,7 @@ export class NeotomaServer {
     }
 
     if (normalizedDirection === "inbound" || normalizedDirection === "both") {
-      let inboundQuery = supabase
+      let inboundQuery = db
         .from("relationship_snapshots")
         .select("*")
         .eq("target_entity_id", parsed.entity_id);
@@ -2392,7 +2424,7 @@ export class NeotomaServer {
 
     // Get relationship snapshot
     const relationshipKey = `${parsed.relationship_type}:${parsed.source_entity_id}:${parsed.target_entity_id}`;
-    const { data: snapshot, error } = await supabase
+    const { data: snapshot, error } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("relationship_key", relationshipKey)
@@ -2411,7 +2443,7 @@ export class NeotomaServer {
     }
 
     // Also get the observations for this relationship to show provenance
-    const { data: observations } = await supabase
+    const { data: observations } = await db
       .from("relationship_observations")
       .select("id, source_id, observed_at, specificity_score, source_priority, metadata")
       .eq("relationship_key", relationshipKey)
@@ -2454,7 +2486,7 @@ export class NeotomaServer {
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = TimelineEventsRequestSchema.parse(args ?? {});
 
-    let query = supabase.from("timeline_events").select("*");
+    let query = db.from("timeline_events").select("*");
 
     if (parsed.event_type) {
       query = query.eq("event_type", parsed.event_type);
@@ -2473,7 +2505,7 @@ export class NeotomaServer {
     }
 
     // Get total count
-    let countQuery = supabase.from("timeline_events").select("*", {
+    let countQuery = db.from("timeline_events").select("*", {
       count: "exact",
       head: true,
     });
@@ -2532,7 +2564,7 @@ export class NeotomaServer {
       : parsed.identifier.trim().toLowerCase();
 
     // Search in entities table by canonical_name or aliases
-    let query = supabase
+    let query = db
       .from("entities")
       .select("*")
       .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
@@ -2550,7 +2582,7 @@ export class NeotomaServer {
     // If no direct match, try generating entity ID to see if it exists
     if ((!entities || entities.length === 0) && parsed.entity_type) {
       const possibleId = generateEntityId(parsed.entity_type, parsed.identifier);
-      const { data: entityById, error: idError } = await supabase
+      const { data: entityById, error: idError } = await db
         .from("entities")
         .select("*")
         .eq("id", possibleId)
@@ -2602,7 +2634,7 @@ export class NeotomaServer {
     let entitiesWithSnapshots = entities || [];
     if (entitiesWithSnapshots.length > 0) {
       const entityIds = entitiesWithSnapshots.map((e: Entity) => e.id);
-      const { data: snapshots, error: snapError } = await supabase
+      const { data: snapshots, error: snapError } = await db
         .from("entity_snapshots")
         .select("*")
         .in("entity_id", entityIds);
@@ -2639,7 +2671,7 @@ export class NeotomaServer {
       for (const entityId of currentLevel) {
         // Get outbound relationships
         if (parsed.direction === "outbound" || parsed.direction === "both") {
-          let outboundQuery = supabase
+          let outboundQuery = db
             .from("relationship_snapshots")
             .select("*")
             .eq("source_entity_id", entityId);
@@ -2664,7 +2696,7 @@ export class NeotomaServer {
 
         // Get inbound relationships
         if (parsed.direction === "inbound" || parsed.direction === "both") {
-          let inboundQuery = supabase
+          let inboundQuery = db
             .from("relationship_snapshots")
             .select("*")
             .eq("target_entity_id", entityId);
@@ -2695,7 +2727,7 @@ export class NeotomaServer {
     // Get entity details if requested
     let entities: any[] = [];
     if (parsed.include_entities && relatedEntityIds.size > 0) {
-      const { data: entityData, error: entityError } = await supabase
+      const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
         .in("id", Array.from(relatedEntityIds));
@@ -2704,7 +2736,7 @@ export class NeotomaServer {
         entities = entityData;
 
         // Include snapshots
-        const { data: snapshots, error: snapError } = await supabase
+        const { data: snapshots, error: snapError } = await db
           .from("entity_snapshots")
           .select("*")
           .in("entity_id", Array.from(relatedEntityIds));
@@ -2744,7 +2776,7 @@ export class NeotomaServer {
 
     if (parsed.node_type === "entity") {
       // Get entity
-      const { data: entity, error: entityError } = await supabase
+      const { data: entity, error: entityError } = await db
         .from("entities")
         .select("*")
         .eq("id", parsed.node_id)
@@ -2757,7 +2789,7 @@ export class NeotomaServer {
       result.entity = entity;
 
       // Get entity snapshot
-      const { data: snapshot, error: snapError } = await supabase
+      const { data: snapshot, error: snapError } = await db
         .from("entity_snapshots")
         .select("*")
         .eq("entity_id", parsed.node_id)
@@ -2769,7 +2801,7 @@ export class NeotomaServer {
 
       // Get relationships
       if (parsed.include_relationships) {
-        const { data: relationships, error: relError } = await supabase
+        const { data: relationships, error: relError } = await db
           .from("relationship_snapshots")
           .select("*")
           .or(`source_entity_id.eq.${parsed.node_id},target_entity_id.eq.${parsed.node_id}`);
@@ -2788,7 +2820,7 @@ export class NeotomaServer {
 
           // Get related entities
           if (relatedEntityIds.size > 0) {
-            const { data: relatedEntities, error: relEntError } = await supabase
+            const { data: relatedEntities, error: relEntError } = await db
               .from("entities")
               .select("*")
               .in("id", Array.from(relatedEntityIds));
@@ -2802,7 +2834,7 @@ export class NeotomaServer {
 
       // Get observations
       if (parsed.include_observations) {
-        const { data: observations, error: obsError } = await supabase
+        const { data: observations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", parsed.node_id)
@@ -2818,7 +2850,7 @@ export class NeotomaServer {
               .map((obs: any) => obs.source_id)
               .filter((id: string) => id);
             if (sourceIds.length > 0) {
-              const { data: sources, error: sourceError } = await supabase
+              const { data: sources, error: sourceError } = await db
                 .from("sources")
                 .select("id, mime_type, file_size, original_filename, created_at")
                 .in("id", sourceIds);
@@ -2828,7 +2860,7 @@ export class NeotomaServer {
 
                 // Get events for these sources
                 if (parsed.include_events) {
-                  const { data: events, error: evtError } = await supabase
+                  const { data: events, error: evtError } = await db
                     .from("timeline_events")
                     .select("*")
                     .in("source_id", sourceIds);
@@ -2844,7 +2876,7 @@ export class NeotomaServer {
       }
     } else {
       // node_type === "source"
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .select("*")
         .eq("id", parsed.node_id)
@@ -2858,7 +2890,7 @@ export class NeotomaServer {
 
       // Get timeline events for this source
       if (parsed.include_events) {
-        const { data: events, error: evtError } = await supabase
+        const { data: events, error: evtError } = await db
           .from("timeline_events")
           .select("*")
           .eq("source_id", parsed.node_id);
@@ -2869,7 +2901,7 @@ export class NeotomaServer {
       }
 
       // Get observations from this source
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations, error: obsError } = await db
         .from("observations")
         .select("*")
         .eq("source_id", parsed.node_id);
@@ -2883,7 +2915,7 @@ export class NeotomaServer {
             .map((obs: any) => obs.entity_id)
             .filter((id: string) => id);
           if (entityIds.length > 0) {
-            const { data: entities, error: entError } = await supabase
+            const { data: entities, error: entError } = await db
               .from("entities")
               .select("*")
               .in("id", entityIds);
@@ -2893,7 +2925,7 @@ export class NeotomaServer {
 
               // Get relationships for these entities
               if (parsed.include_relationships && entities.length > 0) {
-                const { data: relationships, error: relError } = await supabase
+                const { data: relationships, error: relError } = await db
                   .from("relationship_snapshots")
                   .select("*")
                   .or(
@@ -3124,11 +3156,12 @@ export class NeotomaServer {
     const { runInterpretation, runInterpretationWithFixedPoint, checkInterpretationQuota } =
       await import("./services/interpretation.js");
 
-    // Unified schema: accepts EITHER file_content (unstructured) OR file_path OR entities (structured)
+    // Unified schema: accepts file_content (unstructured), file_path, entities (structured), or both.
     const schema = z
       .object({
         user_id: z.string().uuid().optional(), // Optional - will use authenticated user_id
         idempotency_key: z.string().min(1),
+        file_idempotency_key: z.string().min(1).optional(),
         // Unstructured source - EITHER file_content OR file_path
         file_content: z.string().optional(),
         file_path: z.string().optional(),
@@ -3151,7 +3184,7 @@ export class NeotomaServer {
       })
       .refine(
         (data) => {
-          // Must have either file_content+mime_type OR file_path OR entities
+          // Must have either file_content+mime_type OR file_path OR entities (or both structured+unstructured)
           const hasFileContent = data.file_content && data.mime_type;
           const hasFilePath = data.file_path;
           const hasEntities = data.entities && data.entities.length > 0;
@@ -3166,16 +3199,54 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
     const idempotencyKey = parsed.idempotency_key;
 
-    // Handle structured source (entities array)
-    if (parsed.entities) {
-      return await this.storeStructuredInternal(
+    const hasEntities = Boolean(parsed.entities && parsed.entities.length > 0);
+    const hasUnstructured = Boolean((parsed.file_content && parsed.mime_type) || parsed.file_path);
+
+    let structuredResponsePayload: Record<string, unknown> | undefined;
+    if (hasEntities) {
+      const structuredResponse = await this.storeStructuredInternal(
         userId,
-        parsed.entities,
+        parsed.entities as Record<string, unknown>[],
         parsed.source_priority,
         idempotencyKey,
         parsed.original_filename,
         parsed.relationships
       );
+      try {
+        const text = structuredResponse.content[0]?.text ?? "{}";
+        structuredResponsePayload = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        structuredResponsePayload = { success: true };
+      }
+      if (!hasUnstructured) {
+        return structuredResponse;
+      }
+    }
+
+    if (hasEntities && hasUnstructured) {
+      // Use a distinct idempotency key for the file so the unstructured source is not confused
+      // with the structured source (which already claimed idempotency_key). Otherwise reinterpret
+      // would run on the JSON body instead of the PDF. See docs/reports/neotoma_pdf_interpreted_as_note_investigation_2026_02_23.md
+      const fileIdempotencyKey =
+        parsed.file_idempotency_key ?? (parsed.idempotency_key ? `${parsed.idempotency_key}-file` : undefined);
+      const unstructuredOnlyArgs = {
+        ...parsed,
+        idempotency_key: fileIdempotencyKey,
+      };
+      delete (unstructuredOnlyArgs as Record<string, unknown>).entities;
+      delete (unstructuredOnlyArgs as Record<string, unknown>).relationships;
+      const unstructuredResponse = await this.store(unstructuredOnlyArgs);
+      let unstructuredPayload: Record<string, unknown>;
+      try {
+        const text = unstructuredResponse.content[0]?.text ?? "{}";
+        unstructuredPayload = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        unstructuredPayload = {};
+      }
+      return this.buildTextResponse({
+        structured: structuredResponsePayload,
+        unstructured: unstructuredPayload,
+      });
     }
 
     // Handle unstructured source (file content OR file path)
@@ -3184,7 +3255,7 @@ export class NeotomaServer {
     let detectedFilename: string;
 
     if (idempotencyKey) {
-      const { data: existingSource, error: existingSourceError } = await supabase
+      const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id, content_hash, file_size")
         .eq("user_id", userId)
@@ -3197,8 +3268,6 @@ export class NeotomaServer {
 
       if (existingSource) {
         if (!parsed.interpret) {
-          const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
-          const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
           return this.buildTextResponse({
             source_id: existingSource.id,
             content_hash: existingSource.content_hash,
@@ -3208,12 +3277,12 @@ export class NeotomaServer {
             interpretation_debug: {
               interpret_requested: false,
               deduplicated: true,
-              existing_observations_count: existingEntityIds.length,
+              existing_observations_count: 0,
               should_run: false,
               reason: "interpret_false",
             },
-            related_entities: relatedData.entities,
-            related_relationships: relatedData.relationships,
+            related_entities: [],
+            related_relationships: [],
           });
         }
         // Idempotency-key hit with interpret=true: run reinterpret (download, extract, runInterpretation).
@@ -3223,7 +3292,13 @@ export class NeotomaServer {
           checkInterpretationQuota: checkInterpretationQuotaForIdempotency,
         } = await import("./services/interpretation.js");
         const { getSourceMetadata, downloadRawContent } = await import("./services/raw_storage.js");
-        const quota = await checkInterpretationQuotaForIdempotency(userId);
+        const source = await getSourceMetadata(existingSource.id);
+        const isCsvIdem =
+          (source.mime_type || "").toLowerCase() === "text/csv" ||
+          (source.original_filename || "").toLowerCase().endsWith(".csv");
+        const quota = isCsvIdem
+          ? { allowed: true, current: 0, limit: 0 }
+          : await checkInterpretationQuotaForIdempotency(userId);
         if (!quota.allowed) {
           const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
           const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
@@ -3244,14 +3319,14 @@ export class NeotomaServer {
             related_relationships: relatedData.relationships,
           });
         }
-        const source = await getSourceMetadata(existingSource.id);
+        // Missing file in sources_prod fails the request so data is not silently lost
         const idempotencyFileBuffer = await downloadRawContent(source.storage_url);
         const rawText = await extractTextFromBuffer(
           idempotencyFileBuffer,
           source.mime_type,
           source.original_filename || "file"
         );
-        if (!isLLMExtractionAvailable()) {
+        if (!isCsvIdem && !isLLMExtractionAvailable()) {
           const existingEntityIds = await this.getEntityIdsFromSource(existingSource.id);
           const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
           return this.buildTextResponse({
@@ -3301,6 +3376,7 @@ export class NeotomaServer {
           | Awaited<ReturnType<typeof extractWithLLM>>
           | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
           | undefined = undefined;
+        let idempotencyExtractedData: Array<Record<string, unknown>> = [];
         if (idempotencyExtractionDebug.raw_text_length === 0 && isPdfIdem) {
           idempotencyExtractionDebug.vision_fallback_attempted = true;
           const imageResult = await getPdfFirstPageImageDataUrl(
@@ -3331,37 +3407,45 @@ export class NeotomaServer {
           }
         }
         if (typeof idempotencyExtractionResult === "undefined") {
-          const isCsvFile = (source.mime_type || "").toLowerCase() === "text/csv";
-          idempotencyExtractionResult = isCsvFile
-            ? await extractFromCSVWithChunking(
-                rawText,
-                source.original_filename || "file",
-                source.mime_type || "text/plain",
-                "gpt-4o"
-              )
-            : await extractWithLLM(
+          if (isCsvIdem) {
+            const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
+            const csvExtracted = extractEntitiesFromCsvRows(
+              idempotencyFileBuffer,
+              source.original_filename || "file"
+            );
+            idempotencyExtractionDebug.extraction_field_keys = csvExtracted.flatMap((row) =>
+              Object.keys(row).filter((k) => k !== "entity_type" && k !== "type")
+            );
+            idempotencyExtractedData = csvExtracted;
+          } else {
+            idempotencyExtractionResult = await extractWithLLM(
                 rawText,
                 source.original_filename || "file",
                 source.mime_type || "text/plain",
                 "gpt-4o"
               );
+          }
         }
-        let idempotencyExtractedData: Array<Record<string, unknown>>;
-        if ("entities" in idempotencyExtractionResult) {
-          idempotencyExtractedData = idempotencyExtractionResult.entities.map((entity) => ({
-            entity_type: entity.entity_type,
-            ...entity.fields,
-          }));
-          idempotencyExtractionDebug.extraction_field_keys =
-            idempotencyExtractionResult.entities.flatMap((e) =>
-              Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
+        if (idempotencyExtractedData.length === 0 && idempotencyExtractionResult) {
+          if ("entities" in idempotencyExtractionResult) {
+            const multiResult = idempotencyExtractionResult as {
+              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
+            };
+            idempotencyExtractedData = multiResult.entities.map((entity) => ({
+              entity_type: entity.entity_type,
+              ...entity.fields,
+            }));
+            idempotencyExtractionDebug.extraction_field_keys =
+              multiResult.entities.flatMap((e) =>
+                Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
+              );
+          } else {
+            const { entity_type, fields } = idempotencyExtractionResult;
+            idempotencyExtractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
+              (k) => k !== "entity_type" && k !== "type"
             );
-        } else {
-          const { entity_type, fields } = idempotencyExtractionResult;
-          idempotencyExtractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
-            (k) => k !== "entity_type" && k !== "type"
-          );
-          idempotencyExtractedData = [{ entity_type, ...fields }];
+            idempotencyExtractedData = [{ entity_type, ...fields }];
+          }
         }
         const defaultConfig = config.openaiApiKey
           ? {
@@ -3435,7 +3519,7 @@ export class NeotomaServer {
         } else {
           idempotencyEntityIds = await this.getEntityIdsFromSource(existingSource.id);
         }
-        const idempotencyRelatedData =
+        const         idempotencyRelatedData =
           await this.getRelatedEntitiesAndRelationships(idempotencyEntityIds);
         return this.buildTextResponse({
           source_id: existingSource.id,
@@ -3453,6 +3537,10 @@ export class NeotomaServer {
           },
           related_entities: idempotencyRelatedData.entities,
           related_relationships: idempotencyRelatedData.relationships,
+          entity_debug: {
+            entity_ids_retrieved: idempotencyEntityIds,
+            valid_entity_ids: idempotencyEntityIds.filter((id) => id != null),
+          },
         });
       }
     }
@@ -3616,8 +3704,14 @@ export class NeotomaServer {
 
     if (shouldRunInterpretation) {
       try {
-        // Check quota
-        const quota = await checkInterpretationQuota(userId);
+        const isCsvFile =
+          detectedMimeType?.toLowerCase() === "text/csv" ||
+          detectedFilename?.toLowerCase().endsWith(".csv");
+
+        // CSV extraction is deterministic/rule-based and does not consume LLM quota.
+        const quota = isCsvFile
+          ? { allowed: true, current: 0, limit: 0 }
+          : await checkInterpretationQuota(userId);
         if (!quota.allowed) {
           // Get existing entities from this source (if deduplicated previously)
           entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
@@ -3656,8 +3750,8 @@ export class NeotomaServer {
         extractionDebug.pdf_worker_wrapper_path_tried = pdfDebug.wrapper_path_tried;
         extractionDebug.pdf_worker_set_worker_error = pdfDebug.set_worker_error;
 
-        // Check if OpenAI is configured
-        if (!isLLMExtractionAvailable()) {
+        // Check if OpenAI is configured for non-CSV interpretation paths
+        if (!isCsvFile && !isLLMExtractionAvailable()) {
           return this.buildTextResponse({
             ...result,
             interpretation: {
@@ -3676,6 +3770,7 @@ export class NeotomaServer {
           | Awaited<ReturnType<typeof extractWithLLM>>
           | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
           | undefined = undefined;
+        let extractedData: Array<Record<string, unknown>> = [];
         if (extractionDebug.raw_text_length === 0 && isPdf) {
           extractionDebug.vision_fallback_attempted = true;
           const imageResult = await getPdfFirstPageImageDataUrl(
@@ -3706,48 +3801,54 @@ export class NeotomaServer {
           }
         }
         if (typeof extractionResult === "undefined") {
-          const isCsvFile = detectedMimeType?.toLowerCase() === "text/csv";
-          extractionResult = isCsvFile
-            ? await extractFromCSVWithChunking(
-                rawText,
-                detectedFilename,
-                detectedMimeType,
-                "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
-              )
-            : await extractWithLLM(
+          if (isCsvFile) {
+            const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
+            extractedData = extractEntitiesFromCsvRows(fileBuffer, detectedFilename);
+            extractionDebug.extraction_field_keys = extractedData.flatMap((row) =>
+              Object.keys(row).filter((k) => k !== "entity_type" && k !== "type")
+            );
+          } else {
+            extractionResult = await extractWithLLM(
                 rawText,
                 detectedFilename,
                 detectedMimeType,
                 "gpt-4o" // Will be overridden by interpretationConfig.model_id if specified
               );
+          }
         }
 
         // Handle both single entity (LLMExtractionResult) and multi-entity (MultiEntityExtractionResult) results
-        let extractedData: Array<Record<string, unknown>>;
-
-        if ("entities" in extractionResult) {
-          // Multi-entity result from CSV chunking
-          extractedData = extractionResult.entities.map((entity) => ({
-            entity_type: entity.entity_type,
-            ...entity.fields,
-          }));
-        } else {
-          // Single entity result
-          const { entity_type, fields } = extractionResult;
-          extractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
-            (k) => k !== "entity_type" && k !== "type"
-          );
-          extractedData = [
-            {
-              entity_type,
-              ...fields,
-            },
-          ];
-        }
-        if ("entities" in extractionResult) {
-          extractionDebug.extraction_field_keys = extractionResult.entities.flatMap((e) =>
-            Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
-          );
+        if (extractedData.length === 0 && extractionResult) {
+          if ("entities" in extractionResult) {
+            // Multi-entity result from CSV chunking
+            const multiResult = extractionResult as {
+              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
+            };
+            extractedData = multiResult.entities.map((entity) => ({
+              entity_type: entity.entity_type,
+              ...entity.fields,
+            }));
+          } else {
+            // Single entity result
+            const { entity_type, fields } = extractionResult;
+            extractionDebug.extraction_field_keys = Object.keys(fields ?? {}).filter(
+              (k) => k !== "entity_type" && k !== "type"
+            );
+            extractedData = [
+              {
+                entity_type,
+                ...fields,
+              },
+            ];
+          }
+          if ("entities" in extractionResult) {
+            const multiResult = extractionResult as {
+              entities: Array<{ entity_type: string; fields: Record<string, unknown> }>;
+            };
+            extractionDebug.extraction_field_keys = multiResult.entities.flatMap((e) =>
+              Object.keys(e.fields ?? {}).filter((k) => k !== "entity_type" && k !== "type")
+            );
+          }
         }
 
         // Run interpretation with fixed-point guarantee
@@ -3824,10 +3925,10 @@ export class NeotomaServer {
         // Still try to get existing entities if any
         entityIds = await this.getEntityIdsFromSource(storageResult.sourceId);
       }
-    } else if (storageResult.deduplicated) {
+    } else if (storageResult.deduplicated && parsed.interpret) {
       // File was deduplicated and interpretation not requested or already has observations
       // Get existing entities from this source
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations, error: obsError } = await db
         .from("observations")
         .select("id, entity_id, entity_type")
         .eq("source_id", storageResult.sourceId);
@@ -3855,7 +3956,7 @@ export class NeotomaServer {
       const validEntityIds = entityIds.filter((id) => id != null);
 
       if (validEntityIds.length > 0) {
-        const { data: entityData, error: entityError } = await supabase
+        const { data: entityData, error: entityError } = await db
           .from("entities")
           .select("*")
           .in("id", validEntityIds);
@@ -3864,7 +3965,7 @@ export class NeotomaServer {
           entities = entityData;
 
           // Include snapshots
-          const { data: snapshots, error: snapError } = await supabase
+          const { data: snapshots, error: snapError } = await db
             .from("entity_snapshots")
             .select("*")
             .in("entity_id", validEntityIds);
@@ -3881,8 +3982,10 @@ export class NeotomaServer {
         }
       }
 
-      // Add debug info about entity retrieval
+      // Add debug info about entity retrieval (merge with any existing entity_debug from dedup path so client keeps entity_ids_retrieved)
+      const existingDebug = (result as { entity_debug?: Record<string, unknown> }).entity_debug ?? {};
       result.entity_debug = {
+        ...existingDebug,
         entity_ids_from_observations: entityIds,
         valid_entity_ids: entityIds.filter((id) => id != null),
         entities_found: entities.length,
@@ -3902,7 +4005,7 @@ export class NeotomaServer {
 
   // Helper method to get entity IDs from a source_id
   private async getEntityIdsFromSource(sourceId: string): Promise<string[]> {
-    const { data: observations, error } = await supabase
+    const { data: observations, error } = await db
       .from("observations")
       .select("id, entity_id")
       .eq("source_id", sourceId);
@@ -3950,7 +4053,7 @@ export class NeotomaServer {
     const relatedEntityIds = new Set<string>();
 
     // Get all relationships for the stored entities
-    const { data: outboundRels, error: outError } = await supabase
+    const { data: outboundRels, error: outError } = await db
       .from("relationship_snapshots")
       .select("*")
       .in("source_entity_id", entityIds);
@@ -3962,7 +4065,7 @@ export class NeotomaServer {
       }
     }
 
-    const { data: inboundRels, error: inError } = await supabase
+    const { data: inboundRels, error: inError } = await db
       .from("relationship_snapshots")
       .select("*")
       .in("target_entity_id", entityIds);
@@ -3977,7 +4080,7 @@ export class NeotomaServer {
     // Get related entity details with snapshots
     let entities: any[] = [];
     if (relatedEntityIds.size > 0) {
-      const { data: entityData, error: entityError } = await supabase
+      const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
         .in("id", Array.from(relatedEntityIds));
@@ -3986,7 +4089,7 @@ export class NeotomaServer {
         entities = entityData;
 
         // Include snapshots
-        const { data: snapshots, error: snapError } = await supabase
+        const { data: snapshots, error: snapError } = await db
           .from("entity_snapshots")
           .select("*")
           .in("entity_id", Array.from(relatedEntityIds));
@@ -4020,10 +4123,10 @@ export class NeotomaServer {
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
     const { randomUUID } = await import("crypto");
-    const { supabase } = await import("./db.js");
+    const { db } = await import("./db.js");
 
     if (idempotencyKey) {
-      const { data: existingSource, error: existingSourceError } = await supabase
+      const { data: existingSource, error: existingSourceError } = await db
         .from("sources")
         .select("id")
         .eq("user_id", userId)
@@ -4035,7 +4138,7 @@ export class NeotomaServer {
       }
 
       if (existingSource) {
-        const { data: existingObservations, error: obsError } = await supabase
+        const { data: existingObservations, error: obsError } = await db
           .from("observations")
           .select("id, entity_id, entity_type")
           .eq("source_id", existingSource.id)
@@ -4050,7 +4153,7 @@ export class NeotomaServer {
             (obs: { id: string; entity_id: string; entity_type: string }) => obs.entity_id
           ) ?? [];
         const relatedData = await this.getRelatedEntitiesAndRelationships(existingEntityIds);
-        const { count: unknownFieldsCount } = await supabase
+        const { count: unknownFieldsCount } = await db
           .from("raw_fragments")
           .select("id", { count: "exact", head: true })
           .eq("source_id", existingSource.id)
@@ -4195,7 +4298,7 @@ export class NeotomaServer {
         }
 
         // Check if fragment already exists (for idempotence)
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("raw_fragments")
           .select("id, frequency_count, entity_id")
           .eq("source_id", storageResult.sourceId)
@@ -4206,7 +4309,7 @@ export class NeotomaServer {
 
         if (existing) {
           // Update existing fragment
-          await supabase
+          await db
             .from("raw_fragments")
             .update({
               fragment_value: value,
@@ -4223,7 +4326,7 @@ export class NeotomaServer {
         } else {
           // Insert new fragment
           const fragmentId = randomUUID();
-          await supabase.from("raw_fragments").insert({
+          await db.from("raw_fragments").insert({
             id: fragmentId,
             source_id: storageResult.sourceId,
             interpretation_id: null, // No interpretation for structured data
@@ -4260,7 +4363,7 @@ export class NeotomaServer {
 
       for (const [key, value] of nonNullUnknownFields) {
         // Check if fragment already exists (for idempotence)
-        const { data: existing } = await supabase
+        const { data: existing } = await db
           .from("raw_fragments")
           .select("id, frequency_count, entity_id")
           .eq("source_id", storageResult.sourceId)
@@ -4271,7 +4374,7 @@ export class NeotomaServer {
 
         if (existing) {
           // Update existing fragment (increment frequency, update last_seen)
-          const { error: updateError } = await supabase
+          const { error: updateError } = await db
             .from("raw_fragments")
             .update({
               fragment_value: value, // Update value in case it changed
@@ -4333,7 +4436,7 @@ export class NeotomaServer {
             },
           };
 
-          const { data: insertResult, error: insertError } = await supabase
+          const { data: insertResult, error: insertError } = await db
             .from("raw_fragments")
             .insert(insertData)
             .select();
@@ -4345,7 +4448,7 @@ export class NeotomaServer {
                 `[raw_fragments] Race condition detected for ${entityType}.${key}, retrying as update...`
               );
               // Retry as update
-              const { data: retryExisting } = await supabase
+              const { data: retryExisting } = await db
                 .from("raw_fragments")
                 .select("id, frequency_count")
                 .eq("source_id", storageResult.sourceId)
@@ -4354,7 +4457,7 @@ export class NeotomaServer {
                 .maybeSingle();
 
               if (retryExisting) {
-                await supabase
+                await db
                   .from("raw_fragments")
                   .update({
                     fragment_value: value,
@@ -4434,7 +4537,7 @@ export class NeotomaServer {
       // Use fieldsForObservation so date-like unknowns are in the observation and thus
       // in the snapshot and timeline, even when not in the schema yet.
       const observationId = randomUUID();
-      const { error: obsError } = await supabase.from("observations").insert({
+      const { error: obsError } = await db.from("observations").insert({
         id: observationId,
         entity_id: entityId,
         entity_type: entityType,
@@ -4464,7 +4567,7 @@ export class NeotomaServer {
     for (const createdEntity of createdEntities) {
       try {
         // Get all observations for entity
-        const { data: allObservations, error: obsError } = await supabase
+        const { data: allObservations, error: obsError } = await db
           .from("observations")
           .select("*")
           .eq("entity_id", createdEntity.entityId)
@@ -4535,7 +4638,7 @@ export class NeotomaServer {
             (e) => e.entityType === createdEntity.entityType
           ).length;
           if (sameTypeInBatch === 1) {
-            const { data: fragments } = await supabase
+            const { data: fragments } = await db
               .from("raw_fragments")
               .select("fragment_key, fragment_value")
               .eq("source_id", storageResult.sourceId)
@@ -4556,7 +4659,7 @@ export class NeotomaServer {
           }
 
           for (const row of timelineRows) {
-            const { error: evtError } = await supabase.from("timeline_events").upsert(
+            const { error: evtError } = await db.from("timeline_events").upsert(
               {
                 id: row.id,
                 event_type: row.event_type,
@@ -4661,12 +4764,33 @@ export class NeotomaServer {
       });
     }
 
-    // Download and re-analyze
-    const fileBuffer = await downloadRawContent(source.storage_url);
+    // When this source is the "structured twin" (JSON from entities+file store) and a sibling file
+    // source exists (key K + "-file"), use the file source's content for extraction so we interpret
+    // the actual document instead of the message JSON. See docs/reports/neotoma_pdf_interpreted_as_note_investigation_2026_02_23.md
+    let contentSource = source;
+    const key = (source.idempotency_key as string) || "";
+    const isStructuredTwin =
+      (source.mime_type || "").toLowerCase() === "application/json" &&
+      key.length > 0 &&
+      !key.endsWith("-file");
+    if (isStructuredTwin) {
+      const { data: fileSourceRow } = await db
+        .from("sources")
+        .select("id, storage_url, mime_type, original_filename")
+        .eq("user_id", source.user_id)
+        .eq("idempotency_key", `${key}-file`)
+        .maybeSingle();
+      if (fileSourceRow) {
+        contentSource = fileSourceRow as typeof source;
+      }
+    }
+
+    // Download and re-analyze (from this source or linked file source). Missing file fails so sources_prod is not silently lost.
+    const fileBuffer = await downloadRawContent(contentSource.storage_url);
     const rawText = await extractTextFromBuffer(
       fileBuffer,
-      source.mime_type,
-      source.original_filename || "file"
+      contentSource.mime_type,
+      contentSource.original_filename || "file"
     );
 
     // Check if OpenAI is configured
@@ -4690,8 +4814,8 @@ export class NeotomaServer {
 
     const { entity_type, fields } = await extractWithLLM(
       rawText,
-      source.original_filename || "file",
-      source.mime_type,
+      contentSource.original_filename || "file",
+      contentSource.mime_type,
       config.model_id
     );
 
@@ -4710,7 +4834,124 @@ export class NeotomaServer {
       config,
     });
 
-    return this.buildTextResponse(interpretationResult);
+    const responsePayload =
+      contentSource.id !== source.id
+        ? { ...interpretationResult, interpretation_used_file_source: true }
+        : interpretationResult;
+    return this.buildTextResponse(responsePayload);
+  }
+
+  private async listUninterpretedSourceIdsForUser(userId: string, limit: number): Promise<string[]> {
+    const interpretedSet = new Set<string>();
+    const { data: interpretedData, error: interpretedError } = await db
+      .from("interpretations")
+      .select("source_id")
+      .eq("user_id", userId);
+    if (interpretedError) {
+      throw new Error(`Failed to list interpretations: ${interpretedError.message}`);
+    }
+    for (const row of interpretedData || []) {
+      if (row.source_id) interpretedSet.add(row.source_id);
+    }
+
+    const pageSize = Math.max(100, limit * 3);
+    const sourceIds: string[] = [];
+    let offset = 0;
+
+    while (sourceIds.length < limit) {
+      const { data: sourcePage, error: sourceError } = await db
+        .from("sources")
+        .select("id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      if (sourceError) {
+        throw new Error(`Failed to list sources: ${sourceError.message}`);
+      }
+      if (!sourcePage || sourcePage.length === 0) {
+        break;
+      }
+
+      for (const source of sourcePage) {
+        if (sourceIds.length >= limit) break;
+        if (interpretedSet.has(source.id)) continue;
+        sourceIds.push(source.id);
+      }
+
+      if (sourcePage.length < pageSize) break;
+      offset += sourcePage.length;
+    }
+
+    return sourceIds;
+  }
+
+  private async interpretUninterpreted(
+    args: unknown
+  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+    const parsed = InterpretUninterpretedRequestSchema.parse(args);
+    const userId = this.getAuthenticatedUserId(parsed.user_id);
+    const limit = parsed.limit ?? 50;
+    const dryRun = parsed.dry_run ?? false;
+    const sourceIds = await this.listUninterpretedSourceIdsForUser(userId, limit);
+
+    if (dryRun) {
+      return this.buildTextResponse({
+        dry_run: true,
+        count: sourceIds.length,
+        would_interpret: sourceIds,
+      });
+    }
+
+    const interpreted: Array<{
+      source_id: string;
+      interpretation_id?: string;
+      observations_created?: number;
+      success: boolean;
+    }> = [];
+    const errors: Array<{ source_id: string; error: string }> = [];
+
+    for (const sourceId of sourceIds) {
+      const single = await this.reinterpret({
+        source_id: sourceId,
+        interpretation_config: parsed.interpretation_config,
+      });
+      const rawText = single.content?.[0]?.text;
+      if (!rawText) {
+        errors.push({ source_id: sourceId, error: "Missing reinterpret response payload" });
+        continue;
+      }
+      try {
+        const parsedSingle = JSON.parse(rawText) as Record<string, unknown>;
+        if (parsedSingle.error) {
+          errors.push({
+            source_id: sourceId,
+            error: String(parsedSingle.message ?? parsedSingle.error),
+          });
+          continue;
+        }
+        interpreted.push({
+          source_id: sourceId,
+          interpretation_id:
+            typeof parsedSingle.interpretation_id === "string"
+              ? parsedSingle.interpretation_id
+              : undefined,
+          observations_created:
+            typeof parsedSingle.observations_created === "number"
+              ? parsedSingle.observations_created
+              : undefined,
+          success: true,
+        });
+      } catch {
+        errors.push({ source_id: sourceId, error: "Failed to parse reinterpret response payload" });
+      }
+    }
+
+    return this.buildTextResponse({
+      dry_run: false,
+      count: interpreted.length,
+      interpreted,
+      errors,
+    });
   }
 
   // FU-125: MCP correct() Tool
@@ -4724,7 +4965,7 @@ export class NeotomaServer {
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    const { data: existingObservation, error: existingObservationError } = await supabase
+    const { data: existingObservation, error: existingObservationError } = await db
       .from("observations")
       .select("id, entity_id, entity_type, fields")
       .eq("user_id", userId)
@@ -4765,7 +5006,7 @@ export class NeotomaServer {
     }
 
     // Validate entity ownership
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("*")
       .eq("id", parsed.entity_id)
@@ -4797,7 +5038,7 @@ export class NeotomaServer {
 
     // Create correction observation with priority 1000
     const observationId = randomUUID();
-    const { error: obsError } = await supabase.from("observations").insert({
+    const { error: obsError } = await db.from("observations").insert({
       id: observationId,
       entity_id: parsed.entity_id,
       entity_type: parsed.entity_type,
@@ -4821,7 +5062,7 @@ export class NeotomaServer {
 
     // Recompute entity snapshot so the correction is visible immediately
     try {
-      const { data: allObservations, error: fetchError } = await supabase
+      const { data: allObservations, error: fetchError } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", parsed.entity_id)
@@ -4901,7 +5142,7 @@ export class NeotomaServer {
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
     // Validate both entities exist and are owned by user
-    const { data: entities, error: entitiesError } = await supabase
+    const { data: entities, error: entitiesError } = await db
       .from("entities")
       .select("*")
       .in("id", [parsed.from_entity_id, parsed.to_entity_id])
@@ -4921,13 +5162,13 @@ export class NeotomaServer {
     }
 
     // Count observations to move
-    const { count: obsCount } = await supabase
+    const { count: obsCount } = await db
       .from("observations")
       .select("*", { count: "exact", head: true })
       .eq("entity_id", parsed.from_entity_id);
 
     // Rewrite observations to target entity
-    const { error: rewriteError } = await supabase
+    const { error: rewriteError } = await db
       .from("observations")
       .update({ entity_id: parsed.to_entity_id })
       .eq("entity_id", parsed.from_entity_id);
@@ -4940,7 +5181,7 @@ export class NeotomaServer {
     }
 
     // Mark source entity as merged
-    const { error: mergeError } = await supabase
+    const { error: mergeError } = await db
       .from("entities")
       .update({
         merged_to_entity_id: parsed.to_entity_id,
@@ -4956,7 +5197,7 @@ export class NeotomaServer {
     }
 
     // Create merge audit log
-    const { error: auditError } = await supabase.from("entity_merges").insert({
+    const { error: auditError } = await db.from("entity_merges").insert({
       user_id: userId,
       from_entity_id: parsed.from_entity_id,
       to_entity_id: parsed.to_entity_id,
@@ -5297,7 +5538,7 @@ export class NeotomaServer {
       });
 
       // Get total count and metadata
-      let countQuery = supabase
+      let countQuery = db
         .from("entities")
         .select("*", { count: "exact", head: true })
         .is("merged_to_entity_id", null);
@@ -5317,7 +5558,7 @@ export class NeotomaServer {
       }
 
       // Get last_updated timestamp
-      let latestQuery = supabase
+      let latestQuery = db
         .from("entities")
         .select("updated_at, created_at")
         .is("merged_to_entity_id", null);
@@ -5391,7 +5632,7 @@ export class NeotomaServer {
       });
 
       // Get total count
-      let countQuery = supabase
+      let countQuery = db
         .from("entities")
         .select("*", { count: "exact", head: true })
         .eq("entity_type", entityType)
@@ -5408,7 +5649,7 @@ export class NeotomaServer {
       }
 
       // Get last_updated timestamp
-      let latestQuery = supabase
+      let latestQuery = db
         .from("entities")
         .select("updated_at, created_at")
         .eq("entity_type", entityType)
@@ -5456,7 +5697,7 @@ export class NeotomaServer {
    */
   private async handleIndividualEntity(entityId: string): Promise<any> {
     // Get entity
-    const { data: entity, error: entityError } = await supabase
+    const { data: entity, error: entityError } = await db
       .from("entities")
       .select("*")
       .eq("id", entityId)
@@ -5467,7 +5708,7 @@ export class NeotomaServer {
     }
 
     // Get snapshot
-    const { data: snapshot, error: snapshotError } = await supabase
+    const { data: snapshot, error: snapshotError } = await db
       .from("entity_snapshots")
       .select("*")
       .eq("entity_id", entityId)
@@ -5496,7 +5737,7 @@ export class NeotomaServer {
    * Resource handler: Get entity observations
    */
   private async handleEntityObservations(entityId: string): Promise<any> {
-    const { data: observations, error } = await supabase
+    const { data: observations, error } = await db
       .from("observations")
       .select("*")
       .eq("entity_id", entityId)
@@ -5508,7 +5749,7 @@ export class NeotomaServer {
     }
 
     // Get total count
-    const { count, error: countError } = await supabase
+    const { count, error: countError } = await db
       .from("observations")
       .select("*", { count: "exact", head: true })
       .eq("entity_id", entityId);
@@ -5534,7 +5775,7 @@ export class NeotomaServer {
    */
   private async handleEntityRelationships(entityId: string): Promise<any> {
     // Get outbound relationships
-    const { data: outbound, error: outError } = await supabase
+    const { data: outbound, error: outError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("source_entity_id", entityId);
@@ -5547,7 +5788,7 @@ export class NeotomaServer {
     }
 
     // Get inbound relationships
-    const { data: inbound, error: inError } = await supabase
+    const { data: inbound, error: inError } = await db
       .from("relationship_snapshots")
       .select("*")
       .eq("target_entity_id", entityId);
@@ -5589,7 +5830,7 @@ export class NeotomaServer {
       const limit = queryParams?.limit || 1000;
       const offset = queryParams?.offset || 0;
 
-      let query = supabase
+      let query = db
         .from("timeline_events")
         .select("*")
         .gte("event_timestamp", startDate)
@@ -5609,7 +5850,7 @@ export class NeotomaServer {
       }
 
       // Get total count
-      const { count, error: countError } = await supabase
+      const { count, error: countError } = await db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
         .gte("event_timestamp", startDate)
@@ -5674,7 +5915,7 @@ export class NeotomaServer {
       // If user_id is provided, get source IDs for that user first
       let userSourceIds: string[] | undefined;
       if (userId) {
-        const { data: userSources } = await supabase
+        const { data: userSources } = await db
           .from("sources")
           .select("id")
           .eq("user_id", userId);
@@ -5697,7 +5938,7 @@ export class NeotomaServer {
         }
       }
 
-      let query = supabase
+      let query = db
         .from("timeline_events")
         .select("*")
         .gte("event_timestamp", startDate)
@@ -5723,7 +5964,7 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = supabase
+      let countQuery = db
         .from("timeline_events")
         .select("*", { count: "exact", head: true })
         .gte("event_timestamp", startDate)
@@ -5776,7 +6017,7 @@ export class NeotomaServer {
    * Resource handler: Get source
    */
   private async handleSource(sourceId: string): Promise<any> {
-    const { data: source, error } = await supabase
+    const { data: source, error } = await db
       .from("sources")
       .select("*")
       .eq("id", sourceId)
@@ -5787,7 +6028,7 @@ export class NeotomaServer {
     }
 
     // Get observations created from this source
-    const { data: observations, error: obsError } = await supabase
+    const { data: observations, error: obsError } = await db
       .from("observations")
       .select("id, entity_id, entity_type")
       .eq("source_id", sourceId)
@@ -5831,7 +6072,7 @@ export class NeotomaServer {
       const sortOrder = queryParams?.order === "asc";
       const userId = queryParams?.user_id;
 
-      let query = supabase
+      let query = db
         .from("sources")
         .select("id, mime_type, file_size, content_hash, created_at, user_id")
         .order(sortField, { ascending: sortOrder });
@@ -5853,7 +6094,7 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = supabase.from("sources").select("*", { count: "exact", head: true });
+      let countQuery = db.from("sources").select("*", { count: "exact", head: true });
 
       if (userId) {
         countQuery = countQuery.eq("user_id", userId);
@@ -5914,7 +6155,7 @@ export class NeotomaServer {
       // If user_id is provided, get entity IDs for that user first
       let userEntityIds: string[] | undefined;
       if (userId) {
-        const { data: userEntities } = await supabase
+        const { data: userEntities } = await db
           .from("entities")
           .select("id")
           .eq("user_id", userId)
@@ -5936,7 +6177,7 @@ export class NeotomaServer {
         }
       }
 
-      let query = supabase
+      let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
@@ -5968,7 +6209,7 @@ export class NeotomaServer {
       }
 
       // Get total count
-      let countQuery = supabase
+      let countQuery = db
         .from("relationship_snapshots")
         .select("*", { count: "exact", head: true });
 
@@ -6040,7 +6281,7 @@ export class NeotomaServer {
       // If user_id is provided, get entity IDs for that user first
       let userEntityIds: string[] | undefined;
       if (userId) {
-        const { data: userEntities } = await supabase
+        const { data: userEntities } = await db
           .from("entities")
           .select("id")
           .eq("user_id", userId)
@@ -6063,7 +6304,7 @@ export class NeotomaServer {
         }
       }
 
-      let query = supabase
+      let query = db
         .from("relationship_snapshots")
         .select(
           "relationship_key, relationship_type, source_entity_id, target_entity_id, snapshot, computed_at, last_observation_at"
@@ -6092,7 +6333,7 @@ export class NeotomaServer {
       }
 
       // Get total count for this type
-      let countQuery = supabase
+      let countQuery = db
         .from("relationship_snapshots")
         .select("*", { count: "exact", head: true })
         .eq("relationship_type", relationshipType);

@@ -5,7 +5,7 @@
  * Uses encryption + key deletion to make data irretrievable while maintaining immutability.
  */
 
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { softDeleteEntity, softDeleteRelationship } from "./deletion.js";
 import { createCipheriv, randomBytes } from "node:crypto";
 
@@ -100,7 +100,7 @@ export async function createDeletionRequest(
   };
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("deletion_requests")
       .insert(deletionRequest)
       .select()
@@ -135,7 +135,7 @@ export async function processDeletionRequest(
   deletionRequestId: string
 ): Promise<DeletionRequestResult> {
   // Get deletion request
-  const { data: requestData, error: fetchError } = await supabase
+  const { data: requestData, error: fetchError } = await db
     .from("deletion_requests")
     .select("*")
     .eq("id", deletionRequestId)
@@ -151,7 +151,7 @@ export async function processDeletionRequest(
   const request = requestData as DeletionRequest;
 
   // Update status to in_progress
-  await supabase
+  await db
     .from("deletion_requests")
     .update({ status: "in_progress" })
     .eq("id", deletionRequestId);
@@ -188,7 +188,7 @@ export async function processDeletionRequest(
         await softDeleteAllUserData(request.user_id);
       }
 
-      await supabase
+      await db
         .from("deletion_requests")
         .update({ soft_deleted_at: new Date().toISOString() })
         .eq("id", deletionRequestId);
@@ -199,7 +199,7 @@ export async function processDeletionRequest(
       if (request.deletion_method === "cryptographic_erasure") {
         await cryptographicErasure(request.user_id, request.entity_id);
 
-        await supabase
+        await db
           .from("deletion_requests")
           .update({
             hard_deleted_at: new Date().toISOString(),
@@ -209,7 +209,7 @@ export async function processDeletionRequest(
       } else if (request.deletion_method === "physical_deletion") {
         await physicalDeletion(request.user_id, request.entity_id);
 
-        await supabase
+        await db
           .from("deletion_requests")
           .update({ hard_deleted_at: new Date().toISOString() })
           .eq("id", deletionRequestId);
@@ -217,7 +217,7 @@ export async function processDeletionRequest(
     }
 
     // Step 3: Mark completed
-    await supabase
+    await db
       .from("deletion_requests")
       .update({
         status: "completed",
@@ -231,7 +231,7 @@ export async function processDeletionRequest(
     };
   } catch (err) {
     // Update status to rejected
-    await supabase
+    await db
       .from("deletion_requests")
       .update({ status: "rejected" })
       .eq("id", deletionRequestId);
@@ -261,7 +261,7 @@ export async function cryptographicErasure(
   const iv = randomBytes(16); // Initialization vector
 
   // Get observations to encrypt
-  let query = supabase
+  let query = db
     .from("observations")
     .select("id, fields")
     .eq("user_id", userId);
@@ -284,7 +284,7 @@ export async function cryptographicErasure(
       cipher.update(fieldsString, "utf8", "base64") + cipher.final("base64");
 
     // Update observation with encrypted fields
-    await supabase
+    await db
       .from("observations")
       .update({ fields: { _encrypted: encrypted, _iv: iv.toString("base64") } })
       .eq("id", obs.id);
@@ -310,7 +310,7 @@ export async function physicalDeletion(
   entityId?: string
 ): Promise<void> {
   // Delete observations
-  let obsQuery = supabase.from("observations").delete().eq("user_id", userId);
+  let obsQuery = db.from("observations").delete().eq("user_id", userId);
 
   if (entityId) {
     obsQuery = obsQuery.eq("entity_id", entityId);
@@ -324,7 +324,7 @@ export async function physicalDeletion(
 
   // Delete snapshots
   if (entityId) {
-    const { error: snapError } = await supabase
+    const { error: snapError } = await db
       .from("entity_snapshots")
       .delete()
       .eq("entity_id", entityId);
@@ -333,7 +333,7 @@ export async function physicalDeletion(
       throw new Error(`Failed to delete snapshots: ${snapError.message}`);
     }
   } else {
-    const { error: snapError } = await supabase
+    const { error: snapError } = await db
       .from("entity_snapshots")
       .delete()
       .eq("user_id", userId);
@@ -344,7 +344,7 @@ export async function physicalDeletion(
   }
 
   // Delete relationship observations
-  const { error: relError } = await supabase
+  const { error: relError } = await db
     .from("relationship_observations")
     .delete()
     .eq("user_id", userId);
@@ -363,7 +363,7 @@ export async function physicalDeletion(
  */
 async function softDeleteAllUserData(userId: string): Promise<void> {
   // Get all entities for user
-  const { data: entities } = await supabase
+  const { data: entities } = await db
     .from("entities")
     .select("id, entity_type")
     .eq("user_id", userId);
@@ -374,7 +374,7 @@ async function softDeleteAllUserData(userId: string): Promise<void> {
   }
 
   // Get all relationships for user
-  const { data: relationships } = await supabase
+  const { data: relationships } = await db
     .from("relationship_observations")
     .select("relationship_key, source_entity_id, target_entity_id, relationship_type")
     .eq("user_id", userId)
@@ -403,7 +403,7 @@ export async function getDeletionRequests(
   userId: string,
   status?: "pending" | "in_progress" | "completed" | "rejected" | "extended"
 ): Promise<DeletionRequest[]> {
-  let query = supabase
+  let query = db
     .from("deletion_requests")
     .select("*")
     .eq("user_id", userId)
@@ -435,7 +435,7 @@ export async function extendDeletionDeadline(
   extensionReason: string,
   additionalDays: number = 30
 ): Promise<DeletionRequestResult> {
-  const { data: request } = await supabase
+  const { data: request } = await db
     .from("deletion_requests")
     .select("*")
     .eq("id", deletionRequestId)
@@ -471,7 +471,7 @@ export async function extendDeletionDeadline(
   }
 
   // Update request
-  const { error } = await supabase
+  const { error } = await db
     .from("deletion_requests")
     .update({
       deadline: newDeadline.toISOString(),

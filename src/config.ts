@@ -3,9 +3,9 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { existsSync, readFileSync } from "fs";
 
-// Use NEOTOMA_ENV to avoid conflicts when running as MCP in other workspaces
-// Falls back to NODE_ENV for backward compatibility
-const env = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
+// Use NEOTOMA_ENV only to avoid conflicts when running as MCP in other workspaces
+// (host NODE_ENV would incorrectly override Neotoma's dev/prod choice)
+const env = process.env.NEOTOMA_ENV || "development";
 
 // Resolve .env file paths relative to this file's location (works when running as MCP)
 // When running as MCP, process.cwd() might be the workspace directory, not the Neotoma project
@@ -31,25 +31,6 @@ if (env === "production") {
   dotenv.config({ path: join(projectRoot, ".env"), override: false });
 }
 
-function getSupabaseConfig() {
-  const buildUrl = (projectId: string | undefined, fallbackUrl: string | undefined) => {
-    if (projectId) return `https://${projectId}.supabase.co`;
-    return fallbackUrl || "";
-  };
-
-  // Use single variable names (set by 1Password sync based on ENVIRONMENT variable)
-  const projectId = process.env.SUPABASE_PROJECT_ID;
-  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
-  const url = process.env.SUPABASE_URL;
-
-  return {
-    url: buildUrl(projectId, url),
-    key: serviceKey || "",
-  };
-}
-
-const supabaseConfig = getSupabaseConfig();
-
 function getOpenAIConfig() {
   // Use OPENAI_API_KEY (set by 1Password sync based on ENVIRONMENT variable)
   return process.env.OPENAI_API_KEY || "";
@@ -57,8 +38,11 @@ function getOpenAIConfig() {
 
 // Default ports: 8080 dev, 8180 prod, 8280 WS (spaced to avoid cascade when prod bumps)
 const defaultHttpPort = env === "production" ? "8180" : "8080";
-const httpPort = parseInt(process.env.HTTP_PORT || defaultHttpPort, 10);
-const storageBackend = process.env.NEOTOMA_STORAGE_BACKEND || "local";
+const httpPort = parseInt(
+  process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT || defaultHttpPort,
+  10
+);
+const storageBackend = "local";
 const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
 const rawStorageSubdir = env === "production" ? "sources_prod" : "sources";
 const eventLogSubdir = env === "production" ? "events_prod" : "events";
@@ -68,7 +52,7 @@ const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
 
 /**
  * Auto-discover tunnel URL from file written by setup-https-tunnel.sh
- * This allows tunnels to "just work" without manually setting HOST_URL
+ * This allows tunnels to "just work" without manually setting NEOTOMA_HOST_URL
  */
 function discoverTunnelUrl(httpPort: number): string {
   const tunnelFiles = [
@@ -107,16 +91,24 @@ export const config = {
   eventLogDir,
   logsDir,
   eventLogMirrorEnabled: process.env.NEOTOMA_EVENT_LOG_MIRROR === "true",
-  supabaseUrl: supabaseConfig.url,
-  supabaseKey: supabaseConfig.key,
+  // Kept as inert placeholders for backward-compatible call sites while remote storage is removed.
+  authServerUrl: "",
+  authServiceKey: "",
   openaiApiKey: getOpenAIConfig(),
-  port: parseInt(process.env.PORT || "3000", 10),
+  port: parseInt(
+    process.env.NEOTOMA_PORT || process.env.PORT || "3000",
+    10
+  ),
   httpPort,
   environment: env,
-  apiBase: process.env.HOST_URL || process.env.API_BASE_URL || discoverTunnelUrl(httpPort),
-  mcpTokenEncryptionKey: process.env.MCP_TOKEN_ENCRYPTION_KEY || "",
-  oauthClientId: process.env.SUPABASE_OAUTH_CLIENT_ID || "",
-  
+  apiBase:
+    process.env.NEOTOMA_HOST_URL ||
+    discoverTunnelUrl(httpPort),
+  mcpTokenEncryptionKey:
+    process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
+    process.env.MCP_TOKEN_ENCRYPTION_KEY ||
+    "",
+  oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
   // Encryption settings (local backend)
   encryption: {
     enabled: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",
@@ -128,31 +120,24 @@ export const config = {
 
   // Icon generation settings
   iconGeneration: {
-    enabled: process.env.ICON_GENERATION_ENABLED !== "false", // Enabled by default
-    confidenceThreshold: parseFloat(process.env.ICON_MATCH_CONFIDENCE_THRESHOLD || "0.8"),
-    model: process.env.ICON_GENERATION_MODEL || "gpt-4o",
-    cacheTTL: parseInt(process.env.ICON_CACHE_TTL || "86400", 10), // 24 hours default
+    enabled:
+      (process.env.NEOTOMA_ICON_GENERATION_ENABLED ?? process.env.ICON_GENERATION_ENABLED) !==
+      "false",
+    confidenceThreshold: parseFloat(
+      process.env.NEOTOMA_ICON_MATCH_CONFIDENCE_THRESHOLD ||
+        process.env.ICON_MATCH_CONFIDENCE_THRESHOLD ||
+        "0.8"
+    ),
+    model:
+      process.env.NEOTOMA_ICON_GENERATION_MODEL ||
+      process.env.ICON_GENERATION_MODEL ||
+      "gpt-4o",
+    cacheTTL: parseInt(
+      process.env.NEOTOMA_ICON_CACHE_TTL || process.env.ICON_CACHE_TTL || "86400",
+      10
+    ),
   },
 };
-
-if (config.storageBackend === "supabase" && (!config.supabaseUrl || !config.supabaseKey)) {
-  const envFile = env === "production" ? ".env.production" : ".env";
-  if (env === "production") {
-    throw new Error(
-      `Missing Supabase configuration for production environment. ` +
-        `NEOTOMA_ENV is set to "production" but Supabase variables are missing. ` +
-        `Options: 1) Set NEOTOMA_ENV=development, or ` +
-        `2) Provide SUPABASE_PROJECT_ID (or SUPABASE_URL) and SUPABASE_SERVICE_KEY ` +
-        `in ${envFile} or via 1Password sync with ENVIRONMENT=production.`
-    );
-  } else {
-    throw new Error(
-      `Missing Supabase configuration for ${env} environment. ` +
-        `Create ${envFile} with SUPABASE_PROJECT_ID (or SUPABASE_URL) and SUPABASE_SERVICE_KEY, ` +
-        `or sync from 1Password with ENVIRONMENT=development.`
-    );
-  }
-}
 
 /**
  * Log configuration after it's loaded
@@ -160,15 +145,13 @@ if (config.storageBackend === "supabase" && (!config.supabaseUrl || !config.supa
  */
 export function logConfigInfo(): void {
   const discovered = (discoverTunnelUrl as any)._discovered;
-  
-  if (process.env.HOST_URL) {
-    console.log(`[Config] Using HOST_URL from environment: ${config.apiBase}`);
-  } else if (process.env.API_BASE_URL) {
-    console.log(`[Config] Using API_BASE_URL from environment (deprecated): ${config.apiBase}`);
+
+  if (process.env.NEOTOMA_HOST_URL) {
+    console.log(`[Config] Using NEOTOMA_HOST_URL from environment: ${config.apiBase}`);
   } else if (discovered?.file) {
-    console.log(`[Config] HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`);
+    console.log(`[Config] NEOTOMA_HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`);
   } else {
-    console.log(`[Config] HOST_URL not set and no tunnel URL file found; using localhost:${config.httpPort}`);
+    console.log(`[Config] NEOTOMA_HOST_URL not set and no tunnel URL file found; using localhost:${config.httpPort}`);
   }
   
   console.log(`[Config] API base (apiBase): ${config.apiBase}`);

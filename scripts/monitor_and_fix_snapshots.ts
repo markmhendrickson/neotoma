@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import { observationReducer } from "../src/reducers/observation_reducer.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -26,7 +26,7 @@ async function monitorAndFixSnapshots() {
   console.log('🔍 Monitoring snapshots for staleness...\n');
 
   // Get all entity snapshots with observation_count = 0
-  const { data: potentiallyStale, error: snapshotError } = await supabase
+  const { data: potentiallyStale, error: snapshotError } = await db
     .from('entity_snapshots')
     .select('entity_id, entity_type, observation_count, computed_at')
     .eq('observation_count', 0)
@@ -52,7 +52,7 @@ async function monitorAndFixSnapshots() {
   for (const snapshot of potentiallyStale) {
     try {
       // Check if observations actually exist for this entity
-      const { data: observations, error: obsError } = await supabase
+      const { data: observations, error: obsError } = await db
         .from('observations')
         .select('*')
         .eq('entity_id', snapshot.entity_id)
@@ -89,7 +89,7 @@ async function monitorAndFixSnapshots() {
         );
 
         // Save snapshot
-        const { error: upsertError } = await supabase.from('entity_snapshots').upsert(
+        const { error: upsertError } = await db.from('entity_snapshots').upsert(
           {
             entity_id: newSnapshot.entity_id,
             entity_type: newSnapshot.entity_type,

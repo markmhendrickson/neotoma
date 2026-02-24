@@ -5,7 +5,7 @@
  * Test schemas are identified by entity_type patterns like "test", "test_*", etc.
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import type { SchemaMetadata } from "../src/services/schema_registry.js";
 
 interface TestSchemaInfo {
@@ -87,7 +87,7 @@ async function markTestSchemas(
         test_marked_at: new Date().toISOString(),
       };
       
-      const { error } = await supabase
+      const { error } = await db
         .from("schema_registry")
         .update({ metadata: updatedMetadata })
         .eq("id", schema.id);
@@ -134,7 +134,7 @@ async function removeTestSchemas(
       }
       
       // Delete the schema
-      const { error } = await supabase
+      const { error } = await db
         .from("schema_registry")
         .delete()
         .eq("id", schema.id);
@@ -177,7 +177,7 @@ async function cleanupTestSchemas(options: {
   
   try {
     // Fetch all schemas
-    const { data: allSchemas, error: fetchError } = await supabase
+    const { data: allSchemas, error: fetchError } = await db
       .from("schema_registry")
       .select("id, entity_type, schema_version, user_id, scope, metadata, created_at");
     

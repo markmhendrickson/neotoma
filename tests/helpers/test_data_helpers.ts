@@ -4,7 +4,7 @@
  * Helper functions for creating test data with proper schemas
  */
 
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 
 /**
  * Create a test source with all required fields
@@ -16,7 +16,7 @@ export async function createTestSource(params: {
   mime_type?: string;
   file_size?: number;
 }): Promise<{ id: string }> {
-  const { data: source, error } = await supabase
+  const { data: source, error } = await db
     .from("sources")
     .insert({
       user_id: params.user_id,
@@ -47,7 +47,7 @@ export async function createTestObservation(params: {
   observation_priority?: number;
 }): Promise<{ id: string }> {
   const crypto = await import("crypto");
-  const { data: observation, error } = await supabase
+  const { data: observation, error } = await db
     .from("observations")
     .insert({
       id: crypto.randomUUID(),
@@ -83,7 +83,7 @@ export async function createTestEntity(params: {
   const entityId = `ent_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
   // First create the entity record
-  const { error: entityError } = await supabase.from("entities").insert({
+  const { error: entityError } = await db.from("entities").insert({
     id: entityId,
     entity_type: params.entity_type,
     canonical_name: params.canonical_name,
@@ -95,7 +95,7 @@ export async function createTestEntity(params: {
   }
 
   // Then create the snapshot
-  const { data: snapshot, error: snapshotError } = await supabase
+  const { data: snapshot, error: snapshotError } = await db
     .from("entity_snapshots")
     .insert({
       entity_id: entityId,
@@ -135,7 +135,7 @@ export async function createTestRelationship(params: {
   const crypto = await import('crypto');
 
   // Create test source for the relationship
-  const { data: source, error: sourceError } = await supabase
+  const { data: source, error: sourceError } = await db
     .from("sources")
     .insert({
       user_id: params.user_id,
@@ -161,7 +161,7 @@ export async function createTestRelationship(params: {
     .digest('hex')
     .substring(0, 24);
 
-  const { error: obsError } = await supabase
+  const { error: obsError } = await db
     .from("relationship_observations")
     .insert({
       id: crypto.randomUUID(),
@@ -205,7 +205,7 @@ export async function createTestInterpretation(params: {
   config?: Record<string, any>;
 }): Promise<string> {
   const crypto = await import("crypto");
-  const { data: interpretation, error } = await supabase
+  const { data: interpretation, error } = await db
     .from("interpretations")
     .insert({
       id: crypto.randomUUID(),

@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { RealtimeChannel } from "@supabase/supabase-js";
+import { auth } from "../lib/auth";
 import { useAuth } from "./AuthContext";
 
 interface RealtimeContextValue {
@@ -23,7 +22,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const channelsRef = useRef<Map<string, RealtimeChannel>>(new Map());
+  const channelsRef = useRef<Map<string, { unsubscribe: () => void }>>(new Map());
   const debounceTimersRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const subscribe = (config: SubscriptionConfig) => {
@@ -50,7 +49,7 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
         }
       : config.callback;
 
-    const channel = supabase
+    const channel = auth
       .channel(channelKey)
       .on(
         "postgres_changes",

@@ -115,7 +115,7 @@ export function OAuthPage() {
       // Always use relative URL in development to leverage Vite proxy (which handles branch-based port assignment)
       const apiBase = import.meta.env.VITE_API_BASE_URL || "";
       const isDev = import.meta.env.DEV || apiBase === window.location.origin || !apiBase;
-      const apiUrl = isDev ? "/api/mcp/oauth/initiate" : `${apiBase}/api/mcp/oauth/initiate`;
+      const apiUrl = isDev ? "/mcp/oauth/initiate" : `${apiBase}/mcp/oauth/initiate`;
       const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
@@ -217,8 +217,8 @@ export function OAuthPage() {
         const apiBase = import.meta.env.VITE_API_BASE_URL || "";
         const isDev = typeof window !== 'undefined' && (import.meta.env.DEV || apiBase === window.location.origin || !apiBase);
         const apiUrl = isDev 
-          ? `/api/mcp/oauth/status?connection_id=${encodeURIComponent(connectionId)}`
-          : `${apiBase}/api/mcp/oauth/status?connection_id=${encodeURIComponent(connectionId)}`;
+          ? `/mcp/oauth/status?connection_id=${encodeURIComponent(connectionId)}`
+          : `${apiBase}/mcp/oauth/status?connection_id=${encodeURIComponent(connectionId)}`;
         const response = await fetch(apiUrl);
 
         if (!response.ok) {

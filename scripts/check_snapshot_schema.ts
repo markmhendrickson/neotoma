@@ -1,7 +1,7 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 
 async function check() {
-  const { data } = await supabase
+  const { data } = await db
     .from('entity_snapshots')
     .select('entity_id, schema_version, snapshot')
     .eq('entity_id', 'ent_c5042fb1197f4ce6677084ac')

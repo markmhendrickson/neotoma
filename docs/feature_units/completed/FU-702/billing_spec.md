@@ -175,7 +175,7 @@ CREATE TABLE billing_plans (
 - Users can only see invoices for their subscriptions
 - Team owners can see team invoices
 **Migration Required:** Yes
-- Migration file: `supabase/migrations/YYYYMMDDHHMMSS_add_billing_tables.sql`
+- Migration file: `migrations/YYYYMMDDHHMMSS_add_billing_tables.sql`
 - Backfill: None (new feature)
 ## API/MCP Changes
 **New API Endpoints:**

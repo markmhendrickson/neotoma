@@ -65,12 +65,6 @@ if (!apiKey) {
 
 function loadCredentials() {
   const creds = [];
-  if (process.env.SUPABASE_URL) creds.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
-  if (process.env.SUPABASE_SERVICE_KEY)
-    creds.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
-  if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
-  if (process.env.DEV_SUPABASE_SERVICE_KEY)
-    creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
   if (process.env.DEV_OPENAI_API_KEY)
     creds.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
   if (process.env.PROD_OPENAI_API_KEY)
@@ -107,16 +101,12 @@ async function spawnWorkerAgent(fuId, batchId, releaseId, manifest) {
   const creds = loadCredentials();
   const STATUS_FILE_REF = `docs/releases/in_progress/${releaseId}/agent_status.json`;
 
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.DEV_SUPABASE_URL || "";
-  const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1] || "";
-
   const envSetup = `\n**Environment Variables and Testing:**
 
 **Step 1: Verify environment variables are available**
 
 Environment variables should be automatically injected via Cursor Cloud Agents Secrets. Verify they're set:
 \`\`\`bash
-env | grep -E "SUPABASE.*=" || echo "No Supabase credentials found"
 env | grep -E "OPENAI_API_KEY|DEV_OPENAI_API_KEY|PROD_OPENAI_API_KEY" || echo "No OpenAI API key found"
 \`\`\`
 
@@ -131,7 +121,6 @@ chmod +x scripts/setup_agent_environment.sh
 \`\`\`
 
 This script will:
-- Link Supabase project (if not already linked)
 - Apply database migrations
 - Install Playwright browsers (if needed)
 - Verify npm dependencies
@@ -167,7 +156,7 @@ npm run test:e2e
 
 **Important:**
 - Environment variables are injected automatically via Cursor Secrets (no need to export manually)
-- Run the setup script to configure infrastructure (Supabase linking, migrations, Playwright)
+- Run the setup script to configure infrastructure (Playwright, npm deps)
 - ALL tests must pass before marking as complete
 - Update status file with actual test results showing all tests passed
 `;
@@ -185,7 +174,7 @@ ${envSetup}
    - Check if FU spec exists (if not, create it)
    - If UI FU and no prototype, create prototype
    - Run implementation workflow
-   - Run setup script: \`./scripts/setup_agent_environment.sh\` (applies migrations automatically)
+   - Run setup script: \`./scripts/setup_agent_environment.sh\`
    - Run tests (unit, integration, E2E) - **ALL TESTS MUST PASS**
    - If tests fail, fix issues and re-run until all pass
    - Update status file: \`${STATUS_FILE_REF}\` with actual test results
@@ -199,7 +188,7 @@ ${envSetup}
 - Update status file atomically (use file locking)
 - Do not modify FUs assigned to other agents
 - **ALL tests must pass before marking as complete**
-- **Integration tests require Supabase credentials** - they should be injected via Cursor Secrets
+- **Integration tests use local SQLite** - no remote credentials required
 
 **Status File Location:** \`${STATUS_FILE_REF}\`
 **Update Frequency:** Every 5-10 minutes

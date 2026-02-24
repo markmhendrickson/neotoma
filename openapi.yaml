@@ -2,10 +2,10 @@ openapi: 3.1.0
 info:
   title: Neotoma API
   version: 1.0.0
-  description: REST wrapper for Neotoma enabling ChatGPT Actions.
+  description: REST API for Neotoma. Use with any HTTP client, including ChatGPT Actions, Claude, Cursor, MCP servers, CLI tools, and custom integrations.
 servers:
-  - url: https://dev.neotoma.io
-    description: Cloudflare Tunnel URL
+  - url: https://mcp.neotoma.io
+    description: Set from NEOTOMA_HOST_URL when served by the API; default shown for static/codegen use.
   - url: http://localhost:8080
     description: Local development server
 security:
@@ -18,7 +18,7 @@ components:
       bearerFormat: JWT or base64url
       description: |
         Supported bearer tokens:
-        - Supabase access token (JWT) from MCP OAuth flow (recommended for CLI and web clients)
+        - MCP OAuth JWT (recommended for CLI and web clients)
         - base64url-encoded Ed25519 public key (legacy encrypted responses)
         Optional: Include request signature in Authorization header: "Bearer <public_key> Signature <signature>"
   schemas:
@@ -231,6 +231,66 @@ components:
           type: integer
         timeline_events:
           type: integer
+    StoreRequest:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        relationships:
+          type: array
+          description: |
+            Optional. Create relationships between entities in this request. Indices refer to the entities array (0-based).
+          items:
+            type: object
+            required: [relationship_type, source_index, target_index]
+            properties:
+              relationship_type:
+                type: string
+                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+              source_index:
+                type: integer
+                minimum: 0
+              target_index:
+                type: integer
+                minimum: 0
+        source_priority:
+          type: integer
+        idempotency_key:
+          type: string
+          description: Required for structured path, optional for unstructured-only path.
+        file_idempotency_key:
+          type: string
+          description: Optional idempotency key for file path when sending structured + unstructured in one call.
+        file_content:
+          type: string
+          description: Base64-encoded file content (unstructured path)
+        file_path:
+          type: string
+          description: Local file path for server-local environments
+        mime_type:
+          type: string
+          description: Required with file_content, optional with file_path
+        original_filename:
+          type: string
+        interpret:
+          type: boolean
+          default: true
+        interpretation_config:
+          type: object
+          additionalProperties: true
+        user_id:
+          type: string
+      description: Unified store payload. Supports structured only, unstructured only, or both in one request.
+    StoreResponse:
+      type: object
+      properties:
+        structured:
+          $ref: '#/components/schemas/StoreStructuredResponse'
+        unstructured:
+          $ref: '#/components/schemas/StoreUnstructuredResponse'
     StoreStructuredRequest:
       type: object
       required: [entities, idempotency_key]
@@ -444,7 +504,7 @@ paths:
               schema:
                 type: string
 
-  /api/server-info:
+  /server-info:
     get:
       summary: Get server info
       operationId: getServerInfo
@@ -457,7 +517,7 @@ paths:
                 type: object
                 additionalProperties: true
 
-  /api/mcp/oauth/initiate:
+  /mcp/oauth/initiate:
     post:
       summary: Initiate MCP OAuth flow
       operationId: mcpOAuthInitiate
@@ -478,7 +538,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
-  /api/mcp/oauth/authorize:
+  /mcp/oauth/authorize:
     get:
       summary: OAuth authorization endpoint
       operationId: mcpOAuthAuthorize
@@ -511,7 +571,7 @@ paths:
         '302':
           description: Redirect to authorization URL
 
-  /api/mcp/oauth/token:
+  /mcp/oauth/token:
     post:
       summary: OAuth token exchange
       operationId: mcpOAuthToken
@@ -548,7 +608,7 @@ paths:
                 type: object
                 additionalProperties: true
 
-  /api/me:
+  /me:
     get:
       summary: Get current authenticated user
       operationId: getMe
@@ -570,7 +630,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
-  /api/mcp/oauth/status:
+  /mcp/oauth/status:
     get:
       summary: Get OAuth connection status
       operationId: mcpOAuthStatus
@@ -591,7 +651,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
-  /api/mcp/oauth/connections:
+  /mcp/oauth/connections:
     get:
       summary: List OAuth connections
       operationId: mcpOAuthListConnections
@@ -614,7 +674,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
 
-  /api/mcp/oauth/connections/{connection_id}:
+  /mcp/oauth/connections/{connection_id}:
     delete:
       summary: Revoke OAuth connection
       operationId: mcpOAuthRevokeConnection
@@ -634,7 +694,7 @@ paths:
                   success:
                     type: boolean
 
-  /api/entities/query:
+  /entities/query:
     post:
       summary: Query entities
       operationId: queryEntities
@@ -676,7 +736,7 @@ paths:
                   offset:
                     type: integer
 
-  /api/entities/{id}:
+  /entities/{id}:
     get:
       summary: Get entity by ID
       operationId: getEntityById
@@ -697,7 +757,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
-  /api/entities/{id}/observations:
+  /entities/{id}/observations:
     get:
       summary: List observations for entity
       operationId: getEntityObservations
@@ -719,7 +779,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Observation'
 
-  /api/entities/{id}/relationships:
+  /entities/{id}/relationships:
     get:
       summary: List relationships for entity
       operationId: getEntityRelationships
@@ -741,7 +801,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
 
-  /api/entities/merge:
+  /entities/merge:
     post:
       summary: Merge duplicate entities
       operationId: mergeEntities
@@ -774,7 +834,7 @@ paths:
                     type: string
                     format: date-time
 
-  /api/sources:
+  /sources:
     get:
       summary: List sources
       operationId: listSources
@@ -816,7 +876,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Source'
 
-  /api/sources/{id}:
+  /sources/{id}:
     get:
       summary: Get source by ID
       operationId: getSourceById
@@ -832,7 +892,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Source' }
 
-  /api/observations:
+  /observations:
     get:
       summary: List observations
       operationId: listObservations
@@ -870,7 +930,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Observation'
 
-  /api/observations/query:
+  /observations/query:
     post:
       summary: Query observations
       operationId: queryObservations
@@ -910,7 +970,7 @@ paths:
                   offset:
                     type: integer
 
-  /api/observations/create:
+  /observations/create:
     post:
       summary: Create observation
       operationId: createObservation
@@ -930,7 +990,7 @@ paths:
                 type: object
                 additionalProperties: true
 
-  /api/relationships:
+  /relationships:
     get:
       summary: List relationships
       operationId: listRelationships
@@ -947,7 +1007,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/RelationshipSnapshot'
 
-  /api/relationships/{id}:
+  /relationships/{id}:
     get:
       summary: Get relationship by ID
       operationId: getRelationshipById
@@ -963,7 +1023,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RelationshipSnapshot' }
 
-  /api/relationships/snapshot:
+  /relationships/snapshot:
     post:
       summary: Get relationship snapshot with provenance
       operationId: getRelationshipSnapshot
@@ -979,7 +1039,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/GetRelationshipSnapshotResponse' }
 
-  /api/timeline:
+  /timeline:
     get:
       summary: List timeline events
       operationId: listTimeline
@@ -1021,7 +1081,31 @@ paths:
                     items:
                       $ref: '#/components/schemas/TimelineEvent'
 
-  /api/schemas:
+  /timeline/{id}:
+    get:
+      summary: Get timeline event by ID
+      operationId: getTimelineById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: user_id
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Timeline event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: '#/components/schemas/TimelineEvent'
+
+  /schemas:
     get:
       summary: List entity schemas
       operationId: listSchemas
@@ -1043,7 +1127,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/EntitySchema'
 
-  /api/schemas/{entity_type}:
+  /schemas/{entity_type}:
     get:
       summary: Get schema by entity type
       operationId: getSchemaByEntityType
@@ -1059,7 +1143,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/EntitySchema' }
 
-  /api/interpretations:
+  /interpretations:
     get:
       summary: List interpretations
       operationId: listInterpretations
@@ -1093,7 +1177,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Interpretation'
 
-  /api/stats:
+  /stats:
     get:
       summary: Get dashboard stats
       operationId: getStats
@@ -1109,23 +1193,27 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Stats' }
 
-  /api/store:
+  /store:
     post:
-      summary: Store structured entities
+      summary: Store structured entities, unstructured files, or both
       operationId: storeStructured
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/StoreStructuredRequest' }
+            schema: { $ref: '#/components/schemas/StoreRequest' }
       responses:
         '200':
           description: Store result
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/StoreStructuredResponse' }
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/StoreStructuredResponse' }
+                  - { $ref: '#/components/schemas/StoreUnstructuredResponse' }
+                  - { $ref: '#/components/schemas/StoreResponse' }
 
-  /api/store/unstructured:
+  /store/unstructured:
     post:
       summary: Store unstructured file (raw upload with optional AI interpretation)
       operationId: storeUnstructured
@@ -1701,6 +1789,40 @@ paths:
       responses:
         '200':
           description: Source reinterpreted
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+
+  /interpret-uninterpreted:
+    post:
+      summary: Interpret uninterpreted sources
+      description: Re-run AI interpretation for sources that have no prior interpretation runs
+      operationId: interpretUninterpreted
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                  default: 50
+                dry_run:
+                  type: boolean
+                  default: false
+                user_id:
+                  type: string
+                interpretation_config:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Uninterpreted sources processed
           content:
             application/json:
               schema:

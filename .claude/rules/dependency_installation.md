@@ -1,7 +1,6 @@
 ---
-description: "Ensures agents automatically install required dependencies when needed to fulfill prompts"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when adding imports or code that requires packages not in package.json/requirements.txt: install dependencies automatically with correct package manager, update manifest, verify installation."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/dependency_installation.mdc -->

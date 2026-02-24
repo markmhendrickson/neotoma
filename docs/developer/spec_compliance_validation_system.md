@@ -92,7 +92,7 @@ flowchart TD
 
 b. **Database Schema Checks:**
 
-                                                                                                                                                                                                - Column existence: `grep -r "column_name" supabase/schema.sql supabase/migrations/`
+                                                                                                                                                                                                - Column existence: `grep -r "column_name" migrations/ src/`
                                                                                                                                                                                                 - Table existence: Similar pattern
                                                                                                                                                                                                 - Index existence: Similar pattern
 

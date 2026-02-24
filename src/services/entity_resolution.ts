@@ -5,7 +5,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { supabase } from "../db.js";
+import { db } from "../db.js";
 import { logger } from "../utils/logger.js";
 
 export interface Entity {
@@ -49,6 +49,111 @@ export function normalizeEntityValue(entityType: string, raw: string): string {
   return normalized;
 }
 
+export function deriveCanonicalNameFromFields(
+  entityType: string,
+  fields: Record<string, unknown>,
+): string {
+  const preferredNameKeys = [
+    "canonical_name",
+    "name",
+    "full_name",
+    "title",
+    "email",
+    "url",
+  ] as const;
+
+  // 1) Prefer explicit name-like fields
+  let nameField: unknown = fields.canonical_name ?? fields.name;
+  if (nameField == null || String(nameField).trim() === "") {
+    for (const key of preferredNameKeys) {
+      const v = fields[key as string];
+      if (v != null && typeof v === "string" && v.trim() !== "") {
+        nameField = v;
+        break;
+      }
+    }
+  }
+
+  // 2) Prefer stable IDs over arbitrary string fields
+  if (nameField == null || String(nameField).trim() === "") {
+    const idFields = [
+      "message_id",
+      "thread_id",
+      "external_id",
+      "id",
+      "uuid",
+      "company_id",
+      "person_id",
+      "contact_id",
+    ] as const;
+
+    for (const idKey of idFields) {
+      const idValue = fields[idKey as string];
+      if (idValue != null && String(idValue).trim() !== "") {
+        nameField = `id:${idKey}:${String(idValue)}`;
+        break;
+      }
+    }
+  }
+
+  // 3) For row-like finance entities, build a composite canonical name from stable row fields.
+  if (nameField == null || String(nameField).trim() === "") {
+    const compositeCandidates: Record<string, string[]> = {
+      transaction: ["posting_date", "category", "amount_original", "bank_provider"],
+      balance: ["snapshot_date", "account_id", "balance_usd"],
+      dataset_row: ["source_file", "row_index"],
+    };
+
+    const keys = compositeCandidates[entityType];
+    if (keys) {
+      const parts = keys
+        .map((key) => fields[key])
+        .filter((value) => value != null && String(value).trim() !== "")
+        .map((value) => String(value).trim());
+      if (parts.length > 0) {
+        nameField = `${entityType}:${parts.join("|")}`;
+      }
+    }
+  }
+
+  // 4) Last resort: pick a deterministic "first" string field that is not clearly metadata.
+  if (nameField == null || String(nameField).trim() === "") {
+    const rejectPatterns = [
+      /^\d{4}-\d{2}-\d{2}/, // ISO date
+      /^\d+\.\d+$/, // schema_version e.g. "1.0"
+      /^\d+$/, // pure numeric
+    ];
+    const rejectKeys = new Set([
+      "contact_type",
+      "entity_type",
+      "type",
+      "status",
+      "created_at",
+      "updated_at",
+      "created_date",
+      "updated_date",
+      "schema_version",
+      "import_date",
+      "import_source_file",
+      "source",
+    ]);
+
+    const sortedKeys = Object.keys(fields).sort();
+    for (const key of sortedKeys) {
+      if (rejectKeys.has(key)) continue;
+      const v = fields[key];
+      if (typeof v !== "string") continue;
+      const s = v.trim();
+      if (s === "") continue;
+      if (rejectPatterns.some((re) => re.test(s))) continue;
+      nameField = s;
+      break;
+    }
+  }
+
+  return normalizeEntityValue(entityType, String(nameField ?? "unknown"));
+}
+
 /**
  * Resolve entity (get or create)
  * 
@@ -74,71 +179,14 @@ export async function resolveEntity(
     // New signature: resolveEntity({ entityType, fields, userId })
     entityType = options.entityType;
     userId = options.userId;
-    
-    // Extract canonical name from fields: prefer name-like fields so we don't use dates, schema_version, or descriptions
-    const preferredNameKeys = [
-      "name",
-      "canonical_name",
-      "full_name",
-      "title",
-      "email",
-      "url",
-    ] as const;
-    let nameField: unknown = options.fields.name ?? options.fields.canonical_name;
-    if (nameField == null || String(nameField).trim() === "") {
-      for (const key of preferredNameKeys) {
-        const v = options.fields[key as string];
-        if (v != null && typeof v === "string" && String(v).trim() !== "") {
-          nameField = v;
-          break;
-        }
-      }
-    }
-    if (nameField == null || String(nameField).trim() === "") {
-      // Reject patterns for values that shouldn't be used as entity names
-      const rejectPatterns = [
-        /^\d{4}-\d{2}-\d{2}/,           // ISO date
-        /^\d+\.\d+$/,                    // schema_version e.g. "1.0"
-        /^\d+$/,                         // pure numeric
-      ];
-      // Reject keys that are metadata/types, not identifying names
-      const rejectKeys = new Set([
-        "contact_type", "entity_type", "type", "status",
-        "created_at", "updated_at", "created_date", "updated_date",
-        "schema_version", "import_date", "import_source_file"
-      ]);
-      const firstString = Object.entries(options.fields).find(
-        ([key, v]) =>
-          !rejectKeys.has(key) &&
-          typeof v === "string" &&
-          String(v).trim() !== "" &&
-          !rejectPatterns.some((re) => re.test(String(v)))
-      )?.[1] as string | undefined;
-      nameField = firstString;
-    }
 
-    // If still no valid name field, look for unique identifier fields (e.g., company_id, person_id, id)
-    if (nameField == null || String(nameField).trim() === "") {
-      const idFields = ["company_id", "person_id", "contact_id", "id", "uuid", "external_id"];
-      for (const idKey of idFields) {
-        const idValue = options.fields[idKey];
-        if (idValue != null && String(idValue).trim() !== "") {
-          // Use ID field to ensure uniqueness, prefix with "unknown:" to distinguish from named entities
-          nameField = `unknown:${String(idValue)}`;
-          logger.info(`[entity_resolution] Using ID field ${idKey}=${idValue} for entity name`);
-          break;
-        }
-      }
-    }
-
-    canonicalName = normalizeEntityValue(entityType, String(nameField || "unknown"));
-    logger.warn(`[entity_resolution] Final canonical name: ${canonicalName} for entityType: ${entityType}`);
+    canonicalName = deriveCanonicalNameFromFields(entityType, options.fields);
   }
 
   const entityId = generateEntityId(entityType, canonicalName);
 
   // Check if entity exists
-  const { data: existing } = await supabase
+  const { data: existing } = await db
     .from("entities")
     .select("*")
     .eq("id", entityId)
@@ -154,7 +202,7 @@ export async function resolveEntity(
     // If entity exists but has null or default test user_id and we have a userId, update it
     // This ensures entities created with the old default user pattern get the correct user_id
     if (shouldUpdateUserId) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await db
         .from("entities")
         .update({ user_id: userId, updated_at: new Date().toISOString() })
         .eq("id", entityId);
@@ -182,7 +230,7 @@ export async function resolveEntity(
 
   // Create new entity
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await db
     .from("entities")
     .insert({
       id: entityId,
@@ -268,7 +316,7 @@ export function extractEntities(
  * Get entity by ID
  */
 export async function getEntityById(entityId: string): Promise<Entity | null> {
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("entities")
     .select("*")
     .eq("id", entityId)
@@ -289,7 +337,7 @@ export async function listEntities(filters?: {
   limit?: number;
   offset?: number;
 }): Promise<Entity[]> {
-  let query = supabase.from("entities").select("*");
+  let query = db.from("entities").select("*");
 
   if (filters?.entity_type) {
     query = query.eq("entity_type", filters.entity_type);

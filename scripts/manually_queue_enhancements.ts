@@ -4,7 +4,7 @@
  * Useful for testing or recovering from missed queue creation
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import { SchemaRecommendationService } from "../src/services/schema_recommendation.js";
 
 const entityType = process.argv[2] || "task";
@@ -14,7 +14,7 @@ async function manuallyQueueEnhancements() {
   console.log(`\n🔄 Manually queuing auto-enhancement checks for entity_type: ${entityType}\n`);
 
   // Get all unique fragment_keys from raw_fragments
-  const { data: fragments, error: fragError } = await supabase
+  const { data: fragments, error: fragError } = await db
     .from("raw_fragments")
     .select("fragment_key, frequency_count, entity_type, user_id")
     .eq("entity_type", entityType)
@@ -67,7 +67,7 @@ async function manuallyQueueEnhancements() {
 
   // Check queue items before processing
   console.log("\n📋 Checking queue items before processing...");
-  const { data: queueCheck, error: queueCheckError } = await supabase
+  const { data: queueCheck, error: queueCheckError } = await db
     .from("auto_enhancement_queue")
     .select("*")
     .eq("entity_type", entityType)
@@ -108,7 +108,7 @@ async function manuallyQueueEnhancements() {
 
   // Check skipped items for error messages
   console.log("\n🔍 Checking why items were skipped...");
-  const { data: skippedItems } = await supabase
+  const { data: skippedItems } = await db
     .from("auto_enhancement_queue")
     .select("fragment_key, error_message, status")
     .eq("entity_type", entityType)
@@ -134,7 +134,7 @@ async function manuallyQueueEnhancements() {
   }
 
   // Check for schema recommendations
-  const { data: recommendations } = await supabase
+  const { data: recommendations } = await db
     .from("schema_recommendations")
     .select("*")
     .eq("entity_type", entityType)

@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ObservationReducer, type Observation } from "../../src/reducers/observation_reducer.js";
 import { schemaRegistry } from "../../src/services/schema_registry.js";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { config } from "../../src/config.js";
 
 const isLocalBackend = config.storageBackend === "local";
@@ -18,8 +18,8 @@ describe("ObservationReducer - Converter Application", () => {
 
   beforeEach(async () => {
     // Clean up test data
-    await supabase.from("observations").delete().eq("entity_id", testEntityId);
-    await supabase.from("entity_snapshots").delete().eq("entity_id", testEntityId);
+    await db.from("observations").delete().eq("entity_id", testEntityId);
+    await db.from("entity_snapshots").delete().eq("entity_id", testEntityId);
   });
 
   describe("Type conversion during snapshot computation", () => {
@@ -61,7 +61,7 @@ describe("ObservationReducer - Converter Application", () => {
         user_id: testUserId,
       };
 
-      await supabase.from("observations").insert(obs1);
+      await db.from("observations").insert(obs1);
 
       // Register schema 2.0.0 with amount_due as number + converter
       await schemaRegistry.register({
@@ -147,7 +147,7 @@ describe("ObservationReducer - Converter Application", () => {
         user_id: testUserId,
       };
 
-      await supabase.from("observations").insert(obs1);
+      await db.from("observations").insert(obs1);
 
       // Register schema 2.0.0 with created_at as date + converter
       await schemaRegistry.register({
@@ -233,7 +233,7 @@ describe("ObservationReducer - Converter Application", () => {
         user_id: testUserId,
       };
 
-      await supabase.from("observations").insert(obs1);
+      await db.from("observations").insert(obs1);
 
       // Compute snapshot twice
       const snapshot1 = await reducer.computeSnapshot(testEntityId, [obs1]);
@@ -325,7 +325,7 @@ describe("ObservationReducer - Converter Application", () => {
         user_id: testUserId,
       };
 
-      await supabase.from("observations").insert([obs1, obs2]);
+      await db.from("observations").insert([obs1, obs2]);
 
       // Compute snapshot - should use obs2 (most recent) and convert if needed
       const snapshot = await reducer.computeSnapshot(testEntityId, [obs1, obs2]);
@@ -416,7 +416,7 @@ describe("ObservationReducer - Converter Application", () => {
         user_id: testUserId,
       };
 
-      await supabase.from("observations").insert([obs1, obs2]);
+      await db.from("observations").insert([obs1, obs2]);
 
       // Compute snapshot - obs1 wins (higher priority) but should be converted
       const snapshot = await reducer.computeSnapshot(testEntityId, [obs1, obs2]);

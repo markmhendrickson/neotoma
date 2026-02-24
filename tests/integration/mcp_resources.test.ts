@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { NeotomaServer } from "../../src/server.js";
 import { randomUUID } from "node:crypto";
 
@@ -23,24 +23,24 @@ describe("MCP Resources - Integration", () => {
   beforeEach(async () => {
     // Cleanup test data
     if (createdRelationshipIds.length > 0) {
-      await supabase.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationships").delete().in("id", createdRelationshipIds);
       createdRelationshipIds.length = 0;
     }
     if (createdTimelineEventIds.length > 0) {
-      await supabase.from("timeline_events").delete().in("id", createdTimelineEventIds);
+      await db.from("timeline_events").delete().in("id", createdTimelineEventIds);
       createdTimelineEventIds.length = 0;
     }
     if (createdObservationIds.length > 0) {
-      await supabase.from("observations").delete().in("id", createdObservationIds);
+      await db.from("observations").delete().in("id", createdObservationIds);
       createdObservationIds.length = 0;
     }
     if (createdEntityIds.length > 0) {
-      await supabase.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
       createdEntityIds.length = 0;
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
       createdSourceIds.length = 0;
     }
   });
@@ -48,20 +48,20 @@ describe("MCP Resources - Integration", () => {
   afterAll(async () => {
     // Final cleanup
     if (createdRelationshipIds.length > 0) {
-      await supabase.from("relationships").delete().in("id", createdRelationshipIds);
+      await db.from("relationships").delete().in("id", createdRelationshipIds);
     }
     if (createdTimelineEventIds.length > 0) {
-      await supabase.from("timeline_events").delete().in("id", createdTimelineEventIds);
+      await db.from("timeline_events").delete().in("id", createdTimelineEventIds);
     }
     if (createdObservationIds.length > 0) {
-      await supabase.from("observations").delete().in("id", createdObservationIds);
+      await db.from("observations").delete().in("id", createdObservationIds);
     }
     if (createdEntityIds.length > 0) {
-      await supabase.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
-      await supabase.from("entities").delete().in("id", createdEntityIds);
+      await db.from("entity_snapshots").delete().in("entity_id", createdEntityIds);
+      await db.from("entities").delete().in("id", createdEntityIds);
     }
     if (createdSourceIds.length > 0) {
-      await supabase.from("sources").delete().in("id", createdSourceIds);
+      await db.from("sources").delete().in("id", createdSourceIds);
     }
   });
 
@@ -143,7 +143,7 @@ describe("MCP Resources - Integration", () => {
       it("should return entity collection", async () => {
         // Create test entity
         const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
-        const { error: entityError } = await supabase.from("entities").insert({
+        const { error: entityError } = await db.from("entities").insert({
           id: entityId,
           entity_type: "test_invoice",
           canonical_name: "test invoice",
@@ -153,7 +153,7 @@ describe("MCP Resources - Integration", () => {
         createdEntityIds.push(entityId);
 
         // Create snapshot with all required fields
-        const { error: snapshotError } = await supabase.from("entity_snapshots").insert({
+        const { error: snapshotError } = await db.from("entity_snapshots").insert({
           entity_id: entityId,
           entity_type: "test_invoice",
           schema_version: "1.0",
@@ -179,7 +179,7 @@ describe("MCP Resources - Integration", () => {
       it("should return individual entity with snapshot", async () => {
         // Create test entity
         const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
-        const { error: entityError } = await supabase.from("entities").insert({
+        const { error: entityError } = await db.from("entities").insert({
           id: entityId,
           entity_type: "test_invoice",
           canonical_name: "test invoice",
@@ -189,7 +189,7 @@ describe("MCP Resources - Integration", () => {
         createdEntityIds.push(entityId);
 
         // Create snapshot with all required fields
-        const { error: snapshotError } = await supabase.from("entity_snapshots").insert({
+        const { error: snapshotError } = await db.from("entity_snapshots").insert({
           entity_id: entityId,
           entity_type: "test_invoice",
           schema_version: "1.0",
@@ -220,7 +220,7 @@ describe("MCP Resources - Integration", () => {
       it("should return empty observations for entity without observations", async () => {
         // Create test entity
         const entityId = `ent_test_${randomUUID().substring(0, 8)}`;
-        const { error: entityError } = await supabase.from("entities").insert({
+        const { error: entityError } = await db.from("entities").insert({
           id: entityId,
           entity_type: "test_invoice",
           canonical_name: "test invoice",
@@ -245,7 +245,7 @@ describe("MCP Resources - Integration", () => {
         const entityId1 = `ent_test_${randomUUID().substring(0, 8)}`;
         const entityId2 = `ent_test_${randomUUID().substring(0, 8)}`;
         
-        await supabase.from("entities").insert([
+        await db.from("entities").insert([
           {
             id: entityId1,
             entity_type: "test_invoice",
@@ -263,7 +263,7 @@ describe("MCP Resources - Integration", () => {
 
         // Create relationship with all required fields
         const relationshipId = randomUUID();
-        const { error: relError } = await supabase.from("relationships").insert({
+        const { error: relError } = await db.from("relationships").insert({
           id: relationshipId,
           relationship_type: "REFERS_TO",
           source_entity_id: entityId1,

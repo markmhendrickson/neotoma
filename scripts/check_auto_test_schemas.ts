@@ -4,12 +4,12 @@
  * Lists all schemas with "auto_test" in their entity_type name
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 
 async function checkAutoTestSchemas() {
   console.log("[CHECK] Searching for schemas with 'auto_test' in name...\n");
   
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("schema_registry")
     .select("entity_type, schema_version, metadata, created_at, user_id, scope, active")
     .ilike("entity_type", "%auto_test%")

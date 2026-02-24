@@ -9,14 +9,14 @@ import os from "node:os";
 import path from "node:path";
 import * as readline from "node:readline";
 
-import { CANDIDATE_API_PORTS } from "./config.js";
+import { InitAbortError } from "./init_abort.js";
 import { blackBox } from "./format.js";
 
 /** Known MCP config file names to scan for (project-local). */
 const CONFIG_FILENAMES = ["mcp.json", "mcp_config.json", "claude_desktop_config.json"] as const;
 
-/** Project-relative config paths to check (e.g. .cursor/mcp.json, .mcp.json). */
-const PROJECT_CONFIG_PATHS = [".cursor/mcp.json", ".mcp.json"] as const;
+/** Project-relative config paths to check (repo-level Cursor/Claude/Codex). */
+const PROJECT_CONFIG_PATHS = [".cursor/mcp.json", ".mcp.json", ".codex/config.toml"] as const;
 
 /** Codex uses TOML; path ends with config.toml and contains .codex. */
 function isCodexConfigPath(filePath: string): boolean {
@@ -25,11 +25,11 @@ function isCodexConfigPath(filePath: string): boolean {
 }
 
 /**
- * Detect dev/prod Neotoma servers in Codex TOML (sections [mcp_servers.neotoma-dev] and [mcp_servers.neotoma-prod]).
+ * Detect dev/prod Neotoma servers in Codex TOML (sections [mcp_servers.neotoma-dev] and [mcp_servers.neotoma]).
  */
 function detectNeotomaServersFromCodexToml(content: string): { hasDev: boolean; hasProd: boolean } {
   const hasDev = /\[mcp_servers\.neotoma-dev\]/m.test(content);
-  const hasProd = /\[mcp_servers\.neotoma-prod\]/m.test(content);
+  const hasProd = /\[mcp_servers\.neotoma\]/m.test(content);
   return { hasDev, hasProd };
 }
 
@@ -56,7 +56,7 @@ function getUserLevelCodexConfigPath(): string | null {
 }
 
 /**
- * Write neotoma-dev and neotoma-prod into user-level ~/.codex/config.toml so Codex sees them.
+ * Write neotoma-dev and neotoma into user-level ~/.codex/config.toml so Codex sees them.
  * Replaces or appends the Neotoma marker block; leaves other user options intact.
  */
 async function syncCodexUserConfig(repoRoot: string, sessionPorts?: SessionPorts): Promise<void> {
@@ -196,8 +196,13 @@ export async function parseMcpConfig(filePath: string): Promise<McpConfig | null
   return null;
 }
 
-/** Optional session ports from CLI; when set, URL-based entries must use these ports to count as configured. */
-export type SessionPorts = { devPort?: number; prodPort?: number };
+/** Optional session ports from CLI; supports default dev/prod and selected active instance. */
+export type SessionPorts = {
+  devPort?: number;
+  prodPort?: number;
+  activePort?: number;
+  activeEnv?: "dev" | "prod";
+};
 
 function portFromUrl(url: string): number | null {
   try {
@@ -254,6 +259,10 @@ export function detectNeotomaServers(
         } else if (port === 8180) {
           hasProd = true;
         }
+        if (sessionPorts?.activePort != null && port === sessionPorts.activePort) {
+          if (sessionPorts.activeEnv === "dev") hasDev = true;
+          if (sessionPorts.activeEnv === "prod") hasProd = true;
+        }
       }
       if (isFly) hasProd = true;
     }
@@ -306,8 +315,14 @@ export function analyzeMcpConfigIssues(
     if (url && sessionPorts) {
       const port = portFromUrl(url);
       if (port != null) {
-        const isDevLike = port === 8080 || port === sessionPorts.devPort;
-        const isProdLike = port === 8180 || port === sessionPorts.prodPort;
+        const isDevLike =
+          port === 8080 ||
+          port === sessionPorts.devPort ||
+          (sessionPorts.activeEnv === "dev" && port === sessionPorts.activePort);
+        const isProdLike =
+          port === 8180 ||
+          port === sessionPorts.prodPort ||
+          (sessionPorts.activeEnv === "prod" && port === sessionPorts.activePort);
         if (sessionPorts.devPort != null && isDevLike && port !== sessionPorts.devPort) {
           issues.push({
             type: "port_mismatch",
@@ -332,10 +347,6 @@ export function analyzeMcpConfigIssues(
   return issues;
 }
 
-/** Default API ports: prod 8180, dev 8080. Only add session port env when session uses a non-default port. */
-const DEFAULT_PROD_PORT = CANDIDATE_API_PORTS[0];
-const DEFAULT_DEV_PORT = CANDIDATE_API_PORTS[1];
-
 /** Build a server entry for JSON: omit args and env when empty so mcp.json stays minimal. */
 function serverEntry(
   command: string,
@@ -349,37 +360,24 @@ function serverEntry(
 }
 
 /**
- * Generate neotoma-dev and neotoma-prod server entries with absolute script paths.
- * When sessionPorts are provided and differ from defaults (8080 dev, 8180 prod), env is set
- * so scripts use the same ports as the CLI session. Default ports are omitted so the MCP
- * process picks by NEOTOMA_ENV when both APIs are running.
- * Empty args and env are omitted so mcp.json is minimal.
+ * Generate neotoma-dev and neotoma (prod) stdio server entries with absolute script paths.
+ * Stdio MCP servers do not use ports (they communicate via stdin/stdout), so we never
+ * add NEOTOMA_SESSION_DEV_PORT or NEOTOMA_SESSION_PROD_PORT. Session ports are only
+ * applied to URL-based entries via applySessionPortsToUrls.
+ * Empty args and env are omitted so mcp.json stays minimal.
  */
 export function neotomaServerEntries(
   repoRoot: string,
-  sessionPorts?: SessionPorts
+  _sessionPorts?: SessionPorts
 ): {
   "neotoma-dev": { command: string; args?: string[]; env?: Record<string, string> };
-  "neotoma-prod": { command: string; args?: string[]; env?: Record<string, string> };
+  neotoma: { command: string; args?: string[]; env?: Record<string, string> };
 } {
-  const devEnv: Record<string, string> =
-    sessionPorts?.devPort != null && sessionPorts.devPort !== DEFAULT_DEV_PORT
-      ? { NEOTOMA_SESSION_DEV_PORT: String(sessionPorts.devPort) }
-      : {};
-  const prodEnv: Record<string, string> =
-    sessionPorts?.prodPort != null && sessionPorts.prodPort !== DEFAULT_PROD_PORT
-      ? { NEOTOMA_SESSION_PROD_PORT: String(sessionPorts.prodPort) }
-      : {};
   return {
-    "neotoma-dev": serverEntry(
-      path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio.sh"),
-      [],
-      devEnv
-    ),
-    "neotoma-prod": serverEntry(
+    "neotoma-dev": serverEntry(path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio.sh"), []),
+    neotoma: serverEntry(
       path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio_prod.sh"),
-      [],
-      prodEnv
+      []
     ),
   };
 }
@@ -445,8 +443,12 @@ export async function findMcpConfigPaths(
   for (const relPath of PROJECT_CONFIG_PATHS) {
     const absPath = path.join(projectRoot, relPath);
     if (await fileExists(absPath)) {
-      const parsed = await parseMcpConfig(absPath);
-      if (parsed) foundPaths.push(absPath);
+      if (isCodexConfigPath(absPath)) {
+        foundPaths.push(absPath);
+      } else {
+        const parsed = await parseMcpConfig(absPath);
+        if (parsed) foundPaths.push(absPath);
+      }
     }
   }
 
@@ -542,14 +544,24 @@ export async function scanForMcpConfigs(
     userLevelFirst?: boolean;
     devPort?: number;
     prodPort?: number;
+    activePort?: number;
+    activeEnv?: "dev" | "prod";
     neotomaRepoRoot?: string | null;
   }
 ): Promise<{ configs: ConfigStatus[]; repoRoot: string | null }> {
   const includeUserLevel = options?.includeUserLevel ?? false;
   const userLevelFirst = options?.userLevelFirst ?? false;
   const sessionPorts: SessionPorts | undefined =
-    options?.devPort != null || options?.prodPort != null
-      ? { devPort: options.devPort, prodPort: options.prodPort }
+    options?.devPort != null ||
+    options?.prodPort != null ||
+    options?.activePort != null ||
+    options?.activeEnv != null
+      ? {
+          devPort: options.devPort,
+          prodPort: options.prodPort,
+          activePort: options.activePort,
+          activeEnv: options.activeEnv,
+        }
       : undefined;
   const configPaths = await findMcpConfigPaths(cwd, {
     includeUserLevel: includeUserLevel || userLevelFirst,
@@ -602,6 +614,7 @@ export async function scanForMcpConfigs(
 /**
  * Prompt user for yes/no input. In a TTY, a single y/n keypress submits immediately
  * and is echoed once; otherwise uses readline (e.g. for non-interactive or tests).
+ * Rejects with InitAbortError on EOF (Cmd+D).
  */
 async function promptYesNo(question: string): Promise<boolean> {
   const stdin = process.stdin;
@@ -610,15 +623,28 @@ async function promptYesNo(question: string): Promise<boolean> {
       input: stdin,
       output: process.stdout,
     });
-    return new Promise<boolean>((resolve) => {
+    return new Promise<boolean>((resolve, reject) => {
+      let settled = false;
+      rl.on("close", () => {
+        if (!settled) {
+          settled = true;
+          reject(new InitAbortError());
+        }
+      });
       rl.question(`${question} (y/n): `, (answer) => {
-        rl.close();
-        resolve(answer.trim().toLowerCase() === "y" || answer.trim().toLowerCase() === "yes");
+        if (!settled) {
+          settled = true;
+          rl.close();
+          resolve(
+            (answer ?? "").trim().toLowerCase() === "y" ||
+              (answer ?? "").trim().toLowerCase() === "yes"
+          );
+        }
       });
     });
   }
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<boolean>((resolve, reject) => {
     process.stdout.write(`${question} (y/n): `);
     const wasPaused = stdin.isPaused();
     stdin.setRawMode(true);
@@ -627,14 +653,33 @@ async function promptYesNo(question: string): Promise<boolean> {
 
     function done(value: boolean): void {
       stdin.removeListener("data", onData);
+      stdin.removeListener("end", onEnd);
       stdin.setRawMode(false);
       if (wasPaused) stdin.pause();
       process.stdout.write("\n");
       resolve(value);
     }
 
+    function onEnd(): void {
+      stdin.removeListener("data", onData);
+      stdin.removeListener("end", onEnd);
+      stdin.setRawMode(false);
+      if (wasPaused) stdin.pause();
+      process.stdout.write("\n");
+      reject(new InitAbortError());
+    }
+
     function onData(key: string | Buffer): void {
       const k = typeof key === "string" ? key : key.toString("utf8");
+      if (k === "\u0004") {
+        stdin.removeListener("data", onData);
+        stdin.removeListener("end", onEnd);
+        stdin.setRawMode(false);
+        if (wasPaused) stdin.pause();
+        process.stdout.write("\n");
+        reject(new InitAbortError());
+        return;
+      }
       if (k === "\u0003") {
         done(false);
         return;
@@ -651,11 +696,13 @@ async function promptYesNo(question: string): Promise<boolean> {
     }
 
     stdin.once("data", onData);
+    stdin.once("end", onEnd);
   });
 }
 
 /**
  * Prompt user to choose user-level or project-level config. Returns "user", "project", or null if cancelled.
+ * Rejects with InitAbortError on EOF (Cmd+D).
  */
 async function promptUserOrProject(question: string): Promise<"user" | "project" | null> {
   const rl = readline.createInterface({
@@ -663,19 +710,162 @@ async function promptUserOrProject(question: string): Promise<"user" | "project"
     output: process.stdout,
   });
 
-  return new Promise<"user" | "project" | null>((resolve) => {
+  return new Promise<"user" | "project" | null>((resolve, reject) => {
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
     rl.question(`${question} `, (answer) => {
-      rl.close();
-      const a = answer.trim().toLowerCase();
-      if (a === "u" || a === "user") {
-        resolve("user");
-      } else if (a === "p" || a === "project") {
-        resolve("project");
-      } else {
-        resolve(null);
+      if (!settled) {
+        settled = true;
+        rl.close();
+        const a = (answer ?? "").trim().toLowerCase();
+        if (a === "u" || a === "user") {
+          resolve("user");
+        } else if (a === "p" || a === "project") {
+          resolve("project");
+        } else {
+          resolve(null);
+        }
       }
     });
   });
+}
+
+type InstallTargetChoice =
+  | "project_all"
+  | "user_all"
+  | "both_all"
+  | "cursor_only"
+  | "claude_only"
+  | "codex_only"
+  | "skip";
+
+type InstallEnvChoice = "dev" | "prod" | "both";
+
+async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise<InstallEnvChoice>((resolve, reject) => {
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
+    rl.question(
+      "Configure MCP servers for:\n" +
+        "  (1) dev\n" +
+        "  (2) prod\n" +
+        "  (3) both\n" +
+        "Choose [1-3] (default: 3): ",
+      (answer) => {
+        if (settled) return;
+        settled = true;
+        rl.close();
+        const a = (answer ?? "").trim().toLowerCase();
+        if (a === "1" || a === "dev") return resolve("dev");
+        if (a === "2" || a === "prod") return resolve("prod");
+        return resolve("both");
+      }
+    );
+  });
+}
+
+async function promptInstallTarget(): Promise<InstallTargetChoice> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise<InstallTargetChoice>((resolve, reject) => {
+    let settled = false;
+    rl.on("close", () => {
+      if (!settled) {
+        settled = true;
+        reject(new InitAbortError());
+      }
+    });
+    rl.question(
+      "Add or update MCP servers:\n" +
+        "  (1) project (Cursor + Claude + Codex in this repo)\n" +
+        "  (2) user (Cursor + Claude + Codex in ~)\n" +
+        "  (3) both (project + user)\n" +
+        "  (4) Cursor only (project + user)\n" +
+        "  (5) Claude only (project + user)\n" +
+        "  (6) Codex only (project + user)\n" +
+        "  (7) skip\n" +
+        "Choose [1-7] (default: 2): ",
+      (answer) => {
+        if (settled) return;
+        settled = true;
+        rl.close();
+        const a = (answer ?? "").trim().toLowerCase();
+        if (a === "" || a === "2" || a === "user" || a === "u") return resolve("user_all");
+        if (a === "1" || a === "project" || a === "p") return resolve("project_all");
+        if (a === "3" || a === "both") return resolve("both_all");
+        if (a === "4" || a === "cursor" || a === "c") return resolve("cursor_only");
+        if (a === "5" || a === "claude") return resolve("claude_only");
+        if (a === "6" || a === "codex") return resolve("codex_only");
+        return resolve("skip");
+      }
+    );
+  });
+}
+
+type ConfigClient = "cursor" | "claude" | "codex" | "other";
+
+function classifyConfigClient(configPath: string): ConfigClient {
+  const normalized = path.normalize(configPath);
+  if (isCodexConfigPath(normalized)) return "codex";
+  if (
+    normalized.endsWith(path.normalize(".cursor/mcp.json")) ||
+    normalized.includes(`${path.sep}.cursor${path.sep}mcp.json`)
+  ) {
+    return "cursor";
+  }
+  if (
+    normalized.endsWith(path.normalize(".mcp.json")) ||
+    normalized.endsWith(path.normalize("claude_desktop_config.json"))
+  ) {
+    return "claude";
+  }
+  return "other";
+}
+
+function isProjectLevelConfig(configPath: string, repoRoot: string): boolean {
+  const normalizedPath = path.normalize(configPath);
+  const normalizedRoot = path.normalize(repoRoot);
+  return normalizedPath.startsWith(normalizedRoot + path.sep) || normalizedPath === normalizedRoot;
+}
+
+/** Map MCP install target to agent-instructions scope so we can reuse the choice and avoid a second prompt. */
+function installChoiceToScope(choice: Exclude<InstallTargetChoice, "skip">): "project" | "user" | "both" {
+  if (choice === "project_all") return "project";
+  if (choice === "user_all") return "user";
+  return "both"; // both_all or any client-only choice
+}
+
+function filterConfigsByInstallChoice(
+  configs: ConfigStatus[],
+  choice: InstallTargetChoice,
+  repoRoot: string
+): ConfigStatus[] {
+  if (choice === "skip") return [];
+  if (choice === "both_all") return configs;
+  if (choice === "project_all") return configs.filter((c) => isProjectLevelConfig(c.path, repoRoot));
+  if (choice === "user_all") return configs.filter((c) => !isProjectLevelConfig(c.path, repoRoot));
+  if (choice === "cursor_only") return configs.filter((c) => classifyConfigClient(c.path) === "cursor");
+  if (choice === "claude_only") return configs.filter((c) => classifyConfigClient(c.path) === "claude");
+  if (choice === "codex_only") return configs.filter((c) => classifyConfigClient(c.path) === "codex");
+  return [];
 }
 
 /** Rewrite localhost MCP URL to use the given port. */
@@ -737,7 +927,8 @@ function convertHttpToStdio(
       mcpServers[serverId] = entries["neotoma-dev"];
       changed = true;
     } else if (isProd) {
-      mcpServers[serverId] = entries["neotoma-prod"];
+      if (serverId !== "neotoma") delete mcpServers[serverId];
+      mcpServers["neotoma"] = entries.neotoma;
       changed = true;
     }
   }
@@ -922,10 +1113,10 @@ export async function offerInstall(
     /** When set, only consider and install the server for this env (e.g. on CLI session start). */
     currentEnv?: "dev" | "prod";
   }
-): Promise<{ installed: boolean; message: string }> {
+): Promise<{ installed: boolean; message: string; scope?: "project" | "user" | "both" }> {
   const silent = options?.silent ?? false;
   const cwd = options?.cwd ?? process.cwd();
-  const currentEnv = options?.currentEnv;
+  let selectedEnv: "dev" | "prod" | null = options?.currentEnv ?? null;
   const sessionPorts: SessionPorts | undefined =
     options?.devPort != null || options?.prodPort != null
       ? { devPort: options.devPort, prodPort: options.prodPort }
@@ -938,10 +1129,17 @@ export async function offerInstall(
     return { installed: false, message };
   }
 
+  const getMissingConfigs = (env: "dev" | "prod" | null): ConfigStatus[] =>
+    env
+      ? configs.filter((c) => (env === "dev" ? !c.hasDev : !c.hasProd))
+      : configs.filter((c) => !c.hasDev || !c.hasProd);
+
   const configsWithIssues = configs.filter((c) => c.issues && c.issues.length > 0);
-  const missingConfigs = currentEnv
-    ? configs.filter((c) => (currentEnv === "dev" ? !c.hasDev : !c.hasProd))
-    : configs.filter((c) => !c.hasDev || !c.hasProd);
+  if (!silent && options?.currentEnv == null) {
+    const envChoice = await promptInstallEnvironment();
+    selectedEnv = envChoice === "both" ? null : envChoice;
+  }
+  const missingConfigs = getMissingConfigs(selectedEnv);
 
   // First offer to fix misconfigurations if any
   if (configsWithIssues.length > 0 && !silent) {
@@ -964,8 +1162,8 @@ export async function offerInstall(
         devPort: options?.devPort,
         prodPort: options?.prodPort,
       });
-      const stillMissing = currentEnv
-        ? rescanned.filter((c) => (currentEnv === "dev" ? !c.hasDev : !c.hasProd))
+      const stillMissing = selectedEnv
+        ? rescanned.filter((c) => (selectedEnv === "dev" ? !c.hasDev : !c.hasProd))
         : rescanned.filter((c) => !c.hasDev || !c.hasProd);
       if (stillMissing.length === 0) {
         return { installed: true, message: fixResult.message };
@@ -980,8 +1178,8 @@ export async function offerInstall(
   }
 
   if (missingConfigs.length === 0) {
-    const message = currentEnv
-      ? `${currentEnv === "dev" ? "Dev" : "Prod"} Neotoma server is already configured.`
+    const message = selectedEnv
+      ? `${selectedEnv === "dev" ? "Dev" : "Prod"} Neotoma server is already configured.`
       : "Dev and prod Neotoma servers are already configured.";
     if (!silent) process.stdout.write(message + "\n");
     return { installed: false, message };
@@ -1013,10 +1211,10 @@ export async function offerInstall(
     await fs.mkdir(cursorDir, { recursive: true });
     const entries = neotomaServerEntries(repoRoot, sessionPorts);
     const mcpServers =
-      currentEnv === "dev"
+      selectedEnv === "dev"
         ? { "neotoma-dev": entries["neotoma-dev"] }
-        : currentEnv === "prod"
-          ? { "neotoma-prod": entries["neotoma-prod"] }
+        : selectedEnv === "prod"
+          ? { neotoma: entries.neotoma }
           : entries;
     const newConfig = { mcpServers };
     await fs.writeFile(configPath, JSON.stringify(newConfig, null, 2) + "\n");
@@ -1032,16 +1230,16 @@ export async function offerInstall(
       );
     }
 
-    const createdMsg = currentEnv
-      ? `Created ${configPath} with ${currentEnv} server.`
+    const createdMsg = selectedEnv
+      ? `Created ${configPath} with ${selectedEnv} server.`
       : `Created ${configPath} with dev and prod servers.`;
     return { installed: true, message: createdMsg };
   }
 
   // Offer to update existing configs
   if (silent) {
-    const msg = currentEnv
-      ? `Missing ${currentEnv} server. Run 'neotoma mcp check' to add it.`
+    const msg = selectedEnv
+      ? `Missing ${selectedEnv} server. Run 'neotoma mcp check' to add it.`
       : "Missing dev or prod servers. Run 'neotoma mcp check' to add them.";
     return { installed: false, message: msg };
   }
@@ -1051,19 +1249,28 @@ export async function offerInstall(
     process.stdout.write("\n" + formatMcpStatusBox(configs) + "\n");
   }
 
-  const installPrompt = currentEnv
-    ? `Add missing Neotoma ${currentEnv} server to these config files?`
-    : "Add missing Neotoma servers to these config files?";
-  const shouldInstall = await promptYesNo(installPrompt);
-  if (!shouldInstall) {
+  const installChoice = await promptInstallTarget();
+  if (installChoice === "skip") {
     return { installed: false, message: "Installation cancelled." };
+  }
+  const scope = installChoiceToScope(installChoice);
+  const selectedMissingConfigs = filterConfigsByInstallChoice(
+    missingConfigs,
+    installChoice,
+    repoRoot
+  );
+  if (selectedMissingConfigs.length === 0) {
+    return {
+      installed: false,
+      message: "No matching missing configs for the selected target.",
+    };
   }
 
   const entries = neotomaServerEntries(repoRoot, sessionPorts);
   const updatedPaths: string[] = [];
-  const missingCodexOnly = missingConfigs.every((c) => isCodexConfigPath(c.path));
+  const missingCodexOnly = selectedMissingConfigs.every((c) => isCodexConfigPath(c.path));
 
-  for (const config of missingConfigs) {
+  for (const config of selectedMissingConfigs) {
     if (isCodexConfigPath(config.path)) continue; // Codex uses TOML; updated via sync:mcp from .cursor/mcp.json
     const parsed = await parseMcpConfig(config.path);
     if (!parsed) continue;
@@ -1073,15 +1280,15 @@ export async function offerInstall(
     // Apply session ports to any existing URL-based entries so config uses CLI ports
     applySessionPortsToUrls(parsed.mcpServers, sessionPorts);
 
-    // Add missing servers (only current env when currentEnv is set)
-    if (!currentEnv || currentEnv === "dev") {
+    // Add missing servers (only selected env when selectedEnv is set)
+    if (!selectedEnv || selectedEnv === "dev") {
       if (!config.hasDev) {
         parsed.mcpServers["neotoma-dev"] = entries["neotoma-dev"];
       }
     }
-    if (!currentEnv || currentEnv === "prod") {
+    if (!selectedEnv || selectedEnv === "prod") {
       if (!config.hasProd) {
-        parsed.mcpServers["neotoma-prod"] = entries["neotoma-prod"];
+        parsed.mcpServers["neotoma"] = entries.neotoma;
       }
     }
 
@@ -1115,6 +1322,7 @@ export async function offerInstall(
       message: codexPath
         ? `Updated ${codexPath} and project .codex/config.toml. Restart Codex or reload config for changes to take effect.`
         : "Updated project .codex/config.toml (npm run sync:mcp). Restart Codex or reload config for changes to take effect.",
+      scope,
     };
   }
 
@@ -1134,5 +1342,6 @@ export async function offerInstall(
   return {
     installed: true,
     message: `Updated ${updatedPaths.length} config file(s): ${updatedPaths.join(", ")}`,
+    scope,
   };
 }

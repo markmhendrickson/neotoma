@@ -5,8 +5,10 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import type { User, Session } from "@supabase/supabase-js";
+import { auth } from "@/lib/auth";
+
+type Session = Awaited<ReturnType<typeof auth.auth.getSession>>["data"]["session"];
+type User = Session extends { user: infer U } ? U : never;
 
 interface AuthContextType {
   user: User | null;
@@ -46,15 +48,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    auth.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         // No session exists - automatically sign in as guest
         try {
-          const { data: guestData, error: guestError } = await supabase.auth.signInAnonymously();
+          const { data: guestData, error: guestError } = await auth.auth.signInAnonymously();
           if (guestError) {
             console.error("[AuthContext] Failed to sign in as guest:", guestError);
             // Create an Error object with the guest error details
-            // Use the actual error message from Supabase, not a default
+            // Use the actual error message from auth, not a default
             const errorMessage = guestError.message || 
                                  (guestError as any).error || 
                                  "Failed to sign in as guest";
@@ -92,7 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     // This automatically detects changes from localStorage events across tabs
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = auth.auth.onAuthStateChange((event, session) => {
       console.log("[AuthContext] Auth state change:", event, session?.user?.id);
       
       // Handle all auth state changes
@@ -117,14 +119,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await auth.auth.signOut();
   };
 
   const retryGuestSignIn = async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data: guestData, error: guestError } = await supabase.auth.signInAnonymously();
+      const { data: guestData, error: guestError } = await auth.auth.signInAnonymously();
       if (guestError) {
         const errorMessage = guestError.message || 
                              (guestError as any).error || 
@@ -156,13 +158,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null);
     try {
       // Sign out current session first
-      await supabase.auth.signOut();
+      await auth.auth.signOut();
       
       // Wait a moment for sign out to complete
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Sign in as new anonymous user
-      const { data: guestData, error: guestError } = await supabase.auth.signInAnonymously();
+      const { data: guestData, error: guestError } = await auth.auth.signInAnonymously();
       if (guestError) {
         const errorMessage = guestError.message || 
                              (guestError as any).error || 

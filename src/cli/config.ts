@@ -9,20 +9,24 @@ export type Config = {
   token_type?: string;
   expires_at?: string;
   connection_id?: string;
+  /** Last auth mode chosen during `neotoma init`. */
+  init_auth_mode?: "dev_local" | "oauth" | "key_derived";
   /** Neotoma repo root; set by init so CLI can start servers from any cwd. */
   repo_root?: string;
-  /** Server policy: start (start API if needed) or use-existing (connect only). Set by consent prompt. */
-  server_policy?: "start" | "use-existing";
+  /** Additional ports to probe for running API instances. */
+  extra_api_ports?: number[];
+  /** Ports learned from prior successful sessions. */
+  known_api_ports?: number[];
 };
 
 export const DEFAULT_BASE_URL = "http://localhost:8080";
-/** Ports probed for auto-detection when no --base-url or config.base_url is set. 8180 (prod) first, then 8080 (dev). */
-export const CANDIDATE_API_PORTS = [8180, 8080];
+/** Ports probed for auto-detection when no --base-url or config.base_url is set. */
+export const CANDIDATE_API_PORTS = [8080, 8180];
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "neotoma");
 export const CONFIG_PATH = path.join(CONFIG_DIR, "config.json");
 
-const cliEnv = process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development";
-/** True when NEOTOMA_ENV or NODE_ENV is "production". Used for API logs dir, PID path, and CLI log default. */
+const cliEnv = process.env.NEOTOMA_ENV || "development";
+/** True when NEOTOMA_ENV is "production". Used for API logs dir, PID path, and CLI log default. */
 export const isProd = cliEnv === "production";
 /** Directory for API server logs when started with `neotoma api start --background`. Env-specific so dev and prod can run in background without overwriting each other. */
 export const API_LOGS_DIR = path.join(CONFIG_DIR, isProd ? "logs_prod" : "logs");
@@ -99,11 +103,11 @@ async function probeHealth(port: number): Promise<boolean> {
   });
 }
 
-/** Probes /api/me; returns true if the API responds (200 or 401 = up). */
+/** Probes /me; returns true if the API responds (200 or 401 = up). */
 async function probeApiReady(port: number): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const req = http.get(
-      `http://${DETECT_HOST}:${port}/api/me`,
+      `http://${DETECT_HOST}:${port}/me`,
       { timeout: DETECT_TIMEOUT_MS },
       (res) => {
         res.resume();
@@ -137,7 +141,7 @@ export async function waitForHealth(
 }
 
 /**
- * After health is up, poll /api/me until it responds (200 or 401) or timeout.
+ * After health is up, poll /me until it responds (200 or 401) or timeout.
  * Use so we only proceed when the API is actually serving requests, not just /health.
  */
 export async function waitForApiReady(
@@ -160,27 +164,119 @@ export async function waitForApiReady(
  */
 const SESSION_DEV_PORT_ENV = "NEOTOMA_SESSION_DEV_PORT";
 const SESSION_PROD_PORT_ENV = "NEOTOMA_SESSION_PROD_PORT";
+const SESSION_ACTIVE_PORT_ENV = "NEOTOMA_SESSION_API_PORT";
+
+export type ApiEnvHint = "dev" | "prod" | "unknown";
+export type ApiInstance = {
+  port: number;
+  url: string;
+  envHint: ApiEnvHint;
+  source: "session" | "default" | "config" | "env";
+  healthy: boolean;
+  latencyMs: number;
+};
+
+function parsePortsFromUnknown(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => Number(v))
+    .filter((p) => Number.isFinite(p) && p > 0 && p <= 65535)
+    .map((p) => Math.trunc(p));
+}
+
+function parsePortsFromEnv(value: string | undefined): number[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((p) => Number.isFinite(p) && p > 0 && p <= 65535)
+    .map((p) => Math.trunc(p));
+}
+
+function envHintForPort(port: number): ApiEnvHint {
+  if (port === 8080) return "dev";
+  if (port === 8180) return "prod";
+  return "unknown";
+}
+
+async function probeHealthDetailed(port: number): Promise<{ healthy: boolean; latencyMs: number }> {
+  const start = Date.now();
+  const healthy = await probeHealth(port);
+  return { healthy, latencyMs: Date.now() - start };
+}
+
+function buildCandidatePorts(config?: Config): Array<{ port: number; source: ApiInstance["source"] }> {
+  const sessionDev = process.env[SESSION_DEV_PORT_ENV];
+  const sessionProd = process.env[SESSION_PROD_PORT_ENV];
+  const sessionActive = process.env[SESSION_ACTIVE_PORT_ENV];
+  const sessionPorts = [
+    sessionActive && /^\d+$/.test(sessionActive) ? parseInt(sessionActive, 10) : null,
+    sessionDev && /^\d+$/.test(sessionDev) ? parseInt(sessionDev, 10) : null,
+    sessionProd && /^\d+$/.test(sessionProd) ? parseInt(sessionProd, 10) : null,
+  ].filter((p): p is number => p != null && Number.isFinite(p) && p > 0 && p <= 65535);
+
+  const configExtra = parsePortsFromUnknown(config?.extra_api_ports);
+  const configKnown = parsePortsFromUnknown(config?.known_api_ports);
+  const envPorts = parsePortsFromEnv(process.env.NEOTOMA_API_PORTS);
+
+  const withSource: Array<{ port: number; source: ApiInstance["source"] }> = [
+    ...sessionPorts.map((port) => ({ port, source: "session" as const })),
+    ...CANDIDATE_API_PORTS.map((port) => ({ port, source: "default" as const })),
+    ...configExtra.map((port) => ({ port, source: "config" as const })),
+    ...configKnown.map((port) => ({ port, source: "config" as const })),
+    ...envPorts.map((port) => ({ port, source: "env" as const })),
+  ];
+
+  const seen = new Set<number>();
+  const deduped: Array<{ port: number; source: ApiInstance["source"] }> = [];
+  for (const entry of withSource) {
+    if (seen.has(entry.port)) continue;
+    seen.add(entry.port);
+    deduped.push(entry);
+  }
+  return deduped.sort((a, b) => a.port - b.port);
+}
+
+export async function discoverApiInstances(options?: {
+  config?: Config;
+  includeUnhealthy?: boolean;
+}): Promise<ApiInstance[]> {
+  const config = options?.config ?? (await readConfig());
+  const includeUnhealthy = options?.includeUnhealthy === true;
+  const candidates = buildCandidatePorts(config);
+  const instances: ApiInstance[] = [];
+  for (const candidate of candidates) {
+    const { healthy, latencyMs } = await probeHealthDetailed(candidate.port);
+    if (!healthy && !includeUnhealthy) continue;
+    instances.push({
+      port: candidate.port,
+      url: `http://${DETECT_HOST}:${candidate.port}`,
+      envHint: envHintForPort(candidate.port),
+      source: candidate.source,
+      healthy,
+      latencyMs,
+    });
+  }
+  return instances;
+}
+
+export async function rememberKnownApiPort(port: number): Promise<void> {
+  if (!Number.isFinite(port) || port < 1 || port > 65535) return;
+  const config = await readConfig();
+  const known = new Set<number>(parsePortsFromUnknown(config.known_api_ports));
+  known.add(Math.trunc(port));
+  const nextKnown = [...known].sort((a, b) => a - b).slice(-20);
+  await writeConfig({ ...config, known_api_ports: nextKnown });
+}
 
 /** Probes /health on each candidate port (8180 then 8080); returns ports that respond with ok. */
 export async function detectRunningApiPorts(): Promise<number[]> {
-  const sessionDev = process.env[SESSION_DEV_PORT_ENV];
-  const sessionProd = process.env[SESSION_PROD_PORT_ENV];
-  const devPort = sessionDev && /^\d+$/.test(sessionDev) ? parseInt(sessionDev, 10) : null;
-  const prodPort = sessionProd && /^\d+$/.test(sessionProd) ? parseInt(sessionProd, 10) : null;
-  const sessionPorts = [devPort, prodPort].filter((p): p is number => p != null && Number.isFinite(p) && p > 0 && p <= 65535);
-  const candidates =
-    sessionPorts.length > 0
-      ? [...sessionPorts, ...CANDIDATE_API_PORTS.filter((p) => !sessionPorts.includes(p))]
-      : CANDIDATE_API_PORTS;
-  const ports: number[] = [];
-  for (const port of candidates) {
-    if (Number.isFinite(port) && port > 0 && port <= 65535 && (await probeHealth(port))) ports.push(port);
-  }
-  return ports;
+  const instances = await discoverApiInstances();
+  return instances.map((instance) => instance.port);
 }
 
-/** Base URL when detection finds no server; prefer 8180 (prod) so it works without config. */
-const FALLBACK_BASE_URL = `http://${DETECT_HOST}:8180`;
+/** Base URL when detection finds no server. */
+const FALLBACK_BASE_URL = `http://${DETECT_HOST}:8080`;
 
 /**
  * Resolves API base URL: --base-url wins; otherwise prefers session server when set.
@@ -192,6 +288,11 @@ const FALLBACK_BASE_URL = `http://${DETECT_HOST}:8180`;
  */
 export async function resolveBaseUrl(option?: string, _config?: Config): Promise<string> {
   if (option) return option.replace(/\/$/, "");
+
+  const sessionActive = process.env[SESSION_ACTIVE_PORT_ENV];
+  if (sessionActive && /^\d+$/.test(sessionActive)) {
+    return `http://${DETECT_HOST}:${parseInt(sessionActive, 10)}`;
+  }
 
   const sessionDev = process.env[SESSION_DEV_PORT_ENV];
   const sessionProd = process.env[SESSION_PROD_PORT_ENV];
@@ -212,15 +313,26 @@ export async function resolveBaseUrl(option?: string, _config?: Config): Promise
     return `http://${DETECT_HOST}:${port}`;
   }
 
-  const ports = await detectRunningApiPorts();
+  const configBaseUrl = _config?.base_url?.trim();
+  if (configBaseUrl && configBaseUrl.startsWith("http")) {
+    return configBaseUrl.replace(/\/$/, "");
+  }
+
+  const instances = await discoverApiInstances({ config: _config });
+  const ports = instances.map((instance) => instance.port);
   if (ports.length === 0) return FALLBACK_BASE_URL;
   if (ports.length === 1) return `http://${DETECT_HOST}:${ports[0]}`;
-  // Multiple ports and no session port: choose by NEOTOMA_ENV so dev/prod MCP processes
-  // get the right server without needing NEOTOMA_SESSION_DEV_PORT / NEOTOMA_SESSION_PROD_PORT in mcp.json.
-  const prodPortDefault = CANDIDATE_API_PORTS[0];
-  const devPortDefault = CANDIDATE_API_PORTS[1];
-  const port = isProd
-    ? (ports.includes(prodPortDefault) ? prodPortDefault : ports[0])
-    : (ports.includes(devPortDefault) ? devPortDefault : ports[0]);
+  // Multiple ports and no session port: prefer explicit session env when provided.
+  const devPortDefault = 8080;
+  const prodPortDefault = 8180;
+  const sessionEnv = process.env.NEOTOMA_SESSION_ENV;
+  const preferred: "dev" | "prod" | null =
+    sessionEnv === "dev" || sessionEnv === "prod" ? sessionEnv : null;
+  const port =
+    preferred === "dev"
+      ? (ports.includes(devPortDefault) ? devPortDefault : ports[0])
+      : preferred === "prod"
+      ? (ports.includes(prodPortDefault) ? prodPortDefault : ports[0])
+      : (ports.includes(devPortDefault) ? devPortDefault : ports[0]);
   return `http://${DETECT_HOST}:${port}`;
 }

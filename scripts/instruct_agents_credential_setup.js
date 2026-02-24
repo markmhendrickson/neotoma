@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { config } from "dotenv";
-import { execSync } from "child_process";
 
 // Load environment variables
 config({ override: true });
@@ -20,17 +19,14 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Generate base64-encoded credentials
+// Generate base64-encoded credentials (local-only: OpenAI and other vars)
 const creds = [];
-if (process.env.SUPABASE_URL) creds.push(`SUPABASE_URL=${process.env.SUPABASE_URL}`);
-if (process.env.SUPABASE_SERVICE_KEY) creds.push(`SUPABASE_SERVICE_KEY=${process.env.SUPABASE_SERVICE_KEY}`);
-if (process.env.DEV_SUPABASE_URL) creds.push(`DEV_SUPABASE_URL=${process.env.DEV_SUPABASE_URL}`);
-if (process.env.DEV_SUPABASE_SERVICE_KEY) creds.push(`DEV_SUPABASE_SERVICE_KEY=${process.env.DEV_SUPABASE_SERVICE_KEY}`);
 if (process.env.DEV_OPENAI_API_KEY) creds.push(`DEV_OPENAI_API_KEY=${process.env.DEV_OPENAI_API_KEY}`);
 if (process.env.PROD_OPENAI_API_KEY) creds.push(`PROD_OPENAI_API_KEY=${process.env.PROD_OPENAI_API_KEY}`);
+if (process.env.OPENAI_API_KEY) creds.push(`OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`);
 
 if (creds.length === 0) {
-  console.error('[ERROR] No Supabase credentials available in orchestrator environment');
+  console.error('[ERROR] No credentials available in orchestrator environment');
   process.exit(1);
 }
 
@@ -57,13 +53,12 @@ export \$(cat .env.agent | grep -v '^#' | xargs)
 
 **Step 3: Verify credentials are set**
 \`\`\`bash
-env | grep -E "SUPABASE" | head -5
+env | grep -E "OPENAI" | head -5
 \`\`\`
 
 **Step 4: Run migrations (if needed)**
 \`\`\`bash
-# Try running migrations - they should work with credentials set
-npx supabase db push || echo "Migrations may already be applied"
+npm run migrate
 \`\`\`
 
 **Step 5: Run tests**
@@ -133,7 +128,3 @@ for (const agent of agentIds) {
 }
 
 console.log('\n[INFO] All agents notified with credential setup instructions');
-
-
-
-

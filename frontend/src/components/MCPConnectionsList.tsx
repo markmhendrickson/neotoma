@@ -38,7 +38,7 @@ export function MCPConnectionsList() {
       // In production, VITE_API_BASE_URL will be set to the production API URL
       const apiBase = import.meta.env.VITE_API_BASE_URL || "";
       const isDev = typeof window !== 'undefined' && (import.meta.env.DEV || apiBase === window.location.origin || !apiBase);
-      const apiUrl = isDev ? "/api/mcp/oauth/connections" : `${apiBase}/api/mcp/oauth/connections`;
+      const apiUrl = isDev ? "/mcp/oauth/connections" : `${apiBase}/mcp/oauth/connections`;
       const response = await fetch(apiUrl, {
         headers: {
           "Authorization": `Bearer ${sessionToken}`,
@@ -72,8 +72,8 @@ export function MCPConnectionsList() {
       const apiBase = import.meta.env.VITE_API_BASE_URL || "";
       const isDev = typeof window !== 'undefined' && (import.meta.env.DEV || apiBase === window.location.origin || !apiBase);
       const apiUrl = isDev 
-        ? `/api/mcp/oauth/connections/${encodeURIComponent(connectionId)}`
-        : `${apiBase}/api/mcp/oauth/connections/${encodeURIComponent(connectionId)}`;
+        ? `/mcp/oauth/connections/${encodeURIComponent(connectionId)}`
+        : `${apiBase}/mcp/oauth/connections/${encodeURIComponent(connectionId)}`;
       const response = await fetch(apiUrl, {
         method: "DELETE",
         headers: {

@@ -308,7 +308,7 @@ docs/developer/tunnels.md:
       reason: Claude Code setup references tunnels for tunnel or proxy usage
     - path: docs/developer/mcp_oauth_troubleshooting.md
       type: explicit
-      reason: OAuth troubleshooting references tunnels for HOST_URL when using tunnel
+      reason: OAuth troubleshooting references tunnels for NEOTOMA_HOST_URL when using tunnel
     - path: README.md
       type: explicit
       reason: README links to tunnels for watch:prod:tunnel

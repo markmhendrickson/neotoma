@@ -14,12 +14,10 @@ if (!apiKey) {
   process.exit(1);
 }
 
-// Test if environment field is accepted
+// Test if environment field is accepted (local-only: OpenAI and other vars)
 const envVars = {};
-if (process.env.SUPABASE_URL) envVars.SUPABASE_URL = process.env.SUPABASE_URL;
-if (process.env.SUPABASE_SERVICE_KEY) envVars.SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
-if (process.env.DEV_SUPABASE_URL) envVars.DEV_SUPABASE_URL = process.env.DEV_SUPABASE_URL;
-if (process.env.DEV_SUPABASE_SERVICE_KEY) envVars.DEV_SUPABASE_SERVICE_KEY = process.env.DEV_SUPABASE_SERVICE_KEY;
+if (process.env.OPENAI_API_KEY) envVars.OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+if (process.env.DEV_OPENAI_API_KEY) envVars.DEV_OPENAI_API_KEY = process.env.DEV_OPENAI_API_KEY;
 
 const testRequest = {
   prompt: {
@@ -27,7 +25,7 @@ const testRequest = {
 
 Check if these environment variables are available:
 \`\`\`bash
-env | grep -E "SUPABASE" || echo "No Supabase vars found"
+env | grep -E "OPENAI|NEOTOMA" || echo "No env vars found"
 \`\`\`
 
 Report back what you find.`

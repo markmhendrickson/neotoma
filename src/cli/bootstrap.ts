@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Bootstrap entry for the Neotoma CLI. Parses a leading "dev" or "prod"
- * argument to set NEOTOMA_ENV (and NODE_ENV) before loading the main CLI and
+ * argument to set NEOTOMA_ENV before loading the main CLI and
  * config, then forwards the rest of argv with --env injected so the session
  * uses the chosen environment.
  *
@@ -17,7 +17,6 @@ async function main(): Promise<void> {
   let cliArgv: string[];
   if (first === "dev" || first === "prod") {
     process.env.NEOTOMA_ENV = first === "prod" ? "production" : "development";
-    process.env.NODE_ENV = process.env.NEOTOMA_ENV;
     process.env.NEOTOMA_CLI_PREFERRED_ENV = first;
     const rest = argv.slice(3);
     cliArgv = [argv[0], argv[1], "--env", first, ...rest];

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { SchemaRecommendationService } from "../../src/services/schema_recommendation.js";
 import { SchemaRegistryService } from "../../src/services/schema_registry.js";
 import { NeotomaServer } from "../../src/server.js";
@@ -29,75 +29,75 @@ describe("MCP Schema Actions - Integration", () => {
   beforeEach(async () => {
     // Cleanup test data - remove all test entity types (including variants)
     // Use ilike with pattern matching for entity_type cleanup
-    const { data: schemas } = await supabase
+    const { data: schemas } = await db
       .from("schema_registry")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (schemas && schemas.length > 0) {
-      await supabase.from("schema_registry").delete().in("id", schemas.map(s => s.id));
+      await db.from("schema_registry").delete().in("id", schemas.map(s => s.id));
     }
     
-    const { data: recommendations } = await supabase
+    const { data: recommendations } = await db
       .from("schema_recommendations")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (recommendations && recommendations.length > 0) {
-      await supabase.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
+      await db.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
     }
     
-    const { data: fragments } = await supabase
+    const { data: fragments } = await db
       .from("raw_fragments")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (fragments && fragments.length > 0) {
-      await supabase.from("raw_fragments").delete().in("id", fragments.map(f => f.id));
+      await db.from("raw_fragments").delete().in("id", fragments.map(f => f.id));
     }
     
     // Also cleanup by IDs if any
     if (createdSchemaIds.length > 0) {
-      await supabase.from("schema_registry").delete().in("id", createdSchemaIds);
+      await db.from("schema_registry").delete().in("id", createdSchemaIds);
       createdSchemaIds.length = 0;
     }
     if (createdRecommendationIds.length > 0) {
-      await supabase.from("schema_recommendations").delete().in("id", createdRecommendationIds);
+      await db.from("schema_recommendations").delete().in("id", createdRecommendationIds);
       createdRecommendationIds.length = 0;
     }
     if (createdRawFragmentIds.length > 0) {
-      await supabase.from("raw_fragments").delete().in("id", createdRawFragmentIds);
+      await db.from("raw_fragments").delete().in("id", createdRawFragmentIds);
       createdRawFragmentIds.length = 0;
     }
   });
 
   afterAll(async () => {
     // Final cleanup - remove all test entity types (including variants)
-    const { data: schemas } = await supabase
+    const { data: schemas } = await db
       .from("schema_registry")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (schemas && schemas.length > 0) {
-      await supabase.from("schema_registry").delete().in("id", schemas.map(s => s.id));
+      await db.from("schema_registry").delete().in("id", schemas.map(s => s.id));
     }
     
-    const { data: recommendations } = await supabase
+    const { data: recommendations } = await db
       .from("schema_recommendations")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (recommendations && recommendations.length > 0) {
-      await supabase.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
+      await db.from("schema_recommendations").delete().in("id", recommendations.map(r => r.id));
     }
     
-    const { data: fragments } = await supabase
+    const { data: fragments } = await db
       .from("raw_fragments")
       .select("id, entity_type")
       .ilike("entity_type", `${testEntityType}%`);
     
     if (fragments && fragments.length > 0) {
-      await supabase.from("raw_fragments").delete().in("id", fragments.map(f => f.id));
+      await db.from("raw_fragments").delete().in("id", fragments.map(f => f.id));
     }
     
     // Clean up test users
@@ -109,7 +109,7 @@ describe("MCP Schema Actions - Integration", () => {
   describe("analyze_schema_candidates", () => {
     it("should analyze raw_fragments and return recommendations", async () => {
       // Create test raw_fragments
-      const { data: fragments } = await supabase
+      const { data: fragments } = await db
         .from("raw_fragments")
         .insert([
           {
@@ -177,7 +177,7 @@ describe("MCP Schema Actions - Integration", () => {
   describe("get_schema_recommendations", () => {
     it("should retrieve stored recommendations", async () => {
       // Create test recommendation
-      const { data: recommendation } = await supabase
+      const { data: recommendation } = await db
         .from("schema_recommendations")
         .insert({
           entity_type: testEntityType,
@@ -494,7 +494,7 @@ describe("MCP Schema Actions - Integration", () => {
 
       // 1. Store structured data with unknown fields -> raw_fragments
       // (This would normally be done via store() MCP action, but for test we'll create raw_fragments directly)
-      const { data: fragments } = await supabase
+      const { data: fragments } = await db
         .from("raw_fragments")
         .insert([
           {

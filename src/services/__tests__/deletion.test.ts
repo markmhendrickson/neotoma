@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createHash } from "node:crypto";
-import { supabase } from "../../db.js";
+import { db } from "../../db.js";
 import {
   softDeleteEntity,
   softDeleteRelationship,
@@ -21,23 +21,25 @@ describe("Deletion Service", () => {
   const testEntityId = generateEntityId(testEntityType, testCanonicalName);
 
   beforeEach(async () => {
-    // Clean up test data
-    await supabase.from("observations").delete().eq("user_id", userId);
-    await supabase.from("entities").delete().eq("user_id", userId);
-    await supabase.from("relationship_observations").delete().eq("user_id", userId);
+    // Clean up test data (by user and by test entity id so no UNIQUE conflict from other tests)
+    await db.from("observations").delete().eq("user_id", userId);
+    await db.from("entities").delete().eq("id", testEntityId);
+    await db.from("entities").delete().eq("user_id", userId);
+    await db.from("relationship_observations").delete().eq("user_id", userId);
   });
 
   afterEach(async () => {
     // Clean up test data
-    await supabase.from("observations").delete().eq("user_id", userId);
-    await supabase.from("entities").delete().eq("user_id", userId);
-    await supabase.from("relationship_observations").delete().eq("user_id", userId);
+    await db.from("observations").delete().eq("user_id", userId);
+    await db.from("entities").delete().eq("id", testEntityId);
+    await db.from("entities").delete().eq("user_id", userId);
+    await db.from("relationship_observations").delete().eq("user_id", userId);
   });
 
   describe("softDeleteEntity", () => {
     it("should create a deletion observation with _deleted: true", async () => {
       // Create entity first
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -57,7 +59,7 @@ describe("Deletion Service", () => {
       expect(result.observation_id).toBeDefined();
 
       // Verify deletion observation exists
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", testEntityId)
@@ -71,7 +73,7 @@ describe("Deletion Service", () => {
     });
 
     it("should use deterministic observation ID based on entity ID and timestamp", async () => {
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -92,7 +94,7 @@ describe("Deletion Service", () => {
       expect(result1.observation_id).toBeDefined();
       
       // Verify only one deletion observation exists
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", testEntityId)
@@ -110,7 +112,7 @@ describe("Deletion Service", () => {
       const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
       // Create entities first
-      await supabase.from("entities").insert([
+      await db.from("entities").insert([
         {
           id: sourceEntityId,
           entity_type: "company",
@@ -140,7 +142,7 @@ describe("Deletion Service", () => {
       expect(result.observation_id).toBeDefined();
 
       // Verify deletion observation exists
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("relationship_observations")
         .select("*")
         .eq("relationship_key", relationshipKey)
@@ -156,7 +158,7 @@ describe("Deletion Service", () => {
 
   describe("isEntityDeleted", () => {
     it("should return true if entity has deletion observation", async () => {
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -172,7 +174,7 @@ describe("Deletion Service", () => {
     });
 
     it("should return false if entity has no deletion observation", async () => {
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -180,7 +182,7 @@ describe("Deletion Service", () => {
       });
 
       // Create regular observation (not deletion)
-      await supabase.from("observations").insert({
+      await db.from("observations").insert({
         entity_id: testEntityId,
         entity_type: testEntityType,
         schema_version: "1.0",
@@ -196,7 +198,7 @@ describe("Deletion Service", () => {
     });
 
     it("should prioritize highest priority observation", async () => {
-      await supabase.from("entities").insert({
+      await db.from("entities").insert({
         id: testEntityId,
         entity_type: testEntityType,
         canonical_name: testCanonicalName,
@@ -204,7 +206,7 @@ describe("Deletion Service", () => {
       });
 
       // Create regular observation first
-      const { error: obsError } = await supabase.from("observations").insert({
+      const { error: obsError } = await db.from("observations").insert({
         entity_id: testEntityId,
         entity_type: testEntityType,
         schema_version: "1.0",
@@ -221,7 +223,7 @@ describe("Deletion Service", () => {
       expect(result.success).toBe(true);
 
       // Verify deletion observation was created
-      const { data: deletionObs } = await supabase
+      const { data: deletionObs } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", testEntityId)
@@ -245,7 +247,7 @@ describe("Deletion Service", () => {
       const relationshipKey = `${relationshipType}:${sourceEntityId}:${targetEntityId}`;
 
       // Create entities
-      await supabase.from("entities").insert([
+      await db.from("entities").insert([
         {
           id: sourceEntityId,
           entity_type: "company",
@@ -285,7 +287,7 @@ describe("Deletion Service", () => {
         .update(JSON.stringify({}))
         .digest("hex");
 
-      await supabase.from("relationship_observations").insert({
+      await db.from("relationship_observations").insert({
         id: createHash("sha256").update(`${relationshipKey}:${new Date().toISOString()}`).digest("hex"),
         relationship_key: relationshipKey,
         source_entity_id: sourceEntityId,
@@ -311,7 +313,7 @@ describe("Deletion Service", () => {
       const entity3Id = generateEntityId("company", "Company 3");
 
       // Create entities
-      await supabase.from("entities").insert([
+      await db.from("entities").insert([
         {
           id: entity1Id,
           entity_type: "company",

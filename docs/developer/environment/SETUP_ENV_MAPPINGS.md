@@ -18,12 +18,12 @@ This guide helps you add mappings for Neotoma-specific environment variables to 
 
 Based on `env.example`, these variables should be mapped to 1Password:
 
-### Supabase Configuration (Required)
-- `DEV_SUPABASE_PROJECT_ID` - Development Supabase project ID
-- `DEV_SUPABASE_SERVICE_KEY` - Development Supabase service role key
-- `SUPABASE_ACCESS_TOKEN` - Supabase Management API access token (optional)
-- `PROD_SUPABASE_PROJECT_ID` - Production Supabase project ID (if needed)
-- `PROD_SUPABASE_SERVICE_KEY` - Production Supabase service role key (if needed)
+### Database Configuration (Required)
+- `DEV_REMOTE_DB_PROJECT_ID` - Development remote database project ID
+- `DEV_REMOTE_DB_SERVICE_KEY` - Development remote database service role key
+- `REMOTE_DB_ACCESS_TOKEN` - Remote database Management API access token (optional)
+- `PROD_REMOTE_DB_PROJECT_ID` - Production remote database project ID (if needed)
+- `PROD_REMOTE_DB_SERVICE_KEY` - Production remote database service role key (if needed)
 
 ### Connector Configuration
 - `DEV_CONNECTOR_SECRET_KEY` - Development connector secret key (min 16 chars)
@@ -44,10 +44,16 @@ Based on `env.example`, these variables should be mapped to 1Password:
 
 ### Server Configuration (Optional - usually local)
 These can be excluded from 1Password sync as they're typically local development values:
-- `PORT` - MCP Server port (default: 3000)
-- `HTTP_PORT` - HTTP Actions Server port (default: 8080 for development, 8180 for production (ports spaced to avoid cascade))
-- `WS_PORT` - WebSocket MCP Bridge port (default: 8280)
+- `PORT` / `NEOTOMA_PORT` - MCP Server port (default: 3000)
+- `HTTP_PORT` / `NEOTOMA_HTTP_PORT` - HTTP Actions Server port (default: 8080 for development, 8180 for production)
+- `WS_PORT` / `NEOTOMA_WS_PORT` - WebSocket MCP Bridge port (default: 8280)
 - `ACTIONS_BEARER_TOKEN` - Bearer token for HTTP Actions API
+- `NEOTOMA_HOST_URL` - Host URL for API and MCP
+- `NEOTOMA_FRONTEND_URL` / `FRONTEND_URL` - Frontend URL for CORS
+- `NEOTOMA_MCP_PROXY_URL` / `MCP_PROXY_URL` - MCP proxy URL override
+- `NEOTOMA_OAUTH_REDIRECT_BASE_URL` / `OAUTH_REDIRECT_BASE_URL` - OAuth redirect base
+- `NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY` / `MCP_TOKEN_ENCRYPTION_KEY` - OAuth token encryption
+- `NEOTOMA_MCP_CMD` / `MCP_CMD`, `NEOTOMA_MCP_ARGS` / `MCP_ARGS` - MCP WebSocket bridge config
 
 ### Frontend Configuration (Optional - usually local)
 These can be excluded from 1Password sync:
@@ -55,7 +61,6 @@ These can be excluded from 1Password sync:
 - `VITE_LOCAL_MCP_URL` - Local MCP WebSocket URL
 - `VITE_MCP_URL` - MCP URL
 - `VITE_API_BASE_URL` - API Base URL (frontend)
-- `HOST_URL` - Host URL for API and MCP (optional; `API_BASE_URL` also supported)
 - `VITE_AUTO_SEED_RECORDS` - Auto-seed records flag
 
 ## How to Add Mappings
@@ -87,7 +92,7 @@ Optional but recommended fields:
 - `vault` (string) - Vault name
 - `item_name` (string) - Item name in 1Password
 - `field_label` (string) - Field label
-- `service` (string) - Service name (e.g., "Supabase", "OpenAI", "Plaid")
+- `service` (string) - Service name (e.g., "database", "OpenAI", "Plaid")
 - `is_optional` (boolean) - Whether this variable is optional
 - `notes` (string) - Any additional notes
 - `environment_based` (boolean) - Whether this is environment-specific
@@ -95,19 +100,19 @@ Optional but recommended fields:
 
 ### Step 3: Example Mapping
 
-Here's an example for adding `DEV_SUPABASE_SERVICE_KEY`:
+Here's an example for adding `DEV_REMOTE_DB_SERVICE_KEY`:
 
 ```json
 {
-  "env_var": "DEV_SUPABASE_SERVICE_KEY",
+  "env_var": "DEV_REMOTE_DB_SERVICE_KEY",
   "op_reference": "op://Private/your-item-id/field-id",
   "vault": "Private",
-  "item_name": "Neotoma Supabase",
+  "item_name": "Neotoma Database",
   "field_label": "Development Service Role Key",
-  "service": "Supabase",
+  "service": "database",
   "is_optional": false,
   "environment_based": false,
-  "notes": "Development environment Supabase service role key"
+  "notes": "Development environment remote database service role key"
 }
 ```
 
@@ -145,11 +150,11 @@ You can use the MCP parquet tools directly. Here's the pattern:
 {
   "data_type": "env_var_mappings",
   "record": {
-    "env_var": "DEV_SUPABASE_SERVICE_KEY",
+    "env_var": "DEV_REMOTE_DB_SERVICE_KEY",
     "op_reference": "op://Private/item/field",
     "vault": "Private",
-    "item_name": "Neotoma Supabase",
-    "service": "Supabase",
+    "item_name": "Neotoma Database",
+    "service": "database",
     "is_optional": false,
     "environment_based": false
   }
@@ -162,7 +167,7 @@ You can use the MCP parquet tools directly. Here's the pattern:
 {
   "data_type": "env_var_mappings",
   "filters": {
-    "env_var": "DEV_SUPABASE_SERVICE_KEY"
+    "env_var": "DEV_REMOTE_DB_SERVICE_KEY"
   },
   "updates": {
     "op_reference": "op://Private/new-item/new-field"
@@ -199,9 +204,25 @@ tooling:
     onepassword_sync:
       default_exclusions:
         - PORT
+        - NEOTOMA_PORT
         - HTTP_PORT
+        - NEOTOMA_HTTP_PORT
         - WS_PORT
+        - NEOTOMA_WS_PORT
         - ACTIONS_BEARER_TOKEN
+        - NEOTOMA_HOST_URL
+        - NEOTOMA_FRONTEND_URL
+        - FRONTEND_URL
+        - NEOTOMA_MCP_PROXY_URL
+        - MCP_PROXY_URL
+        - NEOTOMA_OAUTH_REDIRECT_BASE_URL
+        - OAUTH_REDIRECT_BASE_URL
+        - NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY
+        - MCP_TOKEN_ENCRYPTION_KEY
+        - NEOTOMA_MCP_CMD
+        - MCP_CMD
+        - NEOTOMA_MCP_ARGS
+        - MCP_ARGS
         - VITE_WS_PORT
         - VITE_LOCAL_MCP_URL
         - VITE_MCP_URL

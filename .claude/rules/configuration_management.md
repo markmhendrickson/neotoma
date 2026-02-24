@@ -1,7 +1,6 @@
 ---
-description: "Ensures configuration files are placed in the correct location based on their scope and purpose"
-globs: ["**/*"]
-alwaysApply: true
+description: "Load when adding or moving config: repo-specific config in repository foundation-config.yaml; shared config in foundation config/repo-adapters/; never put single-repo config in foundation submodule."
+alwaysApply: false
 ---
 
 <!-- Source: foundation/agent_instructions/cursor_rules/configuration_management.mdc -->

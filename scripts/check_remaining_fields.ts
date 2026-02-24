@@ -1,8 +1,8 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 
 async function checkRemaining() {
   // Get all unique fragment_keys for task
-  const { data: fragments } = await supabase
+  const { data: fragments } = await db
     .from('raw_fragments')
     .select('fragment_key, frequency_count')
     .eq('entity_type', 'task')

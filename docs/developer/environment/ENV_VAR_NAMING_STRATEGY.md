@@ -3,8 +3,8 @@
 ## The Question
 
 Should we use:
-- **Current**: `DEV_SUPABASE_SERVICE_KEY` and `PROD_SUPABASE_SERVICE_KEY` (different variable names)
-- **Proposed**: `SUPABASE_SERVICE_KEY` (same variable name, different values per environment)
+- **Current**: `DEV_CONNECTOR_SECRET_KEY` and `PROD_CONNECTOR_SECRET_KEY` (different variable names)
+- **Proposed**: `CONNECTOR_SECRET_KEY` (same variable name, different values per environment)
 
 ## Current State
 
@@ -17,9 +17,7 @@ The `OPENAI_API_KEY` mapping demonstrates this:
 - Uses `environment_based: true` and `environment_key: "development"` or `"production"`
 
 ### Codebase Current Approach
-The codebase currently uses DEV_/PROD_ prefixes extensively:
-- `DEV_SUPABASE_PROJECT_ID` / `PROD_SUPABASE_PROJECT_ID`
-- `DEV_SUPABASE_SERVICE_KEY` / `PROD_SUPABASE_SERVICE_KEY`
+The codebase currently uses DEV_/PROD_ prefixes for some credentials:
 - `DEV_CONNECTOR_SECRET_KEY` / `PROD_CONNECTOR_SECRET_KEY`
 - `DEV_OPENAI_API_KEY` / `PROD_OPENAI_API_KEY` (with fallback to `OPENAI_API_KEY`)
 
@@ -66,15 +64,13 @@ Use **single variable names** for most cases, but keep **explicit prefixes** for
 
 **Use single names for:**
 - `OPENAI_API_KEY` ✅ (already done)
-- `SUPABASE_ACCESS_TOKEN` (optional, less critical)
 - `PLAID_CLIENT_ID` / `PLAID_SECRET` (if using Plaid)
 
 **Keep prefixes for:**
-- `DEV_SUPABASE_SERVICE_KEY` / `PROD_SUPABASE_SERVICE_KEY` ⚠️ (critical, high risk if wrong)
 - `DEV_CONNECTOR_SECRET_KEY` / `PROD_CONNECTOR_SECRET_KEY` ⚠️ (critical, encrypts tokens)
 
 **Why?**
-- Supabase service keys and connector secrets are **high-risk** if wrong
+- Connector secrets are **high-risk** if wrong
 - Mixing dev/prod for these could cause data corruption or security issues
 - The explicit prefix provides an extra safety layer
 - Less critical variables (like API keys) can use environment-based selection
@@ -88,34 +84,15 @@ Use `environment_based: true` with same `env_var` name:
 
 ```json
 {
-  "env_var": "SUPABASE_SERVICE_KEY",
-  "op_reference": "op://Private/supabase-item/dev-key",
+  "env_var": "CONNECTOR_SECRET_KEY",
+  "op_reference": "op://Private/connector-item/dev-key",
   "environment_based": true,
   "environment_key": "development"
 }
 ```
 
-```json
-{
-  "env_var": "SUPABASE_SERVICE_KEY",
-  "op_reference": "op://Private/supabase-item/prod-key",
-  "environment_based": true,
-  "environment_key": "production"
-}
-```
-
 ### Step 2: Update Code
-Simplify `src/config.ts`:
-
-```typescript
-// Before
-const devId = process.env.DEV_SUPABASE_PROJECT_ID;
-const key = process.env.DEV_SUPABASE_SERVICE_KEY || "";
-
-// After
-const projectId = process.env.SUPABASE_PROJECT_ID;
-const key = process.env.SUPABASE_SERVICE_KEY || "";
-```
+Simplify `src/config.ts` to use single variable names where applicable.
 
 ### Step 3: Set ENVIRONMENT Variable
 Ensure `ENVIRONMENT=development` or `ENVIRONMENT=production` is set when syncing.
@@ -141,7 +118,7 @@ If you decide to migrate to single variable names:
 3. ✅ Update code to use single variable names
 4. ✅ Update documentation
 5. ⚠️ Be extra careful about `ENVIRONMENT` variable value
-6. ⚠️ Consider keeping prefixes for critical credentials (Supabase, Connector)
+6. ⚠️ Consider keeping prefixes for critical credentials (Connector)
 
 ## Foundation Script Behavior
 
@@ -160,7 +137,7 @@ So if you set `ENVIRONMENT=production` before running `npm run sync:env`, it wil
 
 ## Conclusion
 
-**For Neotoma**: Keep DEV_/PROD_ prefixes for critical credentials (Supabase, Connector) for safety. Use single variable names for less critical ones (OpenAI API key) where the foundation script already supports it.
+**For Neotoma**: Keep DEV_/PROD_ prefixes for critical credentials (Connector) for safety. Use single variable names for less critical ones (OpenAI API key) where the foundation script already supports it.
 
 This gives you:
 - Safety for critical credentials

@@ -1,14 +1,19 @@
 {
   "mcpServers": {
-    "neotoma-prod": {
-      "command": "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh",
-      "args": [],
-      "env": {}
-    },
     "parquet": {
       "command": "/Users/markmhendrickson/repos/ateles/mcp/parquet/run-parquet-mcp.sh",
       "args": [],
       "env": {}
+    },
+    "web-scraper": {
+      "command": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh",
+      "cwd": "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper"
+    },
+    "neotoma-dev": {
+      "command": "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio.sh"
+    },
+    "neotoma": {
+      "command": "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
     }
   }
 }

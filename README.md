@@ -80,11 +80,11 @@ graph LR
 
 Neotoma stores personal data and requires secure configuration.
 
-**Authentication:** OAuth 2.0 with PKCE (recommended) for secure, long-lived MCP connections with automatic token refresh. Session tokens are deprecated. In the developer preview (local storage only), auth is local (dev stub or key-based when encryption is enabled); OAuth and RLS apply when using Supabase or other remote backends. See [OAuth implementation](docs/developer/mcp_oauth_implementation.md).
+**Authentication:** Local auth is the active mode (dev stub or key-based when encryption is enabled). Session tokens are deprecated. See [OAuth implementation](docs/developer/mcp_oauth_implementation.md) for current local flow details.
 
-**Authorization:** Row-level security (RLS) enabled on all tables when using Supabase; multi-user support with user isolation. Service role for admin operations only.
+**Authorization:** Local data isolation and explicit operation-level access controls are enforced in local-only mode.
 
-**Data protection:** User-controlled data with full export and deletion control; never used for training or provider access. Local backend supports optional encryption at rest (key file or mnemonic). End-to-end encryption planned (v2.0.0). For remote storage (when available), see [Supabase and remote storage](#supabase-and-remote-storage-not-in-developer-preview).
+**Data protection:** User-controlled data with full export and deletion control; never used for training or provider access. Local backend supports optional encryption at rest (key file or mnemonic). End-to-end encryption planned (v2.0.0).
 
 **Verify your setup:** Run `npm run doctor` for environment, database, RLS, and security checks. See [Health check](docs/operations/health_check.md), [Auth](docs/subsystems/auth.md), [Privacy](docs/subsystems/privacy.md), and [Compliance](docs/legal/compliance.md).
 
@@ -97,7 +97,7 @@ Neotoma stores personal data and requires secure configuration.
 
 **Developer preview:** Planned during dogfooding once core invariants are stable.
 
-**What's implemented:** Sources-first architecture with content-addressed storage, dual-path storing (file uploads + agent interactions), observations architecture, entity resolution with hash-based IDs, schema registry system, auto-enhancement, timeline generation, optional entity semantic search for `retrieve_entities` and `retrieve_entity_by_identifier` (Supabase + embeddings), MCP integration (ChatGPT, Claude, Cursor), full provenance and audit trail, row-level security, React frontend, CLI. See [Release roadmap](#release-roadmap) and [docs/releases/](docs/releases/) for details.
+**What's implemented:** Sources-first architecture with content-addressed storage, dual-path storing (file uploads + agent interactions), observations architecture, entity resolution with hash-based IDs, schema registry system, auto-enhancement, timeline generation, optional entity semantic search for `retrieve_entities` and `retrieve_entity_by_identifier` (local embeddings), MCP integration (ChatGPT, Claude, Cursor), full provenance and audit trail, React frontend, CLI. See [Release roadmap](#release-roadmap) and [docs/releases/](docs/releases/) for details.
 
 **Next steps:** Review uncommitted changes (262 files), apply pending migrations, audit test suite, plan v0.4.0 realistically based on current baseline.
 
@@ -135,7 +135,7 @@ Breaking changes should be expected.
 - Casual note-taking
 - Anyone expecting reliability guarantees today
 
-**Storage:** The developer preview supports **local storage only** (SQLite + local file storage). Supabase and other remote backends are not currently supported in the developer preview. See [Developer preview storage](docs/developer/developer_preview_storage.md) and [Getting started](docs/developer/getting_started.md) for setup.
+**Storage:** The developer preview supports **local storage only** (SQLite + local file storage). See [Developer preview storage](docs/developer/developer_preview_storage.md) and [Getting started](docs/developer/getting_started.md) for setup.
 
 ---
 
@@ -179,8 +179,8 @@ The **primary entrypoint** for all documentation is the index and navigation gui
 
 **Developer:**
 
-- [Getting started](docs/developer/getting_started.md) – Setup, storage backends, first run
-- [Developer preview storage](docs/developer/developer_preview_storage.md) – Local-only stance for the preview; Supabase not supported yet
+- [Getting started](docs/developer/getting_started.md) – Setup, local-only storage, first run
+- [Developer preview storage](docs/developer/developer_preview_storage.md) – Local-only stance for the preview
 - [CLI overview](docs/developer/cli_overview.md) – CLI workflows
 - [CLI reference](docs/developer/cli_reference.md) – Commands and scripts
 - [MCP overview](docs/developer/mcp_overview.md) – MCP entry points and setup links
@@ -217,9 +217,12 @@ neotoma api start
 ```
 
 After installation, configure MCP for your AI tool:
+
 ```bash
 neotoma mcp config
 ```
+
+GitHub Pages site (published from this repo): `https://markmhendrickson.github.io/neotoma/`
 
 ### Option 2: Clone repository (for development)
 
@@ -230,7 +233,7 @@ npm install
 npm test
 ```
 
-**Prerequisites:** Node.js v18.x or v20.x (LTS), npm v9+. Developer preview uses **local storage only** (no Supabase required). For local storage, **no `.env` is required**; the app uses defaults (`./data`, `./data/neotoma.db`, `./data/sources`). Optional overrides and Supabase config: [Getting started](docs/developer/getting_started.md).
+**Prerequisites:** Node.js v18.x or v20.x (LTS), npm v9+. Developer preview uses **local storage only**. For local storage, **no `.env` is required**; the app uses defaults (`./data`, `./data/neotoma.db`, `./data/sources`). Optional overrides: [Getting started](docs/developer/getting_started.md).
 
 ---
 
@@ -247,7 +250,7 @@ npm run dev:ws       # WebSocket MCP bridge
 npm run watch:prod:tunnel # Production mode + HTTPS tunnel (local storage, remote access)
 ```
 
-For `watch:prod:tunnel`, no `.env` is required - server auto-discovers tunnel URL. Tunnel prefers Cloudflare when `cloudflared` is installed; else ngrok. Optional: `HOST_URL` (for fixed domain), `NEOTOMA_BEARER_TOKEN`. Full tunnel and env: [Tunnels](docs/developer/tunnels.md), [Getting started – Production with tunnel](docs/developer/getting_started.md#start-development-server).
+For `watch:prod:tunnel`, no `.env` is required - server auto-discovers tunnel URL. Tunnel prefers Cloudflare when `cloudflared` is installed; else ngrok. Optional: `NEOTOMA_HOST_URL` (for fixed domain), `NEOTOMA_BEARER_TOKEN`. Full tunnel and env: [Tunnels](docs/developer/tunnels.md), [Getting started – Production with tunnel](docs/developer/getting_started.md#start-development-server).
 
 **CLI:**
 
@@ -260,6 +263,8 @@ npm run setup:cli  # Build and link so `neotoma` is available globally
 
 If `neotoma` is not found after global install or link, add npm's global bin to your PATH (e.g. `export PATH="$(npm config get prefix)/bin:$PATH"`). See [Getting started](docs/developer/getting_started.md#cli-setup) for details.
 
+Interactive `neotoma` startup is connect-only. It discovers healthy local API instances, applies `--env` as a preference, and prompts when multiple instances are available.
+
 **Testing:** `npm test` | `npm run test:integration` | `npm run test:e2e` | `npm run test:agent-mcp` | `npm run type-check` | `npm run lint`
 
 **IDE instructions:** Neotoma supports both Cursor and Claude Code with project-specific instructions. Instructions in `.cursor/` and `.claude/` are generated from sources in `foundation/` and `docs/`. To sync: `npm run setup:cursor` | `npm run setup:claude` (auto-syncs on commit).
@@ -270,7 +275,7 @@ See [Getting started](docs/developer/getting_started.md) for full setup and stor
 
 ## Using with AI Tools (MCP)
 
-Neotoma exposes memory via MCP. **Developer preview:** Local storage only; local auth (no Supabase). **Auth:** OAuth 2.0 with PKCE (recommended for production); local mode uses built-in local auth. Dev stub: `neotoma auth login --dev-stub`.
+Neotoma exposes memory via MCP. **Developer preview:** Local storage only; local auth. **Auth:** local built-in auth with OAuth-style flow support where applicable. Dev stub: `neotoma auth login --dev-stub`.
 
 **Setup:**
 
@@ -301,18 +306,10 @@ To use the Neotoma MCP server from another workspace, see [Cursor MCP setup](doc
 
 ---
 
-## Supabase and remote storage (not in developer preview)
+## Local-only storage
 
-**Supabase and other remote storage backends are not currently supported in the developer preview.** The preview supports local storage only (SQLite + local file storage). This section is for reference when remote storage is reintroduced.
-
-When Supabase is supported (in a future release), you would:
-
-- Set `NEOTOMA_STORAGE_BACKEND=supabase` in `.env` and configure `DEV_SUPABASE_PROJECT_ID` and `DEV_SUPABASE_SERVICE_KEY`.
-- Run `npm run migrate` to apply migrations to your Supabase project.
-- Create private storage buckets `files` and `sources` in the Supabase dashboard.
-- Use Supabase Auth for OAuth and multi-user RLS; storage buckets remain private (service role for uploads; signed URLs for client access).
-
-**Full setup steps** (when available): [Getting started – Supabase](docs/developer/getting_started.md) (Steps 3–6 and Supabase-specific env and troubleshooting). **Storage stance for developer preview:** [Developer preview storage](docs/developer/developer_preview_storage.md).
+Neotoma is intentionally local-only in this active codebase (SQLite + local file storage).
+If remote backend support is needed later, recover it from git history.
 
 ---
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { supabase } from "../../src/db.js";
+import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 describe("MCP resource actions - parameter variations", () => {
@@ -37,7 +37,7 @@ describe("MCP resource actions - parameter variations", () => {
   describe("list_observations variations", () => {
     it("should list observations for entity_id", async () => {
       const entityId = `ent_obs_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -54,7 +54,7 @@ describe("MCP resource actions - parameter variations", () => {
 
       tracker.trackSource(source!.id);
 
-      await supabase.from("observations")
+      await db.from("observations")
     .insert({
         entity_id: entityId,
         entity_type: "task",
@@ -67,7 +67,7 @@ describe("MCP resource actions - parameter variations", () => {
 
       tracker.trackEntity(entityId);
 
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId);
@@ -77,7 +77,7 @@ describe("MCP resource actions - parameter variations", () => {
 
     it("should paginate observations with limit", async () => {
       const entityId = `ent_obs_paginate_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -96,7 +96,7 @@ describe("MCP resource actions - parameter variations", () => {
 
       // Create multiple observations
       for (let i = 0; i < 10; i++) {
-        await supabase.from("observations")
+        await db.from("observations")
     .insert({
           entity_id: entityId,
           entity_type: "task",
@@ -111,7 +111,7 @@ describe("MCP resource actions - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       const limit = 5;
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId)
@@ -122,7 +122,7 @@ describe("MCP resource actions - parameter variations", () => {
 
     it("should paginate observations with offset", async () => {
       const entityId = `ent_obs_offset_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -141,7 +141,7 @@ describe("MCP resource actions - parameter variations", () => {
 
       // Create multiple observations
       for (let i = 0; i < 15; i++) {
-        await supabase.from("observations")
+        await db.from("observations")
     .insert({
           entity_id: entityId,
           entity_type: "task",
@@ -157,7 +157,7 @@ describe("MCP resource actions - parameter variations", () => {
 
       const limit = 5;
       const offset = 5;
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId)
@@ -172,7 +172,7 @@ describe("MCP resource actions - parameter variations", () => {
   describe("retrieve_field_provenance variations", () => {
     it("should retrieve provenance chain for specific field", async () => {
       const entityId = `ent_prov_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -190,7 +190,7 @@ describe("MCP resource actions - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // Create observations with title field
-      await supabase.from("observations").insert([
+      await db.from("observations").insert([
         {
           entity_id: entityId,
           entity_type: "task",
@@ -212,7 +212,7 @@ describe("MCP resource actions - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Get provenance for title field
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId)
@@ -224,7 +224,7 @@ describe("MCP resource actions - parameter variations", () => {
 
     it("should trace field through multiple observations", async () => {
       const entityId = `ent_trace_${Date.now()}`;
-      const { data: source, error: sourceError } = await supabase
+      const { data: source, error: sourceError } = await db
         .from("sources")
         .insert({
           user_id: testUserId,
@@ -242,7 +242,7 @@ describe("MCP resource actions - parameter variations", () => {
       tracker.trackSource(source!.id);
 
       // Create chain of updates
-      await supabase.from("observations").insert([
+      await db.from("observations").insert([
         {
           entity_id: entityId,
           entity_type: "task",
@@ -272,7 +272,7 @@ describe("MCP resource actions - parameter variations", () => {
       tracker.trackEntity(entityId);
 
       // Get provenance chain
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", entityId)
@@ -287,7 +287,7 @@ describe("MCP resource actions - parameter variations", () => {
 
   describe("list_timeline_events variations", () => {
     it("should list timeline events with pagination", async () => {
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from("timeline_events")
         .select("*")
         .limit(10);
@@ -297,7 +297,7 @@ describe("MCP resource actions - parameter variations", () => {
 
     it("should filter timeline events by event_type", async () => {
       const eventType = "task_created";
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from("timeline_events")
         .select("*")
         .eq("event_type", eventType);
@@ -309,7 +309,7 @@ describe("MCP resource actions - parameter variations", () => {
       const startDate = "2025-01-01";
       const endDate = "2025-12-31";
 
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from("timeline_events")
         .select("*")
         .gte("event_date", startDate)
@@ -319,7 +319,7 @@ describe("MCP resource actions - parameter variations", () => {
     });
 
     it("should filter timeline events by user_id", async () => {
-      const { data: events } = await supabase
+      const { data: events } = await db
         .from("timeline_events")
         .select("*")
         .eq("user_id", testUserId);
@@ -403,7 +403,7 @@ describe("MCP resource actions - parameter variations", () => {
 
   describe("error cases", () => {
     it("should handle invalid entity_id in list_observations", async () => {
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("entity_id", "non-existent-entity");
@@ -412,7 +412,7 @@ describe("MCP resource actions - parameter variations", () => {
     });
 
     it("should handle invalid source_id", async () => {
-      const { data: observations } = await supabase
+      const { data: observations } = await db
         .from("observations")
         .select("*")
         .eq("source_id", "non-existent-source");

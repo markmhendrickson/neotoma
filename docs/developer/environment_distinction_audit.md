@@ -7,7 +7,7 @@ This document records how the codebase distinguishes development from production
 ## Scope
 
 - Local backend: SQLite path, raw storage, event log, logs, API background log/PID.
-- Out of scope: Supabase (env is per-project via env vars), MCP token storage (single config file).
+- Out of scope: MCP token storage (single config file).
 
 ## Implemented (env-specific)
 
@@ -17,15 +17,19 @@ This document records how the codebase distinguishes development from production
 | Raw sources | `data/sources` | `data/sources_prod` | `NEOTOMA_RAW_STORAGE_DIR` |
 | Event log | `data/events` | `data/events_prod` | `NEOTOMA_EVENT_LOG_DIR` |
 | Logs (CLI/backup) | `data/logs` | `data/logs_prod` | `NEOTOMA_LOGS_DIR` |
-| API background log dir | `~/.config/neotoma/logs` | `~/.config/neotoma/logs_prod` | (derived from `NEOTOMA_ENV`/`NODE_ENV`) |
+| API background log dir | `~/.config/neotoma/logs` | `~/.config/neotoma/logs_prod` | (derived from `NEOTOMA_ENV`) |
 | API background PID file | `~/.config/neotoma/api.pid` | `~/.config/neotoma/api_prod.pid` | (derived from env) |
-| HTTP port | 8080 | 8021 | `HTTP_PORT` |
+| HTTP port | 8080 | 8021 | `NEOTOMA_HTTP_PORT` or `HTTP_PORT` |
 
-Environment is determined by `NEOTOMA_ENV` or `NODE_ENV`; `production` means prod defaults.
+Environment is determined by `NEOTOMA_ENV`; `production` means prod defaults.
+
+## CLI base URL and port choice
+
+When resolving the API base URL, the CLI uses: `--base-url` if set; otherwise session ports (`NEOTOMA_SESSION_DEV_PORT` / `NEOTOMA_SESSION_PROD_PORT`) when in a session; otherwise probe of 8180 and 8080. When **no server is detected**, the CLI falls back to port **8180** (prod). When one or two servers are found, port choice follows `--env`, `NEOTOMA_SESSION_ENV`, or `NEOTOMA_ENV` (e.g. prod → 8180, dev → 8080). See `src/cli/config.ts` `resolveBaseUrl()`.
 
 ## Optional / not implemented
 
-- **Local storage for non-`sources` buckets** (`src/repositories/sqlite/supabase_adapter.ts`): Path is `data/storage/<bucket>`. Could be made env-specific (e.g. `data/storage_prod/<bucket>`) for consistency if multiple buckets are used.
+- **Local storage for non-`sources` buckets** (`src/repositories/sqlite/` (storage adapter)): Path is `data/storage/<bucket>`. Could be made env-specific (e.g. `data/storage_prod/<bucket>`) for consistency if multiple buckets are used.
 - **Backup output directory**: Default `./backups`; could default to `./backups_prod` when running in prod.
 - **Restore target**: Restore could be env-aware so restores go to the correct env-specific dirs (more involved).
 

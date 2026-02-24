@@ -12,7 +12,7 @@
 
 1. **Tunnel (Cloudflare or ngrok):** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS to `http://localhost:8080` (or 8180 for prod). ngrok only: UI at `http://localhost:4040`.
 2. **Local MCP server:** Port 8080 (or 8180), `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`.
-3. **Config:** `HOST_URL` (or `API_BASE_URL`) set to the **current** tunnel URL. Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`.
+3. **Config:** `NEOTOMA_HOST_URL` set to the **current** tunnel URL (or server auto-discovers from `/tmp/ngrok-mcp-url.txt`). Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`.
 
 ### "Connection refused" or "refuses to connect"
 
@@ -23,7 +23,7 @@
 **Causes and fixes:**
 
 1. **Tunnel not running** – You stopped the terminal running `npm run tunnel:https` or ngrok died. **Fix:** Start the tunnel again and use the **new** URL it prints.
-2. **Stale URL** – You’re still using an old URL from a previous run. **Fix:** Run `npm run tunnel:https`, copy the current HTTPS URL, update `API_BASE_URL` (and Cursor).
+2. **Stale URL** – You’re still using an old URL from a previous run. **Fix:** Run `npm run tunnel:https`, copy the current HTTPS URL, update `NEOTOMA_HOST_URL` (and Cursor).
 3. **ngrok free-tier warning** – Open the tunnel URL in a browser, accept "Visit Site" if shown, then retry.
 4. **Network/firewall** – VPN or firewall blocking ngrok.
 5. **Tunnel still starting** – Wait 10–30 seconds after starting ngrok.
@@ -39,7 +39,7 @@ The tunnel must be running for the HTTPS URL to work. **`npm run dev:api` starts
 npm run dev:api
 ```
 
-Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). Set `API_BASE_URL` to it (the script often sets it automatically); then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.
+Use the URL the tunnel script prints (or `cat /tmp/ngrok-mcp-url.txt`). The server auto-discovers it from that file, or set `NEOTOMA_HOST_URL` to it; then update Cursor config. For server-only (no tunnel), use `npm run dev:server`. For tunnel-only (e.g. server already running elsewhere), use `npm run tunnel:https` in a separate terminal.
 
 ### Step 1: Verify tunnel is active
 
@@ -112,12 +112,12 @@ See [tunnels.md](tunnels.md) for full provider selection, install, and verificat
 - **Tunnel URL:** From `npm run tunnel:https` output or `cat /tmp/ngrok-mcp-url.txt`
 - **MCP endpoint:** `https://<your-tunnel-url>/mcp`
 - **Local server:** `http://localhost:8080`
-- **Env:** `API_BASE_URL` set to tunnel URL
+- **Env:** `NEOTOMA_HOST_URL` set to tunnel URL (or rely on auto-discovery)
 - **Cursor:** `url` in config = `https://<your-tunnel-url>/mcp`
 
 ## Next steps
 
-1. **Start tunnel** → copy URL → set `API_BASE_URL` → restart MCP server.
+1. **Start tunnel** → copy URL → set `NEOTOMA_HOST_URL` (or let server auto-discover) → restart MCP server.
 2. **Visit tunnel URL in browser** to accept warning page (free tier) if needed.
 3. **Restart Cursor** and test Connect.
 

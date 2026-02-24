@@ -33,7 +33,7 @@ When deploying or developing Neotoma:
 
 1. Use OAuth for MCP (not session tokens).
 2. Verify RLS and configuration: `npm run doctor`.
-3. Keep storage buckets private when using Supabase.
+3. Keep storage paths and data directories private.
 4. Rotate service keys regularly.
 5. Never commit `.env` or credentials.
 6. Use HTTPS for all API endpoints.

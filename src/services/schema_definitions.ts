@@ -250,6 +250,34 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  insurance_policy: {
+    entity_type: "insurance_policy",
+    schema_version: "1.0",
+    metadata: {
+      label: "Insurance policy",
+      description: "Insurance policy records and coverage metadata.",
+      category: "finance",
+      aliases: ["policy", "insurance"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        provider: { type: "string", required: false },
+        policy_number: { type: "string", required: false },
+        insured: { type: "string", required: false },
+        effective_date: { type: "date", required: false },
+        coverage: { type: "string", required: false },
+        import_date: { type: "date", required: false },
+        import_source_file: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        effective_date: { strategy: "last_write" },
+      },
+    },
+  },
+
   invoice: {
     entity_type: "invoice",
     schema_version: "1.0",
@@ -312,6 +340,15 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
         notes: { type: "string", required: false },
         import_date: { type: "date", required: false },
         import_source_file: { type: "string", required: false },
+        // Optional fields matching common extraction output (transaction receipts, bank slips)
+        merchant: { type: "string", required: false },
+        amount: { type: "number", required: false },
+        transaction_date: { type: "date", required: false },
+        posting_date: { type: "date", required: false },
+        category: { type: "string", required: false },
+        account: { type: "string", required: false },
+        status: { type: "string", required: false },
+        transaction_id: { type: "string", required: false },
       },
     },
     reducer_config: {
@@ -1889,6 +1926,9 @@ function scoreSchemaMatch(
   return { required, optional };
 }
 
+/** Types that are generic or catch-all; refinement may override these. */
+const GENERIC_ENTITY_TYPES = new Set(["note", "generic"]);
+
 /**
  * Refine entity type using extracted field keys: if the current type fits poorly
  * (e.g. 0–1 required fields) and another schema fits better (e.g. 2+ required fields),
@@ -1916,6 +1956,10 @@ export function refineEntityTypeFromExtractedFields(
     candidateSchemas ?? Object.entries(ENTITY_SCHEMAS).map(([entity_type, s]) => ({ entity_type, schema_definition: s.schema_definition }));
 
   const currentSchema = candidates.find((c) => c.entity_type === currentEntityType) ?? getSchemaDefinition(currentEntityType);
+  const shouldRefineCurrentType =
+    GENERIC_ENTITY_TYPES.has(currentEntityType) || !currentSchema;
+  if (!shouldRefineCurrentType) return currentEntityType;
+
   const currentScore = currentSchema
     ? scoreSchemaMatch(keySet, currentSchema as SchemaCandidate)
     : { required: 0, optional: 0 };

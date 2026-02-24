@@ -1,4 +1,4 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 import { observationReducer } from '../src/reducers/observation_reducer.js';
 
 async function recomputeBob() {
@@ -7,7 +7,7 @@ async function recomputeBob() {
   console.log(`Recomputing snapshot for ${entityId}...\n`);
   
   // Get all observations for this entity
-  const { data: observations, error: obsError } = await supabase
+  const { data: observations, error: obsError } = await db
     .from('observations')
     .select('*')
     .eq('entity_id', entityId)
@@ -36,7 +36,7 @@ async function recomputeBob() {
   console.log('Computed snapshot:', JSON.stringify(snapshot, null, 2));
   
   // Save snapshot
-  const { error: upsertError } = await supabase.from('entity_snapshots').upsert(
+  const { error: upsertError } = await db.from('entity_snapshots').upsert(
     {
       entity_id: snapshot.entity_id,
       entity_type: snapshot.entity_type,

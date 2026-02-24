@@ -144,7 +144,7 @@ This document does NOT cover:
 | **Categories of data subjects** | Who data relates to       | Neotoma users, entities in documents                      |
 | **Categories of personal data** | What data is processed    | Names, addresses, financial data, IDs (from `properties`) |
 | **Recipients**                  | Who receives data         | User (data owner), AI agents via MCP (with user consent)  |
-| **Third countries**             | Data transfers outside EU | Supabase (US), Fly.io (US) — requires safeguards          |
+| **Third countries**             | Data transfers outside EU | When deployed to cloud: hosting provider location — requires safeguards |
 | **Retention periods**           | How long data is kept     | Until user deletion request                               |
 | **Security measures**           | How data is protected     | Encryption, RLS, access controls                          |
 **Maintenance:**
@@ -155,7 +155,7 @@ This document does NOT cover:
 **Detection Sources:**
 - Security monitoring alerts (unusual access patterns, failed auth attempts)
 - User reports (unauthorized access, data exposure)
-- Vendor notifications (Supabase, Fly.io security incidents)
+- Vendor notifications (hosting provider security incidents, when deployed)
 - Internal audits (access log reviews)
 **Breach Indicators:**
 - Unauthorized access to user accounts
@@ -270,10 +270,10 @@ This document does NOT cover:
 **Detection → Triage → Containment → Eradication → Recovery → Post-Incident**
 **Step 1: Detection**
 **Sources:**
-- Security monitoring (Cloudflare, Supabase logs)
+- Security monitoring (application logs, access logs)
 - User reports (support tickets)
 - Automated alerts (failed auth, unusual patterns)
-- Vendor notifications (Supabase, Fly.io security alerts)
+- Vendor notifications (hosting provider security alerts, when deployed)
 **Step 2: Triage**
 **Actions:**
 1. Acknowledge incident (create incident ticket)
@@ -386,7 +386,7 @@ This document does NOT cover:
    - How data is processed (extraction, structuring, storage)
    - Who processes data (Neotoma, vendors)
 5. **Data Sharing:**
-   - Third-party processors (Supabase, Fly.io)
+   - Third-party processors (when deployed, e.g. hosting provider)
    - AI agents (via MCP, with user consent)
    - No sale of data to third parties
 6. **Data Subject Rights:**
@@ -398,7 +398,7 @@ This document does NOT cover:
 8. **Security Measures:**
    - Encryption, access controls, RLS
 9. **International Transfers:**
-   - Data stored in US (Supabase, Fly.io)
+   - Data stored in US (when deployed to US hosting)
    - Safeguards (Standard Contractual Clauses)
 10. **Contact Information:**
     - Privacy inquiries: privacy@neotoma.com
@@ -470,8 +470,8 @@ This document does NOT cover:
 **Vendors Requiring DPAs:**
 | Vendor        | Service                 | Data Processed             | DPA Status                |
 | ------------- | ----------------------- | -------------------------- | ------------------------- |
-| **Supabase**  | Database, Auth, Storage | User data, documents, PII  | Required                  |
-| **Fly.io**    | Hosting, Infrastructure | Application data, logs     | Required                  |
+| **Hosting**   | Database, Storage (when deployed) | User data, documents, PII  | Required when deployed    |
+| **Infrastructure** | Hosting (when deployed) | Application data, logs     | Required when deployed    |
 | **Stripe**    | Payment Processing      | Payment data, billing info | Required (via Stripe DPA) |
 | **OpenAI**    | Embeddings (future)     | Document text (if used)    | Required (if implemented) |
 | **Gmail API** | Email integration       | Email attachments          | Required (via Google DPA) |
@@ -519,7 +519,7 @@ This document does NOT cover:
 - No adequacy decision for vendor's country
 - Vendor does not provide DPA with SCCs
 **SCC Modules:**
-- **Module 2 (Controller → Processor):** Neotoma → Supabase, Fly.io
+- **Module 2 (Controller → Processor):** Neotoma → hosting provider (when deployed)
 - **Module 3 (Processor → Processor):** If Neotoma acts as processor for enterprise customers
 **Implementation:**
 - Use EU Commission SCCs (2021 version)
@@ -571,14 +571,7 @@ This document does NOT cover:
 ```
 ### 6.2 Vendor SLAs
 **Required SLAs:**
-**Supabase:**
-- Uptime: 99.9% (best effort, no formal SLA on free tier)
-- Support: Community support (free tier)
-- Data Location: US (with SCCs)
-**Fly.io:**
-- Uptime: 99.9% (best effort)
-- Support: Email support
-- Data Location: US (with SCCs)
+**Hosting (when deployed):** Review vendor SLA for uptime, support, and data location.
 **Stripe:**
 - Uptime: 99.99% (formal SLA)
 - Support: Email, phone (paid plans)

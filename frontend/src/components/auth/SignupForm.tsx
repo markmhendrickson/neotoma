@@ -1,7 +1,7 @@
 /**
  * Signup Form Component (FU-700)
  * 
- * User signup with email/password or magic link via Supabase Auth
+ * User signup with email/password or magic link via auth
  */
 
 import { useState } from "react";
@@ -47,11 +47,11 @@ export function SignupForm({ onSuccess, onSwitchToSignin }: SignupFormProps) {
     setLoading(true);
 
     try {
-      const { supabase } = await import("@/lib/supabase");
+      const { auth } = await import("@/lib/auth");
       
       if (useMagicLink) {
         // Send magic link to create account
-        const { error: magicLinkError } = await supabase.auth.signInWithOtp({
+        const { error: magicLinkError } = await auth.auth.signInWithOtp({
           email,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
@@ -60,7 +60,7 @@ export function SignupForm({ onSuccess, onSwitchToSignin }: SignupFormProps) {
         });
         
         if (magicLinkError) {
-          logError(magicLinkError, "Supabase Magic Link Signup");
+          logError(magicLinkError, "Magic Link Signup");
           const errorMessage = extractErrorMessage(magicLinkError, "Failed to send magic link");
           console.error("[Magic Link Signup Error] Extracted message:", errorMessage);
           throw new Error(errorMessage);
@@ -70,13 +70,13 @@ export function SignupForm({ onSuccess, onSwitchToSignin }: SignupFormProps) {
         setMagicLinkSent(true);
       } else {
         // Sign up with password
-        const { data, error: signupError } = await supabase.auth.signUp({
+        const { data, error: signupError } = await auth.auth.signUp({
           email,
           password,
         });
         
         if (signupError) {
-          logError(signupError, "Supabase Signup");
+          logError(signupError, "Signup");
           const errorMessage = extractErrorMessage(signupError, "Signup failed");
           console.error("[Signup Error] Extracted message:", errorMessage);
           throw new Error(errorMessage);
@@ -87,8 +87,8 @@ export function SignupForm({ onSuccess, onSwitchToSignin }: SignupFormProps) {
           // If session exists, user is immediately authenticated
           if (data.session) {
             // Session created - manually refresh session to ensure AuthContext updates
-            const { supabase } = await import("@/lib/supabase");
-            await supabase.auth.getSession();
+            const { auth } = await import("@/lib/auth");
+            await auth.auth.getSession();
             toast({
               title: "Account created successfully",
               description: `Welcome to Neotoma${data.user.email ? `, ${data.user.email}` : ""}`,

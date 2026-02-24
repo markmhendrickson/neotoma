@@ -41,7 +41,7 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
   const { sessionToken, user } = useAuth();
   const { subscribe } = useRealtime();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   const sortSchemas = useCallback((items: Schema[]) => {
@@ -71,7 +71,7 @@ export function SchemaList({ onSchemaClick }: SchemaListProps) {
       if (user?.id) {
         params.append("user_id", user.id);
       }
-      const url = `/api/schemas${params.toString() ? `?${params.toString()}` : ""}`;
+      const url = `/schemas${params.toString() ? `?${params.toString()}` : ""}`;
 
       const response = await fetch(url, { headers });
 

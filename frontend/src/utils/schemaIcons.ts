@@ -117,7 +117,7 @@ function buildSchemasUrl(options?: { userId?: string; keyword?: string }): strin
   }
 
   const queryString = params.toString();
-  return `${base}/api/schemas${queryString ? `?${queryString}` : ""}`;
+  return `${base}/schemas${queryString ? `?${queryString}` : ""}`;
 }
 
 export async function fetchSchemaMetadata(

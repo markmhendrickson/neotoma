@@ -102,15 +102,13 @@ async function ingestSourceNode(content: Buffer, userId: string): Promise<Source
   const hash = computeContentHash(content);
   
   // Check for existing source
-  const existing = await supabase
-    .from('sources')
-    .select('id')
-    .eq('content_hash', hash)
-    .eq('user_id', userId)
-    .single();
+  const existing = await db.queryOne("sources", {
+    content_hash: hash,
+    user_id: userId,
+  });
   
-  if (existing.data) {
-    return { ...existing.data, deduplicated: true };
+  if (existing) {
+    return { ...existing, deduplicated: true };
   }
   
   // Create new source

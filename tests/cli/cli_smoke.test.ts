@@ -111,7 +111,7 @@ describe("cli smoke tests", () => {
 
       const fetchMock = vi.fn(async (input: RequestInfo | Request) => {
         const url = typeof input === "string" ? input : (input as Request).url;
-        if (url.includes("/api/entities/query")) {
+        if (url.includes("/entities/query")) {
           return new Response(
             JSON.stringify({ entities: [{ id: "ent_test", entity_type: "company" }] }),
             { status: 200, headers: { "Content-Type": "application/json" } }
@@ -159,7 +159,7 @@ describe("cli smoke tests", () => {
       let capturedBody: Record<string, unknown> = {};
       const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
         const url = typeof input === "string" ? input : (input as Request).url;
-        if (url.includes("/api/entities/query")) {
+        if (url.includes("/entities/query")) {
           const bodyRaw = init?.body ?? (typeof input !== "string" && (input as Request).body ? await (input as Request).clone().text() : undefined);
           if (bodyRaw) capturedBody = JSON.parse(typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()) as Record<string, unknown>;
           return new Response(

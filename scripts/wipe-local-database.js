@@ -44,7 +44,7 @@ function resolvePaths(targetProd) {
     }
   }
   const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot || process.cwd(), "data");
-  const isProd = targetProd || (process.env.NEOTOMA_ENV || process.env.NODE_ENV || "development") === "production";
+  const isProd = targetProd || (process.env.NEOTOMA_ENV || "development") === "production";
   const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
   const rawStorageSubdir = isProd ? "sources_prod" : "sources";
   const eventLogSubdir = isProd ? "events_prod" : "events";

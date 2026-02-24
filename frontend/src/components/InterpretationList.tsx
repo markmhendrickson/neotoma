@@ -47,7 +47,7 @@ export function InterpretationList({
   const { user, sessionToken } = useAuth();
   const { subscribe } = useRealtime();
   
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   // Helper function to fetch interpretations
@@ -75,7 +75,7 @@ export function InterpretationList({
       }
       
       // Use relative URL to go through Vite proxy
-      const response = await fetch(`/api/interpretations?${params}`, { headers });
+      const response = await fetch(`/interpretations?${params}`, { headers });
       
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {

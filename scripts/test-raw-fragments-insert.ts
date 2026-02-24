@@ -4,7 +4,7 @@
  * This will attempt to insert a test fragment and show detailed error information
  */
 
-import { supabase } from "../src/db.js";
+import { db } from "../src/db.js";
 import { randomUUID } from "node:crypto";
 
 const userId = "00000000-0000-0000-0000-000000000000";
@@ -13,7 +13,7 @@ async function testRawFragmentsInsert() {
   console.log("\n🧪 Testing raw_fragments insert...\n");
 
   // First, get a valid source_id from the database
-  const { data: sources, error: sourcesError } = await supabase
+  const { data: sources, error: sourcesError } = await db
     .from("sources")
     .select("id")
     .limit(1);
@@ -50,7 +50,7 @@ async function testRawFragmentsInsert() {
   console.log("📤 Attempting insert with data:", JSON.stringify(testFragment, null, 2));
   console.log("\n");
 
-  const { data: insertResult, error: insertError } = await supabase
+  const { data: insertResult, error: insertError } = await db
     .from("raw_fragments")
     .insert(testFragment)
     .select();
@@ -67,7 +67,7 @@ async function testRawFragmentsInsert() {
     console.log("Inserted data:", JSON.stringify(insertResult, null, 2));
 
     // Verify it's actually in the database
-    const { data: verifyData, error: verifyError } = await supabase
+    const { data: verifyData, error: verifyError } = await db
       .from("raw_fragments")
       .select("*")
       .eq("id", testFragment.id)
@@ -80,7 +80,7 @@ async function testRawFragmentsInsert() {
     }
 
     // Clean up test data
-    await supabase.from("raw_fragments").delete().eq("id", testFragment.id);
+    await db.from("raw_fragments").delete().eq("id", testFragment.id);
     console.log("\n🧹 Cleaned up test data");
   }
 }

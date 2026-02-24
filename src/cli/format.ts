@@ -10,6 +10,7 @@ const ANSI = {
   cyan: "\u001b[36m",
   green: "\u001b[32m",
   yellow: "\u001b[33m",
+  red: "\u001b[31m",
   /** Warm brown/orange for borders and sub-headings (Claude Code-style panel). */
   accent: "\u001b[38;5;94m",
 } as const;
@@ -68,7 +69,12 @@ export function warn(text: string): string {
   return colorEnabled() ? `${ANSI.yellow}${text}${ANSI.reset}` : text;
 }
 
-/** Label for a command or tool (e.g. "Bash", "neotoma-prod"). */
+/** Error / missing (e.g. "not set"). */
+export function error(text: string): string {
+  return colorEnabled() ? `${ANSI.red}${text}${ANSI.reset}` : text;
+}
+
+/** Label for a command or tool (e.g. "Bash", "neotoma"). */
 export function label(text: string): string {
   return bold(text);
 }
@@ -110,7 +116,7 @@ export function visibleLength(s: string): number {
   return s.replace(/\u001b\[[0-9;]*m/g, "").length;
 }
 
-/** Terminal display width: most chars 1, fullwidth/CJK 2. Use for aligning columns. */
+/** Terminal display width: most chars 1, fullwidth/CJK/symbols 2. Use for aligning columns. */
 export function displayWidth(s: string): number {
   // eslint-disable-next-line no-control-regex -- strip ANSI escape sequences
   const plain = s.replace(/\u001b\[[0-9;]*m/g, "");
@@ -123,6 +129,7 @@ export function displayWidth(s: string): number {
     else if (code >= 0x30a0 && code <= 0x30ff) w += 2; // Katakana
     else if (code >= 0x4e00 && code <= 0x9fff) w += 2; // CJK unified
     else if (code >= 0xff00 && code <= 0xffef) w += 2; // Fullwidth forms
+    else if (code >= 0x2600 && code <= 0x27bf) w += 2; // Misc symbols (✓ ✗ ✅ ❌) — terminals render as 2 cols
     else w += 1;
   }
   return w;
@@ -267,7 +274,9 @@ export function blackBox(
     (options.borderBlack ? "black" : "accent");
   const borderStyle = boxBorderStyle(color);
 
-  const maxWidth = getTerminalWidth();
+  // Reserve space for two borders and left/right padding so the full line does not wrap
+  const marginForLine = 2 + 2 * pad;
+  const maxWidth = getTerminalWidth(marginForLine);
   const cappedInnerWidth = Math.min(innerWidth, maxWidth);
 
   const padLeft = " ".repeat(pad);

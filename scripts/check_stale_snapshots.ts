@@ -1,4 +1,4 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 
 /**
  * Check for entities with stale snapshots (observation_count: 0 but observations exist)
@@ -7,7 +7,7 @@ async function checkStaleSnapshots() {
   console.log('Checking for entities with stale snapshots...\n');
 
   // Get all entity snapshots with observation_count = 0
-  const { data: staleSnapshots, error: snapshotError } = await supabase
+  const { data: staleSnapshots, error: snapshotError } = await db
     .from('entity_snapshots')
     .select('entity_id, entity_type, observation_count, computed_at')
     .eq('observation_count', 0)
@@ -36,7 +36,7 @@ async function checkStaleSnapshots() {
 
   for (const snapshot of staleSnapshots) {
     // Check if observations actually exist for this entity
-    const { data: observations, error: obsError } = await supabase
+    const { data: observations, error: obsError } = await db
       .from('observations')
       .select('id')
       .eq('entity_id', snapshot.entity_id);

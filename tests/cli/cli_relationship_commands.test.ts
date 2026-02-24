@@ -341,6 +341,36 @@ describe("CLI relationship commands", () => {
     });
   });
 
+  describe("relationships get-snapshot", () => {
+    it("should get relationship snapshot with provenance", async () => {
+      const { stdout: createStdout } = await execAsync(
+        `${CLI_PATH} relationships create --source-entity-id "${sourceEntityId}" --target-entity-id "${targetEntityId}" --relationship-type works_at --user-id "${TEST_USER_ID}" --json`
+      );
+      const createResult = JSON.parse(createStdout);
+      tracker.addRelationship(createResult.relationship_id);
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} relationships get-snapshot works_at "${sourceEntityId}" "${targetEntityId}" --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("snapshot");
+      expect(result).toHaveProperty("observations");
+      expect(Array.isArray(result.observations)).toBe(true);
+    });
+
+    it("should return non-zero for missing relationship snapshot", async () => {
+      let exitCode = 0;
+      try {
+        await execAsync(
+          `${CLI_PATH} relationships get-snapshot works_at "ent_missing_source" "ent_missing_target" --json`
+        );
+      } catch (error: any) {
+        exitCode = error.code || 1;
+      }
+      expect(exitCode).toBeGreaterThan(0);
+    });
+  });
+
   describe("exit codes", () => {
     let testRelationshipId: string;
 

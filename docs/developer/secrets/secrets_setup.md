@@ -23,13 +23,8 @@ This creates:
 Store credentials for cloud agents:
 
 ```bash
-# Supabase credentials
-node scripts/secrets_manager.js set DEV_SUPABASE_URL "https://your-project.supabase.co"
-node scripts/secrets_manager.js set DEV_SUPABASE_SERVICE_KEY "your-service-role-key"
-
-# Or use generic names
-node scripts/secrets_manager.js set SUPABASE_URL "https://your-project.supabase.co"
-node scripts/secrets_manager.js set SUPABASE_SERVICE_KEY "your-service-role-key"
+# Database credentials
+node scripts/secrets_manager.js set DATABASE_URL "postgresql://user:pass@host:5432/db"
 
 # OpenAI API keys (environment-specific)
 node scripts/secrets_manager.js set DEV_OPENAI_API_KEY "sk-your-dev-key"
@@ -42,7 +37,7 @@ For use in scripts or agent instructions:
 
 ```bash
 # Get a single secret
-node scripts/secrets_manager.js get SUPABASE_URL
+node scripts/secrets_manager.js get DATABASE_URL
 
 # List all stored keys
 node scripts/secrets_manager.js list
@@ -87,7 +82,7 @@ const encodedSecrets = execSync('node scripts/get_secrets_for_agents.js', { enco
 1. **Use dedicated test credentials** - Never use production credentials
 2. **Rotate keys regularly** - Monthly rotation recommended
 3. **Limit access** - Only give access to `.secrets/` to authorized users
-4. **Monitor usage** - Check Supabase dashboard for unusual activity
+4. **Monitor usage** - Check service dashboards for unusual activity
 5. **Never commit secrets** - Always verify `.secrets/` is in `.gitignore`
 
 ## Integration with Release Orchestrator
@@ -110,8 +105,7 @@ To migrate existing credentials to the secrets manager:
 ```bash
 # Export current credentials from .env
 source .env
-node scripts/secrets_manager.js set SUPABASE_URL "$SUPABASE_URL"
-node scripts/secrets_manager.js set SUPABASE_SERVICE_KEY "$SUPABASE_SERVICE_KEY"
+node scripts/secrets_manager.js set DATABASE_URL "$DATABASE_URL"
 # ... repeat for other credentials
 ```
 

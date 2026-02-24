@@ -73,7 +73,7 @@ export function TransactionDialog({ open, onClose, onSave }: TransactionDialogPr
         source_priority: 100,
         user_id: user?.id,
       });
-      const { data, error } = await api.POST("/api/store", {
+      const { data, error } = await api.POST("/store", {
         body: {
           entities: [transactionData],
           idempotency_key: idempotencyKey,

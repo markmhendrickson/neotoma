@@ -48,14 +48,9 @@ const tasks = [
 
 const diagnostics = [
   {
-    test: /Missing Supabase configuration|Missing SUPABASE_URL|Missing SUPABASE_SERVICE_KEY/i,
-    message:
-      'Supabase environment missing. Populate .env with DEV_SUPABASE_PROJECT_ID (or DEV_SUPABASE_URL) and DEV_SUPABASE_SERVICE_KEY.',
-  },
-  {
     test: /listen EADDRINUSE/i,
     message:
-      'Port already in use. Terminate other dev servers or set HTTP_PORT/VITE_PORT before running npm run dev:serve.',
+      'Port already in use. Terminate other dev servers or set NEOTOMA_HTTP_PORT/HTTP_PORT or NEOTOMA_WS_PORT/WS_PORT before running npm run dev:serve.',
   },
   {
     test: /Cannot find module/i,
@@ -93,14 +88,15 @@ const devServeStateDir = path.join(projectRoot, '.dev-serve');
 const devServeStateFile = branchName ? path.join(devServeStateDir, `${branchName}.json`) : null;
 
 function readAssignedPorts() {
-  const readPort = (name) => {
-    const value = Number(process.env[name]);
+  const readPort = (neotoma, legacy) => {
+    const raw = process.env[neotoma] || process.env[legacy];
+    const value = Number(raw);
     return Number.isFinite(value) ? value : null;
   };
   return {
-    http: readPort('HTTP_PORT'),
-    vite: readPort('VITE_PORT'),
-    ws: readPort('WS_PORT'),
+    http: readPort('NEOTOMA_HTTP_PORT', 'HTTP_PORT'),
+    vite: readPort('VITE_PORT', 'VITE_PORT'),
+    ws: readPort('NEOTOMA_WS_PORT', 'WS_PORT'),
   };
 }
 
@@ -146,25 +142,7 @@ function clearDevServeState() {
 }
 
 function ensureBaseEnv() {
-  // Dev environment: ONLY use DEV_* variables, never generic SUPABASE_* to prevent accidental prod usage
-  const urlKeys = ['DEV_SUPABASE_PROJECT_ID', 'DEV_SUPABASE_URL'];
-  const keyKeys = ['DEV_SUPABASE_SERVICE_KEY'];
-  const missing = [];
-
-  if (!urlKeys.some((key) => hasValue(process.env[key]))) {
-    missing.push('Supabase URL or project id (DEV_SUPABASE_PROJECT_ID or DEV_SUPABASE_URL)');
-  }
-  if (!keyKeys.some((key) => hasValue(process.env[key]))) {
-    missing.push('Supabase service role key (DEV_SUPABASE_SERVICE_KEY)');
-  }
-
-  if (missing.length > 0) {
-    console.error(`[dev-serve] Missing required environment values: ${missing.join(', ')}`);
-    console.error(
-      '[dev-serve] Create .env with DEV_SUPABASE_PROJECT_ID (or DEV_SUPABASE_URL) and DEV_SUPABASE_SERVICE_KEY.',
-    );
-    process.exit(1);
-  }
+  // Local-only: no remote credentials required
 }
 
 function formatPrefix(name, stream) {

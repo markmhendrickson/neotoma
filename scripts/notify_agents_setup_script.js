@@ -45,7 +45,6 @@ chmod +x scripts/setup_agent_environment.sh
 \`\`\`
 
 This script will:
-- Link Supabase project
 - Apply database migrations
 - Install Playwright browsers
 - Verify npm dependencies

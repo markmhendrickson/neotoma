@@ -1,4 +1,4 @@
-import { supabase } from '../src/db.js';
+import { db } from '../src/db.js';
 
 const sourceIds = [
   'b585e7e6-4a89-42c8-a5fe-beba617c936e',
@@ -8,7 +8,7 @@ const sourceIds = [
 
 async function checkSources() {
   for (const sourceId of sourceIds) {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('sources')
       .select('id, content_hash, mime_type, file_size, original_filename, created_at, storage_url')
       .eq('id', sourceId)

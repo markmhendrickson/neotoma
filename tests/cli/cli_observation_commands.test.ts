@@ -1,52 +1,49 @@
-import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { TestIdTracker } from "../helpers/cleanup_helpers.js";
-import { createTestEntity, createTestSource, createTestObservation } from "../helpers/test_data_helpers.js";
+import { writeFile, mkdir } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
 
 const execAsync = promisify(exec);
 
 const CLI_PATH = "node dist/cli/index.js";
-const TEST_USER_ID = "test-user-cli-obs";
 
 describe("CLI observation commands", () => {
-  const tracker = new TestIdTracker();
   let testEntityId: string;
   let testSourceId: string;
   let testObservationId: string;
 
   beforeAll(async () => {
-    // Create test entity
-    testEntityId = await createTestEntity({
-      entity_type: "company",
-      canonical_name: "Observation Test Company",
-      user_id: TEST_USER_ID,
-    });
-    tracker.trackEntity(testEntityId);
+    // Create test data via CLI store-structured (writes to API server DB)
+    const testDir = join(tmpdir(), `neotoma-cli-obs-test-${Date.now()}`);
+    await mkdir(testDir, { recursive: true });
 
-    // Create test source
-    const source = await createTestSource({
-      user_id: TEST_USER_ID,
-      storage_url: "file:///test/observation.json",
-      mime_type: "application/json",
-    });
-    testSourceId = source.id;
-    tracker.trackSource(testSourceId);
+    const entityFile = join(testDir, "obs-entity.json");
+    await writeFile(entityFile, JSON.stringify({
+      entities: [{
+        entity_type: "company",
+        canonical_name: "Observation Test Company",
+        properties: { name: "Observation Test Company" }
+      }]
+    }));
 
-    // Create test observation
-    const observation = await createTestObservation({
-      entity_id: testEntityId,
-      entity_type: "company",
-      source_id: testSourceId,
-      observed_properties: { field: "value" },
-      user_id: TEST_USER_ID,
-    });
-    testObservationId = observation.id;
-    tracker.trackObservation(testObservationId);
-  });
+    const { stdout } = await execAsync(
+      `${CLI_PATH} store-structured --file-path "${entityFile}" --json`
+    );
+    const result = JSON.parse(stdout);
+    testEntityId = result.entities?.[0]?.entity_id;
+    testSourceId = result.source_id;
+    testObservationId = result.entities?.[0]?.observation_id;
 
-  afterEach(async () => {
-    await tracker.cleanup();
+    // Fallback if response shape changes
+    if (!testObservationId) {
+      const { stdout: obsList } = await execAsync(
+        `${CLI_PATH} observations list --entity-id "${testEntityId}" --json`
+      );
+      const obsResult = JSON.parse(obsList);
+      testObservationId = obsResult.observations?.[0]?.id;
+    }
   });
 
   describe("observations list", () => {
@@ -157,8 +154,8 @@ describe("CLI observation commands", () => {
         `${CLI_PATH} observations get --observation-id "${testObservationId}"`
       );
 
-      const result = JSON.parse(stdout);
-      expect(result.observation.id).toBe(testObservationId);
+      // Without --json, output is pretty-printed (may be JSON or table format)
+      expect(stdout).toContain(testObservationId);
     });
   });
 

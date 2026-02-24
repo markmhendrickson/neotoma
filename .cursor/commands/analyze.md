@@ -318,11 +318,18 @@ This command performs systematic analysis following the framework defined in `fo
 
 ### Step 5: Present Summary
 
-**Objective:** Deliver concise summary to user
+**Objective:** Deliver concise summary to user. The summary MUST include a **three-paragraph narrative summary** (see format below) focused on key analytical takeaways, in addition to any structured bullets.
+
+**Summary format requirement (RFC 2119):** Every analysis summary MUST include exactly three paragraphs before the structured sections. Each paragraph MUST focus on **key analytical takeaways** (findings, conclusions, and what the analysis implies)—not on procedure (e.g. "what was analyzed" or "next steps" as a list). Use:
+- **Paragraph 1:** First major analytical takeaway—core finding or conclusion from the analysis and what it implies for the repo.
+- **Paragraph 2:** Second major analytical takeaway—another distinct finding, market/category insight, or validation/challenge to positioning.
+- **Paragraph 3:** Third major analytical takeaway—competitive/governance/strategic conclusion or synthesis; avoid turning this into a to-do list.
 
 **Actions:**
 
 1. **If Product/Project - Present competitive summary:**
+   - First, provide the **three-paragraph summary** focused on key analytical takeaways (see format above).
+   - Then present:
    ```
    ## Competitive Analysis: [Target] vs. [Current Repo]
    
@@ -342,6 +349,8 @@ This command performs systematic analysis following the framework defined in `fo
    ```
 
 2. **If Product/Project - Present partnership summary:**
+   - First, provide the **three-paragraph summary** focused on key analytical takeaways (see format above).
+   - Then present:
    ```
    ## Partnership Analysis: [Target] partnership with [Current Repo]
    
@@ -362,6 +371,8 @@ This command performs systematic analysis following the framework defined in `fo
    ```
 
 3. **If Content/Thought Leadership - Present relevance summary:**
+   - First, provide the **three-paragraph summary** focused on key analytical takeaways (see format above).
+   - Then present:
    ```
    ## Relevance Analysis: [Resource] relevance to [Current Repo]
    

@@ -38,15 +38,19 @@ const httpPort = hashBranchToPort(branch, BASE_HTTP_PORT, HTTP_PORT_RANGE);
 const vitePort = hashBranchToPort(branch, BASE_VITE_PORT, VITE_PORT_RANGE);
 const wsPort = hashBranchToPort(branch, BASE_WS_PORT, WS_PORT_RANGE);
 
-// Export as environment variables
+// Export as environment variables (both NEOTOMA_* and legacy for compat)
 console.log(`HTTP_PORT=${httpPort}`);
+console.log(`NEOTOMA_HTTP_PORT=${httpPort}`);
 console.log(`VITE_PORT=${vitePort}`);
 console.log(`WS_PORT=${wsPort}`);
+console.log(`NEOTOMA_WS_PORT=${wsPort}`);
 console.log(`# Branch: ${branch}`, { stdio: 'inherit' });
 
 // Set environment variables for current process
 process.env.HTTP_PORT = String(httpPort);
+process.env.NEOTOMA_HTTP_PORT = String(httpPort);
 process.env.VITE_PORT = String(vitePort);
 process.env.WS_PORT = String(wsPort);
+process.env.NEOTOMA_WS_PORT = String(wsPort);
 process.env.PORT = String(vitePort); // Vite uses PORT env var
 

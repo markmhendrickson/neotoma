@@ -47,7 +47,7 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken, user } = useAuth();
 
-  // Prefer bearer token from keys, fallback to Supabase session token, then settings
+  // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export function SchemaDetail({ entityType, onClose }: SchemaDetailProps) {
           params.append("user_id", user.id);
         }
         const queryString = params.toString();
-        const url = `/api/schemas/${encodeURIComponent(entityType)}${queryString ? `?${queryString}` : ""}`;
+        const url = `/schemas/${encodeURIComponent(entityType)}${queryString ? `?${queryString}` : ""}`;
         const response = await fetch(url, { headers });
 
         if (!response.ok) {

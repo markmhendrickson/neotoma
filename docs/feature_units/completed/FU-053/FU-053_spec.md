@@ -74,7 +74,7 @@ Enables future cryptographic event signing and agent identity verification. Foun
 **JSONB Schema Changes:**
 - None
 **Migration Required:** Yes
-**Migration File:** `supabase/migrations/YYYYMMDDHHMMSS_add_crypto_fields_to_state_events.sql`
+**Migration File:** `migrations/YYYYMMDDHHMMSS_add_crypto_fields_to_state_events.sql`
 **Migration Description:**
 - Add `signer_public_key` and `signature` columns (nullable)
 - No data migration needed (new columns, nullable)

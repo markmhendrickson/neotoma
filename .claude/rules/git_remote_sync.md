@@ -1,3 +1,8 @@
+---
+description: "Load when push is rejected or branch diverged: pull and merge before pushing; resolve conflicts; do not force push; same workflow for submodules."
+alwaysApply: false
+---
+
 <!-- Source: foundation/agent_instructions/cursor_rules/git_remote_sync.mdc -->
 
 # Git Remote Sync Rule
@@ -235,5 +240,3 @@ $ git push origin HEAD
 - `foundation/agent_instructions/cursor_commands/pull.md` - Pull command workflow
 - `foundation/agent_instructions/cursor_commands/commit.md` - Commit command workflow
 - `foundation/development/workflow.md` - Git workflow documentation
-
-
