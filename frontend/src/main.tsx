@@ -22,10 +22,16 @@ function initializeTheme() {
 initializeTheme();
 const { HelmetProvider } = ReactHelmetAsync;
 
+// GitHub Pages project site is served at /neotoma/; custom domain (neotoma.io) at /. One build for both.
+function getRouterBasename(): string | undefined {
+  const p = typeof window !== "undefined" ? window.location.pathname : "";
+  return p.startsWith("/neotoma") ? "/neotoma" : undefined;
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <HelmetProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={getRouterBasename()}>
         <App />
       </BrowserRouter>
     </HelmetProvider>

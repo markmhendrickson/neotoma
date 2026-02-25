@@ -2826,6 +2826,7 @@ async function runSessionLoop(opts?: {
   const sessionHistory: string[] = [];
   const historyIndexRef = { current: 0 };
   const historyRef: SessionHistoryRef = { history: sessionHistory, indexRef: historyIndexRef };
+  let hasSessionOutput = false;
   let exited = false;
   function doExit(): void {
     if (exited) return;
@@ -2923,12 +2924,14 @@ async function runSessionLoop(opts?: {
       debounceId = setTimeout(() => {
         debounceId = undefined;
         suggestionLinesRef.current = 0;
-        // Non-destructive resize redraw: keep prior prompt history/output intact.
-        // Re-render status boxes at the new width below existing output so borders stay aligned.
+        // Once command/history output exists, avoid injecting status blocks on resize.
+        // This keeps previously shown prompts/details stable while still refreshing the prompt.
         process.stdout.write("\r" + BANNER_ANSI.clearLineFull);
-        process.stdout.write("\n");
-        opts.redrawStatusBlock?.(lineBufferRef.current);
-        process.stdout.write("\n");
+        if (!hasSessionOutput) {
+          process.stdout.write("\n");
+          opts.redrawStatusBlock?.(lineBufferRef.current);
+          process.stdout.write("\n");
+        }
         process.stdout.write(bold("neotoma> ") + lineBufferRef.current);
         if (lineBufferRef.current.length === 0) {
           const hint = getPromptPlaceholder("", "/ for commands");
@@ -2954,6 +2957,7 @@ async function runSessionLoop(opts?: {
       return;
     }
     const trimmed = line.trim();
+    hasSessionOutput = true;
     if (trimmed !== "" && trimmed !== "exit" && trimmed !== "quit") {
       const last = sessionHistory[sessionHistory.length - 1];
       if (last !== trimmed) {
@@ -10103,6 +10107,11 @@ export function buildIntroBoxContent(
 }
 
 type McpConfigStatus = { path: string; hasDev: boolean; hasProd: boolean };
+const MAX_SESSION_BOX_WIDTH = 72;
+
+function getSessionBoxWidth(rawWidth: number): number {
+  return Math.max(20, Math.min(rawWidth, getTerminalWidth(), MAX_SESSION_BOX_WIDTH));
+}
 
 /**
  * Build the status block string (intro + optional watch + optional MCP) for redraw on SIGWINCH.
@@ -10438,7 +10447,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           : 0,
         computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
       );
-      const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+      const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
       const { output } = buildStatusBlockOutput(
         {
           introContent,
@@ -10799,7 +10808,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               : 0,
             computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
           );
-          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+          const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
           const { output } = buildStatusBlockOutput(
             {
               introContent,
@@ -10913,7 +10922,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
             : 0,
             computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
         );
-        const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+        const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
         const { output } = buildStatusBlockOutput(
           {
             introContent,
@@ -10939,7 +10948,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         const lastDetailOutputRef = { current: null as string | null };
         const data = storedStatusBlockRedrawData;
         const redrawStatusBlock: RedrawStatusBlockFn = () => {
-          const newWidth = Math.min(data.rawSessionBoxWidth, getTerminalWidth());
+          const newWidth = getSessionBoxWidth(data.rawSessionBoxWidth);
           const { output: redrawOutput } = buildStatusBlockOutput(data, newWidth);
           process.stdout.write(redrawOutput);
         };
@@ -11083,7 +11092,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               : 0,
             computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
           );
-          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+          const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
           const { output } = buildStatusBlockOutput(
             {
               introContent,
@@ -11168,7 +11177,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
               : 0,
             computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
           );
-          const sessionBoxWidth = Math.min(rawSessionBoxWidth, getTerminalWidth());
+          const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
           const { output } = buildStatusBlockOutput(
             {
               introContent,
@@ -11220,7 +11229,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     if (storedStatusBlockRedrawData != null) {
       const data = storedStatusBlockRedrawData;
       redrawStatusBlock = (_currentBuffer: string) => {
-        const newWidth = Math.min(data.rawSessionBoxWidth, getTerminalWidth());
+        const newWidth = getSessionBoxWidth(data.rawSessionBoxWidth);
         const dataWithWatch =
           sessionWatchDisplayRef != null
             ? {
