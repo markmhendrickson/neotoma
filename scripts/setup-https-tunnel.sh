@@ -61,11 +61,12 @@ if [ "$TUNNEL_PROVIDER" = "cloudflare" ]; then
   # Cloudflare Tunnel: named tunnel (e.g. neotoma) or quick tunnel
   # -------------------------------------------------------------------------
   if ! command -v cloudflared &> /dev/null; then
-    echo "❌ cloudflared is not installed."
-    echo ""
-    echo "Install: brew install cloudflare/cloudflare/cloudflared"
-    echo "Or: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
-    echo ""
+    echo "❌ cloudflared is not installed." >&2
+    echo "" >&2
+    echo "Install: brew install cloudflare/cloudflare/cloudflared" >&2
+    echo "Or: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/" >&2
+    echo "" >&2
+    [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "Tunnel exited (API is still running on port ${HTTP_PORT}). Install cloudflared or ngrok to enable tunnel." >&2
     exit 1
   fi
 
@@ -142,25 +143,27 @@ else
   # ngrok (default)
   # -------------------------------------------------------------------------
   if ! command -v ngrok &> /dev/null; then
-    echo "❌ ngrok is not installed."
-    echo ""
-    echo "Install options:"
-    echo "  1. Homebrew: brew install ngrok/ngrok/ngrok"
-    echo "  2. Download: https://ngrok.com/download"
-    echo "  3. Sign up: https://dashboard.ngrok.com/signup (free account)"
-    echo ""
-    echo "Or use Cloudflare: set NEOTOMA_TUNNEL_PROVIDER=cloudflare and install cloudflared."
-    echo ""
+    echo "❌ ngrok is not installed." >&2
+    echo "" >&2
+    echo "Install options:" >&2
+    echo "  1. Homebrew: brew install ngrok/ngrok/ngrok" >&2
+    echo "  2. Download: https://ngrok.com/download" >&2
+    echo "  3. Sign up: https://dashboard.ngrok.com/signup (free account)" >&2
+    echo "" >&2
+    echo "Or use Cloudflare: set NEOTOMA_TUNNEL_PROVIDER=cloudflare and install cloudflared." >&2
+    echo "" >&2
+    [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "Tunnel exited (API is still running on port ${HTTP_PORT}). Install ngrok or cloudflared to enable tunnel." >&2
     exit 1
   fi
   if ! ngrok config check &> /dev/null; then
-    echo "⚠️  ngrok is not authenticated."
-    echo ""
-    echo "To authenticate:"
-    echo "  1. Sign up at https://dashboard.ngrok.com/signup"
-    echo "  2. Get your authtoken from https://dashboard.ngrok.com/get-started/your-authtoken"
-    echo "  3. Run: ngrok config add-authtoken YOUR_AUTHTOKEN"
-    echo ""
+    echo "⚠️  ngrok is not authenticated." >&2
+    echo "" >&2
+    echo "To authenticate:" >&2
+    echo "  1. Sign up at https://dashboard.ngrok.com/signup" >&2
+    echo "  2. Get your authtoken from https://dashboard.ngrok.com/get-started/your-authtoken" >&2
+    echo "  3. Run: ngrok config add-authtoken YOUR_AUTHTOKEN" >&2
+    echo "" >&2
+    [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "Tunnel exited (API is still running on port ${HTTP_PORT}). Run 'ngrok config add-authtoken <token>' to enable tunnel." >&2
     exit 1
   fi
 

@@ -10,7 +10,7 @@ export interface SeoRouteMetadata {
 
 export const SEO_DEFAULTS = {
   siteName: "Neotoma",
-  baseUrl: "https://markmhendrickson.github.io/neotoma",
+  baseUrl: "https://neotoma.io",
   locale: "en_US",
   ogImageUrl: SITE_METADATA.ogImageUrl,
   ogImageWidth: 1200,

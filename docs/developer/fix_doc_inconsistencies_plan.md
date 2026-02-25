@@ -30,7 +30,7 @@ The existing table at lines 46-59 is correct; the issue is stale text in later s
 - Simplify Section 6 (Quota Enforcement) — replace with "simple hard-coded limit" per v0.2.0 scope
 - Remove `storage_usage` table schema (Section 6.3) — note deferred to v0.3.0
 - Remove Section 3.4 (Timeout Handling) — note deferred to v0.3.0
-- Update `interpretation_runs` schema (Section 3.1) — remove `timeout_at`, `heartbeat_at` columns
+- Update `interpretations` schema (Section 3.1) — remove `timeout_at`, `heartbeat_at` columns
 **Add "Deferred Features" section** listing what moves to v0.3.0:
 - Upload queue + retry worker
 - storage_usage table

@@ -111,6 +111,15 @@ const TABLES_WITH_ID = new Set([
   "local_auth_users",
 ]);
 
+const DETERMINISTIC_ID_TABLES = new Set([
+  "sources",
+  "observations",
+  "entities",
+  "timeline_events",
+  "relationship_observations",
+  "interpretations",
+]);
+
 /** SQLite3 only accepts numbers, strings, bigints, buffers, and null. Normalize for bind. */
 function toBindValue(value: unknown): unknown {
   if (value === undefined || value === null) {
@@ -665,6 +674,11 @@ class LocalQueryBuilder {
           }
 
           if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+            if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+              console.warn(
+                `[DETERMINISM] Missing ID for ${this.table} insert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+              );
+            }
             payload.id = crypto.randomUUID();
           }
           // Only add created_at for tables that have this column
@@ -746,6 +760,11 @@ class LocalQueryBuilder {
           }
 
           if (TABLES_WITH_ID.has(this.table) && !payload.id) {
+            if (DETERMINISTIC_ID_TABLES.has(this.table)) {
+              console.warn(
+                `[DETERMINISM] Missing ID for ${this.table} upsert; falling back to randomUUID. Callers should provide deterministic IDs for domain tables.`
+              );
+            }
             payload.id = crypto.randomUUID();
           }
           const columns = Object.keys(payload);

@@ -34,7 +34,7 @@ Not all Neotoma components are deterministic. The following table explicitly cla
 - **Replay Determinism**: Same input always produces identical output
 - **Auditability**: Process is logged with enough detail to understand what happened
 AI interpretation is **auditable but not replay-deterministic**:
-- `interpretation_runs` table stores `interpretation_config` (model, version, parameters)
+- `interpretations` table stores `interpretation_config` (model, version, parameters)
 - Multiple interpretations for the same source create NEW observations
 - Prior observations are never modified (immutability preserved)
 - Audit trail shows exactly how data was interpreted at each point in time

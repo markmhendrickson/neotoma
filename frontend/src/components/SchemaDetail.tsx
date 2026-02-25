@@ -12,7 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schema_icons";
 
 interface SchemaDetail {
   id: string;

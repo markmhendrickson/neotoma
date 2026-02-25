@@ -19,6 +19,8 @@ const outputDir = path.join(repoRoot, "site_pages");
 const outputFile = path.join(outputDir, "index.html");
 const noJekyllFile = path.join(outputDir, ".nojekyll");
 const faviconFile = path.join(outputDir, "favicon.svg");
+const heroImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-hero.png");
+const heroImageDest = path.join(outputDir, "neotoma-hero.png");
 const robotsFile = path.join(outputDir, "robots.txt");
 const sitemapFile = path.join(outputDir, "sitemap.xml");
 
@@ -73,6 +75,10 @@ function main() {
   fs.writeFileSync(outputFile, buildHtml(), "utf-8");
   fs.writeFileSync(noJekyllFile, "", "utf-8");
   fs.writeFileSync(faviconFile, FAVICON_SVG.trim(), "utf-8");
+  if (fs.existsSync(heroImageSrc)) {
+    fs.copyFileSync(heroImageSrc, heroImageDest);
+    console.log(`Copied hero image: ${path.relative(repoRoot, heroImageDest)}`);
+  }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
   fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
 

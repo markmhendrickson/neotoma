@@ -7,10 +7,23 @@ This document covers:
 - Environment variable configuration
 - Deployment procedures
 - Post-deployment verification
+- Marketing site deployment to neotoma.io (GitHub Pages)
 This document does NOT cover:
 - Local development setup (see `docs/developer/getting_started.md`)
 - Infrastructure scaling (post-MVP)
 - Advanced monitoring (post-MVP)
+## Marketing site (neotoma.io)
+The static marketing site is built with `npm run build:pages:site` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`) on push to `main`. The canonical URL is **https://neotoma.io**.
+### Deploy
+No extra secrets: the workflow uses the repo’s GitHub Pages environment. Push to `main` (or run the workflow manually) to build and deploy. The site is available at your GitHub Pages URL (e.g. `https://<owner>.github.io/neotoma/`) until you add a custom domain.
+### Custom domain (neotoma.io)
+1. In the repo: **Settings → Pages** (under "Code and automation").
+2. Under **Custom domain**, enter **neotoma.io** and click **Save**. GitHub will add a CNAME file or show DNS instructions.
+3. At your DNS provider for neotoma.io, add either:
+   - **A records** for the apex: `192.30.252.153` and `192.30.252.154`, or
+   - An **ALIAS/ANAME** record for the apex pointing to `<owner>.github.io`.
+4. Wait for DNS to propagate (up to 24 hours). GitHub will provision HTTPS for neotoma.io.
+5. Optionally enable **Enforce HTTPS** in Settings → Pages.
 ## Prerequisites
 - Fly.io account (free tier available)
 - Fly CLI installed (`brew install flyctl` or see https://fly.io/docs/hands-on/install-flyctl/)

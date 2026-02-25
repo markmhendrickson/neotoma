@@ -12,7 +12,7 @@ describe("seo_metadata", () => {
     const metadata = resolveSeoMetadata("/");
 
     expect(metadata.title).toContain("Neotoma");
-    expect(metadata.canonicalUrl).toBe("https://markmhendrickson.github.io/neotoma/");
+    expect(metadata.canonicalUrl).toBe("https://neotoma.io/");
     expect(metadata.robots).toBe("index,follow");
   });
 
@@ -34,19 +34,17 @@ describe("seo_metadata", () => {
     const robots = buildRobotsTxt();
 
     expect(robots).toContain("User-agent: *");
-    expect(robots).toContain("Sitemap: https://markmhendrickson.github.io/neotoma/sitemap.xml");
+    expect(robots).toContain("Sitemap: https://neotoma.io/sitemap.xml");
   });
 
   it("builds sitemap with expected canonical URLs", () => {
     const sitemap = buildSitemapXml(["/", "/docs"]);
 
-    expect(sitemap).toContain("<loc>https://markmhendrickson.github.io/neotoma/</loc>");
-    expect(sitemap).toContain("<loc>https://markmhendrickson.github.io/neotoma/docs</loc>");
+    expect(sitemap).toContain("<loc>https://neotoma.io/</loc>");
+    expect(sitemap).toContain("<loc>https://neotoma.io/docs</loc>");
   });
 
   it("normalizes canonical URLs with query and trailing slash", () => {
-    expect(buildCanonicalUrl("/docs/?q=test")).toBe(
-      "https://markmhendrickson.github.io/neotoma/docs"
-    );
+    expect(buildCanonicalUrl("/docs/?q=test")).toBe("https://neotoma.io/docs");
   });
 });

@@ -4131,7 +4131,7 @@ export class NeotomaServer {
     const { resolveEntity } = await import("./services/entity_resolution.js");
     const { schemaRegistry } = await import("./services/schema_registry.js");
     const { validateFieldsWithConverters } = await import("./services/field_validation.js");
-    const { randomUUID } = await import("crypto");
+    const { generateObservationId } = await import("./services/observation_identity.js");
     const { db } = await import("./db.js");
 
     if (idempotencyKey) {
@@ -4299,241 +4299,27 @@ export class NeotomaServer {
           ? { ...validFields, ...dateLikeUnknowns }
           : validFields;
 
-      // Store original values in raw_fragments for converted fields (preserves zero data loss)
-      for (const [key, value] of Object.entries(originalValues)) {
-        // Skip null or undefined values (database constraint)
-        if (value === null || value === undefined) {
-          continue;
-        }
-
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count, entity_id")
-          .eq("source_id", storageResult.sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .eq("entity_type", entityType)
-          .maybeSingle();
-
-        if (existing) {
-          // Update existing fragment
-          await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value,
-              fragment_envelope: {
-                reason: "converted_value_original",
-                entity_type: entityType,
-                schema_version: schema?.schema_version || "1.0",
-                converted_to: validFields[key],
-              },
-              frequency_count: (existing.frequency_count || 1) + 1,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          await db.from("raw_fragments").insert({
-            id: fragmentId,
-            source_id: storageResult.sourceId,
-            interpretation_id: null, // No interpretation for structured data
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "converted_value_original",
-              entity_type: entityType,
-              schema_version: schema?.schema_version || "1.0",
-              converted_to: validFields[key],
-            },
-          });
-        }
-      }
-
-      // Store unknown fields in raw_fragments (no interpretation_id for structured data)
-      // Filter out null/undefined values before storing
-      const nonNullUnknownFields = Object.entries(unknownFields).filter(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        ([_key, value]) => value !== null && value !== undefined
+      const { storeConvertedOriginals, storeUnknownFields } = await import(
+        "./services/raw_fragments.js"
       );
+      const schemaVer = schema?.schema_version || "1.0";
 
-      if (nonNullUnknownFields.length > 0) {
-        logger.error(
-          `[raw_fragments] Storing ${nonNullUnknownFields.length} unknown fields for ${entityType} (source_id: ${storageResult.sourceId}, user_id: ${userId})`
-        );
-      }
+      await storeConvertedOriginals({
+        sourceId: storageResult.sourceId,
+        userId,
+        entityType,
+        schemaVersion: schemaVer,
+        originalValues,
+        validFields,
+      });
 
-      // Store raw_fragments per entity (each entity represents a row in parquet/CSV)
-      // We'll create observations first to get observation IDs, then store fragments with observation context
-      // For now, we'll use entity_id as a proxy for row diversity (each row creates unique entity/observation)
-
-      for (const [key, value] of nonNullUnknownFields) {
-        // Check if fragment already exists (for idempotence)
-        const { data: existing } = await db
-          .from("raw_fragments")
-          .select("id, frequency_count, entity_id")
-          .eq("source_id", storageResult.sourceId)
-          .eq("fragment_key", key)
-          .eq("user_id", userId)
-          .eq("entity_type", entityType)
-          .maybeSingle();
-
-        if (existing) {
-          // Update existing fragment (increment frequency, update last_seen)
-          const { error: updateError } = await db
-            .from("raw_fragments")
-            .update({
-              fragment_value: value, // Update value in case it changed
-              fragment_envelope: {
-                reason: "unknown_field",
-                entity_type: entityType,
-                schema_version: schema?.schema_version || "1.0",
-              },
-              frequency_count: (existing.frequency_count || 1) + 1,
-              last_seen: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
-
-          if (updateError) {
-            logger.error(`[raw_fragments] FAILED to update fragment for ${entityType}.${key}:`, {
-              error: updateError,
-              code: updateError.code,
-              message: updateError.message,
-            });
-          } else {
-            logger.error(
-              `[raw_fragments] Updated existing fragment for ${entityType}.${key} (frequency: ${(existing.frequency_count || 1) + 1})`
-            );
-            unknownFieldsCount++;
-
-            // Queue auto-enhancement check for this field
-            try {
-              const { schemaRecommendationService } =
-                await import("./services/schema_recommendation.js");
-              await schemaRecommendationService.queueAutoEnhancementCheck({
-                entity_type: entityType,
-                fragment_key: key,
-                user_id: userId,
-                frequency_count: (existing.frequency_count || 1) + 1,
-              });
-            } catch (queueError: any) {
-              // Don't fail storage if queuing fails - it's best-effort
-              logger.warn(
-                `[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`,
-                queueError.message
-              );
-            }
-          }
-        } else {
-          // Insert new fragment
-          const fragmentId = randomUUID();
-          const insertData = {
-            id: fragmentId,
-            source_id: storageResult.sourceId,
-            interpretation_id: null, // No interpretation for structured data
-            user_id: userId,
-            entity_type: entityType,
-            fragment_key: key,
-            fragment_value: value,
-            fragment_envelope: {
-              reason: "unknown_field",
-              entity_type: entityType,
-              schema_version: schema?.schema_version || "1.0",
-            },
-          };
-
-          const { data: insertResult, error: insertError } = await db
-            .from("raw_fragments")
-            .insert(insertData)
-            .select();
-
-          if (insertError) {
-            // Handle unique constraint violation from race condition
-            if (insertError.code === "23505") {
-              logger.warn(
-                `[raw_fragments] Race condition detected for ${entityType}.${key}, retrying as update...`
-              );
-              // Retry as update
-              const { data: retryExisting } = await db
-                .from("raw_fragments")
-                .select("id, frequency_count")
-                .eq("source_id", storageResult.sourceId)
-                .eq("fragment_key", key)
-                .eq("user_id", userId)
-                .maybeSingle();
-
-              if (retryExisting) {
-                await db
-                  .from("raw_fragments")
-                  .update({
-                    fragment_value: value,
-                    fragment_envelope: {
-                      reason: "unknown_field",
-                      entity_type: entityType,
-                      schema_version: schema?.schema_version || "1.0",
-                    },
-                    frequency_count: (retryExisting.frequency_count || 1) + 1,
-                    last_seen: new Date().toISOString(),
-                  })
-                  .eq("id", retryExisting.id);
-                unknownFieldsCount++;
-
-                // Queue auto-enhancement check for this field
-                try {
-                  const { schemaRecommendationService } =
-                    await import("./services/schema_recommendation.js");
-                  await schemaRecommendationService.queueAutoEnhancementCheck({
-                    entity_type: entityType,
-                    fragment_key: key,
-                    user_id: userId,
-                    frequency_count: (retryExisting.frequency_count || 1) + 1,
-                  });
-                } catch (queueError: any) {
-                  // Don't fail storage if queuing fails - it's best-effort
-                  logger.warn(
-                    `[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`,
-                    queueError.message
-                  );
-                }
-              }
-            } else {
-              logger.error(`[raw_fragments] FAILED to insert fragment for ${entityType}.${key}:`, {
-                error: insertError,
-                code: insertError.code,
-                message: insertError.message,
-              });
-            }
-          } else {
-            if (insertResult && insertResult.length > 0) {
-              logger.error(
-                `[raw_fragments] Inserted new fragment for ${entityType}.${key} (id: ${fragmentId})`
-              );
-            }
-            unknownFieldsCount++;
-
-            // Queue auto-enhancement check for this field
-            try {
-              const { schemaRecommendationService } =
-                await import("./services/schema_recommendation.js");
-              await schemaRecommendationService.queueAutoEnhancementCheck({
-                entity_type: entityType,
-                fragment_key: key,
-                user_id: userId,
-                frequency_count: 1,
-              });
-            } catch (queueError: any) {
-              // Don't fail storage if queuing fails - it's best-effort
-              logger.warn(
-                `[AUTO_ENHANCE] Failed to queue enhancement check for ${entityType}.${key}:`,
-                queueError.message
-              );
-            }
-          }
-        }
-      }
+      unknownFieldsCount += await storeUnknownFields({
+        sourceId: storageResult.sourceId,
+        userId,
+        entityType,
+        schemaVersion: schemaVer,
+        unknownFields,
+      });
 
       // Resolve entity (user-scoped)
       const entityId = await resolveEntity({
@@ -4545,7 +4331,12 @@ export class NeotomaServer {
       // Create observation directly (no interpretation_id).
       // Use fieldsForObservation so date-like unknowns are in the observation and thus
       // in the snapshot and timeline, even when not in the schema yet.
-      const observationId = randomUUID();
+      const observationId = generateObservationId(
+        storageResult.sourceId,
+        null,
+        entityId,
+        fieldsForObservation
+      );
       const { error: obsError } = await db.from("observations").insert({
         id: observationId,
         entity_id: entityId,
@@ -5045,100 +4836,32 @@ export class NeotomaServer {
       );
     }
 
-    // Create correction observation with priority 1000
-    const observationId = randomUUID();
-    const { error: obsError } = await db.from("observations").insert({
-      id: observationId,
-      entity_id: parsed.entity_id,
-      entity_type: parsed.entity_type,
-      schema_version: schemaEntry.schema_version,
-      source_id: null, // Corrections don't have a source
-      interpretation_id: null,
-      observed_at: new Date().toISOString(),
-      specificity_score: 1.0,
-      source_priority: 1000, // Corrections have highest priority
-      fields: { [parsed.field]: parsed.value },
-      user_id: userId,
-      idempotency_key: parsed.idempotency_key,
-    });
+    const { createCorrection } = await import("./services/correction.js");
 
-    if (obsError) {
+    try {
+      const result = await createCorrection({
+        entity_id: parsed.entity_id,
+        entity_type: parsed.entity_type,
+        field: parsed.field,
+        value: parsed.value,
+        schema_version: schemaEntry.schema_version,
+        user_id: userId,
+        idempotency_key: parsed.idempotency_key,
+      });
+
+      return this.buildTextResponse({
+        observation_id: result.observation_id,
+        entity_id: parsed.entity_id,
+        field: parsed.field,
+        value: parsed.value,
+        message: "Correction applied with priority 1000",
+      });
+    } catch (corrErr) {
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to create correction: ${obsError.message}`
+        `Failed to create correction: ${corrErr instanceof Error ? corrErr.message : String(corrErr)}`
       );
     }
-
-    // Recompute entity snapshot so the correction is visible immediately
-    try {
-      const { data: allObservations, error: fetchError } = await db
-        .from("observations")
-        .select("*")
-        .eq("entity_id", parsed.entity_id)
-        .order("observed_at", { ascending: false });
-
-      if (!fetchError && allObservations && allObservations.length > 0) {
-        const mappedObservations = allObservations.map(
-          (obs: {
-            id: string;
-            entity_id: string;
-            entity_type: string;
-            schema_version: string;
-            source_id: string | null;
-            observed_at: string;
-            specificity_score: number;
-            source_priority: number;
-            fields: Record<string, unknown>;
-            created_at?: string;
-            user_id?: string;
-          }) => ({
-            id: obs.id,
-            entity_id: obs.entity_id,
-            entity_type: obs.entity_type,
-            schema_version: obs.schema_version,
-            source_id: obs.source_id ?? "",
-            observed_at: obs.observed_at,
-            specificity_score: obs.specificity_score,
-            source_priority: obs.source_priority,
-            fields: obs.fields,
-            created_at: obs.created_at,
-            user_id: obs.user_id,
-          })
-        );
-        const { observationReducer } = await import("./reducers/observation_reducer.js");
-        const snapshot = await observationReducer.computeSnapshot(
-          parsed.entity_id,
-          mappedObservations
-        );
-        if (snapshot) {
-          const rowWithEmbedding = await prepareEntitySnapshotWithEmbedding({
-            entity_id: snapshot.entity_id,
-            entity_type: snapshot.entity_type,
-            schema_version: snapshot.schema_version,
-            snapshot: snapshot.snapshot,
-            computed_at: snapshot.computed_at,
-            observation_count: snapshot.observation_count,
-            last_observation_at: snapshot.last_observation_at,
-            provenance: snapshot.provenance,
-            user_id: snapshot.user_id,
-          });
-          await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
-        }
-      }
-    } catch (recomputeErr) {
-      logger.warn(
-        `Failed to recompute snapshot after correction for ${parsed.entity_id}:`,
-        recomputeErr instanceof Error ? recomputeErr.message : String(recomputeErr)
-      );
-    }
-
-    return this.buildTextResponse({
-      observation_id: observationId,
-      entity_id: parsed.entity_id,
-      field: parsed.field,
-      value: parsed.value,
-      message: "Correction applied with priority 1000",
-    });
   }
 
   // FU-126: MCP merge_entities() Tool
@@ -5146,88 +4869,42 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = MergeEntitiesRequestSchema.parse(args);
-
-    // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
 
-    // Validate both entities exist and are owned by user
-    const { data: entities, error: entitiesError } = await db
-      .from("entities")
-      .select("*")
-      .in("id", [parsed.from_entity_id, parsed.to_entity_id])
-      .eq("user_id", userId);
+    const {
+      mergeEntities: mergeEntitiesService,
+      EntityNotFoundError,
+      EntityAlreadyMergedError,
+    } = await import("./services/entity_merge.js");
 
-    if (entitiesError || !entities || entities.length !== 2) {
-      throw new McpError(ErrorCode.InvalidParams, "Both entities must exist and be owned by user");
-    }
+    try {
+      const result = await mergeEntitiesService({
+        fromEntityId: parsed.from_entity_id,
+        toEntityId: parsed.to_entity_id,
+        userId,
+        mergeReason: parsed.merge_reason,
+        mergedBy: "mcp",
+      });
 
-    // Check if source entity is already merged
-    const fromEntity = entities.find((e: any) => e.id === parsed.from_entity_id);
-    if (fromEntity.merged_to_entity_id) {
-      throw new McpError(
-        ErrorCode.InvalidParams,
-        `Source entity ${parsed.from_entity_id} is already merged`
-      );
-    }
-
-    // Count observations to move
-    const { count: obsCount } = await db
-      .from("observations")
-      .select("*", { count: "exact", head: true })
-      .eq("entity_id", parsed.from_entity_id);
-
-    // Rewrite observations to target entity
-    const { error: rewriteError } = await db
-      .from("observations")
-      .update({ entity_id: parsed.to_entity_id })
-      .eq("entity_id", parsed.from_entity_id);
-
-    if (rewriteError) {
+      return this.buildTextResponse({
+        from_entity_id: parsed.from_entity_id,
+        to_entity_id: parsed.to_entity_id,
+        observations_moved: result.observations_moved,
+        merged_at: result.merged_at,
+        merge_reason: parsed.merge_reason,
+      });
+    } catch (err) {
+      if (err instanceof EntityNotFoundError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
+      if (err instanceof EntityAlreadyMergedError) {
+        throw new McpError(ErrorCode.InvalidParams, err.message);
+      }
       throw new McpError(
         ErrorCode.InternalError,
-        `Failed to rewrite observations: ${rewriteError.message}`
+        `Failed to merge entities: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-
-    // Mark source entity as merged
-    const { error: mergeError } = await db
-      .from("entities")
-      .update({
-        merged_to_entity_id: parsed.to_entity_id,
-        merged_at: new Date().toISOString(),
-      })
-      .eq("id", parsed.from_entity_id);
-
-    if (mergeError) {
-      throw new McpError(
-        ErrorCode.InternalError,
-        `Failed to mark entity as merged: ${mergeError.message}`
-      );
-    }
-
-    // Create merge audit log
-    const { error: auditError } = await db.from("entity_merges").insert({
-      user_id: userId,
-      from_entity_id: parsed.from_entity_id,
-      to_entity_id: parsed.to_entity_id,
-      observations_moved: obsCount || 0,
-      merge_reason: parsed.merge_reason,
-      merged_by: "mcp",
-    });
-
-    if (auditError) {
-      // Log but don't fail - audit is not critical
-      logger.warn("Failed to create merge audit log:", auditError);
-    }
-
-    const mergedAt = new Date().toISOString();
-    return this.buildTextResponse({
-      from_entity_id: parsed.from_entity_id,
-      to_entity_id: parsed.to_entity_id,
-      observations_moved: obsCount || 0,
-      merged_at: mergedAt,
-      merge_reason: parsed.merge_reason,
-    });
   }
 
   /** MCP delete_entity: delete an entity via deletion observation (immutable, reversible for audit) */

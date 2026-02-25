@@ -555,12 +555,12 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
 ];
 
 export const SITE_METADATA = {
-  canonicalUrl: "https://markmhendrickson.github.io/neotoma/",
-  ogImageUrl: "https://markmhendrickson.com/images/posts/truth-layer-agent-memory-hero.png",
+  canonicalUrl: "https://neotoma.io/",
+  ogImageUrl: "https://neotoma.io/neotoma-hero.png",
   pageTitle: "Neotoma | Truth layer for persistent agent memory",
   pageDescription:
     "Neotoma is a truth layer for persistent agent memory. Install with npm and configure MCP for Claude, Cursor, or Codex. Deterministic, queryable entities and provenance.",
-  heroImageUrl: "https://markmhendrickson.com/images/posts/truth-layer-agent-memory-hero.png",
+  heroImageUrl: "neotoma-hero.png",
 };
 
 export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">

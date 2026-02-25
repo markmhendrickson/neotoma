@@ -1885,6 +1885,120 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 **When to Use:** Agents can call this at session start to encourage users to upgrade. If `updateAvailable` is true, the agent may prompt the user and run `suggestedCommand` (e.g. via shell) with user consent.
 
+### 3.24 `delete_entity`
+
+**Purpose:** Soft-delete an entity by creating a deletion observation with `_deleted: true`. The entity can be restored later. Follows the immutable audit trail principle -- no data is physically removed.
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string;     // Required: entity to delete
+  entity_type: string;   // Required: entity type
+  user_id?: string;      // Optional: inferred from auth context
+  reason?: string;       // Optional: reason for deletion
+}
+```
+
+**Response:** Confirmation with the created deletion observation ID.
+
+**Determinism:** Yes (same input produces same deletion observation)
+
+### 3.25 `delete_relationship`
+
+**Purpose:** Soft-delete a relationship by removing its snapshot and creating an audit record. Follows the same immutable pattern as entity deletion.
+
+**Request Schema:**
+
+```typescript
+{
+  relationship_type: string;    // Required
+  source_entity_id: string;     // Required
+  target_entity_id: string;     // Required
+  user_id?: string;             // Optional: inferred from auth context
+  reason?: string;              // Optional: reason for deletion
+}
+```
+
+**Response:** Confirmation with the deleted relationship key.
+
+**Determinism:** Yes
+
+### 3.26 `restore_entity`
+
+**Purpose:** Restore a soft-deleted entity by removing the deletion observation and recomputing the snapshot from remaining observations.
+
+**Request Schema:**
+
+```typescript
+{
+  entity_id: string;     // Required: entity to restore
+  entity_type: string;   // Required: entity type
+  user_id?: string;      // Optional: inferred from auth context
+}
+```
+
+**Response:** Restored entity snapshot.
+
+**Determinism:** Yes (same observations produce same snapshot)
+
+### 3.27 `restore_relationship`
+
+**Purpose:** Restore a soft-deleted relationship by recomputing its snapshot from existing relationship observations.
+
+**Request Schema:**
+
+```typescript
+{
+  relationship_type: string;    // Required
+  source_entity_id: string;     // Required
+  target_entity_id: string;     // Required
+  user_id?: string;             // Optional: inferred from auth context
+}
+```
+
+**Response:** Restored relationship snapshot.
+
+**Determinism:** Yes
+
+### 3.28 `health_check_snapshots`
+
+**Purpose:** Identify and optionally repair stale entity snapshots where the observation count is zero (snapshot exists but has no backing observations). Useful for data integrity verification.
+
+**Request Schema:**
+
+```typescript
+{
+  user_id?: string;      // Optional: inferred from auth context
+  repair?: boolean;      // Optional: if true, recompute stale snapshots (default: false)
+}
+```
+
+**Response:** List of stale snapshots found and any repairs performed.
+
+**Determinism:** Yes (read-only scan; repairs are deterministic recomputations)
+
+### 3.29 `interpret_uninterpreted`
+
+**Purpose:** Find sources that have zero interpretation runs and trigger interpretation for them. Useful for catching sources that were stored with `interpret: false` or where interpretation failed silently.
+
+**Request Schema:**
+
+```typescript
+{
+  user_id?: string;             // Optional: inferred from auth context
+  limit?: number;               // Optional: max sources to process (default: 10)
+  interpretation_config?: {     // Optional: interpretation config override
+    model?: string;
+    schema_types?: string[];
+  };
+}
+```
+
+**Response:** List of source IDs interpreted with results.
+
+**Determinism:** No (triggers LLM interpretation which is non-deterministic)
+
 ## 4. Error Envelope Standard
 
 All MCP actions return errors using this structure:

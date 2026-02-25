@@ -65,9 +65,9 @@ To start the API in the **background**:
 
 - `neotoma api start --background --env dev` (or `--env prod`)  
   Starts the selected environment only and writes env-specific PID/log files.
-- `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`)  
-  Starts the API with an HTTPS tunnel (ngrok/cloudflared) for remote MCP access. Tunnel URL is written to `/tmp/ngrok-mcp-url.txt` when ready.
-- `neotoma api start --env dev --tunnel` (or `--env prod --tunnel`, no `--background`)  
+- `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`)
+  Starts the API with an HTTPS tunnel (ngrok/cloudflared) for remote MCP access. Tunnel URL is written to `/tmp/ngrok-mcp-url.txt` when ready. Use `--tunnel-provider ngrok` or `--tunnel-provider cloudflare` to force a provider; otherwise the script auto-detects from installed tools.
+- `neotoma api start --env dev --tunnel` (or `--env prod --tunnel`, no `--background`)
   Runs the API and tunnel in the **foreground** in the current terminal (same as `npm run dev:api`). Logs stream to the terminal; Ctrl+C stops both. Tunnel URL: `cat /tmp/ngrok-mcp-url.txt`.
 
 ## npm scripts summary
@@ -182,6 +182,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `--no-session`: With no arguments, show intro then command menu (prompt `> `, `? for shortcuts`). No servers started.
 - `--no-servers`: With no arguments, enter session with connect-only behavior.
 - `--tunnel`: Start HTTPS tunnel (ngrok/cloudflared) with server start commands.
+- `--tunnel-provider <provider>`: Force tunnel provider to `ngrok` or `cloudflare` when using `--tunnel`; default is auto-detect from installed tools.
 - `--no-update-check`: Disable the update availability check. When enabled (default), the CLI checks the npm registry for a newer version and, if available, prints a one-line notice to stderr. The notice is never shown when `--json` is used.
 
 ### Update check (stderr notice)

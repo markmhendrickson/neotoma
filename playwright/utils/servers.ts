@@ -22,7 +22,7 @@ type BranchPorts = {
 };
 
 async function runGetBranchPorts(): Promise<BranchPorts> {
-  const scriptPath = path.join(repoRoot, 'scripts', 'get-branch-ports.js');
+  const scriptPath = path.join(repoRoot, 'scripts', 'get_branch_ports.js');
   const { stdout } = await execFileAsync('node', [scriptPath], {
     cwd: repoRoot,
   });

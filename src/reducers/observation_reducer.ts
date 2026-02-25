@@ -124,16 +124,15 @@ export class ObservationReducer {
       }
     }
 
-    // Find most recent observation timestamp
+    // Find most recent observation timestamp (deterministic - derived from data, not wall-clock)
     const lastObservationAt = sortedObservations[0].observed_at;
-    const computedAt = new Date().toISOString();
 
     return {
       entity_id: entityId,
       entity_type: entityType,
       schema_version: schemaVersion,
       snapshot,
-      computed_at: computedAt,
+      computed_at: lastObservationAt,
       observation_count: observations.length,
       last_observation_at: lastObservationAt,
       provenance,
@@ -422,14 +421,13 @@ export class ObservationReducer {
     }
 
     const lastObservationAt = sortedObservations[0].observed_at;
-    const computedAt = new Date().toISOString();
 
     return {
       entity_id: entityId,
       entity_type: entityType,
       schema_version: schemaVersion,
       snapshot,
-      computed_at: computedAt,
+      computed_at: lastObservationAt,
       observation_count: observations.length,
       last_observation_at: lastObservationAt,
       provenance,

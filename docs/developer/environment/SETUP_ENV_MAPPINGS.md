@@ -14,9 +14,9 @@ This guide helps you add mappings for Neotoma-specific environment variables to 
 - Add mappings for Neotoma environment variables (see list below)
 - Test the sync process
 
-## Required Environment Variables (from env.example)
+## Required Environment Variables (from .env.example)
 
-Based on `env.example`, these variables should be mapped to 1Password:
+Based on `.env.example`, these variables should be mapped to 1Password:
 
 ### Database Configuration (Required)
 - `DEV_REMOTE_DB_PROJECT_ID` - Development remote database project ID

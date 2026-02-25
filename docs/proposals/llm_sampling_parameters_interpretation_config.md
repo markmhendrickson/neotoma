@@ -124,7 +124,7 @@ InterpretationConfig:
   feature_flags: Record<string, boolean> | null
 ```
 
-### interpretation_runs / interpretations Table
+### interpretations Table
 
 Ensure `interpretation_config` JSONB column can store `top_k` and `top_p` (no migration needed; JSONB is schemaless for additional keys).
 
@@ -142,7 +142,7 @@ Ensure `interpretation_config` JSONB column can store `top_k` and `top_p` (no mi
 
 - Unit test: InterpretationConfig with `top_k` and `top_p` serializes and deserializes correctly
 - Unit test: Preset application produces expected parameter values
-- Integration test: Interpretation run stores full config (including top_k, top_p) in interpretation_runs
+- Integration test: Interpretation run stores full config (including top_k, top_p) in interpretations
 - Regression: Existing interpretation flows work with null/undefined top_k and top_p (backward compatible)
 
 ## Invariants

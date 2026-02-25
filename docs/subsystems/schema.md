@@ -301,67 +301,46 @@ CREATE POLICY "Service role full access" ON sources
 - Per-user deduplication via `(content_hash, user_id)` unique constraint
 - Storage path convention: `sources/{user_id}/{content_hash}`
 - See [`docs/subsystems/sources.md`](./sources.md) for complete architecture
-### 2.12 `interpretation_runs` Table (Interpretations)
+### 2.12 `interpretations` Table
 **Purpose:** Track versioned interpretation attempts. Enables audit trail of how raw content was interpreted and supports reinterpretation without losing history.
 **Schema:**
 ```sql
-CREATE TABLE interpretation_runs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  source_id UUID NOT NULL REFERENCES sources(id),
-  interpretation_config JSONB NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+CREATE TABLE interpretations (
+  id TEXT PRIMARY KEY,
+  source_id TEXT,
+  interpretation_config TEXT,
+  status TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  observations_created INTEGER,
+  user_id TEXT,
+  created_at TEXT,
   error_message TEXT,
-  extracted_entities JSONB DEFAULT '[]',
-  confidence NUMERIC(3,2),
-  unknown_field_count INTEGER NOT NULL DEFAULT 0,
-  extraction_completeness TEXT DEFAULT 'unknown' 
-    CHECK (extraction_completeness IN ('complete', 'partial', 'failed', 'unknown')),
-  started_at TIMESTAMPTZ,
-  completed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  archived_at TIMESTAMPTZ,
-  user_id UUID NOT NULL,
-  timeout_at TIMESTAMPTZ,
-  heartbeat_at TIMESTAMPTZ
+  unknown_fields_count INTEGER
 );
 ```
 **Field Definitions:**
 | Field                     | Type        | Purpose                                         | Mutable | Indexed     |
 | ------------------------- | ----------- | ----------------------------------------------- | ------- | ----------- |
-| `id`                      | UUID        | Unique interpretation ID                        | No      | Primary key |
-| `source_id`               | UUID        | Source being interpreted                        | No      | Yes         |
-| `interpretation_config`   | JSONB       | Config used (model, version, params)            | No      | No          |
+| `id`                      | TEXT        | Unique interpretation ID                        | No      | Primary key |
+| `source_id`               | TEXT        | Source being interpreted                        | No      | Yes         |
+| `interpretation_config`   | TEXT (JSON) | Config used (model, version, params)            | No      | No          |
 | `status`                  | TEXT        | 'pending', 'running', 'completed', 'failed'     | Yes     | Yes         |
 | `error_message`           | TEXT        | Error details if failed                         | Yes     | No          |
-| `extracted_entities`      | JSONB       | Summary of entities extracted                   | Yes     | No          |
-| `confidence`              | NUMERIC     | Overall confidence (0-1)                        | Yes     | No          |
-| `unknown_field_count`     | INTEGER     | Count of unknown fields routed to raw_fragments | Yes     | No          |
-| `extraction_completeness` | TEXT        | 'complete', 'partial', 'failed', 'unknown'      | Yes     | No          |
-| `started_at`              | TIMESTAMPTZ | When interpretation started                     | Yes     | No          |
-| `completed_at`            | TIMESTAMPTZ | When interpretation completed                   | Yes     | No          |
-| `created_at`              | TIMESTAMPTZ | When interpretation was created                 | No      | No          |
-| `archived_at`             | TIMESTAMPTZ | When interpretation was archived (null = active) | Yes     | No          |
-| `user_id`                 | UUID        | User who owns this interpretation               | No      | Yes         |
-| `timeout_at`              | TIMESTAMPTZ | When interpretation should timeout              | Yes     | No          |
-| `heartbeat_at`            | TIMESTAMPTZ | Last heartbeat for long-running interpretations | Yes     | Yes         |
+| `observations_created`    | INTEGER     | Count of observations created                   | Yes     | No          |
+| `unknown_fields_count`    | INTEGER     | Count of unknown fields routed to raw_fragments | Yes     | No          |
+| `started_at`              | TEXT        | When interpretation started (ISO 8601)          | Yes     | No          |
+| `completed_at`            | TEXT        | When interpretation completed (ISO 8601)        | Yes     | No          |
+| `created_at`              | TEXT        | When interpretation was created (ISO 8601)      | No      | No          |
+| `user_id`                 | TEXT        | User who owns this interpretation               | No      | Yes         |
 **Indexes:**
 ```sql
-CREATE INDEX idx_runs_source ON interpretation_runs(source_id);
-CREATE INDEX idx_runs_status ON interpretation_runs(status);
-CREATE INDEX idx_runs_active ON interpretation_runs(source_id) WHERE archived_at IS NULL;
-CREATE INDEX idx_runs_stale ON interpretation_runs(heartbeat_at) WHERE status = 'running';
-```
-**RLS Policies:**
-```sql
-ALTER TABLE interpretation_runs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users read own runs" ON interpretation_runs
-  FOR SELECT USING (user_id = auth.uid());
-CREATE POLICY "Service role full access" ON interpretation_runs
-  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE INDEX idx_interpretations_source ON interpretations(source_id);
+CREATE INDEX idx_interpretations_status ON interpretations(status);
 ```
 **Notes:**
 - Interpretation is non-deterministic but auditable via `interpretation_config`
-- Reinterpretation creates NEW run; never modifies existing
+- Reinterpretation creates NEW record; never modifies existing
 - Unknown fields count tracked; actual fields stored in `raw_fragments`
 - Timeout handling via `timeout_at` and `heartbeat_at` columns
 ### 2.13 `upload_queue` Table
