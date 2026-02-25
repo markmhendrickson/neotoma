@@ -719,34 +719,62 @@ function wrapByDisplayWidth(str: string, maxWidth: number): string[] {
   return lines;
 }
 
+/** Preferred order for entity table; any other top-level keys are appended sorted. */
+const ENTITY_DISPLAY_KEYS = [
+  "entity_id",
+  "entity_type",
+  "canonical_name",
+  "schema_version",
+  "observation_count",
+  "last_observation_at",
+  "computed_at",
+  "merged_to_entity_id",
+  "merged_at",
+] as const;
+
 /**
  * Format one entity as a two-column table (name, value). Skips missing/undefined.
- * Columns: entity_id (or entity.id), entity_type, canonical_name, snapshot keys (sorted),
- * observation_count, last_observation_at, computed_at.
- * Values wrap within the value column; name column stays fixed.
+ * Shows ENTITY_DISPLAY_KEYS first, then all snapshot keys (sorted), then provenance,
+ * raw_fragments, and any other top-level keys. Values wrap within the value column.
  */
 function formatEntityPropertiesTable(entity: Record<string, unknown>): string {
+  const seen = new Set<string>();
   const pairs: [string, unknown][] = [];
   const id = entity.entity_id ?? (entity as { id?: unknown }).id;
-  if (id !== undefined && id !== null) pairs.push(["entity_id", id]);
-  if (entity.entity_type !== undefined && entity.entity_type !== null)
-    pairs.push(["entity_type", entity.entity_type]);
-  if (entity.canonical_name !== undefined && entity.canonical_name !== null)
-    pairs.push(["canonical_name", entity.canonical_name]);
+  if (id !== undefined && id !== null) {
+    pairs.push(["entity_id", id]);
+    seen.add("entity_id");
+    if (entity.entity_id === undefined || entity.entity_id === null) seen.add("id");
+  }
+  for (const k of ENTITY_DISPLAY_KEYS) {
+    if (k === "entity_id") continue;
+    const v = entity[k];
+    if (v !== undefined && v !== null) {
+      pairs.push([k, v]);
+      seen.add(k);
+    }
+  }
   const snapshot = entity.snapshot;
   if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+    seen.add("snapshot");
     const keys = Object.keys(snapshot as Record<string, unknown>).sort();
     for (const k of keys) {
       const v = (snapshot as Record<string, unknown>)[k];
       if (v !== undefined && v !== null) pairs.push([k, v]);
     }
   }
-  if (entity.observation_count !== undefined && entity.observation_count !== null)
-    pairs.push(["observation_count", entity.observation_count]);
-  if (entity.last_observation_at !== undefined && entity.last_observation_at !== null)
-    pairs.push(["last_observation_at", entity.last_observation_at]);
-  if (entity.computed_at !== undefined && entity.computed_at !== null)
-    pairs.push(["computed_at", entity.computed_at]);
+  for (const k of ["provenance", "raw_fragments"] as const) {
+    const v = entity[k];
+    if (v !== undefined && v !== null) {
+      pairs.push([k, v]);
+      seen.add(k);
+    }
+  }
+  const rest = Object.keys(entity).filter((k) => !seen.has(k)).sort();
+  for (const k of rest) {
+    const v = entity[k];
+    if (v !== undefined && v !== null) pairs.push([k, v]);
+  }
   const nameColWidth = pairs.length
     ? Math.max(displayWidth("Field"), ...pairs.map(([k]) => displayWidth(k)))
     : displayWidth("Field");
@@ -2784,6 +2812,8 @@ async function runSessionLoop(opts?: {
   statusBlockLineCount?: number;
   suggestionLinesRef?: SuggestionLinesRef;
   lastReadyPhraseRef?: { current: string };
+  /** Last "view details" output (entity/source/relationship); re-printed on SIGWINCH so it survives resize. */
+  lastDetailOutputRef?: { current: string | null };
 }): Promise<void> {
   const realExit = process.exit.bind(process);
   process.exit = ((code?: number) => {
@@ -2893,12 +2923,11 @@ async function runSessionLoop(opts?: {
       debounceId = setTimeout(() => {
         debounceId = undefined;
         suggestionLinesRef.current = 0;
-        const baseLines = opts.statusBlockLineCount! + 1;
-        const rows = typeof process.stdout.rows === "number" ? process.stdout.rows : 100;
-        const totalLines = Math.max(baseLines, rows - 1);
-        process.stdout.write(BANNER_ANSI.up(totalLines));
-        process.stdout.write("\x1b[0J");
-        opts.redrawStatusBlock!(lineBufferRef.current);
+        // Non-destructive resize redraw: keep prior prompt history/output intact.
+        // Re-render status boxes at the new width below existing output so borders stay aligned.
+        process.stdout.write("\r" + BANNER_ANSI.clearLineFull);
+        process.stdout.write("\n");
+        opts.redrawStatusBlock?.(lineBufferRef.current);
         process.stdout.write("\n");
         process.stdout.write(bold("neotoma> ") + lineBufferRef.current);
         if (lineBufferRef.current.length === 0) {
@@ -3089,6 +3118,19 @@ async function runSessionLoop(opts?: {
           argv[3] === "get" &&
           typeof relationshipIdForFallback === "string";
         process.stdout.write("\n");
+        let captureBuffer = "";
+        const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+        const capturingWrite = (chunk: unknown, encoding?: unknown, cb?: unknown): boolean => {
+          if (typeof chunk === "string") captureBuffer += chunk;
+          else if (Buffer.isBuffer(chunk)) captureBuffer += chunk.toString();
+          else if (
+            chunk != null &&
+            typeof (chunk as { toString?: () => string }).toString === "function"
+          )
+            captureBuffer += (chunk as { toString: () => string }).toString();
+          return originalStdoutWrite(chunk as never, encoding as never, cb as never) as boolean;
+        };
+        (process.stdout as NodeJS.WriteStream).write = capturingWrite as NodeJS.WriteStream["write"];
         try {
           await program.parseAsync(argv);
         } catch (err) {
@@ -3184,6 +3226,10 @@ async function runSessionLoop(opts?: {
               process.exitCode = 1;
             }
           }
+        } finally {
+          (process.stdout as NodeJS.WriteStream).write = originalStdoutWrite;
+          if (opts?.lastDetailOutputRef && captureBuffer.length > 0)
+            opts.lastDetailOutputRef.current = captureBuffer;
         }
         prompt();
         return;
@@ -3198,6 +3244,7 @@ async function runSessionLoop(opts?: {
     }
 
     const args = parseSessionLine(trimmed);
+    opts?.lastDetailOutputRef && (opts.lastDetailOutputRef.current = null);
     const argv = [process.argv[0], process.argv[1], ...args];
     process.stdout.write("\n");
     try {
@@ -4513,6 +4560,23 @@ const authLoginCommand = authCommand
         const raw = await fs.readFile(urlFile, "utf-8");
         const url = raw.trim().replace(/\/$/, "");
         if (!url) throw new Error("Tunnel URL file is empty");
+        const isLocal =
+          url.startsWith("http://127.0.0.1") ||
+          url.startsWith("http://localhost") ||
+          url.startsWith("https://127.0.0.1") ||
+          url.startsWith("https://localhost");
+        if (isLocal) {
+          const msg =
+            "Tunnel URL file contains localhost; use the tunnel URL for OAuth. Start the API with a tunnel and wait until it is ready: neotoma api start --env dev --tunnel (then cat /tmp/ngrok-mcp-url.txt should show the tunnel URL).";
+          if (outputMode === "json") {
+            writeOutput({ ok: false, error: msg, tunnel_url_file: urlFile, read_url: url }, outputMode);
+          } else {
+            process.stderr.write(`neotoma auth login: ${msg}\n`);
+            process.stderr.write(`  (File ${urlFile} contained: ${url})\n`);
+          }
+          process.exitCode = 1;
+          return;
+        }
         baseUrl = url;
       } catch (err) {
         const msg =
@@ -10872,6 +10936,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         };
         const suggestionLinesRef = { current: 0 };
         const lastReadyPhraseRef = { current: SESSION_READY_PHRASES[0]! };
+        const lastDetailOutputRef = { current: null as string | null };
         const data = storedStatusBlockRedrawData;
         const redrawStatusBlock: RedrawStatusBlockFn = () => {
           const newWidth = Math.min(data.rawSessionBoxWidth, getTerminalWidth());
@@ -10891,6 +10956,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           statusBlockLineCount,
           suggestionLinesRef,
           lastReadyPhraseRef,
+          lastDetailOutputRef,
         });
         return;
       }
@@ -11148,6 +11214,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     debugLog("Starting session REPL (runSessionLoop)");
     const suggestionLinesRef = { current: 0 };
     const lastReadyPhraseRef = { current: SESSION_READY_PHRASES[0]! };
+    const lastDetailOutputRef = { current: null as string | null };
     let redrawStatusBlock: RedrawStatusBlockFn | undefined;
     let statusBlockLineCount: number | undefined;
     if (storedStatusBlockRedrawData != null) {
@@ -11183,6 +11250,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       statusBlockLineCount,
       suggestionLinesRef,
       lastReadyPhraseRef,
+      lastDetailOutputRef,
     });
     return;
   }

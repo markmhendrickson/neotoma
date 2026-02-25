@@ -894,8 +894,14 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         clientState: state,
         codeChallenge: code_challenge,
       });
-
-      return res.redirect(authRequest.authUrl);
+      // Keep local OAuth redirects on the current origin (tunnel or localhost) even if
+      // authRequest.authUrl was built from a different absolute base URL.
+      try {
+        const parsed = new URL(authRequest.authUrl);
+        return res.redirect(`${parsed.pathname}${parsed.search}`);
+      } catch {
+        return res.redirect(authRequest.authUrl);
+      }
     }
 
     const { randomUUID } = await import("node:crypto");
