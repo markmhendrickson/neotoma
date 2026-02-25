@@ -1,11 +1,11 @@
-# Deploy marketing site to GitHub Pages. Configure custom domain neotoma.io in
-# repo Settings → Pages → Custom domain so the site is served at https://neotoma.io.
+# Deploy marketing site to GitHub Pages from the dev branch. Configure custom domain
+# neotoma.io in repo Settings → Pages → Custom domain so the site is served at https://neotoma.io.
 name: Deploy site (GitHub Pages)
 
 on:
   push:
     branches:
-      - main
+      - dev
   workflow_dispatch:
 
 permissions:
