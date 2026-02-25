@@ -144,7 +144,16 @@ export function padToDisplayWidth(line: string, width: number): string {
 /** Terminal width for box and layout sizing. Respects viewport; use for capping box width. */
 export function getTerminalWidth(margin = 2): number {
   const cols = typeof process.stdout?.columns === "number" ? process.stdout.columns : 80;
-  return Math.max(20, cols - margin);
+  return Math.max(1, cols - margin);
+}
+
+/** Truncate string to display width with ellipsis. */
+function truncateToDisplayWidth(s: string, maxWidth: number): string {
+  if (displayWidth(s) <= maxWidth) return s;
+  if (maxWidth <= 1) return "…";
+  let len = s.length;
+  while (len > 0 && displayWidth(s.slice(0, len) + "…") > maxWidth) len--;
+  return (s.slice(0, len) || s.slice(0, 1)) + "…";
 }
 
 /** Box-drawing: single-line panel around content. Content is an array of lines; width is max visible length + padding, capped to terminal. */
@@ -277,17 +286,18 @@ export function blackBox(
   // Reserve space for two borders and left/right padding so the full line does not wrap
   const marginForLine = 2 + 2 * pad;
   const maxWidth = getTerminalWidth(marginForLine);
-  const cappedInnerWidth = Math.min(innerWidth, maxWidth);
+  const cappedInnerWidth = Math.max(1, Math.min(innerWidth, maxWidth));
 
   const padLeft = " ".repeat(pad);
   const out: string[] = [];
 
   // Top border with title on the left
   if (title) {
-    const rightDashes = Math.max(0, cappedInnerWidth - titleLen);
+    const titleOut = truncateToDisplayWidth(title, cappedInnerWidth);
+    const rightDashes = Math.max(0, cappedInnerWidth - displayWidth(titleOut));
     const topLine =
       BOX_ROUND.topLeft +
-      title +
+      titleOut +
       BOX_ROUND.horizontal.repeat(rightDashes) +
       BOX_ROUND.topRight;
     out.push(borderStyle(topLine));
@@ -300,7 +310,7 @@ export function blackBox(
   }
 
   // Content lines with side borders and padding (use displayWidth so right border aligns)
-  const maxContentWidth = cappedInnerWidth - pad;
+  const maxContentWidth = Math.max(1, cappedInnerWidth - pad);
   // eslint-disable-next-line no-control-regex
   const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, "");
   for (const line of lines) {

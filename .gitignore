@@ -19,7 +19,11 @@ data
 data/
 data*
 data.backup.*/
-public/assets/
+# Vite build output (outDir: public/); source is frontend/
+public/
+# Build output from build:pages:site (CI regenerates on deploy)
+site_pages/assets/
+site_pages/neotoma-hero.png
 .cursor/mcp.json
 .cursor/error_reports/
 docs/developer/mcp.json.example
