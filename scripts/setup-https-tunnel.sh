@@ -24,13 +24,14 @@ NGROK_PORT="${NGROK_PORT:-4040}"
 NGROK_PID_FILE="${NGROK_PID_FILE:-/tmp/ngrok-mcp.pid}"
 NGROK_URL_FILE="${NGROK_URL_FILE:-/tmp/ngrok-mcp-url.txt}"
 
-# Provider: explicit env wins; else Cloudflare if cloudflared available; else ngrok if auth'd
+# Provider: explicit env wins; else ngrok if installed and authenticated; else Cloudflare if available
+# (Prefer ngrok when both are present so "neotoma api start --tunnel" works without extra config.)
 TUNNEL_PROVIDER="${NEOTOMA_TUNNEL_PROVIDER:-${TUNNEL_PROVIDER:-}}"
 if [ -z "$TUNNEL_PROVIDER" ]; then
-  if command -v cloudflared &> /dev/null; then
-    TUNNEL_PROVIDER="cloudflare"
-  elif command -v ngrok &> /dev/null && ngrok config check &> /dev/null 2>&1; then
+  if command -v ngrok &> /dev/null && ngrok config check &> /dev/null 2>&1; then
     TUNNEL_PROVIDER="ngrok"
+  elif command -v cloudflared &> /dev/null; then
+    TUNNEL_PROVIDER="cloudflare"
   else
     TUNNEL_PROVIDER="ngrok"
   fi
@@ -101,7 +102,8 @@ if [ "$TUNNEL_PROVIDER" = "cloudflare" ]; then
       fi
     fi
     if [ -z "$NAMED_URL" ]; then
-      echo "❌ Named tunnel $CLOUDFLARED_NAMED requires CLOUDFLARE_TUNNEL_URL or HOST_URL in .env (e.g. https://mcp.neotoma.io)"
+      echo "❌ Named tunnel $CLOUDFLARED_NAMED requires CLOUDFLARE_TUNNEL_URL or HOST_URL in .env (e.g. https://mcp.neotoma.io)" >&2
+      [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "   To use ngrok instead: neotoma api start --env dev --tunnel --tunnel-provider ngrok" >&2
       exit 1
     fi
     # Normalize: no trailing slash
@@ -132,8 +134,9 @@ if [ "$TUNNEL_PROVIDER" = "cloudflare" ]; then
       [ -n "$NGROK_URL" ] && break
     done
     if [ -z "$NGROK_URL" ]; then
-      echo "❌ Failed to get Cloudflare tunnel URL. Check: tail -f $CLOUDFLARED_LOG"
-      echo "   Tip: use named tunnel to avoid 429: CLOUDFLARE_TUNNEL_NAME=neotoma CLOUDFLARE_TUNNEL_URL=https://your-hostname"
+      echo "❌ Failed to get Cloudflare tunnel URL. Check: tail -f $CLOUDFLARED_LOG" >&2
+      echo "   Tip: use named tunnel to avoid 429: CLOUDFLARE_TUNNEL_NAME=neotoma CLOUDFLARE_TUNNEL_URL=https://your-hostname" >&2
+      [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ] && echo "   To use ngrok instead: neotoma api start --env dev --tunnel --tunnel-provider ngrok" >&2
       kill $NGROK_PID 2>/dev/null || true
       exit 1
     fi
