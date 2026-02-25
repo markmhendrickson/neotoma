@@ -307,7 +307,7 @@ export function EntityList({ onEntityClick, searchQuery: externalSearchQuery }: 
         )}
       </div>
 
-      <div className="flex-1 rounded-md border overflow-auto">
+      <div className="flex-1 rounded-md border overflow-y-auto">
         {error && (
           <div className="p-4 bg-destructive/10 border-b border-destructive/20">
             <p className="text-sm text-destructive font-medium">Error</p>

@@ -284,6 +284,24 @@ function validateRedirectUri(redirectUri: string): void {
 }
 
 /**
+ * Redirect URIs allowed when the authorization request is from a tunnel (non-local Host).
+ * Prevents sending the authorization code to a third-party site. Allows localhost, loopback, and known app schemes.
+ */
+export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
+  if (!redirectUri || typeof redirectUri !== "string") return false;
+  try {
+    const url = new URL(redirectUri);
+    const protocol = url.protocol.toLowerCase();
+    const host = (url.hostname || "").toLowerCase();
+    if (protocol === "cursor:" || protocol === "vscode:" || protocol === "app:") return true;
+    if (protocol !== "http:" && protocol !== "https:") return false;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Validate state token format
  * Must be base64url string, reasonable length
  */

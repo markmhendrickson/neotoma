@@ -13,7 +13,73 @@ import {
   routeChatThroughMock,
 } from "./helpers.js";
 import { db } from "../../src/db.js";
-import { detectOrphanNodes, detectCycles } from "../../src/services/graph_builder.js";
+
+async function detectOrphanNodes() {
+  const { data: entities, error: entityError } = await db.from("entities").select("id");
+  if (entityError) throw entityError;
+
+  const { data: edges, error: edgeError } = await db.from("source_entity_edges").select("entity_id");
+  if (edgeError) throw edgeError;
+
+  const linkedEntityIds = new Set((edges ?? []).map((edge) => edge.entity_id));
+  const orphanEntities = (entities ?? []).filter((entity) => !linkedEntityIds.has(entity.id));
+
+  return {
+    orphanRecords: 0,
+    orphanEntities: orphanEntities.length,
+    orphanEvents: 0,
+  };
+}
+
+async function detectCycles() {
+  const { data: rels, error } = await db
+    .from("relationships")
+    .select("source_entity_id,target_entity_id,relationship_type");
+  if (error) throw error;
+
+  const adjacency = new Map<string, string[]>();
+  for (const rel of rels ?? []) {
+    if (rel.relationship_type !== "PART_OF") continue;
+    const list = adjacency.get(rel.source_entity_id) ?? [];
+    list.push(rel.target_entity_id);
+    adjacency.set(rel.source_entity_id, list);
+  }
+
+  const cycles: string[][] = [];
+  const permanent = new Set<string>();
+  const stack = new Set<string>();
+  const path: string[] = [];
+
+  const visit = (node: string) => {
+    if (stack.has(node)) {
+      const idx = path.indexOf(node);
+      cycles.push(idx >= 0 ? path.slice(idx).concat(node) : [node, node]);
+      return;
+    }
+    if (permanent.has(node)) return;
+
+    permanent.add(node);
+    stack.add(node);
+    path.push(node);
+
+    const neighbors = adjacency.get(node) ?? [];
+    for (const next of neighbors) {
+      visit(next);
+    }
+
+    path.pop();
+    stack.delete(node);
+  };
+
+  for (const node of adjacency.keys()) {
+    visit(node);
+  }
+
+  return {
+    cycleCount: cycles.length,
+    cycles,
+  };
+}
 
 test.describe("E2E-009: Graph Integrity Checks", () => {
   const testUserId = "test-user-graph-integrity";

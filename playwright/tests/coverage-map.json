@@ -65,6 +65,12 @@
     "states": ["navigate to unknown route"],
     "specFile": "not-found.spec.ts"
   },
+  "sitePage": {
+    "description": "Public site landing page coverage.",
+    "components": ["SitePage"],
+    "states": ["render hero and install guidance"],
+    "specFile": "site-page.spec.ts"
+  },
   "oauthFlow": {
     "description": "OAuth flow coverage.",
     "components": ["OAuthCallback"],

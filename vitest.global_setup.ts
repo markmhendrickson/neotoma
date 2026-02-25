@@ -11,15 +11,10 @@ import { fileURLToPath } from "node:url";
  */
 export default async function globalSetup() {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
-  const testDataDir = path.join(projectRoot, ".vitest", "data");
-  const testSourcesDir = path.join(testDataDir, "sources");
-  mkdirSync(testSourcesDir, { recursive: true });
+  const vitestDir = path.join(projectRoot, ".vitest");
+  mkdirSync(path.join(vitestDir, "sources"), { recursive: true });
 
-  // Ensure local test DB env is set before importing server code.
-  process.env.NEOTOMA_SQLITE_PATH =
-    process.env.NEOTOMA_SQLITE_PATH || path.join(projectRoot, ".vitest", "neotoma.db");
-  process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || testDataDir;
-  process.env.NEOTOMA_RAW_STORAGE_DIR = process.env.NEOTOMA_RAW_STORAGE_DIR || testSourcesDir;
+  process.env.NEOTOMA_DATA_DIR = process.env.NEOTOMA_DATA_DIR || vitestDir;
   process.env.NODE_ENV = "test";
 
   // Pick a stable base port for tests and let the server probe upward if in use.

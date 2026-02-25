@@ -5,6 +5,7 @@ import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { TableScrollWrapper } from '@/components/ui/table-scroll-wrapper';
 
 interface MarkdownContentProps {
   content: string;
@@ -163,11 +164,11 @@ export function MarkdownContent({ content, onNavigate }: MarkdownContentProps) {
 
           // Tables
           table: ({ children }) => (
-            <div className="overflow-x-auto my-4">
+            <TableScrollWrapper className="my-4 rounded-lg" showHint={true}>
               <table className="min-w-full border-collapse">
                 {children}
               </table>
-            </div>
+            </TableScrollWrapper>
           ),
           thead: ({ children }) => (
             <thead className="bg-muted">{children}</thead>

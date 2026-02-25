@@ -9,12 +9,58 @@
 import { describe, it, expect } from "vitest";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { mkdtemp } from "fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import Database from "better-sqlite3";
 
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
+
+function createTestDb(path: string, rows: Array<{ id: string; value: string }>): void {
+  const db = new Database(path);
+  db.exec("CREATE TABLE IF NOT EXISTS cli_test_records (id TEXT PRIMARY KEY, value TEXT)");
+  const insert = db.prepare("INSERT INTO cli_test_records (id, value) VALUES (?, ?)");
+  for (const row of rows) insert.run(row.id, row.value);
+  db.close();
+}
+
+function readTestDbRows(path: string): Array<{ id: string; value: string }> {
+  const db = new Database(path, { readonly: true });
+  const rows = db
+    .prepare("SELECT id, value FROM cli_test_records ORDER BY id")
+    .all() as Array<{ id: string; value: string }>;
+  db.close();
+  return rows;
+}
+
+async function setupTempNeotomaRepo(root: string): Promise<void> {
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify(
+      {
+        name: "neotoma",
+        version: "0.0.0-test",
+      },
+      null,
+      2
+    )
+  );
+}
+
+async function execCliWithRepoRoot(command: string, repoRoot: string): Promise<{
+  stdout: string;
+  stderr: string;
+}> {
+  return execAsync(command, {
+    env: {
+      ...process.env,
+      NEOTOMA_REPO_ROOT: repoRoot,
+      HOME: repoRoot,
+      USERPROFILE: repoRoot,
+    },
+  });
+}
 
 // Run a command and capture help output; commands that print help exit with 0
 async function getHelp(args: string): Promise<string> {
@@ -105,6 +151,11 @@ describe("CLI infrastructure command smoke tests", () => {
     it("storage info --help shows usage", async () => {
       const out = await getHelp("storage info");
       expect(out).toMatch(/info|Usage|Options|storage/i);
+    });
+
+    it("storage set-data-dir --help shows usage", async () => {
+      const out = await getHelp("storage set-data-dir");
+      expect(out).toMatch(/set-data-dir|move-db-files|on-conflict|Usage|Options/i);
     });
 
     it("backup --help shows usage", async () => {
@@ -270,6 +321,121 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(restoreResult).toHaveProperty("status");
       expect(restoreResult.status).toBe("restored");
       expect(restoreResult).toHaveProperty("target_dir");
+    });
+
+    it("storage set-data-dir should update NEOTOMA_DATA_DIR in .env", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-set-data-dir-env-"));
+      await setupTempNeotomaRepo(root);
+      const oldDir = join(root, "old_data");
+      const newDir = join(root, "new_data");
+      await writeFile(
+        join(root, ".env"),
+        `NEOTOMA_DATA_DIR="${oldDir}"\nOPENAI_API_KEY=test-key\n`
+      );
+      await execCliWithRepoRoot(
+        `${CLI_PATH} storage set-data-dir "${newDir}" --no-move-db-files --yes --json`,
+        root
+      );
+      const envText = await readFile(join(root, ".env"), "utf-8");
+      expect(envText).toMatch(new RegExp(`NEOTOMA_DATA_DIR=${newDir.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+      expect(envText).toMatch(/OPENAI_API_KEY=test-key/);
+    });
+
+    it("storage set-data-dir should copy DB files when no conflict and keep old files", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-set-data-dir-copy-"));
+      await setupTempNeotomaRepo(root);
+      const oldDir = join(root, "old_data");
+      const newDir = join(root, "new_data");
+      await writeFile(join(root, ".env"), `NEOTOMA_DATA_DIR=${oldDir}\n`);
+      await mkdir(oldDir, { recursive: true });
+      await mkdir(newDir, { recursive: true });
+      createTestDb(join(oldDir, "neotoma.db"), [{ id: "a", value: "old" }]);
+      await writeFile(join(oldDir, "neotoma.db-wal"), "wal");
+      const { stdout } = await execCliWithRepoRoot(
+        `${CLI_PATH} storage set-data-dir "${newDir}" --move-db-files --yes --json`,
+        root
+      );
+      const result = JSON.parse(stdout);
+      expect(result.move_db_files).toBe(true);
+      expect(readTestDbRows(join(newDir, "neotoma.db"))).toEqual([{ id: "a", value: "old" }]);
+      expect(readTestDbRows(join(oldDir, "neotoma.db"))).toEqual([{ id: "a", value: "old" }]);
+    });
+
+    it("storage set-data-dir overwrite should backup target DB files and replace them", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-set-data-dir-overwrite-"));
+      await setupTempNeotomaRepo(root);
+      const oldDir = join(root, "old_data");
+      const newDir = join(root, "new_data");
+      await writeFile(join(root, ".env"), `NEOTOMA_DATA_DIR=${oldDir}\n`);
+      await mkdir(oldDir, { recursive: true });
+      await mkdir(newDir, { recursive: true });
+      createTestDb(join(oldDir, "neotoma.db"), [{ id: "old_only", value: "source" }]);
+      createTestDb(join(newDir, "neotoma.db"), [{ id: "new_only", value: "target" }]);
+
+      const { stdout } = await execCliWithRepoRoot(
+        `${CLI_PATH} storage set-data-dir "${newDir}" --move-db-files --on-conflict overwrite --yes --json`,
+        root
+      );
+      const result = JSON.parse(stdout);
+      expect(result.conflict_strategy).toBe("overwrite");
+      expect(result.backups_created.length).toBeGreaterThan(0);
+      expect(readTestDbRows(join(newDir, "neotoma.db"))).toEqual([
+        { id: "old_only", value: "source" },
+      ]);
+    });
+
+    it("storage set-data-dir use-new should keep target DB files unchanged", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-set-data-dir-use-new-"));
+      await setupTempNeotomaRepo(root);
+      const oldDir = join(root, "old_data");
+      const newDir = join(root, "new_data");
+      await writeFile(join(root, ".env"), `NEOTOMA_DATA_DIR=${oldDir}\n`);
+      await mkdir(oldDir, { recursive: true });
+      await mkdir(newDir, { recursive: true });
+      createTestDb(join(oldDir, "neotoma.db"), [{ id: "old_only", value: "source" }]);
+      createTestDb(join(newDir, "neotoma.db"), [{ id: "new_only", value: "target" }]);
+
+      const { stdout } = await execCliWithRepoRoot(
+        `${CLI_PATH} storage set-data-dir "${newDir}" --move-db-files --on-conflict use-new --yes --json`,
+        root
+      );
+      const result = JSON.parse(stdout);
+      expect(result.conflict_strategy).toBe("use-new");
+      expect(result.copied_files).toEqual([]);
+      expect(readTestDbRows(join(newDir, "neotoma.db"))).toEqual([
+        { id: "new_only", value: "target" },
+      ]);
+    });
+
+    it("storage set-data-dir merge should merge rows into target DB", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-set-data-dir-merge-"));
+      await setupTempNeotomaRepo(root);
+      const oldDir = join(root, "old_data");
+      const newDir = join(root, "new_data");
+      await writeFile(join(root, ".env"), `NEOTOMA_DATA_DIR=${oldDir}\n`);
+      await mkdir(oldDir, { recursive: true });
+      await mkdir(newDir, { recursive: true });
+      createTestDb(join(oldDir, "neotoma.db"), [
+        { id: "shared", value: "source_shared" },
+        { id: "old_only", value: "source" },
+      ]);
+      createTestDb(join(newDir, "neotoma.db"), [
+        { id: "shared", value: "target_shared" },
+        { id: "new_only", value: "target" },
+      ]);
+
+      const { stdout } = await execCliWithRepoRoot(
+        `${CLI_PATH} storage set-data-dir "${newDir}" --move-db-files --on-conflict merge --yes --json`,
+        root
+      );
+      const result = JSON.parse(stdout);
+      expect(result.conflict_strategy).toBe("merge");
+      expect(result.merge_stats.length).toBeGreaterThan(0);
+      expect(readTestDbRows(join(newDir, "neotoma.db"))).toEqual([
+        { id: "new_only", value: "target" },
+        { id: "old_only", value: "source" },
+        { id: "shared", value: "target_shared" },
+      ]);
     });
   });
 

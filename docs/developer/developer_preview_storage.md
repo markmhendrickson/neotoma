@@ -8,7 +8,7 @@ This document states the storage stance for the Neotoma **developer preview**: w
 
 For the developer preview, **only local storage is supported.**
 
-- **Database:** SQLite at `./data/neotoma.db` (development) or `./data/neotoma.prod.db` (production). Set `NEOTOMA_SQLITE_PATH` if you need a custom path.
+- **Database:** SQLite at `./data/neotoma.db` (development) or `./data/neotoma.prod.db` (production). Set `NEOTOMA_DATA_DIR` to change the data root.
 - **Raw file storage:** Local directory at `./data/sources/` (dev) or `./data/sources_prod/` (prod). Set `NEOTOMA_RAW_STORAGE_DIR` if needed.
 - **Backend:** Local backend only in developer preview.
 

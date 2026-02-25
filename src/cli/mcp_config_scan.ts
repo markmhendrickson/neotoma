@@ -744,7 +744,7 @@ type InstallTargetChoice =
   | "codex_only"
   | "skip";
 
-type InstallEnvChoice = "dev" | "prod" | "both";
+type InstallEnvChoice = "dev" | "prod" | "both" | "skip";
 
 async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
   const rl = readline.createInterface({
@@ -765,12 +765,14 @@ async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
         "  (1) dev\n" +
         "  (2) prod\n" +
         "  (3) both\n" +
-        "Choose [1-3] (default: 3): ",
+        "  (4) skip\n" +
+        "Choose [1-4] (default: 3): ",
       (answer) => {
         if (settled) return;
         settled = true;
         rl.close();
         const a = (answer ?? "").trim().toLowerCase();
+        if (a === "4" || a === "skip" || a === "s") return resolve("skip");
         if (a === "1" || a === "dev") return resolve("dev");
         if (a === "2" || a === "prod") return resolve("prod");
         return resolve("both");
@@ -1112,8 +1114,19 @@ export async function offerInstall(
     boxAlreadyShown?: boolean;
     /** When set, only consider and install the server for this env (e.g. on CLI session start). */
     currentEnv?: "dev" | "prod";
+    /** Optional init default: skip env prompt and use this env target. */
+    autoInstallEnv?: "dev" | "prod" | "both";
+    /** Optional init default: skip target prompt and use this scope. */
+    autoInstallScope?: "project" | "user" | "both";
+    /** When true, do not run sync:mcp (avoids writing project-level MCP configs). */
+    skipProjectSync?: boolean;
   }
-): Promise<{ installed: boolean; message: string; scope?: "project" | "user" | "both" }> {
+): Promise<{
+  installed: boolean;
+  message: string;
+  scope?: "project" | "user" | "both";
+  updatedPaths?: string[];
+}> {
   const silent = options?.silent ?? false;
   const cwd = options?.cwd ?? process.cwd();
   let selectedEnv: "dev" | "prod" | null = options?.currentEnv ?? null;
@@ -1136,8 +1149,16 @@ export async function offerInstall(
 
   const configsWithIssues = configs.filter((c) => c.issues && c.issues.length > 0);
   if (!silent && options?.currentEnv == null) {
-    const envChoice = await promptInstallEnvironment();
-    selectedEnv = envChoice === "both" ? null : envChoice;
+    if (options?.autoInstallEnv) {
+      selectedEnv = options.autoInstallEnv === "both" ? null : options.autoInstallEnv;
+    } else {
+      const envChoice = await promptInstallEnvironment();
+      if (envChoice === "skip") {
+        process.stdout.write("MCP configuration skipped.\n");
+        return { installed: false, message: "MCP configuration skipped." };
+      }
+      selectedEnv = envChoice === "both" ? null : envChoice;
+    }
   }
   const missingConfigs = getMissingConfigs(selectedEnv);
 
@@ -1150,11 +1171,6 @@ export async function offerInstall(
     });
     if (fixResult.fixed) {
       process.stdout.write("Fixed: " + fixResult.message + "\n");
-      if (process.stdout.isTTY) {
-        process.stdout.write(
-          "If Cursor is open, toggle the MCP server or run Developer: Reload Window for changes to take effect.\n"
-        );
-      }
       // Re-scan to see if we still need to add missing servers
       const { configs: rescanned } = await scanForMcpConfigs(process.cwd(), {
         includeUserLevel: true,
@@ -1219,21 +1235,15 @@ export async function offerInstall(
     const newConfig = { mcpServers };
     await fs.writeFile(configPath, JSON.stringify(newConfig, null, 2) + "\n");
 
-    if (choice === "project" && configPath.startsWith(repoRoot)) {
+    if (choice === "project" && configPath.startsWith(repoRoot) && !options?.skipProjectSync) {
       await runSyncMcp(repoRoot);
     }
     await attemptCursorMcpReload(configPath);
 
-    if (process.stdout.isTTY) {
-      process.stdout.write(
-        "If Cursor is open, toggle the MCP server or run Developer: Reload Window for changes to take effect.\n"
-      );
-    }
-
     const createdMsg = selectedEnv
       ? `Created ${configPath} with ${selectedEnv} server.`
       : `Created ${configPath} with dev and prod servers.`;
-    return { installed: true, message: createdMsg };
+    return { installed: true, message: createdMsg, updatedPaths: [configPath] };
   }
 
   // Offer to update existing configs
@@ -1249,7 +1259,14 @@ export async function offerInstall(
     process.stdout.write("\n" + formatMcpStatusBox(configs) + "\n");
   }
 
-  const installChoice = await promptInstallTarget();
+  const installChoice: InstallTargetChoice =
+    options?.autoInstallScope === "project"
+      ? "project_all"
+      : options?.autoInstallScope === "both"
+        ? "both_all"
+        : options?.autoInstallScope === "user"
+          ? "user_all"
+          : await promptInstallTarget();
   if (installChoice === "skip") {
     return { installed: false, message: "Installation cancelled." };
   }
@@ -1268,7 +1285,7 @@ export async function offerInstall(
 
   const entries = neotomaServerEntries(repoRoot, sessionPorts);
   const updatedPaths: string[] = [];
-  const missingCodexOnly = selectedMissingConfigs.every((c) => isCodexConfigPath(c.path));
+  const selectedIncludesCodex = selectedMissingConfigs.some((c) => isCodexConfigPath(c.path));
 
   for (const config of selectedMissingConfigs) {
     if (isCodexConfigPath(config.path)) continue; // Codex uses TOML; updated via sync:mcp from .cursor/mcp.json
@@ -1312,36 +1329,31 @@ export async function offerInstall(
     }
   }
 
-  // If only Codex was missing, update user-level ~/.codex/config.toml and project .codex via sync:mcp
-  if (repoRoot && missingCodexOnly && updatedPaths.length === 0) {
+  // Codex is TOML; update user-level Codex config when selected.
+  let syncAlreadyRan = false;
+  if (repoRoot && selectedIncludesCodex) {
     await syncCodexUserConfig(repoRoot, sessionPorts);
-    await runSyncMcp(repoRoot);
     const codexPath = getUserLevelCodexConfigPath();
-    return {
-      installed: true,
-      message: codexPath
-        ? `Updated ${codexPath} and project .codex/config.toml. Restart Codex or reload config for changes to take effect.`
-        : "Updated project .codex/config.toml (npm run sync:mcp). Restart Codex or reload config for changes to take effect.",
-      scope,
-    };
-  }
-
-  if (repoRoot && updatedPaths.length > 0) {
-    await runSyncMcp(repoRoot);
-    for (const p of updatedPaths) {
-      if (p.includes(".cursor/mcp.json")) await attemptCursorMcpReload(p);
+    if (codexPath && !updatedPaths.includes(codexPath)) updatedPaths.push(codexPath);
+    if (!options?.skipProjectSync) {
+      await runSyncMcp(repoRoot);
+      syncAlreadyRan = true;
     }
   }
 
-  if (process.stdout.isTTY && updatedPaths.length > 0) {
-    process.stdout.write(
-      "If Cursor is open, toggle the MCP server or run Developer: Reload Window for changes to take effect.\n"
-    );
+  if (repoRoot && updatedPaths.length > 0) {
+    if (!options?.skipProjectSync && !syncAlreadyRan) {
+      await runSyncMcp(repoRoot);
+    }
+    for (const p of updatedPaths) {
+      if (p.includes(".cursor/mcp.json")) await attemptCursorMcpReload(p);
+    }
   }
 
   return {
     installed: true,
     message: `Updated ${updatedPaths.length} config file(s): ${updatedPaths.join(", ")}`,
     scope,
+    updatedPaths,
   };
 }

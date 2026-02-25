@@ -4,7 +4,7 @@ import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 
 describe("MCP query actions - parameter variations", () => {
   const tracker = new TestIdTracker();
-  const testUserId = "test-user-query";
+  const testUserId = `test-user-query-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
   beforeAll(async () => {
     // Seed test data for query operations

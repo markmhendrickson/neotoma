@@ -24,11 +24,8 @@ Provide a concise, user-facing guide to the Neotoma CLI for interacting with the
 # Global install
 npm install -g neotoma
 
-# Initialize (creates directories, database, optional encryption)
+# Initialize (creates directories, database; init can prompt for encryption)
 neotoma init
-
-# Or with encryption enabled
-neotoma init --generate-keys
 ```
 
 After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From the Neotoma repo root, running `neotoma` with no arguments starts an interactive session and both dev and prod API servers in watch mode; exit the session (exit / quit / Ctrl+D) to stop the servers. Use `neotoma --no-session` to show the intro and then the command menu (prompt `> `, type `?` for shortcuts).
@@ -63,8 +60,7 @@ If `neotoma` is not found after install or link, add the npm global bin to your 
 After installing (either via npm or from the project), run `neotoma init` to set up directories and the database:
 
 ```bash
-neotoma init                    # Basic setup
-neotoma init --generate-keys    # With encryption for privacy-first mode
+neotoma init                    # Basic setup (init can prompt for encryption)
 neotoma init --data-dir /path   # Custom data directory
 ```
 
@@ -156,7 +152,7 @@ neotoma entities list --type company --json
 ```
 
 ## Configuration and storage
-The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`. The CLI may show an update-available notice to stderr when a newer npm version exists; disable with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`.
+The CLI stores configuration locally. See `docs/developer/cli_reference.md` for the config file path and format. To see where server data is stored (file paths for SQLite, raw sources, event log), run `neotoma storage info`. To reconfigure the data directory and optionally copy/merge existing DB files into the new location, run `neotoma storage set-data-dir <dir>`. The CLI may show an update-available notice to stderr when a newer npm version exists; disable with `--no-update-check` or `NO_UPDATE_NOTIFIER=1`.
 
 ## Diagrams
 

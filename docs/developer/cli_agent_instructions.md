@@ -19,7 +19,8 @@ When a Neotoma CLI session starts (dev or prod), the applied rule files (e.g. `.
 ## Transport and environment
 
 - **When MCP is available (installed and running):** Prefer **MCP** for Neotoma operations. Use MCP tools (e.g. `store_structured`, `create_relationship`, `mcp_parquet_*`) per `docs/developer/mcp/instructions.md`.
-- **When MCP is not available:** Use the **Neotoma CLI** as backup. Use connect-only CLI invocations and ensure the API is already running (e.g. `neotoma store --json='...'`, `neotoma entities list`). For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
+- **When both neotoma-dev and neotoma MCP servers are configured:** Prefer **neotoma** (production) for general use unless the user or context clearly indicates development; if unsure, prefer neotoma.
+- **When MCP is not available:** Use the **Neotoma CLI** as backup. Data commands are API-first with automatic in-process local fallback if the API is unreachable (e.g. `neotoma store --json='...'`, `neotoma entities list`). Use `--offline` to force local transport or `--api-only` to require remote API. For server commands (`api start`, `api stop`, `api logs`, `watch`), always pass `--env dev` or `--env prod`.
 
 ## CLI startup protocol (use-existing)
 
@@ -31,7 +32,7 @@ neotoma entities list --type contact
 neotoma schemas list
 ```
 
-For server commands (`api start`, `api stop`, `api logs`, `watch`), pass `--env dev` or `--env prod`. For data commands, use `--base-url` if you need to target a specific non-default port.
+For server commands (`api start`, `api stop`, `api logs`, `watch`), pass `--env dev` or `--env prod`. For data commands, use `--base-url` for a specific target port, `--offline` to force local transport, or `--api-only` to disable fallback.
 
 **`neotoma dev` / `neotoma prod` are environment shorthands.** They inject `--env dev` or `--env prod` for that invocation.
 

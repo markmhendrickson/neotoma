@@ -221,20 +221,17 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
         "⚠️  Database not accessible - showing all schemas that would be registered\n"
       );
       console.log(
-        "   (Configure NEOTOMA_SQLITE_PATH or data directory to check existing schemas)\n"
+        "   (Configure NEOTOMA_DATA_DIR to check existing schemas)\n"
       );
     } else {
       console.error(
-        "❌ Error: Database not accessible. Please configure NEOTOMA_SQLITE_PATH or data directory.\n"
+        "❌ Error: Database not accessible. Please configure NEOTOMA_DATA_DIR.\n"
       );
       console.error(
         "   Required environment variables:\n"
       );
       console.error(
-        "   - NEOTOMA_SQLITE_PATH (for local SQLite)\n"
-      );
-      console.error(
-        "   - Or NEOTOMA_DATA_DIR with writable data directory\n"
+        "   - NEOTOMA_DATA_DIR (for local SQLite)\n"
       );
       console.error(
         "\n   Options to configure:\n"
@@ -250,9 +247,6 @@ async function initializeSchemas(dryRun: boolean, force: boolean): Promise<void>
       );
       console.error(
         "   2. Manually add to .env file:\n"
-      );
-      console.error(
-        "      NEOTOMA_SQLITE_PATH=./data/neotoma.db\n"
       );
       console.error(
         "      NEOTOMA_DATA_DIR=./data\n"

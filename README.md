@@ -206,11 +206,8 @@ The **primary entrypoint** for all documentation is the index and navigation gui
 # Global install (recommended for MCP server use)
 npm install -g neotoma
 
-# Initialize (creates data directories, database, optional encryption keys)
+# Initialize (creates data directories, database; init can prompt for encryption)
 neotoma init
-
-# Or with encryption enabled
-neotoma init --generate-keys
 
 # Start the API server
 neotoma api start

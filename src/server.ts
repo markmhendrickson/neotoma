@@ -462,10 +462,19 @@ export class NeotomaServer {
 
     // Get authenticated user_id (will throw if not authenticated)
     const userId = this.getAuthenticatedUserId();
+    const storage =
+      config.storageBackend === "local"
+        ? {
+            storage_backend: "local" as const,
+            data_dir: config.dataDir,
+            sqlite_db: config.sqlitePath,
+          }
+        : undefined;
 
     return this.buildTextResponse({
       user_id: userId,
       authenticated: true,
+      storage,
     });
   }
 

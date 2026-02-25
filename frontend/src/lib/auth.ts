@@ -79,29 +79,6 @@ export const auth = {
       emitAuth("SIGNED_IN");
       return { data: { session: currentSession }, error: null };
     },
-    async signInWithOtp(_: unknown) {
-      return { data: null, error: { message: "OTP auth is disabled in local-only mode." } };
-    },
-    async signInWithPassword(_: unknown) {
-      return { data: null, error: { message: "Password auth is disabled in local-only mode." } };
-    },
-    async signUp(_: unknown) {
-      return { data: null, error: { message: "Signup is disabled in local-only mode." } };
-    },
-    async resetPasswordForEmail(_: string, __?: unknown) {
-      return { data: null, error: { message: "Password reset is disabled in local-only mode." } };
-    },
-    async signInWithOAuth(_: unknown) {
-      return { data: null, error: { message: "OAuth providers are disabled in local-only mode." } };
-    },
-    oauth: {
-      async getAuthorizationDetails(_authorizationId: string) {
-        return {
-          data: null,
-          error: { message: "Remote OAuth authorization details are disabled in local-only mode." },
-        };
-      },
-    },
   },
   channel() {
     return {

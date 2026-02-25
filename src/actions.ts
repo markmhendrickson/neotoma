@@ -29,6 +29,11 @@ import { ensureLocalDevUser, LOCAL_DEV_USER_ID } from "./services/local_auth.js"
 import { getSqliteDb } from "./repositories/sqlite/sqlite_client.js";
 import { getMcpAuthToken } from "./crypto/mcp_auth_token.js";
 import {
+  isOauthKeyCredentialValid,
+  normalizeOauthNextPath,
+  OAuthKeySessionStore,
+} from "./services/oauth_key_gate.js";
+import {
   AnalyzeSchemaCandidatesRequestSchema,
   CorrectEntityRequestSchema,
   CreateRelationshipRequestSchema,
@@ -249,6 +254,45 @@ function isLocalRequest(req: express.Request): boolean {
   return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
 }
 
+const OAUTH_KEY_SESSION_COOKIE = "neotoma_oauth_key_session";
+const oauthKeySessions = new OAuthKeySessionStore();
+
+function readCookie(req: express.Request, name: string): string | undefined {
+  const header = (req.headers["cookie"] || req.headers["Cookie"] || "") as string;
+  if (!header) return undefined;
+  const parts = header.split(";").map((part) => part.trim());
+  for (const part of parts) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const key = part.slice(0, eq);
+    if (key !== name) continue;
+    return decodeURIComponent(part.slice(eq + 1));
+  }
+  return undefined;
+}
+
+function hasValidOAuthKeySession(req: express.Request): boolean {
+  const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
+  return oauthKeySessions.isValid(token);
+}
+
+function setOAuthKeySessionCookie(req: express.Request, res: express.Response): void {
+  const token = oauthKeySessions.create();
+  const forwardedProto =
+    ((req.headers["x-forwarded-proto"] || req.headers["X-Forwarded-Proto"]) as string | undefined)
+      ?.split(",")[0]
+      ?.trim()
+      ?.toLowerCase() || "";
+  const secure = req.secure || req.protocol === "https" || forwardedProto === "https";
+  res.cookie(OAUTH_KEY_SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    path: "/mcp/oauth",
+    maxAge: 15 * 60 * 1000,
+  });
+}
+
 // MCP StreamableHTTP endpoint (GET, POST, DELETE)
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
 app.all("/mcp", async (req, res) => {
@@ -324,6 +368,10 @@ app.all("/mcp", async (req, res) => {
     if (!hasAuth) {
       const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`;
       res.setHeader("WWW-Authenticate", wwwAuthHeader);
+      const unauthMessage =
+        config.requireKeyForOauth
+          ? "Unauthorized: Authentication required (key-authenticated OAuth or Bearer token)."
+          : "Unauthorized: Authentication required";
 
       // For POST requests with JSON-RPC body, return JSON-RPC error format
       if (req.method === "POST" && req.body && typeof req.body === "object") {
@@ -331,14 +379,14 @@ app.all("/mcp", async (req, res) => {
           jsonrpc: "2.0",
           error: {
             code: -32001,
-            message: "Unauthorized: Authentication required",
+            message: unauthMessage,
           },
           id: req.body?.id ?? null,
         });
       }
       // For GET/DELETE requests, return simple 401
       return res.status(401).json({
-        error: "Unauthorized: Authentication required",
+        error: unauthMessage,
       });
     }
 
@@ -716,6 +764,87 @@ app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
 });
 
 // RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
+app.get("/mcp/oauth/key-auth", async (req, res) => {
+  if (!config.requireKeyForOauth) {
+    const nextPath = normalizeOauthNextPath((req.query.next as string | undefined) || undefined);
+    return res.redirect(nextPath);
+  }
+
+  const nextPath = normalizeOauthNextPath((req.query.next as string | undefined) || undefined);
+  if (hasValidOAuthKeySession(req)) {
+    return res.redirect(nextPath);
+  }
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  return res.send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Neotoma key authentication</title>
+  </head>
+  <body>
+    <h1>Authenticate with your key</h1>
+    <p>OAuth requires key authentication before continuing. Provide your private key hex or mnemonic.</p>
+    <form method="post" action="/mcp/oauth/key-auth">
+      <input type="hidden" name="next" value="${nextPath}" />
+      <div>
+        <label for="private_key_hex">Private key hex (optional)</label><br />
+        <input id="private_key_hex" name="private_key_hex" type="password" autocomplete="off" />
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="mnemonic">Mnemonic (optional)</label><br />
+        <textarea id="mnemonic" name="mnemonic" rows="3" cols="80"></textarea>
+      </div>
+      <div style="margin-top: 12px;">
+        <label for="mnemonic_passphrase">Mnemonic passphrase (optional)</label><br />
+        <input id="mnemonic_passphrase" name="mnemonic_passphrase" type="password" autocomplete="off" />
+      </div>
+      <div style="margin-top: 14px;">
+        <button type="submit">Authenticate and continue</button>
+      </div>
+    </form>
+    <p style="margin-top: 16px;">
+      If you do not have key credentials configured for this server, OAuth is unavailable. Use
+      <code>NEOTOMA_BEARER_TOKEN</code> and configure MCP with <code>Authorization: Bearer &lt;token&gt;</code>.
+    </p>
+  </body>
+</html>`);
+});
+
+app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (req, res) => {
+  const nextPath = normalizeOauthNextPath((req.body?.next as string | undefined) || undefined);
+
+  if (!config.requireKeyForOauth) {
+    return res.redirect(nextPath);
+  }
+
+  const result = isOauthKeyCredentialValid({
+    privateKeyHex: req.body?.private_key_hex,
+    mnemonic: req.body?.mnemonic,
+    mnemonicPassphrase: req.body?.mnemonic_passphrase,
+  });
+
+  if (!result.ok) {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(401).send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Key authentication failed</title>
+  </head>
+  <body>
+    <h1>Key authentication failed</h1>
+    <p>${result.reason || "Unable to validate key credentials."}</p>
+    <p><a href="/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}">Try again</a></p>
+  </body>
+</html>`);
+  }
+
+  setOAuthKeySessionCookie(req, res);
+  return res.redirect(nextPath);
+});
+
+// RFC 8414 authorization endpoint (GET) for Cursor and other OAuth clients
 app.get("/mcp/oauth/authorize", async (req, res) => {
   try {
     const redirect_uri = req.query.redirect_uri as string | undefined;
@@ -734,12 +863,30 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
     if (!code_challenge || code_challenge_method !== "S256") {
       return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
     }
+    if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
+      const nextPath = normalizeOauthNextPath(req.originalUrl);
+      return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
+    }
+    if (dev_stub === "1" || dev_stub === "true") {
+      return res
+        .status(400)
+        .send("dev_stub is disabled. OAuth requires key authentication via /mcp/oauth/key-auth.");
+    }
 
     if (config.storageBackend === "local") {
+      // When reached via tunnel, only allow redirect_uri to localhost or known app schemes
+      if (!isLocalRequest(req)) {
+        const { isRedirectUriAllowedForTunnel } = await import("./services/mcp_oauth.js");
+        if (!isRedirectUriAllowedForTunnel(redirect_uri)) {
+          return res.status(400).send(
+            "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, http://localhost, or http://127.0.0.1."
+          );
+        }
+      }
+
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest, completeLocalAuthorization } =
-        await import("./services/mcp_oauth.js");
+      const { createLocalAuthorizationRequest } = await import("./services/mcp_oauth.js");
 
       const authRequest = await createLocalAuthorizationRequest({
         connectionId,
@@ -747,20 +894,6 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
         clientState: state,
         codeChallenge: code_challenge,
       });
-
-      if (dev_stub === "1" || dev_stub === "true") {
-        const devUser = ensureLocalDevUser();
-        const completion = await completeLocalAuthorization(
-          authRequest.state,
-          devUser.id,
-          client_id
-        );
-        const params = new URLSearchParams({
-          code: completion.connectionId,
-          state: completion.clientState ?? state,
-        });
-        return res.redirect(`${redirect_uri}?${params.toString()}`);
-      }
 
       return res.redirect(authRequest.authUrl);
     }
@@ -793,6 +926,10 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   if (!state) {
     return res.status(400).send("state is required");
   }
+  if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
+    const nextPath = normalizeOauthNextPath(req.originalUrl);
+    return res.redirect(`/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`);
+  }
 
   // When encryption is enabled: OAuth is not supported (MCP handler requires key-derived token)
   if (config.encryption.enabled) {
@@ -823,8 +960,27 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
 </html>`);
   }
 
-  // When encryption is off: auto-use dev account (no email/password form needed)
-  // This aligns with MCP-style auth: encryption off = no auth required, auto dev-local
+  // When encryption is off: local requests auto-approve; tunnel requests require explicit approval
+  const fromTunnel = !isLocalRequest(req);
+  if (fromTunnel && req.query.approve !== "1") {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    const base = `${req.protocol}://${req.get("host") || ""}`;
+    const approveUrl = `${base}${req.path}?${new URLSearchParams({ state, approve: "1" }).toString()}`;
+    return res.send(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Approve MCP connection</title>
+  </head>
+  <body>
+    <h1>Approve MCP connection</h1>
+    <p>A client is requesting access to Neotoma. Only approve if you started this connection (e.g. by clicking Connect in Cursor).</p>
+    <p><a href="${approveUrl}">Approve this connection</a></p>
+    <p><small>If you did not expect this, close the tab. No access will be granted.</small></p>
+  </body>
+</html>`);
+  }
+
   try {
     const devUser = ensureLocalDevUser();
     const { completeLocalAuthorization } = await import("./services/mcp_oauth.js");
@@ -1185,7 +1341,15 @@ app.get("/me", async (req, res) => {
     if (!userId) {
       return sendError(res, 401, "AUTH_REQUIRED", "Not authenticated");
     }
-    return res.json({ user_id: userId, email: email ?? undefined });
+    const storage =
+      config.storageBackend === "local"
+        ? {
+            storage_backend: "local" as const,
+            data_dir: config.dataDir,
+            sqlite_db: config.sqlitePath,
+          }
+        : undefined;
+    return res.json({ user_id: userId, email: email ?? undefined, storage });
   } catch (error: any) {
     logError("GetMe", req, error);
     return sendError(res, 401, "AUTH_REQUIRED", error.message ?? "Not authenticated");
@@ -2478,6 +2642,19 @@ async function storeUnstructuredForApi(params: {
       (mimeType || "").toLowerCase().includes("pdf") ||
       (originalFilename || "").toLowerCase().endsWith(".pdf");
     const rawTextLength = typeof rawText === "string" ? rawText.length : 0;
+
+    // Avoid nondeterministic LLM errors for empty non-PDF files; store the source and skip interpretation.
+    if (rawTextLength === 0 && !isPdf && !isCsv) {
+      response.interpretation = {
+        skipped: true,
+        reason: "empty_content",
+        message: "No extractable text found; interpretation skipped",
+      };
+      response.interpretation_debug = {
+        raw_text_length: 0,
+      };
+      return response;
+    }
 
     let extractionResult:
       | Awaited<ReturnType<typeof extractWithLLM>>
@@ -4171,9 +4348,17 @@ app.post("/correct", async (req, res) => {
 app.post("/get_authenticated_user", async (req, res) => {
   try {
     const userId = await getAuthenticatedUserId(req, undefined);
+    const storage =
+      config.storageBackend === "local"
+        ? {
+            storage_backend: "local" as const,
+            data_dir: config.dataDir,
+            sqlite_db: config.sqlitePath,
+          }
+        : undefined;
 
     logDebug("Success:get_authenticated_user", req, { user_id: userId });
-    return res.json({ user_id: userId });
+    return res.json({ user_id: userId, storage });
   } catch (error) {
     return handleApiError(
       req,

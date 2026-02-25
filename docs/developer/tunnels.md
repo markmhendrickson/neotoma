@@ -44,6 +44,26 @@ Do not use a tunnel when:
 
 ---
 
+## Security
+
+**Transport:** The tunnel provider (Cloudflare or ngrok) terminates TLS. Clients connect to `https://<tunnel-host>/mcp`; the provider forwards traffic to your local server over HTTP on localhost. Only the tunnel URL is exposed publicly.
+
+**Authentication:** Requests that reach the server via the tunnel have a **non-local Host** header (the tunnel hostname). The server never treats them as "local," so they do **not** get no-auth access:
+
+- **Unauthenticated** requests to `/mcp` receive **401 Unauthorized**. Cursor uses this to show the **Connect** button and start OAuth.
+- **OAuth (key-gated):** Use the Connect flow only after completing `/mcp/oauth/key-auth` with private key hex or mnemonic. PKCE and encrypted refresh tokens apply; see [auth.md](../subsystems/auth.md) and [mcp_oauth_implementation.md](mcp_oauth_implementation.md).
+- **Optional shared secret:** Set `NEOTOMA_BEARER_TOKEN` in `.env`; clients can send `Authorization: Bearer <token>` (useful for scripts or non-OAuth clients).
+- **Encryption on:** When `NEOTOMA_ENCRYPTION_ENABLED=true`, only the key-derived MCP token is accepted (`neotoma auth mcp-token`); OAuth is disabled.
+
+**Summary:** Tunnel traffic must always authenticate. OAuth is key-gated; non-key users should use `NEOTOMA_BEARER_TOKEN`.
+
+**Local OAuth over a public tunnel:** With encryption off, OAuth still uses a built-in dev account **after** key-auth preflight succeeds. When the server is reached **via a tunnel** (non-local Host), it requires **explicit approval** (an "Approve this connection" page) before completing OAuth, and it only accepts **allowlisted redirect URIs** (e.g. `cursor://`, `http://localhost`, `http://127.0.0.1`) so the authorization code cannot be sent to an arbitrary third-party site. If users cannot complete key-authenticated OAuth, use bearer token access:
+
+- **`NEOTOMA_BEARER_TOKEN`** in `.env` and send it as `Authorization: Bearer <token>` from the client (no OAuth; good for scripts or single-user).
+- **Encryption on** (`NEOTOMA_ENCRYPTION_ENABLED=true`): OAuth is disabled; use the key-derived token from `neotoma auth mcp-token` only.
+
+---
+
 ## Supported Providers
 
 | Provider    | Binary      | Auto-selected when        | Override                    |
@@ -79,6 +99,8 @@ Port is controlled by `NEOTOMA_HTTP_PORT` or `HTTP_PORT` (default 8080 for dev, 
 
 **Combined commands** (e.g. `dev:api`, `watch:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `NEOTOMA_HOST_URL`. Ctrl+C stops both.
 
+**CLI:** To start the API with a tunnel from the Neotoma CLI: `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`). See [cli_reference.md](cli_reference.md).
+
 ---
 
 ## Environment Variables
@@ -86,6 +108,8 @@ Port is controlled by `NEOTOMA_HTTP_PORT` or `HTTP_PORT` (default 8080 for dev, 
 | Variable | Purpose |
 |----------|---------|
 | `NEOTOMA_HOST_URL` | Base URL for API and MCP (OAuth, discovery, "Add to Cursor"). If unset, server auto-discovers from `/tmp/ngrok-mcp-url.txt`. |
+| `NEOTOMA_REQUIRE_KEY_FOR_OAUTH` | Default `true`. Requires `/mcp/oauth/key-auth` preflight before OAuth authorize/local-login. |
+| `NEOTOMA_BEARER_TOKEN` | Shared bearer token fallback for remote users who are not using key-authenticated OAuth. |
 | `NEOTOMA_TUNNEL_PROVIDER` | Force provider: `cloudflare` or `ngrok`. |
 | `NEOTOMA_HTTP_PORT` | Port the server listens on; prefer when running inside a host workspace (avoids conflicts). |
 | `HTTP_PORT` | Legacy; tunnel forwards to this (default 8080; prod scripts use 8180). |

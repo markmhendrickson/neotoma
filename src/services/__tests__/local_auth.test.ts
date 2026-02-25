@@ -4,7 +4,6 @@ import path from "path";
 
 async function loadLocalAuthModule(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
-  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
 
   const moduleUrl = new URL("../local_auth.js", import.meta.url).href;

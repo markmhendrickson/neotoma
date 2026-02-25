@@ -59,7 +59,6 @@ flyctl launch --no-deploy --name neotoma --region <closest-region>
 ```bash
 # Set database credentials (if using remote backend)
 flyctl secrets set \
-  NEOTOMA_SQLITE_PATH="" \
   NEOTOMA_DATA_DIR=""
 # Set bearer token for API auth
 flyctl secrets set \

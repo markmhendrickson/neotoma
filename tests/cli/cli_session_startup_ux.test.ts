@@ -6,6 +6,9 @@ import {
   buildIntroBoxContent,
   buildStatusBlockOutput,
   getPromptPlaceholder,
+  getSlashSuggestionCursorUpLines,
+  getWatchEventCount,
+  parseWatchRowSelection,
 } from "../../src/cli/index.ts";
 
 describe("CLI session startup UX", () => {
@@ -36,14 +39,14 @@ describe("CLI session startup UX", () => {
         apiLines: ["Production API: http://127.0.0.1:8180 (2 ms)"],
         watchLines: ["1  1m ago  entity  add  ent_abc  Updated invoice"],
         watchEventCount: 1,
-        installationLines: ["MCP status by config:", "CLI instructions status:"],
+        installationLines: ["Config", "MCP User", "MCP Project", "CLI Instructions"],
       },
       100
     );
 
     expect(output).toContain(" APIs ");
     expect(output).toContain(" Recent events ");
-    expect(output).toContain(" Installation ");
+    expect(output).toContain(" Initialization ");
   });
 
   it("formats API lines with environment labels", () => {
@@ -70,7 +73,7 @@ describe("CLI session startup UX", () => {
     expect(lines[1]).toContain("Development API:");
   });
 
-  it("adds installation warnings when platform config exists but Neotoma is missing", () => {
+  it("does not show cursor MCP warning when cursor config exists", () => {
     const lines = buildInstallationBoxLines(
       [{ path: "/tmp/.cursor/mcp.json", hasDev: false, hasProd: false }],
       {
@@ -79,14 +82,31 @@ describe("CLI session startup UX", () => {
       }
     );
 
-    expect(lines.join("\n")).toContain("Warning: Cursor config found, Neotoma MCP is not installed.");
-    expect(lines.join("\n")).toContain(
-      "Warning: Cursor is installed, Neotoma CLI instructions are missing."
-    );
+    expect(lines.join("\n")).not.toContain("Warning: Cursor config found, Neotoma MCP is not installed.");
   });
 
   it("shows prompt placeholder only when input is empty", () => {
     expect(getPromptPlaceholder("")).toBe("/ for commands");
     expect(getPromptPlaceholder("entities list")).toBe("");
+  });
+
+  it("moves cursor up one extra line after slash suggestions render", () => {
+    expect(getSlashSuggestionCursorUpLines(0)).toBe(1);
+    expect(getSlashSuggestionCursorUpLines(1)).toBe(2);
+    expect(getSlashSuggestionCursorUpLines(5)).toBe(6);
+  });
+
+  it("parses watch row selections from numeric and slash inputs", () => {
+    expect(parseWatchRowSelection("9")).toBe(9);
+    expect(parseWatchRowSelection("/9")).toBe(9);
+    expect(parseWatchRowSelection("/ list 9")).toBe(9);
+    expect(parseWatchRowSelection("/list 9")).toBe(9);
+    expect(parseWatchRowSelection("/list")).toBe(0);
+    expect(parseWatchRowSelection("list 9")).toBe(0);
+  });
+
+  it("returns watch event count only when events exist", () => {
+    expect(getWatchEventCount([])).toBeUndefined();
+    expect(getWatchEventCount([1, 2, 3])).toBe(3);
   });
 });
