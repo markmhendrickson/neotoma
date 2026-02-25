@@ -219,7 +219,7 @@ After installation, configure MCP for your AI tool:
 neotoma mcp config
 ```
 
-GitHub Pages site (published from this repo): `https://markmhendrickson.github.io/neotoma/`
+Marketing site: **https://neotoma.io** (GitHub Pages; custom domain set in repo Settings → Pages). See [Deployment](docs/infrastructure/deployment.md#marketing-site-neotomaio).
 
 ### Option 2: Clone repository (for development)
 

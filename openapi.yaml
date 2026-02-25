@@ -249,7 +249,7 @@ components:
             properties:
               relationship_type:
                 type: string
-                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
               source_index:
                 type: integer
                 minimum: 0
@@ -311,7 +311,7 @@ components:
             properties:
               relationship_type:
                 type: string
-                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
               source_index:
                 type: integer
                 minimum: 0
@@ -393,7 +393,7 @@ components:
       properties:
         relationship_type:
           type: string
-          enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+          enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
         source_entity_id:
           type: string
         target_entity_id:
@@ -703,6 +703,142 @@ paths:
                 properties:
                   success:
                     type: boolean
+
+  /.well-known/oauth-authorization-server:
+    get:
+      summary: OAuth 2.0 Authorization Server Metadata (RFC 8414)
+      operationId: oauthServerMetadata
+      responses:
+        '200':
+          description: Authorization server metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /.well-known/oauth-protected-resource:
+    get:
+      summary: OAuth 2.0 Protected Resource Metadata
+      operationId: oauthProtectedResource
+      responses:
+        '200':
+          description: Protected resource metadata
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /mcp/oauth/callback:
+    get:
+      summary: OAuth callback endpoint
+      operationId: mcpOAuthCallback
+      parameters:
+        - in: query
+          name: code
+          schema: { type: string }
+        - in: query
+          name: state
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect after OAuth callback
+
+  /mcp/oauth/key-auth:
+    get:
+      summary: Key-based authorization page (GET)
+      operationId: mcpOAuthKeyAuthGet
+      parameters:
+        - in: query
+          name: next
+          schema: { type: string }
+      responses:
+        '200':
+          description: Key auth HTML page
+          content:
+            text/html:
+              schema: { type: string }
+    post:
+      summary: Key-based authorization submission (POST)
+      operationId: mcpOAuthKeyAuthPost
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                next:
+                  type: string
+                key:
+                  type: string
+      responses:
+        '302':
+          description: Redirect after key auth
+
+  /mcp/oauth/local-login:
+    get:
+      summary: Local login for development (auto-creates dev user)
+      operationId: mcpOAuthLocalLogin
+      responses:
+        '302':
+          description: Redirect after local login
+
+  /mcp/oauth/register:
+    post:
+      summary: Dynamic Client Registration (RFC 7591)
+      operationId: mcpOAuthRegister
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                client_name:
+                  type: string
+                redirect_uris:
+                  type: array
+                  items: { type: string }
+      responses:
+        '201':
+          description: Client registered
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /mcp/oauth/authorization-details:
+    get:
+      summary: Authorization details proxy
+      operationId: mcpOAuthAuthorizationDetails
+      responses:
+        '200':
+          description: Authorization details
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /auth/dev-signin:
+    post:
+      summary: Dev-only sign-in endpoint (development mode only)
+      operationId: devSignIn
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                type: object
 
   /entities/query:
     post:
@@ -1557,7 +1693,7 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
                 source_entity_id:
                   type: string
                 target_entity_id:
@@ -1593,7 +1729,7 @@ paths:
               properties:
                 relationship_type:
                   type: string
-                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS]
+                  enum: [PART_OF, CORRECTS, REFERS_TO, SETTLES, DUPLICATE_OF, DEPENDS_ON, SUPERSEDES, EMBEDS, works_at, owns, manages, part_of, related_to, depends_on, references, transacted_with, member_of, reports_to, located_at, created_by, funded_by, acquired_by, subsidiary_of, partner_of, competitor_of, supplies_to, contracted_with, invested_in]
                 source_entity_id:
                   type: string
                 target_entity_id:

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS source_entity_edges (
   source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
   entity_id TEXT NOT NULL REFERENCES entities(id),
   edge_type TEXT NOT NULL DEFAULT 'EXTRACTED_FROM',
-  interpretation_run_id UUID REFERENCES interpretation_runs(id),
+  interpretation_id UUID REFERENCES interpretations(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

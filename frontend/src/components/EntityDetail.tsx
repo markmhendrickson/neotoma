@@ -12,8 +12,8 @@ import { Separator } from "@/components/ui/separator";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
-import { getEntityDisplayName } from "@/utils/entityDisplay";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schema_icons";
+import { getEntityDisplayName } from "@/utils/entity_display";
 import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface EntitySnapshot {

@@ -61,7 +61,7 @@ v0.2.0 implements the minimal sources-first ingestion architecture with content-
 ## Migrations Applied
 1. ✅ `20251231000001_add_sources_table.sql` - Sources table with RLS
 2. ✅ `20251231000002_extend_entities_table.sql` - Entity extensions (user_id, merged_to)
-3. ✅ `20251231000003_add_interpretation_runs_table.sql` - Interpretation runs
+3. ✅ `20251231000003_add_interpretations_table.sql` - Interpretations
 4. ✅ `20251231000004_extend_observations_table.sql` - Observation extensions
 5. ✅ `20251231000005_extend_raw_fragments_table.sql` - Raw fragments extensions
 6. ✅ `20251231000006_add_entity_merges_table.sql` - Entity merges audit log

@@ -6362,11 +6362,25 @@ apiCommand
     "--tunnel",
     "Start HTTPS tunnel (ngrok/cloudflared) with the API for remote MCP access; tunnel URL written to /tmp/ngrok-mcp-url.txt"
   )
-  .action(async (opts: { background?: boolean; tunnel?: boolean }) => {
+  .option(
+    "--tunnel-provider <provider>",
+    "Tunnel provider: ngrok or cloudflare (default: auto-detect from installed tools)"
+  )
+  .action(async (opts: { background?: boolean; tunnel?: boolean; tunnelProvider?: string }) => {
     const outputMode = resolveOutputMode();
     const envOpt = (program.opts() as { env?: string }).env;
     if (envOpt !== "dev" && envOpt !== "prod") {
       const error = "Specify --env dev or --env prod for server commands.";
+      if (outputMode === "json") {
+        writeOutput({ ok: false, error }, outputMode);
+        return;
+      }
+      process.stderr.write(`neotoma api start: ${error}\n`);
+      return;
+    }
+    const tunnelProvider = opts.tunnelProvider?.toLowerCase();
+    if (tunnelProvider && tunnelProvider !== "ngrok" && tunnelProvider !== "cloudflare") {
+      const error = "Invalid --tunnel-provider; use ngrok or cloudflare.";
       if (outputMode === "json") {
         writeOutput({ ok: false, error }, outputMode);
         return;
@@ -6414,11 +6428,13 @@ apiCommand
         : envOpt === "prod"
           ? "dev:prod"
           : "dev:server";
+      const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
+      if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
       const child = spawn(npmCmd, ["run", childScript], {
         cwd: repoRoot,
         detached: true,
         stdio: ["ignore", logStream, logStream],
-        env: { ...process.env, NEOTOMA_ENV: effectiveEnv },
+        env: spawnEnv,
       });
       child.unref();
       await fs.writeFile(apiPidPath, String(child.pid ?? ""));
@@ -6493,7 +6509,10 @@ apiCommand
       process.stderr.write(INIT_REQUIRED_MESSAGE + "\n");
       return;
     }
-    const useTunnel = opts.tunnel === true;
+    const useTunnel =
+      opts.tunnel === true ||
+      (program.opts() as { tunnel?: boolean }).tunnel === true ||
+      process.argv.includes("--tunnel");
     if (process.stdout.isTTY && useTunnel) {
       process.stdout.write(
         dim("Tunnel URL when ready: ") +
@@ -6512,14 +6531,26 @@ apiCommand
       : envOpt === "prod"
         ? "dev:prod"
         : "dev:server";
+    const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
+    if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
     const child = spawn(npmCmd, ["run", childScript], {
       cwd: repoRoot,
       stdio: "inherit",
-      env: { ...process.env, NEOTOMA_ENV: effectiveEnv },
+      env: spawnEnv,
     });
     const exitCode = await new Promise<number | null>((resolve) => {
       child.on("close", (code, _sig) => resolve(code ?? null));
     });
+    if (useTunnel && exitCode !== null && exitCode !== 0) {
+      process.stderr.write(
+        dim("Tunnel failed to start. ") +
+          "Install and authenticate ngrok (" +
+          pathStyle("ngrok config add-authtoken <token>") +
+          ") or install cloudflared and use " +
+          pathStyle("--tunnel-provider cloudflare") +
+          ". See docs/developer/tunnels.md.\n"
+      );
+    }
     process.exitCode = exitCode ?? 0;
   });
 
@@ -6542,7 +6573,7 @@ apiCommand
 
     const scriptDir = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = path.join(scriptDir, "..", "..");
-    const killPortScript = path.join(repoRoot, "scripts", "kill-port.js");
+    const killPortScript = path.join(repoRoot, "scripts", "kill_port.js");
 
     let ran = false;
     try {
@@ -6569,7 +6600,7 @@ apiCommand
           stop_ran: ran,
           message: ran
             ? "Stop command completed for port " + port + "."
-            : "Run from repo root to stop: node scripts/kill-port.js " + port,
+            : "Run from repo root to stop: node scripts/kill_port.js " + port,
         },
         outputMode
       );
@@ -6582,7 +6613,7 @@ apiCommand
       process.stdout.write(
         bullet(
           "To stop the API server: " +
-            pathStyle("node scripts/kill-port.js " + port) +
+            pathStyle("node scripts/kill_port.js " + port) +
             " (from repo root)"
         ) + "\n"
       );
@@ -6639,7 +6670,7 @@ apiCommand
       dim("To stop a process: ") +
         pathStyle("neotoma api stop") +
         dim(" (configured port) or ") +
-        pathStyle("node scripts/kill-port.js <port>") +
+        pathStyle("node scripts/kill_port.js <port>") +
         dim(" from repo root.") +
         nl()
     );

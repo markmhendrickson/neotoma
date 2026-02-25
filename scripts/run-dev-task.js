@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const WITH_BRANCH_SCRIPT = path.join(__dirname, 'with-branch-ports.js');
+const WITH_BRANCH_SCRIPT = path.join(__dirname, 'with_branch_ports.js');
 const DEV_SERVE_SCRIPT = path.normalize(path.join('scripts', 'dev-serve.js'));
 const DEV_SERVE_STATE_DIR = path.resolve(process.cwd(), '.dev-serve');
 

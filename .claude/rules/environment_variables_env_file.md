@@ -58,7 +58,7 @@ When an environment variable is needed:
 
 If the variable is not in `.env`:
 
-1. **Check `env.example`** for expected variables
+1. **Check `.env.example`** for expected variables
 2. **Check repository documentation** for setup instructions
 3. **Check if variable should be synced from 1Password** (see `foundation/agent_instructions/cursor_rules/environment_variables_1password.mdc` if applicable)
 4. **Only then ask the user** if the variable is truly missing
@@ -104,7 +104,7 @@ Agent: "What should DATA_DIR be set to?" # WRONG - should check .env first
 - **MUST use values from `.env`** when they exist
 - **MUST NOT assume** environment variables are unset just because they're not in the current shell
 - **MUST handle quoted values** in `.env` (remove quotes when extracting)
-- **MUST check `env.example`** if variable is missing from `.env`
+- **MUST check `.env.example`** if variable is missing from `.env`
 - **MUST check repository-specific documentation** for environment variable setup if variable is missing
 
 ## Integration with Other Rules

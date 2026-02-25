@@ -13,7 +13,7 @@ import { Loader2, Search, Database } from "lucide-react";
 import { useSettings } from "@/hooks/useSettings";
 import { useKeys } from "@/hooks/useKeys";
 import { useAuth } from "@/contexts/AuthContext";
-import { getSchemaIcon, type SchemaMetadata } from "@/utils/schemaIcons";
+import { getSchemaIcon, type SchemaMetadata } from "@/utils/schema_icons";
 import { useRealtime } from "@/contexts/RealtimeContext";
 
 interface Schema {

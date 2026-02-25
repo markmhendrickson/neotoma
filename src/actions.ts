@@ -2385,48 +2385,30 @@ app.post("/observations/create", async (req, res) => {
         .json(buildErrorEnvelope("FORBIDDEN", "user_id does not match authenticated user."));
     }
 
-    // Use the ingestStructuredInternal helper from the MCP server
-    // For HTTP, we'll implement directly here
-    // Use resolveEntity to ensure entity exists with correct user_id
-    // This handles the case where entity exists with null user_id
     const { resolveEntity } = await import("./services/entity_resolution.js");
+    const { createObservation } = await import("./services/observation_storage.js");
+    const { getSnapshot } = await import("./services/snapshot_computation.js");
+
     const entity_id = await resolveEntity({
       entityType: entity_type,
-      fields: { name: entity_identifier }, // Use entity_identifier as name field
+      fields: { name: entity_identifier },
       userId: user_id,
     });
 
-    // Create observation
-    const observation = {
-      id: randomUUID(),
+    const obsData = await createObservation({
       entity_id,
       entity_type,
       schema_version: "1.0",
-      source_id: null, // No source for direct API creation
+      source_id: null,
       interpretation_id: null,
       observed_at: new Date().toISOString(),
       specificity_score: 1.0,
       source_priority,
       fields,
       user_id,
-      created_at: new Date().toISOString(),
-    };
+    });
 
-    const { data: obsData, error: obsError } = await db
-      .from("observations")
-      .insert(observation)
-      .select()
-      .single();
-
-    if (obsError) throw obsError;
-
-    // Get updated snapshot
-    const { data: snapshot } = await db
-      .from("entity_snapshots")
-      .select("*")
-      .eq("entity_id", entity_id)
-      .eq("user_id", user_id)
-      .single();
+    const snapshot = await getSnapshot(entity_id, user_id);
 
     return res.json({
       observation_id: obsData.id,
@@ -2462,20 +2444,14 @@ async function storeStructuredForApi(params: {
   }
 
   if (existingSource) {
-    const { data: existingObservations, error: obsError } = await db
-      .from("observations")
-      .select("id, entity_id, entity_type")
-      .eq("source_id", existingSource.id)
-      .eq("user_id", userId);
+    const { listObservationsForSource } = await import("./services/observation_storage.js");
+    const existingObs = await listObservationsForSource(existingSource.id, userId);
 
-    if (obsError) throw obsError;
-
-    const existingEntities =
-      existingObservations?.map((obs: { id: string; entity_id: string; entity_type: string }) => ({
-        entity_id: obs.entity_id,
-        entity_type: obs.entity_type,
-        observation_id: obs.id,
-      })) ?? [];
+    const existingEntities = existingObs.map((obs) => ({
+      entity_id: obs.entity_id,
+      entity_type: obs.entity_type,
+      observation_id: obs.id,
+    }));
 
     return {
       success: true,
@@ -2485,6 +2461,8 @@ async function storeStructuredForApi(params: {
       entities: existingEntities,
     };
   }
+
+  const { createObservation } = await import("./services/observation_storage.js");
 
   const jsonContent = JSON.stringify(entities, (key, value) => {
     if (typeof value === "bigint") {
@@ -2522,8 +2500,7 @@ async function storeStructuredForApi(params: {
       userId,
     });
 
-    const observation = {
-      id: randomUUID(),
+    const obsData = await createObservation({
       entity_id,
       entity_type,
       schema_version: "1.0",
@@ -2534,16 +2511,7 @@ async function storeStructuredForApi(params: {
       source_priority: sourcePriority,
       fields,
       user_id: userId,
-      created_at: new Date().toISOString(),
-    };
-
-    const { data: obsData, error: obsError } = await db
-      .from("observations")
-      .insert(observation)
-      .select()
-      .single();
-
-    if (obsError) throw obsError;
+    });
 
     createdEntities.push({
       entity_id,
@@ -2943,7 +2911,6 @@ app.post("/entities/merge", async (req, res) => {
   }
 
   try {
-    // Get authenticated user_id and validate it matches provided user_id
     const authenticatedUserId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
     const { from_entity_id, to_entity_id, merge_reason, user_id: providedUserId } = parsed.data;
@@ -2953,81 +2920,26 @@ app.post("/entities/merge", async (req, res) => {
       return sendError(res, 403, "FORBIDDEN", "user_id does not match authenticated user.");
     }
 
-    // Validate both entities exist and belong to authenticated user
-    const { data: fromEntity } = await db
-      .from("entities")
-      .select("id, merged_to_entity_id")
-      .eq("id", from_entity_id)
-      .eq("user_id", authenticatedUserId) // SECURITY: Only merge entities belonging to authenticated user
-      .single();
-
-    const { data: toEntity } = await db
-      .from("entities")
-      .select("id, merged_to_entity_id")
-      .eq("id", to_entity_id)
-      .eq("user_id", authenticatedUserId) // SECURITY: Only merge entities belonging to authenticated user
-      .single();
-
-    if (!fromEntity || !toEntity) {
-      return sendError(res, 404, "RESOURCE_NOT_FOUND", "Entity not found");
-    }
-
-    if (fromEntity.merged_to_entity_id) {
-      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "Source entity already merged");
-    }
-
-    if (toEntity.merged_to_entity_id) {
-      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", "Target entity already merged");
-    }
-
-    // Rewrite observations
-    const { data: rewriteData, error: rewriteError } = await db
-      .from("observations")
-      .update({ entity_id: to_entity_id })
-      .eq("entity_id", from_entity_id)
-      .eq("user_id", user_id)
-      .select("id");
-
-    if (rewriteError) throw rewriteError;
-
-    const observations_moved = rewriteData?.length || 0;
-
-    // Mark source entity as merged
-    const { error: mergeError } = await db
-      .from("entities")
-      .update({
-        merged_to_entity_id: to_entity_id,
-        merged_at: new Date().toISOString(),
-      })
-      .eq("id", from_entity_id)
-      .eq("user_id", user_id);
-
-    if (mergeError) throw mergeError;
-
-    // Record merge in entity_merges table
-    await db.from("entity_merges").insert({
-      user_id,
-      from_entity_id,
-      to_entity_id,
-      reason: merge_reason,
-      merged_by: "http_api",
-      observations_rewritten: observations_moved,
+    const { mergeEntities } = await import("./services/entity_merge.js");
+    const result = await mergeEntities({
+      fromEntityId: from_entity_id,
+      toEntityId: to_entity_id,
+      userId: user_id,
+      mergeReason: merge_reason,
+      mergedBy: "http_api",
     });
 
-    // Delete snapshot for merged entity
-    await db
-      .from("entity_snapshots")
-      .delete()
-      .eq("entity_id", from_entity_id)
-      .eq("user_id", user_id);
-
-    // TODO: Trigger snapshot recomputation for to_entity
-
-    return res.json({
-      observations_moved,
-      merged_at: new Date().toISOString(),
-    });
+    return res.json(result);
   } catch (error) {
+    const { EntityNotFoundError, EntityAlreadyMergedError } = await import(
+      "./services/entity_merge.js"
+    );
+    if (error instanceof EntityNotFoundError) {
+      return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
+    }
+    if (error instanceof EntityAlreadyMergedError) {
+      return sendError(res, 400, "VALIDATION_INVALID_FORMAT", error.message);
+    }
     logError("APIError:entities_merge", req, error);
     const message = error instanceof Error ? error.message : "Failed to merge entities";
     return sendError(res, 500, "DB_QUERY_FAILED", message);
@@ -4301,37 +4213,19 @@ app.post("/correct", async (req, res) => {
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
     const { entity_id, entity_type, field, value, idempotency_key } = parsed.data;
 
-    // Create correction observation
-    const correctionSourceId = `correction_${idempotency_key}`;
-
-    // Insert correction observation with highest priority
-    const { data: observation, error } = await db
-      .from("observations")
-      .insert({
-        entity_id,
-        entity_type,
-        schema_version: "1.0",
-        fields: { [field]: value },
-        source_id: correctionSourceId,
-        source_priority: 1000, // Highest priority for manual corrections
-        user_id: userId,
-        observed_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === "23505") {
-        // Duplicate key - idempotent
-        return res.json({ success: true, message: "Correction already applied" });
-      }
-      logError("DbError:correct", req, error);
-      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
-    }
+    const { createCorrection } = await import("./services/correction.js");
+    const result = await createCorrection({
+      entity_id,
+      entity_type,
+      field,
+      value,
+      schema_version: "1.0",
+      user_id: userId,
+      idempotency_key,
+    });
 
     logDebug("Success:correct", req, { entity_id, field });
-    return res.json({ success: true, observation });
+    return res.json({ success: true, observation_id: result.observation_id, snapshot: result.snapshot });
   } catch (error) {
     return handleApiError(
       req,

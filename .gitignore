@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .env*
+!.env.example
 *.log
 .DS_Store
 # .claude/ is committed (project settings), but .claude/settings.local.json is ignored (user overrides)
@@ -29,4 +30,17 @@ backups/
 
 # Vite build artifacts
 frontend/.vite/deps/
+
+# Local SQLite artifacts (repo root and test cache)
+/neotoma.db
+/neotoma.db-shm
+/neotoma.db-wal
+/neotoma.prod.db
+/neotoma.prod.db-shm
+/neotoma.prod.db-wal
+.vitest/
+
+# Local backup/debug artifacts
+keys.backup.*
+*-debug.png
 

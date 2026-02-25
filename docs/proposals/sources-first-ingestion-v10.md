@@ -61,7 +61,7 @@ Greenfield build. No migration. AI agent execution via MCP. Uses existing Truth 
 ### 3) Unknown/invalid fields are preserved durably, without duplicating stores
 
 - **Authoritative store for unknown fields**: `raw_fragments`.
-- `interpretation_runs` stores only summary metrics (counts), not a second copy of unknown field payloads.
+- `interpretations` stores only summary metrics (counts), not a second copy of unknown field payloads.
 
 ### 4) Entity duplication is expected; a minimal merge tool is first-class
 
@@ -109,12 +109,12 @@ sources/{user_id}/{content_hash}
 
 
 
-### B) `interpretation_runs`
+### B) `interpretations`
 
 Key change vs v9: remove `unknown_fields` payload; keep only metrics.
 
 ```sql
-CREATE TABLE interpretation_runs (
+CREATE TABLE interpretations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   source_id UUID NOT NULL REFERENCES sources(id),
   interpretation_config JSONB NOT NULL,
@@ -130,14 +130,14 @@ CREATE TABLE interpretation_runs (
   user_id UUID NOT NULL
 );
 
-CREATE INDEX idx_runs_source ON interpretation_runs(source_id);
-CREATE INDEX idx_runs_status ON interpretation_runs(status);
-CREATE INDEX idx_runs_active ON interpretation_runs(source_id) WHERE archived_at IS NULL;
+CREATE INDEX idx_interpretations_source ON interpretations(source_id);
+CREATE INDEX idx_interpretations_status ON interpretations(status);
+CREATE INDEX idx_interpretations_active ON interpretations(source_id) WHERE archived_at IS NULL;
 
-ALTER TABLE interpretation_runs ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Users read own runs" ON interpretation_runs
+ALTER TABLE interpretations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users read own interpretations" ON interpretations
   FOR SELECT USING (user_id = auth.uid());
-CREATE POLICY "Service role full access" ON interpretation_runs
+CREATE POLICY "Service role full access" ON interpretations
   FOR ALL TO service_role USING (true) WITH CHECK (true);
 ```
 
@@ -148,7 +148,7 @@ CREATE POLICY "Service role full access" ON interpretation_runs
 ```sql
 ALTER TABLE observations
   ADD COLUMN IF NOT EXISTS source_id UUID REFERENCES sources(id),
-  ADD COLUMN IF NOT EXISTS interpretation_run_id UUID REFERENCES interpretation_runs(id);
+  ADD COLUMN IF NOT EXISTS interpretation_id UUID REFERENCES interpretations(id);
 
 CREATE INDEX IF NOT EXISTS idx_observations_source ON observations(source_id) WHERE source_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_observations_run ON observations(interpretation_run_id) WHERE interpretation_run_id IS NOT NULL;
@@ -168,7 +168,7 @@ CREATE POLICY "Service role full access" ON observations
 ```sql
 ALTER TABLE raw_fragments
   ADD COLUMN IF NOT EXISTS source_id UUID REFERENCES sources(id),
-  ADD COLUMN IF NOT EXISTS interpretation_run_id UUID REFERENCES interpretation_runs(id),
+  ADD COLUMN IF NOT EXISTS interpretation_id UUID REFERENCES interpretations(id),
   ADD COLUMN IF NOT EXISTS user_id UUID;
 
 CREATE INDEX IF NOT EXISTS idx_fragments_source ON raw_fragments(source_id) WHERE source_id IS NOT NULL;
@@ -256,7 +256,7 @@ For each extracted entity candidate:
 2. Validate fields against schema.
 3. Write **valid fields** into a new observation with `source_priority = 0`.
 4. Write **unknown/type-mismatch fields** into `raw_fragments` with `source_id` + `interpretation_run_id`.
-5. Update `interpretation_runs.unknown_field_count`.
+5. Update `interpretations.unknown_fields_count`.
 6. Recompute snapshot for affected entities.
 
 ---
@@ -320,7 +320,7 @@ Deterministic behavior:
 
 ### Phase 1 (1–2 weeks)
 
-- Migrations: `sources`, `interpretation_runs` (with `unknown_field_count`), `upload_queue`, `storage_usage`, `entity_merges`
+- Migrations: `sources`, `interpretations` (with `unknown_fields_count`), `upload_queue`, `storage_usage`, `entity_merges`
 - Extend: `observations`, `raw_fragments`
 - RLS hardening: remove public read on `observations`, `entity_snapshots`, `raw_fragments`
 - Schema seeding: base types + `generic` using only allowed field types/strategies

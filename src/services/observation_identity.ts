@@ -34,17 +34,21 @@ export interface Observation {
  * - Valid UUID format for database compatibility
  */
 export function generateObservationId(
-  sourceId: string,
-  interpretationId: string,
+  sourceId: string | null,
+  interpretationId: string | null,
   entityId: string,
-  canonicalFields: Record<string, unknown>
+  canonicalFields: Record<string, unknown>,
+  idempotencyKey?: string | null
 ): string {
-  const canonical = {
-    source_id: sourceId,
-    interpretation_id: interpretationId,
+  const canonical: Record<string, unknown> = {
+    source_id: sourceId ?? "none",
+    interpretation_id: interpretationId ?? "none",
     entity_id: entityId,
-    fields: canonicalFields, // Already canonicalized
+    fields: canonicalFields,
   };
+  if (idempotencyKey) {
+    canonical.idempotency_key = idempotencyKey;
+  }
   
   // JSON.stringify on canonical object is deterministic because:
   // - canonicalFields has sorted keys

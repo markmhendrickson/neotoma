@@ -32,17 +32,17 @@ See [`docs/architecture/architectural_decisions.md`](../architecture/architectur
 
 ```typescript
 interface SourceNode {
-  id: string; // UUID
+  id: string; // Text primary key
   content_hash: string; // SHA-256 hash for deduplication
   storage_url: string; // Storage URL
-  storage_status: 'uploaded' | 'pending' | 'failed';
   mime_type: string; // MIME type
-  file_name?: string; // Original filename
-  byte_size: number; // File size
+  original_filename?: string; // Original filename
+  file_size: number; // File size in bytes
   source_type: string; // e.g., 'file', 'structured', 'url'
-  source_metadata?: Record<string, any>; // JSONB additional metadata
+  provenance?: string; // JSON provenance metadata
   created_at: string; // ISO 8601
   user_id: string; // UUID
+  idempotency_key?: string; // For deduplication of store calls
 }
 ```
 
@@ -52,10 +52,9 @@ interface SourceNode {
   "id": "src_abc123",
   "content_hash": "a1b2c3d4e5f6...",
   "storage_url": "sources/user123/a1b2c3d4e5f6...",
-  "storage_status": "uploaded",
   "mime_type": "application/pdf",
-  "file_name": "invoice.pdf",
-  "byte_size": 102400,
+  "original_filename": "invoice.pdf",
+  "file_size": 102400,
   "source_type": "file",
   "created_at": "2024-01-15T10:30:00Z",
   "user_id": "user123"
@@ -178,8 +177,8 @@ Two invoice PDFs uploaded:
   "content_hash": "abc123...",
   "storage_url": "sources/user123/abc123...",
   "mime_type": "application/pdf",
-  "file_name": "invoice_001.pdf",
-  "byte_size": 102400,
+  "original_filename": "invoice_001.pdf",
+  "file_size": 102400,
   "created_at": "2024-01-15T10:00:00Z"
 }
 ```
@@ -191,8 +190,8 @@ Two invoice PDFs uploaded:
   "content_hash": "def456...",
   "storage_url": "sources/user123/def456...",
   "mime_type": "application/pdf",
-  "file_name": "invoice_002.pdf",
-  "byte_size": 98304,
+  "original_filename": "invoice_002.pdf",
+  "file_size": 98304,
   "created_at": "2024-02-01T10:00:00Z"
 }
 ```
