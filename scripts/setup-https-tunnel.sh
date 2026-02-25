@@ -276,6 +276,13 @@ fi
 echo "✅ HTTPS tunnel established!"
 echo ""
 
+if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
+  echo "📋 MCP: Add to .cursor/mcp.json: {\"mcpServers\": {\"neotoma\": {\"url\": \"${NGROK_URL}/mcp\"}}}"
+  echo "   Or run: neotoma mcp config   (then restart Cursor)"
+  echo "   To test OAuth (key-auth in browser): neotoma auth login --tunnel"
+  echo ""
+fi
+
 if [ "${TUNNEL_NONINTERACTIVE:-}" != "1" ]; then
 echo "📋 Configuration:"
 echo "   ℹ️  Local URL: http://localhost:${HTTP_PORT}"

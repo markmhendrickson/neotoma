@@ -40,7 +40,11 @@ frontend/.vite/deps/
 /neotoma.prod.db-wal
 .vitest/
 
-# Local backup/debug artifacts
+# Key files (encryption keys, etc.)
+keys/
+*.key*
 keys.backup.*
+
+# Local backup/debug artifacts
 *-debug.png
 

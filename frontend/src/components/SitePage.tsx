@@ -211,72 +211,19 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <SectionDivider />
               <SectionHeading id="install">Install with npm</SectionHeading>
               <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} staticMode={staticMode} />
-              <p className="text-[15px] leading-7 mb-2">
-                <strong>
-                  What <code>neotoma init</code> does:
-                </strong>
-              </p>
-              <ul className="list-disc pl-5 mb-4">
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Creates the data directory structure:
-                  <ul className="list-disc pl-5 mt-1 mb-0">
-                    <li>
-                      Database (SQLite):
-                      <ul className="list-disc pl-5 mt-1 mb-0">
-                        <li>
-                          <code>neotoma.db</code>: dev
-                        </li>
-                        <li>
-                          <code>neotoma.prod.db</code>: prod
-                        </li>
-                      </ul>
-                    </li>
-                    <li>
-                      <code>sources/</code>: ingested files via store calls
-                    </li>
-                    <li>
-                      <code>logs/</code>: CLI/API/MCP logs
-                      <ul className="list-disc pl-5 mt-1 mb-0">
-                        <li>
-                          <code>events.log</code> (dev), <code>events.prod.log</code> (prod):
-                          event-sourcing event log; both in <code>logs/</code>
-                        </li>
-                        <li>
-                          <code>session.log</code> (dev), <code>session.prod.log</code> (prod): API
-                          server stdout/stderr when the server is started by CLI or MCP
-                        </li>
-                        <li>
-                          <code>cli.&lt;pid&gt;.log</code>: CLI stdout/stderr (when in repo)
-                        </li>
-                      </ul>
-                    </li>
-                  </ul>
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Writes CLI configuration. Can optionally add agent instructions (prefer MCP, CLI as
-                  backup) and MCP server entries in Cursor, Codex, etc., so CLI and MCP use this
-                  environment.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Creates or updates <code>.env</code>:
-                  <ul className="list-disc pl-5 mt-1 mb-0">
-                    <li>
-                      <code>NEOTOMA_DATA_DIR</code>: data directory
-                    </li>
-                    <li>
-                      <code>NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY</code>: MCP OAuth token encryption
-                      (set by init)
-                    </li>
-                    <li>
-                      <code>OPENAI_API_KEY</code>: optional, for LLM extraction on unstructured
-                      storage requests
-                    </li>
-                  </ul>
-                </li>
-              </ul>
               <p className="text-[15px] leading-7 mb-4">
-                Run the API server if you need it available for app-based access. It&apos;s not
-                necessary to run for MCP or CLI usage.
+                Running <code>neotoma init</code> creates a local data folder where Neotoma stores
+                your memory, logs, and ingested files, keeps development and production data
+                separate, and writes a config file you can edit later if needed.
+              </p>
+              <p className="text-[15px] leading-7 mb-4">
+                Init will also connect Neotoma to your tools, saving CLI instructions and
+                configuring MCP servers for Claude, Claude, Codex and/or Cursor so agents use MCP
+                when available and fall back to the CLI.
+              </p>
+              <p className="text-[15px] leading-7 mb-4">
+                You don’t need to run the API server for normal MCP or CLI use. Run it only if you
+                want app-based access.
               </p>
               <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
 

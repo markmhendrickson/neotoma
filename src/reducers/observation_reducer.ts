@@ -7,8 +7,10 @@
 import {
   schemaRegistry,
   type FieldDefinition,
+  type SchemaRegistryEntry,
 } from "../services/schema_registry.js";
 import { validateFieldWithConverters } from "../services/field_validation.js";
+import { getSchemaDefinition } from "../services/schema_definitions.js";
 
 export interface Observation {
   id: string;
@@ -79,7 +81,24 @@ export class ObservationReducer {
     const userId = observations[0].user_id;
 
     // Load schema and merge policies (pass userId to support user-specific schemas)
-    const schemaEntry = await schemaRegistry.loadActiveSchema(entityType, userId);
+    let schemaEntry: SchemaRegistryEntry | null = await schemaRegistry.loadActiveSchema(
+      entityType,
+      userId,
+    );
+    if (!schemaEntry) {
+      const codeSchema = getSchemaDefinition(entityType);
+      if (codeSchema) {
+        schemaEntry = {
+          id: "",
+          entity_type: codeSchema.entity_type,
+          schema_version: codeSchema.schema_version || "1.0",
+          schema_definition: codeSchema.schema_definition,
+          reducer_config: codeSchema.reducer_config,
+          active: true,
+          created_at: sortedObservations[0].observed_at,
+        };
+      }
+    }
     if (!schemaEntry) {
       // For v0.1.0, use default merge policies if no schema exists
       console.warn(
