@@ -24,7 +24,6 @@ import { rmSync } from "fs";
 
 async function loadLocalOAuthModule(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
-  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
   const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = key;
@@ -37,7 +36,6 @@ async function loadLocalOAuthModule(tempDir: string) {
 
 async function loadLocalAuthModule(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
-  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
   process.env.NEOTOMA_RAW_STORAGE_DIR = path.join(tempDir, "sources");
   const key = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
   process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY = key;

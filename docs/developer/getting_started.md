@@ -38,7 +38,7 @@ Neotoma now runs in local-only mode:
 
 - SQLite database under `./data` by default
 - Local raw file storage under `./data/sources`
-- Optional event/log directories under `./data/events` and `./data/logs`
+- Optional logs directory under `./data/logs` (includes `events.log` for event-sourcing)
 
 No remote backend configuration is required.
 
@@ -49,9 +49,8 @@ Create a `.env` only if you want overrides. Defaults work without one.
 ```bash
 # Optional local path overrides
 # NEOTOMA_DATA_DIR=./data
-# NEOTOMA_SQLITE_PATH=./data/neotoma.db
 # NEOTOMA_RAW_STORAGE_DIR=./data/sources
-# NEOTOMA_EVENT_LOG_DIR=./data/events
+# NEOTOMA_EVENT_LOG_PATH=./data/logs/events.log
 # NEOTOMA_LOGS_DIR=./data/logs
 
 # Optional event mirroring

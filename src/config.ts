@@ -45,10 +45,14 @@ const httpPort = parseInt(
 const storageBackend = "local";
 const dataDir = process.env.NEOTOMA_DATA_DIR || join(projectRoot, "data");
 const rawStorageSubdir = env === "production" ? "sources_prod" : "sources";
-const eventLogSubdir = env === "production" ? "events_prod" : "events";
 const logsSubdir = env === "production" ? "logs_prod" : "logs";
-const eventLogDir = process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, eventLogSubdir);
 const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
+// Event log: both envs in data/logs — events.log (dev), events.prod.log (prod)
+const eventLogFileName = env === "production" ? "events.prod.log" : "events.log";
+const eventLogPath =
+  process.env.NEOTOMA_EVENT_LOG_PATH ||
+  (process.env.NEOTOMA_EVENT_LOG_DIR ? join(process.env.NEOTOMA_EVENT_LOG_DIR, eventLogFileName) : null) ||
+  join(dataDir, "logs", eventLogFileName);
 
 /**
  * Auto-discover tunnel URL from file written by setup-https-tunnel.sh
@@ -84,11 +88,9 @@ export const config = {
   projectRoot,
   storageBackend,
   dataDir,
-  sqlitePath:
-    process.env.NEOTOMA_SQLITE_PATH ||
-    join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
+  sqlitePath: join(dataDir, env === "production" ? "neotoma.prod.db" : "neotoma.db"),
   rawStorageDir: process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir),
-  eventLogDir,
+  eventLogPath,
   logsDir,
   eventLogMirrorEnabled: process.env.NEOTOMA_EVENT_LOG_MIRROR === "true",
   // Kept as inert placeholders for backward-compatible call sites while remote storage is removed.
@@ -109,6 +111,8 @@ export const config = {
     process.env.MCP_TOKEN_ENCRYPTION_KEY ||
     "",
   oauthClientId: process.env.NEOTOMA_OAUTH_CLIENT_ID || "",
+  requireKeyForOauth:
+    (process.env.NEOTOMA_REQUIRE_KEY_FOR_OAUTH || "true").toLowerCase() !== "false",
   // Encryption settings (local backend)
   encryption: {
     enabled: process.env.NEOTOMA_ENCRYPTION_ENABLED === "true",

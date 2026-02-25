@@ -66,7 +66,7 @@ It does not cover:
 ## Common Operations
 
 - **Migrations:** Apply with `npm run migrate`. Dry-run: `npm run migrate:dry-run`. See [Troubleshooting](troubleshooting.md) for "relation does not exist" and RLS issues.
-- **Backups:** For local SQLite, copy `NEOTOMA_SQLITE_PATH` (default `./data/neotoma.db` in dev, `./data/neotoma.prod.db` in prod), `NEOTOMA_RAW_STORAGE_DIR` (default `./data/sources` in dev, `./data/sources_prod` in prod), `NEOTOMA_EVENT_LOG_DIR` (default `./data/events` in dev, `./data/events_prod` in prod), and `NEOTOMA_LOGS_DIR` (default `./data/logs` in dev, `./data/logs_prod` in prod).
+- **Backups:** For local SQLite, copy the DB (default `./data/neotoma.db` in dev, `./data/neotoma.prod.db` in prod, under `NEOTOMA_DATA_DIR`), `NEOTOMA_RAW_STORAGE_DIR` (default `./data/sources` in dev, `./data/sources_prod` in prod), and `NEOTOMA_LOGS_DIR` (default `./data/logs` in dev, `./data/logs_prod` in prod; includes `events.log`).
 - **User and access:** Auth and user management are in [Auth](docs/subsystems/auth.md).
 
 ---

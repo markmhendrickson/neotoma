@@ -4,8 +4,7 @@ import { describe, it, expect } from "vitest";
 
 async function loadDb(tempDir: string) {
   process.env.NEOTOMA_DATA_DIR = tempDir;
-  process.env.NEOTOMA_SQLITE_PATH = path.join(tempDir, "neotoma.db");
-  process.env.NEOTOMA_EVENT_LOG_DIR = path.join(tempDir, "events");
+  process.env.NEOTOMA_EVENT_LOG_PATH = path.join(tempDir, "events.log");
   process.env.NEOTOMA_EVENT_LOG_MIRROR = "false";
 
   const moduleUrl = new URL("../../../db.js", import.meta.url).href;

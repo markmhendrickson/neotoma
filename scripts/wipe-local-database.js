@@ -12,7 +12,7 @@
  *
  * Options:
  *   --confirm    Skip confirmation prompt (dev only; prod always requires typing "wipe production")
- *   --storage    Also remove raw sources and event logs (env-specific: data/sources or data/sources_prod, data/events or data/events_prod)
+ *   --storage    Also remove raw sources and logs (env-specific: data/sources or data/sources_prod, data/logs or data/logs_prod; includes events.log)
  *   --env production  Target production DB (neotoma.prod.db). Requires typing "wipe production" to confirm.
  */
 
@@ -47,17 +47,15 @@ function resolvePaths(targetProd) {
   const isProd = targetProd || (process.env.NEOTOMA_ENV || "development") === "production";
   const defaultDbFile = isProd ? "neotoma.prod.db" : "neotoma.db";
   const rawStorageSubdir = isProd ? "sources_prod" : "sources";
-  const eventLogSubdir = isProd ? "events_prod" : "events";
-  const sqlitePath =
-    process.env.NEOTOMA_SQLITE_PATH || join(dataDir, defaultDbFile);
+  const logsSubdir = isProd ? "logs_prod" : "logs";
+  const sqlitePath = join(dataDir, defaultDbFile);
   const rawStorageDir =
     process.env.NEOTOMA_RAW_STORAGE_DIR || join(dataDir, rawStorageSubdir);
-  const eventLogDir =
-    process.env.NEOTOMA_EVENT_LOG_DIR || join(dataDir, eventLogSubdir);
+  const logsDir = process.env.NEOTOMA_LOGS_DIR || join(dataDir, logsSubdir);
   return {
     sqlitePath: resolve(process.cwd(), sqlitePath),
     rawStorageDir: resolve(process.cwd(), rawStorageDir),
-    eventLogDir: resolve(process.cwd(), eventLogDir),
+    logsDir: resolve(process.cwd(), logsDir),
   };
 }
 
@@ -125,7 +123,7 @@ async function wipeLocal() {
       : "🗑️  Neotoma Local Dev Database Wipe\n"
   );
 
-  const { sqlitePath, rawStorageDir, eventLogDir } = resolvePaths(targetProdRun);
+  const { sqlitePath, rawStorageDir, logsDir } = resolvePaths(targetProdRun);
 
   if (!existsSync(sqlitePath)) {
     console.log(`Database not found at ${sqlitePath}. Nothing to wipe.`);
@@ -176,10 +174,10 @@ async function wipeLocal() {
   if (clearStorage) {
     const src = clearDirectory(rawStorageDir);
     console.log(`  ✅ Cleared raw sources (${src.removed} items): ${rawStorageDir}`);
-    const evt = clearDirectory(eventLogDir);
-    console.log(`  ✅ Cleared event logs (${evt.removed} items): ${eventLogDir}`);
+    const log = clearDirectory(logsDir);
+    console.log(`  ✅ Cleared logs (${log.removed} items): ${logsDir}`);
   } else {
-    console.log("\n💡 Tip: Use --storage to also remove data/sources and data/events");
+    console.log("\n💡 Tip: Use --storage to also remove data/sources and data/logs");
   }
 
   if (dbRemoved) {

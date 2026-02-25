@@ -2,8 +2,8 @@
 # Setup script for test environment variables (local-only mode)
 # Exports environment variables needed for integration/E2E tests with local SQLite
 
-# Local SQLite backend (default for tests)
-export NEOTOMA_SQLITE_PATH="${NEOTOMA_SQLITE_PATH:-.vitest/neotoma.db}"
+# Local SQLite backend (default for tests: DB at .vitest/neotoma.db)
+export NEOTOMA_DATA_DIR="${NEOTOMA_DATA_DIR:-.vitest}"
 
 # If credentials are provided in instructions but not exported, extract and export them
 if [ -n "$1" ]; then
@@ -15,4 +15,4 @@ if [ -n "$1" ]; then
 fi
 
 echo "Environment variables configured for tests (local mode)"
-echo "NEOTOMA_SQLITE_PATH=${NEOTOMA_SQLITE_PATH}"
+echo "NEOTOMA_DATA_DIR=${NEOTOMA_DATA_DIR}"

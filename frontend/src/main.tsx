@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
 import "./index.css";
 
@@ -19,12 +20,15 @@ function initializeTheme() {
 
 // Initialize theme before React renders
 initializeTheme();
+const { HelmetProvider } = ReactHelmetAsync;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <HelmetProvider>
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </HelmetProvider>
   </React.StrictMode>
 );
 

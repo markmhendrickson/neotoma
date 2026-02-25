@@ -13,15 +13,17 @@ This document records how the codebase distinguishes development from production
 
 | Area | Dev default | Prod default | Override env var |
 |------|-------------|--------------|------------------|
-| SQLite DB | `data/neotoma.db` | `data/neotoma.prod.db` | `NEOTOMA_SQLITE_PATH` |
+| SQLite DB | `data/neotoma.db` | `data/neotoma.prod.db` | (derived from `NEOTOMA_DATA_DIR` + env) |
 | Raw sources | `data/sources` | `data/sources_prod` | `NEOTOMA_RAW_STORAGE_DIR` |
-| Event log | `data/events` | `data/events_prod` | `NEOTOMA_EVENT_LOG_DIR` |
+| Event log (file) | `data/logs/events.log` | `data/logs_prod/events.log` | `NEOTOMA_EVENT_LOG_PATH` |
 | Logs (CLI/backup) | `data/logs` | `data/logs_prod` | `NEOTOMA_LOGS_DIR` |
+
+**Event log vs logs:** The event-sourcing append-only log is a single file `events.log` inside the logs directory. All other application logs (CLI, API, session) also live under `data/logs/` with descriptive names (e.g. `session.log` for dev, `session.prod.log` for prod, `cli.<pid>.log`).
 | API background log dir | `~/.config/neotoma/logs` | `~/.config/neotoma/logs_prod` | (derived from `NEOTOMA_ENV`) |
 | API background PID file | `~/.config/neotoma/api.pid` | `~/.config/neotoma/api_prod.pid` | (derived from env) |
 | HTTP port | 8080 | 8021 | `NEOTOMA_HTTP_PORT` or `HTTP_PORT` |
 
-Environment is determined by `NEOTOMA_ENV`; `production` means prod defaults.
+Environment is determined by `NEOTOMA_ENV`; `production` means prod defaults. `NEOTOMA_ENV` and `NEOTOMA_HTTP_PORT` are not in `.env.example` or the init template; set them at runtime (e.g. `NEOTOMA_ENV=production neotoma api start`) or in your shell profile if you want a fixed env or port.
 
 ## CLI base URL and port choice
 

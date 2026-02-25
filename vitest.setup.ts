@@ -12,12 +12,9 @@ dotenv.config(); // Load .env
 const useLocalDb = process.env.RUN_REMOTE_TESTS !== "1";
 if (useLocalDb) {
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
-  const testDataDir = path.join(projectRoot, ".vitest", "data");
-  const testSourcesDir = path.join(testDataDir, "sources");
-  mkdirSync(testSourcesDir, { recursive: true });
-  process.env.NEOTOMA_SQLITE_PATH = path.join(projectRoot, ".vitest", "neotoma.db");
-  process.env.NEOTOMA_DATA_DIR = testDataDir;
-  process.env.NEOTOMA_RAW_STORAGE_DIR = testSourcesDir;
+  const vitestDir = path.join(projectRoot, ".vitest");
+  mkdirSync(path.join(vitestDir, "sources"), { recursive: true });
+  process.env.NEOTOMA_DATA_DIR = vitestDir;
 }
 
 // Only set test key if no real key exists (don't override real keys)

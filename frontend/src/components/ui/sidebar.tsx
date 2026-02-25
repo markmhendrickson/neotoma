@@ -21,10 +21,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_WIDTH_COOKIE_NAME = "sidebar_width";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
-const SIDEBAR_WIDTH_DEFAULT_REM = 16;
-const SIDEBAR_WIDTH_MIN_REM = 12;
+const SIDEBAR_WIDTH_DEFAULT_REM = 12;
+const SIDEBAR_WIDTH_MIN_REM = 10;
 const SIDEBAR_WIDTH_MAX_REM = 36;
-const SIDEBAR_WIDTH = "16rem";
+const SIDEBAR_WIDTH = "12rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
@@ -456,7 +456,7 @@ const SidebarHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<"div
         data-sidebar="header"
         className={cn(
           "flex shrink-0 flex-col gap-2 py-2 px-3 h-16",
-          "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center",
+          "group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-start",
           className
         )}
         {...props}

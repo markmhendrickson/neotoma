@@ -92,6 +92,85 @@ describe("cli smoke tests", () => {
     });
   });
 
+  it("reset removes neotoma-prefixed MCP entries from JSON and Codex TOML", async () => {
+    await withTempHome(async (homeDir) => {
+      const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-"));
+      await fs.writeFile(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+
+      const projectCursorMcpPath = path.join(repoRoot, ".cursor", "mcp.json");
+      await fs.mkdir(path.dirname(projectCursorMcpPath), { recursive: true });
+      await fs.writeFile(
+        projectCursorMcpPath,
+        JSON.stringify(
+          {
+            mcpServers: {
+              parquet: { command: "/tmp/parquet.sh" },
+              "neotoma-dev": { command: "/tmp/neotoma-dev.sh" },
+              "neotoma-prod": { command: "/tmp/neotoma-prod.sh" },
+              neotoma: { command: "/tmp/neotoma.sh" },
+            },
+          },
+          null,
+          2
+        )
+      );
+
+      const codexConfigPath = path.join(homeDir, ".codex", "config.toml");
+      await fs.mkdir(path.dirname(codexConfigPath), { recursive: true });
+      await fs.writeFile(
+        codexConfigPath,
+        [
+          "[mcp_servers.other]",
+          'command = "/tmp/other.sh"',
+          "",
+          "[mcp_servers.neotoma-prod]",
+          'command = "/tmp/neotoma-prod.sh"',
+          "[mcp_servers.neotoma-prod.env]",
+          'NEOTOMA_SESSION_PROD_PORT = "8181"',
+          "",
+          "[mcp_servers.neotoma]",
+          'command = "/tmp/neotoma.sh"',
+          "",
+        ].join("\n")
+      );
+
+      const previousRepoRoot = process.env.NEOTOMA_REPO_ROOT;
+      process.env.NEOTOMA_REPO_ROOT = repoRoot;
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+      } finally {
+        stdout.restore();
+        if (previousRepoRoot === undefined) {
+          delete process.env.NEOTOMA_REPO_ROOT;
+        } else {
+          process.env.NEOTOMA_REPO_ROOT = previousRepoRoot;
+        }
+      }
+
+      const parsedReset = JSON.parse(stdout.output.join(""));
+      expect(parsedReset.success).toBe(true);
+      expect(Array.isArray(parsedReset.mcp_configs_updated)).toBe(true);
+
+      const projectCursorRaw = await fs.readFile(projectCursorMcpPath, "utf-8");
+      const projectCursor = JSON.parse(projectCursorRaw) as {
+        mcpServers?: Record<string, unknown>;
+      };
+      expect(projectCursor.mcpServers?.parquet).toBeDefined();
+      expect(projectCursor.mcpServers?.["neotoma-dev"]).toBeUndefined();
+      expect(projectCursor.mcpServers?.["neotoma-prod"]).toBeUndefined();
+      expect(projectCursor.mcpServers?.neotoma).toBeUndefined();
+
+      const codexConfig = await fs.readFile(codexConfigPath, "utf-8");
+      expect(codexConfig).toMatch(/\[mcp_servers\.other\]/);
+      expect(codexConfig).not.toMatch(/\[mcp_servers\.neotoma/i);
+    });
+  });
+
   it("lists entities using the API client", async () => {
     await withTempHome(async (homeDir) => {
       const configDir = path.join(homeDir, ".config", "neotoma");

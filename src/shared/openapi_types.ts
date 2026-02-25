@@ -1444,6 +1444,12 @@ export interface operations {
                     "application/json": {
                         user_id?: string;
                         email?: string;
+                        storage?: {
+                            /** @enum {string} */
+                            storage_backend?: "local";
+                            data_dir?: string;
+                            sqlite_db?: string;
+                        };
                     };
                 };
             };
@@ -2761,6 +2767,12 @@ export interface operations {
                 content: {
                     "application/json": {
                         user_id?: string;
+                        storage?: {
+                            /** @enum {string} */
+                            storage_backend?: "local";
+                            data_dir?: string;
+                            sqlite_db?: string;
+                        };
                     };
                 };
             };

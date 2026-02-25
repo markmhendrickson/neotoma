@@ -1,17 +1,18 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { TableScrollWrapper } from "@/components/ui/table-scroll-wrapper";
 
 const Table = React.forwardRef<
   HTMLTableElement,
   React.HTMLAttributes<HTMLTableElement>
 >(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
+  <TableScrollWrapper className="rounded-md" showHint={true}>
     <table
       ref={ref}
       className={cn("w-full caption-bottom", className)}
       {...props}
     />
-  </div>
+  </TableScrollWrapper>
 ));
 Table.displayName = "Table";
 

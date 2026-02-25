@@ -65,6 +65,10 @@ To start the API in the **background**:
 
 - `neotoma api start --background --env dev` (or `--env prod`)  
   Starts the selected environment only and writes env-specific PID/log files.
+- `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`)  
+  Starts the API with an HTTPS tunnel (ngrok/cloudflared) for remote MCP access. Tunnel URL is written to `/tmp/ngrok-mcp-url.txt` when ready.
+- `neotoma api start --env dev --tunnel` (or `--env prod --tunnel`, no `--background`)  
+  Runs the API and tunnel in the **foreground** in the current terminal (same as `npm run dev:api`). Logs stream to the terminal; Ctrl+C stops both. Tunnel URL: `cat /tmp/ngrok-mcp-url.txt`.
 
 ## npm scripts summary
 
@@ -171,6 +175,8 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 ### Global options
 - `--base-url <url>`: Override API base URL.
 - `--env <env>`: Environment selector (`dev` or `prod`). Required for server commands such as `api start`, `api stop`, `api logs`, and `watch`.
+- `--offline`: Force in-process local transport for data commands (no external API process required).
+- `--api-only`: Disable offline fallback and fail fast when API is unreachable.
 - `--json`: Output machine readable JSON.
 - `--pretty`: Output formatted JSON.
 - `--no-session`: With no arguments, show intro then command menu (prompt `> `, `? for shortcuts`). No servers started.
@@ -186,8 +192,18 @@ When the CLI runs in an interactive context (TTY, not `--json`), it may check th
 
 - `neotoma session`: Start an interactive session with a persistent `neotoma> ` prompt. Run subcommands (e.g. `storage info`, `api status`) without restarting the CLI. Similar to a native shell or IDE command prompt. Does **not** start servers automatically.
   - Type `help` to list commands.
+  - Type `/` to open the live command list (command + description per line), and keep typing to filter matches.
   - Type `exit` or `quit`, or press Ctrl+D, to end the session.
   - Arguments with spaces can be quoted: `request --operation "GET /api/entities"`.
+  - Maintenance invariant (TTY redraw): slash suggestions are rendered on the next line with a leading newline, so cursor-up must move `rendered_lines + 1`. See `getSlashSuggestionCursorUpLines()` and `tests/cli/cli_session_startup_ux.test.ts` (regression guard).
+
+### Offline support matrix
+
+- **Data commands (entities, relationships, sources, observations, timeline, store, schemas, stats, corrections, snapshots):** API-first with automatic local in-process fallback on connection failures.
+- **Forced local path:** pass `--offline`.
+- **Strict remote path:** pass `--api-only`.
+- **Server lifecycle commands (`api start|stop|status|logs|processes`):** server-management behavior is unchanged and not redirected to local fallback.
+- **Watch/storage/logs/backup:** already local backend commands and continue to run without a running API.
 
 **Examples:**
 ```bash
@@ -203,9 +219,8 @@ neotoma session --servers
 
 ### Initialization
 
-- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and optionally generates encryption keys. If run from the repo (or a subdirectory), saves the repo path to `~/.config/neotoma/config.json` and adds `NEOTOMA_REPO_ROOT` to `.env.example` so `neotoma` can start servers from any cwd. If run from outside the repo, prompts for an optional repo path to save. In interactive mode (TTY), init prompts to create `.env` from `.env.example` when `.env` is missing, then optionally to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
+- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and can prompt to create encryption keys for privacy-first mode. If run from the repo (or a subdirectory), saves the repo path to `~/.config/neotoma/config.json` so `neotoma` can start servers from any cwd. If run from outside the repo, prompts for an optional repo path to save. In interactive mode (TTY), init prompts to create `.env` from `.env.example` when `.env` is missing, then optionally to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
   - `--data-dir <path>`: Custom data directory path. Default: `./data` (if in repo) or `~/neotoma/data` (if installed globally).
-  - `--generate-keys`: Generate encryption keys for privacy-first mode.
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
   - `--skip-env`: Skip interactive `.env` creation and variable prompts (e.g. for CI or non-interactive use).
@@ -215,28 +230,25 @@ neotoma session --servers
 # Basic initialization
 neotoma init
 
-# Initialize with encryption
-neotoma init --generate-keys
-
 # Initialize with custom data directory
 neotoma init --data-dir /path/to/data
 ```
 
 **What it creates:**
-- Data directories: `<data-dir>/`, `<data-dir>/sources/`, `<data-dir>/events/`, `<data-dir>/logs/`
+- Data directories: `<data-dir>/`, `<data-dir>/sources/`, `<data-dir>/logs/` (event log is `<data-dir>/logs/events.log`)
 - SQLite database: `<data-dir>/neotoma.db` (with WAL mode enabled)
-- Encryption key (if `--generate-keys`): `<data-dir>/neotoma.key` (mode 0600)
+- Encryption key (if user chooses key-derived auth when prompted): `<data-dir>/../keys/neotoma.key` (mode 0600). Conventional global path: `~/.config/neotoma/keys/neotoma.key`.
 - Environment template: `<parent-dir>/.env.example`
 
 ### Authentication
 
-CLI uses the same auth patterns as MCP and REST API. When encryption is off, no login is needed; commands work immediately.
+CLI uses the same auth patterns as MCP and REST API. Local CLI commands can run without login in development, but MCP OAuth now requires key-auth preflight.
 
 - `neotoma auth status`: Show auth mode (none, dev-token, key-derived) and user details. Works without prior login.
-- `neotoma auth login`: OAuth PKCE flow for MCP Connect (Cursor) setup. Not required for CLI API usage.
-  - `--dev-stub`: Skip local-login page redirect (local backend only).
+- `neotoma auth login`: OAuth PKCE flow for MCP Connect (Cursor) setup. Browser flow requires key authentication (`/mcp/oauth/key-auth`) first.
 - `neotoma auth logout`: Clear stored OAuth credentials (MCP Connect only).
 - `neotoma auth mcp-token`: Print MCP auth token derived from private key (when encryption is enabled). Add to mcp.json headers.
+- If key-authenticated OAuth is unavailable, configure `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>` for MCP instead of OAuth.
 
 ### MCP configuration
 
@@ -374,12 +386,24 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 ### Storage
 - `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).
-  - Local backend (only supported backend): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/events`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / env overrides.
+  - Local backend (only supported backend): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/logs/events.log`), `logs` (e.g. `data/logs`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / `NEOTOMA_DATA_DIR` and other env overrides.
+- `neotoma storage set-data-dir <dir>`: Update repo `.env` with `NEOTOMA_DATA_DIR=<dir>`, and optionally copy SQLite DB files (`neotoma.db`, `neotoma.prod.db`, and `-wal`/`-shm` sidecars) from the old data directory.
+  - Interactive mode asks whether to copy DB files.
+  - When DB files exist in both old and new directories, conflict handling is:
+    - `merge`: back up target DB files, then insert missing rows from old DBs into target DBs.
+    - `overwrite`: back up target DB files, then replace target DB files with old DB files.
+    - `use-new`: keep target DB files unchanged and only switch `NEOTOMA_DATA_DIR`.
+  - Old directory files are always preserved (copy/merge only, never delete old DB files).
+  - Options:
+    - `--move-db-files` / `--no-move-db-files`
+    - `--on-conflict <merge|overwrite|use-new>`
+    - `--yes` (skip prompts)
+  - `--json` output includes backup paths, copied files, conflict strategy, and merge stats.
 
 ### Backup and restore
 - `neotoma backup create`: Create a backup of the local database, sources, and logs.
   - `--output <dir>`: Output directory (default: `./backups`).
-  - Creates a timestamped subdirectory with `neotoma.db`, WAL file, `sources/`, `events/`, `logs/`, and a `manifest.json` with checksums.
+  - Creates a timestamped subdirectory with `neotoma.db`, WAL file, `sources/`, `logs/` (includes `events.log`), and a `manifest.json` with checksums.
   - If encryption is enabled, data in the backup remains encrypted. Preserve the key file or mnemonic for restore.
 - `neotoma backup restore`: Restore a backup into the data directory.
   - `--from <dir>`: Backup directory to restore from (required).
@@ -389,7 +413,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 - `neotoma logs tail`: Read persistent log files.
   - `--decrypt`: Decrypt encrypted log lines using `NEOTOMA_KEY_FILE_PATH` or `NEOTOMA_MNEMONIC`.
   - `--lines <n>`: Number of lines to show (default: 50).
-  - `--file <path>`: Specific log file (default: latest in env-specific `data/logs` or `data/events`; prod uses `data/logs_prod`, `data/events_prod`).
+  - `--file <path>`: Specific log file (default: latest in env-specific `data/logs`; prod uses `data/logs_prod`).
 
 ### Developer scripts
 - `neotoma dev list`: List available npm scripts from `package.json`.
@@ -399,7 +423,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 - The repo is found by: config `repo_root` (set by `neotoma init`), then `NEOTOMA_REPO_ROOT`, then walking up from the current directory (package.json name must be `neotoma`).
 
 ### Debugging and testing (e.g. with an agent)
-- **When debugging CLI-related issues, always check the CLI log first.** In dev the default path is `~/.config/neotoma/cli.log`. If the user passed `--log-file`, check that path. For session server output, check `<repo>/data/logs/session-dev.log` or `session-prod.log`. For background API, check `neotoma api logs` or `~/.config/neotoma/logs/api.log`. See **Where to look for what (logs)** in `docs/operations/troubleshooting.md` for a per-component log map.
+- **When debugging CLI-related issues, always check the CLI log first.** In dev the default path is `~/.config/neotoma/cli.log`. If the user passed `--log-file`, check that path. For session server output, check `<repo>/data/logs/session.log` (dev) or `session.prod.log` (prod). The same file is used whether the API was started by the CLI or by the MCP server (both append); look for "started by MCP" in the log to see who started a given run. For background API, check `neotoma api logs` or `~/.config/neotoma/logs/api.log`. See **Where to look for what (logs)** in `docs/operations/troubleshooting.md` for a per-component log map.
 - **Dev** (default): CLI appends stdout and stderr to `~/.config/neotoma/cli.log`. Use `--no-log-file` to disable.
 - **Prod** (`NEOTOMA_ENV=production`): No log file by default; use `--log-file <path>` to enable.
 - `--log-file <path>`: Append CLI output to this path (overrides env default).

@@ -25,7 +25,7 @@ This document is a checklist of functionality across the repository that you sho
 
 - [ ] `git clone` (or fresh pull), `npm install`, `npm run type-check` succeeds
 - [ ] `neotoma init` (from repo root) creates `data/`, SQLite DB, and `.env.example` (or prompts)
-- [ ] `neotoma init --generate-keys` creates encryption key when desired
+- [ ] When init prompts for key-derived auth, choosing to create a key creates the encryption key
 - [ ] `neotoma init --data-dir /path/to/custom` uses custom data directory
 - [ ] `neotoma storage info` shows correct backend and paths
 
@@ -160,7 +160,7 @@ If the release includes UI changes or you want to validate the full stack:
 
 ### 6.1 Local backend
 
-- [ ] Data directory contains `neotoma.db`, `sources/`, and optionally `events/`, `logs/`
+- [ ] Data directory contains `neotoma.db`, `sources/`, and optionally `logs/` (includes `events.log`)
 - [ ] After `store` (file), file exists under `sources/` with expected naming (e.g. by hash)
 - [ ] `neotoma backup create` includes DB, sources, logs; checksums in manifest
 

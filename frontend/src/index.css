@@ -213,3 +213,35 @@
   }
 }
 
+/* Shared table scroll UX: constrain to container width, horizontal scroll, ateles-style hint */
+.table-scroll-outer {
+  @apply relative;
+}
+.table-scroll-outer .table-scroll-viewport {
+  @apply min-w-0 max-w-full;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner {
+  display: flex;
+  flex-direction: row;
+  width: max-content;
+  min-width: 100%;
+}
+.table-scroll-outer.table-scrollable .table-scroll-inner > table {
+  flex: 0 0 auto;
+}
+.table-scroll-outer.table-scrollable .table-scroll-edge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 2.5rem;
+  pointer-events: none;
+}
+.table-scroll-outer.table-scrollable .table-scroll-hint {
+  @apply flex items-center gap-1 text-[11px] text-muted-foreground bg-background px-2 py-1.5 rounded-md;
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  white-space: nowrap;
+}
+

@@ -170,7 +170,7 @@ export function SourceTable({ onSourceClick, onFileUpload, searchQuery: external
         </div>
       </div>
 
-      <div className="flex-1 rounded-md border overflow-auto">
+      <div className="flex-1 rounded-md border overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-6 w-6 animate-spin" />

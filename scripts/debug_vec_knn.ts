@@ -1,17 +1,20 @@
 #!/usr/bin/env npx tsx
 /**
  * Debug vec0 KNN: check table row counts and run MATCH with OpenAI query embedding.
- * Run: NEOTOMA_SQLITE_PATH=./data/neotoma.prod.db npx tsx scripts/debug_vec_knn.ts
+ * Run from repo root. Use NEOTOMA_ENV=production to use prod DB (data/neotoma.prod.db).
  */
 import "dotenv/config";
 import Database from "better-sqlite3";
+import { join } from "node:path";
 import { createRequire } from "node:module";
 import { generateEmbedding } from "../src/embeddings.js";
 
 const createRequireFromMeta = createRequire(import.meta.url);
 const sqliteVec = createRequireFromMeta("sqlite-vec") as { load: (d: Database.Database) => void };
 
-const dbPath = process.env.NEOTOMA_SQLITE_PATH || "./.vitest/neotoma.db";
+const dataDir = process.env.NEOTOMA_DATA_DIR || join(process.cwd(), "data");
+const isProd = process.env.NEOTOMA_ENV === "production";
+const dbPath = join(dataDir, isProd ? "neotoma.prod.db" : "neotoma.db");
 const db = new Database(dbPath);
 sqliteVec.load(db);
 

@@ -90,26 +90,3 @@ cwd = "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper"
 [mcp_servers.web-scraper]
 command = "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper/run-web-scraper-mcp.sh"
 cwd = "/Users/markmhendrickson/repos/neotoma/mcp/web-scraper"
-
-[mcp_servers.neotoma-dev]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio.sh"
-
-[mcp_servers.neotoma]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-# --- end synced MCP servers ---
-
-# --- MCP servers synced from .cursor/mcp.json (do not edit by hand) ---
-[mcp_servers.neotoma-dev]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio.sh"
-
-[mcp_servers.neotoma]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-# --- end synced MCP servers ---
-
-# --- MCP servers synced from .cursor/mcp.json (do not edit by hand) ---
-[mcp_servers.neotoma-dev]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio.sh"
-
-[mcp_servers.neotoma]
-command = "/Users/markmhendrickson/repos/neotoma/scripts/run_neotoma_mcp_stdio_prod.sh"
-# --- end synced MCP servers ---

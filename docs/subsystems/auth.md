@@ -69,19 +69,20 @@ MCP clients MUST authenticate using OAuth 2.0 Authorization Code flow with PKCE 
 
 Local mode uses a built-in auth provider. OAuth endpoints remain the same, but the authorization step is handled by a local login page.
 
-**Local flow summary (encryption off):**
+**Local flow summary (key-gated OAuth):**
 
 1. Client opens `GET /api/mcp/oauth/authorize` with PKCE parameters.
-2. If `dev_stub=1`: Neotoma completes immediately with dev user. Otherwise, redirects to local-login.
-3. Local-login auto-uses dev account (no credentials form). Creates OAuth connection and redirects with `code` and `state`.
-4. Client exchanges `code` at `POST /api/mcp/oauth/token` and uses the returned access token.
-
-**When encryption is on:** OAuth is not supported. MCP and API require key-derived Bearer token. See Key-Based Auth section below.
+2. If the browser session has not been key-authenticated, Neotoma redirects to `/mcp/oauth/key-auth`.
+3. User provides private key hex or mnemonic (plus optional passphrase); Neotoma validates against configured key source and caches a short-lived session.
+4. Neotoma continues to local-login and creates OAuth connection for the local dev user, then redirects with `code` and `state`.
+5. Client exchanges `code` at `POST /api/mcp/oauth/token` and uses the returned access token.
 
 **OAuth with local backend (encryption off):**
 
-- When encryption is off, the local-login flow auto-uses the dev account (no email/password form).
-- `neotoma auth login --dev-stub` skips the redirect to the login page and completes immediately.
+- OAuth is allowed only after key-auth preflight (`/mcp/oauth/key-auth`) succeeds.
+- `dev_stub` bypass is disabled.
+- **When the server is reached via a tunnel (remote MCP):** The server requires explicit approval (an "Approve this connection" page) and only allows redirect URIs to localhost or known app schemes (e.g. `cursor://`).
+- If key-auth is unavailable for a user/session, remote access should use `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>` instead of OAuth. See [tunnels.md](../developer/tunnels.md#security).
 
 **Base URL when running locally:**
 
