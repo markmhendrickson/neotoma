@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build UI (for compiled Tailwind CSS)
+        run: npm run build:ui
+
       - name: Build site
         run: npm run build:pages:site
 

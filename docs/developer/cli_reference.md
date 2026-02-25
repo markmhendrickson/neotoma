@@ -238,7 +238,7 @@ neotoma init --data-dir /path/to/data
 **What it creates:**
 - Data directories: `<data-dir>/`, `<data-dir>/sources/`, `<data-dir>/logs/` (event log is `<data-dir>/logs/events.log`)
 - SQLite database: `<data-dir>/neotoma.db` (with WAL mode enabled)
-- Encryption key (if user chooses key-derived auth when prompted): `<data-dir>/../keys/neotoma.key` (mode 0600). Conventional global path: `~/.config/neotoma/keys/neotoma.key`.
+- Encryption key (if user chooses key-derived auth when prompted): `~/.config/neotoma/keys/neotoma.key` (mode 0600).
 - Environment template: `<parent-dir>/.env.example`
 
 ### Authentication
@@ -246,7 +246,7 @@ neotoma init --data-dir /path/to/data
 CLI uses the same auth patterns as MCP and REST API. Local CLI commands can run without login in development, but MCP OAuth now requires key-auth preflight.
 
 - `neotoma auth status`: Show auth mode (none, dev-token, key-derived) and user details. Works without prior login.
-- `neotoma auth login`: OAuth PKCE flow for MCP Connect (Cursor) setup. Browser flow requires key authentication (`/mcp/oauth/key-auth`) first.
+- `neotoma auth login`: OAuth PKCE flow for MCP Connect (Cursor) setup. Browser flow requires key authentication (`/mcp/oauth/key-auth`) first. Use `--tunnel` to read the API base URL from `/tmp/ngrok-mcp-url.txt` (for testing OAuth when the API is behind a tunnel).
 - `neotoma auth logout`: Clear stored OAuth credentials (MCP Connect only).
 - `neotoma auth mcp-token`: Print MCP auth token derived from private key (when encryption is enabled). Add to mcp.json headers.
 - If key-authenticated OAuth is unavailable, configure `Authorization: Bearer <NEOTOMA_BEARER_TOKEN>` for MCP instead of OAuth.

@@ -789,6 +789,54 @@ export const ENTITY_SCHEMAS: Record<string, EntitySchema> = {
     },
   },
 
+  conversation: {
+    entity_type: "conversation",
+    schema_version: "1.0",
+    metadata: {
+      label: "Conversation",
+      description: "Chat conversation container entity.",
+      category: "knowledge",
+      aliases: ["chat_conversation", "thread"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        title: { type: "string", required: false, preserveCase: true },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        title: { strategy: "highest_priority", tie_breaker: "source_priority" },
+      },
+    },
+  },
+
+  agent_message: {
+    entity_type: "agent_message",
+    schema_version: "1.0",
+    metadata: {
+      label: "Agent Message",
+      description: "Message entity representing one chat turn.",
+      category: "knowledge",
+      aliases: ["chat_message", "message"],
+    },
+    schema_definition: {
+      fields: {
+        schema_version: { type: "string", required: true },
+        role: { type: "string", required: true },
+        content: { type: "string", required: true, preserveCase: true },
+        turn_key: { type: "string", required: false },
+      },
+    },
+    reducer_config: {
+      merge_policies: {
+        role: { strategy: "last_write" },
+        content: { strategy: "last_write" },
+        turn_key: { strategy: "last_write" },
+      },
+    },
+  },
+
   relationship: {
     entity_type: "relationship",
     schema_version: "1.0",

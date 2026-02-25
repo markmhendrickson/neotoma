@@ -3,6 +3,7 @@
 
 import crypto from "crypto";
 import { db } from "../db.js";
+import { generateDeterministicSourceId } from "./source_identity.js";
 
 export interface RawStorageOptions {
   userId: string;
@@ -155,9 +156,11 @@ export async function storeRawContent(
   }
 
   // Create source record
+  const deterministicSourceId = generateDeterministicSourceId(userId, contentHash);
   const { data: source, error: insertError } = await db
     .from("sources")
     .insert({
+      id: deterministicSourceId,
       user_id: userId,
       content_hash: contentHash,
       mime_type: mimeType,

@@ -829,6 +829,64 @@ function formatSourcePropertiesTable(source: Record<string, unknown>): string {
   return out.join("\n");
 }
 
+/** Relationship field order for display. All other keys from the record are appended sorted. */
+const RELATIONSHIP_DISPLAY_KEYS = [
+  "relationship_key",
+  "relationship_type",
+  "source_entity_id",
+  "target_entity_id",
+  "observation_count",
+  "last_observation_at",
+  "computed_at",
+  "schema_version",
+  "snapshot",
+  "provenance",
+  "user_id",
+] as const;
+
+/**
+ * Format one relationship as a two-column table (name, value). Uses same layout as entity/source table.
+ */
+function formatRelationshipPropertiesTable(relationship: Record<string, unknown>): string {
+  const seen = new Set<string>();
+  const pairs: [string, unknown][] = [];
+  for (const k of RELATIONSHIP_DISPLAY_KEYS) {
+    const v = relationship[k];
+    if (v !== undefined && v !== null) {
+      pairs.push([k, v]);
+      seen.add(k);
+    }
+  }
+  const rest = Object.keys(relationship)
+    .filter((k) => !seen.has(k))
+    .sort();
+  for (const k of rest) {
+    const v = relationship[k];
+    if (v !== undefined && v !== null) pairs.push([k, v]);
+  }
+  const nameColWidth = pairs.length
+    ? Math.max(displayWidth("Field"), ...pairs.map(([k]) => displayWidth(k)))
+    : displayWidth("Field");
+  const gap = 2;
+  const termWidth = typeof process.stdout?.columns === "number" ? process.stdout.columns : 80;
+  const valueColWidth = Math.max(10, termWidth - nameColWidth - gap);
+  const prefix = " ".repeat(nameColWidth + gap);
+  const out: string[] = [];
+  out.push(bold(padToDisplayWidth("Field", nameColWidth)) + "  " + bold("Value"));
+  out.push(dim("-".repeat(nameColWidth) + "  " + "-".repeat(Math.min(valueColWidth, 40))));
+  for (const [name, val] of pairs) {
+    if (val === undefined || val === null) continue;
+    const valStr = typeof val === "object" ? JSON.stringify(val) : String(val);
+    const wrapped = wrapByDisplayWidth(valStr, valueColWidth);
+    const namePadded = padToDisplayWidth(name, nameColWidth);
+    out.push(namePadded + "  " + (wrapped[0] ?? ""));
+    for (let i = 1; i < wrapped.length; i++) {
+      out.push(prefix + wrapped[i]);
+    }
+  }
+  return out.join("\n");
+}
+
 type RelationshipRow = {
   relationship_type?: string;
   source_entity_id?: string;
@@ -2257,6 +2315,7 @@ type WatchEvent = {
   /** Optional IDs from the row for "view details": entity get, sources get, relationship get/list. */
   entity_id?: string;
   relationship_key?: string;
+  relationship_type?: string;
   source_entity_id?: string;
   target_entity_id?: string;
   from_entity_id?: string;
@@ -2976,7 +3035,10 @@ async function runSessionLoop(opts?: {
       ) {
         const relationshipId =
           event.relationship_key ??
-          (event.table === "relationship_snapshots" ? event.id : undefined);
+          (event.table === "relationship_snapshots" ? event.id : undefined) ??
+          (event.relationship_type && event.source_entity_id && event.target_entity_id
+            ? `${event.relationship_type}:${event.source_entity_id}:${event.target_entity_id}`
+            : undefined);
         if (relationshipId) {
           argv = [
             process.argv[0],
@@ -3002,6 +3064,8 @@ async function runSessionLoop(opts?: {
         argv = [process.argv[0], process.argv[1], "sources", "get", event.source_id];
       }
       if (argv !== null) {
+        const localFallbackEnv: "dev" | "prod" | undefined =
+          event.env === "dev" || event.env === "prod" ? event.env : opts?.preferredEnv;
         const entityIdForFallback =
           event.table === "entities" ? event.id : (event.entity_id ?? event.to_entity_id);
         const sourceIdForFallback =
@@ -3010,10 +3074,20 @@ async function runSessionLoop(opts?: {
             : event.table === "interpretations"
               ? event.source_id
               : undefined;
+        const relationshipIdForFallback =
+          event.relationship_key ??
+          (event.table === "relationship_snapshots" ? event.id : undefined) ??
+          (event.relationship_type && event.source_entity_id && event.target_entity_id
+            ? `${event.relationship_type}:${event.source_entity_id}:${event.target_entity_id}`
+            : undefined);
         const isEntityGet =
           argv[2] === "entities" && argv[3] === "get" && typeof entityIdForFallback === "string";
         const isSourceGet =
           argv[2] === "sources" && argv[3] === "get" && typeof sourceIdForFallback === "string";
+        const isRelationshipGet =
+          argv[2] === "relationships" &&
+          argv[3] === "get" &&
+          typeof relationshipIdForFallback === "string";
         process.stdout.write("\n");
         try {
           await program.parseAsync(argv);
@@ -3029,13 +3103,13 @@ async function runSessionLoop(opts?: {
             if (
               is404EntityNotFound &&
               opts?.repoRoot &&
-              opts?.preferredEnv &&
+              localFallbackEnv &&
               opts?.userId &&
               entityIdForFallback
             ) {
               const localEntity = await getEntityFromLocalDb(
                 opts.repoRoot,
-                opts.preferredEnv,
+                localFallbackEnv,
                 opts.userId,
                 entityIdForFallback
               );
@@ -3055,13 +3129,13 @@ async function runSessionLoop(opts?: {
             } else if (
               is404SourceNotFound &&
               opts?.repoRoot &&
-              opts?.preferredEnv &&
+              localFallbackEnv &&
               opts?.userId &&
               sourceIdForFallback
             ) {
               const localSource = await getSourceFromLocalDb(
                 opts.repoRoot,
-                opts.preferredEnv,
+                localFallbackEnv,
                 opts.userId,
                 sourceIdForFallback
               );
@@ -3074,6 +3148,33 @@ async function runSessionLoop(opts?: {
                 process.stdout.write(
                   dim(
                     "  Recent events are from local DB. If the API uses a different backend, the source may exist only locally.\n"
+                  )
+                );
+                process.exitCode = 1;
+              }
+            } else if (
+              isRelationshipGet &&
+              opts?.repoRoot &&
+              localFallbackEnv &&
+              opts?.userId &&
+              relationshipIdForFallback
+            ) {
+              const localRelationship = await getRelationshipFromLocalDb(
+                opts.repoRoot,
+                localFallbackEnv,
+                opts.userId,
+                relationshipIdForFallback
+              );
+              if (localRelationship) {
+                process.stdout.write(
+                  formatRelationshipPropertiesTable(localRelationship as Record<string, unknown>) +
+                    "\n"
+                );
+              } else {
+                writeCliError(err);
+                process.stdout.write(
+                  dim(
+                    "  Recent events are from local DB. If the API uses a different backend (or env), the relationship may exist only locally.\n"
                   )
                 );
                 process.exitCode = 1;
@@ -3380,6 +3481,7 @@ program
 
         // 3. Encryption key: created later via prompt when user chooses key_derived auth
         let keyPath: string | undefined;
+        let keyPathWrittenToEnv = false;
 
         // 4. .env in repo: use envRepoRoot (cwd repo, saved config, or path prompted below when not in repo)
         let envExamplePath: string | null = envRepoRoot
@@ -3791,7 +3893,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             );
             const wantCreate = keyChoice.trim() === "" || keyChoice.trim() === "1";
             if (wantCreate) {
-              const keysDir = path.join(dataDir, "..", "keys");
+              const keysDir = path.join(CONFIG_DIR, "keys");
               keyPath = path.join(keysDir, "neotoma.key");
               try {
                 await fs.access(keyPath);
@@ -4044,6 +4146,22 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               }
             }
           }
+          // When user created/selected a key during init, write NEOTOMA_KEY_FILE_PATH to .env so key-auth works
+          if (keyPath) {
+            try {
+              let envText = await fs.readFile(envPathStr, "utf-8");
+              const keyPathLine = /^#?\s*NEOTOMA_KEY_FILE_PATH=.*$/m;
+              if (keyPathLine.test(envText)) {
+                envText = envText.replace(keyPathLine, "NEOTOMA_KEY_FILE_PATH=" + keyPath);
+              } else {
+                envText = envText.trimEnd() + "\nNEOTOMA_KEY_FILE_PATH=" + keyPath + "\n";
+              }
+              await fs.writeFile(envPathStr, envText);
+              keyPathWrittenToEnv = true;
+            } catch {
+              // .env may not exist if user skipped create
+            }
+          }
         }
         if (keyPath) {
           process.stdout.write(nl() + heading("Encryption enabled") + nl());
@@ -4052,7 +4170,11 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             bullet("Add to .env: " + pathStyle("NEOTOMA_ENCRYPTION_ENABLED=true")) + "\n"
           );
           process.stdout.write(
-            bullet("Add to .env: " + pathStyle("NEOTOMA_KEY_FILE_PATH=" + keyPath)) + "\n"
+            bullet(
+              keyPathWrittenToEnv
+                ? "Set in .env: " + pathStyle("NEOTOMA_KEY_FILE_PATH=" + keyPath)
+                : "Add to .env: " + pathStyle("NEOTOMA_KEY_FILE_PATH=" + keyPath)
+            ) + "\n"
           );
           process.stdout.write(
             nl() + warn("Back up your key file. Data cannot be recovered without it.") + nl()
@@ -4370,14 +4492,43 @@ program
 
 const authCommand = program.command("auth").description("Authentication commands");
 
+const DEFAULT_TUNNEL_URL_FILE = "/tmp/ngrok-mcp-url.txt";
+
 const authLoginCommand = authCommand
   .command("login")
   .description("Login using OAuth PKCE")
   .option("--dev-stub", "Use local dev stub authentication (local backend only)")
+  .option(
+    "--tunnel",
+    "Use tunnel URL from " + DEFAULT_TUNNEL_URL_FILE + " (for testing OAuth when API is behind tunnel)"
+  )
   .action(async () => {
     const outputMode = resolveOutputMode();
     const config = await readConfig();
-    const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
+    const loginOpts = authLoginCommand.opts() as { devStub?: boolean; tunnel?: boolean };
+    let baseUrl: string;
+    if (loginOpts.tunnel) {
+      const urlFile = process.env.NGROK_URL_FILE ?? DEFAULT_TUNNEL_URL_FILE;
+      try {
+        const raw = await fs.readFile(urlFile, "utf-8");
+        const url = raw.trim().replace(/\/$/, "");
+        if (!url) throw new Error("Tunnel URL file is empty");
+        baseUrl = url;
+      } catch (err) {
+        const msg =
+          "No tunnel URL found. Start the API with a tunnel first: neotoma api start --env dev --tunnel";
+        if (outputMode === "json") {
+          writeOutput({ ok: false, error: msg, tunnel_url_file: urlFile }, outputMode);
+        } else {
+          process.stderr.write(`neotoma auth login: ${msg}\n`);
+          process.stderr.write(`  (Looked in ${urlFile})\n`);
+        }
+        process.exitCode = 1;
+        return;
+      }
+    } else {
+      baseUrl = (await resolveBaseUrl(program.opts().baseUrl, config)).replace(/\/$/, "");
+    }
     let token: string | undefined;
     try {
       token = await getCliToken();
@@ -4413,8 +4564,7 @@ const authLoginCommand = authCommand
         // Fall through to login if /me fails (e.g. server down)
       }
     }
-    const loginOptions = authLoginCommand.opts();
-    await runLoginFlow(baseUrl, Boolean(loginOptions.devStub));
+    await runLoginFlow(baseUrl, Boolean(loginOpts.devStub));
   });
 
 authCommand
@@ -6583,7 +6733,7 @@ apiCommand
         .catch(() => false);
       if (scriptExists) {
         execSync('node "' + killPortScript + '" ' + port, {
-          stdio: "inherit",
+          stdio: outputMode === "json" ? "ignore" : "inherit",
           cwd: repoRoot,
         });
         ran = true;
@@ -9205,6 +9355,50 @@ async function getSourceFromLocalDb(
   }
 }
 
+/**
+ * Load relationship by key from local SQLite (same DB as Recent events). Used when API lookup fails
+ * so the user can still see relationship details from local DB.
+ */
+async function getRelationshipFromLocalDb(
+  repoRoot: string,
+  preferredEnv: "dev" | "prod",
+  userId: string,
+  relationshipKey: string
+): Promise<Record<string, unknown> | null> {
+  const dataDir = resolveDataDir(repoRoot);
+  const dbFile = preferredEnv === "prod" ? "neotoma.prod.db" : "neotoma.db";
+  const dbPath = path.join(dataDir, dbFile);
+  try {
+    await fs.access(dbPath);
+  } catch {
+    return null;
+  }
+  type Row = Record<string, unknown>;
+  type DbInstance = {
+    close: () => void;
+    pragma: (sql: string) => void;
+    prepare: (sql: string) => { get: (...args: unknown[]) => Row | undefined };
+  };
+  const { default: Database } = await import("better-sqlite3");
+  const db = new Database(dbPath) as unknown as DbInstance;
+  db.pragma("busy_timeout = 2000");
+  try {
+    const snapshot = db
+      .prepare("SELECT * FROM relationship_snapshots WHERE relationship_key = ? AND user_id = ?")
+      .get(relationshipKey, userId) as Row | undefined;
+    if (snapshot) return snapshot;
+
+    const lastObservation = db
+      .prepare(
+        "SELECT relationship_key, relationship_type, source_entity_id, target_entity_id, observed_at, created_at, source_id, interpretation_id, user_id FROM relationship_observations WHERE relationship_key = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .get(relationshipKey, userId) as Row | undefined;
+    return lastObservation ?? null;
+  } finally {
+    db.close();
+  }
+}
+
 const WATCH_INITIAL_EVENT_LIMIT = 10;
 
 /**
@@ -9354,6 +9548,7 @@ async function getLastNWatchEntries(
       } else if (table === "relationship_observations" || table === "relationship_snapshots") {
         out.relationship_key =
           strVal(row, "relationship_key") ?? (table === "relationship_snapshots" ? id : undefined);
+        out.relationship_type = strVal(row, "relationship_type");
         out.source_entity_id = strVal(row, "source_entity_id");
         out.target_entity_id = strVal(row, "target_entity_id");
       } else if (table === "entity_merges") {
@@ -9546,6 +9741,8 @@ function getMcpStatusByPlatform(
 export type InitContextStatus = {
   dataDirExists: boolean;
   envFileExists: boolean;
+  dataDir: string;
+  envFilePath: string;
 };
 
 /** Resolve data dir and .env status for init box. Returns null when repo root is unknown. */
@@ -9568,7 +9765,7 @@ export async function getInitContextStatus(
     dataDir = path.join(repoRoot, "data");
   }
   const dataDirExists = await pathExists(dataDir);
-  return { dataDirExists, envFileExists };
+  return { dataDirExists, envFileExists, dataDir, envFilePath: envPath };
 }
 
 export function buildInstallationBoxLines(
@@ -9588,8 +9785,12 @@ export function buildInstallationBoxLines(
   const lines: string[] = [""];
 
   if (initContext != null) {
-    lines.push("Data directory  " + mark(initContext.dataDirExists));
-    lines.push(".env file       " + mark(initContext.envFileExists));
+    lines.push(
+      "Data directory  " + mark(initContext.dataDirExists) + "  " + (initContext.dataDir ?? "")
+    );
+    lines.push(
+      ".env file       " + mark(initContext.envFileExists) + "  " + (initContext.envFilePath ?? "")
+    );
     lines.push("");
   }
 
@@ -9776,11 +9977,10 @@ function formatIntroStatValue(n: number | null): string {
 export function buildIntroBoxContent(
   version: string,
   summaryLinesOrStats: string[] | DualEnvIntroStats,
-  env?: "dev" | "prod"
+  _env?: "dev" | "prod"
 ): IntroBoxContent {
   const versionPart = dim(`v${version}`);
-  const envPart = env != null ? dim(` ${env} `) : " ";
-  const title = black(bold(" Neotoma ") + versionPart + envPart);
+  const title = black(bold(" Neotoma ") + versionPart + " ");
   const ratW = INTRO_PACK_RAT_DISPLAY_WIDTH;
   const ratSep = "  " + black("│") + " ";
   const blankRat = padToDisplayWidth("", ratW) + ratSep;

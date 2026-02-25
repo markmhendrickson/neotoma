@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://markmhendrickson.github.io/neotoma/sitemap.xml
+Sitemap: https://neotoma.io/sitemap.xml

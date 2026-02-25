@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 
 import { db } from "../db.js";
 import type { RelationshipSnapshot } from "../reducers/relationship_reducer.js";
+import { generateDeterministicSourceId } from "./source_identity.js";
 
 export type RelationshipType =
   | "PART_OF"
@@ -135,9 +136,14 @@ export class RelationshipsService {
       if (existing) {
         sourceId = existing.id;
       } else {
+        const deterministicSourceId = generateDeterministicSourceId(
+          params.user_id,
+          contentHashValue,
+        );
         const { data: source, error: sourceError } = await db
           .from("sources")
           .insert({
+            id: deterministicSourceId,
             content_hash: contentHashValue,
             mime_type: "application/json",
             storage_url: `internal://relationship/${params.relationship_type}`,

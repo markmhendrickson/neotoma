@@ -68,13 +68,13 @@ Do not use a tunnel when:
 
 | Provider    | Binary      | Auto-selected when        | Override                    |
 |------------|-------------|----------------------------|-----------------------------|
-| Cloudflare | `cloudflared` | Installed (preferred)      | `NEOTOMA_TUNNEL_PROVIDER=cloudflare` |
-| ngrok      | `ngrok`     | Cloudflare not installed, ngrok installed and authenticated | `NEOTOMA_TUNNEL_PROVIDER=ngrok` |
+| ngrok      | `ngrok`     | Installed and authenticated | `NEOTOMA_TUNNEL_PROVIDER=ngrok` |
+| Cloudflare | `cloudflared` | ngrok not available, cloudflared installed | `NEOTOMA_TUNNEL_PROVIDER=cloudflare` |
 
 **Selection order (when `NEOTOMA_TUNNEL_PROVIDER` is not set):**
 
-1. If `cloudflared` is installed → **Cloudflare**
-2. Else if `ngrok` is installed and authenticated → **ngrok**
+1. If `ngrok` is installed and authenticated → **ngrok**
+2. Else if `cloudflared` is installed → **Cloudflare**
 3. Else → **ngrok** (script will error if ngrok is not usable)
 
 To force a provider, set in `.env` or export before running:
@@ -100,6 +100,8 @@ Port is controlled by `NEOTOMA_HTTP_PORT` or `HTTP_PORT` (default 8080 for dev, 
 **Combined commands** (e.g. `dev:api`, `watch:prod:tunnel`) start both tunnel and server in one terminal; the tunnel script writes the URL to `/tmp/ngrok-mcp-url.txt` and the server reads it for auto-discovery or explicit `NEOTOMA_HOST_URL`. Ctrl+C stops both.
 
 **CLI:** To start the API with a tunnel from the Neotoma CLI: `neotoma api start --background --env dev --tunnel` (or `--env prod --tunnel`). See [cli_reference.md](cli_reference.md).
+
+**Testing OAuth over the tunnel:** With the API and tunnel running, run `neotoma auth login --tunnel`. The CLI reads the tunnel URL from `/tmp/ngrok-mcp-url.txt`, opens the key-auth page in your browser, then completes the OAuth flow. Use this to create an OAuth connection for Cursor (or to verify the flow). If the tunnel URL file is missing, the command prints guidance to start the API with `--tunnel` first.
 
 ---
 

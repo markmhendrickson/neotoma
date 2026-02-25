@@ -213,7 +213,8 @@ const Sidebar = React.forwardRef<
     ref
   ) => {
     const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
-    const [isMounted, setIsMounted] = React.useState(false);
+    // For static exports (no client hydration), render visible immediately.
+    const [isMounted, setIsMounted] = React.useState(() => typeof window === "undefined");
 
     React.useEffect(() => {
       setIsMounted(true);
