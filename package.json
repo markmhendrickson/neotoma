@@ -4,11 +4,11 @@
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
+  "browser": false,
   "bin": {
     "neotoma": "dist/cli/bootstrap.js"
   },
   "scripts": {
-    "postinstall": "node scripts/postinstall.js",
     "pretest": "npm run build:server",
     "build:server": "tsc && node scripts/copy_pdf_worker_wrapper.js",
     "build:ui": "vite build",
@@ -111,7 +111,8 @@
     "debug:errors:cli": "node scripts/trigger_error_debug_cli.js",
     "monitor:snapshots": "tsx scripts/monitor_and_fix_snapshots.ts",
     "check:snapshots": "tsx scripts/check_stale_snapshots.ts",
-    "simulate:install": "node scripts/simulate_npm_install.js"
+    "simulate:install": "node scripts/simulate_npm_install.js",
+    "check:bundlephobia": "node scripts/check_bundlephobia.js"
   },
   "keywords": [
     "mcp",
@@ -120,11 +121,24 @@
     "storage",
     "chatgpt"
   ],
-  "author": "",
+  "author": "Mark Hendrickson",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/markmhendrickson/neotoma.git"
+  },
+  "homepage": "https://neotoma.io",
+  "bugs": {
+    "url": "https://github.com/markmhendrickson/neotoma/issues"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md"
+  ],
   "dependencies": {
     "@dsnp/parquetjs": "^1.8.7",
-    "@modelcontextprotocol/sdk": "^1.25.2",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@noble/curves": "^2.0.1",
     "@noble/hashes": "^2.0.1",
     "@radix-ui/react-collapsible": "^1.1.12",
@@ -181,6 +195,11 @@
     "ws": "^8.18.0",
     "zod": "^3.22.4"
   },
+  "overrides": {
+    "hono": "^4.12.2",
+    "fast-xml-parser": "^5.4.1",
+    "qs": "^6.15.0"
+  },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
     "@testing-library/jest-dom": "^6.9.1",
@@ -197,9 +216,10 @@
     "@types/pdfkit": "^0.17.3",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
+    "@types/semver": "^7.7.1",
     "@types/ws": "^8.18.1",
-    "@typescript-eslint/eslint-plugin": "^6.17.0",
-    "@typescript-eslint/parser": "^6.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.56.1",
+    "@typescript-eslint/parser": "^8.56.1",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "baseline-browser-mapping": "^2.9.15",

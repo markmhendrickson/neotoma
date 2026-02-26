@@ -3,7 +3,10 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
+import { initGoogleAnalytics } from "./utils/analytics";
 import "./index.css";
+
+initGoogleAnalytics();
 
 // Initialize theme on app load
 function initializeTheme() {

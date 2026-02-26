@@ -19,17 +19,25 @@ No extra secrets: the workflow uses the repo’s GitHub Pages environment. Push 
 ### Custom domain (neotoma.io)
 1. In the repo: **Settings → Pages** (under "Code and automation").
 2. Under **Custom domain**, enter **neotoma.io** and click **Save**. GitHub will add a CNAME file or show DNS instructions.
-3. At your DNS provider for neotoma.io, add either:
-   - **A records** for the apex: `192.30.252.153` and `192.30.252.154`, or
-   - An **ALIAS/ANAME** record for the apex pointing to `<owner>.github.io`.
+3. At your DNS provider for neotoma.io, add **A records** for the apex (all four):
+   - `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
+   - **Via script (Cloudflare):** `./scripts/cloudflare_set_github_pages_apex.sh` (sets apex to these IPs, DNS only).
+   - Or an **ALIAS/ANAME** for the apex pointing to `<owner>.github.io` if your provider supports it.
 4. Wait for DNS to propagate (up to 24 hours). GitHub will provision HTTPS for neotoma.io.
-5. Optionally enable **Enforce HTTPS** in Settings → Pages.
+5. When **Enforce HTTPS** becomes available in Settings → Pages, enable it.
+
+#### If HTTPS stays unavailable (certificate for \*.github.io or "Not Secure")
+- **CAA records:** If the zone has CAA records, at least one must allow Let's Encrypt (GitHub uses it for custom domains). Add a CAA record: `0 issue "letsencrypt.org"`. Via script: `./scripts/cloudflare_ensure_caa_letsencrypt.sh`.
+- **Retrigger issuance:** In Settings → Pages, remove the custom domain, wait a few minutes, then re-add `neotoma.io` and Save. GitHub will run DNS check and request a new certificate.
+- **Wait:** Issuance can take up to 24 hours after DNS is correct.
 
 ### Cloudflare cutover checklist (redirect removal)
-1. In Cloudflare, remove any forwarding or redirect rule that sends `https://neotoma.io/*` to `https://<owner>.github.io/neotoma/*`.
-2. Keep DNS records pointed at GitHub Pages for the apex domain (A records or ALIAS/ANAME as supported by provider).
+1. Remove any forwarding or redirect rule that sends `https://neotoma.io` to GitHub (repo or github.io):
+   - **Via script (recommended):** `CLOUDFLARE_API_TOKEN` in env, then run `./scripts/remove_cloudflare_redirect.sh`. Uses Rulesets API; removes redirect rules that point to `*github*`.
+   - **Via dashboard:** Cloudflare Dashboard → Rules → Redirect Rules (or Page Rules); delete the rule that forwards neotoma.io to the repo or github.io.
+2. Ensure apex A records point to GitHub Pages (all four): `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`. Run `./scripts/cloudflare_set_github_pages_apex.sh` to set them via API.
 3. Verify with browser and curl:
-   - `https://neotoma.io` returns `200` and stays on `neotoma.io` (no hop to `github.io`).
+   - `https://neotoma.io` returns `200` and stays on `neotoma.io` (no hop to `github.io` or `github.com`).
    - `https://neotoma.io/sitemap.xml` and `https://neotoma.io/robots.txt` resolve successfully.
 ## Prerequisites
 - Fly.io account (free tier available)
