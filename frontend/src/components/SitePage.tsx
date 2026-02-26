@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, Copy } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FUNCTIONALITY_MATRIX,
   MCP_ACTIONS_TABLE,
@@ -19,6 +19,10 @@ import { SeoHead } from "./SeoHead";
 interface SitePageProps {
   staticMode?: boolean;
 }
+
+const RESPONSIVE_TABLE_CLASS =
+  "w-full caption-bottom border-0 text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words [&_thead]:sr-only [&_thead]:absolute [&_thead]:w-px [&_thead]:h-px [&_thead]:overflow-hidden [&_thead]:whitespace-nowrap [&_tbody]:block [&_tr]:block [&_tr]:mb-0 [&_tr]:rounded-none [&_tr]:border-b [&_tr]:border-border [&_tr]:bg-transparent [&_tr]:py-4 [&_td]:grid [&_td]:grid-cols-[8rem_minmax(0,1fr)] [&_td]:gap-3 [&_td]:items-start [&_td]:p-0 [&_td]:border-0 [&_td]:text-[14px] [&_td]:leading-5 [&_td]:py-4 [&_td.align-top]:py-2 [&_td::before]:content-[attr(data-label)] [&_td::before]:font-semibold [&_td::before]:text-foreground md:w-max md:border md:border-border md:border-collapse md:[&_thead]:not-sr-only md:[&_thead]:static md:[&_thead]:w-auto md:[&_thead]:h-auto md:[&_thead]:overflow-visible md:[&_thead]:whitespace-normal md:[&_thead_tr]:border-b md:[&_thead_tr]:border-border md:[&_tbody]:table-row-group md:[&_tbody_tr]:border-b md:[&_tbody_tr]:border-border md:[&_tbody_tr:last-child]:border-b-0 md:[&_tr]:table-row md:[&_tr]:h-10 md:[&_tr]:mb-0 md:[&_tr]:rounded-none md:[&_tr]:border-0 md:[&_tr]:bg-transparent md:[&_tr]:py-4 md:[&_tr]:transition-colors md:[&_tbody_tr:hover]:bg-muted/50 md:[&_td]:table-cell md:[&_td]:px-4 md:[&_td]:py-3 md:[&_td]:align-middle md:[&_td]:text-body md:[&_td:has([role=checkbox])]:pr-0 md:[&_td::before]:hidden md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:text-left md:[&_th]:align-middle md:[&_th]:font-semibold md:[&_th]:text-foreground md:[&_th:has([role=checkbox])]:pr-0";
+const MOBILE_TABLE_ROWS_STEP = 5;
 
 function sanitizeCodeForCopy(rawCode: string): string {
   return rawCode
@@ -67,7 +71,14 @@ function SectionDivider() {
 function LearnMoreCard({ item }: { item: LearnMoreCardItem }) {
   const isExternal = item.href.startsWith("http");
   const content = (
-    <Alert className="flex flex-row items-stretch gap-4 cursor-pointer h-full no-underline">
+    <Alert className="flex flex-col md:flex-row items-stretch gap-4 cursor-pointer h-full no-underline">
+      {item.imageUrl && (
+        <img
+          src={item.imageUrl}
+          alt=""
+          className="w-full md:w-[148px] md:h-[148px] md:shrink-0 rounded object-cover"
+        />
+      )}
       <div className="min-w-0 flex-1 flex flex-col gap-1">
         <AlertTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           {item.label}
@@ -82,13 +93,6 @@ function LearnMoreCard({ item }: { item: LearnMoreCardItem }) {
           </span>
         </AlertDescription>
       </div>
-      {item.imageUrl && (
-        <img
-          src={item.imageUrl}
-          alt=""
-          className="shrink-0 w-[148px] h-[148px] rounded object-cover"
-        />
-      )}
     </Alert>
   );
   return isExternal ? (
@@ -152,6 +156,47 @@ function CodeBlock({ code, staticMode = false }: { code: string; staticMode?: bo
 }
 
 export function SitePage({ staticMode = false }: SitePageProps) {
+  const functionalityRows = FUNCTIONALITY_MATRIX.flatMap((row) =>
+    row.openapi
+      .split(",")
+      .map((endpoint) => endpoint.trim())
+      .filter(Boolean)
+      .map((endpoint, i) => {
+        const spaceIdx = endpoint.indexOf(" ");
+        const method = spaceIdx >= 0 ? endpoint.slice(0, spaceIdx) : "";
+        const path = spaceIdx >= 0 ? endpoint.slice(spaceIdx + 1) : endpoint;
+        return {
+          key: `${row.functionality}-${i}-${endpoint}`,
+          method,
+          path,
+          description: row.endpointDescriptions?.[i] ?? row.functionality,
+          parameters: row.endpointParameters?.[i] ?? "—",
+        };
+      })
+  );
+  const [isMobile, setIsMobile] = useState(false);
+  const [visibleGlossaryRows, setVisibleGlossaryRows] = useState(MOBILE_TABLE_ROWS_STEP);
+  const [visibleFunctionalityRows, setVisibleFunctionalityRows] = useState(MOBILE_TABLE_ROWS_STEP);
+  const [visibleMcpRows, setVisibleMcpRows] = useState(MOBILE_TABLE_ROWS_STEP);
+  const [visibleCliRows, setVisibleCliRows] = useState(MOBILE_TABLE_ROWS_STEP);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncMobileState = () => setIsMobile(window.innerWidth <= 767);
+    syncMobileState();
+    window.addEventListener("resize", syncMobileState);
+    window.visualViewport?.addEventListener("resize", syncMobileState);
+    return () => {
+      window.removeEventListener("resize", syncMobileState);
+      window.visualViewport?.removeEventListener("resize", syncMobileState);
+    };
+  }, []);
+
+  const glossaryVisibleCount = visibleGlossaryRows;
+  const functionalityVisibleCount = visibleFunctionalityRows;
+  const mcpVisibleCount = visibleMcpRows;
+  const cliVisibleCount = visibleCliRows;
+
   return (
     <>
       {!staticMode ? <SeoHead routePath="/" /> : null}
@@ -230,24 +275,29 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <SectionDivider />
               <SectionHeading id="terminology">Core terminology</SectionHeading>
               <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
-                <table className="w-full border border-neutral-200 border-collapse text-[15px] leading-7">
+                <table className={RESPONSIVE_TABLE_CLASS}>
                   <thead>
                     <tr>
-                      <th className="text-left p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[14ch]">
+                      <th className="min-w-[14ch] md:min-w-[14ch]">
                         Term
                       </th>
-                      <th className="text-left p-3 border-b border-neutral-200 bg-neutral-50 min-w-[36ch]">
+                      <th className="min-w-[36ch] md:min-w-[36ch]">
                         Definition
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {GLOSSARY_ROWS.map((row) => (
+                    {GLOSSARY_ROWS.slice(0, glossaryVisibleCount).map((row) => (
                       <tr key={row.term}>
-                        <td className="align-top p-3 border-r border-b border-neutral-200 font-medium">
-                          {row.term}
-                        </td>
-                        <td className="align-top p-3 border-b border-neutral-200">
+                        {!isMobile ? (
+                          <td
+                            data-label="Term"
+                            className="font-medium"
+                          >
+                            {row.term}
+                          </td>
+                        ) : null}
+                        <td data-label={row.term} className="align-top">
                           {row.definition}
                         </td>
                       </tr>
@@ -255,6 +305,30 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   </tbody>
                 </table>
               </TableScrollWrapper>
+              {glossaryVisibleCount < GLOSSARY_ROWS.length ? (
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      setVisibleGlossaryRows((prev) =>
+                        Math.min(prev + MOBILE_TABLE_ROWS_STEP, GLOSSARY_ROWS.length)
+                      )
+                    }
+                  >
+                    Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, GLOSSARY_ROWS.length - glossaryVisibleCount)})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleGlossaryRows(GLOSSARY_ROWS.length)}
+                  >
+                    Load all ({GLOSSARY_ROWS.length - glossaryVisibleCount})
+                  </Button>
+                </div>
+              ) : null}
 
               <SectionDivider />
               <SectionHeading id="agent-instructions">Agent instructions</SectionHeading>
@@ -339,58 +413,70 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </p>
               <div>
                 <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
-                  <table className="w-max border border-neutral-200 border-collapse text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words">
+                  <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[8ch]">
+                        <th className="min-w-[8ch]">
                           Method
                         </th>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[28ch]">
+                        <th className="min-w-[28ch]">
                           Endpoint
                         </th>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[20ch]">
+                        <th className="min-w-[20ch]">
                           Description
                         </th>
-                        <th className="text-left font-medium p-3 border-b border-neutral-200 bg-neutral-50 min-w-[18ch]">
+                        <th className="min-w-[18ch]">
                           Parameters
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {FUNCTIONALITY_MATRIX.flatMap((row) =>
-                        row.openapi
-                          .split(",")
-                          .map((endpoint) => endpoint.trim())
-                          .filter(Boolean)
-                          .map((endpoint, i) => {
-                            const spaceIdx = endpoint.indexOf(" ");
-                            const method = spaceIdx >= 0 ? endpoint.slice(0, spaceIdx) : "";
-                            const path = spaceIdx >= 0 ? endpoint.slice(spaceIdx + 1) : endpoint;
-                            const description = row.endpointDescriptions?.[i] ?? row.functionality;
-                            const parameters = row.endpointParameters?.[i] ?? "—";
-                            return (
-                              <tr key={`${row.functionality}-${i}-${endpoint}`}>
-                                <td className="align-top p-3 border-r border-b border-neutral-200">
-                                  <code className="text-[13px]">{method}</code>
-                                </td>
-                                <td className="align-top p-3 border-r border-b border-neutral-200">
-                                  <code className="text-[13px] break-words whitespace-normal">
-                                    {path}
-                                  </code>
-                                </td>
-                                <td className="align-top p-3 border-r border-b border-neutral-200">
-                                  {description}
-                                </td>
-                                <td className="align-top p-3 border-b border-neutral-200">
-                                  <code className="text-[13px] text-neutral-600">{parameters}</code>
-                                </td>
-                              </tr>
-                            );
-                          })
-                      )}
+                      {functionalityRows.slice(0, functionalityVisibleCount).map((row) => (
+                        <tr key={row.key}>
+                          <td data-label="Method" className="align-top">
+                            <code className="text-[13px]">{row.method}</code>
+                          </td>
+                          <td data-label="Endpoint" className="align-top">
+                            <code className="text-[13px] break-words whitespace-normal">{row.path}</code>
+                          </td>
+                          <td
+                            data-label="Description"
+                            className="align-top"
+                          >
+                            {row.description}
+                          </td>
+                          <td data-label="Parameters" className="align-top">
+                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </TableScrollWrapper>
+                {functionalityVisibleCount < functionalityRows.length ? (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setVisibleFunctionalityRows((prev) =>
+                          Math.min(prev + MOBILE_TABLE_ROWS_STEP, functionalityRows.length)
+                        )
+                      }
+                    >
+                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, functionalityRows.length - functionalityVisibleCount)})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVisibleFunctionalityRows(functionalityRows.length)}
+                    >
+                      Load all ({functionalityRows.length - functionalityVisibleCount})
+                    </Button>
+                  </div>
+                ) : null}
               </div>
 
               <SectionDivider />
@@ -405,39 +491,66 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </p>
               <div>
                 <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
-                  <table className="w-max border border-neutral-200 border-collapse text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words">
+                  <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[28ch]">
+                        <th className="min-w-[28ch]">
                           Action
                         </th>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[20ch]">
+                        <th className="min-w-[20ch]">
                           Description
                         </th>
-                        <th className="text-left font-medium p-3 border-b border-neutral-200 bg-neutral-50 min-w-[18ch]">
+                        <th className="min-w-[18ch]">
                           Parameters
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {MCP_ACTIONS_TABLE.map((row, i) => (
+                      {MCP_ACTIONS_TABLE.slice(0, mcpVisibleCount).map((row, i) => (
                         <tr key={`${row.action}-${i}`}>
-                          <td className="align-top p-3 border-r border-b border-neutral-200">
+                          <td data-label="Action" className="align-top">
                             <code className="text-[13px] break-words whitespace-normal">
                               {row.action}
                             </code>
                           </td>
-                          <td className="align-top p-3 border-r border-b border-neutral-200">
+                          <td
+                            data-label="Description"
+                            className="align-top"
+                          >
                             {row.description}
                           </td>
-                          <td className="align-top p-3 border-b border-neutral-200">
-                            <code className="text-[13px] text-neutral-600">{row.parameters}</code>
+                          <td data-label="Parameters" className="align-top">
+                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </TableScrollWrapper>
+                {mcpVisibleCount < MCP_ACTIONS_TABLE.length ? (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setVisibleMcpRows((prev) =>
+                          Math.min(prev + MOBILE_TABLE_ROWS_STEP, MCP_ACTIONS_TABLE.length)
+                        )
+                      }
+                    >
+                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, MCP_ACTIONS_TABLE.length - mcpVisibleCount)})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVisibleMcpRows(MCP_ACTIONS_TABLE.length)}
+                    >
+                      Load all ({MCP_ACTIONS_TABLE.length - mcpVisibleCount})
+                    </Button>
+                  </div>
+                ) : null}
               </div>
 
               <SectionDivider />
@@ -458,39 +571,66 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </p>
               <div>
                 <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
-                  <table className="w-max border border-neutral-200 border-collapse text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words">
+                  <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[28ch]">
+                        <th className="min-w-[28ch]">
                           Command
                         </th>
-                        <th className="text-left font-medium p-3 border-r border-b border-neutral-200 bg-neutral-50 min-w-[20ch]">
+                        <th className="min-w-[20ch]">
                           Description
                         </th>
-                        <th className="text-left font-medium p-3 border-b border-neutral-200 bg-neutral-50 min-w-[18ch]">
+                        <th className="min-w-[18ch]">
                           Flags
                         </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {CLI_COMMANDS_TABLE.map((row, i) => (
+                      {CLI_COMMANDS_TABLE.slice(0, cliVisibleCount).map((row, i) => (
                         <tr key={`${row.command}-${i}`}>
-                          <td className="align-top p-3 border-r border-b border-neutral-200">
+                          <td data-label="Command" className="align-top">
                             <code className="text-[13px] break-words whitespace-normal">
                               {row.command}
                             </code>
                           </td>
-                          <td className="align-top p-3 border-r border-b border-neutral-200">
+                          <td
+                            data-label="Description"
+                            className="align-top"
+                          >
                             {row.description}
                           </td>
-                          <td className="align-top p-3 border-b border-neutral-200">
-                            <code className="text-[13px] text-neutral-600">{row.parameters}</code>
+                          <td data-label="Flags" className="align-top">
+                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </TableScrollWrapper>
+                {cliVisibleCount < CLI_COMMANDS_TABLE.length ? (
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setVisibleCliRows((prev) =>
+                          Math.min(prev + MOBILE_TABLE_ROWS_STEP, CLI_COMMANDS_TABLE.length)
+                        )
+                      }
+                    >
+                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, CLI_COMMANDS_TABLE.length - cliVisibleCount)})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setVisibleCliRows(CLI_COMMANDS_TABLE.length)}
+                    >
+                      Load all ({CLI_COMMANDS_TABLE.length - cliVisibleCount})
+                    </Button>
+                  </div>
+                ) : null}
               </div>
 
               <SectionDivider />

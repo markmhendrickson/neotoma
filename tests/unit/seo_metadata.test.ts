@@ -45,6 +45,8 @@ describe("seo_metadata", () => {
   });
 
   it("normalizes canonical URLs with query and trailing slash", () => {
-    expect(buildCanonicalUrl("/docs/?q=test")).toBe("https://neotoma.io/docs");
+    expect(buildCanonicalUrl("/docs/?q=test")).toBe(
+      "https://neotoma.io/docs"
+    );
   });
 });
