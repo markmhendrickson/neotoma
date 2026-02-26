@@ -701,16 +701,23 @@ function writeOutput(value: unknown, mode: OutputMode): void {
   process.stdout.write(`${stableStringify(value, indent)}\n`);
 }
 
-/** Wrap a string to a max display width; returns lines (uses displayWidth for column alignment). */
+/** Wrap a string to a max display width; returns lines. Prefers breaking at / or space so paths and words don't split mid-token. */
 function wrapByDisplayWidth(str: string, maxWidth: number): string[] {
   if (maxWidth <= 0) return [str];
   const lines: string[] = [];
   let current = "";
   for (let i = 0; i < str.length; i++) {
-    const next = current + str[i];
+    const ch = str[i]!;
+    const next = current + ch;
     if (displayWidth(next) > maxWidth && current.length > 0) {
-      lines.push(current);
-      current = str[i];
+      const breakAt = Math.max(current.lastIndexOf("/"), current.lastIndexOf(" "));
+      if (breakAt > 0 && displayWidth(current.slice(0, breakAt)) <= maxWidth) {
+        lines.push(current.slice(0, breakAt).trimEnd());
+        current = current.slice(breakAt) + ch;
+      } else {
+        lines.push(current);
+        current = ch;
+      }
     } else {
       current = next;
     }

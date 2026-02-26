@@ -128,6 +128,9 @@ References: docs/specs/MVP_FEATURE_UNITS.md
 - Reference Feature Unit ID in message
 - Include "References:" line pointing to relevant docs
 - Keep commits atomic (easy to review, revert)
+
+**Cursor IDE — disable "Made-with: Cursor" trailer:** Cursor adds a `--trailer "Made-with: Cursor"` to commits made through its UI or agent. To turn this off: **Cursor Settings → Agents → Attribution** and toggle Attribution off. (See [Cursor forum](https://forum.cursor.com/t/trailer-in-git-commit-messages-cant-be-stopped/150552).)
+
 ### Step 4: Push and Create Pull Request
 ```bash
 # Push commits
