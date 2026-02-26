@@ -43,6 +43,10 @@ async function loadCli(): Promise<CliModule> {
   return (await import("../../src/cli/index.ts")) as CliModule;
 }
 
+function canonicalizeTmpPath(p: string): string {
+  return p.replace(/^\/private(?=\/var\/)/, "");
+}
+
 function captureStdout(): { output: string[]; restore: () => void } {
   const output: string[] = [];
   const writeSpy = vi
@@ -168,6 +172,182 @@ describe("cli smoke tests", () => {
       const codexConfig = await fs.readFile(codexConfigPath, "utf-8");
       expect(codexConfig).toMatch(/\[mcp_servers\.other\]/);
       expect(codexConfig).not.toMatch(/\[mcp_servers\.neotoma/i);
+    });
+  });
+
+  it("reset backs up repo-local NEOTOMA_DATA_DIR when configured", async () => {
+    await withTempHome(async () => {
+      const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-"));
+      await fs.writeFile(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+
+      const configuredDataDir = path.join(repoRoot, "custom-data");
+      await fs.mkdir(configuredDataDir, { recursive: true });
+      await fs.writeFile(path.join(configuredDataDir, "neotoma.prod.db"), "seed");
+      await fs.writeFile(path.join(repoRoot, ".env"), "NEOTOMA_DATA_DIR=./custom-data\n");
+
+      const previousRepoRoot = process.env.NEOTOMA_REPO_ROOT;
+      process.env.NEOTOMA_REPO_ROOT = repoRoot;
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+      } finally {
+        stdout.restore();
+        if (previousRepoRoot === undefined) {
+          delete process.env.NEOTOMA_REPO_ROOT;
+        } else {
+          process.env.NEOTOMA_REPO_ROOT = previousRepoRoot;
+        }
+      }
+
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        backups_moved: Array<{ from: string; to: string }>;
+      };
+      expect(parsedReset.success).toBe(true);
+      const expectedDataDir = canonicalizeTmpPath(configuredDataDir);
+      expect(
+        parsedReset.backups_moved.some(
+          (item) => canonicalizeTmpPath(item.from) === expectedDataDir
+        )
+      ).toBe(true);
+    });
+  });
+
+  it("reset does not back up external NEOTOMA_DATA_DIR", async () => {
+    await withTempHome(async () => {
+      const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-external-"));
+      await fs.writeFile(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+
+      const externalDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-external-data-"));
+      await fs.writeFile(path.join(externalDataDir, "neotoma.prod.db"), "seed");
+      await fs.writeFile(path.join(repoRoot, ".env"), `NEOTOMA_DATA_DIR=${externalDataDir}\n`);
+
+      const previousRepoRoot = process.env.NEOTOMA_REPO_ROOT;
+      process.env.NEOTOMA_REPO_ROOT = repoRoot;
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+      } finally {
+        stdout.restore();
+        if (previousRepoRoot === undefined) {
+          delete process.env.NEOTOMA_REPO_ROOT;
+        } else {
+          process.env.NEOTOMA_REPO_ROOT = previousRepoRoot;
+        }
+      }
+
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        backups_moved: Array<{ from: string; to: string }>;
+      };
+      expect(parsedReset.success).toBe(true);
+      const expectedExternalDir = canonicalizeTmpPath(externalDataDir);
+      expect(
+        parsedReset.backups_moved.some(
+          (item) => canonicalizeTmpPath(item.from) === expectedExternalDir
+        )
+      ).toBe(false);
+      const expectedDefaultDataDir = canonicalizeTmpPath(path.join(repoRoot, "data"));
+      expect(
+        parsedReset.backups_moved.some(
+          (item) => canonicalizeTmpPath(item.from) === expectedDefaultDataDir
+        )
+      ).toBe(false);
+    });
+  });
+
+  it("reset backs up symlinked NEOTOMA_DATA_DIR when symlink target is repo-local", async () => {
+    await withTempHome(async () => {
+      const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-symlink-in-"));
+      await fs.writeFile(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+
+      const realDataDir = path.join(repoRoot, "actual-data");
+      await fs.mkdir(realDataDir, { recursive: true });
+      await fs.writeFile(path.join(realDataDir, "neotoma.prod.db"), "seed");
+      const symlinkPath = path.join(repoRoot, "linked-data");
+      await fs.symlink(realDataDir, symlinkPath, "dir");
+      await fs.writeFile(path.join(repoRoot, ".env"), "NEOTOMA_DATA_DIR=./linked-data\n");
+
+      const previousRepoRoot = process.env.NEOTOMA_REPO_ROOT;
+      process.env.NEOTOMA_REPO_ROOT = repoRoot;
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+      } finally {
+        stdout.restore();
+        if (previousRepoRoot === undefined) {
+          delete process.env.NEOTOMA_REPO_ROOT;
+        } else {
+          process.env.NEOTOMA_REPO_ROOT = previousRepoRoot;
+        }
+      }
+
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        backups_moved: Array<{ from: string; to: string }>;
+      };
+      expect(parsedReset.success).toBe(true);
+      const expectedSymlinkPath = canonicalizeTmpPath(symlinkPath);
+      expect(
+        parsedReset.backups_moved.some(
+          (item) => canonicalizeTmpPath(item.from) === expectedSymlinkPath
+        )
+      ).toBe(true);
+    });
+  });
+
+  it("reset does not back up symlinked NEOTOMA_DATA_DIR when symlink target is external", async () => {
+    await withTempHome(async () => {
+      const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-symlink-out-"));
+      await fs.writeFile(
+        path.join(repoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+
+      const externalDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-external-symlink-data-"));
+      await fs.writeFile(path.join(externalDataDir, "neotoma.prod.db"), "seed");
+      const symlinkPath = path.join(repoRoot, "linked-external-data");
+      await fs.symlink(externalDataDir, symlinkPath, "dir");
+      await fs.writeFile(path.join(repoRoot, ".env"), "NEOTOMA_DATA_DIR=./linked-external-data\n");
+
+      const previousRepoRoot = process.env.NEOTOMA_REPO_ROOT;
+      process.env.NEOTOMA_REPO_ROOT = repoRoot;
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+      } finally {
+        stdout.restore();
+        if (previousRepoRoot === undefined) {
+          delete process.env.NEOTOMA_REPO_ROOT;
+        } else {
+          process.env.NEOTOMA_REPO_ROOT = previousRepoRoot;
+        }
+      }
+
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        backups_moved: Array<{ from: string; to: string }>;
+      };
+      expect(parsedReset.success).toBe(true);
+      const expectedSymlinkPath = canonicalizeTmpPath(symlinkPath);
+      expect(
+        parsedReset.backups_moved.some(
+          (item) => canonicalizeTmpPath(item.from) === expectedSymlinkPath
+        )
+      ).toBe(false);
     });
   });
 

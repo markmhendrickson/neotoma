@@ -557,9 +557,9 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
   ogImageUrl: "https://neotoma.io/neotoma-hero.png",
-  pageTitle: "Neotoma | Truth layer for persistent agent memory",
+  pageTitle: "Neotoma | Truth layer for persistent AI agent memory",
   pageDescription:
-    "Neotoma is a truth layer for persistent agent memory. Install with npm and configure MCP for Claude, Cursor, or Codex. Deterministic, queryable entities and provenance.",
+    "Neotoma is the truth layer for persistent AI agent memory: deterministic, inspectable state with provenance. Install with npm, connect MCP, and query memory.",
   heroImageUrl: "neotoma-hero.png",
 };
 

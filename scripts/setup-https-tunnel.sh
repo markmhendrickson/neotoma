@@ -272,6 +272,78 @@ if [ -f "${CURSOR_CONFIG}" ]; then
   fi
 fi
 
+# Remote auth preflight: for tunnel access, ensure at least one auth path is configured
+# (Bearer token OR key source for key-authenticated OAuth).
+get_effective_env_var() {
+  _name="$1"
+  _val="${!_name:-}"
+  if [ -n "$_val" ]; then
+    echo "$_val"
+    return
+  fi
+  if [ -f "${ENV_FILE:-}" ]; then
+    _line=$(grep -E "^${_name}=" "${ENV_FILE}" 2>/dev/null | head -1 || true)
+    if [ -n "$_line" ]; then
+      _val=$(echo "$_line" | sed 's/^[^=]*=//' | tr -d '"' | tr -d "'" | xargs)
+      echo "$_val"
+      return
+    fi
+  fi
+  echo ""
+}
+
+BEARER_TOKEN_VALUE="$(get_effective_env_var NEOTOMA_BEARER_TOKEN)"
+KEY_FILE_VALUE="$(get_effective_env_var NEOTOMA_KEY_FILE_PATH)"
+MNEMONIC_VALUE="$(get_effective_env_var NEOTOMA_MNEMONIC)"
+REMOTE_AUTH_CONFIGURED=0
+if [ -n "$BEARER_TOKEN_VALUE" ] || [ -n "$KEY_FILE_VALUE" ] || [ -n "$MNEMONIC_VALUE" ]; then
+  REMOTE_AUTH_CONFIGURED=1
+fi
+
+if [ "$REMOTE_AUTH_CONFIGURED" -eq 0 ]; then
+  if [ "${TUNNEL_NONINTERACTIVE:-}" = "1" ]; then
+    echo "⚠️  Remote auth is not configured for tunnel access."
+    echo "   Configure one of:"
+    echo "   - NEOTOMA_BEARER_TOKEN in .env (quick start), or"
+    echo "   - NEOTOMA_KEY_FILE_PATH / NEOTOMA_MNEMONIC for key-authenticated OAuth."
+    echo "   After setting auth in .env, restart the server/tunnel so settings are loaded."
+    echo ""
+  else
+    echo "⚠️  Remote auth is not configured for tunnel access."
+    echo "   You can set NEOTOMA_BEARER_TOKEN now (quick start), or use key-authenticated OAuth via NEOTOMA_KEY_FILE_PATH / NEOTOMA_MNEMONIC."
+    read -p "Set NEOTOMA_BEARER_TOKEN in .env now? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+      read -r -p "NEOTOMA_BEARER_TOKEN value: " _new_token
+      if [ -n "$_new_token" ]; then
+        [ -z "${ENV_FILE:-}" ] && ENV_FILE="${REPO_ROOT}/.env"
+        [ ! -f "${ENV_FILE}" ] && touch "${ENV_FILE}"
+        _tmp_env="${ENV_FILE}.tmp.$$"
+        awk -v token="$_new_token" '
+          BEGIN { updated = 0 }
+          {
+            if ($0 ~ /^#?[[:space:]]*NEOTOMA_BEARER_TOKEN=/ && updated == 0) {
+              print "NEOTOMA_BEARER_TOKEN=" token
+              updated = 1
+            } else {
+              print
+            }
+          }
+          END {
+            if (updated == 0) print "NEOTOMA_BEARER_TOKEN=" token
+          }
+        ' "${ENV_FILE}" > "${_tmp_env}" && mv "${_tmp_env}" "${ENV_FILE}"
+        echo "✅ Saved NEOTOMA_BEARER_TOKEN to ${ENV_FILE}."
+        echo "   Restart the server/tunnel so the API loads the new token."
+        echo ""
+      else
+        echo "ℹ️  Empty token; skipped."
+        echo ""
+      fi
+    fi
+  fi
+fi
+
 # Prefix width for alignment: "  ℹ️  " / "  ⚠️  " / "  ✅  " (same length)
 echo "✅ HTTPS tunnel established!"
 echo ""
