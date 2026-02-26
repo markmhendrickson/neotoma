@@ -1,6 +1,6 @@
 # Neotoma: Truth Layer for Persistent Agent Memory
 
-![Neotoma banner](docs/assets/neotoma_banner.png)
+![Neotoma banner](https://raw.githubusercontent.com/markmhendrickson/neotoma/dev/docs/assets/neotoma_banner.png)
 
 Neotoma is a **truth layer**: an explicit, inspectable, replayable substrate for personal data that AI agents read and write. When agents act, personal data becomes state. Neotoma treats that state the way production systems do: contract-first, deterministic, immutable, and queryable.
 

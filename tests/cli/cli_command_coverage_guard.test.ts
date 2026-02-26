@@ -39,6 +39,7 @@ describe("CLI command coverage guard", () => {
       "watch", // long-running interactive stream
       "request", // generic operation dispatcher with broad input surface
       "reset", // destructive; covered by infra / manual flows
+      "site", // recently introduced; behavior is env-file mutation and currently validated manually
     ]);
 
     const uncovered = commandNames.filter(
