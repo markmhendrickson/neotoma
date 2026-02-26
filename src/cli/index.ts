@@ -4279,35 +4279,32 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               "OPENAI_API_KEY value [optional, Enter to skip]: "
             );
             if (keyVal.trim()) {
-              if (keyVal) {
-                let envText: string;
-                try {
-                  envText = await fs.readFile(envPathStr, "utf-8");
-                } catch {
-                  envText = await fs.readFile(envExamplePath, "utf-8");
-                }
-                const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
-                if (openAiLine.test(envText)) {
-                  envText = envText.replace(
-                    openAiLine,
-                    "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
-                  );
-                } else {
-                  envText =
-                    envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
-                }
-                await fs.writeFile(envPathStr, envText);
-                process.stdout.write(bullet(success("OPENAI_API_KEY saved to .env.")) + "\n");
-                _envConfigured = true;
+              let envText: string;
+              try {
+                envText = await fs.readFile(envPathStr, "utf-8");
+              } catch {
+                envText = await fs.readFile(envExamplePath, "utf-8");
               }
+              const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
+              if (openAiLine.test(envText)) {
+                envText = envText.replace(
+                  openAiLine,
+                  "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
+                );
+              } else {
+                envText =
+                  envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
+              }
+              await fs.writeFile(envPathStr, envText);
+              process.stdout.write(bullet(success("OPENAI_API_KEY saved to .env.")) + "\n");
+              _envConfigured = true;
             }
           } else if (envExists && useAdvancedPrompts) {
             const keyVal = await askQuestion(
               "OPENAI_API_KEY value [optional, Enter to skip]: "
             );
             if (keyVal.trim()) {
-              if (keyVal) {
-                let envText = await fs.readFile(envPathStr, "utf-8");
+              let envText = await fs.readFile(envPathStr, "utf-8");
                 const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
                 if (openAiLine.test(envText)) {
                   envText = envText.replace(
@@ -4318,10 +4315,9 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                   envText =
                     envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
                 }
-                await fs.writeFile(envPathStr, envText);
-                process.stdout.write(bullet(success("OPENAI_API_KEY updated in .env.")) + "\n");
-                _envConfigured = true;
-              }
+              await fs.writeFile(envPathStr, envText);
+              process.stdout.write(bullet(success("OPENAI_API_KEY updated in .env.")) + "\n");
+              _envConfigured = true;
             }
           }
           // When user created/selected a key during init, write NEOTOMA_KEY_FILE_PATH to .env so key-auth works
@@ -4453,9 +4449,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         // In pretty mode (not json), ask for repo root if not found
         if (!configRepoRoot && outputMode === "pretty" && useAdvancedPrompts) {
           const pathInput = await askQuestion(
-            "Path to Neotoma repo (optional, for running " +
-              pathStyle("neotoma") +
-              " from any directory): "
+            "Path to Neotoma repo [default: skip]: "
           );
           if (pathInput) {
             const validated = await validateNeotomaRepo(pathInput);
