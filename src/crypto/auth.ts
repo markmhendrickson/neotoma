@@ -103,7 +103,7 @@ function base64UrlDecode(str: string): Uint8Array {
     const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
     const binary = atob(padded);
     return new Uint8Array([...binary].map((c) => c.charCodeAt(0)));
-  } catch (error) {
+  } catch {
     // Return empty array for invalid base64 strings
     return new Uint8Array(0);
   }

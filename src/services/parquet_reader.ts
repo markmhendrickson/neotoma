@@ -237,7 +237,7 @@ async function readParquetFileInternal(
           return value;
         });
         return JSON.parse(jsonStr);
-      } catch (serializeError: any) {
+      } catch {
         // If serialization fails, do a deep conversion
         const deepConverted: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(entity)) {

@@ -1546,7 +1546,7 @@ export class NeotomaServer {
               }
               return value;
             });
-          } catch (stringifyError) {
+          } catch {
             errorMessage = String(error);
           }
         }
@@ -3641,7 +3641,7 @@ export class NeotomaServer {
                 return value;
               });
             }
-          } catch (stringifyError) {
+          } catch {
             // If stringification fails, use fallback
             errorMessage = String(error);
           }

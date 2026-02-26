@@ -32,7 +32,7 @@ export function convertTimestampNanosToIso(value: unknown): string | null {
     }
 
     return date.toISOString();
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -57,7 +57,7 @@ export function convertTimestampMsToIso(value: unknown): string | null {
     }
 
     return date.toISOString();
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -82,7 +82,7 @@ export function convertTimestampSecondsToIso(value: unknown): string | null {
     }
 
     return date.toISOString();
-  } catch (error) {
+  } catch {
     return null;
   }
 }

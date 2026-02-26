@@ -14,8 +14,12 @@ This document does NOT cover:
 - Advanced monitoring (post-MVP)
 ## Marketing site (neotoma.io)
 The static marketing site is built with `npm run build:pages:site` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`) on push to **main**. The canonical URL is **https://neotoma.io**.
+### One-time: Enable GitHub Pages from Actions
+1. In the repo on GitHub: **Settings → Pages** (under "Code and automation").
+2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch"). Save.
+3. The workflow runs on the next push to **main** or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
 ### Deploy
-No extra secrets: the workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually) to build and deploy. The site is served at **https://neotoma.io** after custom domain configuration.
+No extra secrets: the workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually from the Actions tab) to build and deploy. The site is served at **https://neotoma.io** after custom domain configuration.
 ### Custom domain (neotoma.io)
 1. In the repo: **Settings → Pages** (under "Code and automation").
 2. Under **Custom domain**, enter **neotoma.io** and click **Save**. GitHub will add a CNAME file or show DNS instructions.

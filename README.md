@@ -1,8 +1,8 @@
 # Neotoma: Truth Layer for Persistent Agent Memory
 
-![Neotoma banner](https://raw.githubusercontent.com/markmhendrickson/neotoma/dev/docs/assets/neotoma_banner.png)
+![Neotoma banner](https://raw.githubusercontent.com/markmhendrickson/neotoma/main/docs/assets/neotoma_banner.png)
 
-Neotoma is a **truth layer**: an explicit, inspectable, replayable substrate for personal data that AI agents read and write. When agents act, personal data becomes state. Neotoma treats that state the way production systems do: contract-first, deterministic, immutable, and queryable.
+[Neotoma](https://neotoma.io) is a **truth layer**: an explicit, inspectable, replayable substrate for personal data that AI agents read and write. When agents act, personal data becomes state. Neotoma treats that state the way production systems do: contract-first, deterministic, immutable, and queryable.
 
 **Why it exists:** The thing that keeps breaking in agentic systems is not intelligence but trust. Memory changes implicitly, context drifts, and you cannot see what changed or replay it. Neotoma provides the missing primitive: user-controlled, deterministic, inspectable memory with full provenance, so you can trust agents with real, ongoing state.
 
@@ -99,7 +99,7 @@ Neotoma stores personal data and requires secure configuration.
 
 **What's implemented:** Sources-first architecture with content-addressed storage, dual-path storing (file uploads + agent interactions), observations architecture, entity resolution with hash-based IDs, schema registry system, auto-enhancement, timeline generation, optional entity semantic search for `retrieve_entities` and `retrieve_entity_by_identifier` (local embeddings), MCP integration (ChatGPT, Claude, Cursor), full provenance and audit trail, React frontend, CLI. See [Release roadmap](#release-roadmap) and [docs/releases/](docs/releases/) for details.
 
-**Next steps:** Review uncommitted changes (262 files), apply pending migrations, audit test suite, plan v0.4.0 realistically based on current baseline.
+**Next steps:** Review current uncommitted changes, apply pending migrations, audit the test suite, and plan v0.4.0 realistically based on the current baseline.
 
 ---
 
@@ -143,15 +143,15 @@ Breaking changes should be expected.
 
 ### Completed Releases
 
-- **v0.2.0** – Minimal storing + correction loop (`completed`). [docs/releases/v0.2.0/](docs/releases/v0.2.0/)
-- **v0.2.1** – Entity resolution enhancement (`completed`). [docs/releases/v0.2.1/](docs/releases/v0.2.1/)
-- **v0.2.2** – Development foundations (`completed`). [docs/releases/v0.2.2/](docs/releases/v0.2.2/)
-- **v0.2.15** – Vocabulary alignment + API simplification (`completed`). [docs/releases/v0.2.15/](docs/releases/v0.2.15/)
+- **v0.2.0** – Minimal ingestion + correction loop (`in_testing`). [docs/releases/v0.2.0/](docs/releases/v0.2.0/)
+- **v0.2.1** – Documentation generation system (`in_progress`). [docs/releases/v0.2.1/](docs/releases/v0.2.1/)
+- **v0.2.2** – `list_capabilities` MCP action (`planning`). [docs/releases/v0.2.2/](docs/releases/v0.2.2/)
+- **v0.2.15** – Complete architecture migration (`implemented`, pending migrations). [docs/releases/v0.2.15/](docs/releases/v0.2.15/)
 - **v0.3.0** – Reconciliation release (`completed`). [docs/releases/v0.3.0/](docs/releases/v0.3.0/)
 
 ### Future Planning
 
-Future releases will be planned realistically based on the v0.3.0 baseline. Previous aspirational releases (v0.4.0 through v2.1.0) have been archived to [docs/releases/archived/aspirational/](docs/releases/archived/aspirational/) and can be revisited for future planning.
+Future releases will be planned realistically based on the v0.3.0 baseline. Previous aspirational releases (v0.4.0 through v2.2.0) have been archived to [docs/releases/archived/aspirational/](docs/releases/archived/aspirational/) and can be revisited for future planning.
 
 Full release index: [docs/releases/](docs/releases/).
 
@@ -219,7 +219,7 @@ After installation, configure MCP for your AI tool:
 neotoma mcp config
 ```
 
-Marketing site: **https://neotoma.io** (GitHub Pages, deployed from **dev**; custom domain set in repo Settings → Pages). See [Deployment](docs/infrastructure/deployment.md#marketing-site-neotomaio).
+Marketing site: **https://neotoma.io** (GitHub Pages, deployed from **main**; custom domain set in repo Settings → Pages). See [Deployment](docs/infrastructure/deployment.md#marketing-site-neotomaio).
 
 ### Option 2: Clone repository (for development)
 

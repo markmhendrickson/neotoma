@@ -1734,7 +1734,7 @@ app.get("/schemas/:entity_type", async (req, res) => {
           const validated = await validateSessionToken(token);
           // Use validated user ID if not provided in query
           userId = userId || validated.userId;
-        } catch (authError) {
+        } catch {
           // Not a valid token - continue without user_id (will try global schema)
         }
       }
@@ -2595,7 +2595,7 @@ async function storeUnstructuredForApi(params: {
     const {
       extractWithLLM,
       extractWithLLMFromImage,
-      extractFromCSVWithChunking,
+      extractFromCSVWithChunking: _extractFromCSVWithChunking,
       isLLMExtractionAvailable,
     } = await import("./services/llm_extraction.js");
 
@@ -2632,7 +2632,7 @@ async function storeUnstructuredForApi(params: {
 
     let extractionResult:
       | Awaited<ReturnType<typeof extractWithLLM>>
-      | Awaited<ReturnType<typeof extractFromCSVWithChunking>>
+      | Awaited<ReturnType<typeof _extractFromCSVWithChunking>>
       | undefined = undefined;
     let extractedData: Array<Record<string, unknown>> = [];
     const pdfDebug = getPdfWorkerDebug();

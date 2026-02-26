@@ -36,7 +36,7 @@ export function registerPublicKey(bearerToken: string, userId?: string): void {
       createdAt: new Date(),
       lastUsed: new Date(),
     });
-  } catch (error) {
+  } catch {
     throw new Error("Invalid bearer token format");
   }
 }
@@ -81,7 +81,7 @@ export function ensurePublicKeyRegistered(bearerToken: string): boolean {
   try {
     registerPublicKey(bearerToken);
     return true;
-  } catch (error) {
+  } catch {
     // Invalid bearer token format - return false instead of throwing
     return false;
   }

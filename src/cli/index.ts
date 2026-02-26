@@ -3303,7 +3303,7 @@ async function runSessionLoop(opts?: {
     }
 
     const args = parseSessionLine(trimmed);
-    opts?.lastDetailOutputRef && (opts.lastDetailOutputRef.current = null);
+    if (opts?.lastDetailOutputRef) opts.lastDetailOutputRef.current = null;
     const argv = [process.argv[0], process.argv[1], ...args];
     process.stdout.write("\n");
     try {
@@ -4861,7 +4861,7 @@ const authLoginCommand = authCommand
           return;
         }
         baseUrl = url;
-      } catch (err) {
+      } catch {
         const msg =
           "No tunnel URL found. Start the API with a tunnel first: neotoma api start --env dev --tunnel";
         if (outputMode === "json") {

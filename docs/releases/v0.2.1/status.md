@@ -7,7 +7,7 @@
 ## 1. Release Metadata
 - **Release ID**: `v0.2.1`
 - **Name**: Documentation Generation System
-- **Status**: `planning`
+- **Status**: `in_progress`
 - **Release Type**: Not Marketed
 - **Deployment**: Production (neotoma.io)
 - **Priority**: P0
@@ -89,9 +89,9 @@ See `acceptance_criteria.md` for detailed criteria.
 | 2025-12-10 | Created v0.2.1 release plan | Add comprehensive documentation and support system to enable users and reduce support burden |
 ## 8. Risks and Blockers
 **Current Risks:**
-- None identified yet (planning phase)
+- None identified yet (in_progress phase)
 **Current Blockers:**
-- None identified yet (planning phase)
+- None identified yet (in_progress phase)
 ## 9. Next Steps
 1. **Feature Unit Specification:** Create detailed specifications for FU-300, FU-301, FU-302, FU-303
 2. **Implementation Planning:** Break down each FU into implementation tasks
