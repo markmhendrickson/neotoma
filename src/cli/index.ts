@@ -4503,6 +4503,174 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
     }
   );
 
+// ── Site configure (Google Analytics and env vars) ─────────────────────────
+
+const siteCommand = program
+  .command("site")
+  .description("Site and frontend configuration");
+
+siteCommand
+  .command("configure")
+  .description(
+    "Configure site env vars: Google Analytics (VITE_GA_MEASUREMENT_ID) and optional Google API credentials"
+  )
+  .option("--ga-measurement-id <id>", "GA4 measurement ID (e.g. G-XXXXXXXXXX)")
+  .option(
+    "--google-application-credentials <path>",
+    "Path to Google application credentials JSON (server-side APIs)"
+  )
+  .option(
+    "--google-oauth-credentials <path>",
+    "Path to Google OAuth credentials file or directory (e.g. .creds)"
+  )
+  .action(
+    async (opts: {
+      gaMeasurementId?: string;
+      googleApplicationCredentials?: string;
+      googleOauthCredentials?: string;
+    }) => {
+      const outputMode = resolveOutputMode();
+      let repoRoot: string | null = null;
+      try {
+        const config = await readConfig();
+        if (config.repo_root) repoRoot = await validateNeotomaRepo(config.repo_root);
+        if (!repoRoot && process.env.NEOTOMA_REPO_ROOT) {
+          repoRoot = await validateNeotomaRepo(process.env.NEOTOMA_REPO_ROOT);
+        }
+        if (!repoRoot) repoRoot = await findRepoRoot(process.cwd());
+      } catch {
+        // leave null
+      }
+      if (!repoRoot) {
+        process.stderr.write(
+          "Not a Neotoma repo. Run from the repo root or run " +
+            pathStyle("neotoma init") +
+            " first.\n"
+        );
+        process.exitCode = 1;
+        return;
+      }
+      const envPath = path.join(repoRoot, ".env");
+      const envExamplePath = path.join(repoRoot, ".env.example");
+      if (!(await pathExists(envPath))) {
+        if (await pathExists(envExamplePath)) {
+          await fs.copyFile(envExamplePath, envPath);
+          if (outputMode === "pretty") {
+            process.stdout.write(
+              bullet(success("Created .env from .env.example")) + "\n"
+            );
+          }
+        } else {
+          await fs.writeFile(envPath, "");
+          if (outputMode === "pretty") {
+            process.stdout.write(bullet(success("Created empty .env")) + "\n");
+          }
+        }
+      }
+
+      let gaId = opts.gaMeasurementId?.trim();
+      let googleAppCreds = opts.googleApplicationCredentials?.trim();
+      let googleOauthCreds = opts.googleOauthCredentials?.trim();
+      if (process.stdout.isTTY && outputMode === "pretty") {
+        if (gaId === undefined || gaId === "") {
+          const raw = await askQuestion(
+            "VITE_GA_MEASUREMENT_ID (GA4 measurement ID, e.g. G-XXXXXXXXXX) [optional, Enter to skip]: "
+          );
+          gaId = raw.trim();
+        }
+        if (googleAppCreds === undefined || googleAppCreds === "") {
+          const raw = await askQuestion(
+            "GOOGLE_APPLICATION_CREDENTIALS (path to service account JSON) [optional, Enter to skip]: "
+          );
+          googleAppCreds = raw.trim();
+        }
+        if (googleOauthCreds === undefined || googleOauthCreds === "") {
+          const raw = await askQuestion(
+            "GOOGLE_OAUTH_CREDENTIALS (path, e.g. .creds) [optional, Enter to skip]: "
+          );
+          googleOauthCreds = raw.trim();
+        }
+      }
+
+      const updated: string[] = [];
+      // Apply when option was explicitly passed (including empty) or user entered non-empty at prompt
+      if (opts.gaMeasurementId !== undefined) {
+        await updateOrInsertEnvVar(
+          envPath,
+          "VITE_GA_MEASUREMENT_ID",
+          opts.gaMeasurementId.trim()
+        );
+        updated.push("VITE_GA_MEASUREMENT_ID");
+      } else if (gaId !== undefined && gaId !== "") {
+        await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", gaId);
+        updated.push("VITE_GA_MEASUREMENT_ID");
+      }
+      if (opts.googleApplicationCredentials !== undefined) {
+        await updateOrInsertEnvVar(
+          envPath,
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          opts.googleApplicationCredentials.trim()
+        );
+        updated.push("GOOGLE_APPLICATION_CREDENTIALS");
+      } else if (googleAppCreds !== undefined && googleAppCreds !== "") {
+        await updateOrInsertEnvVar(
+          envPath,
+          "GOOGLE_APPLICATION_CREDENTIALS",
+          googleAppCreds
+        );
+        updated.push("GOOGLE_APPLICATION_CREDENTIALS");
+      }
+      if (opts.googleOauthCredentials !== undefined) {
+        await updateOrInsertEnvVar(
+          envPath,
+          "GOOGLE_OAUTH_CREDENTIALS",
+          opts.googleOauthCredentials.trim()
+        );
+        updated.push("GOOGLE_OAUTH_CREDENTIALS");
+      } else if (googleOauthCreds !== undefined && googleOauthCreds !== "") {
+        await updateOrInsertEnvVar(
+          envPath,
+          "GOOGLE_OAUTH_CREDENTIALS",
+          googleOauthCreds
+        );
+        updated.push("GOOGLE_OAUTH_CREDENTIALS");
+      }
+
+      if (outputMode === "json") {
+        writeOutput(
+          { env_file: envPath, updated_vars: updated },
+          outputMode
+        );
+        return;
+      }
+      if (updated.length > 0) {
+        process.stdout.write(
+          heading("Site env vars updated") + "\n"
+        );
+        process.stdout.write(keyValue("env_file", envPath, true) + "\n");
+        process.stdout.write(
+          bullet("Set or updated: " + updated.join(", ")) + "\n"
+        );
+      } else {
+        process.stdout.write(
+          dim("No values provided. Use options or run interactively to set vars.") + "\n"
+        );
+        process.stdout.write(
+          dim("  ") +
+            pathStyle("neotoma site configure --ga-measurement-id G-XXXXXXXXXX") +
+            "\n"
+        );
+        process.stdout.write(
+          dim("  ") +
+            pathStyle(
+              "neotoma site configure --google-application-credentials '' --google-oauth-credentials .creds"
+            ) +
+            "\n"
+        );
+      }
+    }
+  );
+
 let resetCompletionPrinted = false;
 
 program
