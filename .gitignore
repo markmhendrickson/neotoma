@@ -24,6 +24,7 @@ public/
 # Build output from build:pages:site (CI regenerates on deploy)
 site_pages/assets/
 site_pages/neotoma-hero.png
+site_pages/neotoma-og-1200x630.png
 .cursor/mcp.json
 .cursor/error_reports/
 docs/developer/mcp.json.example

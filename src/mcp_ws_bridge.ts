@@ -196,7 +196,7 @@ wss.on("connection", (ws: WebSocket) => {
     if (child && !child.killed) {
       try {
         child.kill("SIGTERM");
-      } catch (error) {
+      } catch {
         // ignore cleanup error
       }
     }

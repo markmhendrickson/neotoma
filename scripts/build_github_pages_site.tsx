@@ -16,6 +16,8 @@ const noJekyllFile = path.join(outputDir, ".nojekyll");
 const faviconFile = path.join(outputDir, "favicon.svg");
 const heroImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-hero.png");
 const heroImageDest = path.join(outputDir, "neotoma-hero.png");
+const ogImageSrc = path.join(repoRoot, "frontend", "public", "neotoma-og-1200x630.png");
+const ogImageDest = path.join(outputDir, "neotoma-og-1200x630.png");
 const robotsFile = path.join(outputDir, "robots.txt");
 const sitemapFile = path.join(outputDir, "sitemap.xml");
 const publicIndex = path.join(repoRoot, "public", "index.html");
@@ -28,9 +30,19 @@ function buildHtmlFromPublic(): string {
 
   const html = fs.readFileSync(publicIndex, "utf-8");
   // Use relative asset paths so the site works on both custom domain root and /repo subpath.
-  return html
+  let out = html
     .replaceAll('src="/assets/', 'src="assets/')
     .replaceAll('href="/assets/', 'href="assets/');
+  // Inject build id for debugging (View Source in prod to confirm which build is live)
+  const buildId =
+    process.env.GITHUB_SHA?.slice(0, 7) ||
+    process.env.BUILD_ID ||
+    `local-${Date.now()}`;
+  const buildComment = `\n    <!-- build: ${buildId} -->`;
+  if (out.includes("</head>")) {
+    out = out.replace("</head>", `${buildComment}\n  </head>`);
+  }
+  return out;
 }
 
 function main() {
@@ -51,6 +63,10 @@ function main() {
   if (fs.existsSync(heroImageSrc)) {
     fs.copyFileSync(heroImageSrc, heroImageDest);
     console.log(`Copied hero image: ${path.relative(repoRoot, heroImageDest)}`);
+  }
+  if (fs.existsSync(ogImageSrc)) {
+    fs.copyFileSync(ogImageSrc, ogImageDest);
+    console.log(`Copied OG image: ${path.relative(repoRoot, ogImageDest)}`);
   }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
   fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");

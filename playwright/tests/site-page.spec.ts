@@ -11,6 +11,9 @@ test.describe("sitePage coverage", () => {
     ).toBeVisible();
     await expect(page.locator("#install")).toBeVisible();
     await expect(page.getByRole("heading", { name: /install with npm/i })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /currently in developer release/i }),
+    ).toBeVisible();
   });
 
   test("renders learn more links and footer navigation", async ({ page }) => {

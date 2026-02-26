@@ -114,7 +114,7 @@ export function validateFieldWithConverters(
           originalValue: value,
         };
       }
-    } catch (error) {
+    } catch {
       // Converter threw error - skip to next converter
       continue;
     }

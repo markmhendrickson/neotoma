@@ -31,7 +31,7 @@ function decodeJWTUnverified(token: string): {
     // Decode payload (second part)
     const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
     return { header, payload };
-  } catch (error) {
+  } catch {
     return null;
   }
 }

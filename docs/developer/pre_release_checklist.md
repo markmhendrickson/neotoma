@@ -82,6 +82,15 @@ npm run check:bundlephobia
   - Check **Overview** for quality/maintenance/license scores and any flagged issues.
   - **Required:** Resolve or explicitly document any open Socket issues before Checkpoint 2 sign-off.
   - Ensures the published package does not ship known CVEs or Socket-flagged risks.
+  - **Expected, documented alerts (do not block sign-off):**
+    - **Network access:** CLI and server use `fetch()` for health checks, OAuth, and API calls (local or configured base URL). Intentional for MCP/API client behavior.
+    - **Shell access:** CLI uses `child_process.spawn`/`exec` for subprocesses (e.g. MCP bridge, `neotoma init`, opening URLs, schema icon generation). Intentional for CLI and dev tooling.
+  - If Socket shows **dependency high CVE** alerts, ensure `npm audit` is clean and overrides are in place; re-publish or wait for Socket re-scan if needed.
+  - **Other common Socket findings (document, do not block):**
+    - **Obsoleto (Obsolete):** Some transitive deps may be deprecated. Run `npm ls` and check npm for deprecation; replace direct deps where feasible; document transitives.
+    - **Utiliza eval / Código nativo / Cadenas URL / Acceso FS o env:** Often from transitive deps (e.g. tooling, native bindings). Document as accepted if not in our code.
+    - **Typosquats (“Quiso decir: parseuri, utile”):** False positive for package name `neotoma`; no action.
+    - **Vulnerabilidad potencial / Anomalía detectada por IA:** Review and document; fix if it points to our code, else note as transitive or false positive.
 
 ### 1.9 MCP server startup
 

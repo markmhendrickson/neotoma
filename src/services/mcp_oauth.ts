@@ -278,7 +278,7 @@ function validateRedirectUri(redirectUri: string): void {
     if (!url.protocol.match(/^(https?|cursor|vscode|app):$/)) {
       throw createOAuthError.invalidRedirectUri(`Invalid redirect URI protocol: ${url.protocol}`);
     }
-  } catch (error) {
+  } catch {
     throw createOAuthError.invalidRedirectUri(`Invalid redirect URI format: ${redirectUri}`);
   }
 }

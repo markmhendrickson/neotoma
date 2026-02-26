@@ -235,7 +235,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   Neotoma is in active, early development. Runs locally with CLI, MCP, and API with
                   tunnel support for remote access. Best for developers comfortable with early-stage
                   tooling and feedback. Not yet hardened for production; avoid storing highly
-                  sensitive data.
+                  sensitive data.&nbsp;
+                  <a
+                    href="https://markmhendrickson.com/posts/neotoma-developer-release"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Read release post
+                  </a>
                 </AlertDescription>
               </Alert>
               <figure className="my-10 rounded overflow-hidden">
@@ -278,22 +285,15 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <table className={RESPONSIVE_TABLE_CLASS}>
                   <thead>
                     <tr>
-                      <th className="min-w-[14ch] md:min-w-[14ch]">
-                        Term
-                      </th>
-                      <th className="min-w-[36ch] md:min-w-[36ch]">
-                        Definition
-                      </th>
+                      <th className="min-w-[14ch] md:min-w-[14ch]">Term</th>
+                      <th className="min-w-[36ch] md:min-w-[36ch]">Definition</th>
                     </tr>
                   </thead>
                   <tbody>
                     {GLOSSARY_ROWS.slice(0, glossaryVisibleCount).map((row) => (
                       <tr key={row.term}>
                         {!isMobile ? (
-                          <td
-                            data-label="Term"
-                            className="font-medium"
-                          >
+                          <td data-label="Term" className="font-medium">
                             {row.term}
                           </td>
                         ) : null}
@@ -317,7 +317,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       )
                     }
                   >
-                    Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, GLOSSARY_ROWS.length - glossaryVisibleCount)})
+                    Load more (
+                    {Math.min(MOBILE_TABLE_ROWS_STEP, GLOSSARY_ROWS.length - glossaryVisibleCount)})
                   </Button>
                   <Button
                     type="button"
@@ -416,18 +417,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="min-w-[8ch]">
-                          Method
-                        </th>
-                        <th className="min-w-[28ch]">
-                          Endpoint
-                        </th>
-                        <th className="min-w-[20ch]">
-                          Description
-                        </th>
-                        <th className="min-w-[18ch]">
-                          Parameters
-                        </th>
+                        <th className="min-w-[8ch]">Method</th>
+                        <th className="min-w-[28ch]">Endpoint</th>
+                        <th className="min-w-[20ch]">Description</th>
+                        <th className="min-w-[18ch]">Parameters</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -437,16 +430,17 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             <code className="text-[13px]">{row.method}</code>
                           </td>
                           <td data-label="Endpoint" className="align-top">
-                            <code className="text-[13px] break-words whitespace-normal">{row.path}</code>
+                            <code className="text-[13px] break-words whitespace-normal">
+                              {row.path}
+                            </code>
                           </td>
-                          <td
-                            data-label="Description"
-                            className="align-top"
-                          >
+                          <td data-label="Description" className="align-top">
                             {row.description}
                           </td>
                           <td data-label="Parameters" className="align-top">
-                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
+                            <code className="text-[13px] text-muted-foreground">
+                              {row.parameters}
+                            </code>
                           </td>
                         </tr>
                       ))}
@@ -465,7 +459,12 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         )
                       }
                     >
-                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, functionalityRows.length - functionalityVisibleCount)})
+                      Load more (
+                      {Math.min(
+                        MOBILE_TABLE_ROWS_STEP,
+                        functionalityRows.length - functionalityVisibleCount
+                      )}
+                      )
                     </Button>
                     <Button
                       type="button"
@@ -494,15 +493,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="min-w-[28ch]">
-                          Action
-                        </th>
-                        <th className="min-w-[20ch]">
-                          Description
-                        </th>
-                        <th className="min-w-[18ch]">
-                          Parameters
-                        </th>
+                        <th className="min-w-[28ch]">Action</th>
+                        <th className="min-w-[20ch]">Description</th>
+                        <th className="min-w-[18ch]">Parameters</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -513,14 +506,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                               {row.action}
                             </code>
                           </td>
-                          <td
-                            data-label="Description"
-                            className="align-top"
-                          >
+                          <td data-label="Description" className="align-top">
                             {row.description}
                           </td>
                           <td data-label="Parameters" className="align-top">
-                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
+                            <code className="text-[13px] text-muted-foreground">
+                              {row.parameters}
+                            </code>
                           </td>
                         </tr>
                       ))}
@@ -539,7 +531,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         )
                       }
                     >
-                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, MCP_ACTIONS_TABLE.length - mcpVisibleCount)})
+                      Load more (
+                      {Math.min(MOBILE_TABLE_ROWS_STEP, MCP_ACTIONS_TABLE.length - mcpVisibleCount)}
+                      )
                     </Button>
                     <Button
                       type="button"
@@ -574,15 +568,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
-                        <th className="min-w-[28ch]">
-                          Command
-                        </th>
-                        <th className="min-w-[20ch]">
-                          Description
-                        </th>
-                        <th className="min-w-[18ch]">
-                          Flags
-                        </th>
+                        <th className="min-w-[28ch]">Command</th>
+                        <th className="min-w-[20ch]">Description</th>
+                        <th className="min-w-[18ch]">Flags</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -593,14 +581,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                               {row.command}
                             </code>
                           </td>
-                          <td
-                            data-label="Description"
-                            className="align-top"
-                          >
+                          <td data-label="Description" className="align-top">
                             {row.description}
                           </td>
                           <td data-label="Flags" className="align-top">
-                            <code className="text-[13px] text-muted-foreground">{row.parameters}</code>
+                            <code className="text-[13px] text-muted-foreground">
+                              {row.parameters}
+                            </code>
                           </td>
                         </tr>
                       ))}
@@ -619,7 +606,12 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         )
                       }
                     >
-                      Load more ({Math.min(MOBILE_TABLE_ROWS_STEP, CLI_COMMANDS_TABLE.length - cliVisibleCount)})
+                      Load more (
+                      {Math.min(
+                        MOBILE_TABLE_ROWS_STEP,
+                        CLI_COMMANDS_TABLE.length - cliVisibleCount
+                      )}
+                      )
                     </Button>
                     <Button
                       type="button"
