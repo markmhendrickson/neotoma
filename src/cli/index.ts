@@ -3505,30 +3505,23 @@ program
         let envRepoRoot: string | null = repoRoot;
 
         // Determine data directory (allow interactive override when --data-dir is not provided)
-        let dataDir = opts.dataDir?.trim();
-        if (!dataDir) {
-          const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
-          const defaultDataDir = repoRoot
-            ? path.join(repoRoot, "data")
-            : path.join(homeDir, "neotoma", "data");
-
-          if (process.stdout.isTTY && useAdvancedPrompts) {
-            process.stdout.write(nl() + heading("Neotoma data directory") + nl());
-            process.stdout.write(
-              bullet(
-                dim(
-                  `Enter path for data storage (press Enter to use default): ${pathStyle(defaultDataDir)}`
-                )
-              ) + "\n"
-            );
-            const rawDataDir = await askQuestion("Data directory path: ");
-            const trimmedDataDir = rawDataDir.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
-            dataDir = trimmedDataDir || defaultDataDir;
+        const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
+        const defaultDataDir = repoRoot
+          ? path.join(repoRoot, "data")
+          : path.join(homeDir, "neotoma", "data");
+        let dataDir = opts.dataDir?.trim() || defaultDataDir;
+        if (process.stdout.isTTY && useAdvancedPrompts) {
+          const rawDataDir = await askQuestion(
+            "Data directory [default: " + pathStyle(defaultDataDir) + "]: "
+          );
+          const trimmedDataDir = rawDataDir.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
+          if (trimmedDataDir) {
+            dataDir = path.isAbsolute(trimmedDataDir)
+              ? trimmedDataDir
+              : path.resolve(repoRoot ?? process.cwd(), trimmedDataDir);
             process.stdout.write(
               bullet(success("Using data directory: ") + pathStyle(dataDir)) + "\n" + nl()
             );
-          } else {
-            dataDir = defaultDataDir;
           }
         }
 
@@ -3538,47 +3531,9 @@ program
           path?: string;
         }[] = [];
 
-        // 1. Create data directories
-        const dirs = [dataDir, path.join(dataDir, "sources"), path.join(dataDir, "logs")];
+        // Data directory and dir/DB creation run after plan when interactive (so "p=personalize" can prompt for data dir)
 
-        for (const dir of dirs) {
-          try {
-            await fs.access(dir);
-            steps.push({ name: path.basename(dir) || "data", status: "exists", path: dir });
-          } catch {
-            await fs.mkdir(dir, { recursive: true });
-            steps.push({ name: path.basename(dir) || "data", status: "created", path: dir });
-          }
-        }
-
-        // 2. Initialize SQLite databases (dev and prod)
-        const dbFiles = ["neotoma.db", "neotoma.prod.db"] as const;
-        if (!opts.skipDb) {
-          const { default: Database } = await import("better-sqlite3");
-          for (const dbFile of dbFiles) {
-            const dbPath = path.join(dataDir, dbFile);
-            try {
-              await fs.access(dbPath);
-              if (opts.force) {
-                const db = new Database(dbPath);
-                db.pragma("journal_mode = WAL");
-                db.close();
-                steps.push({ name: dbFile, status: "done", path: dbPath });
-              } else {
-                steps.push({ name: dbFile, status: "exists", path: dbPath });
-              }
-            } catch {
-              const db = new Database(dbPath);
-              db.pragma("journal_mode = WAL");
-              db.close();
-              steps.push({ name: dbFile, status: "created", path: dbPath });
-            }
-          }
-        } else {
-          steps.push({ name: "database", status: "skipped" });
-        }
-
-        // 3. Encryption key: created later via prompt when user chooses key_derived auth
+        // 1. Encryption key: created later via prompt when user chooses key_derived auth
         let keyPath: string | undefined;
         let keyPathWrittenToEnv = false;
 
@@ -3588,48 +3543,12 @@ program
           : null;
         let envPath: string | null = envRepoRoot ? path.join(envRepoRoot, ".env") : null;
         const mcpTokenEncryptionKey = randomBytes(32).toString("hex");
-        const envContent = `# Neotoma Environment Configuration
-# Repo path is stored in ~/.config/neotoma by neotoma init (or set NEOTOMA_REPO_ROOT at runtime to override).
-
-# Data directory (defaults to ./data)
-NEOTOMA_DATA_DIR=${dataDir}
-
-# Set at runtime when needed: NEOTOMA_ENV (development|production), NEOTOMA_HTTP_PORT or HTTP_PORT
-
-# MCP OAuth local login: encrypts tokens (set by init)
-NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
-
-# Encryption (optional - for privacy-first mode)
-# NEOTOMA_ENCRYPTION_ENABLED=true
-# NEOTOMA_KEY_FILE_PATH=${keyPath || "~/.config/neotoma/keys/neotoma.key"}
-
-# OpenAI API key (for LLM-based extraction)
-# OPENAI_API_KEY=sk-...
-`;
-
-        // .env.example is the repo template; init never creates or overwrites it
-        if (envExamplePath) {
-          try {
-            await fs.access(envExamplePath);
-            steps.push({ name: ".env.example", status: "exists", path: envExamplePath });
-          } catch {
-            steps.push({ name: ".env.example", status: "skipped", path: envExamplePath });
-          }
-        } else {
-          steps.push({ name: ".env.example", status: "skipped" });
-        }
+        let envContent = ""; // built after plan with final dataDir
 
         // When not in a repo, optionally prompt for repo path so we can create .env there
         if (!envRepoRoot && process.stdout.isTTY && !opts.skipEnv && useAdvancedPrompts) {
-          process.stdout.write(nl() + heading("Neotoma repo path") + nl());
-          process.stdout.write(
-            bullet(
-              dim(
-                "No repo detected. Enter path to your Neotoma repo to create .env there (or leave blank to skip): "
-              )
-            ) + "\n"
-          );
-          const raw = await askQuestion("Repo path: ");
+          process.stdout.write(nl() + bullet(heading("Neotoma repo path")) + nl());
+          const raw = await askQuestion("Repo path [default: skip]: ");
           const trimmed = raw.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
           if (trimmed) {
             const validated = await validateNeotomaRepo(trimmed);
@@ -3854,7 +3773,84 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           if (decision === "p" || decision === "personalize") {
             useAdvancedPrompts = true;
             process.stdout.write(dim("Switching to advanced interactive prompts.") + nl() + nl());
+            const rawDataDir = await askQuestion(
+              "Data directory [default: " + pathStyle(dataDir) + "]: "
+            );
+            const trimmedDataDir = rawDataDir.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
+            if (trimmedDataDir) {
+              dataDir = path.isAbsolute(trimmedDataDir)
+                ? trimmedDataDir
+                : path.resolve(repoRoot ?? process.cwd(), trimmedDataDir);
+              process.stdout.write(
+                bullet(success("Using data directory: ") + pathStyle(dataDir)) + "\n" + nl()
+              );
+            }
           }
+        }
+
+        // Create data directories and DBs (and build envContent) now that final dataDir is set
+        envContent = `# Neotoma Environment Configuration
+# Repo path is stored in ~/.config/neotoma by neotoma init (or set NEOTOMA_REPO_ROOT at runtime to override).
+
+# Data directory (defaults to ./data)
+NEOTOMA_DATA_DIR=${dataDir}
+
+# Set at runtime when needed: NEOTOMA_ENV (development|production), NEOTOMA_HTTP_PORT or HTTP_PORT
+
+# MCP OAuth local login: encrypts tokens (set by init)
+NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
+
+# Encryption (optional - for privacy-first mode)
+# NEOTOMA_ENCRYPTION_ENABLED=true
+# NEOTOMA_KEY_FILE_PATH=${keyPath || "~/.config/neotoma/keys/neotoma.key"}
+
+# OpenAI API key (for LLM-based extraction)
+# OPENAI_API_KEY=sk-...
+`;
+        const dirs = [dataDir, path.join(dataDir, "sources"), path.join(dataDir, "logs")];
+        for (const dir of dirs) {
+          try {
+            await fs.access(dir);
+            steps.push({ name: path.basename(dir) || "data", status: "exists", path: dir });
+          } catch {
+            await fs.mkdir(dir, { recursive: true });
+            steps.push({ name: path.basename(dir) || "data", status: "created", path: dir });
+          }
+        }
+        const dbFiles = ["neotoma.db", "neotoma.prod.db"] as const;
+        if (!opts.skipDb) {
+          const { default: Database } = await import("better-sqlite3");
+          for (const dbFile of dbFiles) {
+            const dbPath = path.join(dataDir, dbFile);
+            try {
+              await fs.access(dbPath);
+              if (opts.force) {
+                const db = new Database(dbPath);
+                db.pragma("journal_mode = WAL");
+                db.close();
+                steps.push({ name: dbFile, status: "done", path: dbPath });
+              } else {
+                steps.push({ name: dbFile, status: "exists", path: dbPath });
+              }
+            } catch {
+              const db = new Database(dbPath);
+              db.pragma("journal_mode = WAL");
+              db.close();
+              steps.push({ name: dbFile, status: "created", path: dbPath });
+            }
+          }
+        } else {
+          steps.push({ name: "database", status: "skipped" });
+        }
+        if (envExamplePath) {
+          try {
+            await fs.access(envExamplePath);
+            steps.push({ name: ".env.example", status: "exists", path: envExamplePath });
+          } catch {
+            steps.push({ name: ".env.example", status: "skipped", path: envExamplePath });
+          }
+        } else {
+          steps.push({ name: ".env.example", status: "skipped" });
         }
 
         // Output results
@@ -4002,7 +3998,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                     padToDisplayWidth("Yes", encW) +
                     "\n"
                 );
-                const authChoice = await askQuestion("Choose auth mode [1-2] (default: 1): ");
+                const authChoice = await askQuestion("Auth mode [1-2] [default: 1]: ");
                 initAuthSummary.mode = normalizeInitAuthMode(authChoice) ?? defaultInitAuthMode;
               }
             }
@@ -4059,7 +4055,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           } else if (initAuthSummary.mode === "key_derived") {
             process.stdout.write(nl());
             const keyChoice = await askQuestion(
-              "Create new key [1] or enter path to existing key [2] (default: 1): "
+              "Create new key [1] or path to existing key [2] [default: 1]: "
             );
             const wantCreate = keyChoice.trim() === "" || keyChoice.trim() === "1";
             if (wantCreate) {
@@ -4081,7 +4077,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                 );
               }
             } else {
-              const existingPath = await askQuestion("Path to existing key file: ");
+              const existingPath = await askQuestion("Path to existing key file [default: skip]: ");
               const resolved = existingPath.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
               if (!resolved) {
                 process.stdout.write(
@@ -4279,11 +4275,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             resolved.OPENAI_API_KEY != null && String(resolved.OPENAI_API_KEY).trim() !== "";
           const shouldPromptOpenAi = !opts.yes && outputMode === "pretty" && process.stdout.isTTY;
           if (!openAiSet && shouldPromptOpenAi) {
-            const setOpenAi = await askYesNo(
-              "Set OPENAI_API_KEY now? (optional, for LLM extraction) (y/n): "
+            const keyVal = await askQuestion(
+              "OPENAI_API_KEY value [optional, Enter to skip]: "
             );
-            if (setOpenAi) {
-              const keyVal = await askQuestion("OPENAI_API_KEY value: ");
+            if (keyVal.trim()) {
               if (keyVal) {
                 let envText: string;
                 try {
@@ -4307,9 +4302,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               }
             }
           } else if (envExists && useAdvancedPrompts) {
-            const updateOpenAi = await askYesNo("Update OPENAI_API_KEY in .env? (y/n): ");
-            if (updateOpenAi) {
-              const keyVal = await askQuestion("OPENAI_API_KEY value: ");
+            const keyVal = await askQuestion(
+              "OPENAI_API_KEY value [optional, Enter to skip]: "
+            );
+            if (keyVal.trim()) {
               if (keyVal) {
                 let envText = await fs.readFile(envPathStr, "utf-8");
                 const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
