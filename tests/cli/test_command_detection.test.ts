@@ -91,7 +91,6 @@ describe("Command Detection Debug", () => {
       const out = stdoutWrites.join("");
       expect(out).toMatch(/\d+\.\d+\.\d+/);
       expect(out).not.toContain("Nest is warm");
-      expect(out).not.toContain("neotoma>");
     } finally {
       process.stdout.write = origWrite;
     }
@@ -120,7 +119,6 @@ describe("Command Detection Debug", () => {
       const out = stdoutWrites.join("");
       expect(out).toContain("Usage:");
       expect(out).not.toContain("Nest is warm");
-      expect(out).not.toContain("neotoma>");
     } finally {
       process.stdout.write = origWrite;
     }

@@ -28,7 +28,7 @@ npm install -g neotoma
 neotoma init
 ```
 
-After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From the Neotoma repo root, running `neotoma` with no arguments starts an interactive session and both dev and prod API servers in watch mode; exit the session (exit / quit / Ctrl+D) to stop the servers. Use `neotoma --no-session` to show the intro and then the command menu (prompt `> `, type `?` for shortcuts).
+After installation, the `neotoma` command is available globally. Run `neotoma --help` to see available commands. From a Neotoma source checkout, running `neotoma` with no arguments starts an interactive session and both dev and prod API servers in watch mode; exit the session (exit / quit / Ctrl+D) to stop the servers. Use `neotoma --no-session` to show the intro and then the command menu (prompt `> `, type `?` for shortcuts).
 
 **Direct invocation:** Every action available in the interactive session is available as a direct CLI call: `neotoma <top-level> [subcommand] [options] [args]`. For example, `entities list` at the prompt is equivalent to `neotoma entities list`. Agents and scripts should always use direct invocation (e.g. `neotoma entities list --type company`) and never depend on entering the interactive session. When no command is given and stdout is not a TTY (e.g. an agent runs `neotoma` with no args), the CLI prints a short message and exits with code 1; pass an explicit command to avoid that.
 
