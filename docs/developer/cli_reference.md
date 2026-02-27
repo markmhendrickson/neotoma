@@ -38,7 +38,7 @@ Examples: `neotoma prod`, `neotoma dev`, `neotoma prod storage info`. Equivalent
 
 ### Default: interactive session (use-existing only)
 
-When you run `neotoma` with **no arguments**, the CLI finds the repo from the current directory, from `~/.config/neotoma/config.json` (set by `neotoma init`), or from `NEOTOMA_REPO_ROOT`. If no repo is found, it prompts to run `neotoma init` (which can set the repo path so future runs work from any cwd). With a repo, the CLI:
+When you run `neotoma` with **no arguments**, the CLI finds the Neotoma source checkout from the current directory, from `~/.config/neotoma/config.json` (set by `neotoma init`), or from `NEOTOMA_REPO_ROOT`. If no source checkout is found, it prompts to run `neotoma init` (which can set the Neotoma path so future runs work from any cwd). With a source checkout, the CLI:
 
 1. Uses **use-existing** policy only (no automatic server start).
 2. Discovers running API instances from session ports, default ports (`8080`, `8180`), remembered ports, and optional extra configured ports.
@@ -220,7 +220,7 @@ neotoma session --servers
 
 ### Initialization
 
-- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and can prompt to create encryption keys for privacy-first mode. If run from the repo (or a subdirectory), saves the repo path to `~/.config/neotoma/config.json` so `neotoma` can start servers from any cwd. If run from outside the repo, prompts for an optional repo path to save. In interactive mode (TTY), init prompts to create `.env` from `.env.example` when `.env` is missing, then optionally to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
+- `neotoma init`: Initialize Neotoma for first-time use. Creates data directories, initializes the SQLite database, and can prompt to create encryption keys for privacy-first mode. If run from a source checkout (or a subdirectory), saves the Neotoma path to `~/.config/neotoma/config.json` so `neotoma` can start servers from any cwd. If run from outside a source checkout, prompts for an optional Neotoma path to save. In interactive mode (TTY), init prompts to create `.env` from `.env.example` when `.env` is missing, then optionally to set `OPENAI_API_KEY` for LLM extraction. Init can also prompt to add CLI instructions (`neotoma cli-instructions check`) when missing.
   - `--data-dir <path>`: Custom data directory path. Default: `./data` (if in repo) or `~/neotoma/data` (if installed globally).
   - `--force`: Overwrite existing configuration.
   - `--skip-db`: Skip database initialization.
@@ -274,7 +274,7 @@ Commands for managing MCP server configuration files (Cursor, Claude Code, Winds
   - For each found config, checks for `neotoma-dev` and `neotoma` server entries (based on `command` script names or `url` patterns).
   - If any config is missing dev or prod servers, prompts to add them with absolute script paths.
   - If no config files found, offers to create `.cursor/mcp.json` in current directory.
-  - Uses Neotoma repo root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`.
+  - Uses Neotoma source root (from `findRepoRoot`, config, or `NEOTOMA_REPO_ROOT`) to resolve absolute script paths for `run_neotoma_mcp_stdio.sh` and `run_neotoma_mcp_stdio_prod.sh`.
   - After install, shows a reminder to run `neotoma cli-instructions check`; when MCP servers are installed interactively, it can also prompt to add CLI instructions if missing.
 
 **Dev vs Prod detection patterns:**
@@ -387,7 +387,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 
 ### Storage
 - `neotoma storage info`: Show where CLI config and server data are stored (file paths and backend).
-  - Local backend (only supported backend): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/logs/events.log`), `logs` (e.g. `data/logs`). Paths are resolved from current directory when run from the Neotoma repo, or from `NEOTOMA_PROJECT_ROOT` / `NEOTOMA_DATA_DIR` and other env overrides.
+  - Local backend (only supported backend): prints `data_dir`, `sqlite_db` (default `data/neotoma.db` in development, `data/neotoma.prod.db` in production), `raw_sources` (e.g. `data/sources`), `event_log` (e.g. `data/logs/events.log`), `logs` (e.g. `data/logs`). Paths are resolved from current directory when run from a Neotoma source checkout, or from `NEOTOMA_PROJECT_ROOT` / `NEOTOMA_DATA_DIR` and other env overrides.
 - `neotoma storage set-data-dir <dir>`: Update repo `.env` with `NEOTOMA_DATA_DIR=<dir>`, and optionally copy SQLite DB files (`neotoma.db`, `neotoma.prod.db`, and `-wal`/`-shm` sidecars) from the old data directory.
   - Interactive mode asks whether to copy DB files.
   - When DB files exist in both old and new directories, conflict handling is:

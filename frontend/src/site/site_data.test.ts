@@ -11,6 +11,9 @@ describe("site_data", () => {
   it("defines sidebar sections in expected order", () => {
     expect(SITE_SECTIONS.map((section) => section.id)).toEqual([
       "install",
+      "docker",
+      "get-started",
+      "use-cases",
       "terminology",
       "agent-instructions",
       "functionality",
