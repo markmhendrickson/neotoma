@@ -3552,8 +3552,10 @@ program
         const mcpTokenEncryptionKey = randomBytes(32).toString("hex");
         let envContent = ""; // built after plan with final dataDir
 
-        // When not in a repo, optionally prompt for repo path so we can create .env there
-        if (!envRepoRoot && process.stdout.isTTY && !opts.skipEnv && useAdvancedPrompts) {
+        // When not in a repo, prompt for repo path so we can create .env there.
+        // This runs in normal interactive init too (not only --advanced) so
+        // .env setup is not skipped just because init was started outside a repo.
+        if (!envRepoRoot && process.stdout.isTTY && !opts.skipEnv && !opts.yes) {
           process.stdout.write(nl() + bullet(heading("Neotoma repo path")) + nl());
           const raw = await askQuestion("Repo path [default: skip]: ");
           const trimmed = raw.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
@@ -4471,6 +4473,26 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             ...(initAuthSummary.mode !== "skip" ? { init_auth_mode: initAuthSummary.mode } : {}),
           };
           await writeConfig(nextConfig);
+        }
+
+        // If repo root was discovered late (after env setup phase), still ensure
+        // .env exists so init behavior is consistent regardless of launch directory.
+        if (!opts.skipEnv && !envRepoRoot && configRepoRoot) {
+          const lateEnvPath = path.join(configRepoRoot, ".env");
+          const lateEnvExamplePath = path.join(configRepoRoot, ".env.example");
+          if (!(await pathExists(lateEnvPath))) {
+            if (await pathExists(lateEnvExamplePath)) {
+              await fs.copyFile(lateEnvExamplePath, lateEnvPath);
+            } else {
+              await fs.writeFile(lateEnvPath, "");
+            }
+            if (outputMode === "pretty") {
+              process.stdout.write(
+                bullet(success(".env created after repo path was provided.")) + "\n"
+              );
+              process.stdout.write(bullet(dim("Path: ") + pathStyle(lateEnvPath)) + "\n");
+            }
+          }
         }
 
         process.stdout.write(nl());
@@ -10135,6 +10157,7 @@ export function buildInstallationBoxLines(
 
   const lines: string[] = [""];
 
+  // Always show env config status (repo and .env), whether successful or not.
   if (initContext != null) {
     lines.push(
       "Data directory  " + mark(initContext.dataDirExists) + "  " + (initContext.dataDir ?? "")
@@ -10142,6 +10165,12 @@ export function buildInstallationBoxLines(
     lines.push(
       ".env file       " + mark(initContext.envFileExists) + "  " + (initContext.envFilePath ?? "")
     );
+    lines.push("");
+  } else {
+    lines.push(
+      "Repo path      " + mark(false) + "  Not configured (run " + pathStyle("neotoma init") + " or set NEOTOMA_REPO_ROOT)"
+    );
+    lines.push(".env file      " + mark(false) + "  (set repo path first)");
     lines.push("");
   }
 
@@ -10680,8 +10709,28 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       argv.includes("--version") ||
       argv.includes("-V");
     if (!process.stdout.isTTY && !wantsHelpOrVersion) {
+      const repoRoot = await resolveAndPersistRepoRootFromInitContext();
+      const guidanceLines: string[] = [];
+      if (!repoRoot) {
+        guidanceLines.push(
+          "Neotoma repo is not configured in this shell.",
+          "Run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT to your Neotoma repo."
+        );
+      } else {
+        const envPath = path.join(repoRoot, ".env");
+        if (!(await pathExists(envPath))) {
+          guidanceLines.push(
+            "Neotoma repo is configured, but .env is missing.",
+            "Run 'neotoma init' to create .env defaults, or create " +
+              pathStyle(envPath) +
+              " manually."
+          );
+        }
+      }
+      const guidance = guidanceLines.length > 0 ? "\n" + guidanceLines.join("\n") + "\n" : "";
       process.stderr.write(
-        "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options.\n"
+        "No command given. Run neotoma <command> (e.g. neotoma entities list). Use neotoma --help for options.\n" +
+          guidance
       );
       process.exitCode = 1;
       return;
