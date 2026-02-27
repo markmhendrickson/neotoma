@@ -14,6 +14,9 @@ test.describe("sitePage coverage", () => {
     await expect(
       page.getByRole("heading", { name: /currently in developer release/i }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("img", { name: /screen recording: agent thinking and planning/i }),
+    ).toBeVisible();
   });
 
   test("renders learn more links and footer navigation", async ({ page }) => {
