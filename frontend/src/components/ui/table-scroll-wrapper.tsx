@@ -30,7 +30,8 @@ export function TableScrollWrapper({
     if (!el) return;
 
     const update = () => {
-      const scrollable = el.scrollWidth > el.clientWidth;
+      // Only treat as scrollable when there is meaningful overflow (avoid 1px rounding)
+      const scrollable = el.scrollWidth > el.clientWidth + 1;
       setIsScrollable(scrollable);
       if (scrollable) {
         const left = el.scrollLeft > 4;
@@ -40,11 +41,16 @@ export function TableScrollWrapper({
     };
 
     update();
+    // Re-measure after layout so we don't show hint if table fits once rendered
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(update);
+    });
     el.addEventListener("scroll", update, { passive: true });
     const resizeObserver = new ResizeObserver(update);
     resizeObserver.observe(el);
 
     return () => {
+      cancelAnimationFrame(raf);
       el.removeEventListener("scroll", update);
       resizeObserver.disconnect();
     };
@@ -53,14 +59,14 @@ export function TableScrollWrapper({
   return (
     <div
       className={cn(
-        "table-scroll-outer w-full max-w-full",
+        "table-scroll-outer w-full max-w-full rounded-lg border border-border overflow-hidden",
         isScrollable && "table-scrollable",
         className
       )}
     >
       <div
         ref={viewportRef}
-        className={cn("table-scroll-viewport overflow-x-auto w-full min-w-0 max-w-full", viewportClassName)}
+        className={cn("table-scroll-viewport overflow-x-auto w-full min-w-0 max-w-full rounded-lg", viewportClassName)}
       >
         <div className="table-scroll-inner">
           {children}
