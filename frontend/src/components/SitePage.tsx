@@ -11,6 +11,7 @@ import {
   SITE_METADATA,
   type LearnMoreCardItem,
 } from "../site/site_data";
+import thinkingAndPlanningDemo from "../assets/thinking-and-planning-demo.gif";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 import {
@@ -318,7 +319,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <p className="text-[15px] leading-7 mt-4 mb-4">
                 Behind the scenes the agent also stores the conversation itself and every turn you
                 exchange, so the full thread is available as persistent, queryable memory the next
-                time you or any connected tool needs it.
+                time you or any connected tool needs it. Below, a sped-up screen recording shows
+                the agent thinking and planning: breaking down a request into steps and using
+                memory as it works.
               </p>
               <div className="my-6">
                 <Dialog>
@@ -329,8 +332,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       aria-label="View screen recording full size"
                     >
                       <img
-                        src="/get-started-demo.gif"
-                        alt="Screen recording: create a task and list open tasks in the agent (click to view full size)"
+                        src={thinkingAndPlanningDemo}
+                        alt="Screen recording: agent thinking and planning (sped up); click to view full size"
                         className="w-full block"
                       />
                     </button>
@@ -340,8 +343,8 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       Screen recording full size
                     </DialogTitle>
                     <img
-                      src="/get-started-demo.gif"
-                      alt="Screen recording: create a task and list open tasks in the agent"
+                      src={thinkingAndPlanningDemo}
+                      alt="Screen recording: agent thinking and planning (sped up)"
                       className="max-w-[95vw] max-h-[95vh] w-auto h-auto object-contain rounded-lg"
                     />
                   </DialogContent>
