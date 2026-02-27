@@ -46,6 +46,9 @@ export interface GlossaryRow {
 
 export const SITE_SECTIONS: SiteSection[] = [
   { id: "install", label: "Install with npm", shortLabel: "Install", icon: "Package" },
+  { id: "docker", label: "Run with Docker", shortLabel: "Docker", icon: "Container" },
+  { id: "get-started", label: "Get started", shortLabel: "Get started", icon: "Rocket" },
+  { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Users" },
   { id: "terminology", label: "Core terminology", shortLabel: "Terminology", icon: "BookText" },
   { id: "agent-instructions", label: "Instructions", shortLabel: "Instructions", icon: "Bot" },
   {
@@ -88,6 +91,22 @@ neotoma api start --env production`,
   syncConfigCommands: `cd /path/to/neotoma
 # Add neotoma-dev and neotoma to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
 npm run sync:mcp`,
+  dockerBuild: `git clone https://github.com/markmhendrickson/neotoma.git
+cd neotoma
+docker build -t neotoma .`,
+  dockerRun: `# Run with a persistent data volume
+docker run -d \\
+  --name neotoma \\
+  -p 8080:8080 \\
+  -v neotoma-data:/app/data \\
+  neotoma`,
+  dockerRunProd: `# Production mode with a named volume
+docker run -d \\
+  --name neotoma \\
+  -p 8080:8080 \\
+  -e NODE_ENV=production \\
+  -v neotoma-data:/app/data \\
+  neotoma`,
   cliStoreExample: `neotoma store --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'`,
   cliListExample: `neotoma entities list --type company --limit 10`,
   cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
@@ -529,11 +548,43 @@ export const LEARN_MORE_REPO_CARD: LearnMoreCardItem = {
 export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
   {
     label: "Related post",
+    title: "Neotoma developer release",
+    description:
+      "Announcing the developer release: local CLI, MCP, and API with tunnel support; for developers comfortable with early-stage tooling and feedback.",
+    href: "https://markmhendrickson.com/posts/neotoma-developer-release",
+    imageUrl: "https://markmhendrickson.com/images/posts/neotoma-developer-release-hero.png",
+  },
+  {
+    label: "Related post",
     title: "Building a truth layer for persistent agent memory",
     description:
       "Why a deterministic, inspectable memory substrate for AI tools matters and how Neotoma fits.",
     href: "https://markmhendrickson.com/posts/truth-layer-agent-memory",
     imageUrl: "https://markmhendrickson.com/images/posts/truth-layer-agent-memory-hero.png",
+  },
+  {
+    label: "Related post",
+    title: "Agent memory has a truth problem",
+    description:
+      "Why retrieval dominates early, where it fails for ongoing state, and why local-first structured memory is hard but necessary.",
+    href: "https://markmhendrickson.com/posts/agent-memory-truth-problem",
+    imageUrl: "https://markmhendrickson.com/images/posts/agent-memory-truth-problem-hero.png",
+  },
+  {
+    label: "Related post",
+    title: "Why agent memory needs more than RAG",
+    description:
+      "Why similarity search works for exploration but breaks for durable state, and how schema-first memory closes the gap.",
+    href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
+    imageUrl: "https://markmhendrickson.com/images/posts/why-agent-memory-needs-more-than-rag-hero.png",
+  },
+  {
+    label: "Related post",
+    title: "Six agentic trends I'm betting on (and how I might be wrong)",
+    description:
+      "The structural pressures that underpin my work, and what would invalidate them as the AI industry evolves. Neotoma is built in response to these assumptions.",
+    href: "https://markmhendrickson.com/posts/six-agentic-trends-betting-on",
+    imageUrl: "https://markmhendrickson.com/images/posts/six-agentic-trends-betting-on-hero.png",
   },
   {
     label: "Related post",
@@ -543,14 +594,6 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
     href: "https://markmhendrickson.com/posts/agent-command-centers-source-of-truth",
     imageUrl:
       "https://markmhendrickson.com/images/posts/agent-command-centers-source-of-truth-hero.png",
-  },
-  {
-    label: "Related post",
-    title: "Six agentic trends I'm betting on (and how I might be wrong)",
-    description:
-      "The structural pressures that underpin my work, and what would invalidate them as the AI industry evolves. Neotoma is built in response to these assumptions.",
-    href: "https://markmhendrickson.com/posts/six-agentic-trends-betting-on",
-    imageUrl: "https://markmhendrickson.com/images/posts/six-agentic-trends-betting-on-hero.png",
   },
 ];
 

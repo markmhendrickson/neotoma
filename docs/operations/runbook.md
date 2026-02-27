@@ -74,7 +74,7 @@ It does not cover:
 ## Emergency Procedures
 
 - **Rollback:** Revert deployment to previous version; re-run migrations only if a migration rollback is defined (see migration docs). Restore DB/storage from backup if data corruption is suspected.
-- **Incident response:** Triage using [Troubleshooting](troubleshooting.md). Check logs and `npm run doctor` output. For security issues, see [SECURITY.md](../../SECURITY.md) in the repo root.
+- **Incident response:** Triage using [Troubleshooting](troubleshooting.md). Check logs and `npm run doctor` output. For security issues, see [SECURITY.md](../../SECURITY.md) in the source root.
 
 ---
 

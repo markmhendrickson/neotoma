@@ -280,6 +280,175 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
 
               <SectionDivider />
+              <SectionHeading id="docker">Run with Docker</SectionHeading>
+              <p className="text-[15px] leading-7 mb-4">
+                If you prefer not to install directly on your host machine, you can run Neotoma in a
+                Docker container. Clone the repo and build the image:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                Then start a container with a persistent volume so your data survives restarts:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                The API will be available at{" "}
+                <code>http://localhost:8080</code>. Point your MCP client or CLI at that address
+                with <code>--base-url http://localhost:8080</code>.
+              </p>
+
+              <SectionDivider />
+              <SectionHeading id="get-started">Get started</SectionHeading>
+              <p className="text-[15px] leading-7 mb-4">
+                Once you&apos;ve installed Neotoma and run <code>neotoma init</code> to connect your
+                preferred client, try the same quick test in whichever tool you chose. Tell the agent
+                something like &quot;Remind me to review my subscription Friday,&quot; then in the
+                same conversation ask it to list your open tasks. The task you just created should
+                appear in the list.
+              </p>
+              <p className="text-[15px] leading-7 mb-4">
+                Behind the scenes the agent also stores the conversation itself and every turn you
+                exchange, so the full thread is available as persistent, queryable memory the next
+                time you or any connected tool needs it.
+              </p>
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Claude</h3>
+              <ol className="list-decimal pl-5 mb-2">
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Restart Claude Desktop so it picks up the new MCP configuration.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Open a new chat and ask the agent to create a task.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask it to list your open tasks and confirm the new one appears.
+                </li>
+              </ol>
+              <div className="my-6">
+                <img
+                  src="/screenshot-claude.png"
+                  alt="Claude Desktop showing a task created and listed via Neotoma"
+                  className="rounded-md border border-neutral-200 w-full"
+                />
+              </div>
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Claude Code</h3>
+              <ol className="list-decimal pl-5 mb-2">
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Open a new Claude Code session in your project directory.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask the agent to create a task.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask it to list your open tasks and confirm the new one appears.
+                </li>
+              </ol>
+              <div className="my-6">
+                <img
+                  src="/screenshot-claude-code.png"
+                  alt="Claude Code terminal showing a task created and listed via Neotoma"
+                  className="rounded-md border border-neutral-200 w-full"
+                />
+              </div>
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Cursor</h3>
+              <ol className="list-decimal pl-5 mb-2">
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Restart Cursor so it loads the Neotoma MCP servers.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Start a new agent chat and ask it to create a task.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask it to list your open tasks and confirm the new one appears.
+                </li>
+              </ol>
+              <div className="my-6">
+                <img
+                  src="/screenshot-cursor.png"
+                  alt="Cursor IDE agent chat showing a task created and listed via Neotoma"
+                  className="rounded-md border border-neutral-200 w-full"
+                />
+              </div>
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Codex</h3>
+              <ol className="list-decimal pl-5 mb-2">
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Start a new Codex session.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask the agent to create a task.
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Ask it to list your open tasks and confirm the new one appears.
+                </li>
+              </ol>
+              <div className="my-6">
+                <img
+                  src="/screenshot-codex.png"
+                  alt="Codex CLI showing a task created and listed via Neotoma"
+                  className="rounded-md border border-neutral-200 w-full"
+                />
+              </div>
+
+              <SectionDivider />
+              <SectionHeading id="use-cases">Use cases</SectionHeading>
+              <p className="text-[15px] leading-7 mb-4">
+                Neotoma is built for developers, agent builders, and operators who need memory that
+                is deterministic, inspectable, and consistent across sessions and tools. It works
+                well for teams that need the same query to return the same answer regardless of when
+                or where it runs. It is not yet designed for UI-first, casual note-taking workflows.
+              </p>
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Developers and agent builders
+              </h3>
+              <ul className="list-disc pl-5 mb-4">
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Persist runbooks, architectural decisions, and incident notes so any session can
+                  retrieve them deterministically.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Track implementation tasks linked to repos, issues, and people across tools.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Build agent workflows backed by structured memory with full provenance and
+                  replayability.
+                </li>
+              </ul>
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Operators, founders, and solo workflows
+              </h3>
+              <ul className="list-disc pl-5 mb-4">
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Capture commitments from conversations and emails, then review upcoming tasks by
+                  date.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Track vendors, subscriptions, invoices, and renewal timelines in a single graph.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Ask complete-set questions such as &quot;all pending tasks for project X&quot;
+                  and get the same answer across sessions and tools.
+                </li>
+              </ul>
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Research and knowledge-heavy work
+              </h3>
+              <ul className="list-disc pl-5 mb-4">
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Ingest documents and notes, then query entities, dates, and relationships instead
+                  of relying on fuzzy recall.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Build evidence chains that trace from source documents to derived conclusions.
+                </li>
+                <li className="text-[15px] leading-7 mt-3 first:mt-0">
+                  Maintain durable context that survives model resets and session boundaries.
+                </li>
+              </ul>
+
+              <SectionDivider />
               <SectionHeading id="terminology">Core terminology</SectionHeading>
               <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
                 <table className={RESPONSIVE_TABLE_CLASS}>

@@ -18,13 +18,16 @@ import {
   Bot,
   BookText,
   Bug,
+  Container,
   ExternalLink,
   GraduationCap,
   MessageSquare,
   Package,
+  Rocket,
   SatelliteDish,
   Server,
   Terminal,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,13 +43,16 @@ const SIDEBAR_ICONS: Record<string, LucideIcon> = {
   Bot,
   BookText,
   Bug,
+  Container,
   ExternalLink,
   GraduationCap,
   MessageSquare,
   Package,
+  Rocket,
   SatelliteDish,
   Server,
   Terminal,
+  Users,
 };
 
 const sectionLinkClass = (active: boolean) =>
