@@ -14,6 +14,63 @@ interface QueryEntitiesParams {
   offset?: number;
 }
 
+async function countVisibleEntities(params: {
+  userId: string;
+  entityType?: string;
+  includeMerged?: boolean;
+}): Promise<number> {
+  const { userId, entityType, includeMerged = false } = params;
+
+  let entityIdQuery = db.from("entities").select("id").eq("user_id", userId);
+  if (entityType) {
+    entityIdQuery = entityIdQuery.eq("entity_type", entityType);
+  }
+  if (!includeMerged) {
+    entityIdQuery = entityIdQuery.is("merged_to_entity_id", null);
+  }
+
+  const { data: entityRows, error: entityError } = await entityIdQuery;
+  if (entityError) {
+    throw new Error(`Failed to query entity ids for count: ${entityError.message}`);
+  }
+  if (!entityRows || entityRows.length === 0) {
+    return 0;
+  }
+
+  const entityIds = entityRows.map((row: { id: string }) => row.id);
+  const deletedEntityIds = new Set<string>();
+  const chunkSize = 500;
+
+  for (let i = 0; i < entityIds.length; i += chunkSize) {
+    const chunk = entityIds.slice(i, i + chunkSize);
+    const { data: deletionObservations, error: observationsError } = await db
+      .from("observations")
+      .select("entity_id, source_priority, observed_at, fields")
+      .in("entity_id", chunk)
+      .order("source_priority", { ascending: false })
+      .order("observed_at", { ascending: false });
+
+    if (observationsError) {
+      throw new Error(`Failed to query deletion observations for count: ${observationsError.message}`);
+    }
+
+    const highestByEntity = new Map<string, any>();
+    for (const obs of deletionObservations || []) {
+      if (!highestByEntity.has(obs.entity_id)) {
+        highestByEntity.set(obs.entity_id, obs);
+      }
+    }
+
+    for (const [entityId, obs] of highestByEntity.entries()) {
+      if (obs.fields?._deleted === true) {
+        deletedEntityIds.add(entityId);
+      }
+    }
+  }
+
+  return entityIds.length - deletedEntityIds.size;
+}
+
 export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promise<{
   entities: EntityWithProvenance[];
   total: number;
@@ -83,19 +140,7 @@ export async function queryEntitiesWithCount(params: QueryEntitiesParams): Promi
       offset,
     });
 
-    let countQuery = db.from("entities").select("*", { count: "exact", head: true });
-    countQuery = countQuery.eq("user_id", userId);
-    if (entityType) {
-      countQuery = countQuery.eq("entity_type", entityType);
-    }
-    if (!includeMerged) {
-      countQuery = countQuery.is("merged_to_entity_id", null);
-    }
-    const { count, error: countError } = await countQuery;
-    if (countError) {
-      throw new Error(`Failed to count entities: ${countError.message}`);
-    }
-    total = count || 0;
+    total = await countVisibleEntities({ userId, entityType, includeMerged });
   }
 
   return {

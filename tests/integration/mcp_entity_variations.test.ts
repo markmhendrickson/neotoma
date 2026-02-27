@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { db } from "../../src/db.js";
 import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { verifyEntityExists, computeEntitySnapshot } from "../helpers/database_verifiers.js";
+import { queryEntities } from "../../src/services/entity_queries.js";
+import { queryEntitiesWithCount } from "../../src/shared/action_handlers/entity_handlers.js";
 
 describe("MCP entity actions - parameter variations", () => {
   const tracker = new TestIdTracker();
@@ -211,6 +213,99 @@ describe("MCP entity actions - parameter variations", () => {
         .ilike("canonical_name", "%Task%");
 
       expect(entities!.length).toBeGreaterThan(0);
+    });
+
+    it("should paginate after filtering deleted task entities", async () => {
+      const localUserId = `test-user-entity-pagination-${Date.now()}`;
+      const sourceId = `src_pagination_${Date.now()}`;
+      const deletedEntityId = `ent_000_deleted_${Date.now()}`;
+      const activeEntityId = `ent_999_active_${Date.now()}`;
+
+      const { error: sourceError } = await db.from("sources").insert({
+        id: sourceId,
+        user_id: localUserId,
+        content_hash: `pagination_deleted_filter_${Date.now()}`,
+        storage_url: "file:///test/minimal.txt",
+        mime_type: "text/plain",
+        file_size: 0,
+      });
+      expect(sourceError).toBeNull();
+
+      tracker.trackSource(sourceId);
+      tracker.trackEntity(deletedEntityId);
+      tracker.trackEntity(activeEntityId);
+
+      const { error: entityError } = await db.from("entities").insert([
+        {
+          id: deletedEntityId,
+          entity_type: "task",
+          canonical_name: "Deleted task for pagination filter test",
+          user_id: localUserId,
+        },
+        {
+          id: activeEntityId,
+          entity_type: "task",
+          canonical_name: "Active task for pagination filter test",
+          user_id: localUserId,
+        },
+      ]);
+      expect(entityError).toBeNull();
+
+      const { error: observationError } = await db.from("observations").insert([
+        {
+          entity_id: deletedEntityId,
+          entity_type: "task",
+          source_id: sourceId,
+          fields: { title: "Deleted task" },
+          user_id: localUserId,
+          source_priority: 100,
+          schema_version: "1.0",
+          observed_at: new Date(Date.now() - 2000).toISOString(),
+        },
+        {
+          entity_id: activeEntityId,
+          entity_type: "task",
+          source_id: sourceId,
+          fields: { title: "Active task" },
+          user_id: localUserId,
+          source_priority: 100,
+          schema_version: "1.0",
+          observed_at: new Date(Date.now() - 2000).toISOString(),
+        },
+        {
+          entity_id: deletedEntityId,
+          entity_type: "task",
+          source_id: sourceId,
+          fields: { _deleted: true },
+          user_id: localUserId,
+          source_priority: 1000,
+          schema_version: "1.0",
+          observed_at: new Date(Date.now() - 1000).toISOString(),
+        },
+      ]);
+      expect(observationError).toBeNull();
+
+      const entities = await queryEntities({
+        userId: localUserId,
+        entityType: "task",
+        includeMerged: false,
+        limit: 1,
+        offset: 0,
+      });
+
+      expect(entities).toHaveLength(1);
+      expect(entities[0].entity_id).toBe(activeEntityId);
+
+      const withCount = await queryEntitiesWithCount({
+        userId: localUserId,
+        entityType: "task",
+        includeMerged: false,
+        limit: 20,
+        offset: 0,
+      });
+
+      expect(withCount.entities).toHaveLength(1);
+      expect(withCount.total).toBe(1);
     });
   });
 
