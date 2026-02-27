@@ -572,19 +572,19 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
   },
   {
     label: "Related post",
-    title: "Why agent memory needs more than RAG",
-    description:
-      "Why similarity search works for exploration but breaks for durable state, and how schema-first memory closes the gap.",
-    href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
-    imageUrl: "https://markmhendrickson.com/images/posts/why-agent-memory-needs-more-than-rag-hero.png",
-  },
-  {
-    label: "Related post",
     title: "Six agentic trends I'm betting on (and how I might be wrong)",
     description:
       "The structural pressures that underpin my work, and what would invalidate them as the AI industry evolves. Neotoma is built in response to these assumptions.",
     href: "https://markmhendrickson.com/posts/six-agentic-trends-betting-on",
     imageUrl: "https://markmhendrickson.com/images/posts/six-agentic-trends-betting-on-hero.png",
+  },
+  {
+    label: "Related post",
+    title: "Why agent memory needs more than RAG",
+    description:
+      "Why similarity search works for exploration but breaks for durable state, and how schema-first memory closes the gap.",
+    href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
+    imageUrl: "https://markmhendrickson.com/images/posts/why-agent-memory-needs-more-than-rag-hero.png",
   },
   {
     label: "Related post",
