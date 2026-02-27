@@ -4,62 +4,62 @@
 
 @layer base {
   :root {
-    /* Light Mode - Base Colors */
-    --background: 0 0% 100%;             /* #FFFFFF - Pure white */
-    --foreground: 222 47% 11%;            /* #111827 - Near-black */
-    --card: 210 20% 98%;                 /* #F9FAFB - Subtle gray */
-    --card-foreground: 222 47% 11%;      /* #111827 - Primary text */
-    --popover: 0 0% 100%;                /* #FFFFFF - Pure white */
-    --popover-foreground: 222 47% 11%;   /* #111827 - Primary text */
+    /* Light Mode - Earthy, casual-sophisticated (warm cream, tan, brick, teal accent) */
+    --background: 38 22% 98%;             /* Warm off-white / cream */
+    --foreground: 28 22% 18%;             /* Warm dark brown */
+    --card: 35 20% 96%;                   /* Light warm grey */
+    --card-foreground: 28 22% 18%;       /* Warm dark brown */
+    --popover: 38 22% 98%;               /* Warm cream */
+    --popover-foreground: 28 22% 18%;    /* Warm dark brown */
     
-    /* Primary (Trust/Action) */
-    --primary: 210 100% 40%;              /* #0066CC - Professional blue */
-    --primary-foreground: 0 0% 100%;     /* #FFFFFF - White text */
+    /* Primary - reddish-brown (brick) */
+    --primary: 12 48% 38%;                /* Brick / terracotta */
+    --primary-foreground: 0 0% 100%;      /* White text on primary */
     
-    /* Secondary */
-    --secondary: 210 20% 96%;             /* #F3F4F6 - Tertiary background */
-    --secondary-foreground: 222 47% 11%; /* #111827 - Primary text */
+    /* Secondary - warm tan */
+    --secondary: 35 18% 94%;              /* Light warm grey */
+    --secondary-foreground: 28 22% 18%;   /* Warm dark brown */
     
-    /* Muted */
-    --muted: 210 20% 96%;                 /* #F3F4F6 - Tertiary background */
-    --muted-foreground: 215 16% 47%;     /* #6B7280 - Secondary text */
+    /* Muted - warm beige/grey */
+    --muted: 35 18% 94%;                 /* Light warm grey */
+    --muted-foreground: 28 14% 44%;      /* Warm grey-brown */
     
-    /* Accent */
-    --accent: 210 20% 96%;                /* #F3F4F6 - Tertiary background */
-    --accent-foreground: 222 47% 11%;    /* #111827 - Primary text */
+    /* Accent - subtle teal accent */
+    --accent: 35 18% 92%;                 /* Slightly deeper warm grey */
+    --accent-foreground: 28 22% 18%;     /* Warm dark brown */
     
-    /* Status Colors */
-    --destructive: 0 84% 60%;             /* #EF4444 - Red */
-    --destructive-foreground: 0 0% 100%; /* #FFFFFF - White text */
-    --success: 142 71% 45%;               /* #10B981 - Green */
-    --warning: 38 92% 50%;                /* #F59E0B - Amber */
-    --info: 217 91% 60%;                  /* #3B82F6 - Blue */
+    /* Status Colors (warm-aligned) */
+    --destructive: 0 65% 50%;             /* Softer red */
+    --destructive-foreground: 0 0% 100%;  /* White text */
+    --success: 152 45% 40%;              /* Muted green */
+    --warning: 32 85% 48%;               /* Warm amber */
+    --info: 175 35% 42%;                  /* Teal accent */
     
-    /* Borders and Dividers */
-    --border: 210 20% 90%;                /* #E5E7EB - Subtle gray borders */
-    --input: 210 20% 90%;                 /* #E5E7EB - Input borders */
-    --divider: 210 20% 82%;               /* #D1D5DB - Dividers */
+    /* Borders and Dividers - warm grey */
+    --border: 32 18% 88%;                /* Warm grey borders */
+    --input: 32 18% 88%;                 /* Warm grey input */
+    --divider: 30 16% 82%;               /* Warm dividers */
     
-    /* Ring (focus) */
-    --ring: 210 100% 40%;                 /* #0066CC - Primary blue */
+    /* Ring (focus) - brick to match primary */
+    --ring: 12 48% 38%;                  /* Brick */
     
     /* Border Radius */
     --radius: 0.5rem;
     
-    /* Sidebar */
-    --sidebar-background: 210 20% 98%;     /* #F9FAFB - Subtle gray (matches secondary) */
-    --sidebar-foreground: 222 47% 11%;    /* #111827 - Primary text */
-    --sidebar-primary: 210 100% 40%;     /* #0066CC - Primary blue */
-    --sidebar-primary-foreground: 0 0% 100%; /* #FFFFFF - White text */
-    --sidebar-accent: 210 20% 96%;        /* #F3F4F6 - Tertiary background */
-    --sidebar-accent-foreground: 222 47% 11%; /* #111827 - Primary text */
-    --sidebar-border: 210 20% 90%;        /* #E5E7EB - Subtle gray borders */
-    --sidebar-ring: 210 100% 40%;         /* #0066CC - Primary blue */
+    /* Sidebar - warm, tactile */
+    --sidebar-background: 35 20% 96%;     /* Light warm grey */
+    --sidebar-foreground: 28 22% 18%;     /* Warm dark brown */
+    --sidebar-primary: 12 48% 38%;        /* Brick */
+    --sidebar-primary-foreground: 0 0% 100%; /* White text on primary */
+    --sidebar-accent: 35 18% 92%;         /* Warm grey */
+    --sidebar-accent-foreground: 28 22% 18%; /* Warm dark brown */
+    --sidebar-border: 32 18% 88%;         /* Warm grey borders */
+    --sidebar-ring: 12 48% 38%;           /* Brick */
     
     /* Entity Type Colors */
     --entity-person: 239 84% 67%;         /* #6366F1 - Indigo */
     --entity-company: 258 90% 66%;        /* #8B5CF6 - Purple */
-    --entity-location: 330 81% 60%;         /* #EC4899 - Pink */
+    --entity-location: 330 81% 60%;       /* #EC4899 - Pink */
     --entity-event: 38 92% 50%;           /* #F59E0B - Amber */
     --entity-document: 142 71% 45%;       /* #10B981 - Green */
   }
@@ -124,23 +124,22 @@
 }
 
 @layer base {
-  /* Documentation-specific design system variables */
+  /* Documentation-specific design system variables - earthy, refined */
   :root {
-    /* Personal website aesthetic - minimal, clean, high contrast */
-    --doc-background: 0 0% 100%;           /* #FFFFFF - Pure white */
-    --doc-foreground: 0 0% 0%;             /* #000000 - Black text */
-    --doc-secondary: 0 0% 40%;             /* #666666 - Gray for secondary text */
-    --doc-border: 0 0% 90%;                /* #E5E5E5 - Subtle borders */
-    --doc-code-bg: 0 0% 96%;               /* #F5F5F5 - Code block background */
+    --doc-background: 38 22% 98%;           /* Warm cream */
+    --doc-foreground: 28 22% 18%;          /* Warm dark brown */
+    --doc-secondary: 28 14% 44%;            /* Warm grey-brown */
+    --doc-border: 32 18% 88%;               /* Warm grey borders */
+    --doc-code-bg: 35 18% 92%;              /* Warm light grey - code blocks */
     
-    /* Primary action color - professional blue */
-    --doc-primary: 210 100% 40%;           /* #0066CC - Primary blue */
-    --doc-primary-hover: 210 100% 32%;     /* #0052A3 - Darker blue on hover */
-    --doc-primary-foreground: 0 0% 100%;   /* #FFFFFF - White text on primary */
+    /* Primary - brick / terracotta */
+    --doc-primary: 12 48% 38%;             /* Brick */
+    --doc-primary-hover: 12 48% 30%;       /* Darker brick on hover */
+    --doc-primary-foreground: 0 0% 100%;   /* White text on primary */
     
     /* Minimal border radius */
-    --doc-radius-minimal: 2px;             /* Minimal rounding for code blocks */
-    --doc-radius-default: 4px;             /* Default rounding for containers */
+    --doc-radius-minimal: 2px;
+    --doc-radius-default: 4px;
   }
 
   .dark {

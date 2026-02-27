@@ -13,6 +13,12 @@ import {
 } from "../site/site_data";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
 import { TableScrollWrapper } from "./ui/table-scroll-wrapper";
 import { SeoHead } from "./SeoHead";
 
@@ -21,7 +27,7 @@ interface SitePageProps {
 }
 
 const RESPONSIVE_TABLE_CLASS =
-  "w-full caption-bottom border-0 text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words [&_thead]:sr-only [&_thead]:absolute [&_thead]:w-px [&_thead]:h-px [&_thead]:overflow-hidden [&_thead]:whitespace-nowrap [&_tbody]:block [&_tr]:block [&_tr]:mb-0 [&_tr]:rounded-none [&_tr]:border-b [&_tr]:border-border [&_tr]:bg-transparent [&_tr]:py-4 [&_td]:grid [&_td]:grid-cols-[8rem_minmax(0,1fr)] [&_td]:gap-3 [&_td]:items-start [&_td]:p-0 [&_td]:border-0 [&_td]:text-[14px] [&_td]:leading-5 [&_td]:py-4 [&_td.align-top]:py-2 [&_td::before]:content-[attr(data-label)] [&_td::before]:font-semibold [&_td::before]:text-foreground md:w-max md:border md:border-border md:border-collapse md:[&_thead]:not-sr-only md:[&_thead]:static md:[&_thead]:w-auto md:[&_thead]:h-auto md:[&_thead]:overflow-visible md:[&_thead]:whitespace-normal md:[&_thead_tr]:border-b md:[&_thead_tr]:border-border md:[&_tbody]:table-row-group md:[&_tbody_tr]:border-b md:[&_tbody_tr]:border-border md:[&_tbody_tr:last-child]:border-b-0 md:[&_tr]:table-row md:[&_tr]:h-10 md:[&_tr]:mb-0 md:[&_tr]:rounded-none md:[&_tr]:border-0 md:[&_tr]:bg-transparent md:[&_tr]:py-4 md:[&_tr]:transition-colors md:[&_tbody_tr:hover]:bg-muted/50 md:[&_td]:table-cell md:[&_td]:px-4 md:[&_td]:py-3 md:[&_td]:align-middle md:[&_td]:text-body md:[&_td:has([role=checkbox])]:pr-0 md:[&_td::before]:hidden md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:text-left md:[&_th]:align-middle md:[&_th]:font-semibold md:[&_th]:text-foreground md:[&_th:has([role=checkbox])]:pr-0";
+  "w-full caption-bottom border-0 bg-white dark:bg-transparent text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words [&_thead]:sr-only [&_thead]:absolute [&_thead]:w-px [&_thead]:h-px [&_thead]:overflow-hidden [&_thead]:whitespace-nowrap [&_tbody]:block [&_tr]:block [&_tr]:mb-0 [&_tr]:rounded-none [&_tr]:border-b [&_tr]:border-border [&_tr]:bg-transparent [&_tr]:py-4 [&_td]:grid [&_td]:grid-cols-[8rem_minmax(0,1fr)] [&_td]:gap-3 [&_td]:items-start [&_td]:p-0 [&_td]:border-0 [&_td]:text-[14px] [&_td]:leading-5 [&_td]:py-4 [&_td.align-top]:py-2 [&_td::before]:content-[attr(data-label)] [&_td::before]:font-semibold [&_td::before]:text-foreground md:w-full md:border md:border-border md:border-collapse md:rounded-lg md:overflow-hidden md:[&_thead]:not-sr-only md:[&_thead]:static md:[&_thead]:w-auto md:[&_thead]:h-auto md:[&_thead]:overflow-visible md:[&_thead]:whitespace-normal md:[&_thead_th]:bg-muted md:[&_thead_th:first-child]:rounded-tl-lg md:[&_thead_th:last-child]:rounded-tr-lg md:[&_tbody_tr:last-child_td:first-child]:rounded-bl-lg md:[&_tbody_tr:last-child_td:last-child]:rounded-br-lg md:[&_thead_tr]:border-b md:[&_thead_tr]:border-border md:[&_tbody]:table-row-group md:[&_tbody_tr]:border-b md:[&_tbody_tr]:border-border md:[&_tbody_tr:last-child]:border-b-0 md:[&_tr]:table-row md:[&_tr]:h-10 md:[&_tr]:mb-0 md:[&_tr]:rounded-none md:[&_tr]:border-0 md:[&_tr]:bg-transparent md:[&_tr]:py-4 md:[&_tr]:transition-colors md:[&_tbody_tr:hover]:bg-muted/50 md:[&_td]:table-cell md:[&_td]:px-4 md:[&_td]:py-3 md:[&_td]:align-middle md:[&_td]:text-body md:[&_td:has([role=checkbox])]:pr-0 md:[&_td::before]:hidden md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:text-left md:[&_th]:align-middle md:[&_th]:font-semibold md:[&_th]:text-foreground md:[&_th:has([role=checkbox])]:pr-0";
 const MOBILE_TABLE_ROWS_STEP = 5;
 
 function sanitizeCodeForCopy(rawCode: string): string {
@@ -48,7 +54,7 @@ function SectionHeading({ id, children }: { id: string; children: string }) {
       {children}
       <a
         href={`#${id}`}
-        className="ml-2 inline-flex items-center text-neutral-500 no-underline border-none opacity-40 group-hover:opacity-70 hover:!opacity-100 hover:text-neutral-800 transition"
+        className="ml-2 inline-flex items-center text-muted-foreground no-underline border-none opacity-40 group-hover:opacity-70 hover:!opacity-100 hover:text-foreground transition"
         aria-label="Link to section"
       >
         #
@@ -60,9 +66,9 @@ function SectionHeading({ id, children }: { id: string; children: string }) {
 function SectionDivider() {
   return (
     <div className="flex items-center gap-3 my-12" aria-hidden="true">
-      <span className="h-px flex-1 bg-neutral-200" />
-      <span className="text-[8px] text-neutral-400 leading-none">◆</span>
-      <span className="h-px flex-1 bg-neutral-200" />
+      <span className="h-px flex-1 bg-border" />
+      <span className="text-[8px] text-muted-foreground leading-none">◆</span>
+      <span className="h-px flex-1 bg-border" />
     </div>
   );
 }
@@ -71,7 +77,7 @@ function SectionDivider() {
 function LearnMoreCard({ item }: { item: LearnMoreCardItem }) {
   const isExternal = item.href.startsWith("http");
   const content = (
-    <Alert className="flex flex-col md:flex-row items-stretch gap-4 cursor-pointer h-full no-underline">
+    <Alert className="flex flex-col md:flex-row items-stretch gap-4 cursor-pointer h-full no-underline bg-white dark:bg-card border-border">
       {item.imageUrl && (
         <img
           src={item.imageUrl}
@@ -200,14 +206,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   return (
     <>
       {!staticMode ? <SeoHead routePath="/" /> : null}
-      <div className="min-h-screen bg-white text-neutral-800">
+      <div className="min-h-screen bg-background text-foreground">
         <main className="min-w-0">
           <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
-            <article id="intro" className="post-prose [&_a]:underline [&_a]:hover:text-neutral-900">
+            <article id="intro" className="post-prose [&_a]:underline [&_a]:hover:text-foreground">
               <h1 className="text-[24px] font-medium tracking-[-0.02em] mb-4 mt-0">
                 A truth layer for persistent agent memory
               </h1>
-              <p className="text-[17px] text-neutral-600 leading-7 mb-6 mt-0 max-w-[36em]">
+              <p className="text-[17px] text-muted-foreground leading-7 mb-6 mt-0 max-w-[36em]">
                 Give your agents memory you can inspect, replay, and trust.
               </p>
               <p className="text-[15px] leading-7 mb-4">
@@ -228,10 +234,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 API directly. <a href="#install">Install with npm</a> below, then configure MCP for
                 your editor or use the CLI.
               </p>
-              <Alert className="mt-10 mb-12 border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-50 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
-                <AlertTriangle className="h-4 w-4" />
+              <Alert className="mt-10 mb-12 rounded-lg border border-border bg-muted p-4 text-foreground [&>svg]:text-muted-foreground">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
                 <AlertTitle>Currently in developer release</AlertTitle>
-                <AlertDescription className="text-[15px] leading-7">
+                <AlertDescription className="text-[15px] leading-7 [&_a]:text-foreground [&_a]:underline [&_a]:hover:text-foreground/90">
                   Neotoma is in active, early development. Runs locally with CLI, MCP, and API with
                   tunnel support for remote access. Best for developers comfortable with early-stage
                   tooling and feedback. Not yet hardened for production; avoid storing highly
@@ -246,7 +252,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </AlertDescription>
               </Alert>
               <figure className="my-10 rounded overflow-hidden">
-                <div className="bg-neutral-100">
+                <div className="bg-muted">
                   <img
                     src={SITE_METADATA.heroImageUrl}
                     alt="Neotoma: truth layer for persistent agent memory"
@@ -254,7 +260,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     className="block max-w-full h-auto"
                   />
                 </div>
-                <figcaption className="pt-3 text-[12px] text-neutral-600">
+                <figcaption className="pt-3 text-[12px] text-muted-foreground">
                   <em>Neotoma</em> is named after the genus of packrats, known for collecting and
                   preserving material. Here it denotes a truth layer for persistent agent memory.
                 </figcaption>
@@ -278,179 +284,139 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 want app-based access.
               </p>
               <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
-
-              <SectionDivider />
-              <SectionHeading id="docker">Run with Docker</SectionHeading>
               <p className="text-[15px] leading-7 mb-4">
-                If you prefer not to install directly on your host machine, you can run Neotoma in a
-                Docker container. Clone the repo and build the image:
-              </p>
-              <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
-              <p className="text-[15px] leading-7 mb-4">
-                Then start a container with a persistent volume so your data survives restarts:
-              </p>
-              <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} staticMode={staticMode} />
-              <p className="text-[15px] leading-7 mb-4">
-                The API will be available at{" "}
-                <code>http://localhost:8080</code>. Point your MCP client or CLI at that address
-                with <code>--base-url http://localhost:8080</code>.
+                Prefer to run in a container? See{" "}
+                <a
+                  href="#docker"
+                  className="text-foreground underline underline-offset-2 hover:no-underline"
+                >
+                  Run with Docker
+                </a>{" "}
               </p>
 
               <SectionDivider />
               <SectionHeading id="get-started">Get started</SectionHeading>
               <p className="text-[15px] leading-7 mb-4">
-                Once you&apos;ve installed Neotoma and run <code>neotoma init</code> to connect your
-                preferred client, try the same quick test in whichever tool you chose. Tell the agent
-                something like &quot;Remind me to review my subscription Friday,&quot; then in the
-                same conversation ask it to list your open tasks. The task you just created should
-                appear in the list.
+                After installing Neotoma, run <code>neotoma init</code> and choose your client.
+                Neotoma works with Claude, Claude Code, Cursor, and Codex today, with more tools
+                coming. The steps are the same regardless of which one you pick.
               </p>
-              <p className="text-[15px] leading-7 mb-4">
+              <ol className="list-decimal pl-5 mb-2">
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Restart your tool so it picks up the new MCP configuration (for Claude Desktop
+                  and Cursor) or start a new session (for Claude Code and Codex).
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  Tell the agent something like &quot;Remind me to review my subscription
+                  Friday.&quot;
+                </li>
+                <li className="text-[15px] leading-7 mt-2 first:mt-0">
+                  In the same conversation, ask it to list your open tasks. The one you just
+                  created should appear.
+                </li>
+              </ol>
+              <p className="text-[15px] leading-7 mt-4 mb-4">
                 Behind the scenes the agent also stores the conversation itself and every turn you
                 exchange, so the full thread is available as persistent, queryable memory the next
                 time you or any connected tool needs it.
               </p>
-
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Claude</h3>
-              <ol className="list-decimal pl-5 mb-2">
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Restart Claude Desktop so it picks up the new MCP configuration.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Open a new chat and ask the agent to create a task.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask it to list your open tasks and confirm the new one appears.
-                </li>
-              </ol>
               <div className="my-6">
-                <img
-                  src="/screenshot-claude.png"
-                  alt="Claude Desktop showing a task created and listed via Neotoma"
-                  className="rounded-md border border-neutral-200 w-full"
-                />
-              </div>
-
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Claude Code</h3>
-              <ol className="list-decimal pl-5 mb-2">
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Open a new Claude Code session in your project directory.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask the agent to create a task.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask it to list your open tasks and confirm the new one appears.
-                </li>
-              </ol>
-              <div className="my-6">
-                <img
-                  src="/screenshot-claude-code.png"
-                  alt="Claude Code terminal showing a task created and listed via Neotoma"
-                  className="rounded-md border border-neutral-200 w-full"
-                />
-              </div>
-
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Cursor</h3>
-              <ol className="list-decimal pl-5 mb-2">
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Restart Cursor so it loads the Neotoma MCP servers.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Start a new agent chat and ask it to create a task.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask it to list your open tasks and confirm the new one appears.
-                </li>
-              </ol>
-              <div className="my-6">
-                <img
-                  src="/screenshot-cursor.png"
-                  alt="Cursor IDE agent chat showing a task created and listed via Neotoma"
-                  className="rounded-md border border-neutral-200 w-full"
-                />
-              </div>
-
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">Codex</h3>
-              <ol className="list-decimal pl-5 mb-2">
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Start a new Codex session.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask the agent to create a task.
-                </li>
-                <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Ask it to list your open tasks and confirm the new one appears.
-                </li>
-              </ol>
-              <div className="my-6">
-                <img
-                  src="/screenshot-codex.png"
-                  alt="Codex CLI showing a task created and listed via Neotoma"
-                  className="rounded-md border border-neutral-200 w-full"
-                />
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-border overflow-hidden focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-zoom-in"
+                      aria-label="View screen recording full size"
+                    >
+                      <img
+                        src="/get-started-demo.gif"
+                        alt="Screen recording: create a task and list open tasks in the agent (click to view full size)"
+                        className="w-full block"
+                      />
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-[95vw] max-h-[95vh] w-max p-0 border-0 [&>div]:p-0 [&>div]:overflow-visible">
+                    <DialogTitle className="sr-only">
+                      Screen recording full size
+                    </DialogTitle>
+                    <img
+                      src="/get-started-demo.gif"
+                      alt="Screen recording: create a task and list open tasks in the agent"
+                      className="max-w-[95vw] max-h-[95vh] w-auto h-auto object-contain rounded-lg"
+                    />
+                  </DialogContent>
+                </Dialog>
+                <p className="mt-2 text-[13px] text-muted-foreground">
+                  Click to view full size
+                </p>
               </div>
 
               <SectionDivider />
               <SectionHeading id="use-cases">Use cases</SectionHeading>
               <p className="text-[15px] leading-7 mb-4">
-                Neotoma is built for developers, agent builders, and operators who need memory that
-                is deterministic, inspectable, and consistent across sessions and tools. It works
-                well for teams that need the same query to return the same answer regardless of when
-                or where it runs. It is not yet designed for UI-first, casual note-taking workflows.
+                Neotoma gives every connected AI tool a shared, persistent memory. Anything you
+                store in one session is available in every other session and every other tool without
+                re-explaining context. It&apos;s for AI-native individual operators, knowledge
+                workers with scattered data, and builders of agentic systems. The table below shows
+                what each needs and the kinds of data they ask Neotoma to remember.
               </p>
-
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
-                Developers and agent builders
-              </h3>
-              <ul className="list-disc pl-5 mb-4">
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Persist runbooks, architectural decisions, and incident notes so any session can
-                  retrieve them deterministically.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Track implementation tasks linked to repos, issues, and people across tools.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Build agent workflows backed by structured memory with full provenance and
-                  replayability.
-                </li>
-              </ul>
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
-                Operators, founders, and solo workflows
-              </h3>
-              <ul className="list-disc pl-5 mb-4">
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Capture commitments from conversations and emails, then review upcoming tasks by
-                  date.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Track vendors, subscriptions, invoices, and renewal timelines in a single graph.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Ask complete-set questions such as &quot;all pending tasks for project X&quot;
-                  and get the same answer across sessions and tools.
-                </li>
-              </ul>
-              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
-                Research and knowledge-heavy work
-              </h3>
-              <ul className="list-disc pl-5 mb-4">
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Ingest documents and notes, then query entities, dates, and relationships instead
-                  of relying on fuzzy recall.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Build evidence chains that trace from source documents to derived conclusions.
-                </li>
-                <li className="text-[15px] leading-7 mt-3 first:mt-0">
-                  Maintain durable context that survives model resets and session boundaries.
-                </li>
-              </ul>
+              <TableScrollWrapper className="my-6 rounded-lg bg-white dark:bg-transparent" showHint={!staticMode}>
+                <table
+                  className={`${RESPONSIVE_TABLE_CLASS} md:[&_th]:max-w-[23ch] md:[&_td]:max-w-[23ch] md:[&_th:first-child]:max-w-[17ch] md:[&_td:first-child]:max-w-[17ch] [&_th]:whitespace-normal [&_td]:whitespace-normal [&_td]:items-center [&_th]:!align-middle [&_td]:!align-middle md:[&_th]:!align-middle md:[&_td]:!align-middle`}
+                >
+                  <thead>
+                    <tr>
+                      <th className="min-w-[14ch] md:min-w-[14ch]">Who</th>
+                      <th className="min-w-[22ch] md:min-w-[22ch]">What they need</th>
+                      <th className="min-w-[26ch] md:min-w-[26ch]">Example data to remember</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td data-label="Who" className="font-medium">
+                        AI-native individual operators
+                      </td>
+                      <td data-label="What they need">
+                        Memory that follows them across Claude, Cursor, ChatGPT, and other daily
+                        tools. Teams once data sharing is in place.
+                      </td>
+                      <td data-label="Example data">
+                        Tasks, preferences, conversation history, personal notes, recurring
+                        reminders, contacts, deadlines, follow-ups, saved snippets
+                      </td>
+                    </tr>
+                    <tr>
+                      <td data-label="Who" className="font-medium">
+                        Knowledge workers with scattered data
+                      </td>
+                      <td data-label="What they need">
+                        One place for context across documents and sessions that survives model
+                        resets and tool switches
+                      </td>
+                      <td data-label="Example data">
+                        Source documents, extracted entities, evidence chains, cross-document
+                        relationships, citations, key quotes, timelines, personas
+                      </td>
+                    </tr>
+                    <tr>
+                      <td data-label="Who" className="font-medium">
+                        Builders of agentic systems
+                      </td>
+                      <td data-label="What they need">
+                        A structured memory layer agents can read and write with full provenance
+                      </td>
+                      <td data-label="Example data">
+                        Past resolutions, session histories, accumulated facts, runbooks, decisions,
+                        tool configs, error patterns, user intents
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </TableScrollWrapper>
 
               <SectionDivider />
               <SectionHeading id="terminology">Core terminology</SectionHeading>
-              <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
+              <TableScrollWrapper className="my-6 rounded-lg bg-white dark:bg-transparent" showHint={!staticMode}>
                 <table className={RESPONSIVE_TABLE_CLASS}>
                   <thead>
                     <tr>
@@ -582,7 +548,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 . The table below lists each endpoint and the capability it provides.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
+                <TableScrollWrapper className="my-6 rounded-lg bg-white dark:bg-transparent" showHint={!staticMode}>
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
@@ -658,7 +624,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 tunnel access.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
+                <TableScrollWrapper className="my-6 rounded-lg bg-white dark:bg-transparent" showHint={!staticMode}>
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
@@ -733,7 +699,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 and subcommand help for usage.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 rounded-lg" showHint={!staticMode}>
+                <TableScrollWrapper className="my-6 rounded-lg bg-white dark:bg-transparent" showHint={!staticMode}>
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
@@ -795,12 +761,54 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </div>
 
               <SectionDivider />
-              <SectionHeading id="learn-more">Learn more</SectionHeading>
-              <div className="flex flex-col gap-4 [&_a]:no-underline">
-                <LearnMoreCard key={LEARN_MORE_REPO_CARD.href} item={LEARN_MORE_REPO_CARD} />
-                {LEARN_MORE_POSTS.map((post) => (
-                  <LearnMoreCard key={post.href} item={post} />
-                ))}
+              <SectionHeading id="docker">Run with Docker</SectionHeading>
+              <p className="text-[15px] leading-7 mb-4">
+                If you prefer not to install directly on your host machine, you can run the full
+                Neotoma stack&mdash;API server, CLI, and MCP server&mdash;inside a Docker container.
+                Clone the repo and build the image:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                Start a container with a persistent volume so your data survives restarts:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                Initialize the data directory inside the container:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerInit} staticMode={staticMode} />
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Connect MCP from Docker
+              </h3>
+              <p className="text-[15px] leading-7 mb-4">
+                To connect an MCP client (Cursor, Claude, Codex) to the containerized server, add
+                this to your MCP configuration. The client runs <code>docker exec</code> to
+                communicate with the MCP server over stdio:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerMcpConfig} staticMode={staticMode} />
+
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Use the CLI from Docker
+              </h3>
+              <p className="text-[15px] leading-7 mb-4">
+                The <code>neotoma</code> CLI is available inside the container. Prefix commands with{" "}
+                <code>docker exec</code>:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerCliExample} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                The API is also available at <code>http://localhost:8080</code> for direct HTTP
+                access.
+              </p>
+
+              <SectionDivider />
+              <div className="rounded-lg p-6 md:p-8 -mx-4 px-4 md:-mx-8 md:px-8 mt-6 [&_h2]:!mt-0">
+                <SectionHeading id="learn-more">Learn more</SectionHeading>
+                <div className="flex flex-col gap-4 [&_a]:no-underline mt-4">
+                  <LearnMoreCard key={LEARN_MORE_REPO_CARD.href} item={LEARN_MORE_REPO_CARD} />
+                  {LEARN_MORE_POSTS.map((post) => (
+                    <LearnMoreCard key={post.href} item={post} />
+                  ))}
+                </div>
               </div>
             </article>
           </div>

@@ -46,7 +46,6 @@ export interface GlossaryRow {
 
 export const SITE_SECTIONS: SiteSection[] = [
   { id: "install", label: "Install with npm", shortLabel: "Install", icon: "Package" },
-  { id: "docker", label: "Run with Docker", shortLabel: "Docker", icon: "Container" },
   { id: "get-started", label: "Get started", shortLabel: "Get started", icon: "Rocket" },
   { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Users" },
   { id: "terminology", label: "Core terminology", shortLabel: "Terminology", icon: "BookText" },
@@ -64,6 +63,7 @@ export const SITE_SECTIONS: SiteSection[] = [
     icon: "Server",
   },
   { id: "cli", label: "Command-line interface (CLI)", shortLabel: "CLI", icon: "Terminal" },
+  { id: "docker", label: "Run with Docker", shortLabel: "Docker", icon: "Container" },
   { id: "learn-more", label: "Resources", shortLabel: "Resources", icon: "GraduationCap" },
 ];
 
@@ -94,19 +94,26 @@ npm run sync:mcp`,
   dockerBuild: `git clone https://github.com/markmhendrickson/neotoma.git
 cd neotoma
 docker build -t neotoma .`,
-  dockerRun: `# Run with a persistent data volume
-docker run -d \\
+  dockerRun: `docker run -d \\
   --name neotoma \\
   -p 8080:8080 \\
   -v neotoma-data:/app/data \\
   neotoma`,
-  dockerRunProd: `# Production mode with a named volume
-docker run -d \\
-  --name neotoma \\
-  -p 8080:8080 \\
-  -e NODE_ENV=production \\
-  -v neotoma-data:/app/data \\
-  neotoma`,
+  dockerInit: `docker exec neotoma neotoma init --yes --data-dir /app/data`,
+  dockerMcpConfig: `{
+  "mcpServers": {
+    "neotoma": {
+      "command": "docker",
+      "args": ["exec", "-i", "neotoma", "node", "dist/index.js"]
+    }
+  }
+}`,
+  dockerCliExample: `# Store an entity
+docker exec neotoma neotoma store \\
+  --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'
+
+# List entities
+docker exec neotoma neotoma entities list --type task`,
   cliStoreExample: `neotoma store --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'`,
   cliListExample: `neotoma entities list --type company --limit 10`,
   cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
