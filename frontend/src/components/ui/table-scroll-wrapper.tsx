@@ -59,14 +59,17 @@ export function TableScrollWrapper({
   return (
     <div
       className={cn(
-        "table-scroll-outer w-full max-w-full rounded-lg border border-border overflow-hidden",
+        "table-scroll-outer w-full max-w-full overflow-hidden md:rounded-lg md:border md:border-border",
         isScrollable && "table-scrollable",
         className
       )}
     >
       <div
         ref={viewportRef}
-        className={cn("table-scroll-viewport overflow-x-auto w-full min-w-0 max-w-full rounded-lg", viewportClassName)}
+        className={cn(
+          "table-scroll-viewport overflow-x-auto w-full min-w-0 max-w-full md:rounded-lg",
+          viewportClassName
+        )}
       >
         <div className="table-scroll-inner">
           {children}
