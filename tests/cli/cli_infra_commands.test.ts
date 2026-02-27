@@ -258,7 +258,7 @@ describe("CLI infrastructure command smoke tests", () => {
       ).rejects.toBeDefined();
     });
 
-    it("api start --background should return init guidance when repo is not configured", async () => {
+    it("api start --background should work from outside source checkout", async () => {
       const isolatedHome = await mkdtemp(join(tmpdir(), "neotoma-cli-home-"));
       const isolatedCwd = await mkdtemp(join(tmpdir(), "neotoma-cli-cwd-"));
       const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
@@ -274,8 +274,18 @@ describe("CLI infrastructure command smoke tests", () => {
         }
       );
       const result = JSON.parse(stdout);
-      expect(result).toHaveProperty("ok", false);
-      expect(String(result.error ?? "")).toMatch(/neotoma init/i);
+      expect(result).toHaveProperty("ok", true);
+      expect(String(result.message ?? "")).toMatch(/started in background/i);
+
+      // Cleanup background API for test isolation.
+      await execAsync(`node "${cliPathAbsolute}" api stop --env dev --json`, {
+        cwd: isolatedCwd,
+        env: {
+          ...process.env,
+          HOME: isolatedHome,
+          USERPROFILE: isolatedHome,
+        },
+      });
     });
 
     it("servers should report local URL when session env vars are set", async () => {

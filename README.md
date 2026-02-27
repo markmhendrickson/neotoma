@@ -221,7 +221,7 @@ neotoma mcp config
 
 Marketing site: **https://neotoma.io** (GitHub Pages, deployed from **main**; custom domain set in repo Settings → Pages). See [Deployment](docs/infrastructure/deployment.md#marketing-site-neotomaio).
 
-### Option 2: Clone repository (for development)
+### Option 2: Clone source checkout (for development)
 
 ```bash
 git clone https://github.com/markmhendrickson/neotoma.git

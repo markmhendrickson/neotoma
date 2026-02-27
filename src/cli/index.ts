@@ -578,7 +578,7 @@ async function validateNeotomaRepo(dir: string): Promise<string | null> {
 }
 
 const INIT_REQUIRED_MESSAGE =
-  "Neotoma setup is required. Run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT.";
+  "Neotoma setup is required. Run 'neotoma init' to set your Neotoma path, or set NEOTOMA_REPO_ROOT.";
 
 async function resolveRepoRootFromInitContext(): Promise<{
   config: Config;
@@ -601,7 +601,7 @@ async function resolveRepoRootFromInitContext(): Promise<{
 async function persistRepoRootIfMissing(config: Config, repoRoot: string): Promise<void> {
   if (config.repo_root) return;
   await writeConfig({ ...config, repo_root: repoRoot });
-  process.stderr.write(dim("Saved repo path to config: ") + pathStyle(CONFIG_PATH) + "\n");
+  process.stderr.write(dim("Saved Neotoma path to config: ") + pathStyle(CONFIG_PATH) + "\n");
 }
 
 async function resolveAndPersistRepoRootFromInitContext(): Promise<string | null> {
@@ -611,8 +611,17 @@ async function resolveAndPersistRepoRootFromInitContext(): Promise<string | null
   return repoRoot;
 }
 
+/** Resolve the Neotoma package root from the running CLI install location. */
+async function resolveRepoRootFromInstalledCli(): Promise<string | null> {
+  const cliDir = path.dirname(fileURLToPath(import.meta.url));
+  return await findRepoRoot(cliDir);
+}
+
 async function maybeRunInitForMissingRepo(promptEnabled: boolean): Promise<string | null> {
   let repoRoot = await resolveAndPersistRepoRootFromInitContext();
+  if (repoRoot) return repoRoot;
+  // npm global/link installs can run from arbitrary cwd; fallback to the installed package root.
+  repoRoot = await resolveRepoRootFromInstalledCli();
   if (repoRoot) return repoRoot;
   if (!promptEnabled) return null;
 
@@ -635,10 +644,11 @@ async function maybeRunInitForMissingRepo(promptEnabled: boolean): Promise<strin
 }
 
 async function loadNpmScripts(): Promise<{ repoRoot: string; scripts: NpmScript[] }> {
-  const repoRoot = await resolveAndPersistRepoRootFromInitContext();
+  const repoRoot =
+    (await resolveAndPersistRepoRootFromInitContext()) ?? (await resolveRepoRootFromInstalledCli());
   if (!repoRoot) {
     throw new Error(
-      "Not a Neotoma repo. Run from the repo root (package.json name must be 'neotoma'), run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT."
+      "Neotoma source checkout not found. Run from the source root (package.json name must be 'neotoma'), run 'neotoma init' to set your Neotoma path, or set NEOTOMA_REPO_ROOT."
     );
   }
   const pkgPath = path.join(repoRoot, "package.json");
@@ -1432,7 +1442,7 @@ async function pickSessionPorts(repoRoot: string): Promise<[number, number]> {
     return [a, b];
   } catch (err) {
     throw new Error(
-      "Failed to pick session ports. Ensure you are in the Neotoma repo and scripts/pick-port.js exists. " +
+      "Failed to pick session ports. Ensure you are in a Neotoma source checkout and scripts/pick-port.js exists. " +
         (err instanceof Error ? err.message : String(err))
     );
   }
@@ -1708,7 +1718,7 @@ program
   .option("--debug", "Show detailed initialization logs when starting session")
   .option(
     "--log-file <path>",
-    "Append CLI stdout and stderr to this file (development default: repo data/logs/cli.<pid>.log when in a repo, else ~/.config/neotoma/cli.<pid>.log)"
+    "Append CLI stdout and stderr to this file (development default: <neotoma>/data/logs/cli.<pid>.log when a Neotoma path is configured, else ~/.config/neotoma/cli.<pid>.log)"
   )
   .option("--no-log-file", "Do not append CLI output to the log file (no-op in prod)")
   .option("--no-update-check", "Disable update availability check");
@@ -3552,12 +3562,12 @@ program
         const mcpTokenEncryptionKey = randomBytes(32).toString("hex");
         let envContent = ""; // built after plan with final dataDir
 
-        // When not in a repo, prompt for repo path so we can create .env there.
+        // When not in a source checkout, prompt for path so we can create .env there.
         // This runs in normal interactive init too (not only --advanced) so
-        // .env setup is not skipped just because init was started outside a repo.
+        // .env setup is not skipped just because init was started outside a source checkout.
         if (!envRepoRoot && process.stdout.isTTY && !opts.skipEnv && !opts.yes) {
-          process.stdout.write(nl() + bullet(heading("Neotoma repo path")) + nl());
-          const raw = await askQuestion("Repo path [default: skip]: ");
+          process.stdout.write(nl() + bullet(heading("Neotoma path")) + nl());
+          const raw = await askQuestion("Neotoma path [default: skip]: ");
           const trimmed = raw.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
           if (trimmed) {
             const validated = await validateNeotomaRepo(trimmed);
@@ -3567,12 +3577,14 @@ program
               await persistRepoRootIfMissing(initConfig, envRepoRoot);
               envExamplePath = path.join(envRepoRoot, ".env.example");
               envPath = path.join(envRepoRoot, ".env");
-              process.stdout.write(bullet(success("Using repo: ") + pathStyle(envRepoRoot)) + "\n");
+              process.stdout.write(
+                bullet(success("Using Neotoma path: ") + pathStyle(envRepoRoot)) + "\n"
+              );
             } else {
               process.stdout.write(
                 bullet(
                   warn(
-                    "Not a valid Neotoma repo (package.json name must be 'neotoma'). Skipping .env setup."
+                    "Not a valid Neotoma source checkout (package.json name must be 'neotoma'). Skipping .env setup."
                   )
                 ) + "\n"
               );
@@ -3799,7 +3811,7 @@ program
 
         // Create data directories and DBs (and build envContent) now that final dataDir is set
         envContent = `# Neotoma Environment Configuration
-# Repo path is stored in ~/.config/neotoma by neotoma init (or set NEOTOMA_REPO_ROOT at runtime to override).
+# Neotoma path is stored in ~/.config/neotoma by neotoma init (or set NEOTOMA_REPO_ROOT at runtime to override).
 
 # Data directory (defaults to ./data)
 NEOTOMA_DATA_DIR=${dataDir}
@@ -4046,7 +4058,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               if (!apiAlreadyRunning) {
                 if (!repoRoot) {
                   initAuthSummary.oauthDeferredReason =
-                    "OAuth selected but no repo root found for temporary API startup.";
+                    "OAuth selected but no Neotoma source checkout was found for temporary API startup.";
                 } else if (!isLocalHost(baseUrl)) {
                   initAuthSummary.oauthDeferredReason =
                     "OAuth selected but base URL is not local. Start your API manually, then run neotoma auth login.";
@@ -4453,12 +4465,12 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           }
         }
 
-        // Persist repo root so "neotoma" can start servers from any cwd
+        // Persist Neotoma source root so "neotoma" can start servers from any cwd
         let configRepoRoot = repoRoot ?? (await readConfig()).repo_root;
-        // In pretty mode (not json), ask for repo root if not found
+        // In pretty mode (not json), ask for Neotoma path if not found
         if (!configRepoRoot && outputMode === "pretty" && useAdvancedPrompts) {
           const pathInput = await askQuestion(
-            "Path to Neotoma repo [default: skip]: "
+            "Path to Neotoma source checkout [default: skip]: "
           );
           if (pathInput) {
             const validated = await validateNeotomaRepo(pathInput);
@@ -4488,7 +4500,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             }
             if (outputMode === "pretty") {
               process.stdout.write(
-                bullet(success(".env created after repo path was provided.")) + "\n"
+                bullet(success(".env created after Neotoma path was provided.")) + "\n"
               );
               process.stdout.write(bullet(dim("Path: ") + pathStyle(lateEnvPath)) + "\n");
             }
@@ -4510,7 +4522,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           process.stdout.write(
             bullet(
               dim(
-                ".env is created when run from the repo, when a repo path is saved in config, or when you enter a repo path during init. Data is under ~/neotoma/data."
+                ".env is created when run from a Neotoma source checkout, when a Neotoma path is saved in config, or when you enter a Neotoma path during init. Data is under ~/neotoma/data."
               )
             ) + "\n"
           );
@@ -4565,7 +4577,7 @@ siteCommand
       }
       if (!repoRoot) {
         process.stderr.write(
-          "Not a Neotoma repo. Run from the repo root or run " +
+          "Neotoma source checkout not found. Run from the source root or run " +
             pathStyle("neotoma init") +
             " first.\n"
         );
@@ -7123,7 +7135,7 @@ apiCommand
           stop_ran: ran,
           message: ran
             ? "Stop command completed for port " + port + "."
-            : "Run from repo root to stop: node scripts/kill_port.js " + port,
+            : "Run from Neotoma source root to stop: node scripts/kill_port.js " + port,
         },
         outputMode
       );
@@ -7137,7 +7149,7 @@ apiCommand
         bullet(
           "To stop the API server: " +
             pathStyle("node scripts/kill_port.js " + port) +
-            " (from repo root)"
+            " (from Neotoma source root)"
         ) + "\n"
       );
     }
@@ -7194,7 +7206,7 @@ apiCommand
         pathStyle("neotoma api stop") +
         dim(" (configured port) or ") +
         pathStyle("node scripts/kill_port.js <port>") +
-        dim(" from repo root.") +
+        dim(" from Neotoma source root.") +
         nl()
     );
   });
@@ -10168,9 +10180,9 @@ export function buildInstallationBoxLines(
     lines.push("");
   } else {
     lines.push(
-      "Repo path      " + mark(false) + "  Not configured (run " + pathStyle("neotoma init") + " or set NEOTOMA_REPO_ROOT)"
+      "Neotoma path  " + mark(false) + "  Not configured (run " + pathStyle("neotoma init") + " or set NEOTOMA_REPO_ROOT)"
     );
-    lines.push(".env file      " + mark(false) + "  (set repo path first)");
+    lines.push(".env file      " + mark(false) + "  (set Neotoma path first)");
     lines.push("");
   }
 
@@ -10713,14 +10725,14 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       const guidanceLines: string[] = [];
       if (!repoRoot) {
         guidanceLines.push(
-          "Neotoma repo is not configured in this shell.",
-          "Run 'neotoma init' to set repo path, or set NEOTOMA_REPO_ROOT to your Neotoma repo."
+          "Neotoma path is not configured in this shell.",
+          "Run 'neotoma init' to set your Neotoma path, or set NEOTOMA_REPO_ROOT to a Neotoma source checkout."
         );
       } else {
         const envPath = path.join(repoRoot, ".env");
         if (!(await pathExists(envPath))) {
           guidanceLines.push(
-            "Neotoma repo is configured, but .env is missing.",
+            "Neotoma path is configured, but .env is missing.",
             "Run 'neotoma init' to create .env defaults, or create " +
               pathStyle(envPath) +
               " manually."
@@ -10738,7 +10750,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     if (noSession) {
       debugLog("No-session mode: showing intro panel and command menu (no REPL)");
       const v = version ?? (await getCliVersion());
-      const repoRootForLocal = await findRepoRoot(process.cwd());
+      const repoRootForLocal =
+        (await resolveAndPersistRepoRootFromInitContext()) ??
+        (await resolveRepoRootFromInstalledCli());
       const introStatsOrFallback = repoRootForLocal
         ? await getDualEnvIntroStats(repoRootForLocal, LOCAL_DEV_USER_ID)
         : ["Production data: unavailable", "Development data: unavailable"];
@@ -11186,7 +11200,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         }
       } else {
         sessionRepoRoot = undefined;
-        debugLog("No Neotoma repo found; session only (no servers)");
+        debugLog("No Neotoma source checkout found; session only (no servers)");
         if (version != null) {
           const introContent = buildIntroBoxContent(
             version,
@@ -11199,7 +11213,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           });
         }
         process.stdout.write(
-          dim("Not in a Neotoma repo. Session only, servers are not started.") + "\n\n"
+          dim("Not in a Neotoma source checkout. Session only, servers are not started.") + "\n\n"
         );
       }
     } else {
@@ -11210,7 +11224,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         const version = await getCliVersion();
         const mcpStdioCount = await detectNeotomaMcpStdioProcessCount();
         const apiLines = buildApiBoxLines(discoveredInstances, mcpStdioCount);
-        const repoRootForLocal = await findRepoRoot(process.cwd());
+        const repoRootForLocal =
+          (await resolveAndPersistRepoRootFromInitContext()) ??
+          (await resolveRepoRootFromInstalledCli());
         const introStatsOrFallback = repoRootForLocal
           ? await getDualEnvIntroStats(repoRootForLocal, LOCAL_DEV_USER_ID)
           : ["Production data: unavailable", "Development data: unavailable"];
@@ -11448,7 +11464,9 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         } else {
           // No sessionRepoRoot (e.g. cwd not in Neotoma repo) but we have API instances: still show full status block.
           // Resolve repo from cwd for direct local DB reads (intro + recent events) when possible.
-          const repoRootForLocal = await findRepoRoot(process.cwd());
+          const repoRootForLocal =
+            (await resolveAndPersistRepoRootFromInitContext()) ??
+            (await resolveRepoRootFromInstalledCli());
           const effectiveUserId = userIdForWatch ?? LOCAL_DEV_USER_ID;
           const introStatsOrFallback = repoRootForLocal
             ? await getDualEnvIntroStats(repoRootForLocal, effectiveUserId)

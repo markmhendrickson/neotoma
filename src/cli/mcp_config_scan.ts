@@ -797,7 +797,7 @@ async function promptInstallTarget(): Promise<InstallTargetChoice> {
     });
     rl.question(
       "Add or update MCP servers:\n" +
-        "  (1) project (Cursor + Claude + Codex in this repo)\n" +
+        "  (1) project (Cursor + Claude + Codex in this source checkout)\n" +
         "  (2) user (Cursor + Claude + Codex in ~)\n" +
         "  (3) both (project + user)\n" +
         "  (4) Cursor only (project + user)\n" +
@@ -990,7 +990,8 @@ export async function offerFix(
   if (!repoRoot) {
     return {
       fixed: false,
-      message: "Cannot fix: Neotoma repo root not found. Run from Neotoma repo.",
+      message:
+        "Cannot fix: Neotoma source root not found. Run from a Neotoma source checkout.",
       updatedPaths: [],
     };
   }
@@ -1137,7 +1138,7 @@ export async function offerInstall(
 
   if (!repoRoot) {
     const message =
-      "Cannot install: Neotoma repo root not found. Run from Neotoma repo or set NEOTOMA_REPO_ROOT.";
+      "Cannot install: Neotoma source root not found. Run from a Neotoma source checkout or set NEOTOMA_REPO_ROOT.";
     if (!silent) process.stderr.write(message + "\n");
     return { installed: false, message };
   }
