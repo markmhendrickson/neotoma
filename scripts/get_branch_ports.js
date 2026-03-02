@@ -8,14 +8,14 @@ import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 
 // Base ports
-const BASE_HTTP_PORT = 8080;
+const BASE_HTTP_PORT = 3080;
 const BASE_VITE_PORT = 5173;
 const BASE_WS_PORT = 8081;
 
 // Port ranges (avoid conflicts with common services)
-const HTTP_PORT_RANGE = 100; // 8080-8179
+const HTTP_PORT_RANGE = 100; // 3080-3179
 const VITE_PORT_RANGE = 100; // 5173-5272
-const WS_PORT_RANGE = 100;   // 8081-8180
+const WS_PORT_RANGE = 100;   // BASE_WS_PORT through BASE_WS_PORT + 99
 
 function getGitBranch() {
   try {

@@ -235,6 +235,14 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(result.auth_setup).toHaveProperty("mode");
     });
 
+    it("init --yes should complete in non-interactive mode", async () => {
+      const dir = await mkdtemp(join(tmpdir(), "neotoma-cli-init-yes-"));
+      const dataDir = join(dir, "data");
+      const { stdout } = await execAsync(`${CLI_PATH} init --yes --data-dir "${dataDir}" --skip-db --skip-env`);
+      expect(stdout).toMatch(/Neotoma initialized/i);
+      expect(stdout).toMatch(/neotoma/i);
+    });
+
     it("init --json should defer oauth setup when oauth auth mode is requested", async () => {
       const dir = await mkdtemp(join(tmpdir(), "neotoma-cli-init-oauth-"));
       const dataDir = join(dir, "data");
@@ -290,9 +298,9 @@ describe("CLI infrastructure command smoke tests", () => {
 
     it("servers should report local URL when session env vars are set", async () => {
       const { stdout } = await execAsync(
-        `NEOTOMA_SESSION_ENV=dev NEOTOMA_SESSION_DEV_PORT=8080 ${CLI_PATH} servers`
+        `NEOTOMA_SESSION_ENV=dev NEOTOMA_SESSION_DEV_PORT=3080 ${CLI_PATH} servers`
       );
-      expect(stdout).toContain("http://127.0.0.1:8080/mcp");
+      expect(stdout).toContain("http://127.0.0.1:3080/mcp");
     });
 
     it("servers should honor selected session instance port", async () => {

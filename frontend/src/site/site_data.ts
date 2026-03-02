@@ -96,7 +96,7 @@ cd neotoma
 docker build -t neotoma .`,
   dockerRun: `docker run -d \\
   --name neotoma \\
-  -p 8080:8080 \\
+  -p 3080:3080 \\
   -v neotoma-data:/app/data \\
   neotoma`,
   dockerInit: `docker exec neotoma neotoma init --yes --data-dir /app/data`,

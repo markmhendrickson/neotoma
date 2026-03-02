@@ -21,7 +21,7 @@ This document covers:
 **Development:**
 
 ```
-http://localhost:8080
+http://localhost:3080
 ```
 
 **Production:**
@@ -265,7 +265,7 @@ Upload a file and optionally create/update a record.
   **Request Example:**
 
 ```bash
-curl -X POST http://localhost:8080/upload_file \
+curl -X POST http://localhost:3080/upload_file \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@document.pdf" \
   -F "properties={\"title\":\"My Document\"}"

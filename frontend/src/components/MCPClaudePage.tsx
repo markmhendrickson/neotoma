@@ -84,7 +84,7 @@ export function MCPClaudePage() {
 {`{
   "mcpServers": {
     "neotoma": {
-      "url": "${serverInfo?.mcpUrl || "http://localhost:8080/mcp"}"
+      "url": "${serverInfo?.mcpUrl || "http://localhost:3080/mcp"}"
     }
   }
 }`}

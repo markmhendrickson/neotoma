@@ -10,8 +10,9 @@ import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createWriteStream } from "node:fs";
 import { realpathSync } from "node:fs";
+import { createRequire } from "node:module";
 import * as readline from "node:readline";
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 
 import { config as appConfig } from "../config.js";
 import { getMcpAuthToken } from "../crypto/mcp_auth_token.js";
@@ -24,6 +25,7 @@ import {
   CONFIG_DIR,
   CONFIG_PATH,
   CANDIDATE_API_PORTS,
+  USER_ENV_PATH,
   clearConfig,
   discoverApiInstances,
   isTokenExpired,
@@ -42,6 +44,7 @@ import {
   isUpdateAvailable,
   formatUpgradeCommand,
 } from "../version_check.js";
+import { shutdownLocalTransport } from "../shared/local_transport.js";
 import {
   accent,
   black,
@@ -76,6 +79,7 @@ const CLI_BANNER = `
 
 const BANNER_ANIMATION_MS_PER_LETTER = 120;
 const BANNER_ANIMATION_MS_BETWEEN_CYCLES = 600;
+const nodeRequire = createRequire(import.meta.url);
 
 const ESC = "\u001b";
 const BANNER_ANSI = {
@@ -568,10 +572,17 @@ export async function findRepoRoot(startDir: string): Promise<string | null> {
 async function validateNeotomaRepo(dir: string): Promise<string | null> {
   const candidate = await resolveStartDir(dir);
   const pkgPath = path.join(candidate, "package.json");
+  const sourceMarkerPath = path.join(candidate, "src", "cli", "index.ts");
+  const distMarkerPath = path.join(candidate, "dist", "cli", "index.js");
   try {
     const raw = await fs.readFile(pkgPath, "utf-8");
     const pkg = JSON.parse(raw) as PackageJson;
-    return pkg.name === "neotoma" ? candidate : null;
+    if (pkg.name !== "neotoma") return null;
+    // Accept source checkouts, built installs, and lightweight test repos that only carry package metadata.
+    if ((await pathExists(sourceMarkerPath)) || (await pathExists(distMarkerPath))) {
+      return candidate;
+    }
+    return candidate;
   } catch {
     return null;
   }
@@ -579,6 +590,13 @@ async function validateNeotomaRepo(dir: string): Promise<string | null> {
 
 const INIT_REQUIRED_MESSAGE =
   "Neotoma setup is required. Run 'neotoma init' to set your Neotoma path, or set NEOTOMA_REPO_ROOT.";
+const NO_ARGS_INIT_REQUIRED_MESSAGE = "Neotoma is not initialized. Run 'neotoma init' and try again.";
+const OPENAI_API_KEY_PROMPT =
+  "OPENAI_API_KEY value (for unstructured storage inference) [optional, Enter to skip]: ";
+
+function configuredProjectRoot(config: Config): string | undefined {
+  return config.project_root ?? config.repo_root;
+}
 
 async function resolveRepoRootFromInitContext(): Promise<{
   config: Config;
@@ -586,8 +604,9 @@ async function resolveRepoRootFromInitContext(): Promise<{
 }> {
   const config = await readConfig();
   let repoRoot: string | null = null;
-  if (config.repo_root) {
-    repoRoot = await validateNeotomaRepo(config.repo_root);
+  const configuredRoot = configuredProjectRoot(config);
+  if (configuredRoot) {
+    repoRoot = await validateNeotomaRepo(configuredRoot);
   }
   if (!repoRoot && process.env.NEOTOMA_REPO_ROOT) {
     repoRoot = await validateNeotomaRepo(process.env.NEOTOMA_REPO_ROOT);
@@ -599,8 +618,8 @@ async function resolveRepoRootFromInitContext(): Promise<{
 }
 
 async function persistRepoRootIfMissing(config: Config, repoRoot: string): Promise<void> {
-  if (config.repo_root) return;
-  await writeConfig({ ...config, repo_root: repoRoot });
+  if (configuredProjectRoot(config)) return;
+  await writeConfig({ ...config, project_root: repoRoot, repo_root: repoRoot });
   process.stderr.write(dim("Saved Neotoma path to config: ") + pathStyle(CONFIG_PATH) + "\n");
 }
 
@@ -787,7 +806,9 @@ function formatEntityPropertiesTable(entity: Record<string, unknown>): string {
       seen.add(k);
     }
   }
-  const rest = Object.keys(entity).filter((k) => !seen.has(k)).sort();
+  const rest = Object.keys(entity)
+    .filter((k) => !seen.has(k))
+    .sort();
   for (const k of rest) {
     const v = entity[k];
     if (v !== undefined && v !== null) pairs.push([k, v]);
@@ -1006,14 +1027,13 @@ function writeTemporaryApiStatusMessage(message: string, mode: OutputMode): void
     return;
   }
   const lower = message.toLowerCase();
-  const styled =
-    lower.includes("not running")
-      ? bullet(warn(message))
-      : lower.includes("started")
-        ? bullet(success(message))
-        : lower.includes("stopped")
-          ? bullet(dim(message))
-          : bullet(dim(message));
+  const styled = lower.includes("not running")
+    ? bullet(warn(message))
+    : lower.includes("started")
+      ? bullet(success(message))
+      : lower.includes("stopped")
+        ? bullet(dim(message))
+        : bullet(dim(message));
   writeMessage(styled, mode);
 }
 
@@ -1024,7 +1044,7 @@ function formatChoicePrompt(question: string): string {
     /\[[^\]]+\]/.test(question) ||
     /\((?:y\/n|yes\/no)\)/i.test(question) ||
     /\bdefault\s*:\s*[^)]+/i.test(question);
-  return isMultiChoice ? `? ${question}` : question;
+  return isMultiChoice ? `› ${question}` : question;
 }
 
 /** Turn raw fetch/network errors into a short, human-readable message.
@@ -1044,7 +1064,7 @@ function humanReadableApiError(err: unknown, sessionContext?: boolean): string {
         "Retry with `neotoma --env prod` if the server crashed."
       );
     }
-    return "Server not reachable. Is the API running? Try `neotoma api start --env dev`. If the API is on port 8180 (e.g. npm run dev:prod), use --base-url http://localhost:8180 or --env prod";
+    return "Server not reachable. Is the API running? Try `neotoma api start --env dev`. If the API is on port 3180 (e.g. npm run dev:prod), use --base-url http://localhost:3180 or --env prod";
   }
   if (code === "ENOTFOUND") {
     return "Host not found. Check --base-url or --env.";
@@ -1429,7 +1449,7 @@ async function waitForSessionPortFile(
 async function pickSessionPorts(repoRoot: string): Promise<[number, number]> {
   const scriptPath = path.join(repoRoot, "scripts", "pick-port.js");
   try {
-    const out = execSync(`node "${scriptPath}" 8080 8180`, {
+    const out = execSync(`node "${scriptPath}" 3080 3180`, {
       encoding: "utf-8",
       cwd: repoRoot,
     }).trim();
@@ -1693,12 +1713,12 @@ const program = new Command();
 program
   .name("neotoma")
   .description("Neotoma CLI")
-  .option("--base-url <url>", "API base URL (default: auto-detect 8180 or 8080)")
+  .option("--base-url <url>", "API base URL (default: auto-detect 3180 or 3080)")
   .option(
     "--offline",
-    "Run data commands through in-process local transport (no running API process required)"
+    "Run data commands through in-process local transport (explicit opt-in; no running API process required)"
   )
-  .option("--api-only", "Disable offline fallback; fail when API is unreachable")
+  .option("--api-only", "Force API-only mode (default); fail when API is unreachable")
   .option("--json", "Output machine-readable JSON")
   .option("--pretty", "Output formatted JSON for humans")
   .option("--no-session", "With no args: show intro then command menu (>); no servers")
@@ -1767,13 +1787,21 @@ program.hook("preAction", (_thisCommand, actionCommand) => {
   if (opts.offline) {
     process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "true";
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "false";
+    if (process.stdout.isTTY) {
+      process.stderr.write(
+        dim(
+          "Offline mode enabled: running in-process local transport (this may trigger first-run OS permission prompts)." +
+            "\n"
+        )
+      );
+    }
     return;
   }
   process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT = "false";
+  // API-only is now the default transport. Inline/local fallback requires explicit --offline.
+  process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
   if (opts.apiOnly) {
     process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK = "true";
-  } else {
-    delete process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK;
   }
 });
 
@@ -1955,6 +1983,63 @@ async function movePathToTimestampBackup(srcPath: string, ts: string): Promise<s
   return backupPath;
 }
 
+type GlobalUninstallResult = {
+  attempted: boolean;
+  succeeded: boolean;
+  exitCode: number | null;
+  message: string;
+};
+
+async function runGlobalNeotomaUninstall(): Promise<GlobalUninstallResult> {
+  const cwdRepoRoot = await findRepoRoot(process.cwd());
+  if (!cwdRepoRoot) {
+    return {
+      attempted: false,
+      succeeded: false,
+      exitCode: null,
+      message:
+        "Skipped global uninstall (run 'neotoma reset' from within the Neotoma repo to uninstall globally).",
+    };
+  }
+  const overrideCommand = process.env.NEOTOMA_RESET_UNINSTALL_COMMAND?.trim();
+  const command = overrideCommand || (process.platform === "win32" ? "npm.cmd" : "npm");
+  const args = overrideCommand ? [] : ["uninstall", "-g", "neotoma"];
+  return await new Promise<GlobalUninstallResult>((resolve) => {
+    const child = spawn(command, args, {
+      stdio: "pipe",
+      shell: Boolean(overrideCommand),
+      env: { ...process.env },
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      resolve({
+        attempted: true,
+        succeeded: false,
+        exitCode: null,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+    child.on("close", (code) => {
+      const succeeded = (code ?? 1) === 0;
+      const commandDisplay = overrideCommand || `${command} ${args.join(" ")}`;
+      const message =
+        stderr.trim() ||
+        (succeeded
+          ? `Global uninstall completed (${commandDisplay}).`
+          : `Global uninstall failed (${commandDisplay}) with exit code ${code ?? "unknown"}.`);
+      resolve({
+        attempted: true,
+        succeeded,
+        exitCode: code,
+        message,
+      });
+    });
+  });
+}
+
 async function readEnvFileVars(envPath: string): Promise<Record<string, string>> {
   try {
     const raw = await fs.readFile(envPath, "utf-8");
@@ -1983,19 +2068,6 @@ function resolvePathInput(inputPath: string, baseDir: string): string {
   const homeExpanded = trimmed.replace(/^~(?=\/|$)/, os.homedir());
   if (path.isAbsolute(homeExpanded)) return path.normalize(homeExpanded);
   return path.resolve(baseDir, homeExpanded);
-}
-
-async function normalizePathForContainmentCheck(inputPath: string): Promise<string> {
-  try {
-    return await fs.realpath(inputPath);
-  } catch {
-    return path.resolve(inputPath);
-  }
-}
-
-function isPathWithinDirectory(targetPath: string, directoryPath: string): boolean {
-  const rel = path.relative(directoryPath, targetPath);
-  return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
 function quoteSqlIdent(identifier: string): string {
@@ -2092,8 +2164,12 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
     rows_ignored: 0,
   };
   try {
-    sourceDb = new Database(sourceDbPath, { readonly: true });
-    targetDb = new Database(targetDbPath);
+    const DatabaseConstructor = nodeRequire("better-sqlite3") as new (
+      path: string,
+      options?: { readonly?: boolean }
+    ) => Database.Database;
+    sourceDb = new DatabaseConstructor(sourceDbPath, { readonly: true });
+    targetDb = new DatabaseConstructor(targetDbPath);
     checkpointWal(sourceDb);
     checkpointWal(targetDb);
     targetDb.prepare("ATTACH DATABASE ? AS src").run(sourceDbPath);
@@ -2163,9 +2239,17 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
   return stats;
 }
 
-async function updateOrInsertEnvVar(envPath: string, key: string, value: string): Promise<void> {
+function normalizeSingleLineInput(value: unknown): string {
+  return String(value ?? "").replace(/\n/g, "");
+}
+
+async function updateOrInsertEnvVar(
+  envPath: string,
+  key: string,
+  value: string | undefined | null
+): Promise<void> {
   const lineRegex = new RegExp(`^#?\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`, "m");
-  const cleanValue = value.replace(/\n/g, "");
+  const cleanValue = normalizeSingleLineInput(value);
   let envText = "";
   try {
     envText = await fs.readFile(envPath, "utf-8");
@@ -2212,9 +2296,36 @@ async function removeNeotomaServersFromJsonMcpConfig(configPath: string): Promis
   }
   if (!parsed.mcpServers || typeof parsed.mcpServers !== "object") return false;
   const nextServers = { ...parsed.mcpServers };
-  const neotomaServerIds = Object.keys(nextServers).filter((serverId) =>
-    /^neotoma(?:[-_].*)?$/i.test(serverId.trim())
-  );
+  const isLikelyNeotomaServerConfig = (config: unknown): boolean => {
+    if (!config || typeof config !== "object") return false;
+    const serverConfig = config as { command?: string; url?: string };
+    const command = String(serverConfig.command ?? "");
+    const url = String(serverConfig.url ?? "");
+
+    // Match known Neotoma stdio wrappers used by init/mcp check.
+    if (command.includes("run_neotoma_mcp_stdio")) return true;
+
+    if (!url) return false;
+    if (url.includes("neotoma.fly.dev/mcp")) return true;
+
+    try {
+      const parsedUrl = new URL(url);
+      const isLocalHost =
+        parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1";
+      const isMcpPath = parsedUrl.pathname.includes("/mcp");
+      const port = parsedUrl.port ? parseInt(parsedUrl.port, 10) : parsedUrl.protocol === "https:" ? 443 : 80;
+      if (isLocalHost && isMcpPath && (port === 3080 || port === 3180)) return true;
+    } catch {
+      // Ignore malformed URLs; fall back to other checks.
+    }
+    return false;
+  };
+  const neotomaServerIds = Object.entries(nextServers)
+    .filter(
+      ([serverId, config]) =>
+        /^neotoma(?:[-_].*)?$/i.test(serverId.trim()) || isLikelyNeotomaServerConfig(config)
+    )
+    .map(([serverId]) => serverId);
   if (neotomaServerIds.length === 0) return false;
   for (const serverId of neotomaServerIds) {
     delete nextServers[serverId];
@@ -2308,7 +2419,13 @@ async function startTemporaryApiForInit(params: {
   outputMode: OutputMode;
   /** Message after API is ready (default: " for OAuth setup.") */
   startedMessage?: string;
-}): Promise<{ child: ReturnType<typeof spawn>; logPath: string }> {
+  /** When true, do not print the "Temporary API started..." status line. */
+  suppressStartedStatus?: boolean;
+}): Promise<{
+  child: ReturnType<typeof spawn>;
+  logPath: string;
+  closeLogs: () => Promise<void>;
+}> {
   const port = parsePortFromBaseUrl(params.baseUrl);
   const actionsPath = path.join(params.repoRoot, "dist", "actions.js");
   try {
@@ -2323,7 +2440,7 @@ async function startTemporaryApiForInit(params: {
   await fs.mkdir(logsDir, { recursive: true });
   const logPath = path.join(logsDir, `init-api.${Date.now()}.log`);
   const logStream = createWriteStream(logPath, { flags: "a" });
-  const envName = port === 8180 ? "production" : "development";
+  const envName = port === 3180 ? "production" : "development";
   const child = spawn(process.execPath, [actionsPath], {
     cwd: params.repoRoot,
     env: {
@@ -2358,27 +2475,49 @@ async function startTemporaryApiForInit(params: {
   })();
 
   await Promise.race([onExit, onReady]);
-  writeTemporaryApiStatusMessage(
-    "Temporary API started" + (params.startedMessage ?? " for OAuth setup."),
-    params.outputMode
-  );
-  return { child, logPath };
+  if (!params.suppressStartedStatus) {
+    writeTemporaryApiStatusMessage(
+      "Temporary API started" + (params.startedMessage ?? " for OAuth setup."),
+      params.outputMode
+    );
+  }
+  return {
+    child,
+    logPath,
+    closeLogs: async () => {
+      child.stdout?.unpipe(logStream);
+      child.stderr?.unpipe(logStream);
+      await new Promise<void>((resolve) => {
+        if (logStream.destroyed || (logStream as { closed?: boolean }).closed) {
+          resolve();
+          return;
+        }
+        logStream.end(() => resolve());
+      });
+    },
+  };
 }
 
 async function stopTemporaryApiForInit(child: ReturnType<typeof spawn>): Promise<void> {
   if (child.killed || child.exitCode != null) return;
   child.kill("SIGTERM");
-  await Promise.race([
-    new Promise<void>((resolve) => {
-      child.once("exit", () => resolve());
-    }),
-    new Promise<void>((resolve) => {
-      setTimeout(() => {
-        if (!child.killed && child.exitCode == null) child.kill("SIGKILL");
-        resolve();
-      }, 3000);
-    }),
-  ]);
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (!child.killed && child.exitCode == null) child.kill("SIGKILL");
+      finish();
+    }, 3000);
+    timeoutId.unref?.();
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      child.removeListener("exit", onExit);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    const onExit = () => finish();
+    child.once("exit", onExit);
+  });
 }
 
 /** Server policy: start (spawn API if needed) or use-existing (connect only). */
@@ -3199,7 +3338,8 @@ async function runSessionLoop(opts?: {
             captureBuffer += (chunk as { toString: () => string }).toString();
           return originalStdoutWrite(chunk as never, encoding as never, cb as never) as boolean;
         };
-        (process.stdout as NodeJS.WriteStream).write = capturingWrite as NodeJS.WriteStream["write"];
+        (process.stdout as NodeJS.WriteStream).write =
+          capturingWrite as NodeJS.WriteStream["write"];
         try {
           await program.parseAsync(argv);
         } catch (err) {
@@ -3491,7 +3631,10 @@ program
   .option("--skip-db", "Skip database initialization")
   .option("--skip-env", "Skip interactive .env creation and variable prompts")
   .option("-y, --yes", "Apply the default init plan without prompts")
-  .option("--advanced", "Use step-by-step interactive setup prompts")
+  .option(
+    "--advanced",
+    "Use personalization mode (step-by-step setup prompts, including optional source path prompts)"
+  )
   .option(
     "--auth-mode <mode>",
     "Auth setup mode: dev_local, oauth, or key_derived (non-interactive shortcut)"
@@ -3510,7 +3653,11 @@ program
         const outputMode = resolveOutputMode();
         let useAdvancedPrompts = Boolean(opts.advanced);
         /** Temporary API started at start of init (TTY), stopped at end of init */
-        let temporaryApiForInit: { child: ReturnType<typeof spawn>; logPath: string } | null = null;
+        let temporaryApiForInit: {
+          child: ReturnType<typeof spawn>;
+          logPath: string;
+          closeLogs: () => Promise<void>;
+        } | null = null;
 
         // Resolve repo root consistently (config -> NEOTOMA_REPO_ROOT -> cwd), then persist when missing.
         const { config: initConfig, repoRoot: initialRepoRoot } =
@@ -3523,11 +3670,26 @@ program
 
         // Determine data directory (allow interactive override when --data-dir is not provided)
         const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
-        const defaultDataDir = repoRoot
+        const defaultDataDirCandidate = repoRoot
           ? path.join(repoRoot, "data")
           : path.join(homeDir, "neotoma", "data");
+        const detectedInitializedDataDir = await detectInitializedDataDir([
+          process.env.NEOTOMA_DATA_DIR ?? "",
+          defaultDataDirCandidate,
+          path.join(homeDir, "neotoma", "data"),
+        ]);
+        const defaultDataDir = detectedInitializedDataDir ?? defaultDataDirCandidate;
         let dataDir = opts.dataDir?.trim() || defaultDataDir;
+        // If user explicitly provides --data-dir or a personalized path, sync .env to that value.
+        let forceSyncDataDirToEnv = Boolean(opts.dataDir?.trim());
         if (process.stdout.isTTY && useAdvancedPrompts) {
+          process.stdout.write(
+            nl() +
+              dim("[2/5]") +
+              " " +
+              bold("Personalize Data directory") +
+              nl()
+          );
           const rawDataDir = await askQuestion(
             "Data directory [default: " + pathStyle(defaultDataDir) + "]: "
           );
@@ -3536,8 +3698,13 @@ program
             dataDir = path.isAbsolute(trimmedDataDir)
               ? trimmedDataDir
               : path.resolve(repoRoot ?? process.cwd(), trimmedDataDir);
+            forceSyncDataDirToEnv = true;
             process.stdout.write(
               bullet(success("Using data directory: ") + pathStyle(dataDir)) + "\n" + nl()
+            );
+          } else if (process.stdout.isTTY) {
+            process.stdout.write(
+              bullet(dim("Using default data directory: ") + pathStyle(defaultDataDir)) + "\n" + nl()
             );
           }
         }
@@ -3547,6 +3714,133 @@ program
           status: "done" | "skipped" | "created" | "exists";
           path?: string;
         }[] = [];
+        type InitProgressStepId = "auth" | "data" | "env" | "mcp" | "cli";
+        type InitProgressStatus = "pending" | "in_progress" | "done" | "skipped" | "failed";
+        const INIT_PROGRESS_STEPS: { id: InitProgressStepId; label: string }[] = [
+          { id: "auth", label: "Authentication" },
+          { id: "data", label: "Data directory" },
+          { id: "env", label: "Environment" },
+          { id: "mcp", label: "MCP configuration" },
+          { id: "cli", label: "CLI instructions" },
+        ];
+        const progressEnabled = outputMode === "pretty" && process.stdout.isTTY;
+        const initStartedAtMs = Date.now();
+        const initProgress: Record<
+          InitProgressStepId,
+          {
+            status: InitProgressStatus;
+            detail?: string;
+            summaryLines?: string[];
+            startedAtMs?: number;
+            elapsedMs?: number;
+          }
+        > = {
+          auth: { status: "pending" },
+          data: { status: "pending" },
+          env: { status: "pending" },
+          mcp: { status: "pending" },
+          cli: { status: "pending" },
+        };
+        const initStatusLabel = (status: InitProgressStatus): string => {
+          if (status === "in_progress") return "in progress";
+          return status;
+        };
+        const formatElapsedMs = (elapsedMs: number | undefined): string => {
+          if (elapsedMs == null || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
+          if (elapsedMs < 1000) return `${elapsedMs}ms`;
+          return `${(elapsedMs / 1000).toFixed(1)}s`;
+        };
+        const truncateForTerminal = (text: string, maxWidth: number): string => {
+          if (maxWidth <= 0) return "";
+          if (visibleLength(text) <= maxWidth) return text;
+          if (maxWidth <= 1) return "…";
+          return text.slice(0, maxWidth - 1) + "…";
+        };
+        const renderInitProgressLine = (id: InitProgressStepId, maxWidth: number): string => {
+          const index = INIT_PROGRESS_STEPS.findIndex((step) => step.id === id);
+          const step = INIT_PROGRESS_STEPS[index]!;
+          const progress = initProgress[id];
+          const prefix = `[${index + 1}/${INIT_PROGRESS_STEPS.length}]`;
+          const labelWidth = 18;
+          const statusWidth = 11;
+          const baseText = `${prefix} ${padToDisplayWidth(step.label, labelWidth)}`;
+          const status = padToDisplayWidth(initStatusLabel(progress.status), statusWidth);
+          const elapsed =
+            progress.status === "in_progress"
+              ? progress.startedAtMs != null
+                ? ` (${formatElapsedMs(Date.now() - progress.startedAtMs)})`
+                : ""
+              : progress.elapsedMs != null
+                ? ` (${formatElapsedMs(progress.elapsedMs)})`
+                : "";
+          const detail = progress.detail ? ` - ${progress.detail}` : "";
+          return truncateForTerminal(`${baseText} ${status}${elapsed}${detail}`, maxWidth);
+        };
+        let renderedProgressLines = 0;
+        const clearRenderedProgress = (): void => {
+          if (!progressEnabled || renderedProgressLines <= 0) return;
+          process.stdout.write(BANNER_ANSI.up(renderedProgressLines));
+          for (let i = 0; i < renderedProgressLines; i++) {
+            process.stdout.write(BANNER_ANSI.clearLineFull);
+            if (i < renderedProgressLines - 1) process.stdout.write(BANNER_ANSI.down(1));
+          }
+          process.stdout.write(BANNER_ANSI.up(Math.max(0, renderedProgressLines - 1)));
+          process.stdout.write("\r");
+          renderedProgressLines = 0;
+        };
+        const renderProgressBlock = (): void => {
+          if (!progressEnabled) return;
+          clearRenderedProgress();
+          const rows = INIT_PROGRESS_STEPS.map((step) =>
+            renderInitProgressLine(step.id, Math.max(30, getTerminalWidth(2)))
+          );
+          process.stdout.write(rows.join("\n") + "\n");
+          renderedProgressLines = rows.length;
+        };
+        const suspendLiveProgress = (): void => {
+          if (!progressEnabled) return;
+          clearRenderedProgress();
+        };
+        const isBalancedPersonalizeOutput = (): boolean => progressEnabled && useAdvancedPrompts;
+        const setInitProgress = (
+          id: InitProgressStepId,
+          status: InitProgressStatus,
+          detail?: string
+        ): void => {
+          const current = initProgress[id];
+          const normalizedDetail = detail?.trim() || undefined;
+          if (current.status === status && (current.detail ?? "") === (normalizedDetail ?? "")) {
+            return;
+          }
+          current.status = status;
+          current.detail = normalizedDetail;
+          if (status === "in_progress") {
+            current.startedAtMs = Date.now();
+            current.elapsedMs = undefined;
+          } else if (current.startedAtMs != null) {
+            current.elapsedMs = Math.max(0, Date.now() - current.startedAtMs);
+          }
+          // Skip redraw when finishing the last step so the summary is the only place final state is shown
+          if (id === "cli" && status !== "in_progress") return;
+          // In personalize flow, show step prompts only; render the boxed summary at the end.
+          if (useAdvancedPrompts) return;
+          renderProgressBlock();
+        };
+        const setInitProgressSummaryLines = (id: InitProgressStepId, lines: string[]): void => {
+          const normalized = lines.map((line) => line.trim()).filter((line) => line.length > 0);
+          initProgress[id].summaryLines = normalized.length > 0 ? normalized : undefined;
+        };
+        const writePersonalizeStepBanner = (id: InitProgressStepId, title: string): void => {
+          if (!progressEnabled || !useAdvancedPrompts) return;
+          const index = INIT_PROGRESS_STEPS.findIndex((step) => step.id === id);
+          process.stdout.write(
+            nl() +
+              dim(`[${index + 1}/${INIT_PROGRESS_STEPS.length}]`) +
+              " " +
+              bold(`Personalize ${title}`) +
+              nl()
+          );
+        };
 
         // Data directory and dir/DB creation run after plan when interactive (so "p=personalize" can prompt for data dir)
 
@@ -3554,18 +3848,24 @@ program
         let keyPath: string | undefined;
         let keyPathWrittenToEnv = false;
 
-        // 4. .env in repo: use envRepoRoot (cwd repo, saved config, or path prompted below when not in repo)
+        // 4. .env target: project checkout when detected, otherwise user-level env.
         let envExamplePath: string | null = envRepoRoot
           ? path.join(envRepoRoot, ".env.example")
           : null;
-        let envPath: string | null = envRepoRoot ? path.join(envRepoRoot, ".env") : null;
+        let envPath: string | null = envRepoRoot ? path.join(envRepoRoot, ".env") : USER_ENV_PATH;
         const mcpTokenEncryptionKey = randomBytes(32).toString("hex");
         let envContent = ""; // built after plan with final dataDir
 
-        // When not in a source checkout, prompt for path so we can create .env there.
-        // This runs in normal interactive init too (not only --advanced) so
-        // .env setup is not skipped just because init was started outside a source checkout.
-        if (!envRepoRoot && process.stdout.isTTY && !opts.skipEnv && !opts.yes) {
+        // In personalization mode, allow entering a Neotoma source path for .env setup.
+        // Default mode should not prompt for this path.
+        if (
+          !envRepoRoot &&
+          process.stdout.isTTY &&
+          !opts.skipEnv &&
+          !opts.yes &&
+          useAdvancedPrompts
+        ) {
+          writePersonalizeStepBanner("env", "Environment target");
           process.stdout.write(nl() + bullet(heading("Neotoma path")) + nl());
           const raw = await askQuestion("Neotoma path [default: skip]: ");
           const trimmed = raw.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
@@ -3584,7 +3884,7 @@ program
               process.stdout.write(
                 bullet(
                   warn(
-                    "Not a valid Neotoma source checkout (package.json name must be 'neotoma'). Skipping .env setup."
+                    "Not a valid Neotoma source checkout (missing expected source files). Skipping project .env setup."
                   )
                 ) + "\n"
               );
@@ -3624,6 +3924,10 @@ program
           mode: authModeFromFlag ?? defaultInitAuthMode,
           oauthCompleted: false,
         };
+        let authSummaryLines: string[] = [];
+        let personalizedAuthMode: InitAuthMode | null = null;
+        let earlyOpenAiPrompted = false;
+        let earlyOpenAiInput = "";
         if (outputMode === "pretty" && process.stdout.isTTY && !opts.yes && !useAdvancedPrompts) {
           const configuredAuth = await detectConfiguredAuthMode(envPath);
           const envExists = envPath ? await pathExists(envPath) : false;
@@ -3634,12 +3938,24 @@ program
               p.toLowerCase().includes("claude") ||
               p.includes(`${path.sep}.codex${path.sep}`)
           );
+          const existingMcpPathsForPlan = mcpScan.configs
+            .map((c) => c.path)
+            .filter(
+              (p) =>
+                p.includes(`${path.sep}.cursor${path.sep}`) ||
+                p.toLowerCase().includes("claude") ||
+                p.includes(`${path.sep}.codex${path.sep}`)
+            );
           let cliRulePathsForPlan: string[] = [];
           try {
             const { getUserAppliedRulePaths } = await import("./agent_instructions_scan.js");
             const userRulePaths = getUserAppliedRulePaths();
             if (userRulePaths) {
-              cliRulePathsForPlan = [userRulePaths.cursor, userRulePaths.claude, userRulePaths.codex];
+              cliRulePathsForPlan = [
+                userRulePaths.cursor,
+                userRulePaths.claude,
+                userRulePaths.codex,
+              ];
             }
           } catch {
             // Non-fatal; path list is optional in plan view.
@@ -3673,6 +3989,9 @@ program
               details: [
                 "Create data, sources, and logs at this location.",
                 "Initialize local development and production SQLite databases with WAL mode.",
+                ...(detectedInitializedDataDir != null
+                  ? [`Detected existing initialized data directory: ${detectedInitializedDataDir}`]
+                  : []),
               ],
             },
             {
@@ -3681,6 +4000,9 @@ program
               details:
                 envPath && !opts.skipEnv
                   ? [
+                      envRepoRoot
+                        ? "Project env target selected from detected source checkout."
+                        : "User env target selected because no source checkout was detected.",
                       envExists
                         ? "Update local environment file by filling in missing defaults."
                         : "Create local environment file with detected defaults.",
@@ -3691,42 +4013,42 @@ program
             {
               label: "MCP configuration",
               value:
-                mcpMissingProd && mcpScan.repoRoot && mcpUserPathsForPlan.length > 0
+                mcpMissingProd && mcpUserPathsForPlan.length > 0
                   ? mcpUserPathsForPlan
-                  : mcpMissingProd && mcpScan.repoRoot
+                  : mcpMissingProd
                     ? "User-wide production usage"
                     : "No changes",
               details:
-                mcpMissingProd && mcpScan.repoRoot
+                mcpMissingProd
                   ? [
                       "Add or update user-level Neotoma production server entries for Cursor, Claude, and Codex.",
                       "Keep project-level MCP configurations unchanged.",
                     ]
-                  : mcpScan.repoRoot
-                    ? ["Keep existing production MCP server configuration."]
+                  : existingMcpPathsForPlan.length > 0
+                    ? ["No MCP changes planned. Existing configuration details are shown in initialization output."]
                     : undefined,
             },
             {
               label: "CLI instructions",
               value:
-                mcpScan.repoRoot && cliRulePathsForPlan.length > 0
+                cliRulePathsForPlan.length > 0
                   ? cliRulePathsForPlan
-                  : mcpScan.repoRoot
-                    ? [
-                        "~/.cursor/rules/neotoma_cli.mdc",
-                        "~/.claude/rules/neotoma_cli.mdc",
-                        "~/.codex/neotoma_cli.md",
-                      ]
-                    : "Skipped",
-              details: mcpScan.repoRoot
-                ? [
-                    "Write or refresh local CLI instruction rules for Cursor, Claude, and Codex.",
-                    "Prefer MCP access when available and use CLI as fallback.",
-                  ]
-                : undefined,
+                  : [
+                      "~/.cursor/rules/neotoma_cli.mdc",
+                      "~/.claude/rules/neotoma_cli.mdc",
+                      "~/.codex/neotoma_cli.md",
+                    ],
+              details: [
+                "Write or refresh local CLI instruction rules for Cursor, Claude, and Codex.",
+                "Prefer MCP access when available and use CLI as fallback.",
+              ],
             },
           ];
-          const labelWidth = Math.max(...planRows.map((r) => displayWidth(r.label)));
+          const numberedPlanRows = planRows.map((row, index) => ({
+            ...row,
+            label: `${index + 1}. ${row.label}`,
+          }));
+          const labelWidth = Math.max(...numberedPlanRows.map((r) => displayWidth(r.label)));
           const termWidth = getTerminalWidth(0);
           const gap = 2;
           // Cap value width so full line fits inside blackBox (box truncates with "…" otherwise)
@@ -3740,9 +4062,16 @@ program
             Math.max(20, termWidth - labelWidth - gap - 2),
             maxBoxContentWidth - labelWidth - gap
           );
-          const tableLines: string[] = [bold("Step") + " ".repeat(Math.max(0, labelWidth - 4)) + "  " + bold("Details")];
-          tableLines.push(dim("─".repeat(labelWidth) + "  " + "─".repeat(Math.min(valueWidth, 50))));
-          for (const row of planRows) {
+          const tableLines: string[] = [
+            bold("Step") +
+              " ".repeat(Math.max(0, labelWidth - 4)) +
+              "  " +
+              bold("Details"),
+          ];
+          tableLines.push(
+            dim("─".repeat(labelWidth) + "  " + "─".repeat(Math.min(valueWidth, 50)))
+          );
+          for (const row of numberedPlanRows) {
             const valueLines = Array.isArray(row.value) ? row.value : [row.value];
             const indent = " ".repeat(labelWidth + gap);
             let firstValueLine = true;
@@ -3778,9 +4107,7 @@ program
               nl() +
               nl()
           );
-          const decision = (
-            await askQuestion("Apply plan? [Enter=apply, p=personalize, q=quit]: ")
-          )
+          const decision = (await askQuestion("Apply plan? [Enter=apply, p=personalize, q=quit]: "))
             .trim()
             .toLowerCase();
           if (
@@ -3793,21 +4120,123 @@ program
           }
           if (decision === "p" || decision === "personalize") {
             useAdvancedPrompts = true;
-            process.stdout.write(dim("Switching to advanced interactive prompts.") + nl() + nl());
-            const rawDataDir = await askQuestion(
-              "Data directory [default: " + pathStyle(dataDir) + "]: "
+            process.stdout.write(
+              dim("Switching to advanced interactive prompts.") +
+                nl() +
+                dim("You will customize setup step-by-step before applying changes.") +
+                nl() +
+                nl()
             );
-            const trimmedDataDir = rawDataDir.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
-            if (trimmedDataDir) {
-              dataDir = path.isAbsolute(trimmedDataDir)
-                ? trimmedDataDir
-                : path.resolve(repoRoot ?? process.cwd(), trimmedDataDir);
+            writePersonalizeStepBanner("auth", "Authentication");
+            process.stdout.write(nl());
+            if (!authModeFromFlag) {
+              const optW = 6;
+              const modeW = 36;
+              const encW = 10;
+              const header =
+                dim(
+                  padToDisplayWidth("Option", optW) +
+                    "  " +
+                    padToDisplayWidth("Mode", modeW) +
+                    "  " +
+                    padToDisplayWidth("Encrypted", encW)
+                ) +
+                "\n" +
+                dim(
+                  padToDisplayWidth("------", optW) +
+                    "  " +
+                    "-".repeat(modeW) +
+                    "  " +
+                    "-".repeat(encW)
+                );
+              process.stdout.write(header + "\n");
               process.stdout.write(
-                bullet(success("Using data directory: ") + pathStyle(dataDir)) + "\n" + nl()
+                padToDisplayWidth("1", optW) +
+                  "  " +
+                  padToDisplayWidth("Default user (no login)", modeW) +
+                  "  " +
+                  padToDisplayWidth("No", encW) +
+                  "\n"
               );
+              process.stdout.write(
+                padToDisplayWidth("2", optW) +
+                  "  " +
+                  padToDisplayWidth("Key-derived user", modeW) +
+                  "  " +
+                  padToDisplayWidth("Yes", encW) +
+                  "\n"
+              );
+              const authChoice = await askQuestion("Auth mode [1-2] [default: 1]: ");
+              personalizedAuthMode = normalizeInitAuthMode(authChoice) ?? defaultInitAuthMode;
+              if (personalizedAuthMode === "dev_local") {
+                process.stdout.write(success("Authenticated") + nl());
+              }
+            }
+            process.stdout.write(nl());
+            writePersonalizeStepBanner("data", "Data directory");
+            for (;;) {
+              const rawDataDir = await askQuestion(
+                "Data directory [default: " + pathStyle(dataDir) + "]: "
+              );
+              const trimmedDataDir = rawDataDir
+                .trim()
+                .replace(/^~(?=\/|$)/, process.env.HOME || "");
+              const candidateDataDir = trimmedDataDir
+                ? path.isAbsolute(trimmedDataDir)
+                  ? trimmedDataDir
+                  : path.resolve(repoRoot ?? process.cwd(), trimmedDataDir)
+                : dataDir;
+              try {
+                await fs.mkdir(candidateDataDir, { recursive: true });
+                dataDir = candidateDataDir;
+                if (trimmedDataDir) {
+                  forceSyncDataDirToEnv = true;
+                  process.stdout.write(
+                    bullet(success("Using data directory: ") + pathStyle(dataDir)) + "\n" + nl()
+                  );
+                } else if (progressEnabled) {
+                  process.stdout.write(
+                    bullet(dim("Using default data directory: ") + pathStyle(dataDir)) + "\n" + nl()
+                  );
+                }
+                break;
+              } catch (error) {
+                process.stdout.write(
+                  bullet(
+                    warn(
+                      "Cannot use data directory " +
+                        pathStyle(candidateDataDir) +
+                        ": " +
+                        formatCliError(error)
+                    )
+                  ) + "\n"
+                );
+                process.stdout.write(dim("Enter a different path.") + nl() + nl());
+              }
             }
           }
         }
+
+        if (!useAdvancedPrompts && !opts.skipEnv && envPath && outputMode === "pretty" && process.stdout.isTTY) {
+          let existingOpenAi = (process.env.OPENAI_API_KEY ?? "").trim();
+          if (!existingOpenAi) {
+            try {
+              const envText = await fs.readFile(envPath, "utf-8");
+              const parsedOpenAi = envText.match(/^\s*OPENAI_API_KEY=(.*)$/m)?.[1]?.trim();
+              if (parsedOpenAi) {
+                existingOpenAi = parsedOpenAi.replace(/^['"]|['"]$/g, "").trim();
+              }
+            } catch {
+              // .env may not exist yet; prompt below if key is still unset.
+            }
+          }
+          if (!existingOpenAi) {
+            earlyOpenAiInput = await askQuestion(OPENAI_API_KEY_PROMPT);
+            earlyOpenAiPrompted = true;
+          }
+        }
+
+        setInitProgress("data", "in_progress");
 
         // Create data directories and DBs (and build envContent) now that final dataDir is set
         envContent = `# Neotoma Environment Configuration
@@ -3873,6 +4302,17 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         } else {
           steps.push({ name: ".env.example", status: "skipped" });
         }
+        {
+          const dataCreatedCount = steps.filter((s) => s.status === "created").length;
+          const dataExistingCount = steps.filter((s) => s.status === "exists").length;
+          const dataSkippedCount = steps.filter((s) => s.status === "skipped").length;
+          const dataDetailParts = [
+            `created ${dataCreatedCount}`,
+            `reused ${dataExistingCount}`,
+            ...(dataSkippedCount > 0 ? [`skipped ${dataSkippedCount}`] : []),
+          ];
+          setInitProgress("data", "done", dataDetailParts.join(", "));
+        }
 
         // Output results
         if (outputMode === "json") {
@@ -3926,45 +4366,47 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         }
 
         if (process.stdout.isTTY) {
-          const createdCount = steps.filter((s) => s.status === "created").length;
-          const existingCount = steps.filter((s) => s.status === "exists").length;
-          const summary =
-            createdCount > 0 && existingCount > 0
-              ? success("✓") + ` Created ${createdCount} items; found ${existingCount} existing items.`
-              : createdCount > 0
-                ? success("✓") + ` Created ${createdCount} items.`
-                : existingCount > 0
-                  ? success("✓") + ` Found ${existingCount} existing items.`
-                  : success("✓") + " Prepared directories and files.";
-          process.stdout.write("\n" + summary + "\n");
-          for (const step of steps) {
-            const statusText =
-              step.status === "created"
-                ? success("created")
-                : step.status === "exists"
-                  ? dim("already existed")
-                  : step.status === "skipped"
-                    ? dim("skipped")
-                    : success("done");
-            const pathPart = step.path ? " " + pathStyle(`(${step.path})`) : "";
-            process.stdout.write(bullet(`${step.name}: ${statusText}${pathPart}`) + "\n");
+          if (!progressEnabled) {
+            const createdCount = steps.filter((s) => s.status === "created").length;
+            const existingCount = steps.filter((s) => s.status === "exists").length;
+            const summary =
+              createdCount > 0 && existingCount > 0
+                ? success("✓") +
+                  ` Created ${createdCount} items; found ${existingCount} existing items.`
+                : createdCount > 0
+                  ? success("✓") + ` Created ${createdCount} items.`
+                  : existingCount > 0
+                    ? success("✓") + ` Found ${existingCount} existing items.`
+                    : success("✓") + " Prepared directories and files.";
+            process.stdout.write("\n" + summary + "\n");
+            for (const step of steps) {
+              const statusText =
+                step.status === "created"
+                  ? success("created")
+                  : step.status === "exists"
+                    ? dim("already existed")
+                    : step.status === "skipped"
+                      ? dim("skipped")
+                      : success("done");
+              const pathPart = step.path ? " " + pathStyle(`(${step.path})`) : "";
+              process.stdout.write(bullet(`${step.name}: ${statusText}${pathPart}`) + "\n");
+            }
+            process.stdout.write(nl());
           }
-          process.stdout.write(nl());
+          setInitProgress("auth", "in_progress");
 
           // Start temporary API once at start of init if needed (OAuth or dev_local); stop at end of init
           try {
             const config = await readConfig();
             const baseUrl = await resolveBaseUrl(program.opts().baseUrl, config);
             if (!(await isApiReachable(baseUrl)) && repoRoot && isLocalHost(baseUrl)) {
-              writeTemporaryApiStatusMessage(
-                "API is not running. Starting temporary API for initialization...",
-                outputMode
-              );
+              suspendLiveProgress();
               temporaryApiForInit = await startTemporaryApiForInit({
                 repoRoot,
                 baseUrl,
                 outputMode,
                 startedMessage: ".",
+                suppressStartedStatus: true,
               });
             }
           } catch {
@@ -3973,7 +4415,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
           const configuredAuth = await detectConfiguredAuthMode(envPath);
           let authStatusNote: string | null = null;
-          if (configuredAuth && !authModeFromFlag) {
+          if (personalizedAuthMode) {
+            initAuthSummary.mode = personalizedAuthMode;
+            authStatusNote = "personalized";
+          } else if (configuredAuth && !authModeFromFlag && !useAdvancedPrompts) {
             initAuthSummary.mode = configuredAuth.mode;
             authStatusNote = "configured in " + configuredAuth.source;
           } else {
@@ -3981,7 +4426,9 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               initAuthSummary.mode = defaultInitAuthMode;
               authStatusNote = "default";
             } else {
-              process.stdout.write(nl() + bullet(heading("Choose authentication mode")) + nl());
+              suspendLiveProgress();
+              writePersonalizeStepBanner("auth", "Authentication");
+              process.stdout.write(nl());
               if (!authModeFromFlag) {
                 const optW = 6;
                 const modeW = 36;
@@ -4039,15 +4486,9 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                   });
                   if (res.ok) {
                     const me = (await res.json()) as { user_id?: string };
-                    process.stdout.write(
-                      bullet(
-                        success("✓") +
-                          " Authenticated with OAuth; user ID " +
-                          (me.user_id ?? "—") +
-                          "." +
-                          nl()
-                      )
-                    );
+                    authSummaryLines = [
+                      `Authenticated with OAuth; user ID ${me.user_id ?? "—"}.`,
+                    ];
                   }
                 }
               } catch {
@@ -4138,27 +4579,34 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                 const me = (await res.json()) as { user_id?: string };
                 if (me.user_id) {
                   const note = authStatusNote ? ` (${authStatusNote})` : "";
-                  writeMessage(
-                    "\n" +
-                      success("✓") +
-                      " Authenticated as " +
-                      initAuthModeLabel(initAuthSummary.mode) +
-                      note +
-                      "; user ID " +
-                      me.user_id +
-                      ".",
-                    outputMode
-                  );
+                  authSummaryLines = [
+                    `Authenticated as ${initAuthModeLabel(initAuthSummary.mode)}${note}; user ID ${me.user_id}.`,
+                  ];
                 }
               }
             } catch {
               // Skip showing user ID on error (e.g. API not reachable)
             }
           }
+          const authDetail =
+            initAuthSummary.mode === "oauth" && initAuthSummary.oauthDeferredReason
+              ? "oauth deferred"
+              : initAuthSummary.mode === "oauth" && initAuthSummary.oauthCompleted
+                ? "oauth complete"
+                : initAuthSummary.mode === "key_derived" && keyPath
+                  ? "key configured"
+                  : initAuthModeLabel(initAuthSummary.mode).toLowerCase();
+          setInitProgress("auth", "done", authDetail);
+          setInitProgressSummaryLines("auth", authSummaryLines);
+        } else {
+          setInitProgress("auth", "skipped", "non-interactive output");
         }
 
         let _envCreated = false;
         let _envConfigured = false;
+        let envOpenAiOutcome: "saved" | "updated" | "already_set" | "skipped" | "not_prompted" =
+          "not_prompted";
+        let envSummaryLines: string[] = [];
 
         const INIT_ENV_VARS = [
           "NEOTOMA_DATA_DIR",
@@ -4192,9 +4640,27 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           if (value.length <= 8) return "***";
           return value.slice(0, 6) + "…***";
         };
+        const buildEnvSummaryLines = (resolvedValues: Record<string, string | undefined>): string[] =>
+          INIT_ENV_VARS.map((name) => {
+            const value = resolvedValues[name];
+            const set = value != null && String(value).trim() !== "";
+            const display =
+              set && SECRET_ENV_VARS.has(name)
+                ? maskSecret(String(value))
+                : set
+                  ? String(value)
+                  : "not set";
+            return `${name}: ${set ? display : "optional (not set)"}`;
+          });
 
-        if (process.stdout.isTTY && !opts.skipEnv && envPath && envExamplePath) {
+        if (opts.skipEnv || !envPath) {
+          const reason = opts.skipEnv ? "--skip-env" : "no env target";
+          setInitProgress("env", "skipped", reason);
+        } else if (process.stdout.isTTY) {
+          setInitProgress("env", "in_progress");
+          suspendLiveProgress();
           const envPathStr = envPath;
+          await fs.mkdir(path.dirname(envPathStr), { recursive: true });
           let envExists = false;
           try {
             await fs.access(envPathStr);
@@ -4219,7 +4685,11 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             let changed = false;
             for (const [key, value] of Object.entries(knownDefaults)) {
               const current = parsed[key];
-              if (current == null || String(current).trim() === "") {
+              const shouldWriteValue =
+                current == null ||
+                String(current).trim() === "" ||
+                (key === "NEOTOMA_DATA_DIR" && forceSyncDataDirToEnv);
+              if (shouldWriteValue) {
                 const keyLine = new RegExp(
                   `^#?\\s*${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=.*$`,
                   "m"
@@ -4252,93 +4722,86 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           }
           // When .env does not exist, do not merge knownDefaults into resolved so we show
           // "not set" for vars that are not in process.env; after creating .env we write defaults via envContent.
-
-          process.stdout.write(
-            nl() + bullet(heading("Set environment variables") + " " + dim(pathStyle(envPathStr))) + nl()
-          );
-          for (const name of INIT_ENV_VARS) {
-            const value = resolved[name];
-            const set = value != null && String(value).trim() !== "";
-            const display = set
-              ? SECRET_ENV_VARS.has(name)
-                ? maskSecret(String(value))
-                : String(value)
-              : "";
-            const defaultVal = knownDefaults[name];
-            const defaultHint =
-              defaultVal != null && SECRET_ENV_VARS.has(name)
-                ? dim("(set by init when creating .env)")
-                : defaultVal != null
-                  ? dim(`(default: ${defaultVal})`)
-                  : dim("(not set)");
-            const status = set
-              ? success("already set") + (display ? " " + dim(`(${display})`) : "")
-              : dim("optional") + " " + defaultHint;
-            process.stdout.write(bullet(`${pathStyle(name)}: ${status}`) + "\n");
-          }
-          process.stdout.write(nl());
+          // Env var details are shown only as sublines under the Environment step in the final summary.
+          envSummaryLines = buildEnvSummaryLines(resolved);
 
           if (!envExists) {
-            const createEnv = useAdvancedPrompts
-              ? await askYesNo("Create .env from .env.example and configure now? (y/n): ")
-              : true;
-            if (createEnv) {
-              await fs.writeFile(envPathStr, envContent);
-              _envCreated = true;
-              process.stdout.write(
-                bullet(success(".env created with detected paths and defaults.")) + "\n"
-              );
-              process.stdout.write(bullet(dim("Path: ") + pathStyle(envPathStr)) + "\n");
-            }
+            // Always create .env during init so personalize mode remains streamlined.
+            await fs.writeFile(envPathStr, envContent);
+            _envCreated = true;
           }
 
           const openAiSet =
             resolved.OPENAI_API_KEY != null && String(resolved.OPENAI_API_KEY).trim() !== "";
+          if (openAiSet) {
+            envOpenAiOutcome = "already_set";
+          }
           const shouldPromptOpenAi = !opts.yes && outputMode === "pretty" && process.stdout.isTTY;
           if (!openAiSet && shouldPromptOpenAi) {
-            const keyVal = await askQuestion(
-              "OPENAI_API_KEY value [optional, Enter to skip]: "
-            );
+            let keyVal = "";
+            if (earlyOpenAiPrompted && !useAdvancedPrompts) {
+              keyVal = earlyOpenAiInput;
+            } else {
+              if (useAdvancedPrompts) {
+                writePersonalizeStepBanner("env", "environment variables");
+              } else if (progressEnabled) {
+                renderProgressBlock();
+              }
+              keyVal = await askQuestion(OPENAI_API_KEY_PROMPT);
+            }
             if (keyVal.trim()) {
               let envText: string;
               try {
                 envText = await fs.readFile(envPathStr, "utf-8");
               } catch {
-                envText = await fs.readFile(envExamplePath, "utf-8");
+                if (envExamplePath) {
+                  envText = await fs.readFile(envExamplePath, "utf-8");
+                } else {
+                  envText = envContent;
+                }
               }
               const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
               if (openAiLine.test(envText)) {
                 envText = envText.replace(
                   openAiLine,
-                  "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
+                  "OPENAI_API_KEY=" + normalizeSingleLineInput(keyVal)
                 );
               } else {
                 envText =
-                  envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
+                  envText.trimEnd() +
+                  "\nOPENAI_API_KEY=" +
+                  normalizeSingleLineInput(keyVal) +
+                  "\n";
               }
               await fs.writeFile(envPathStr, envText);
-              process.stdout.write(bullet(success("OPENAI_API_KEY saved to .env.")) + "\n");
               _envConfigured = true;
+              envOpenAiOutcome = "saved";
+            } else {
+              envOpenAiOutcome = "skipped";
             }
           } else if (envExists && useAdvancedPrompts) {
-            const keyVal = await askQuestion(
-              "OPENAI_API_KEY value [optional, Enter to skip]: "
-            );
+            writePersonalizeStepBanner("env", "environment variables");
+            const keyVal = await askQuestion(OPENAI_API_KEY_PROMPT);
             if (keyVal.trim()) {
               let envText = await fs.readFile(envPathStr, "utf-8");
-                const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
-                if (openAiLine.test(envText)) {
-                  envText = envText.replace(
-                    openAiLine,
-                    "OPENAI_API_KEY=" + keyVal.replace(/\n/g, "")
-                  );
-                } else {
-                  envText =
-                    envText.trimEnd() + "\nOPENAI_API_KEY=" + keyVal.replace(/\n/g, "") + "\n";
-                }
+              const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
+              if (openAiLine.test(envText)) {
+                envText = envText.replace(
+                  openAiLine,
+                  "OPENAI_API_KEY=" + normalizeSingleLineInput(keyVal)
+                );
+              } else {
+                envText =
+                  envText.trimEnd() +
+                  "\nOPENAI_API_KEY=" +
+                  normalizeSingleLineInput(keyVal) +
+                  "\n";
+              }
               await fs.writeFile(envPathStr, envText);
-              process.stdout.write(bullet(success("OPENAI_API_KEY updated in .env.")) + "\n");
               _envConfigured = true;
+              envOpenAiOutcome = "updated";
+            } else {
+              envOpenAiOutcome = "skipped";
             }
           }
           // When user created/selected a key during init, write NEOTOMA_KEY_FILE_PATH to .env so key-auth works
@@ -4354,11 +4817,36 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               await fs.writeFile(envPathStr, envText);
               keyPathWrittenToEnv = true;
             } catch {
-              // .env may not exist if user skipped create
+              // .env write failures are non-fatal here; continue init flow.
             }
           }
+          const envDetailParts: string[] = [];
+          envDetailParts.push(_envCreated ? ".env created" : "existing .env");
+          if (_envConfigured) {
+            envDetailParts.push(`OpenAI key ${envOpenAiOutcome}`);
+          } else if (envOpenAiOutcome === "already_set") {
+            envDetailParts.push("OpenAI key already set");
+          } else if (envOpenAiOutcome === "skipped") {
+            envDetailParts.push("OpenAI key skipped");
+          } else {
+            envDetailParts.push("OpenAI key not prompted");
+          }
+          // Re-read env state after any writes (OpenAI/key path/default fill) so summary reflects final values.
+          const finalResolved: Record<string, string | undefined> = { ...process.env };
+          try {
+            const finalEnvText = await fs.readFile(envPathStr, "utf-8");
+            Object.assign(finalResolved, parseEnvFile(finalEnvText));
+          } catch {
+            // Keep process.env values when env file is unavailable.
+          }
+          envSummaryLines = buildEnvSummaryLines(finalResolved);
+          setInitProgress("env", "done", envDetailParts.join(", "));
+          setInitProgressSummaryLines("env", envSummaryLines);
+        } else {
+          setInitProgress("env", "skipped", "non-interactive output");
         }
         if (keyPath) {
+          suspendLiveProgress();
           process.stdout.write(nl() + heading("Encryption enabled") + nl());
           process.stdout.write(keyValue("Key file", keyPath, true) + "\n");
           process.stdout.write(
@@ -4378,23 +4866,56 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
         // MCP config: offer to add dev/prod servers if scan found configs missing them.
         // In init, show the same Initialization table used by session startup so MCP + CLI status are aligned.
+        const getRelevantMcpPaths = (): string[] =>
+          Array.from(
+            new Set(
+              mcpScan.configs
+                .map((c) => c.path)
+                .filter(
+                  (p) =>
+                    p.includes(`${path.sep}.cursor${path.sep}`) ||
+                    p.toLowerCase().includes("claude") ||
+                    p.includes(`${path.sep}.codex${path.sep}`)
+                )
+            )
+          );
+        const summarizePathChanges = (updated: string[], existing: string[]): string[] => {
+          const updatedSet = new Set(updated);
+          const lines: string[] = [];
+          for (const p of updated) lines.push(`updated: ${p}`);
+          for (const p of existing) {
+            if (!updatedSet.has(p)) lines.push(`existing: ${p}`);
+          }
+          return lines;
+        };
         let mcpInstallResult:
-          | { installed: boolean; message: string; scope?: "project" | "user" | "both"; updatedPaths?: string[] }
+          | {
+              installed: boolean;
+              message: string;
+              scope?: "project" | "user" | "both";
+              updatedPaths?: string[];
+            }
           | undefined;
-        if (outputMode === "pretty" && process.stdout.isTTY && mcpScan.repoRoot) {
+        const initMcpRoot = mcpScan.repoRoot ?? repoRoot ?? process.cwd();
+        setInitProgress("mcp", "in_progress");
+        if (useAdvancedPrompts) {
+          writePersonalizeStepBanner("mcp", "MCP configuration");
+        }
+        if (outputMode === "pretty" && process.stdout.isTTY) {
           try {
             const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
-            await scanAgentInstructions(mcpScan.repoRoot, {
+            await scanAgentInstructions(initMcpRoot, {
               includeUserLevel: true,
             });
           } catch {
             // Best-effort scan for setup hints; continue init on scan failures.
           }
         }
-        if (mcpMissingProd && mcpScan.repoRoot) {
+        if (mcpMissingProd) {
           try {
+            suspendLiveProgress();
             const { offerInstall } = await import("./mcp_config_scan.js");
-            mcpInstallResult = await offerInstall(mcpScan.configs, mcpScan.repoRoot, {
+            mcpInstallResult = await offerInstall(mcpScan.configs, initMcpRoot, {
               boxAlreadyShown: outputMode === "pretty" && process.stdout.isTTY,
               ...(useAdvancedPrompts
                 ? {}
@@ -4409,69 +4930,125 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               mcpInstallResult.updatedPaths &&
               mcpInstallResult.updatedPaths.length > 0
             ) {
+              // Keep install details in the final initialization summary table.
+            }
+            if (mcpInstallResult?.installed) {
+              setInitProgress("mcp", "done", "updated production entries");
+              setInitProgressSummaryLines(
+                "mcp",
+                summarizePathChanges(mcpInstallResult.updatedPaths ?? [], getRelevantMcpPaths())
+              );
+            } else {
+              setInitProgress("mcp", "done", "already configured");
+              setInitProgressSummaryLines("mcp", summarizePathChanges([], getRelevantMcpPaths()));
+            }
+          } catch {
+            if (!isBalancedPersonalizeOutput()) {
               process.stdout.write(
-                success("✓ ") +
-                  "Added MCP configuration to: " +
-                  mcpInstallResult.updatedPaths.join(", ") +
+                nl() +
+                  dim("Run ") +
+                  pathStyle("neotoma mcp check") +
+                  dim(
+                    " later to add production server (or development+production) to your MCP configurations."
+                  ) +
                   nl()
               );
             }
-          } catch {
-            process.stdout.write(
-              nl() +
-                dim("Run ") +
-                pathStyle("neotoma mcp check") +
-                dim(
-                  " later to add production server (or development+production) to your MCP configurations."
-                ) +
-                nl()
-            );
+            setInitProgress("mcp", "failed", "run neotoma mcp check");
           }
+        } else {
+          setInitProgress("mcp", "done", "already configured");
+          setInitProgressSummaryLines("mcp", summarizePathChanges([], getRelevantMcpPaths()));
         }
 
-        if (outputMode === "pretty" && process.stdout.isTTY && mcpScan.repoRoot) {
+        setInitProgress("cli", "in_progress");
+        let cliUpdatedPaths: string[] = [];
+        if (outputMode === "pretty" && process.stdout.isTTY) {
           try {
-            const configureCli = useAdvancedPrompts
-              ? await askYesNo(
-                  "Configure CLI instructions (prefer MCP when available, CLI as backup)? (y/n): "
-                )
-              : true;
+            suspendLiveProgress();
+            if (useAdvancedPrompts) {
+              writePersonalizeStepBanner("cli", "CLI instructions");
+            }
+            const configureCli = await (useAdvancedPrompts
+              ? (() => {
+                  // Default yes in personalize flow for quicker setup.
+                  return askQuestion(
+                    "Configure CLI instructions (prefer MCP when available, CLI as backup)? [Y/n]: "
+                  ).then((answer) => {
+                    const a = answer.trim().toLowerCase();
+                    if (a === "" || a === "y" || a === "yes") return true;
+                    if (a === "n" || a === "no") return false;
+                    return true;
+                  });
+                })()
+              : Promise.resolve(true));
             if (configureCli) {
-              const { scanAgentInstructions, offerAddPreferCliRule } =
+              const {
+                scanAgentInstructions,
+                offerAddPreferCliRule,
+                getUserAppliedRulePaths,
+                PROJECT_APPLIED_RULE_PATHS,
+              } =
                 await import("./agent_instructions_scan.js");
-              const scanResult = await scanAgentInstructions(mcpScan.repoRoot, {
+              const scanResult = await scanAgentInstructions(initMcpRoot, {
                 includeUserLevel: true,
               });
+              const appliedCliPaths: string[] = [];
+              const userRulePaths = getUserAppliedRulePaths();
+              if (scanResult.appliedProject.cursor) {
+                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.cursor));
+              }
+              if (scanResult.appliedProject.claude) {
+                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.claude));
+              }
+              if (scanResult.appliedProject.codex) {
+                appliedCliPaths.push(path.join(initMcpRoot, PROJECT_APPLIED_RULE_PATHS.codex));
+              }
+              if (userRulePaths) {
+                if (scanResult.appliedUser.cursor) appliedCliPaths.push(userRulePaths.cursor);
+                if (scanResult.appliedUser.claude) appliedCliPaths.push(userRulePaths.claude);
+                if (scanResult.appliedUser.codex) appliedCliPaths.push(userRulePaths.codex);
+              }
               if (scanResult.missingInApplied || scanResult.needsUpdateInApplied) {
+                const preferredCliScope: "project" | "user" | "both" | undefined =
+                  mcpInstallResult?.scope ?? (useAdvancedPrompts ? undefined : "user");
                 const { added, skipped } = await offerAddPreferCliRule(scanResult, {
                   nonInteractive: false,
-                  ...(useAdvancedPrompts ? {} : { scope: "user" as const }),
+                  ...(preferredCliScope ? { scope: preferredCliScope } : {}),
                 });
                 if (added.length > 0) {
-                  process.stdout.write(
-                    success("✓ ") + "Added CLI instructions to: " + added.join(", ") + nl()
+                  cliUpdatedPaths = added;
+                  setInitProgress("cli", "done", `updated ${added.length} file(s)`);
+                  setInitProgressSummaryLines(
+                    "cli",
+                    summarizePathChanges(cliUpdatedPaths, appliedCliPaths)
                   );
                 } else if (skipped) {
-                  process.stdout.write(
-                    dim("CLI instructions are already up to date for the selected scope.") + nl()
-                  );
+                  setInitProgress("cli", "done", "already up to date");
+                  setInitProgressSummaryLines("cli", summarizePathChanges([], appliedCliPaths));
                 }
               } else {
-                process.stdout.write(dim("CLI instructions are already up to date.") + nl());
+                setInitProgress("cli", "done", "already up to date");
+                setInitProgressSummaryLines("cli", summarizePathChanges([], appliedCliPaths));
               }
+            } else {
+              setInitProgress("cli", "skipped", "user skipped");
             }
           } catch {
-            process.stdout.write(dim("Could not check CLI instructions.") + nl());
+            if (!isBalancedPersonalizeOutput()) {
+              process.stdout.write(dim("Could not check CLI instructions.") + nl());
+            }
+            setInitProgress("cli", "failed", "could not verify CLI instructions");
           }
+        } else {
+          setInitProgress("cli", "skipped", "non-interactive output");
         }
 
         // Persist Neotoma source root so "neotoma" can start servers from any cwd
-        let configRepoRoot = repoRoot ?? (await readConfig()).repo_root;
-        // In pretty mode (not json), ask for Neotoma path if not found
+        let configRepoRoot = repoRoot ?? configuredProjectRoot(await readConfig());
+        // Never prompt for source checkout path unless personalization mode is active.
         if (!configRepoRoot && outputMode === "pretty" && useAdvancedPrompts) {
-          const pathInput = await askQuestion(
-            "Path to Neotoma source checkout [default: skip]: "
-          );
+          const pathInput = await askQuestion("Path to Neotoma source checkout [default: skip]: ");
           if (pathInput) {
             const validated = await validateNeotomaRepo(pathInput);
             if (validated) configRepoRoot = validated;
@@ -4481,7 +5058,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           const config = await readConfig();
           const nextConfig: Config = {
             ...config,
-            ...(configRepoRoot ? { repo_root: configRepoRoot } : {}),
+            ...(configRepoRoot ? { project_root: configRepoRoot, repo_root: configRepoRoot } : {}),
             ...(initAuthSummary.mode !== "skip" ? { init_auth_mode: initAuthSummary.mode } : {}),
           };
           await writeConfig(nextConfig);
@@ -4511,22 +5088,111 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
         if (temporaryApiForInit) {
           await stopTemporaryApiForInit(temporaryApiForInit.child);
-          writeTemporaryApiStatusMessage("Stopped temporary API.", outputMode);
+          await temporaryApiForInit.closeLogs();
         }
 
-        process.stdout.write(nl() + heading("✓ Neotoma initialized!") + nl());
-        process.stdout.write(
-          dim("Next step: run ") + pathStyle("neotoma") + dim(" to start a session.") + nl()
-        );
-        if (!envRepoRoot) {
+        if (progressEnabled) {
+          clearRenderedProgress();
+          const dataSummaryLines = steps.map((step) => {
+            const statusText =
+              step.status === "created"
+                ? "created"
+                : step.status === "exists"
+                  ? "reused"
+                  : step.status === "skipped"
+                    ? "skipped"
+                    : "done";
+            const pathPart = step.path ? ` (${step.path})` : "";
+            return `${step.name}: ${statusText}${pathPart}`;
+          });
+          setInitProgressSummaryLines("data", dataSummaryLines);
+          const summaryRows = INIT_PROGRESS_STEPS.map((step, index) => {
+            const state = initProgress[step.id];
+            const elapsedPart = state.elapsedMs != null ? ` (${formatElapsedMs(state.elapsedMs)})` : "";
+            const detailPart = state.detail ? ` - ${state.detail}` : "";
+            const statusText = state.status === "done" ? "✓ done" : state.status.replace("_", " ");
+            const statusLine = `${statusText}${elapsedPart}${detailPart}`;
+            const normalizedSummaryLines = (state.summaryLines ?? []).map((line) => {
+              const trimmed = line.trim();
+              const hasChangeLabel =
+                trimmed.startsWith("updated:") ||
+                trimmed.startsWith("existing:") ||
+                trimmed.startsWith("created:") ||
+                trimmed.startsWith("reused:") ||
+                trimmed.startsWith("skipped:");
+              if ((step.id === "mcp" || step.id === "cli") && !hasChangeLabel && trimmed.startsWith("/")) {
+                return `existing: ${trimmed}`;
+              }
+              return trimmed;
+            });
+            const details = [statusLine, ...normalizedSummaryLines.map((line) => `- ${line}`)];
+            return { label: `${index + 1}. ${step.label}`, details };
+          });
+          const summaryLabelWidth = Math.max(...summaryRows.map((row) => displayWidth(row.label)));
+          const summaryTermWidth = getTerminalWidth(0);
+          const summaryGap = 2;
+          const summaryBoxPad = 1;
+          const summaryMarginForBox = 2 + 2 * summaryBoxPad;
+          const summaryMaxContentWidth = Math.max(
+            1,
+            Math.min(summaryTermWidth, getTerminalWidth(summaryMarginForBox)) - summaryBoxPad
+          );
+          const summaryValueWidth = Math.min(
+            Math.max(20, summaryTermWidth - summaryLabelWidth - summaryGap - 2),
+            summaryMaxContentWidth - summaryLabelWidth - summaryGap
+          );
+          const summaryTableLines: string[] = [
+            bold("Step") +
+              " ".repeat(Math.max(0, summaryLabelWidth - 4)) +
+              "  " +
+              bold("Details"),
+            dim("─".repeat(summaryLabelWidth) + "  " + "─".repeat(Math.min(summaryValueWidth, 50))),
+          ];
+          for (const row of summaryRows) {
+            let firstRowLine = true;
+            for (let i = 0; i < row.details.length; i++) {
+              const wrapped = wrapByDisplayWidth(row.details[i]!, summaryValueWidth);
+              for (let j = 0; j < wrapped.length; j++) {
+                const pad =
+                  firstRowLine && j === 0
+                    ? padToDisplayWidth(row.label, summaryLabelWidth)
+                    : " ".repeat(summaryLabelWidth);
+                const rendered = i === 0 ? wrapped[j] : dim(wrapped[j]!);
+                summaryTableLines.push(pad + "  " + rendered);
+                firstRowLine = false;
+              }
+            }
+            summaryTableLines.push("");
+          }
+          process.stdout.write(
+            nl() +
+              blackBox(summaryTableLines, {
+                title: " Initializing... ",
+                borderColor: "green",
+                padding: 1,
+                sessionBoxWidth: getTerminalWidth(),
+              }) +
+              nl()
+          );
+          const progressValues = Object.values(initProgress);
+          const doneCount = progressValues.filter((item) => item.status === "done").length;
+          const skippedCount = progressValues.filter((item) => item.status === "skipped").length;
+          const failedCount = progressValues.filter((item) => item.status === "failed").length;
+          const totalElapsed = formatElapsedMs(Date.now() - initStartedAtMs);
           process.stdout.write(
             bullet(
-              dim(
-                ".env is created when run from a Neotoma source checkout, when a Neotoma path is saved in config, or when you enter a Neotoma path during init. Data is under ~/neotoma/data."
-              )
+              `Completed ${doneCount} step(s), skipped ${skippedCount}, failed ${failedCount}` +
+                (totalElapsed ? ` in ${totalElapsed}` : "")
             ) + "\n"
           );
         }
+
+        process.stdout.write(nl() + heading("✓ Neotoma initialized!") + nl());
+        process.stdout.write("Run " + pathStyle("neotoma") + " to start a session." + nl());
+        // Release stdin after interactive prompts so Node can exit immediately.
+        process.stdin.pause();
+        await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
+        process.exit(0);
       } catch (err) {
         if (err instanceof InitAbortError) {
           process.stdout.write("\n");
@@ -4539,9 +5205,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
 // ── Site configure (Google Analytics and env vars) ─────────────────────────
 
-const siteCommand = program
-  .command("site")
-  .description("Site and frontend configuration");
+const siteCommand = program.command("site").description("Site and frontend configuration");
 
 siteCommand
   .command("configure")
@@ -4567,7 +5231,8 @@ siteCommand
       let repoRoot: string | null = null;
       try {
         const config = await readConfig();
-        if (config.repo_root) repoRoot = await validateNeotomaRepo(config.repo_root);
+        const configuredRoot = configuredProjectRoot(config);
+        if (configuredRoot) repoRoot = await validateNeotomaRepo(configuredRoot);
         if (!repoRoot && process.env.NEOTOMA_REPO_ROOT) {
           repoRoot = await validateNeotomaRepo(process.env.NEOTOMA_REPO_ROOT);
         }
@@ -4590,9 +5255,7 @@ siteCommand
         if (await pathExists(envExamplePath)) {
           await fs.copyFile(envExamplePath, envPath);
           if (outputMode === "pretty") {
-            process.stdout.write(
-              bullet(success("Created .env from .env.example")) + "\n"
-            );
+            process.stdout.write(bullet(success("Created .env from .env.example")) + "\n");
           }
         } else {
           await fs.writeFile(envPath, "");
@@ -4629,11 +5292,7 @@ siteCommand
       const updated: string[] = [];
       // Apply when option was explicitly passed (including empty) or user entered non-empty at prompt
       if (opts.gaMeasurementId !== undefined) {
-        await updateOrInsertEnvVar(
-          envPath,
-          "VITE_GA_MEASUREMENT_ID",
-          opts.gaMeasurementId.trim()
-        );
+        await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", opts.gaMeasurementId.trim());
         updated.push("VITE_GA_MEASUREMENT_ID");
       } else if (gaId !== undefined && gaId !== "") {
         await updateOrInsertEnvVar(envPath, "VITE_GA_MEASUREMENT_ID", gaId);
@@ -4647,11 +5306,7 @@ siteCommand
         );
         updated.push("GOOGLE_APPLICATION_CREDENTIALS");
       } else if (googleAppCreds !== undefined && googleAppCreds !== "") {
-        await updateOrInsertEnvVar(
-          envPath,
-          "GOOGLE_APPLICATION_CREDENTIALS",
-          googleAppCreds
-        );
+        await updateOrInsertEnvVar(envPath, "GOOGLE_APPLICATION_CREDENTIALS", googleAppCreds);
         updated.push("GOOGLE_APPLICATION_CREDENTIALS");
       }
       if (opts.googleOauthCredentials !== undefined) {
@@ -4662,37 +5317,24 @@ siteCommand
         );
         updated.push("GOOGLE_OAUTH_CREDENTIALS");
       } else if (googleOauthCreds !== undefined && googleOauthCreds !== "") {
-        await updateOrInsertEnvVar(
-          envPath,
-          "GOOGLE_OAUTH_CREDENTIALS",
-          googleOauthCreds
-        );
+        await updateOrInsertEnvVar(envPath, "GOOGLE_OAUTH_CREDENTIALS", googleOauthCreds);
         updated.push("GOOGLE_OAUTH_CREDENTIALS");
       }
 
       if (outputMode === "json") {
-        writeOutput(
-          { env_file: envPath, updated_vars: updated },
-          outputMode
-        );
+        writeOutput({ env_file: envPath, updated_vars: updated }, outputMode);
         return;
       }
       if (updated.length > 0) {
-        process.stdout.write(
-          heading("Site env vars updated") + "\n"
-        );
+        process.stdout.write(heading("Site env vars updated") + "\n");
         process.stdout.write(keyValue("env_file", envPath, true) + "\n");
-        process.stdout.write(
-          bullet("Set or updated: " + updated.join(", ")) + "\n"
-        );
+        process.stdout.write(bullet("Set or updated: " + updated.join(", ")) + "\n");
       } else {
         process.stdout.write(
           dim("No values provided. Use options or run interactively to set vars.") + "\n"
         );
         process.stdout.write(
-          dim("  ") +
-            pathStyle("neotoma site configure --ga-measurement-id G-XXXXXXXXXX") +
-            "\n"
+          dim("  ") + pathStyle("neotoma site configure --ga-measurement-id G-XXXXXXXXXX") + "\n"
         );
         process.stdout.write(
           dim("  ") +
@@ -4710,38 +5352,37 @@ let resetCompletionPrinted = false;
 program
   .command("reset")
   .description(
-    "Reset local Neotoma initialization state: backup configuration and environment files (and repo-local data when NEOTOMA_DATA_DIR is unset or points inside repo), backup CLI instruction copies, remove Neotoma MCP installs from user and repository configurations"
+    "Reset local Neotoma to a clean slate: back up and remove local Neotoma state, clean MCP/config instructions, and attempt global npm uninstall only when run from within a Neotoma repo (never back up/remove data dir configured via NEOTOMA_DATA_DIR in .env)"
   )
   .option("-y, --yes", "Skip confirmation prompt")
   .action(async (opts: { yes?: boolean }) => {
     const outputMode = resolveOutputMode();
     const { repoRoot } = await resolveRepoRootFromInitContext();
     const ts = backupTimestamp();
-
-    // Core candidates: always show in "Skipped (not present)" if missing
-    const coreBackupCandidates: string[] = [CONFIG_DIR];
-    // Optional candidates: only show in skipped if they actually existed at some point (move-if-present only, silent otherwise)
-    const optionalBackupCandidates: string[] = [];
-    if (repoRoot) {
-      const envPath = path.join(repoRoot, ".env");
-      const envVars = await readEnvFileVars(envPath);
-      const envDataDir = envVars.NEOTOMA_DATA_DIR?.trim();
-      // Back up repo-local data dir when using default data/ or NEOTOMA_DATA_DIR points inside repo.
-      if (envDataDir == null || envDataDir.length === 0) {
-        coreBackupCandidates.push(path.join(repoRoot, "data"));
-      } else {
-        const configuredDataDir = resolvePathInput(envDataDir, repoRoot);
-        const [normalizedConfiguredDataDir, normalizedRepoRoot] = await Promise.all([
-          normalizePathForContainmentCheck(configuredDataDir),
-          normalizePathForContainmentCheck(repoRoot),
-        ]);
-        if (isPathWithinDirectory(normalizedConfiguredDataDir, normalizedRepoRoot)) {
-          coreBackupCandidates.push(configuredDataDir);
-        }
-      }
-      optionalBackupCandidates.push(path.join(repoRoot, "keys"), envPath);
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+    const envPath = repoRoot ? path.join(repoRoot, ".env") : null;
+    const envVars = envPath ? await readEnvFileVars(envPath) : {};
+    const envDataDirRaw = envVars.NEOTOMA_DATA_DIR?.trim();
+    const protectedDataDirs = new Set<string>();
+    if (repoRoot && envDataDirRaw) {
+      protectedDataDirs.add(resolvePathInput(envDataDirRaw, repoRoot));
     }
-    const backupCandidates = [...coreBackupCandidates, ...optionalBackupCandidates];
+
+    const stateCandidates: string[] = [CONFIG_DIR];
+    const optionalStateCandidates: string[] = [];
+    if (repoRoot) {
+      optionalStateCandidates.push(path.join(repoRoot, "keys"), envPath!);
+    }
+
+    const dataDirCandidatesRaw: string[] = [path.join(homeDir, "neotoma", "data")];
+    if (repoRoot) dataDirCandidatesRaw.push(path.join(repoRoot, "data"));
+    if (repoRoot && envDataDirRaw) dataDirCandidatesRaw.push(resolvePathInput(envDataDirRaw, repoRoot));
+    const dataDirCandidates: string[] = [];
+    for (const candidate of dataDirCandidatesRaw) {
+      if (!candidate) continue;
+      if (dataDirCandidates.includes(candidate)) continue;
+      dataDirCandidates.push(candidate);
+    }
 
     const cliInstructionPaths: string[] = [];
     if (repoRoot) {
@@ -4767,13 +5408,20 @@ program
       process.stdout.write("This will:" + nl());
       process.stdout.write(
         bullet(
-          "Back up local configuration and environment files (and repo-local data when NEOTOMA_DATA_DIR is unset or points inside repo) to timestamped copies."
+          "Back up and remove local Neotoma state (config, env, keys, instructions, and data directories)."
         ) + nl()
+      );
+      process.stdout.write(
+        bullet("Never back up/remove a data directory configured via NEOTOMA_DATA_DIR in .env.") + nl()
       );
       process.stdout.write(
         bullet("Back up neotoma_cli instruction files in user and repo.") + nl()
       );
       process.stdout.write(bullet("Remove Neotoma MCP entries from user and repo configs.") + nl());
+      process.stdout.write(
+        bullet("Attempt global uninstall: npm uninstall -g neotoma (only when run from within a Neotoma repo)")
+          + nl()
+      );
       process.stdout.write(nl());
       const ok = await askYesNo("Continue with reset? (y/n): ");
       if (!ok) {
@@ -4783,15 +5431,32 @@ program
     }
 
     const cliInstructionPathSet = new Set(cliInstructionPaths);
-    const allBackupSources = [...backupCandidates, ...cliInstructionPaths];
+    const allBackupSources = [...stateCandidates, ...optionalStateCandidates, ...cliInstructionPaths];
     const moved: Array<{ from: string; to: string }> = [];
     for (const src of allBackupSources) {
       const to = await movePathToTimestampBackup(src, ts);
       if (to) moved.push({ from: src, to });
     }
+    const dataDirsProtected: string[] = [];
+    const dataDirsMoved: Array<{ from: string; to: string }> = [];
+    for (const dataDir of dataDirCandidates) {
+      if (protectedDataDirs.has(dataDir)) {
+        dataDirsProtected.push(dataDir);
+        continue;
+      }
+      const to = await movePathToTimestampBackup(dataDir, ts);
+      if (to) {
+        const entry = { from: dataDir, to };
+        moved.push(entry);
+        dataDirsMoved.push(entry);
+      }
+    }
     const movedFromSet = new Set(moved.map((m) => m.from));
-    // Only report skipped for core paths; optional paths (keys, .env) are moved if present and silently skipped if not
-    const skippedBackupCandidates = coreBackupCandidates.filter((src) => !movedFromSet.has(src));
+    // Only report skipped for core state paths and non-protected data dirs.
+    const skippedBackupCandidates = [
+      ...stateCandidates.filter((src) => !movedFromSet.has(src)),
+      ...dataDirCandidates.filter((src) => !movedFromSet.has(src) && !protectedDataDirs.has(src)),
+    ];
     const movedCliCount = moved.filter((m) => cliInstructionPathSet.has(m.from)).length;
 
     const mcpCleaned: string[] = [];
@@ -4802,6 +5467,7 @@ program
         : await removeNeotomaServersFromJsonMcpConfig(configPath);
       if (changed) mcpCleaned.push(configPath);
     }
+    const globalUninstall = await runGlobalNeotomaUninstall();
 
     if (outputMode === "json") {
       writeOutput(
@@ -4810,7 +5476,10 @@ program
           repo_root: repoRoot,
           timestamp: ts,
           backups_moved: moved,
+          data_dirs_backed_up_and_removed: dataDirsMoved.map((item) => item.from),
+          data_dirs_protected_by_env: dataDirsProtected,
           mcp_configs_updated: mcpCleaned,
+          global_uninstall: globalUninstall,
         },
         outputMode
       );
@@ -4835,6 +5504,12 @@ program
       if (moved.length === 0 && skippedBackupCandidates.length === 0) {
         process.stdout.write(nl() + bullet(dim("Nothing to back up.")) + nl());
       }
+      if (dataDirsProtected.length > 0) {
+        process.stdout.write(nl() + bold("Protected data directories (not backed up or removed):") + nl());
+        for (const dataDir of dataDirsProtected) {
+          process.stdout.write(bullet(dim(pathStyle(dataDir) + " (set via NEOTOMA_DATA_DIR in .env)")) + nl());
+        }
+      }
 
       process.stdout.write(nl());
       if (cliInstructionPaths.length > 0 && movedCliCount === 0) {
@@ -4847,6 +5522,21 @@ program
         }
       } else {
         process.stdout.write(bullet(dim("No Neotoma MCP entries to clean.")) + nl());
+      }
+      process.stdout.write(nl());
+      if (!globalUninstall.attempted) {
+        process.stdout.write(bullet(dim(globalUninstall.message)) + nl());
+      } else if (globalUninstall.succeeded) {
+        process.stdout.write(bullet(success("Global uninstall completed.")) + nl());
+      } else {
+        process.stdout.write(
+          bullet(
+            warn(
+              "Global uninstall failed (non-fatal): " +
+                (globalUninstall.message || `exit code ${globalUninstall.exitCode ?? "unknown"}`)
+            )
+          ) + nl()
+        );
       }
 
       process.stdout.write(nl() + heading("Neotoma reset complete.") + nl());
@@ -4864,7 +5554,9 @@ const authLoginCommand = authCommand
   .option("--dev-stub", "Use local dev stub authentication (local backend only)")
   .option(
     "--tunnel",
-    "Use tunnel URL from " + DEFAULT_TUNNEL_URL_FILE + " (for testing OAuth when API is behind tunnel)"
+    "Use tunnel URL from " +
+      DEFAULT_TUNNEL_URL_FILE +
+      " (for testing OAuth when API is behind tunnel)"
   )
   .action(async () => {
     const outputMode = resolveOutputMode();
@@ -4886,7 +5578,10 @@ const authLoginCommand = authCommand
           const msg =
             "Tunnel URL file contains localhost; use the tunnel URL for OAuth. Start the API with a tunnel and wait until it is ready: neotoma api start --env dev --tunnel (then cat /tmp/ngrok-mcp-url.txt should show the tunnel URL).";
           if (outputMode === "json") {
-            writeOutput({ ok: false, error: msg, tunnel_url_file: urlFile, read_url: url }, outputMode);
+            writeOutput(
+              { ok: false, error: msg, tunnel_url_file: urlFile, read_url: url },
+              outputMode
+            );
           } else {
             process.stderr.write(`neotoma auth login: ${msg}\n`);
             process.stderr.write(`  (File ${urlFile} contained: ${url})\n`);
@@ -5183,7 +5878,8 @@ mcpCommand
       let neotomaRepoRoot: string | null = null;
       try {
         const config = await readConfig();
-        if (config.repo_root) neotomaRepoRoot = await validateNeotomaRepo(config.repo_root);
+        const configuredRoot = configuredProjectRoot(config);
+        if (configuredRoot) neotomaRepoRoot = await validateNeotomaRepo(configuredRoot);
         if (!neotomaRepoRoot && process.env.NEOTOMA_REPO_ROOT) {
           neotomaRepoRoot = await validateNeotomaRepo(process.env.NEOTOMA_REPO_ROOT);
         }
@@ -6736,7 +7432,7 @@ type NeotomaProcessRow = { pid: number; port: number; command: string; label: st
 function listNeotomaServerProcesses(): NeotomaProcessRow[] {
   const rows: NeotomaProcessRow[] = [];
   const isWin = process.platform === "win32";
-  const labelForPort = (p: number) => (p === 8180 ? "prod" : p === 8080 ? "dev" : String(p));
+  const labelForPort = (p: number) => (p === 3180 ? "prod" : p === 3080 ? "dev" : String(p));
 
   if (isWin) {
     try {
@@ -7031,7 +7727,7 @@ apiCommand
             start_api: "npm run start:api",
             start_api_prod: "npm run start:api:prod",
           },
-          ports: { default: 8080, prod: 8180 },
+          ports: { default: 3080, prod: 3180 },
           message:
             "To run in foreground, omit --json. Use --background to start in background and get PID.",
         },
@@ -7054,7 +7750,9 @@ apiCommand
           pathStyle("cat /tmp/ngrok-mcp-url.txt") +
           dim(". For Cursor: set url to https://<tunnel-url>/mcp in .cursor/mcp.json, or run ") +
           pathStyle("neotoma mcp config") +
-          dim(". OAuth requires key authentication in-browser; otherwise use Authorization bearer token (NEOTOMA_BEARER_TOKEN).") +
+          dim(
+            ". OAuth requires key authentication in-browser; otherwise use Authorization bearer token (NEOTOMA_BEARER_TOKEN)."
+          ) +
           ".\n\n"
       );
     }
@@ -7104,7 +7802,7 @@ apiCommand
       process.stderr.write(`neotoma api stop: ${error}\n`);
       return;
     }
-    const port = envOpt === "prod" ? 8180 : 8080;
+    const port = envOpt === "prod" ? 3180 : 3080;
 
     const scriptDir = path.dirname(fileURLToPath(import.meta.url));
     const repoRoot = path.join(scriptDir, "..", "..");
@@ -9567,6 +10265,23 @@ function resolveDataDir(repoRoot: string): string {
   return envDir ? envDir : path.join(repoRoot, "data");
 }
 
+async function detectInitializedDataDir(candidates: string[]): Promise<string | null> {
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    if (!trimmed) continue;
+    const absolute = path.isAbsolute(trimmed) ? trimmed : path.resolve(process.cwd(), trimmed);
+    if (seen.has(absolute)) continue;
+    seen.add(absolute);
+    const devDbPath = path.join(absolute, "neotoma.db");
+    const prodDbPath = path.join(absolute, "neotoma.prod.db");
+    if ((await pathExists(devDbPath)) || (await pathExists(prodDbPath))) {
+      return absolute;
+    }
+  }
+  return null;
+}
+
 /**
  * Intro stats (entity/source/event counts) from the local SQLite DB.
  * Used when the API returns all zeros but Recent events show data (e.g. server using remote storage).
@@ -10051,7 +10766,7 @@ async function getDualEnvIntroStats(
 
 export function buildApiBoxLines(instances: ApiInstance[], mcpStdioCount?: number): string[] {
   if (instances.length === 0) {
-    const lines: string[] = ["No running Neotoma HTTP APIs detected (ports 8080, 8180)."];
+    const lines: string[] = ["No running Neotoma HTTP APIs detected (ports 3080, 3180)."];
     if (mcpStdioCount !== undefined && mcpStdioCount > 0) {
       lines.push(`Neotoma MCP (stdio): ${mcpStdioCount} process(es) running (e.g. Cursor).`);
     } else {
@@ -10128,15 +10843,18 @@ export type InitContextStatus = {
   envFileExists: boolean;
   dataDir: string;
   envFilePath: string;
+  envTarget: "project" | "user";
 };
 
-/** Resolve data dir and .env status for init box. Returns null when repo root is unknown. */
+/** Resolve data dir and .env status for init box for project/user env targets. */
 export async function getInitContextStatus(
   repoRoot: string | null
 ): Promise<InitContextStatus | null> {
-  if (!repoRoot) return null;
-  const envPath = path.join(repoRoot, ".env");
+  const envTarget: "project" | "user" = repoRoot ? "project" : "user";
+  const envPath = repoRoot ? path.join(repoRoot, ".env") : USER_ENV_PATH;
   const envFileExists = await pathExists(envPath);
+  const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
+  const defaultDataDir = repoRoot ? path.join(repoRoot, "data") : path.join(homeDir, "neotoma", "data");
   let dataDir: string;
   if (envFileExists) {
     const envVars = await readEnvFileVars(envPath);
@@ -10144,13 +10862,13 @@ export async function getInitContextStatus(
     dataDir = configured
       ? path.isAbsolute(configured)
         ? configured
-        : path.resolve(repoRoot, configured)
-      : path.join(repoRoot, "data");
+        : path.resolve(repoRoot ?? process.cwd(), configured)
+      : defaultDataDir;
   } else {
-    dataDir = path.join(repoRoot, "data");
+    dataDir = defaultDataDir;
   }
   const dataDirExists = await pathExists(dataDir);
-  return { dataDirExists, envFileExists, dataDir, envFilePath: envPath };
+  return { dataDirExists, envFileExists, dataDir, envFilePath: envPath, envTarget };
 }
 
 export function buildInstallationBoxLines(
@@ -10169,8 +10887,13 @@ export function buildInstallationBoxLines(
 
   const lines: string[] = [""];
 
-  // Always show env config status (repo and .env), whether successful or not.
+  // Always show env config status (project or user target).
   if (initContext != null) {
+    lines.push(
+      (initContext.envTarget === "project" ? "Project env configured" : "User env configured") +
+        "  " +
+        mark(initContext.envFileExists)
+    );
     lines.push(
       "Data directory  " + mark(initContext.dataDirExists) + "  " + (initContext.dataDir ?? "")
     );
@@ -10179,10 +10902,10 @@ export function buildInstallationBoxLines(
     );
     lines.push("");
   } else {
+    lines.push("User env configured  " + mark(false) + "  " + USER_ENV_PATH);
     lines.push(
-      "Neotoma path  " + mark(false) + "  Not configured (run " + pathStyle("neotoma init") + " or set NEOTOMA_REPO_ROOT)"
+      "Project env configured  " + mark(false) + "  (set NEOTOMA_REPO_ROOT or run in source checkout)"
     );
-    lines.push(".env file      " + mark(false) + "  (set Neotoma path first)");
     lines.push("");
   }
 
@@ -10585,12 +11308,12 @@ function hasNoCommand(args: string[]): boolean {
 }
 
 /** Tee process.stdout and process.stderr to a log file. Used when --log-file is set. */
-function teeToLogFile(logFilePath: string): void {
+function teeToLogFile(logFilePath: string): (() => Promise<void>) | null {
   try {
     const logStream = createWriteStream(logFilePath, { flags: "a" });
     logStream.on("error", () => {});
-    const origStdoutWrite = process.stdout.write.bind(process.stdout);
-    const origStderrWrite = process.stderr.write.bind(process.stderr);
+    const origStdoutWrite = process.stdout.write;
+    const origStderrWrite = process.stderr.write;
     const writeToLog = (chunk: unknown, enc?: unknown, _cb?: unknown): void => {
       try {
         if (typeof chunk === "string") {
@@ -10608,15 +11331,22 @@ function teeToLogFile(logFilePath: string): void {
     ): boolean {
       writeToLog(chunk, encodingOrCallback, callback);
       if (typeof encodingOrCallback === "function") {
-        return origStdoutWrite(chunk as string, encodingOrCallback as (err?: Error | null) => void);
+        return origStdoutWrite.call(
+          process.stdout,
+          chunk as string,
+          undefined,
+          encodingOrCallback as (err?: Error | null) => void
+        );
       }
       const enc = typeof encodingOrCallback === "string" ? encodingOrCallback : undefined;
       const cb =
         typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
       if (enc !== undefined) {
-        return origStdoutWrite(chunk as string, enc as BufferEncoding, cb);
+        return origStdoutWrite.call(process.stdout, chunk as string, enc as BufferEncoding, cb);
       }
-      return cb ? origStdoutWrite(chunk as string, cb) : origStdoutWrite(chunk as string);
+      return cb
+        ? origStdoutWrite.call(process.stdout, chunk as string, undefined, cb)
+        : origStdoutWrite.call(process.stdout, chunk as string);
     };
     process.stderr.write = function (
       chunk: unknown,
@@ -10625,18 +11355,40 @@ function teeToLogFile(logFilePath: string): void {
     ): boolean {
       writeToLog(chunk, encodingOrCallback, callback);
       if (typeof encodingOrCallback === "function") {
-        return origStderrWrite(chunk as string, encodingOrCallback as (err?: Error | null) => void);
+        return origStderrWrite.call(
+          process.stderr,
+          chunk as string,
+          undefined,
+          encodingOrCallback as (err?: Error | null) => void
+        );
       }
       const enc = typeof encodingOrCallback === "string" ? encodingOrCallback : undefined;
       const cb =
         typeof callback === "function" ? (callback as (err?: Error | null) => void) : undefined;
       if (enc !== undefined) {
-        return origStderrWrite(chunk as string, enc as BufferEncoding, cb);
+        return origStderrWrite.call(process.stderr, chunk as string, enc as BufferEncoding, cb);
       }
-      return cb ? origStderrWrite(chunk as string, cb) : origStderrWrite(chunk as string);
+      return cb
+        ? origStderrWrite.call(process.stderr, chunk as string, undefined, cb)
+        : origStderrWrite.call(process.stderr, chunk as string);
+    };
+    let cleanedUp = false;
+    return async () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      process.stdout.write = origStdoutWrite;
+      process.stderr.write = origStderrWrite;
+      await new Promise<void>((resolve) => {
+        if (logStream.destroyed || (logStream as { closed?: boolean }).closed) {
+          resolve();
+          return;
+        }
+        logStream.end(() => resolve());
+      });
     };
   } catch {
     // do not break CLI if log file cannot be opened
+    return null;
   }
 }
 
@@ -10658,12 +11410,14 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         ? path.join(repoRootForLog, "data", "logs", cliLogBasename)
         : path.join(CONFIG_DIR, cliLogBasename);
   const logFilePath = noLogFile ? null : (explicitLogPath ?? defaultLogPath);
+  let cleanupLogFile: (() => Promise<void>) | null = null;
   if (logFilePath) {
     await fs.mkdir(path.dirname(logFilePath), { recursive: true }).catch(() => {});
-    teeToLogFile(logFilePath);
+    cleanupLogFile = teeToLogFile(logFilePath);
   }
 
-  let version: string | null = null;
+  try {
+    let version: string | null = null;
 
   program.parseOptions(argv);
   const args = program.args && program.args.length > 0 ? program.args : argv.slice(2);
@@ -10685,6 +11439,17 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     }
     program.outputHelp();
     return;
+  }
+
+  // For plain `neotoma` startup, require init before rendering any status boxes or prompts.
+  if (noArgs && !isInitCommand && !isResetCommand) {
+    const { repoRoot } = await resolveRepoRootFromInitContext();
+    const initContext = await getInitContextStatus(repoRoot);
+    if (!initContext?.envFileExists || !initContext.dataDirExists) {
+      process.stderr.write(NO_ARGS_INIT_REQUIRED_MESSAGE + "\n");
+      process.exitCode = 1;
+      return;
+    }
   }
 
   if (!isResetCommand && !isInitCommand) {
@@ -10724,15 +11489,17 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       const repoRoot = await resolveAndPersistRepoRootFromInitContext();
       const guidanceLines: string[] = [];
       if (!repoRoot) {
-        guidanceLines.push(
-          "Neotoma path is not configured in this shell.",
-          "Run 'neotoma init' to set your Neotoma path, or set NEOTOMA_REPO_ROOT to a Neotoma source checkout."
-        );
+        if (!(await pathExists(USER_ENV_PATH))) {
+          guidanceLines.push(
+            "User env is not configured.",
+            "Run 'neotoma init' to create defaults at " + pathStyle(USER_ENV_PATH) + "."
+          );
+        }
       } else {
         const envPath = path.join(repoRoot, ".env");
         if (!(await pathExists(envPath))) {
           guidanceLines.push(
-            "Neotoma path is configured, but .env is missing.",
+            "Project env is not configured.",
             "Run 'neotoma init' to create .env defaults, or create " +
               pathStyle(envPath) +
               " manually."
@@ -10778,12 +11545,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
         includeUserLevel: true,
       });
-      const initContext = await getInitContextStatus(repoRootForLocal ?? null);
+      const { repoRoot: initProjectRoot } = await resolveRepoRootFromInitContext();
+      const initContext = await getInitContextStatus(initProjectRoot);
       const installationLines = buildInstallationBoxLines(
         mcpConfigs,
         agentScan,
         initContext,
-        repoRootForLocal ?? null
+        initProjectRoot
       );
       const rawSessionBoxWidth = Math.max(
         computeBoxInnerWidth(introContent.lines, { title: introContent.title, padding: 2 }),
@@ -10842,8 +11610,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
       if (process.stdout.isTTY) {
         debugLog("No --env flag; prompting user for environment");
         process.stdout.write("\n" + bold("Load which environment?") + "\n");
-        process.stdout.write(dim("1) dev (port 8080)") + "\n");
-        process.stdout.write(dim("2) prod (port 8180)") + "\n");
+        process.stdout.write(dim("1) dev (port 3080)") + "\n");
+        process.stdout.write(dim("2) prod (port 3180)") + "\n");
         const answer = await askQuestion("> ");
         if (answer === "2" || answer.toLowerCase() === "prod") {
           preferredEnv = "prod";
@@ -11134,12 +11902,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const agentScan = await scanAgentInstructions(sessionRepoRoot, {
             includeUserLevel: true,
           });
-          const initContext = await getInitContextStatus(sessionRepoRoot ?? null);
+          const { repoRoot: initProjectRoot } = await resolveRepoRootFromInitContext();
+          const initContext = await getInitContextStatus(initProjectRoot);
           const installationLines = buildInstallationBoxLines(
             mcpConfigs,
             agentScan,
             initContext,
-            sessionRepoRoot ?? null
+            initProjectRoot
           );
           const currentVersion = version ?? (await getCliVersion());
           const introContent = buildIntroBoxContent(currentVersion, introStats, result.env);
@@ -11255,12 +12024,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
         const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
           includeUserLevel: true,
         });
-        const initContext = await getInitContextStatus(repoRootForLocal ?? null);
+        const { repoRoot: initProjectRoot } = await resolveRepoRootFromInitContext();
+        const initContext = await getInitContextStatus(initProjectRoot);
         const installationLines = buildInstallationBoxLines(
           mcpConfigs,
           agentScan,
           initContext,
-          repoRootForLocal ?? null
+          initProjectRoot
         );
         const rawSessionBoxWidth = Math.max(
           computeBoxInnerWidth(introContent.lines, { title: introContent.title, padding: 2 }),
@@ -11268,7 +12038,7 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           watchLines != null
             ? computeBoxInnerWidth(watchLines, { title: " Recent events ", padding: 1 })
             : 0,
-            computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
+          computeBoxInnerWidth(installationLines, { title: " Initialization ", padding: 1 })
         );
         const sessionBoxWidth = getSessionBoxWidth(rawSessionBoxWidth);
         const { output } = buildStatusBlockOutput(
@@ -11422,12 +12192,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const agentScan = await scanAgentInstructions(sessionRepoRoot, {
             includeUserLevel: true,
           });
-          const initContext = await getInitContextStatus(sessionRepoRoot ?? null);
+          const { repoRoot: initProjectRoot } = await resolveRepoRootFromInitContext();
+          const initContext = await getInitContextStatus(initProjectRoot);
           const installationLines = buildInstallationBoxLines(
             mcpConfigs,
             agentScan,
             initContext,
-            sessionRepoRoot ?? null
+            initProjectRoot
           );
           const rawSessionBoxWidth = Math.max(
             computeBoxInnerWidth(introContent.lines, {
@@ -11509,12 +12280,13 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
           const agentScan = await scanAgentInstructions(repoRootForLocal ?? process.cwd(), {
             includeUserLevel: true,
           });
-          const initContext = await getInitContextStatus(repoRootForLocal ?? null);
+          const { repoRoot: initProjectRoot } = await resolveRepoRootFromInitContext();
+          const initContext = await getInitContextStatus(initProjectRoot);
           const installationLines = buildInstallationBoxLines(
             mcpConfigs,
             agentScan,
             initContext,
-            repoRootForLocal ?? null
+            initProjectRoot
           );
           const rawSessionBoxWidth = Math.max(
             computeBoxInnerWidth(introContent.lines, {
@@ -11630,7 +12402,11 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
   ]);
   const normalizedArgv =
     argv.length > 0 && TOP_LEVEL_COMMANDS.has(argv[0]) ? ["node", "neotoma", ...argv] : argv;
-  await program.parseAsync(normalizedArgv);
+    await program.parseAsync(normalizedArgv);
+  } finally {
+    await shutdownLocalTransport().catch(() => {});
+    if (cleanupLogFile) await cleanupLogFile();
+  }
 }
 
 const entryPath = process.argv[1];

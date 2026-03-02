@@ -35,7 +35,27 @@ This document is a checklist of functionality across the repository that you sho
 - [ ] `neotoma init` creates `~/neotoma/data/` (or configured dir), DB, and env template
 - [ ] `neotoma storage info` shows expected paths and backend
 
-### 1.3 Environment and backend
+### 1.3 Testing npm-based flow before publishing
+
+To verify global and non-global behavior **without** publishing to npm:
+
+**Non-global (from repo):**
+
+- Run CLI from repo without installing: `npm run cli` or `npm run cli:dev`.
+- Or link the current build so `neotoma` is available globally but points at the repo:
+  - `npm run setup:cli` (build + `npm link`), then run `neotoma` from any directory.
+  - From **inside** the repo, init should detect project and use project `.env`; from **outside** (e.g. `cd ~`), init should use user env at `~/.config/neotoma/.env`.
+
+**Global (simulate `npm install -g neotoma`):**
+
+1. From repo root: `npm run build:server && npm pack` → creates `neotoma-<version>.tgz`.
+2. Install that tarball globally: `npm install -g ./neotoma-<version>.tgz`.
+3. Run from a directory that is **not** the repo (e.g. `cd ~` or `mkdir /tmp/neotoma-test && cd /tmp/neotoma-test`).
+4. **To test user-env-only (no project):** Clear any saved project root so the CLI does not reuse it: remove or rename `~/.config/neotoma/config.json` (or delete only the `project_root` / `repo_root` keys). Unset `NEOTOMA_REPO_ROOT` if set. Then run `neotoma init`. You should see "User env configured" and env at `~/.config/neotoma/.env`, data at `~/neotoma/data`, with no source-checkout prompt in the default flow.
+5. Run `neotoma init` (and optionally `neotoma --no-session` to check status). If config still has a valid project root, init will use **project** env (e.g. repo `.env`); that is expected when you have used Neotoma from the repo before.
+6. To revert: `npm uninstall -g neotoma`.
+
+### 1.4 Environment and backend
 
 - [ ] Server uses SQLite and local `data/sources/`
 - [ ] `npm run copy:env` (in worktree) copies env from main repo when documented
@@ -127,7 +147,7 @@ With MCP client connected:
 
 ## 4. HTTP API
 
-With API running (e.g. `npm run dev:server` on port 8080):
+With API running (e.g. `npm run dev:server` on port 3080):
 
 - [ ] `GET /api/me` returns current user or guest when anonymous sign-in enabled
 - [ ] `POST /api/entities/query` with body returns entities; pagination and filters work

@@ -44,7 +44,7 @@ No remote backend configuration is required.
 
 ## Environment setup
 
-Create a `.env` only if you want overrides. Defaults work without one.
+Run `neotoma init` first. It auto-detects whether to manage project `.env` (inside a source checkout) or user `.env` at `~/.config/neotoma/.env` (global/non-checkout usage). Create or edit `.env` only when you want overrides.
 
 ```bash
 # Optional local path overrides
@@ -58,7 +58,7 @@ NEOTOMA_EVENT_LOG_MIRROR=false
 
 # Optional server ports
 PORT=3000
-HTTP_PORT=8080
+HTTP_PORT=3080
 WS_PORT=8280
 
 # API auth token used by local HTTP actions
@@ -98,3 +98,4 @@ npm run lint
 
 - Remote backend setup has been removed from active docs and runtime.
 - If remote support is needed in the future, restore from git history.
+- For clean-machine macOS validation, see `docs/developer/macos_vm_testing.md` (UTM + SSH workflow).

@@ -51,8 +51,8 @@ describe("CLI API discovery", () => {
     process.env.NEOTOMA_API_PORTS = "9004";
 
     mockHttpHealth({
-      8080: true,
-      8180: true,
+      3080: true,
+      3180: true,
       9001: true,
       9002: true,
       9003: true,
@@ -66,9 +66,9 @@ describe("CLI API discovery", () => {
     };
 
     const instances = await discoverApiInstances({ config });
-    expect(instances.map((instance) => instance.port)).toEqual([8080, 8180, 9001, 9002, 9003, 9004, 9005]);
-    expect(instances.find((instance) => instance.port === 8080)?.envHint).toBe("dev");
-    expect(instances.find((instance) => instance.port === 8180)?.envHint).toBe("prod");
+    expect(instances.map((instance) => instance.port)).toEqual([3080, 3180, 9001, 9002, 9003, 9004, 9005]);
+    expect(instances.find((instance) => instance.port === 3080)?.envHint).toBe("dev");
+    expect(instances.find((instance) => instance.port === 3180)?.envHint).toBe("prod");
     expect(instances.find((instance) => instance.port === 9002)?.source).toBe("session");
   });
 
@@ -81,8 +81,8 @@ describe("CLI API discovery", () => {
   it("detectRunningApiPorts returns healthy discovered ports", async () => {
     process.env.NEOTOMA_API_PORTS = "9090";
     mockHttpHealth({
-      8080: false,
-      8180: false,
+      3080: false,
+      3180: false,
       9090: true,
     });
     const ports = await detectRunningApiPorts();

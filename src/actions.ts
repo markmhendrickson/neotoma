@@ -223,7 +223,7 @@ app.get("/server-info", (_req, res) => {
     process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
   const httpPort = httpPortEnv
     ? parseInt(httpPortEnv, 10)
-    : config.httpPort || 8080;
+    : config.httpPort || 3080;
   const mcpBase =
     process.env.NEOTOMA_MCP_PROXY_URL ||
     process.env.MCP_PROXY_URL ||
@@ -4429,7 +4429,7 @@ export async function startHTTPServer() {
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
   const basePort = httpPortEnv
     ? parseInt(httpPortEnv, 10)
-    : config.httpPort || 8080;
+    : config.httpPort || 3080;
   const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
   const maxTries = 20;
 

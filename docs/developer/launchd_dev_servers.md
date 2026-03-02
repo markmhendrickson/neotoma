@@ -20,7 +20,7 @@ After reboot, the agent runs again automatically (RunAtLoad + KeepAlive).
 
 ## What runs
 
-The agent runs `npm run dev:api` (tunnel + API on port 8080). It sources `.env` from the repo root if present, so `NEOTOMA_*` and tunnel vars are applied.
+The agent runs `npm run dev:api` (tunnel + API on port 3080). It sources `.env` from the repo root if present, so `NEOTOMA_*` and tunnel vars are applied.
 
 ## Commands
 
@@ -48,4 +48,4 @@ rm ~/Library/LaunchAgents/com.neotoma.dev-servers.plist
 ## Scope
 
 - **macOS only.** LaunchAgents are a macOS feature. On Linux, use a systemd user service or similar.
-- **Dev environment only.** This runs the dev API (port 8080). For production-like always-on, you would use a separate plist or process manager.
+- **Dev environment only.** This runs the dev API (port 3080). For production-like always-on, you would use a separate plist or process manager.

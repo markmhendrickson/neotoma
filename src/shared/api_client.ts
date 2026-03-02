@@ -20,7 +20,10 @@ export function createApiClient(options: ApiClientOptions = {}) {
   });
 
   const defaultFallback =
-    process.env.NODE_ENV === "test" ? false : process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK !== "true";
+    process.env.NODE_ENV === "test"
+      ? false
+      : process.env.NEOTOMA_ENABLE_OFFLINE_FALLBACK === "true" &&
+        process.env.NEOTOMA_DISABLE_OFFLINE_FALLBACK !== "true";
   const shouldFallback = options.useOfflineFallback ?? defaultFallback;
   const forceLocal = process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT === "true";
 

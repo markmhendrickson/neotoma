@@ -8,7 +8,7 @@
 ### 1. ngrok Setup ✅
 - **Authtoken configured:** `NGROK_AUTHTOKEN` synced from 1Password
 - **Tunnel active:** `https://melissia-introrse-correspondently.ngrok-free.dev`
-- **Local port:** 8080
+- **Local port:** 3080
 - **Tunnel PID:** Stored in `/tmp/ngrok-mcp.pid`
 
 ### 2. Cursor Configuration ✅
@@ -24,7 +24,7 @@
   ```
 
 ### 3. Server Configuration ⚠️
-- **MCP server running:** Port 8080 (confirmed)
+- **MCP server running:** Port 3080 (confirmed)
 - **NEOTOMA_HOST_URL:** Set to HTTPS URL for OAuth redirects (or rely on auto-discovery from tunnel file)
 - **Action required:** Restart MCP server with `NEOTOMA_HOST_URL` environment variable if not using auto-discovery
 
@@ -120,7 +120,7 @@ npm run tunnel:https
 - **HTTPS URL:** `https://melissia-introrse-correspondently.ngrok-free.dev`
 - **MCP Endpoint:** `https://melissia-introrse-correspondently.ngrok-free.dev/mcp`
 - **Tunnel Status:** Active (PID in `/tmp/ngrok-mcp.pid`)
-- **Server Status:** Running on port 8080
+- **Server Status:** Running on port 3080
 - **NEOTOMA_HOST_URL:** Set to HTTPS URL (or use auto-discovery)
 
 ## References

@@ -107,7 +107,7 @@ When a user has an invalid or expired X-Connection-Id in their Cursor MCP config
    {
      "mcpServers": {
        "neotoma": {
-         "url": "http://localhost:8080/mcp",
+        "url": "http://localhost:3080/mcp",
          "headers": {
            "X-Connection-Id": "invalid-connection-id-12345"
          }
@@ -159,7 +159,7 @@ When you see the error "Invalid or expired connection ID" in Cursor:
    {
      "mcpServers": {
        "neotoma": {
-         "url": "http://localhost:8080/mcp",
+        "url": "http://localhost:3080/mcp",
          "headers": {
            // "X-Connection-Id": "invalid-id-here"  // Remove this line
          }
