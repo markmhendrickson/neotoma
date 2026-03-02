@@ -36,7 +36,7 @@ describe("CLI session startup UX", () => {
     const { output } = buildStatusBlockOutput(
       {
         introContent: intro,
-        apiLines: ["Production API: http://127.0.0.1:8180 (2 ms)"],
+        apiLines: ["Production API: http://127.0.0.1:3180 (2 ms)"],
         watchLines: ["1  1m ago  entity  add  ent_abc  Updated invoice"],
         watchEventCount: 1,
         installationLines: ["Config", "MCP User", "MCP Project", "CLI Instructions"],
@@ -52,16 +52,16 @@ describe("CLI session startup UX", () => {
   it("formats API lines with environment labels", () => {
     const lines = buildApiBoxLines([
       {
-        port: 8180,
-        url: "http://127.0.0.1:8180",
+        port: 3180,
+        url: "http://127.0.0.1:3180",
         envHint: "prod",
         source: "default",
         healthy: true,
         latencyMs: 3,
       },
       {
-        port: 8080,
-        url: "http://127.0.0.1:8080",
+        port: 3080,
+        url: "http://127.0.0.1:3080",
         envHint: "dev",
         source: "default",
         healthy: true,
@@ -82,7 +82,53 @@ describe("CLI session startup UX", () => {
       }
     );
 
-    expect(lines.join("\n")).not.toContain("Warning: Cursor config found, Neotoma MCP is not installed.");
+    expect(lines.join("\n")).not.toContain(
+      "Warning: Cursor config found, Neotoma MCP is not installed."
+    );
+  });
+
+  it("shows user env status in installation box", () => {
+    const lines = buildInstallationBoxLines(
+      [],
+      {
+        appliedProject: { cursor: false, claude: false, codex: false },
+        appliedUser: { cursor: false, claude: false, codex: false },
+      },
+      {
+        envTarget: "user",
+        envFileExists: true,
+        envFilePath: "/Users/example/.config/neotoma/.env",
+        dataDirExists: true,
+        dataDir: "/Users/example/neotoma/data",
+      },
+      null
+    );
+
+    const output = lines.join("\n");
+    expect(output).toContain("User env configured  ✅");
+    expect(output).toContain(".env file       ✅  /Users/example/.config/neotoma/.env");
+  });
+
+  it("shows project env status in installation box", () => {
+    const lines = buildInstallationBoxLines(
+      [],
+      {
+        appliedProject: { cursor: false, claude: false, codex: false },
+        appliedUser: { cursor: false, claude: false, codex: false },
+      },
+      {
+        envTarget: "project",
+        envFileExists: true,
+        envFilePath: "/repo/.env",
+        dataDirExists: false,
+        dataDir: "/repo/data",
+      },
+      "/repo"
+    );
+
+    const output = lines.join("\n");
+    expect(output).toContain("Project env configured  ✅");
+    expect(output).toContain("Data directory  ❌  /repo/data");
   });
 
   it("shows prompt placeholder only when input is empty", () => {

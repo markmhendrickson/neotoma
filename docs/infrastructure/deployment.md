@@ -119,10 +119,10 @@ app = "neotoma"
 primary_region = "iad"
 [build]
 [env]
-  PORT = "8080"
+  PORT = "3180"
   NODE_ENV = "production"
 [http_service]
-  internal_port = 8080
+  internal_port = 3180
   force_https = true
   auto_stop_machines = true
   auto_start_machines = true
@@ -130,7 +130,7 @@ primary_region = "iad"
   processes = ["app"]
 [[services]]
   http_checks = []
-  internal_port = 8080
+  internal_port = 3180
   processes = ["app"]
   protocol = "tcp"
   script_checks = []
@@ -152,7 +152,7 @@ primary_region = "iad"
       timeout = "2s"
 ```
 **Key Settings:**
-- `internal_port = 8080`: Matches `HTTP_PORT` environment variable
+- `internal_port = 3180`: Matches `HTTP_PORT` environment variable
 - `auto_stop_machines = true`: Saves costs (machines stop when idle)
 - `auto_start_machines = true`: Machines start on first request
 - `min_machines_running = 0`: No always-on machines (cost-effective)
@@ -295,9 +295,9 @@ flyctl ssh console
    ```
 ### Issue: "Port mismatch"
 **Solution:**
-- Ensure `fly.toml` has `internal_port = 8080`
-- Verify `HTTP_PORT=8080` in environment (or use default)
-- Check `Dockerfile` exposes port 8080
+- Ensure `fly.toml` has `internal_port = 3180`
+- Verify `HTTP_PORT=3180` in environment (or use default)
+- Check `Dockerfile` exposes port 3180
 ### Issue: "Out of memory"
 **Solution:**
 1. **Increase memory:**

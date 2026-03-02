@@ -10,8 +10,8 @@ RUN npm run build:server
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
-ENV HTTP_PORT=8080
-EXPOSE 8080
+ENV HTTP_PORT=3080
+EXPOSE 3080
 
 COPY package*.json ./
 RUN npm ci --omit=dev

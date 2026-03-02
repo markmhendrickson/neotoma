@@ -24,7 +24,7 @@ When a Neotoma CLI session starts (dev or prod), the applied rule files (e.g. `.
 
 ## CLI startup protocol (use-existing)
 
-CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`8080`, `8180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
+CLI uses connect-only startup for interactive sessions. It does not auto-start servers on session start. On no-args startup, it discovers running local API instances from session ports, defaults (`3080`, `3180`), remembered ports, and optional configured ports. If multiple instances are healthy, it applies `--env` as a preference and then prompts for explicit selection.
 
 ```bash
 neotoma store --json='[...]'

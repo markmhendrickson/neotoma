@@ -768,7 +768,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               <p className="text-[15px] leading-7 mb-4">
                 If you prefer not to install directly on your host machine, you can run the full
                 Neotoma stack&mdash;API server, CLI, and MCP server&mdash;inside a Docker container.
-                Clone the repo and build the image:
+                Clone the Neotoma repository and build the image:
               </p>
               <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
               <p className="text-[15px] leading-7 mb-4">
@@ -799,7 +799,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </p>
               <CodeBlock code={SITE_CODE_SNIPPETS.dockerCliExample} staticMode={staticMode} />
               <p className="text-[15px] leading-7 mb-4">
-                The API is also available at <code>http://localhost:8080</code> for direct HTTP
+                The API is also available at <code>http://localhost:3080</code> for direct HTTP
                 access.
               </p>
 

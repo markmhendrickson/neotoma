@@ -86,7 +86,7 @@ Local mode uses a built-in auth provider. OAuth endpoints remain the same, but t
 
 **Base URL when running locally:**
 
-The redirect to the local login page uses `NEOTOMA_HOST_URL` (or the default `http://localhost:8080` in development). If your `.env` has `NEOTOMA_HOST_URL=https://dev.neotoma.io`, the browser will open dev.neotoma.io for login even when the API process is running on your machine. For local-only use, set `NEOTOMA_HOST_URL=http://localhost:8080` or leave it unset, and point Cursor at `http://localhost:8080/mcp`.
+The redirect to the local login page uses `NEOTOMA_HOST_URL` (or the default `http://localhost:3080` in development). If your `.env` has `NEOTOMA_HOST_URL=https://dev.neotoma.io`, the browser will open dev.neotoma.io for login even when the API process is running on your machine. For local-only use, set `NEOTOMA_HOST_URL=http://localhost:3080` or leave it unset, and point Cursor at `http://localhost:3080/mcp`.
 
 **Deployment with multiple instances (local backend):**
 

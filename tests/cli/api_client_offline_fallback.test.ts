@@ -32,7 +32,7 @@ vi.mock("../../src/shared/local_transport.ts", () => ({
   getLocalTransportClient: getLocalTransportClientMock,
 }));
 
-describe("api_client offline fallback", () => {
+describe("api_client transport modes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.NEOTOMA_FORCE_LOCAL_TRANSPORT;
@@ -50,7 +50,7 @@ describe("api_client offline fallback", () => {
 
     const { createApiClient } = await import("../../src/shared/api_client.ts");
     const api = createApiClient({
-      baseUrl: "http://localhost:8080",
+      baseUrl: "http://localhost:3080",
       token: "token-1",
       useOfflineFallback: true,
     });
@@ -58,17 +58,33 @@ describe("api_client offline fallback", () => {
     const result = await api.POST("/entities/query", { body: { limit: 1 } as never });
     expect(result).toEqual({ data: { entities: [] }, error: undefined });
     expect(getLocalTransportClientMock).toHaveBeenCalledWith({
-      baseUrl: "http://localhost:8080",
+      baseUrl: "http://localhost:3080",
       token: "token-1",
     });
     expect(localClient.POST).toHaveBeenCalledWith("/entities/query", { body: { limit: 1 } });
+  });
+
+  it("does not implicitly fallback on network failure by default", async () => {
+    const networkErr = new Error("fetch failed", { cause: { code: "ECONNREFUSED" } as Error });
+    remoteClient.POST.mockRejectedValueOnce(networkErr);
+
+    const { createApiClient } = await import("../../src/shared/api_client.ts");
+    const api = createApiClient({
+      baseUrl: "http://localhost:3080",
+      token: "token-1",
+    });
+
+    await expect(api.POST("/entities/query", { body: { limit: 1 } as never })).rejects.toThrow(
+      "fetch failed"
+    );
+    expect(getLocalTransportClientMock).not.toHaveBeenCalled();
   });
 
   it("does not fallback for /health checks", async () => {
     remoteClient.GET.mockRejectedValueOnce(new Error("fetch failed"));
 
     const { createApiClient } = await import("../../src/shared/api_client.ts");
-    const api = createApiClient({ baseUrl: "http://localhost:8080" });
+    const api = createApiClient({ baseUrl: "http://localhost:3080" });
 
     await expect(api.GET("/health", {} as never)).rejects.toThrow("fetch failed");
     expect(getLocalTransportClientMock).not.toHaveBeenCalled();
@@ -79,7 +95,7 @@ describe("api_client offline fallback", () => {
     localClient.GET.mockResolvedValueOnce({ data: { status: "ok" }, error: undefined });
 
     const { createApiClient } = await import("../../src/shared/api_client.ts");
-    const api = createApiClient({ baseUrl: "http://localhost:8080" });
+    const api = createApiClient({ baseUrl: "http://localhost:3080" });
     const result = await api.GET("/stats", {} as never);
 
     expect(result).toEqual({ data: { status: "ok" }, error: undefined });

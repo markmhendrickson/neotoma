@@ -23,7 +23,7 @@ function readSettingsFromStorage(): Settings {
     const cloudStorageEnabledValue = storage?.getItem('cloudStorageEnabled');
     const legacyApiSyncEnabled = storage?.getItem('apiSyncEnabled');
     const storedApiBase = storage?.getItem('apiBase');
-    const defaultApiBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080';
+    const defaultApiBase = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3080';
     const resolvedCloudSetting = cloudStorageEnabledValue ?? legacyApiSyncEnabled;
     return {
       apiBase: storedApiBase || defaultApiBase,
@@ -32,7 +32,7 @@ function readSettingsFromStorage(): Settings {
     };
   } catch {
     return {
-      apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080',
+      apiBase: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3080',
       bearerToken: '',
       cloudStorageEnabled: false,
     };

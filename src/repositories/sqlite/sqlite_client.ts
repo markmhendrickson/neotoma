@@ -1,9 +1,11 @@
-import Database from "better-sqlite3";
+import type Database from "better-sqlite3";
 import { mkdirSync } from "fs";
+import { createRequire } from "node:module";
 import path from "path";
 import { config } from "../../config.js";
 
 let cachedDb: Database.Database | null = null;
+const nodeRequire = createRequire(import.meta.url);
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS sources (
@@ -364,11 +366,15 @@ export function getSqliteDb(): Database.Database {
     return cachedDb;
   }
 
+  // Lazy-load native addon so CLI/entry points that never use the DB don't trigger macOS permission prompts.
+  const DatabaseConstructor = nodeRequire("better-sqlite3") as new (
+    path: string
+  ) => Database.Database;
   const dbPath = config.sqlitePath;
   const dir = path.dirname(dbPath);
   mkdirSync(dir, { recursive: true });
 
-  const db = new Database(dbPath);
+  const db = new DatabaseConstructor(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 

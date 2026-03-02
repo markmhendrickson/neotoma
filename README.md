@@ -2,9 +2,15 @@
 
 ![Neotoma banner](https://raw.githubusercontent.com/markmhendrickson/neotoma/main/docs/assets/neotoma_banner.png)
 
-[Neotoma](https://neotoma.io) is a **truth layer**: an explicit, inspectable, replayable substrate for personal data that AI agents read and write. When agents act, personal data becomes state. Neotoma treats that state the way production systems do: contract-first, deterministic, immutable, and queryable.
+_Give your agents memory you can inspect, replay, and trust._
 
-**Why it exists:** The thing that keeps breaking in agentic systems is not intelligence but trust. Memory changes implicitly, context drifts, and you cannot see what changed or replay it. Neotoma provides the missing primitive: user-controlled, deterministic, inspectable memory with full provenance, so you can trust agents with real, ongoing state.
+For a guided overview, see [neotoma.io](https://neotoma.io).
+
+Agent memory is forgetful. What keeps breaking automation is trust, not intelligence: memory changes implicitly, context drifts, and you cannot see what changed or replay it. When agents act, personal data becomes state. The missing primitive is a layer of explicit, inspectable, replayable state.
+
+[Neotoma](https://neotoma.io) is that layer. Open-source, privacy-protective, and user-controlled. It is contract-first and deterministic (same input, same output), with immutable, queryable state in one graph for documents you upload and data agents write.
+
+It works with Cursor, Claude, Codex, and other MCP-capable tools, with CLI fallback when MCP is unavailable. Install with npm, then configure MCP for your editor or use the CLI directly.
 
 For the full rationale, see [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory).
 
@@ -12,11 +18,11 @@ For the full rationale, see [Building a truth layer for persistent agent memory]
 
 ## What Neotoma Is
 
-Neotoma is a **Truth Layer**, not an app, agent, or workflow engine. It is the lowest-level canonical source of truth for personal data (documents and agent-created data), exposed to AI tools via Model Context Protocol (MCP).
+Neotoma is a _truth layer_, not an app, agent, or workflow engine. It is the lowest-level canonical source of truth for personal data (documents and agent-created data), exposed to AI tools via Model Context Protocol (MCP).
 
-**In practice:** You upload documents (PDFs, images, receipts, contracts) or share information during agent conversations. You don't have to structure it yourself: agents structure and store it via Neotoma when you provide unstructured or semi-structured content. Neotoma resolves entities across all sources, builds timelines from date fields, and keeps every fact traceable to its source. ChatGPT, Claude, and Cursor can read this memory, write new structured data, correct mistakes, and trigger reinterpretation. One graph connects people, companies, events, and relationships across all your data.
+You upload documents (PDFs, images, receipts, contracts) or share information during agent conversations. You don't have to structure it yourself: agents structure and store it via Neotoma when you provide unstructured or semi-structured content. Neotoma resolves entities across all sources, builds timelines from date fields, and keeps every fact traceable to its source. ChatGPT, Claude, and Cursor can read this memory, write new structured data, correct mistakes, and trigger reinterpretation. One graph connects people, companies, events, and relationships across all your data.
 
-**What it is not:** Not a note-taking app or "second brain." Not provider-controlled ChatGPT Memory or Claude Projects (those are conversation-only and platform-locked; Neotoma is structured personal data memory with entity resolution and timelines, cross-platform via MCP). Not a vector store or RAG layer. Not an autonomous agent. It is the memory layer agents read and write; you control what goes in and what stays.
+It's not a note-taking app or "second brain." Not provider-controlled ChatGPT Memory or Claude Projects (those are conversation-only and platform-locked; Neotoma is structured personal data memory with entity resolution and timelines, cross-platform via MCP). Not a vector store or RAG layer. Not an autonomous agent. It is the memory layer agents read and write; you control what goes in and what stays.
 
 ---
 
@@ -63,12 +69,29 @@ graph LR
 
 ---
 
+## Core Terminology
+
+| Term            | Definition                                                                                    |
+| --------------- | --------------------------------------------------------------------------------------------- |
+| Truth Layer     | Deterministic, immutable structured memory substrate that tools and agents read and write.    |
+| Source          | Raw data (file, text, URL, or structured JSON) stored with content-addressed deduplication.   |
+| Observation     | Granular fact extracted from a source; reducers merge observations into entity snapshots.     |
+| Entity          | Canonical representation of a person, company, task, or other object with a deterministic ID. |
+| Entity snapshot | Current truth for an entity computed from all related observations.                           |
+| Provenance      | Origin tracking (source, timestamp, operation) so each value is traceable.                    |
+| Memory graph    | Graph of sources, observations, entities, events, and typed relationships.                    |
+
+For the full glossary, see [Core terminology](https://neotoma.io/#terminology).
+
+---
+
 ## Who It's For
 
-- **AI-native operators** who rely on ChatGPT, Claude, or Cursor and need persistent memory across sessions.
-- **Knowledge workers** (researchers, analysts, consultants, legal) who need cross-data reasoning and entity unification across contracts, invoices, and agent-created data.
-- **Small teams (2–20)** who want a shared truth layer with row-level security.
-- **Builders of agentic systems** who need a deterministic memory and provenance layer for agents and toolchains (e.g. agent frameworks, orchestration pipelines, observability stacks).
+| Who                                   | What they need                                                           | Example data to remember                                                |
+| ------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| AI-native individual operators        | Memory that follows across daily tools and sessions                      | Tasks, preferences, notes, recurring reminders, contacts, deadlines     |
+| Knowledge workers with scattered data | Durable context across documents and sessions, with evidence and lineage | Source documents, extracted entities, citations, key quotes, timelines  |
+| Builders of agentic systems           | Structured memory agents can read and write with provenance              | Session histories, accumulated facts, decisions, runbooks, tool configs |
 
 **Why Neotoma:** One memory graph across documents and agent-created data; agents remember context without re-explanation; full provenance and audit trail; works with any MCP-compatible tool; privacy-first and user-controlled. The same substrate serves both human-in-the-loop use and agent frameworks or toolchains that need deterministic memory and provenance.
 
@@ -161,7 +184,7 @@ Full release index: [docs/releases/](docs/releases/).
 
 The **primary entrypoint** for all documentation is the index and navigation guide. All contributors and AI assistants working on the repo should load it first.
 
-- **[Documentation index and navigation](docs/context/index_rules.mdc)** – Map of the docs system, reading order by change type, dependency graph, and quick-reference answers. Start here when contributing or navigating the repo.
+- **[Documentation index and navigation](#documentation-index)** – Map of the docs system, reading order by change type, dependency graph, and quick-reference answers. Start here when contributing or navigating the repo.
 
 **Foundational (load first):**
 
@@ -213,6 +236,16 @@ neotoma init
 neotoma api start
 ```
 
+CLI transport defaults are API-first. Use `--offline` only when you explicitly want in-process local transport:
+
+```bash
+# Default (API transport; no implicit local fallback)
+neotoma entities list --type task
+
+# Explicit local inline mode (no API server required)
+neotoma --offline entities list --type task
+```
+
 After installation, configure MCP for your AI tool:
 
 ```bash
@@ -231,6 +264,56 @@ npm test
 ```
 
 **Prerequisites:** Node.js v18.x or v20.x (LTS), npm v9+. Developer preview uses **local storage only**. For local storage, **no `.env` is required**; the app uses defaults (`./data`, `./data/neotoma.db`, `./data/sources`). Optional overrides: [Getting started](docs/developer/getting_started.md).
+
+### Option 3: Run with Docker
+
+```bash
+git clone https://github.com/markmhendrickson/neotoma.git
+cd neotoma
+docker build -t neotoma .
+
+docker run -d \
+  --name neotoma \
+  -p 3080:3080 \
+  -v neotoma-data:/app/data \
+  neotoma
+
+docker exec neotoma neotoma init --yes --data-dir /app/data
+```
+
+Connect MCP from Docker:
+
+```json
+{
+  "mcpServers": {
+    "neotoma": {
+      "command": "docker",
+      "args": ["exec", "-i", "neotoma", "node", "dist/index.js"]
+    }
+  }
+}
+```
+
+Use the CLI from Docker:
+
+```bash
+docker exec neotoma neotoma store \
+  --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'
+
+docker exec neotoma neotoma entities list --type task
+```
+
+---
+
+## Get started
+
+After installation:
+
+1. Run `neotoma init` and configure your MCP client.
+2. In a conversation, tell your assistant: "Remind me to review my subscription Friday."
+3. In the same conversation, ask it to list your open tasks.
+
+This gives you a quick end-to-end validation that memory is persisting and retrievable across sessions and tools. For full setup steps, see [Getting started](docs/developer/getting_started.md).
 
 ---
 
@@ -287,6 +370,20 @@ To use the Neotoma MCP server from another workspace, see [Cursor MCP setup](doc
 
 ---
 
+## Agent Instructions (Behavior Summary)
+
+Neotoma-compatible agents follow a consistent behavior contract across MCP and CLI:
+
+- **Store first:** Persist the conversation turn before responding.
+- **Bounded retrieval:** Retrieve likely related entities before storing new ones.
+- **Entity extraction:** Extract and store relevant people, tasks, events, places, and relationships from user input.
+- **Task creation:** Create tasks when users express intent, obligations, deadlines, or reminders.
+- **External data safety:** Store relevant entities from external tool results before responding.
+
+Full instructions: [MCP instructions](docs/developer/mcp/instructions.md) and [CLI agent instructions](docs/developer/cli_agent_instructions.md).
+
+---
+
 ## Core Principles
 
 1. **Deterministic** – Same input → same output. Hash-based IDs, no randomness in core components.
@@ -307,6 +404,15 @@ To use the Neotoma MCP server from another workspace, see [Cursor MCP setup](doc
 
 Neotoma is intentionally local-only in this active codebase (SQLite + local file storage).
 If remote backend support is needed later, recover it from git history.
+
+---
+
+## Related posts
+
+- [Neotoma developer release](https://markmhendrickson.com/posts/neotoma-developer-release)
+- [Building a truth layer for persistent agent memory](https://markmhendrickson.com/posts/truth-layer-agent-memory)
+- [Agent memory has a truth problem](https://markmhendrickson.com/posts/agent-memory-truth-problem)
+- [Why agent memory needs more than RAG](https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag)
 
 ---
 

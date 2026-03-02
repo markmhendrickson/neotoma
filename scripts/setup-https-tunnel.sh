@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-HTTP_PORT="${HTTP_PORT:-8080}"
+HTTP_PORT="${HTTP_PORT:-3080}"
 # When CLI session spawns, API may bind to a different port on EADDRINUSE; wait for port file
 if [ -n "${NEOTOMA_SESSION_PORT_FILE:-}" ]; then
   _wait=0

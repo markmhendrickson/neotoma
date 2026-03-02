@@ -66,15 +66,17 @@ async function syncCodexUserConfig(repoRoot: string, sessionPorts?: SessionPorts
   const entries = neotomaServerEntries(repoRoot, sessionPorts);
   const blocks: string[] = [];
   for (const [id, config] of Object.entries(entries)) {
-    const lines = [
-      `[mcp_servers.${id}]`,
-      `command = ${escapeTomlString(config.command)}`,
-      `cwd = ${escapeTomlString(repoRoot)}`,
-    ];
-    if (Array.isArray(config.args) && config.args.length) {
+    const lines = [`[mcp_servers.${id}]`];
+    if ("url" in config && typeof config.url === "string") {
+      lines.push(`url = ${escapeTomlString(config.url)}`);
+    } else if ("command" in config && typeof config.command === "string") {
+      lines.push(`command = ${escapeTomlString(config.command)}`);
+      lines.push(`cwd = ${escapeTomlString(repoRoot)}`);
+    }
+    if ("args" in config && Array.isArray(config.args) && config.args.length) {
       lines.push(`args = [${config.args.map((a) => escapeTomlString(a)).join(", ")}]`);
     }
-    if (config.env && Object.keys(config.env).length > 0) {
+    if ("env" in config && config.env && Object.keys(config.env).length > 0) {
       lines.push(`[mcp_servers.${id}.env]`);
       for (const [k, v] of Object.entries(config.env)) {
         lines.push(`${k} = ${escapeTomlString(String(v))}`);
@@ -251,12 +253,12 @@ export function detectNeotomaServers(
       if (isLocal && url.includes("/mcp")) {
         if (wantDevPort != null) {
           if (port === wantDevPort) hasDev = true;
-        } else if (port === 8080) {
+        } else if (port === 3080) {
           hasDev = true;
         }
         if (wantProdPort != null) {
           if (port === wantProdPort) hasProd = true;
-        } else if (port === 8180) {
+        } else if (port === 3180) {
           hasProd = true;
         }
         if (sessionPorts?.activePort != null && port === sessionPorts.activePort) {
@@ -274,8 +276,8 @@ export function detectNeotomaServers(
 }
 
 /**
- * Analyze MCP config for misconfigurations or suboptimal setup.
- * When in a local Neotoma repo, stdio is recommended over HTTP for local use.
+ * Analyze MCP config for misconfigurations.
+ * For local Neotoma usage, HTTP MCP URLs are the default.
  */
 export function analyzeMcpConfigIssues(
   mcpServers: Record<string, unknown> | undefined,
@@ -302,25 +304,18 @@ export function analyzeMcpConfigIssues(
 
     if (!isNeotoma) continue;
 
-    // Using HTTP locally when stdio is recommended (in local repo)
-    if (url && (url.includes("localhost") || url.includes("127.0.0.1")) && isLocalRepo) {
-      issues.push({
-        type: "http_locally",
-        serverId,
-        description: `${serverId} uses HTTP locally; stdio is recommended for local development.`,
-      });
-    }
+    void isLocalRepo;
 
     // Port mismatch when session ports are set
     if (url && sessionPorts) {
       const port = portFromUrl(url);
       if (port != null) {
         const isDevLike =
-          port === 8080 ||
+          port === 3080 ||
           port === sessionPorts.devPort ||
           (sessionPorts.activeEnv === "dev" && port === sessionPorts.activePort);
         const isProdLike =
-          port === 8180 ||
+          port === 3180 ||
           port === sessionPorts.prodPort ||
           (sessionPorts.activeEnv === "prod" && port === sessionPorts.activePort);
         if (sessionPorts.devPort != null && isDevLike && port !== sessionPorts.devPort) {
@@ -347,38 +342,22 @@ export function analyzeMcpConfigIssues(
   return issues;
 }
 
-/** Build a server entry for JSON: omit args and env when empty so mcp.json stays minimal. */
-function serverEntry(
-  command: string,
-  args: string[] = [],
-  env: Record<string, string> = {}
-): { command: string; args?: string[]; env?: Record<string, string> } {
-  const entry: { command: string; args?: string[]; env?: Record<string, string> } = { command };
-  if (args.length > 0) entry.args = args;
-  if (Object.keys(env).length > 0) entry.env = env;
-  return entry;
-}
-
 /**
- * Generate neotoma-dev and neotoma (prod) stdio server entries with absolute script paths.
- * Stdio MCP servers do not use ports (they communicate via stdin/stdout), so we never
- * add NEOTOMA_SESSION_DEV_PORT or NEOTOMA_SESSION_PROD_PORT. Session ports are only
- * applied to URL-based entries via applySessionPortsToUrls.
- * Empty args and env are omitted so mcp.json stays minimal.
+ * Generate neotoma-dev and neotoma (prod) stdio MCP server entries.
+ * This lets MCP clients launch Neotoma directly without requiring a separate API server.
  */
+type McpServerEntry = { url: string } | { command: string; args?: string[]; env?: Record<string, string> };
+
 export function neotomaServerEntries(
   repoRoot: string,
   _sessionPorts?: SessionPorts
 ): {
-  "neotoma-dev": { command: string; args?: string[]; env?: Record<string, string> };
-  neotoma: { command: string; args?: string[]; env?: Record<string, string> };
+  "neotoma-dev": McpServerEntry;
+  neotoma: McpServerEntry;
 } {
   return {
-    "neotoma-dev": serverEntry(path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio.sh"), []),
-    neotoma: serverEntry(
-      path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio_prod.sh"),
-      []
-    ),
+    "neotoma-dev": { command: path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio.sh") },
+    neotoma: { command: path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio_prod.sh") },
   };
 }
 
@@ -766,7 +745,7 @@ async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
         "  (2) prod\n" +
         "  (3) both\n" +
         "  (4) skip\n" +
-        "Choose [1-4] (default: 3): ",
+        "Choose [1-4] (default: 2): ",
       (answer) => {
         if (settled) return;
         settled = true;
@@ -775,13 +754,13 @@ async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
         if (a === "4" || a === "skip" || a === "s") return resolve("skip");
         if (a === "1" || a === "dev") return resolve("dev");
         if (a === "2" || a === "prod") return resolve("prod");
-        return resolve("both");
+        return resolve("prod");
       }
     );
   });
 }
 
-async function promptInstallTarget(): Promise<InstallTargetChoice> {
+async function promptInstallTarget(includeProjectOptions: boolean): Promise<InstallTargetChoice> {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -795,8 +774,8 @@ async function promptInstallTarget(): Promise<InstallTargetChoice> {
         reject(new InitAbortError());
       }
     });
-    rl.question(
-      "Add or update MCP servers:\n" +
+    const prompt = includeProjectOptions
+      ? "Add or update MCP servers:\n" +
         "  (1) project (Cursor + Claude + Codex in this source checkout)\n" +
         "  (2) user (Cursor + Claude + Codex in ~)\n" +
         "  (3) both (project + user)\n" +
@@ -804,12 +783,27 @@ async function promptInstallTarget(): Promise<InstallTargetChoice> {
         "  (5) Claude only (project + user)\n" +
         "  (6) Codex only (project + user)\n" +
         "  (7) skip\n" +
-        "Choose [1-7] (default: 2): ",
-      (answer) => {
+        "Choose [1-7] (default: 2): "
+      : "Add or update MCP servers:\n" +
+        "  (1) user (Cursor + Claude + Codex in ~)\n" +
+        "  (2) Cursor only (user)\n" +
+        "  (3) Claude only (user)\n" +
+        "  (4) Codex only (user)\n" +
+        "  (5) skip\n" +
+        "Note: project-level MCP options require running from a source checkout.\n" +
+        "Choose [1-5] (default: 1): ";
+    rl.question(prompt, (answer) => {
         if (settled) return;
         settled = true;
         rl.close();
         const a = (answer ?? "").trim().toLowerCase();
+        if (!includeProjectOptions) {
+          if (a === "" || a === "1" || a === "user" || a === "u") return resolve("user_all");
+          if (a === "2" || a === "cursor" || a === "c") return resolve("cursor_only");
+          if (a === "3" || a === "claude") return resolve("claude_only");
+          if (a === "4" || a === "codex") return resolve("codex_only");
+          return resolve("skip");
+        }
         if (a === "" || a === "2" || a === "user" || a === "u") return resolve("user_all");
         if (a === "1" || a === "project" || a === "p") return resolve("project_all");
         if (a === "3" || a === "both") return resolve("both_all");
@@ -817,8 +811,7 @@ async function promptInstallTarget(): Promise<InstallTargetChoice> {
         if (a === "5" || a === "claude") return resolve("claude_only");
         if (a === "6" || a === "codex") return resolve("codex_only");
         return resolve("skip");
-      }
-    );
+      });
   });
 }
 
@@ -893,49 +886,12 @@ function applySessionPortsToUrls(
     if (!u.includes("/mcp") || (!u.includes("localhost") && !u.includes("127.0.0.1"))) continue;
     const port = portFromUrl(u);
     if (port == null) continue;
-    if (sessionPorts.devPort != null && port === 8080) {
+    if (sessionPorts.devPort != null && port === 3080) {
       config.url = rewriteMcpUrlToPort(u, sessionPorts.devPort);
-    } else if (sessionPorts.prodPort != null && port === 8180) {
+    } else if (sessionPorts.prodPort != null && port === 3180) {
       config.url = rewriteMcpUrlToPort(u, sessionPorts.prodPort);
     }
   }
-}
-
-/**
- * Convert HTTP-based neotoma entries to stdio in mcpServers.
- * Identifies dev (port 8080 or session dev) and prod (port 8180 or session prod) by port.
- */
-function convertHttpToStdio(
-  mcpServers: Record<string, { command?: string; url?: string; [key: string]: unknown }>,
-  repoRoot: string,
-  sessionPorts?: SessionPorts
-): boolean {
-  let changed = false;
-  const entries = neotomaServerEntries(repoRoot, sessionPorts);
-
-  for (const [serverId, config] of Object.entries(mcpServers)) {
-    if (!config?.url || typeof config.url !== "string") continue;
-    const u = config.url;
-    if (!u.includes("localhost") && !u.includes("127.0.0.1")) continue;
-    if (!u.includes("/mcp")) continue;
-
-    const port = portFromUrl(u);
-    if (port == null) continue;
-
-    const isDev = port === 8080 || port === sessionPorts?.devPort;
-    const isProd = port === 8180 || port === sessionPorts?.prodPort;
-
-    if (isDev) {
-      mcpServers[serverId] = entries["neotoma-dev"];
-      changed = true;
-    } else if (isProd) {
-      if (serverId !== "neotoma") delete mcpServers[serverId];
-      mcpServers["neotoma"] = entries.neotoma;
-      changed = true;
-    }
-  }
-
-  return changed;
 }
 
 /**
@@ -1020,9 +976,7 @@ export async function offerFix(
   }
   process.stdout.write("\n");
 
-  const shouldFix = await promptYesNo(
-    "Fix these issues? (Convert HTTP to stdio for local use, align ports with CLI session)"
-  );
+  const shouldFix = await promptYesNo("Fix these issues? (Align local MCP URLs with CLI session ports)");
   if (!shouldFix) {
     return { fixed: false, message: "Fix cancelled.", updatedPaths: [] };
   }
@@ -1035,13 +989,7 @@ export async function offerFix(
 
     let changed = false;
 
-    // Convert HTTP to stdio where applicable
-    const hadHttpLocally = (config.issues || []).some((i) => i.type === "http_locally");
-    if (hadHttpLocally) {
-      changed = convertHttpToStdio(parsed.mcpServers, repoRoot, sessionPorts) || changed;
-    }
-
-    // Fix port mismatch for remaining URL entries
+    // Fix port mismatch for URL entries
     if (sessionPorts) {
       const before = JSON.stringify(parsed.mcpServers);
       applySessionPortsToUrls(parsed.mcpServers, sessionPorts);
@@ -1244,7 +1192,12 @@ export async function offerInstall(
     const createdMsg = selectedEnv
       ? `Created ${configPath} with ${selectedEnv} server.`
       : `Created ${configPath} with dev and prod servers.`;
-    return { installed: true, message: createdMsg, updatedPaths: [configPath] };
+    return {
+      installed: true,
+      message: createdMsg,
+      scope: choice === "project" ? "project" : "user",
+      updatedPaths: [configPath],
+    };
   }
 
   // Offer to update existing configs
@@ -1259,6 +1212,9 @@ export async function offerInstall(
   if (!boxAlreadyShown) {
     process.stdout.write("\n" + formatMcpStatusBox(configs) + "\n");
   }
+  const runningFromSourceCheckout =
+    cwd === repoRoot || cwd.startsWith(repoRoot + path.sep);
+  const includeProjectOptions = runningFromSourceCheckout;
 
   const installChoice: InstallTargetChoice =
     options?.autoInstallScope === "project"
@@ -1267,20 +1223,24 @@ export async function offerInstall(
         ? "both_all"
         : options?.autoInstallScope === "user"
           ? "user_all"
-          : await promptInstallTarget();
+          : await promptInstallTarget(includeProjectOptions);
   if (installChoice === "skip") {
     return { installed: false, message: "Installation cancelled." };
   }
   const scope = installChoiceToScope(installChoice);
-  const selectedMissingConfigs = filterConfigsByInstallChoice(
+  let selectedMissingConfigs = filterConfigsByInstallChoice(
     missingConfigs,
     installChoice,
     repoRoot
   );
+  if (!includeProjectOptions) {
+    selectedMissingConfigs = selectedMissingConfigs.filter((c) => !isProjectLevelConfig(c.path, repoRoot));
+  }
   if (selectedMissingConfigs.length === 0) {
     return {
       installed: false,
       message: "No matching missing configs for the selected target.",
+      scope,
     };
   }
 

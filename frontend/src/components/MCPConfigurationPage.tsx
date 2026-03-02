@@ -59,10 +59,10 @@ export function MCPConfigurationPage() {
         // Fallback to default if server info unavailable
         console.warn("Failed to fetch server info, using defaults:", error);
         setServerInfo({ 
-          httpPort: 8080, 
+          httpPort: 3080, 
           mcpUrl: import.meta.env.VITE_API_BASE_URL 
             ? `${import.meta.env.VITE_API_BASE_URL}/mcp`
-            : "http://localhost:8080/mcp"
+            : "http://localhost:3080/mcp"
         });
       }
     };
@@ -109,7 +109,7 @@ export function MCPConfigurationPage() {
     const mcpUrl = serverInfo?.mcpUrl || 
       (import.meta.env.VITE_API_BASE_URL 
         ? `${import.meta.env.VITE_API_BASE_URL}/mcp`
-        : "http://localhost:8080/mcp");
+        : "http://localhost:3080/mcp");
     
     return JSON.stringify(
       {
@@ -165,7 +165,7 @@ export function MCPConfigurationPage() {
       const mcpUrl = serverInfo?.mcpUrl || 
         (import.meta.env.VITE_API_BASE_URL 
           ? `${import.meta.env.VITE_API_BASE_URL}/mcp`
-          : "http://localhost:8080/mcp");
+          : "http://localhost:3080/mcp");
       
       // Config should be just the server config object (url for HTTP transport)
       const serverConfig = {
@@ -593,7 +593,7 @@ export function MCPConfigurationPage() {
 {`{
   "mcpServers": {
     "neotoma": {
-      "url": "${serverInfo?.mcpUrl || "http://localhost:8080/mcp"}"
+      "url": "${serverInfo?.mcpUrl || "http://localhost:3080/mcp"}"
     }
   }
 }`}
