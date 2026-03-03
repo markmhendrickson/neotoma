@@ -10,8 +10,8 @@
 
 ### When the tunnel is running
 
-1. **Tunnel (Cloudflare or ngrok):** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS to `http://localhost:8080` (or 8180 for prod). ngrok only: UI at `http://localhost:4040`.
-2. **Local MCP server:** Port 8080 (or 8180), `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`.
+1. **Tunnel (Cloudflare or ngrok):** PID in `/tmp/ngrok-mcp.pid`, forwards HTTPS to `http://localhost:3080` (or 3180 for prod). ngrok only: UI at `http://localhost:4040`.
+2. **Local MCP server:** Port 3080 (or 3180), `/mcp` returns 401 when unauthenticated, discovery at `/.well-known/oauth-authorization-server`.
 3. **Config:** `NEOTOMA_HOST_URL` set to the **current** tunnel URL (or server auto-discovers from `/tmp/ngrok-mcp-url.txt`). Cursor / `.cursor/mcp.json` use `https://<tunnel>/mcp`.
 
 ### "Connection refused" or "refuses to connect"
@@ -59,7 +59,7 @@ tail -f /tmp/cloudflared-tunnel.log
 
 ```bash
 # Verify local server responds
-curl http://localhost:8080/.well-known/oauth-authorization-server
+curl http://localhost:3080/.well-known/oauth-authorization-server
 
 # Should return JSON with OAuth endpoints
 ```
@@ -111,7 +111,7 @@ See [tunnels.md](tunnels.md) for full provider selection, install, and verificat
 
 - **Tunnel URL:** From `npm run tunnel:https` output or `cat /tmp/ngrok-mcp-url.txt`
 - **MCP endpoint:** `https://<your-tunnel-url>/mcp`
-- **Local server:** `http://localhost:8080`
+- **Local server:** `http://localhost:3080`
 - **Env:** `NEOTOMA_HOST_URL` set to tunnel URL (or rely on auto-discovery)
 - **Cursor:** `url` in config = `https://<your-tunnel-url>/mcp`
 
@@ -131,13 +131,13 @@ cat /tmp/ngrok-mcp-url.txt
 curl -s http://localhost:4040/api/tunnels | python3 -m json.tool
 
 # Local server
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp   # expect 401
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3080/mcp   # expect 401
 
 # Through tunnel (replace with your current URL; ngrok free tier may need header)
 curl -s -H "ngrok-skip-browser-warning: 1" "https://YOUR-TUNNEL-URL/.well-known/oauth-authorization-server"
 
 # Processes
-lsof -i :8080
+lsof -i :3080
 ps aux | grep "[n]grok http"
 ps aux | grep "[c]loudflared"
 ```

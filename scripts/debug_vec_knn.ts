@@ -4,7 +4,7 @@
  * Run from repo root. Use NEOTOMA_ENV=production to use prod DB (data/neotoma.prod.db).
  */
 import "dotenv/config";
-import Database from "better-sqlite3";
+import Database from "../src/repositories/sqlite/sqlite_driver.js";
 import { join } from "node:path";
 import { createRequire } from "node:module";
 import { generateEmbedding } from "../src/embeddings.js";

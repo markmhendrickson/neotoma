@@ -21,13 +21,13 @@ This document records how the codebase distinguishes development from production
 **Event log vs logs:** The event-sourcing append-only log is a single file `events.log` inside the logs directory. All other application logs (CLI, API, session) also live under `data/logs/` with descriptive names (e.g. `session.log` for dev, `session.prod.log` for prod, `cli.<pid>.log`).
 | API background log dir | `~/.config/neotoma/logs` | `~/.config/neotoma/logs_prod` | (derived from `NEOTOMA_ENV`) |
 | API background PID file | `~/.config/neotoma/api.pid` | `~/.config/neotoma/api_prod.pid` | (derived from env) |
-| HTTP port | 8080 | 8021 | `NEOTOMA_HTTP_PORT` or `HTTP_PORT` |
+| HTTP port | 3080 | 8021 | `NEOTOMA_HTTP_PORT` or `HTTP_PORT` |
 
 Environment is determined by `NEOTOMA_ENV`; `production` means prod defaults. `NEOTOMA_ENV` and `NEOTOMA_HTTP_PORT` are not in `.env.example` or the init template; set them at runtime (e.g. `NEOTOMA_ENV=production neotoma api start`) or in your shell profile if you want a fixed env or port.
 
 ## CLI base URL and port choice
 
-When resolving the API base URL, the CLI uses: `--base-url` if set; otherwise session ports (`NEOTOMA_SESSION_DEV_PORT` / `NEOTOMA_SESSION_PROD_PORT`) when in a session; otherwise probe of 8180 and 8080. When **no server is detected**, the CLI falls back to port **8180** (prod). When one or two servers are found, port choice follows `--env`, `NEOTOMA_SESSION_ENV`, or `NEOTOMA_ENV` (e.g. prod → 8180, dev → 8080). See `src/cli/config.ts` `resolveBaseUrl()`.
+When resolving the API base URL, the CLI uses: `--base-url` if set; otherwise session ports (`NEOTOMA_SESSION_DEV_PORT` / `NEOTOMA_SESSION_PROD_PORT`) when in a session; otherwise probe of 3180 and 3080. When **no server is detected**, the CLI falls back to port **3080** (dev). When one or two servers are found, port choice follows `--env`, `NEOTOMA_SESSION_ENV`, or `NEOTOMA_ENV` (e.g. prod → 3180, dev → 3080). See `src/cli/config.ts` `resolveBaseUrl()`.
 
 ## Optional / not implemented
 

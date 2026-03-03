@@ -1,18 +1,68 @@
 /**
- * Helper to create test parquet files with BigInt values
- * 
- * Uses parquetjs (the older library) for writing since @dsnp/parquetjs is read-only
+ * Helper to create test parquet files with BigInt values.
+ *
+ * Uses apache-arrow + parquet-wasm for writing test parquet fixtures.
  */
 
 import * as fs from "fs";
 import * as path from "path";
-import { ParquetSchema, ParquetWriter } from "parquetjs";
+import { tableFromArrays, tableToIPC } from "apache-arrow";
+import { Table as WasmTable, writeParquet } from "parquet-wasm";
 
 export interface TestParquetOptions {
   outputPath: string;
   rows?: Array<Record<string, unknown>>;
   includeBigInt?: boolean;
   customSchema?: Record<string, { type: string; optional?: boolean }>;
+}
+
+function coerceBySchemaType(value: unknown, schemaType?: string): unknown {
+  if (value === undefined) {
+    return null;
+  }
+  if (value === null || !schemaType) {
+    return value;
+  }
+  const type = schemaType.toUpperCase();
+  if (type === "INT64" || type === "INT_64") {
+    return typeof value === "bigint" ? value : BigInt(value as number | string);
+  }
+  if (type === "INT32" || type === "DOUBLE" || type === "FLOAT" || type === "DECIMAL") {
+    return typeof value === "number" ? value : Number(value);
+  }
+  if (type === "UTF8" || type === "STRING") {
+    return String(value);
+  }
+  if (type === "BOOLEAN" || type === "BOOL") {
+    return Boolean(value);
+  }
+  return value;
+}
+
+async function writeRowsToParquet(
+  outputPath: string,
+  rows: Array<Record<string, unknown>>,
+  customSchema?: Record<string, { type: string; optional?: boolean }>
+): Promise<void> {
+  if (rows.length === 0) {
+    throw new Error("Cannot write parquet file with zero rows");
+  }
+
+  const columnNames = customSchema
+    ? Object.keys(customSchema)
+    : Array.from(new Set(rows.flatMap((row) => Object.keys(row))));
+
+  const columns: Record<string, unknown[]> = {};
+  for (const columnName of columnNames) {
+    const schemaType = customSchema?.[columnName]?.type;
+    columns[columnName] = rows.map((row) => coerceBySchemaType(row[columnName], schemaType));
+  }
+
+  const arrowTable = tableFromArrays(columns);
+  const wasmTable = WasmTable.fromIPCStream(tableToIPC(arrowTable, "stream"));
+  const parquetData = writeParquet(wasmTable);
+  wasmTable.drop();
+  fs.writeFileSync(outputPath, parquetData);
 }
 
 /**
@@ -29,30 +79,6 @@ export async function createTestParquetFile(
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
-  // Use custom schema if provided, otherwise use default
-  let schemaFields: Record<string, any>;
-  
-  if (customSchema) {
-    schemaFields = {};
-    for (const [fieldName, fieldDef] of Object.entries(customSchema)) {
-      schemaFields[fieldName] = {
-        type: fieldDef.type,
-        optional: fieldDef.optional !== false,
-      };
-    }
-  } else {
-    // Default schema with Int64 fields (which will be read as BigInt)
-    schemaFields = {
-      id: { type: "INT64", optional: false },
-      name: { type: "UTF8", optional: true },
-      amount: { type: "DOUBLE", optional: true },
-      count: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
-      timestamp: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
-    };
-  }
-  
-  const schema = new ParquetSchema(schemaFields);
 
   // Default test data (use smaller BigInt values that fit in Int53 range)
   const defaultRows = rows || [
@@ -79,14 +105,14 @@ export async function createTestParquetFile(
     },
   ];
 
-  // Write parquet file
-  const writer = await ParquetWriter.openFile(schema, outputPath);
-
-  for (const row of defaultRows) {
-    await writer.appendRow(row);
-  }
-
-  await writer.close();
+  const effectiveSchema = customSchema || {
+    id: { type: "INT64", optional: false },
+    name: { type: "UTF8", optional: true },
+    amount: { type: "DOUBLE", optional: true },
+    count: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
+    timestamp: includeBigInt ? { type: "INT64", optional: true } : { type: "INT32", optional: true },
+  };
+  await writeRowsToParquet(outputPath, defaultRows, effectiveSchema);
 
   return outputPath;
 }
@@ -119,26 +145,23 @@ export async function createParquetWithKnownSchema(
   outputPath: string,
   entityType: string = "test_task"
 ): Promise<string> {
-  // Create schema with mixed known and unknown fields
-  const schema = new ParquetSchema({
+  const schema = {
     id: { type: "INT64", optional: false },
-    title: { type: "UTF8", optional: true },          // Known field (common in task schema)
-    status: { type: "UTF8", optional: true },         // Known field
-    unknown_field_1: { type: "UTF8", optional: true }, // Unknown field
-    unknown_field_2: { type: "INT32", optional: true }, // Unknown field
-    unknown_field_3: { type: "UTF8", optional: true }, // Unknown field
-  });
+    title: { type: "UTF8", optional: true },
+    status: { type: "UTF8", optional: true },
+    unknown_field_1: { type: "UTF8", optional: true },
+    unknown_field_2: { type: "INT32", optional: true },
+    unknown_field_3: { type: "UTF8", optional: true },
+  };
 
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const writer = await ParquetWriter.openFile(schema, outputPath);
-
-  // Create multiple rows to test row diversity
+  const rows: Array<Record<string, unknown>> = [];
   for (let i = 1; i <= 6; i++) {
-    await writer.appendRow({
+    rows.push({
       id: BigInt(i),
       title: `Task ${i}`,
       status: i % 2 === 0 ? "completed" : "pending",
@@ -147,8 +170,7 @@ export async function createParquetWithKnownSchema(
       unknown_field_3: `extra_${i}`,
     });
   }
-
-  await writer.close();
+  await writeRowsToParquet(outputPath, rows, schema);
   return outputPath;
 }
 
@@ -159,29 +181,27 @@ export async function createParquetWithKnownSchema(
 export async function createParquetWithUnknownSchema(
   outputPath: string
 ): Promise<string> {
-  const schema = new ParquetSchema({
+  const schema = {
     id: { type: "INT64", optional: false },
     field_a: { type: "UTF8", optional: true },
     field_b: { type: "INT32", optional: true },
     field_c: { type: "UTF8", optional: true },
-  });
+  };
 
   const dir = path.dirname(outputPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
-  const writer = await ParquetWriter.openFile(schema, outputPath);
-
+  const rows: Array<Record<string, unknown>> = [];
   for (let i = 1; i <= 5; i++) {
-    await writer.appendRow({
+    rows.push({
       id: BigInt(i),
       field_a: `value_a_${i}`,
       field_b: i * 100,
       field_c: `value_c_${i}`,
     });
   }
-
-  await writer.close();
+  await writeRowsToParquet(outputPath, rows, schema);
   return outputPath;
 }

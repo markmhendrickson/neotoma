@@ -20,11 +20,11 @@ The Neotoma HTTP server exposes REST endpoints that ChatGPT can call as Actions.
    ```bash
    npm run dev:server
    ```
-   Should see: `HTTP Actions listening on :8080`
+   Should see: `HTTP Actions listening on :3080`
 3. **Create a tunnel** to expose localhost (required for ChatGPT to access):
    **Using ngrok:**
    ```bash
-   ngrok http 8080
+   ngrok http 3080
    ```
    Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`)
 ### Option B: Production Deployment
@@ -112,7 +112,7 @@ The OpenAPI schema includes these actions:
 - Verify server is running and accessible
 ### Issue: "Connection refused" or "Cannot reach server"
 **Solutions:**
-- Verify server is running: `curl http://localhost:8080/health`
+- Verify server is running: `curl http://localhost:3080/health`
 - Check firewall rules allow incoming connections
 - For local development, ensure tunnel (ngrok) is running
 - Verify HTTPS endpoint is accessible from the internet
@@ -143,13 +143,13 @@ npm run dev:server
 # Set environment variables
 export ACTIONS_BEARER_TOKEN=your-token-here
 # Create tunnel (local development)
-ngrok http 8080
+ngrok http 3080
 # Test health endpoint
-curl http://localhost:8080/health
+curl http://localhost:3080/health
 # Test with authentication
-curl -H "Authorization: Bearer your-token" http://localhost:8080/health
+curl -H "Authorization: Bearer your-token" http://localhost:3080/health
 # Access OpenAPI schema (for Custom GPT import)
-curl http://localhost:8080/openapi.yaml
+curl http://localhost:3080/openapi.yaml
 ```
 ## Additional Resources
 - **MCP Specification:** `docs/specs/MCP_SPEC.md`

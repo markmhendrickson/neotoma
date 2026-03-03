@@ -40,7 +40,7 @@ npm run tunnel:https
 ```
 
 This will:
-- Start the tunnel (Cloudflare or ngrok, see [tunnels.md](tunnels.md)) on port 8080
+- Start the tunnel (Cloudflare or ngrok, see [tunnels.md](tunnels.md)) on port 3080
 - Display the HTTPS URL (e.g. `https://<random>.trycloudflare.com` or `https://<random>.ngrok-free.app`)
 - Write the URL to `/tmp/ngrok-mcp-url.txt`
 
@@ -137,7 +137,7 @@ Update `.cursor/mcp.json` to use the HTTPS URL:
 1. ✅ HTTPS URL is correct in `.cursor/mcp.json`
 2. ✅ `NEOTOMA_HOST_URL` is set and server restarted (or server auto-discovers from tunnel file)
 3. ✅ Tunnel is active (ngrok terminal still running)
-4. ✅ Server is running on port 8080
+4. ✅ Server is running on port 3080
 5. ✅ Cursor was restarted after config change
 6. ✅ Clear Cursor's MCP cache (remove and re-add server)
 

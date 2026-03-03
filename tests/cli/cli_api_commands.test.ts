@@ -14,6 +14,11 @@ describe("CLI api commands", () => {
       expect(result).toHaveProperty("status");
       expect(result).toHaveProperty("latency_ms");
     });
+
+    it("should render APIs box in pretty output", async () => {
+      const { stdout } = await execAsync(`${CLI_PATH} api status`);
+      expect(stdout).toContain(" APIs ");
+    });
   });
 
   describe("api start", () => {

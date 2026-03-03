@@ -1,11 +1,14 @@
 #!/usr/bin/env npx tsx
 /**
- * Test Parquet Reading with @dsnp/parquetjs
- * 
- * Tests reading parquet files from DATA_DIR using @dsnp/parquetjs (updated fork).
+ * Test parquet reading with parquet-wasm.
+ *
+ * Tests reading parquet files from DATA_DIR using parquet-wasm + apache-arrow.
  */
 
 import { config } from "dotenv";
+import { tableFromIPC } from "apache-arrow";
+import { readParquet } from "parquet-wasm";
+import { readFileSync } from "node:fs";
 
 config();
 
@@ -16,47 +19,42 @@ if (!DATA_DIR) {
   process.exit(1);
 }
 
-async function testDsnpParquetReading() {
+async function testParquetWasmReading() {
   try {
     // Test with transactions.parquet  
     const testFile = `${DATA_DIR}/transactions/transactions.parquet`;
     console.log(`\n📊 Testing parquet reading with: ${testFile}\n`);
 
-    // Import the library
-    console.log("📦 Loading @dsnp/parquetjs...");
-    const parquet = await import("@dsnp/parquetjs");
-    console.log("✅ Library loaded");
-    
-    // Open the parquet file
+    console.log("📦 Loading parquet-wasm + apache-arrow...");
+    console.log("✅ Libraries loaded");
+
     console.log("📖 Opening parquet file...");
-    const { ParquetReader } = parquet.default || parquet;
-    const reader = await ParquetReader.openFile(testFile);
+    const parquetBytes = new Uint8Array(readFileSync(testFile));
+    const wasmTable = readParquet(parquetBytes);
+    const arrowTable = tableFromIPC(wasmTable.intoIPCStream());
     console.log("✅ File opened successfully");
     
-    // Get metadata
-    const schema = reader.getSchema();
-    
     console.log(`\n📋 Schema Information:`);
-    console.log(`   Fields: ${Object.keys(schema.fields).length}`);
-    console.log(`   Field names: ${Object.keys(schema.fields).join(", ")}`);
+    const fieldNames = arrowTable.schema.fields.map((field) => field.name);
+    console.log(`   Fields: ${fieldNames.length}`);
+    console.log(`   Field names: ${fieldNames.join(", ")}`);
     
     console.log(`\n📈 File Statistics:`);
-    console.log(`   Row count: ${reader.getRowCount()}`);
+    console.log(`   Row count: ${arrowTable.numRows}`);
     
     // Read first few rows
     console.log(`\n📄 Sample Rows (first 3):`);
-    const cursor = reader.getCursor();
-    
-    for (let i = 0; i < 3; i++) {
-      const record = await cursor.next();
+    const rows = arrowTable.toArray() as Array<Record<string, unknown>>;
+    for (let i = 0; i < Math.min(3, rows.length); i++) {
+      const record = rows[i];
       if (record) {
         console.log(`\n   Row ${i + 1}:`, JSON.stringify(record, null, 2));
       }
     }
-    
-    await reader.close();
-    
-    console.log(`\n✅ @dsnp/parquetjs reading test PASSED!\n`);
+
+    wasmTable.drop();
+
+    console.log(`\n✅ parquet-wasm reading test PASSED!\n`);
     console.log(`Next steps:`);
     console.log(`  1. Extend MCP store action to detect .parquet files`);
     console.log(`  2. Convert parquet rows to entity objects`);
@@ -69,4 +67,4 @@ async function testDsnpParquetReading() {
   }
 }
 
-testDsnpParquetReading();
+testParquetWasmReading();

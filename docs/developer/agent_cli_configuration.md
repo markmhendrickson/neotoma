@@ -19,6 +19,8 @@ To add the rule so it is applied in Cursor, Claude Code, and Codex, run `neotoma
 
 `neotoma init` and `neotoma mcp check` also surface this workflow. They can remind you to run `neotoma cli-instructions check`, and in interactive runs they can offer to add missing CLI instructions after MCP setup.
 
+For a first-run onboarding UX where a human asks an agent to run install/init and request confirmation before first save, see [Agent onboarding](agent_onboarding.md). That flow is onboarding-only and does not replace the ongoing MCP/CLI behavior contract in this document.
+
 ## Configuration strategy
 
 - **Permissions and approval behavior** live in your user config, not in the repo.

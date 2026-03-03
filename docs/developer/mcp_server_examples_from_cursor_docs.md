@@ -348,7 +348,7 @@ private getUnauthenticatedResponse() {
 **What This Means:**
 - Connect buttons **ARE possible** for URL-based servers
 - The issue may be specific to:
-  - **localhost URLs** (`http://localhost:8080/mcp`) vs production HTTPS
+  - **localhost URLs** (`http://localhost:3080/mcp`) vs production HTTPS
   - **Discovery endpoint implementation** differences
   - **Initialize response format** differences
   - **401 response timing** or header format

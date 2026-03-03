@@ -7,10 +7,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { createRequire } from "module";
-
-const require = createRequire(import.meta.url);
-const parquetjs = require("parquetjs");
+import { tableFromIPC, tableFromArrays, tableToIPC } from "apache-arrow";
+import { Table as WasmTable, readParquet, writeParquet } from "parquet-wasm";
 
 const DATA_DIR = process.env.DATA_DIR || "/Users/markmhendrickson/Documents/data";
 const SAMPLE_SIZE = 50;
@@ -66,40 +64,34 @@ function findParquetFiles(): ParquetFile[] {
 async function createSampleFile(sourceFile: ParquetFile): Promise<void> {
   try {
     console.log(`Processing: ${sourceFile.filename}`);
+
+    const parquetBytes = new Uint8Array(fs.readFileSync(sourceFile.fullPath));
+    const wasmTable = readParquet(parquetBytes);
+    const arrowTable = tableFromIPC(wasmTable.intoIPCStream());
+    const rows = arrowTable.toArray() as Array<Record<string, unknown>>;
+    wasmTable.drop();
+
+    // Read first 50 rows (or all if fewer)
+    const sampledRows = rows.slice(0, SAMPLE_SIZE);
     
-    // Read source file
-    const reader = await parquetjs.ParquetReader.openFile(sourceFile.fullPath);
-    const schema = reader.getSchema();
-    const cursor = reader.getCursor();
-    const rowCount = reader.getRowCount();
-    
-    // Read first 50 rows (or all if less than 50)
-    const sampleSize = Math.min(SAMPLE_SIZE, Number(rowCount));
-    const rows: any[] = [];
-    
-    for (let i = 0; i < sampleSize; i++) {
-      const row = await cursor.next();
-      if (!row) break;
-      rows.push(row);
-    }
-    
-    await reader.close();
-    
-    if (rows.length === 0) {
+    if (sampledRows.length === 0) {
       console.log(`  ⚠️  Skipping ${sourceFile.filename}: no rows found`);
       return;
     }
-    
-    // Write sample file
-    const writer = await parquetjs.ParquetWriter.openFile(schema, sourceFile.samplePath);
-    
-    for (const row of rows) {
-      await writer.appendRow(row);
+
+    const columnNames = Array.from(new Set(sampledRows.flatMap((row) => Object.keys(row))));
+    const columns: Record<string, unknown[]> = {};
+    for (const columnName of columnNames) {
+      columns[columnName] = sampledRows.map((row) => row[columnName] ?? null);
     }
-    
-    await writer.close();
-    
-    console.log(`  ✅ Created sample: ${path.basename(sourceFile.samplePath)} (${rows.length} rows)`);
+
+    const sampledArrowTable = tableFromArrays(columns);
+    const sampledWasmTable = WasmTable.fromIPCStream(tableToIPC(sampledArrowTable, "stream"));
+    const sampledParquetBytes = writeParquet(sampledWasmTable);
+    sampledWasmTable.drop();
+    fs.writeFileSync(sourceFile.samplePath, sampledParquetBytes);
+
+    console.log(`  ✅ Created sample: ${path.basename(sourceFile.samplePath)} (${sampledRows.length} rows)`);
   } catch (error: any) {
     console.error(`  ❌ Error processing ${sourceFile.filename}:`, error.message);
   }
@@ -135,12 +127,9 @@ async function main() {
   console.log(`   Errors: ${errorCount}`);
 }
 
-// Run if called directly
-if (require.main === module) {
-  main().catch((error) => {
-    console.error("Fatal error:", error);
-    process.exit(1);
-  });
-}
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
 
 export { findParquetFiles, createSampleFile };

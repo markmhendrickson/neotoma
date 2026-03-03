@@ -58,6 +58,43 @@ function captureStdout(): { output: string[]; restore: () => void } {
   return { output, restore: () => writeSpy.mockRestore() };
 }
 
+async function withMockResetUninstall<T>(
+  command: string,
+  callback: () => Promise<T>
+): Promise<T> {
+  const previous = process.env.NEOTOMA_RESET_UNINSTALL_COMMAND;
+  process.env.NEOTOMA_RESET_UNINSTALL_COMMAND = command;
+  try {
+    return await callback();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NEOTOMA_RESET_UNINSTALL_COMMAND;
+    } else {
+      process.env.NEOTOMA_RESET_UNINSTALL_COMMAND = previous;
+    }
+  }
+}
+
+async function withWorkingDirectory<T>(cwd: string, callback: () => Promise<T>): Promise<T> {
+  const previousCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    return await callback();
+  } finally {
+    process.chdir(previousCwd);
+  }
+}
+
+async function seedMockNeotomaRepoRoot(repoRoot: string): Promise<void> {
+  await fs.writeFile(
+    path.join(repoRoot, "package.json"),
+    JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+  );
+  const markerDir = path.join(repoRoot, "src", "cli");
+  await fs.mkdir(markerDir, { recursive: true });
+  await fs.writeFile(path.join(markerDir, "index.ts"), "// test marker\n");
+}
+
 describe("cli smoke tests", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -67,7 +104,7 @@ describe("cli smoke tests", () => {
   it("includes dev_stub in OAuth URL when requested", async () => {
     const { buildOAuthAuthorizeUrl } = await loadCli();
     const url = buildOAuthAuthorizeUrl({
-      baseUrl: "http://localhost:8080",
+      baseUrl: "http://localhost:3080",
       redirectUri: "http://127.0.0.1:12345/callback",
       state: "state-token",
       codeChallenge: "challenge",
@@ -99,10 +136,7 @@ describe("cli smoke tests", () => {
   it("reset removes neotoma-prefixed MCP entries from JSON and Codex TOML", async () => {
     await withTempHome(async (homeDir) => {
       const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-"));
-      await fs.writeFile(
-        path.join(repoRoot, "package.json"),
-        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
-      );
+      await seedMockNeotomaRepoRoot(repoRoot);
 
       const projectCursorMcpPath = path.join(repoRoot, ".cursor", "mcp.json");
       await fs.mkdir(path.dirname(projectCursorMcpPath), { recursive: true });
@@ -146,7 +180,9 @@ describe("cli smoke tests", () => {
       const { runCli } = await loadCli();
       const stdout = captureStdout();
       try {
-        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
       } finally {
         stdout.restore();
         if (previousRepoRoot === undefined) {
@@ -175,13 +211,10 @@ describe("cli smoke tests", () => {
     });
   });
 
-  it("reset backs up repo-local NEOTOMA_DATA_DIR when configured", async () => {
+  it("reset protects repo-local NEOTOMA_DATA_DIR when configured in .env", async () => {
     await withTempHome(async () => {
       const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-"));
-      await fs.writeFile(
-        path.join(repoRoot, "package.json"),
-        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
-      );
+      await seedMockNeotomaRepoRoot(repoRoot);
 
       const configuredDataDir = path.join(repoRoot, "custom-data");
       await fs.mkdir(configuredDataDir, { recursive: true });
@@ -193,7 +226,9 @@ describe("cli smoke tests", () => {
       const { runCli } = await loadCli();
       const stdout = captureStdout();
       try {
-        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
       } finally {
         stdout.restore();
         if (previousRepoRoot === undefined) {
@@ -206,12 +241,18 @@ describe("cli smoke tests", () => {
       const parsedReset = JSON.parse(stdout.output.join("")) as {
         success: boolean;
         backups_moved: Array<{ from: string; to: string }>;
+        data_dirs_protected_by_env: string[];
       };
       expect(parsedReset.success).toBe(true);
       const expectedDataDir = canonicalizeTmpPath(configuredDataDir);
       expect(
         parsedReset.backups_moved.some(
           (item) => canonicalizeTmpPath(item.from) === expectedDataDir
+        )
+      ).toBe(false);
+      expect(
+        parsedReset.data_dirs_protected_by_env.some(
+          (item) => canonicalizeTmpPath(item) === expectedDataDir
         )
       ).toBe(true);
     });
@@ -220,10 +261,7 @@ describe("cli smoke tests", () => {
   it("reset does not back up external NEOTOMA_DATA_DIR", async () => {
     await withTempHome(async () => {
       const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-external-"));
-      await fs.writeFile(
-        path.join(repoRoot, "package.json"),
-        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
-      );
+      await seedMockNeotomaRepoRoot(repoRoot);
 
       const externalDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-external-data-"));
       await fs.writeFile(path.join(externalDataDir, "neotoma.prod.db"), "seed");
@@ -234,7 +272,9 @@ describe("cli smoke tests", () => {
       const { runCli } = await loadCli();
       const stdout = captureStdout();
       try {
-        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
       } finally {
         stdout.restore();
         if (previousRepoRoot === undefined) {
@@ -247,6 +287,7 @@ describe("cli smoke tests", () => {
       const parsedReset = JSON.parse(stdout.output.join("")) as {
         success: boolean;
         backups_moved: Array<{ from: string; to: string }>;
+        data_dirs_protected_by_env: string[];
       };
       expect(parsedReset.success).toBe(true);
       const expectedExternalDir = canonicalizeTmpPath(externalDataDir);
@@ -261,16 +302,18 @@ describe("cli smoke tests", () => {
           (item) => canonicalizeTmpPath(item.from) === expectedDefaultDataDir
         )
       ).toBe(false);
+      expect(
+        parsedReset.data_dirs_protected_by_env.some(
+          (item) => canonicalizeTmpPath(item) === expectedExternalDir
+        )
+      ).toBe(true);
     });
   });
 
-  it("reset backs up symlinked NEOTOMA_DATA_DIR when symlink target is repo-local", async () => {
+  it("reset protects symlinked NEOTOMA_DATA_DIR when symlink target is repo-local", async () => {
     await withTempHome(async () => {
       const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-symlink-in-"));
-      await fs.writeFile(
-        path.join(repoRoot, "package.json"),
-        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
-      );
+      await seedMockNeotomaRepoRoot(repoRoot);
 
       const realDataDir = path.join(repoRoot, "actual-data");
       await fs.mkdir(realDataDir, { recursive: true });
@@ -284,7 +327,9 @@ describe("cli smoke tests", () => {
       const { runCli } = await loadCli();
       const stdout = captureStdout();
       try {
-        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
       } finally {
         stdout.restore();
         if (previousRepoRoot === undefined) {
@@ -297,12 +342,18 @@ describe("cli smoke tests", () => {
       const parsedReset = JSON.parse(stdout.output.join("")) as {
         success: boolean;
         backups_moved: Array<{ from: string; to: string }>;
+        data_dirs_protected_by_env: string[];
       };
       expect(parsedReset.success).toBe(true);
       const expectedSymlinkPath = canonicalizeTmpPath(symlinkPath);
       expect(
         parsedReset.backups_moved.some(
           (item) => canonicalizeTmpPath(item.from) === expectedSymlinkPath
+        )
+      ).toBe(false);
+      expect(
+        parsedReset.data_dirs_protected_by_env.some(
+          (item) => canonicalizeTmpPath(item) === expectedSymlinkPath
         )
       ).toBe(true);
     });
@@ -311,10 +362,7 @@ describe("cli smoke tests", () => {
   it("reset does not back up symlinked NEOTOMA_DATA_DIR when symlink target is external", async () => {
     await withTempHome(async () => {
       const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-data-symlink-out-"));
-      await fs.writeFile(
-        path.join(repoRoot, "package.json"),
-        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
-      );
+      await seedMockNeotomaRepoRoot(repoRoot);
 
       const externalDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-external-symlink-data-"));
       await fs.writeFile(path.join(externalDataDir, "neotoma.prod.db"), "seed");
@@ -327,7 +375,9 @@ describe("cli smoke tests", () => {
       const { runCli } = await loadCli();
       const stdout = captureStdout();
       try {
-        await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
       } finally {
         stdout.restore();
         if (previousRepoRoot === undefined) {
@@ -340,6 +390,7 @@ describe("cli smoke tests", () => {
       const parsedReset = JSON.parse(stdout.output.join("")) as {
         success: boolean;
         backups_moved: Array<{ from: string; to: string }>;
+        data_dirs_protected_by_env: string[];
       };
       expect(parsedReset.success).toBe(true);
       const expectedSymlinkPath = canonicalizeTmpPath(symlinkPath);
@@ -348,6 +399,80 @@ describe("cli smoke tests", () => {
           (item) => canonicalizeTmpPath(item.from) === expectedSymlinkPath
         )
       ).toBe(false);
+      expect(
+        parsedReset.data_dirs_protected_by_env.some(
+          (item) => canonicalizeTmpPath(item) === expectedSymlinkPath
+        )
+      ).toBe(true);
+    });
+  });
+
+  it("reset reports global uninstall attempted and succeeded", async () => {
+    await withTempHome(async () => {
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
+      } finally {
+        stdout.restore();
+      }
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        global_uninstall: { attempted: boolean; succeeded: boolean };
+      };
+      expect(parsedReset.success).toBe(true);
+      expect(parsedReset.global_uninstall.attempted).toBe(true);
+      expect(parsedReset.global_uninstall.succeeded).toBe(true);
+    });
+  });
+
+  it("reset keeps success true when global uninstall fails", async () => {
+    await withTempHome(async () => {
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await withMockResetUninstall('node -e "process.exit(4)"', async () => {
+          await runCli(["node", "cli", "reset", "--yes", "--json"]);
+        });
+      } finally {
+        stdout.restore();
+      }
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        global_uninstall: { attempted: boolean; succeeded: boolean; exitCode: number | null };
+      };
+      expect(parsedReset.success).toBe(true);
+      expect(parsedReset.global_uninstall.attempted).toBe(true);
+      expect(parsedReset.global_uninstall.succeeded).toBe(false);
+      expect(parsedReset.global_uninstall.exitCode).toBe(4);
+    });
+  });
+
+  it("reset skips global uninstall when run outside a neotoma repo", async () => {
+    await withTempHome(async () => {
+      const { runCli } = await loadCli();
+      const outsideRepoDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-reset-outside-"));
+      const stdout = captureStdout();
+      try {
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await withWorkingDirectory(outsideRepoDir, async () => {
+            await runCli(["node", "cli", "reset", "--yes", "--json"]);
+          });
+        });
+      } finally {
+        stdout.restore();
+      }
+      const parsedReset = JSON.parse(stdout.output.join("")) as {
+        success: boolean;
+        global_uninstall: { attempted: boolean; succeeded: boolean; exitCode: number | null; message: string };
+      };
+      expect(parsedReset.success).toBe(true);
+      expect(parsedReset.global_uninstall.attempted).toBe(false);
+      expect(parsedReset.global_uninstall.succeeded).toBe(false);
+      expect(parsedReset.global_uninstall.exitCode).toBeNull();
+      expect(parsedReset.global_uninstall.message).toContain("Skipped global uninstall");
     });
   });
 
