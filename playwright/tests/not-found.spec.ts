@@ -21,7 +21,7 @@ test.describe("404 Not Found Page", () => {
     await page.goto("/missing-page");
     await page.waitForLoadState("networkidle");
 
-    const homeLink = page.getByRole("link", { name: /go to home/i });
+    const homeLink = page.getByRole("link", { name: /go home/i });
     await expect(homeLink).toBeVisible();
     await homeLink.click();
     await page.waitForLoadState("networkidle");

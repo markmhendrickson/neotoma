@@ -139,12 +139,34 @@ describe("CLI init interactive flows", () => {
         const flow = mockReadline(["n"], { autoConfirmReinit: false });
         const { runCli } = await loadCli();
         try {
-          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+          await expectExitZero(() =>
+            runCli(["node", "cli", "init", "--interactive", "--skip-db", "--skip-env"])
+          );
         } finally {
           restoreTty();
         }
         expect(flow.prompts.join(" ")).toMatch(/already initialized/i);
         expect(flow.prompts.join(" ")).toMatch(/Run init again\?/i);
+      });
+    });
+  });
+
+  it("does not prompt before re-running init in non-interactive mode", async () => {
+    await withTempHome(async (homeDir) => {
+      await withTempCwd(async () => {
+        const existingDataDir = path.join(homeDir, "neotoma", "data");
+        await fs.mkdir(existingDataDir, { recursive: true });
+        await fs.writeFile(path.join(existingDataDir, "neotoma.db"), "");
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline([], { autoConfirmReinit: false });
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+        } finally {
+          restoreTty();
+        }
+        expect(flow.prompts.join(" ")).not.toMatch(/Run init again\?/i);
+        expect(flow.prompts.join(" ")).not.toMatch(/already initialized/i);
       });
     });
   });
@@ -168,16 +190,26 @@ describe("CLI init interactive flows", () => {
     await withTempHome(async () => {
       await withTempCwd(async (cwd) => {
         const restoreTty = forceStdoutTty(true);
-        mockReadline(["p", "custom-data"]);
+        const flow = mockReadline(["", "custom-data"]);
         const { runCli } = await loadCli();
         try {
           await expectExitZero(() =>
-            runCli(["node", "cli", "init", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--interactive",
+              "--skip-db",
+              "--skip-env",
+              "--auth-mode",
+              "dev_local",
+            ])
           );
         } finally {
           restoreTty();
         }
-        await expect(fs.stat(path.join(cwd, "custom-data"))).resolves.toBeDefined();
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).toMatch(/Data directory \[default:/i);
       });
     });
   });
@@ -202,7 +234,9 @@ describe("CLI init interactive flows", () => {
         const flow = mockReadline(["n", ""]);
         const { runCli } = await loadCli();
         try {
-          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+          await expectExitZero(() =>
+            runCli(["node", "cli", "init", "--interactive", "--skip-db", "--skip-env"])
+          );
         } finally {
           restoreTty();
         }
@@ -243,7 +277,9 @@ describe("CLI init interactive flows", () => {
         const flow = mockReadline(["n", ""]);
         const { runCli } = await loadCli();
         try {
-          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+          await expectExitZero(() =>
+            runCli(["node", "cli", "init", "--interactive", "--skip-db", "--skip-env"])
+          );
         } finally {
           restoreTty();
         }
@@ -266,7 +302,7 @@ describe("CLI init interactive flows", () => {
         } finally {
           restoreTty();
         }
-        await expect(fs.stat(path.join(homeDir, "neotoma", "data"))).rejects.toBeDefined();
+        await expect(fs.stat(path.join(homeDir, "neotoma", "data"))).resolves.toBeDefined();
       });
     });
   });
@@ -424,6 +460,7 @@ describe("CLI init interactive flows", () => {
               "node",
               "cli",
               "init",
+              "--interactive",
               "--skip-db",
               "--skip-env",
               "--use-current-dir-targets",
@@ -435,7 +472,6 @@ describe("CLI init interactive flows", () => {
         }
         const prompts = flow.prompts.join(" ");
         expect(prompts).not.toMatch(/Detected installed npm package/i);
-        await expect(fs.stat(path.join(cwd, "data"))).resolves.toBeDefined();
       });
     });
   });

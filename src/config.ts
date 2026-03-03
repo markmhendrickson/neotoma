@@ -12,14 +12,70 @@ const env = process.env.NEOTOMA_ENV || "development";
 // So we always resolve from the file location: dist/config.js -> project root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// Always resolve project root from file location (dist/ -> project root, src/ -> project root)
-// This works regardless of process.cwd() when running as MCP
-const projectRoot = process.env.NEOTOMA_PROJECT_ROOT || 
-  (__dirname.endsWith("/dist") || __dirname.includes("/dist/") 
-    ? join(__dirname, "..") 
-    : __dirname.endsWith("/src") || __dirname.includes("/src/")
-    ? join(__dirname, "..")
-    : __dirname);
+
+function resolveUserEnvPath(): string | null {
+  const homeDir = process.env.HOME || process.env.USERPROFILE;
+  if (!homeDir) return null;
+  return join(homeDir, ".config", "neotoma", ".env");
+}
+
+function hydrateDataDirFromUserEnvConfig(): void {
+  if (process.env.NEOTOMA_DATA_DIR?.trim()) return;
+  const userEnvPath = resolveUserEnvPath();
+  if (!userEnvPath || !existsSync(userEnvPath)) return;
+  try {
+    const parsed = dotenv.parse(readFileSync(userEnvPath, "utf-8"));
+    const configuredDataDir = parsed.NEOTOMA_DATA_DIR?.trim();
+    if (configuredDataDir) process.env.NEOTOMA_DATA_DIR = configuredDataDir;
+  } catch {
+    // Ignore invalid user env files and continue with existing fallbacks.
+  }
+}
+
+function isNeotomaRepoRoot(candidate: string | null | undefined): candidate is string {
+  if (!candidate) return false;
+  const packageJsonPath = join(candidate, "package.json");
+  if (!existsSync(packageJsonPath)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(packageJsonPath, "utf-8")) as { name?: string };
+    return parsed.name === "neotoma";
+  } catch {
+    return false;
+  }
+}
+
+function resolveRepoRootFromCliConfig(): string | null {
+  const homeDir = process.env.HOME || process.env.USERPROFILE;
+  if (!homeDir) return null;
+  const configPath = join(homeDir, ".config", "neotoma", "config.json");
+  if (!existsSync(configPath)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as {
+      repo_root?: string;
+      repoRoot?: string;
+    };
+    const candidate = parsed.repo_root ?? parsed.repoRoot;
+    return isNeotomaRepoRoot(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveProjectRootFromRuntime(): string {
+  if (isNeotomaRepoRoot(process.env.NEOTOMA_PROJECT_ROOT)) {
+    return process.env.NEOTOMA_PROJECT_ROOT;
+  }
+  if (isNeotomaRepoRoot(process.cwd())) return process.cwd();
+  const configuredRepoRoot = resolveRepoRootFromCliConfig();
+  if (configuredRepoRoot) return configuredRepoRoot;
+  // Fallback to file-location based root (dist/ -> package root, src/ -> repo root).
+  if (__dirname.endsWith("/dist") || __dirname.includes("/dist/")) return join(__dirname, "..");
+  if (__dirname.endsWith("/src") || __dirname.includes("/src/")) return join(__dirname, "..");
+  return __dirname;
+}
+
+const projectRoot = resolveProjectRootFromRuntime();
+hydrateDataDirFromUserEnvConfig();
 
 // Load environment-specific .env files
 if (env === "production") {

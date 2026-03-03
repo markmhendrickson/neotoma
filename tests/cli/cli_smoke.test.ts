@@ -16,6 +16,10 @@ type CliModule = {
   }) => string;
 };
 
+type ReadlineMockState = {
+  prompts: string[];
+};
+
 async function withTempHome<T>(callback: (homeDir: string) => Promise<T>): Promise<T> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "neotoma-cli-"));
   const previousHome = process.env.HOME;
@@ -41,6 +45,47 @@ async function withTempHome<T>(callback: (homeDir: string) => Promise<T>): Promi
 async function loadCli(): Promise<CliModule> {
   vi.resetModules();
   return (await import("../../src/cli/index.ts")) as CliModule;
+}
+
+function mockReadline(answers: string[]): ReadlineMockState {
+  const state: ReadlineMockState = { prompts: [] };
+  let answerIndex = 0;
+  vi.doMock("node:readline", () => ({
+    createInterface: () => {
+      let closeHandler: (() => void) | undefined;
+      return {
+        on: (event: string, handler: () => void) => {
+          if (event === "close") closeHandler = handler;
+        },
+        question: (question: string, cb: (value: string) => void) => {
+          state.prompts.push(question);
+          const answer = answers[answerIndex] ?? "";
+          answerIndex += 1;
+          if (answer === "__EOF__") {
+            closeHandler?.();
+            return;
+          }
+          cb(answer);
+        },
+        close: () => {
+          closeHandler?.();
+        },
+      };
+    },
+  }));
+  return state;
+}
+
+function forceStdoutTty(value: boolean): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(process.stdout, "isTTY");
+  Object.defineProperty(process.stdout, "isTTY", {
+    configurable: true,
+    get: () => value,
+  });
+  return () => {
+    if (descriptor) Object.defineProperty(process.stdout, "isTTY", descriptor);
+    else delete (process.stdout as { isTTY?: boolean }).isTTY;
+  };
 }
 
 function canonicalizeTmpPath(p: string): string {
@@ -447,6 +492,25 @@ describe("cli smoke tests", () => {
       expect(parsedReset.global_uninstall.attempted).toBe(true);
       expect(parsedReset.global_uninstall.succeeded).toBe(false);
       expect(parsedReset.global_uninstall.exitCode).toBe(4);
+    });
+  });
+
+  it("reset does not prompt in default non-interactive mode", async () => {
+    await withTempHome(async () => {
+      const restoreTty = forceStdoutTty(true);
+      const flow = mockReadline(["n"]);
+      const { runCli } = await loadCli();
+      const stdout = captureStdout();
+      try {
+        await withMockResetUninstall('node -e "process.exit(0)"', async () => {
+          await runCli(["node", "cli", "reset"]);
+        });
+      } finally {
+        stdout.restore();
+        restoreTty();
+      }
+      expect(flow.prompts.join(" ")).not.toMatch(/Continue with reset\?/i);
+      expect(flow.prompts.length).toBe(0);
     });
   });
 
