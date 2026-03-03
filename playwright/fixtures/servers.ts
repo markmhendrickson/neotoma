@@ -13,6 +13,10 @@ import {
 } from '../utils/servers.js';
 
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const viteCommand =
+  process.platform === 'win32'
+    ? 'node_modules/.bin/vite.cmd'
+    : 'node_modules/.bin/vite';
 
 type RunningServers = {
   backend: ChildProcessWithoutNullStreams;
@@ -43,12 +47,14 @@ function drainStream(child: ChildProcessWithoutNullStreams, label: string) {
 async function startServers(): Promise<RunningServers> {
   const useMockApi = process.env.PLAYWRIGHT_USE_MOCK_API !== '0';
   const ports = await getBranchPorts();
+  const configuredUiBase = process.env.PLAYWRIGHT_UI_BASE_URL ?? 'http://127.0.0.1:5195';
+  const uiPort = Number(new URL(configuredUiBase).port || '5195');
   const credentials = await createTestCredentials();
   const backendEnv = buildBackendEnv(ports.httpPort, {
     bearerToken: credentials.bearerToken,
     wsPort: ports.wsPort,
   });
-  const frontendEnv = buildFrontendEnv(ports.vitePort, ports.httpPort, ports.wsPort);
+  const frontendEnv = buildFrontendEnv(uiPort, ports.httpPort, ports.wsPort);
 
   const backend = spawn(npmCommand, ['run', 'dev:server'], {
     cwd: repoRoot,
@@ -64,17 +70,21 @@ async function startServers(): Promise<RunningServers> {
     await waitForHttp(`${mockApi.origin}/health`);
   }
 
-  const frontend = spawn(npmCommand, ['run', 'dev:ui'], {
+  const frontend = spawn(
+    viteCommand,
+    ['--config', 'vite.config.ts', '--host', '127.0.0.1', '--port', String(uiPort)],
+    {
     cwd: repoRoot,
     env: frontendEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
-  });
+    }
+  );
   drainStream(frontend, 'frontend');
 
-  await waitForHttp(`http://localhost:${ports.vitePort}`);
+  await waitForHttp(`http://127.0.0.1:${uiPort}`);
 
   const apiUrl = `http://127.0.0.1:${ports.httpPort}/api`;
-  const uiUrl = `http://localhost:${ports.vitePort}`;
+  const uiUrl = `http://127.0.0.1:${uiPort}`;
 
   return {
     backend,
