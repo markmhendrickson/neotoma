@@ -199,6 +199,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
                 <SidebarMenuButton
                   asChild
                   isActive={activeSection === section.id}
+                  tooltip={section.shortLabel}
                   className={sectionLinkClass(activeSection === section.id)}
                 >
                   <a href={`#${section.id}`} onClick={onSectionClick}>

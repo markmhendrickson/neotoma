@@ -11559,11 +11559,30 @@ export type InitContextStatus = {
 export async function getInitContextStatus(
   repoRoot: string | null
 ): Promise<InitContextStatus | null> {
-  const envTarget: "project" | "user" = repoRoot ? "project" : "user";
-  const envPath = repoRoot ? path.join(repoRoot, ".env") : USER_ENV_PATH;
+  let effectiveRepoRoot: string | null = repoRoot;
+  let envTarget: "project" | "user" = effectiveRepoRoot ? "project" : "user";
+  let envPath = effectiveRepoRoot ? path.join(effectiveRepoRoot, ".env") : USER_ENV_PATH;
+
+  // In package-consumer repos (not source checkouts), `init` can target cwd when
+  // neotoma is installed as a dependency. Mirror that resolution here so plain
+  // `npx neotoma` recognizes prior init in the same project.
+  if (!effectiveRepoRoot) {
+    const cwd = process.cwd();
+    if (await detectInstalledNeotomaPackage(cwd)) {
+      const packageEnvPath = path.join(cwd, ".env");
+      if (await pathExists(packageEnvPath)) {
+        effectiveRepoRoot = cwd;
+        envTarget = "project";
+        envPath = packageEnvPath;
+      }
+    }
+  }
+
   const envFileExists = await pathExists(envPath);
   const homeDir = process.env.HOME || process.env.USERPROFILE || ".";
-  const defaultDataDir = repoRoot ? path.join(repoRoot, "data") : path.join(homeDir, "neotoma", "data");
+  const defaultDataDir = effectiveRepoRoot
+    ? path.join(effectiveRepoRoot, "data")
+    : path.join(homeDir, "neotoma", "data");
   let dataDir: string;
   if (envFileExists) {
     const envVars = await readEnvFileVars(envPath);
@@ -11571,7 +11590,7 @@ export async function getInitContextStatus(
     dataDir = configured
       ? path.isAbsolute(configured)
         ? configured
-        : path.resolve(repoRoot ?? process.cwd(), configured)
+        : path.resolve(effectiveRepoRoot ?? process.cwd(), configured)
       : defaultDataDir;
   } else {
     dataDir = defaultDataDir;

@@ -65,6 +65,7 @@ import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
+import { readOpenApiFile } from "./shared/openapi_file.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -4390,8 +4391,7 @@ app.post("/health_check_snapshots", async (req, res) => {
 // Conversational interactions should be externalized to MCP-compatible agents per architecture
 
 app.get("/openapi.yaml", (req, res) => {
-  const openApiPath = path.join(process.cwd(), "openapi.yaml");
-  const openApiContent = fs.readFileSync(openApiPath, "utf-8");
+  const openApiContent = readOpenApiFile();
   const spec = yaml.load(openApiContent) as { servers?: Array<{ url: string; description?: string }> };
   const baseUrl = (config.apiBase || "").replace(/\/$/, "");
   if (spec.servers?.length && baseUrl) {

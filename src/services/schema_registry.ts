@@ -15,6 +15,10 @@ import { dirname, join } from "path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function logSchemaRegistryInfo(message: string): void {
+  process.stderr.write(`${message}\n`);
+}
+
 export interface ConverterDefinition {
   from: "number" | "string" | "boolean" | "array" | "object";
   to: "string" | "number" | "date" | "boolean" | "array" | "object";
@@ -398,7 +402,7 @@ export class SchemaRegistryService {
     for (const field of options.fields_to_add || []) {
       // Skip if field already exists
       if (mergedFields[field.field_name]) {
-        console.log(
+        logSchemaRegistryInfo(
           `[SCHEMA_REGISTRY] Field ${field.field_name} already exists in schema, skipping`,
         );
         continue;
@@ -447,13 +451,13 @@ export class SchemaRegistryService {
       await this.activate(options.entity_type, newVersion);
     }
 
-    console.log(
+    logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Incrementally updated schema for ${options.entity_type} to version ${newVersion}`,
     );
 
     // 7. Migrate raw_fragments if requested (historical data backfill only)
     if (options.migrate_existing) {
-      console.log(
+      logSchemaRegistryInfo(
         `[SCHEMA_REGISTRY] Migrating existing raw_fragments for ${options.entity_type}`,
       );
       const fieldNamesToMigrate = [
@@ -485,7 +489,7 @@ export class SchemaRegistryService {
     const BATCH_SIZE = 100; // Smaller batch size for safety
     let totalMigrated = 0;
 
-    console.log(
+    logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Starting migration for fields: ${options.field_names.join(", ")}`,
     );
 
@@ -525,7 +529,7 @@ export class SchemaRegistryService {
           continue; // No more fragments to migrate
         }
 
-        console.log(
+        logSchemaRegistryInfo(
           `[SCHEMA_REGISTRY] Processing batch of ${fragments.length} fragments for field ${fieldName}`,
         );
 
@@ -638,7 +642,7 @@ export class SchemaRegistryService {
               }
             } else {
               totalMigrated += Object.keys(promotedFields).length;
-              console.log(
+              logSchemaRegistryInfo(
                 `[SCHEMA_REGISTRY] Migrated ${Object.keys(promotedFields).length} fields for entity ${entityId}`,
               );
 
@@ -706,7 +710,7 @@ export class SchemaRegistryService {
       }
     }
 
-    console.log(
+    logSchemaRegistryInfo(
       `[SCHEMA_REGISTRY] Migration complete. Total fragments processed: ${totalMigrated}`,
     );
 
