@@ -5,6 +5,7 @@
  * Used for auto-creating user-specific schemas when no schema exists for an entity type.
  */
 
+import { Type } from "apache-arrow";
 import type { SchemaDefinition, ReducerConfig } from "./schema_registry.js";
 import { logger } from "../utils/logger.js";
 
@@ -131,13 +132,13 @@ export async function inferSchemaFromParquet(
   entityType: string
 ): Promise<InferredSchema> {
   try {
-    // Dynamic import for CommonJS module
-    const parquet = await import("@dsnp/parquetjs");
-    const { ParquetReader } = parquet.default || parquet;
-    const reader = await ParquetReader.openFile(filePath);
+    const fsPromises = await import("node:fs/promises");
+    const { tableFromIPC } = await import("apache-arrow");
+    const parquetWasm = await import("parquet-wasm");
+    const parquetBytes = new Uint8Array(await fsPromises.readFile(filePath));
+    const wasmSchema = parquetWasm.readSchema(parquetBytes);
+    const arrowSchema = tableFromIPC(wasmSchema.intoIPCStream()).schema;
 
-    // Get schema
-    const schema = reader.getSchema();
     const fields: Record<
       string,
       {
@@ -147,21 +148,18 @@ export async function inferSchemaFromParquet(
     > = {};
     const inferredTypes: Record<string, string> = {};
 
-    // Map parquet types to Neotoma types
-    for (const [fieldName, field] of Object.entries(schema.fields)) {
-      const parquetType = (field as any).primitiveType || (field as any).type;
-      const neotomaType = mapParquetTypeToNeotoma(parquetType, fieldName);
+    // Map Arrow field types to Neotoma types
+    for (const field of arrowSchema.fields) {
+      const arrowTypeName = Type[field.typeId] ?? field.type.toString();
+      const neotomaType = mapParquetTypeToNeotoma(String(arrowTypeName), field.name);
 
-      fields[fieldName] = {
+      fields[field.name] = {
         type: neotomaType,
         required: false, // All fields optional by default
       };
 
-      inferredTypes[fieldName] = neotomaType;
+      inferredTypes[field.name] = neotomaType;
     }
-
-    await reader.close();
-
     // Build default reducer config
     const mergePolicies: Record<string, any> = {};
     for (const fieldName of Object.keys(fields)) {

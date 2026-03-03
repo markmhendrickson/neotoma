@@ -289,6 +289,7 @@ export function blackBox(
   const cappedInnerWidth = Math.max(1, Math.min(innerWidth, maxWidth));
 
   const padLeft = " ".repeat(pad);
+  const padRight = " ".repeat(pad);
   const out: string[] = [];
 
   // Top border with title on the left
@@ -310,7 +311,7 @@ export function blackBox(
   }
 
   // Content lines with side borders and padding (use displayWidth so right border aligns)
-  const maxContentWidth = Math.max(1, cappedInnerWidth - pad);
+  const maxContentWidth = Math.max(1, cappedInnerWidth - 2 * pad);
   // eslint-disable-next-line no-control-regex
   const stripAnsi = (s: string) => s.replace(/\u001b\[[0-9;]*m/g, "");
   for (const line of lines) {
@@ -322,8 +323,14 @@ export function blackBox(
       outLine = (plain.slice(0, len) || plain.slice(0, 1)) + "…";
     }
     const len = displayWidth(outLine);
-    const padded = padLeft + outLine + " ".repeat(Math.max(0, cappedInnerWidth - pad - len));
-    out.push(borderStyle(BOX_ROUND.vertical) + padded + borderStyle(BOX_ROUND.vertical));
+    const contentPadded = outLine + " ".repeat(Math.max(0, maxContentWidth - len));
+    out.push(
+      borderStyle(BOX_ROUND.vertical) +
+        padLeft +
+        contentPadded +
+        padRight +
+        borderStyle(BOX_ROUND.vertical)
+    );
   }
 
   // Bottom border

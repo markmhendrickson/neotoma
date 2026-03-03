@@ -6,15 +6,31 @@ import { describe, expect, it, vi } from "vitest";
 
 type CliModule = {
   runCli: (argv: string[]) => Promise<void>;
+  resolveInitDataDirDefaults: (params: {
+    repoRoot: string | null;
+    envPath: string | null;
+    homeDir?: string;
+    cwd?: string;
+    processEnvDataDir?: string;
+  }) => Promise<{
+    defaultDataDir: string;
+    defaultDataDirCandidate: string;
+    detectedInitializedDataDir: string | null;
+    configuredEnvDataDir: string | null;
+  }>;
 };
 
 type ReadlineMockState = {
   prompts: string[];
 };
 
-function mockReadline(answers: string[]): ReadlineMockState {
+function mockReadline(
+  answers: string[],
+  options: { autoConfirmReinit?: boolean } = {}
+): ReadlineMockState {
   const state: ReadlineMockState = { prompts: [] };
   let answerIndex = 0;
+  const autoConfirmReinit = options.autoConfirmReinit ?? true;
   vi.doMock("node:readline", () => ({
     createInterface: () => {
       let closeHandler: (() => void) | undefined;
@@ -24,6 +40,10 @@ function mockReadline(answers: string[]): ReadlineMockState {
         },
         question: (question: string, cb: (value: string) => void) => {
           state.prompts.push(question);
+          if (autoConfirmReinit && /already initialized/i.test(question)) {
+            cb("y");
+            return;
+          }
           const answer = answers[answerIndex] ?? "";
           answerIndex += 1;
           if (answer === "__EOF__") {
@@ -76,6 +96,12 @@ async function withTempCwd<T>(callback: (cwd: string) => Promise<T>): Promise<T>
   }
 }
 
+async function writeCliConfig(homeDir: string, config: Record<string, unknown>): Promise<void> {
+  const configDir = path.join(homeDir, ".config", "neotoma");
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(path.join(configDir, "config.json"), JSON.stringify(config, null, 2));
+}
+
 async function loadCli(): Promise<CliModule> {
   vi.resetModules();
   return (await import("../../src/cli/index.ts")) as CliModule;
@@ -103,6 +129,26 @@ async function expectExitZero(run: () => Promise<void>): Promise<void> {
 }
 
 describe("CLI init interactive flows", () => {
+  it("prompts before re-running init when Neotoma is already initialized", async () => {
+    await withTempHome(async (homeDir) => {
+      await withTempCwd(async () => {
+        const existingDataDir = path.join(homeDir, "neotoma", "data");
+        await fs.mkdir(existingDataDir, { recursive: true });
+        await fs.writeFile(path.join(existingDataDir, "neotoma.db"), "");
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline(["n"], { autoConfirmReinit: false });
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+        } finally {
+          restoreTty();
+        }
+        expect(flow.prompts.join(" ")).toMatch(/already initialized/i);
+        expect(flow.prompts.join(" ")).toMatch(/Run init again\?/i);
+      });
+    });
+  });
+
   it("applies the default plan on Enter", async () => {
     await withTempHome(async () => {
       await withTempCwd(async () => {
@@ -136,6 +182,79 @@ describe("CLI init interactive flows", () => {
     });
   });
 
+  it("prompts for current-directory targets when npm package is detected without checkout", async () => {
+    await withTempHome(async () => {
+      await withTempCwd(async (cwd) => {
+        await fs.writeFile(
+          path.join(cwd, "package.json"),
+          JSON.stringify(
+            {
+              name: "neotoma-tests",
+              dependencies: {
+                neotoma: "^0.0.0-test",
+              },
+            },
+            null,
+            2
+          )
+        );
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline(["n", ""]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).toMatch(/Detected installed npm package/i);
+        expect(prompts).toMatch(/Data and env targets will be resolved in the next steps/i);
+        await expect(fs.stat(path.join(cwd, "data"))).rejects.toBeDefined();
+      });
+    });
+  });
+
+  it("prompts for current-directory targets when fallback root comes from saved config", async () => {
+    await withTempHome(async (homeDir) => {
+      const configuredRepoRoot = path.join(homeDir, "configured-neotoma");
+      await fs.mkdir(path.join(configuredRepoRoot, "src", "cli"), { recursive: true });
+      await fs.writeFile(
+        path.join(configuredRepoRoot, "package.json"),
+        JSON.stringify({ name: "neotoma", version: "0.0.0-test" }, null, 2)
+      );
+      await fs.writeFile(path.join(configuredRepoRoot, "src", "cli", "index.ts"), "// marker\n");
+      await writeCliConfig(homeDir, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+
+      await withTempCwd(async (cwd) => {
+        await fs.writeFile(
+          path.join(cwd, "package.json"),
+          JSON.stringify(
+            {
+              name: "neotoma-tests",
+              dependencies: {
+                neotoma: "^0.0.0-test",
+              },
+            },
+            null,
+            2
+          )
+        );
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline(["n", ""]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).toMatch(/Detected installed npm package/i);
+        expect(prompts).toMatch(/Data and env targets will be resolved in the next steps/i);
+        await expect(fs.stat(path.join(cwd, "data"))).rejects.toBeDefined();
+      });
+    });
+  });
+
   it("quits cleanly on plan cancel", async () => {
     await withTempHome(async (homeDir) => {
       await withTempCwd(async () => {
@@ -165,7 +284,8 @@ describe("CLI init interactive flows", () => {
         } finally {
           restoreTty();
         }
-        expect(defaultFlow.prompts.join(" ")).not.toMatch(/Neotoma path/i);
+        expect(defaultFlow.prompts.join(" ")).not.toMatch(/Path to Neotoma source checkout/i);
+        expect(defaultFlow.prompts.join(" ")).not.toMatch(/Apply MCP \+ CLI updates to:/i);
       });
     });
 
@@ -181,8 +301,86 @@ describe("CLI init interactive flows", () => {
         } finally {
           restoreTty();
         }
-        expect(advancedFlow.prompts.join(" ")).toMatch(/Neotoma path/i);
+        expect(advancedFlow.prompts.join(" ")).toMatch(/Path to Neotoma source checkout/i);
+        expect(advancedFlow.prompts.join(" ")).toMatch(/Apply MCP \+ CLI updates to:/i);
+        expect(
+          advancedFlow.prompts.filter((prompt) => /Path to Neotoma source checkout/i.test(prompt)).length
+        ).toBe(1);
+        expect(
+          advancedFlow.prompts.filter((prompt) => /Apply MCP \+ CLI updates to:/i.test(prompt)).length
+        ).toBe(1);
+        const sourcePromptIndex = advancedFlow.prompts.findIndex((prompt) =>
+          /Path to Neotoma source checkout/i.test(prompt)
+        );
+        const scopePromptIndex = advancedFlow.prompts.findIndex((prompt) =>
+          /Apply MCP \+ CLI updates to:/i.test(prompt)
+        );
+        expect(sourcePromptIndex).toBeGreaterThanOrEqual(0);
+        expect(scopePromptIndex).toBeGreaterThanOrEqual(0);
+        expect(sourcePromptIndex).toBeLessThan(scopePromptIndex);
       });
+    });
+  });
+
+  it("skips MCP and CLI prompts when scope is set to skip", async () => {
+    await withTempHome(async () => {
+      await withTempCwd(async () => {
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline(["", "", "2"]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() =>
+            runCli(["node", "cli", "init", "--advanced", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+          );
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).toMatch(/Apply MCP \+ CLI updates to:/i);
+        expect(prompts).not.toMatch(/Configure MCP servers for:/i);
+        expect(prompts).not.toMatch(/Configure MCP configuration \(add\/update MCP servers\)\?/i);
+        expect(prompts).not.toMatch(/Configure CLI instructions/i);
+      });
+    });
+  });
+
+  it("shows MCP configuration yes/no prompt in advanced mode", async () => {
+    await withTempHome(async () => {
+      await withTempCwd(async () => {
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline(["", "", "n", "n"]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() =>
+            runCli(["node", "cli", "init", "--advanced", "--skip-db", "--skip-env", "--auth-mode", "dev_local"])
+          );
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).toMatch(/Configure MCP configuration \(add\/update MCP servers\)\? \[Y\/n\]:/i);
+      });
+    });
+  });
+
+  it("prefers NEOTOMA_DATA_DIR from selected env file", async () => {
+    await withTempHome(async (homeDir) => {
+      const envDir = path.join(homeDir, ".config", "neotoma");
+      const envPath = path.join(envDir, ".env");
+      const configuredDataDir = path.join(homeDir, "Documents", "data");
+      await fs.mkdir(envDir, { recursive: true });
+      await fs.writeFile(envPath, `NEOTOMA_DATA_DIR=${configuredDataDir}\n`);
+
+      const { resolveInitDataDirDefaults } = await loadCli();
+      const defaults = await resolveInitDataDirDefaults({
+        repoRoot: null,
+        envPath,
+        homeDir,
+        cwd: homeDir,
+      });
+
+      expect(defaults.configuredEnvDataDir).toBe(configuredDataDir);
+      expect(defaults.defaultDataDir).toBe(configuredDataDir);
     });
   });
 });

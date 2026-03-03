@@ -18,6 +18,12 @@ async function setupTempNeotomaRepo(root: string): Promise<void> {
   await writeFile(path.join(root, "src", "cli", "index.ts"), "// test marker\n");
 }
 
+async function writeCliConfig(home: string, config: Record<string, unknown>): Promise<void> {
+  const configDir = path.join(home, ".config", "neotoma");
+  await mkdir(configDir, { recursive: true });
+  await writeFile(path.join(configDir, "config.json"), JSON.stringify(config, null, 2));
+}
+
 function baseEnv(home: string, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -175,5 +181,87 @@ describe("CLI init command non-interactive coverage", () => {
     const result = JSON.parse(stdout) as { next_steps: string[] };
     expect(result.next_steps.join(" ")).toMatch(/Start the API/i);
     expect(result.next_steps.join(" ")).toMatch(/mcp check/i);
+  });
+
+  it("prefers directory-local checkout over saved config repo root", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-local-over-config-"));
+    const localRepoRoot = path.join(root, "local-repo");
+    const configuredRepoRoot = path.join(root, "configured-repo");
+    const home = path.join(root, "home");
+    await mkdir(home, { recursive: true });
+    await mkdir(localRepoRoot, { recursive: true });
+    await mkdir(configuredRepoRoot, { recursive: true });
+    await setupTempNeotomaRepo(localRepoRoot);
+    await setupTempNeotomaRepo(configuredRepoRoot);
+    await writeCliConfig(home, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+
+    await execAsync(`${CLI_PATH} init --yes --skip-db --skip-env --json`, {
+      cwd: localRepoRoot,
+      env: baseEnv(home),
+    });
+
+    await expect(stat(path.join(localRepoRoot, "data"))).resolves.toBeDefined();
+    await expect(stat(path.join(configuredRepoRoot, "data"))).rejects.toBeDefined();
+  });
+
+  it("prefers NEOTOMA_REPO_ROOT over directory-local checkout", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-env-over-local-"));
+    const localRepoRoot = path.join(root, "local-repo");
+    const envRepoRoot = path.join(root, "env-repo");
+    const home = path.join(root, "home");
+    await mkdir(home, { recursive: true });
+    await mkdir(localRepoRoot, { recursive: true });
+    await mkdir(envRepoRoot, { recursive: true });
+    await setupTempNeotomaRepo(localRepoRoot);
+    await setupTempNeotomaRepo(envRepoRoot);
+
+    await execAsync(`${CLI_PATH} init --yes --skip-db --skip-env --json`, {
+      cwd: localRepoRoot,
+      env: baseEnv(home, { NEOTOMA_REPO_ROOT: envRepoRoot }),
+    });
+
+    await expect(stat(path.join(envRepoRoot, "data"))).resolves.toBeDefined();
+    await expect(stat(path.join(localRepoRoot, "data"))).rejects.toBeDefined();
+  });
+
+  it("falls back to saved config repo root when not in a checkout", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-config-fallback-"));
+    const configuredRepoRoot = path.join(root, "configured-repo");
+    const home = path.join(root, "home");
+    const outsideDir = path.join(root, "outside");
+    await mkdir(home, { recursive: true });
+    await mkdir(configuredRepoRoot, { recursive: true });
+    await mkdir(outsideDir, { recursive: true });
+    await setupTempNeotomaRepo(configuredRepoRoot);
+    await writeCliConfig(home, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+
+    await execAsync(`${CLI_PATH} init --yes --skip-db --skip-env --json`, {
+      cwd: outsideDir,
+      env: baseEnv(home),
+    });
+
+    await expect(stat(path.join(configuredRepoRoot, "data"))).resolves.toBeDefined();
+  });
+
+  it("shows configuration box data via init configuration command", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-configuration-command-"));
+    const repoRoot = path.join(root, "repo");
+    const home = path.join(root, "home");
+    await mkdir(home, { recursive: true });
+    await mkdir(repoRoot, { recursive: true });
+    await setupTempNeotomaRepo(repoRoot);
+
+    await execAsync(`${CLI_PATH} init --yes --skip-db --skip-env --json`, {
+      cwd: repoRoot,
+      env: baseEnv(home, { NEOTOMA_REPO_ROOT: repoRoot }),
+    });
+
+    const { stdout } = await execAsync(`${CLI_PATH} init configuration --json`, {
+      cwd: repoRoot,
+      env: baseEnv(home, { NEOTOMA_REPO_ROOT: repoRoot }),
+    });
+    const result = JSON.parse(stdout) as { configuration_lines: string[] };
+    expect(Array.isArray(result.configuration_lines)).toBe(true);
+    expect(result.configuration_lines.join(" ")).toMatch(/env configured/i);
   });
 });
