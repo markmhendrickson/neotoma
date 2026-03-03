@@ -363,6 +363,116 @@ describe("CLI init interactive flows", () => {
     });
   });
 
+  it("skips scope and MCP/CLI prompts when provided via flags", async () => {
+    await withTempHome(async () => {
+      await withTempCwd(async () => {
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline([""]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() =>
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--advanced",
+              "--skip-db",
+              "--skip-env",
+              "--auth-mode",
+              "dev_local",
+              "--scope",
+              "skip",
+              "--configure-mcp",
+              "no",
+              "--configure-cli",
+              "no",
+            ])
+          );
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).not.toMatch(/Apply MCP \+ CLI updates to:/i);
+        expect(prompts).not.toMatch(/Configure MCP configuration \(add\/update MCP servers\)\?/i);
+        expect(prompts).not.toMatch(/Configure CLI instructions/i);
+      });
+    });
+  });
+
+  it("uses current directory targets from flag without prompting", async () => {
+    await withTempHome(async () => {
+      await withTempCwd(async (cwd) => {
+        await fs.writeFile(
+          path.join(cwd, "package.json"),
+          JSON.stringify(
+            {
+              name: "neotoma-tests",
+              dependencies: {
+                neotoma: "^0.0.0-test",
+              },
+            },
+            null,
+            2
+          )
+        );
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline([""]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() =>
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--skip-db",
+              "--skip-env",
+              "--use-current-dir-targets",
+              "yes",
+            ])
+          );
+        } finally {
+          restoreTty();
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).not.toMatch(/Detected installed npm package/i);
+        await expect(fs.stat(path.join(cwd, "data"))).resolves.toBeDefined();
+      });
+    });
+  });
+
+  it("writes openai key from flag without prompting for it", async () => {
+    await withTempHome(async (homeDir) => {
+      await withTempCwd(async () => {
+        const previousOpenAi = process.env.OPENAI_API_KEY;
+        delete process.env.OPENAI_API_KEY;
+        const restoreTty = forceStdoutTty(true);
+        const flow = mockReadline([""]);
+        const { runCli } = await loadCli();
+        try {
+          await expectExitZero(() =>
+            runCli([
+              "node",
+              "cli",
+              "init",
+              "--skip-db",
+              "--openai-api-key",
+              "test-openai-key",
+            ])
+          );
+        } finally {
+          restoreTty();
+          if (previousOpenAi === undefined) delete process.env.OPENAI_API_KEY;
+          else process.env.OPENAI_API_KEY = previousOpenAi;
+        }
+        const prompts = flow.prompts.join(" ");
+        expect(prompts).not.toMatch(/OPENAI_API_KEY value/i);
+        const envPath = path.join(homeDir, ".config", "neotoma", ".env");
+        const envText = await fs.readFile(envPath, "utf-8");
+        expect(envText).toMatch(/OPENAI_API_KEY=test-openai-key/);
+      });
+    });
+  });
+
   it("prefers NEOTOMA_DATA_DIR from selected env file", async () => {
     await withTempHome(async (homeDir) => {
       const envDir = path.join(homeDir, ".config", "neotoma");

@@ -264,4 +264,43 @@ describe("CLI init command non-interactive coverage", () => {
     expect(Array.isArray(result.configuration_lines)).toBe(true);
     expect(result.configuration_lines.join(" ")).toMatch(/env configured/i);
   });
+
+  it("applies scope and setup flags in non-interactive mode", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-nonint-flags-"));
+    const repoRoot = path.join(root, "repo");
+    const home = path.join(root, "home");
+    const dataDir = path.join(root, "data");
+    await mkdir(home, { recursive: true });
+    await mkdir(repoRoot, { recursive: true });
+    await setupTempNeotomaRepo(repoRoot);
+
+    const { stdout } = await execAsync(
+      `${CLI_PATH} init --yes --skip-db --skip-env --data-dir "${dataDir}" --scope skip --configure-mcp no --configure-cli no --openai-api-key "sk-test-key" --json`,
+      {
+        cwd: repoRoot,
+        env: baseEnv(home, { NEOTOMA_REPO_ROOT: repoRoot }),
+      }
+    );
+
+    const result = JSON.parse(stdout) as {
+      success: boolean;
+      data_dir: string;
+      steps: Array<{ name: string; status: string }>;
+    };
+    expect(result.success).toBe(true);
+    expect(result.data_dir).toBe(dataDir);
+    expect(result.steps.some((step) => step.name === "database" && step.status === "skipped")).toBe(true);
+  });
+
+  it("validates invalid optional flag values", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "neotoma-init-invalid-flag-"));
+    const home = path.join(root, "home");
+    await mkdir(home, { recursive: true });
+
+    await expect(
+      execAsync(`${CLI_PATH} init --yes --skip-db --skip-env --scope banana --json`, {
+        env: baseEnv(home),
+      })
+    ).rejects.toThrow(/Invalid --scope/);
+  });
 });

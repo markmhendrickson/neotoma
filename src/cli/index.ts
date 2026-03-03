@@ -4298,6 +4298,22 @@ const initCommand = program
             "~/.codex/neotoma_cli.md",
           ];
           const hasDetectedCliRulePathsForPlan = cliRulePathsForPlan.length > 0;
+          const plannedScopeSelection: InitScopeSelection | null =
+            initScopeFromFlag ?? (useAdvancedPrompts ? null : "user");
+          const scopeValue =
+            plannedScopeSelection == null
+              ? "Choose during personalization"
+              : plannedScopeSelection === "skip"
+                ? "Skip MCP + CLI updates"
+                : plannedScopeSelection === "user"
+                  ? "User"
+                  : plannedScopeSelection === "project"
+                    ? "Project"
+                    : "Both (user + project)";
+          const plannedConfigureMcp =
+            plannedScopeSelection !== "skip" && (configureMcpFromFlag ?? true);
+          const plannedConfigureCli =
+            plannedScopeSelection !== "skip" && (configureCliFromFlag ?? true);
           const planRows: {
             label: string;
             value: string | string[];
@@ -4347,34 +4363,47 @@ const initCommand = program
                       envExists
                         ? "Update local environment file by filling in missing defaults."
                         : "Create local environment file with detected defaults.",
-                      "Leave OpenAI key unset unless you provide it.",
+                      openAiKeyFromFlag
+                        ? "Set OpenAI key from --openai-api-key."
+                        : "Leave OpenAI key unset unless you provide it.",
                     ]
                   : undefined,
             },
             {
               label: "Configuration scope",
-              value: useAdvancedPrompts ? "Choose during personalization" : "User (default)",
+              value: scopeValue,
               details: [
                 "Use one scope for both MCP configuration and CLI instructions.",
-                runningFromSourceCheckout
-                  ? "Project, user, and both scopes are available."
-                  : "Defaults to user scope unless changed in personalization.",
+                plannedScopeSelection === "skip"
+                  ? "Skip both MCP configuration and CLI instruction updates."
+                  : runningFromSourceCheckout
+                    ? "Project, user, and both scopes are available."
+                    : "Defaults to user scope unless changed in personalization.",
               ],
             },
             {
               label: "MCP configuration",
-              value:
-                mcpMissingProdInUserScope && mcpUserPathsForPlan.length > 0
+              value: !plannedConfigureMcp
+                ? "Skipped"
+                : mcpMissingProdInUserScope && mcpUserPathsForPlan.length > 0
                   ? mcpUserPathsForPlan
                   : existingMcpPathsForPlan.length > 0
                     ? existingMcpPathsForPlan
-                  : mcpMissingProdInUserScope
-                    ? "User-wide production usage"
-                    : "No changes",
+                    : mcpMissingProdInUserScope
+                      ? "User-wide production usage"
+                      : "No changes",
               details:
-                mcpMissingProdInUserScope
+                !plannedConfigureMcp
+                  ? ["MCP configuration is skipped by provided flags."]
+                  : mcpMissingProdInUserScope
                   ? [
-                      "Add or update user-level Neotoma production server entries for Cursor, Claude, and Codex.",
+                      "Add or update user-level Neotoma " +
+                        (mcpEnvFromFlag === "dev"
+                          ? "development"
+                          : mcpEnvFromFlag === "both"
+                            ? "development + production"
+                            : "production") +
+                        " server entries for Cursor, Claude, and Codex.",
                       "Keep project-level MCP configurations unchanged.",
                     ]
                   : existingMcpPathsForPlan.length > 0
@@ -4383,11 +4412,14 @@ const initCommand = program
             },
             {
               label: "CLI instructions",
-              value:
-                hasDetectedCliRulePathsForPlan
+              value: !plannedConfigureCli
+                ? "Skipped"
+                : hasDetectedCliRulePathsForPlan
                   ? cliRulePathsForPlan
                   : defaultCliInstructionPathsForPlan,
-              details: hasDetectedCliRulePathsForPlan
+              details: !plannedConfigureCli
+                ? ["CLI instruction configuration is skipped by provided flags."]
+                : hasDetectedCliRulePathsForPlan
                 ? [
                     "No CLI instruction changes planned. Existing instruction file paths are shown above.",
                     "Prefer MCP access when available and use CLI as fallback.",
@@ -4584,7 +4616,7 @@ const initCommand = program
               // .env may not exist yet; prompt below if key is still unset.
             }
           }
-          if (!existingOpenAi) {
+          if (!existingOpenAi && !openAiKeyFromFlag) {
             earlyOpenAiInput = await askQuestion(OPENAI_API_KEY_PROMPT);
             earlyOpenAiPrompted = true;
           }
@@ -4898,11 +4930,13 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             }
           } else if (initAuthSummary.mode === "key_derived") {
             process.stdout.write(nl());
-            const keyChoice = await askQuestion(
-              "Create new key [1] or path to existing key [2] [default: 1]: "
-            );
-            const wantCreate = keyChoice.trim() === "" || keyChoice.trim() === "1";
-            if (wantCreate) {
+            const resolvedKeySource: InitKeySource =
+              keySourceFromFlag ??
+              (opts.yes ? "skip" : normalizeInitKeySource(
+                await askQuestion("Create new key [1] or path to existing key [2] [default: 1]: ")
+              ) ??
+                "create");
+            if (resolvedKeySource === "create") {
               const keysDir = path.join(CONFIG_DIR, "keys");
               keyPath = path.join(keysDir, "neotoma.key");
               try {
@@ -4920,10 +4954,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                   bullet("Created encryption key at " + pathStyle(keyPath)) + "\n"
                 );
               }
-            } else {
-              const existingPath = await askPathQuestion(
-                "Path to existing key file [default: skip]: "
-              );
+            } else if (resolvedKeySource === "existing") {
+              const existingPath =
+                opts.keyPath?.trim() ||
+                (await askPathQuestion("Path to existing key file [default: skip]: "));
               const resolved = existingPath.trim().replace(/^~(?=\/|$)/, process.env.HOME || "");
               if (!resolved) {
                 process.stdout.write(
@@ -4949,6 +4983,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
                   );
                 }
               }
+            } else {
+              process.stdout.write(
+                bullet(dim("Skipping key file setup. Set NEOTOMA_KEY_FILE_PATH in .env later.")) + "\n"
+              );
             }
           }
           // Show user ID for dev_local (API already started at start of init if needed)
@@ -5121,7 +5159,34 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             envOpenAiOutcome = "already_set";
           }
           const shouldPromptOpenAi = !opts.yes && outputMode === "pretty" && process.stdout.isTTY;
-          if (!openAiSet && shouldPromptOpenAi) {
+          if (!openAiSet && openAiKeyFromFlag) {
+            let envText: string;
+            try {
+              envText = await fs.readFile(envPathStr, "utf-8");
+            } catch {
+              if (envExamplePath) {
+                envText = await fs.readFile(envExamplePath, "utf-8");
+              } else {
+                envText = envContent;
+              }
+            }
+            const openAiLine = /^#?\s*OPENAI_API_KEY=.*$/m;
+            if (openAiLine.test(envText)) {
+              envText = envText.replace(
+                openAiLine,
+                "OPENAI_API_KEY=" + normalizeSingleLineInput(openAiKeyFromFlag)
+              );
+            } else {
+              envText =
+                envText.trimEnd() +
+                "\nOPENAI_API_KEY=" +
+                normalizeSingleLineInput(openAiKeyFromFlag) +
+                "\n";
+            }
+            await fs.writeFile(envPathStr, envText);
+            _envConfigured = true;
+            envOpenAiOutcome = envExists ? "updated" : "saved";
+          } else if (!openAiSet && shouldPromptOpenAi) {
             let keyVal = "";
             if (earlyOpenAiPrompted && !useAdvancedPrompts) {
               keyVal = earlyOpenAiInput;
@@ -5249,7 +5314,14 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         }
 
         setInitProgress("scope", "in_progress");
-        if (useAdvancedPrompts) {
+        if (initScopeFromFlag) {
+          if (initScopeFromFlag === "skip") {
+            skipInitScope = true;
+            selectedInitScope = "user";
+          } else {
+            selectedInitScope = initScopeFromFlag;
+          }
+        } else if (useAdvancedPrompts) {
           writePersonalizeStepBanner("scope", "Configuration scope");
           if (!repoRoot && outputMode === "pretty") {
             const pathInput = await askPathQuestion(
@@ -5367,16 +5439,18 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         if (useAdvancedPrompts) {
           writePersonalizeStepBanner("mcp", "MCP configuration");
         }
-        const configureMcp = await (useAdvancedPrompts && !skipInitScope
-          ? askQuestion("Configure MCP configuration (add/update MCP servers)? [Y/n]: ").then(
-              (answer) => {
-                const a = answer.trim().toLowerCase();
-                if (a === "" || a === "y" || a === "yes") return true;
-                if (a === "n" || a === "no") return false;
-                return true;
-              }
-            )
-          : Promise.resolve(true));
+        const configureMcp = await (configureMcpFromFlag != null
+          ? Promise.resolve(configureMcpFromFlag)
+          : useAdvancedPrompts && !skipInitScope
+            ? askQuestion("Configure MCP configuration (add/update MCP servers)? [Y/n]: ").then(
+                (answer) => {
+                  const a = answer.trim().toLowerCase();
+                  if (a === "" || a === "y" || a === "yes") return true;
+                  if (a === "n" || a === "no") return false;
+                  return true;
+                }
+              )
+            : Promise.resolve(true));
         if (outputMode === "pretty" && process.stdout.isTTY) {
           try {
             const { scanAgentInstructions } = await import("./agent_instructions_scan.js");
@@ -5400,10 +5474,10 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             mcpInstallResult = await offerInstall(mcpScan.configs, initMcpRoot, {
               boxAlreadyShown: outputMode === "pretty" && process.stdout.isTTY,
               autoInstallScope: selectedInitScope,
+              autoInstallEnv: mcpEnvFromFlag ?? (useAdvancedPrompts ? undefined : ("prod" as const)),
               ...(useAdvancedPrompts
                 ? {}
                 : {
-                    autoInstallEnv: "prod" as const,
                     skipProjectSync: true,
                   }),
             });
@@ -5415,7 +5489,11 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
               // Keep install details in the final initialization summary table.
             }
             if (mcpInstallResult?.installed) {
-              setInitProgress("mcp", "done", "updated production entries");
+              setInitProgress(
+                "mcp",
+                "done",
+                `updated ${mcpEnvFromFlag ?? "prod"} entries`
+              );
               setInitProgressSummaryLines(
                 "mcp",
                 summarizePathChanges(mcpInstallResult.updatedPaths ?? [], getRelevantMcpPaths())
@@ -5451,19 +5529,21 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             if (useAdvancedPrompts) {
               writePersonalizeStepBanner("cli", "CLI instructions");
             }
-            const configureCli = await (useAdvancedPrompts
-              ? (() => {
-                  // Default yes in personalize flow for quicker setup.
-                  return askQuestion(
-                    "Configure CLI instructions (prefer MCP when available, CLI as backup)? [Y/n]: "
-                  ).then((answer) => {
-                    const a = answer.trim().toLowerCase();
-                    if (a === "" || a === "y" || a === "yes") return true;
-                    if (a === "n" || a === "no") return false;
-                    return true;
-                  });
-                })()
-              : Promise.resolve(true));
+            const configureCli = await (configureCliFromFlag != null
+              ? Promise.resolve(configureCliFromFlag)
+              : useAdvancedPrompts
+                ? (() => {
+                    // Default yes in personalize flow for quicker setup.
+                    return askQuestion(
+                      "Configure CLI instructions (prefer MCP when available, CLI as backup)? [Y/n]: "
+                    ).then((answer) => {
+                      const a = answer.trim().toLowerCase();
+                      if (a === "" || a === "y" || a === "yes") return true;
+                      if (a === "n" || a === "no") return false;
+                      return true;
+                    });
+                  })()
+                : Promise.resolve(true));
             if (configureCli) {
               const {
                 scanAgentInstructions,
