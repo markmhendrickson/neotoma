@@ -45,8 +45,6 @@ export interface GlossaryRow {
 }
 
 export const SITE_SECTIONS: SiteSection[] = [
-  { id: "quick-start", label: "Quick start", shortLabel: "Quick start", icon: "Zap" },
-  { id: "intro", label: "Introduction", shortLabel: "Introduction", icon: "BookOpen" },
   { id: "install", label: "Install with npm", shortLabel: "Install", icon: "Package" },
   { id: "get-started", label: "Get started", shortLabel: "Get started", icon: "Rocket" },
   { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Users" },
@@ -75,8 +73,13 @@ npm install -g neotoma
 
 # Initialize
 neotoma init`,
-  agentInstallPrompt: `Install Neotoma by following these instructions:
-https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_installation_instructions.md`,
+  agentInstallPrompt: `Install and initialize Neotoma for me using npm, then report what changed.
+
+Use this exact sequence:
+1) npm install -g neotoma
+2) neotoma init
+
+After init, preview any personal data you already have in this session/context, show me a proposed save list, and ask for my confirmation before saving anything to Neotoma.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -95,8 +98,6 @@ neotoma api start --env production`,
   syncConfigCommands: `cd /path/to/neotoma
 # Add neotoma-dev and neotoma to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
 npm run sync:mcp`,
-  dockerAgentPrompt: `Follow the instructions at:
-https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_docker_instructions.md`,
   dockerBuild: `git clone https://github.com/markmhendrickson/neotoma.git
 cd neotoma
 docker build -t neotoma .`,
@@ -552,7 +553,7 @@ export const LEARN_MORE_REPO_CARD: LearnMoreCardItem = {
   label: "Repository",
   title: "Neotoma on GitHub",
   description:
-    "Source code, README with installation and MCP setup, and the rationale for the memory correctness layer. Clone, contribute, or open issues.",
+    "Source code, README with installation and MCP setup, and the rationale for the truth layer. Clone, contribute, or open issues.",
   href: "https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#neotoma-truth-layer-for-persistent-agent-memory",
   imageUrl: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
   ctaLabel: "Visit repo →",
@@ -613,9 +614,9 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
-  pageTitle: "Neotoma | Deterministic, inspectable memory for long-running agents",
+  pageTitle: "Neotoma | The truth layer for persistent AI agent memory",
   pageDescription:
-    "State integrity layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
+    "Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory.",
   heroImageUrl: "neotoma-hero.png",
 };
 

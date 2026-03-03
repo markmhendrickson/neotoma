@@ -1,5 +1,5 @@
-import { AlertTriangle, Check, ChevronDown, Copy } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, Check, Copy } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   FUNCTIONALITY_MATRIX,
   MCP_ACTIONS_TABLE,
@@ -138,210 +138,16 @@ function CodeBlock({ code, staticMode = false }: { code: string; staticMode?: bo
           aria-label={copied ? "Copied" : "Copy code"}
           onClick={onCopy}
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? (
+            <Check className="h-3.5 w-3.5" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
         </Button>
       ) : null}
       <pre className="rounded-lg border border-border bg-muted p-4 pr-12 overflow-x-auto font-mono text-[14px] text-foreground whitespace-pre-wrap break-words">
         <code>{code}</code>
       </pre>
-    </div>
-  );
-}
-
-/** Failure interaction examples from docs/developer/agent_memory_failure_interactions_by_schema.md */
-const FORGETFUL_SCENARIOS = [
-  {
-    left: "Use Jordan Lee from legal on this thread.",
-    right: "Sending to Jordan Lee (Sales).",
-    schema: "person",
-  },
-  {
-    left: "Use Priya's new work email.",
-    right: "Sent to priya@oldco.com.",
-    schema: "contact",
-  },
-  {
-    left: "Route this to Acme Holdings.",
-    right: "Assigned to Acme Logistics account owner.",
-    schema: "company",
-  },
-  {
-    left: "Ship to the updated Austin office.",
-    right: "Shipment queued for 210 2nd St.",
-    schema: "address",
-  },
-  {
-    left: "Remind me to submit payroll Friday.",
-    right: "Reminder set for last Friday's payroll task.",
-    schema: "task",
-  },
-  {
-    left: "What changed after yesterday's incident?",
-    right: "No change after incident close.",
-    schema: "event",
-  },
-  {
-    left: "Where is the handoff meeting?",
-    right: "At the old office on 3rd Ave.",
-    schema: "location",
-  },
-  {
-    left: "Which company owns this contract?",
-    right: "Owned by Beta LLC.",
-    schema: "contract",
-  },
-  {
-    left: "Was invoice 884 paid?",
-    right: "Unpaid as of Feb 2.",
-    schema: "transaction",
-  },
-  {
-    left: "Continue where we left off yesterday.",
-    right: "Resuming based on last week's thread.",
-    schema: "conversation",
-  },
-  {
-    left: "Show all open work for Project Atlas.",
-    right: "Showing 18 open items.",
-    schema: "project",
-  },
-];
-
-const SCENARIO_DURATION_MS = 5000;
-const HUMAN_TYPING_MS = 1700;
-const AGENT_THINKING_MS = 900;
-const AGENT_TYPING_MS = 2000;
-
-function ForgetfulAgentIllustration() {
-  const [elapsedTotal, setElapsedTotal] = useState(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const startedAt = Date.now();
-    const intervalId = window.setInterval(() => {
-      setElapsedTotal(Date.now() - startedAt);
-    }, 80);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, []);
-
-  const absoluteScenarioIndex = Math.floor(elapsedTotal / SCENARIO_DURATION_MS);
-  const activeScenario = FORGETFUL_SCENARIOS[absoluteScenarioIndex % FORGETFUL_SCENARIOS.length];
-  const elapsedInActiveScenario = elapsedTotal - absoluteScenarioIndex * SCENARIO_DURATION_MS;
-  const composerProgress = Math.min(1, Math.max(0, elapsedInActiveScenario / HUMAN_TYPING_MS));
-  const composerVisibleChars = Math.floor(activeScenario.left.length * composerProgress);
-  const composerText = activeScenario.left.slice(0, composerVisibleChars);
-  const isComposerTyping = elapsedInActiveScenario < HUMAN_TYPING_MS;
-  const agentResponseStart = HUMAN_TYPING_MS + AGENT_THINKING_MS;
-  const firstVisibleScenarioIndex = Math.max(0, absoluteScenarioIndex - 8);
-  const messages: Array<{
-    key: string;
-    role: "human" | "agent";
-    text: string;
-    isThinking: boolean;
-  }> = [];
-
-  for (let i = firstVisibleScenarioIndex; i <= absoluteScenarioIndex; i += 1) {
-    const scenario = FORGETFUL_SCENARIOS[i % FORGETFUL_SCENARIOS.length];
-    const elapsedInScenario = elapsedTotal - i * SCENARIO_DURATION_MS;
-    if (elapsedInScenario < 0) continue;
-
-    if (elapsedInScenario >= HUMAN_TYPING_MS) {
-      messages.push({
-        key: `human-${i}`,
-        role: "human",
-        text: scenario.left,
-        isThinking: false,
-      });
-
-      const agentTypingProgress = Math.max(
-        0,
-        Math.min(1, (elapsedInScenario - agentResponseStart) / AGENT_TYPING_MS)
-      );
-      const agentVisibleChars = Math.floor(scenario.right.length * agentTypingProgress);
-      const agentIsThinking = elapsedInScenario < agentResponseStart;
-
-      messages.push({
-        key: `agent-${i}`,
-        role: "agent",
-        text: scenario.right.slice(0, agentVisibleChars),
-        isThinking: agentIsThinking,
-      });
-    }
-  }
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
-
-  return (
-    <div className="relative h-[360px] overflow-hidden rounded-xl border border-emerald-500/20 bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 p-3 shadow-[0_14px_50px_rgba(0,0,0,0.45)] dark:border-emerald-400/30 dark:from-slate-100 dark:via-slate-50 dark:to-white dark:shadow-[0_14px_50px_rgba(0,0,0,0.08)] md:h-[420px]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_35%)] dark:bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.12),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.08),transparent_35%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-20 [background-image:linear-gradient(to_bottom,rgba(148,163,184,0.28)_1px,transparent_1px)] [background-size:100%_10px] dark:opacity-30 dark:[background-image:linear-gradient(to_bottom,rgba(100,116,139,0.2)_1px,transparent_1px)]" />
-      <div className="relative flex h-full flex-col overflow-hidden rounded-lg border border-emerald-400/25 bg-slate-950/90 dark:border-emerald-500/30 dark:bg-white/95">
-        <div className="flex shrink-0 items-center justify-between border-b border-emerald-400/20 px-3 py-2 text-[10px] uppercase tracking-wide text-emerald-200/70 dark:border-emerald-500/25 dark:text-emerald-800/90">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-rose-400/75 dark:bg-rose-500/80" />
-            <span className="h-2 w-2 rounded-full bg-amber-300/75 dark:bg-amber-500/80" />
-            <span className="h-2 w-2 rounded-full bg-emerald-400/75 dark:bg-emerald-500/80" />
-          </div>
-          <span>agent session · deterministic mode</span>
-        </div>
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="flex min-h-full flex-col justify-end gap-2 px-2 py-2 pb-2">
-            {messages.map((message, index) => {
-              const total = messages.length || 1;
-              const age = total - 1 - index;
-              const opacity = Math.max(0.22, 1 - age * 0.13);
-              return (
-                <div
-                  key={message.key}
-                  className={`flex ${message.role === "human" ? "justify-start" : "justify-end"}`}
-                  style={{ opacity }}
-                >
-                  <div
-                    className={`max-w-[88%] rounded-md border px-2.5 py-1.5 font-mono text-[11px] shadow-sm ${
-                      message.role === "human"
-                        ? "border-slate-600/80 bg-slate-900 text-slate-200 dark:border-slate-300 dark:bg-slate-200 dark:text-slate-800"
-                        : "border-emerald-400/35 bg-emerald-500/10 text-emerald-100 dark:border-emerald-400/50 dark:bg-emerald-100 dark:text-emerald-900"
-                    }`}
-                  >
-                    {message.isThinking ? (
-                      <p className="flex items-center gap-1 leading-4 text-emerald-200/70 dark:text-emerald-600/90">
-                        <span className="h-1 w-1 rounded-full bg-emerald-300/80 animate-bounce [animation-delay:0ms] dark:bg-emerald-600" />
-                        <span className="h-1 w-1 rounded-full bg-emerald-300/80 animate-bounce [animation-delay:150ms] dark:bg-emerald-600" />
-                        <span className="h-1 w-1 rounded-full bg-emerald-300/80 animate-bounce [animation-delay:300ms] dark:bg-emerald-600" />
-                      </p>
-                    ) : (
-                      <p className="leading-4">
-                        <span>{message.text || "\u00A0"}</span>
-                      </p>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="pointer-events-none absolute inset-x-0 top-9 h-10 bg-gradient-to-b from-slate-950 to-transparent dark:from-white dark:to-transparent" />
-        <div className="shrink-0 px-2 pb-2 pt-1">
-          <div className="rounded-md border border-emerald-400/25 bg-slate-900/95 p-1.5 shadow-sm shadow-emerald-500/10 dark:border-emerald-400/40 dark:bg-slate-100/95 dark:shadow-emerald-500/15">
-            <div className="flex h-8 items-center rounded border border-emerald-400/25 bg-slate-950 px-2 font-mono text-[11px] leading-4 text-emerald-100/90 dark:border-emerald-400/40 dark:bg-white dark:text-emerald-800">
-              <span className="mr-1 text-emerald-300 dark:text-emerald-600">$</span>
-              <span className={composerText ? "" : "text-emerald-300/45 dark:text-emerald-500/60"}>
-                {composerText || "awaiting operator input..."}
-              </span>
-              {isComposerTyping ? (
-                <span className="ml-0.5 inline-block w-[1px] animate-pulse text-emerald-300 dark:text-emerald-600">
-                  |
-                </span>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -394,136 +200,18 @@ export function SitePage({ staticMode = false }: SitePageProps) {
       <div className="min-h-screen bg-background text-foreground">
         <main className="min-w-0">
           <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
-            <section className="relative left-1/2 right-1/2 -ml-[calc(50vw+1.5rem)] -mr-[calc(50vw+1.5rem)] md:-ml-[calc(50vw+2rem)] md:-mr-[calc(50vw+2rem)] -mt-16 md:-mt-24 w-[calc(100vw+3rem)] md:w-[calc(100vw+4rem)] min-h-[100svh] px-8 pt-0 pb-12 md:px-16 md:pt-0 md:pb-16 lg:px-24 lg:pt-0 lg:pb-20 flex flex-col justify-center">
-              <div className="grid gap-2 md:gap-4 lg:gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-center">
-                <div className="p-16">
-                  <h1
-                    id="quick-start"
-                    className="group scroll-mt-6 text-[28px] font-medium tracking-[-0.02em] mt-0 mb-2"
-                  >
-                    Your production agent is amnesiac.
-                  </h1>
-                  <p className="text-[17px] leading-7 mb-5 text-foreground/90 font-normal">
-                    Deterministic, inspectable memory for long-running agents.
-                  </p>
-
-                  <div className="mb-5">
-                    <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                      Without a memory invariant
-                    </p>
-                    <ul className="list-none pl-0 space-y-1">
-                      <li className="text-[14px] leading-6 text-muted-foreground flex items-start gap-2">
-                        <span className="text-rose-400 mt-0.5 shrink-0" aria-hidden="true">×</span>
-                        Context drifts across sessions.
-                      </li>
-                      <li className="text-[14px] leading-6 text-muted-foreground flex items-start gap-2">
-                        <span className="text-rose-400 mt-0.5 shrink-0" aria-hidden="true">×</span>
-                        Facts conflict across tools.
-                      </li>
-                      <li className="text-[14px] leading-6 text-muted-foreground flex items-start gap-2">
-                        <span className="text-rose-400 mt-0.5 shrink-0" aria-hidden="true">×</span>
-                        Decisions execute without a reproducible trail.
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div className="mb-5">
-                    <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                      Neotoma makes memory
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {["Versioned", "Schema-bound", "Replayable", "Auditable"].map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-block rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[13px] font-medium text-emerald-600 dark:text-emerald-400"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded border border-border bg-muted/50 px-4 py-3 mb-4">
-                    <p className="text-[13px] leading-5 text-foreground/90 font-medium mb-0.5">
-                      Invariant: Memory evolves deterministically.
-                    </p>
-                    <p className="text-[13px] leading-5 text-muted-foreground mb-0.5">
-                      Every state change is versioned and replayable.
-                    </p>
-                    <p className="text-[13px] leading-5 text-muted-foreground/70">
-                      No silent mutation. No implicit overwrite.
-                    </p>
-                  </div>
-
-                  <p className="text-[13px] leading-5 text-muted-foreground/80 italic mb-5">
-                    RAG retrieves documents. Neotoma enforces state evolution.
-                  </p>
-
-                  <p className="text-[13px] leading-5 text-muted-foreground mb-5">
-                    For builders running long-lived agents in production.
-                    {" "}Not for note-taking. Not for ad hoc prompts.
-                  </p>
-
-                  <p className="text-[13px] leading-5 text-muted-foreground mb-5">
-                    5-minute integration. Fully reversible.
-                    {" "}Works with Claude, Codex, and Cursor.
-                  </p>
-
-                  <div className="flex flex-wrap gap-3">
-                    <a
-                      href="https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#neotoma-truth-layer-for-persistent-agent-memory"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center rounded-md border border-foreground bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline hover:bg-foreground/90 transition-colors"
-                    >
-                      View invariant + architecture
-                    </a>
-                    <a
-                      href="#install"
-                      className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                    >
-                      Install in 5 minutes (reversible)
-                    </a>
-                  </div>
-                </div>
-                <div className="lg:px-6">
-                  <ForgetfulAgentIllustration />
-                </div>
-              </div>
-              <a
-                href="#intro"
-                className="absolute bottom-6 left-1/2 -translate-x-1/2 inline-flex flex-col items-center gap-1 text-muted-foreground no-underline hover:text-foreground transition"
-                aria-label="Scroll to introduction"
-              >
-                <span className="text-[11px] uppercase tracking-wide">Scroll for more details</span>
-                <ChevronDown className="h-5 w-5 animate-bounce" />
-              </a>
-            </section>
-
-            <div className="rounded-lg border border-border bg-card p-4 md:p-5 mb-8">
-              <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                Example
-              </p>
-              <p className="text-[14px] leading-6 text-foreground/90 font-mono">
-                Agent updates contract owner →
-                {" "}previous state versioned →
-                {" "}conflict detected →
-                {" "}timeline replayed →
-                {" "}operator verifies change.
-              </p>
-            </div>
-
-            <SectionDivider />
-
             <article id="intro" className="post-prose [&_a]:underline [&_a]:hover:text-foreground">
-              <h2 className="text-[24px] font-medium tracking-[-0.02em] mb-4 mt-0">
-                Neotoma is a memory correctness layer for persistent agent state
-              </h2>
+              <h1 className="text-[24px] font-medium tracking-[-0.02em] mb-4 mt-0">
+                A truth layer for persistent agent memory
+              </h1>
+              <p className="text-[17px] text-muted-foreground leading-7 mb-6 mt-0 max-w-[36em]">
+                Give your agents memory you can inspect, replay, and trust.
+              </p>
               <p className="text-[15px] leading-7 mb-4">
-                What keeps breaking agent automation is not intelligence but state integrity:
-                memory changes implicitly, context drifts, and there is no way to see what
-                changed or replay it. When agents act on personal data, that data becomes state.
-                The missing primitive is a correctness layer for explicit, inspectable, replayable state.
+                Agent memory is forgetful. What keeps breaking automation is trust, not
+                intelligence: memory changes implicitly, context drifts, and you can&apos;t see what
+                changed or replay it. When agents act, personal data becomes state. The missing
+                primitive is a layer of explicit, inspectable, replayable state.
               </p>
               <p className="text-[15px] leading-7 mb-4">
                 Neotoma is that layer. Open-source, privacy-protective, and user-controlled.
@@ -537,7 +225,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 API directly. <a href="#install">Install with npm</a> below, then configure MCP for
                 your editor or use the CLI.
               </p>
-              <Alert className="mt-10 mb-12 rounded-lg border border-border bg-card p-6 md:p-8 text-foreground [&>svg]:left-6 [&>svg]:top-6 md:[&>svg]:left-8 md:[&>svg]:top-8 [&>svg~*]:pl-8 [&>svg]:text-muted-foreground">
+              <Alert className="mt-10 mb-12 rounded-lg border border-border bg-muted p-4 text-foreground [&>svg]:text-muted-foreground">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <AlertTitle>Currently in developer release</AlertTitle>
                 <AlertDescription className="text-[15px] leading-7 [&_a]:text-foreground [&_a]:underline [&_a]:hover:text-foreground/90">
@@ -558,14 +246,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="bg-muted">
                   <img
                     src={SITE_METADATA.heroImageUrl}
-                    alt="Neotoma: memory correctness layer for AI agents"
+                    alt="Neotoma: truth layer for persistent agent memory"
                     loading="eager"
                     className="block max-w-full h-auto"
                   />
                 </div>
                 <figcaption className="pt-3 text-[12px] text-muted-foreground">
                   <em>Neotoma</em> is named after the genus of packrats, known for collecting and
-                  preserving material. Here it denotes a memory correctness layer for persistent agent state.
+                  preserving material. Here it denotes a truth layer for persistent agent memory.
                 </figcaption>
               </figure>
 
@@ -578,31 +266,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </TabsList>
                 <TabsContent value="agent">
                   <p className="text-[15px] leading-7 mb-4">
-                    If you want your assistant to handle setup, give it instructions like the prompt
-                    below. This path starts with npm install, then init.
+                    If you want your assistant to handle setup, give it instructions like the
+                    prompt below. This path starts with npm install, then init.
                   </p>
                   <CodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} staticMode={staticMode} />
                   <p className="text-[15px] leading-7 mb-4">
-                    Prefer to run in a container? See{" "}
-                    <a
-                      href="#docker"
-                      className="text-foreground underline underline-offset-2 hover:no-underline"
-                    >
-                      Run with Docker
-                    </a>{" "}
-                    for an agent-ready Docker prompt.
-                  </p>
-                  <p className="text-[15px] leading-7 mb-4">
                     During first-run onboarding, the agent should preview any personal data it can
                     already see from your in-session context or explicit tool outputs and ask for
-                    confirmation before saving. See{" "}
-                    <a
-                      href="https://neotoma.io/agent-installation"
-                      className="text-foreground underline underline-offset-2 hover:no-underline"
-                    >
-                      agent installation workflow
-                    </a>{" "}
-                    for the exact sequence.
+                    confirmation before saving.
                   </p>
                 </TabsContent>
                 <TabsContent value="human">
@@ -621,10 +292,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     You don’t need to run the API server for normal MCP or CLI use. Run it only if
                     you want app-based access.
                   </p>
-                  <CodeBlock
-                    code={SITE_CODE_SNIPPETS.postInstallCommands}
-                    staticMode={staticMode}
-                  />
+                  <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
                   <p className="text-[15px] leading-7 mb-4">
                     Prefer to run in a container? See{" "}
                     <a
@@ -1118,57 +786,43 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
               <SectionDivider />
               <SectionHeading id="docker">Run with Docker</SectionHeading>
-              <Tabs defaultValue="agent" className="mb-4">
-                <TabsList className="mb-3">
-                  <TabsTrigger value="agent">Agent</TabsTrigger>
-                  <TabsTrigger value="human">Human</TabsTrigger>
-                </TabsList>
-                <TabsContent value="agent">
-                  <p className="text-[15px] leading-7 mb-4">
-                    If you want your assistant to handle Docker setup, use a prompt like this:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerAgentPrompt} staticMode={staticMode} />
-                </TabsContent>
-                <TabsContent value="human">
-                  <p className="text-[15px] leading-7 mb-4">
-                    If you prefer not to install directly on your host machine, you can run the full
-                    Neotoma stack&mdash;API server, CLI, and MCP server&mdash;inside a Docker
-                    container. Clone the Neotoma repository and build the image:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
-                  <p className="text-[15px] leading-7 mb-4">
-                    Start a container with a persistent volume so your data survives restarts:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} staticMode={staticMode} />
-                  <p className="text-[15px] leading-7 mb-4">
-                    Initialize the data directory inside the container:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerInit} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                If you prefer not to install directly on your host machine, you can run the full
+                Neotoma stack&mdash;API server, CLI, and MCP server&mdash;inside a Docker container.
+                Clone the Neotoma repository and build the image:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                Start a container with a persistent volume so your data survives restarts:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                Initialize the data directory inside the container:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerInit} staticMode={staticMode} />
 
-                  <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
-                    Connect MCP from Docker
-                  </h3>
-                  <p className="text-[15px] leading-7 mb-4">
-                    To connect an MCP client (Cursor, Claude, Codex) to the containerized server,
-                    add this to your MCP configuration. The client runs <code>docker exec</code> to
-                    communicate with the MCP server over stdio:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerMcpConfig} staticMode={staticMode} />
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Connect MCP from Docker
+              </h3>
+              <p className="text-[15px] leading-7 mb-4">
+                To connect an MCP client (Cursor, Claude, Codex) to the containerized server, add
+                this to your MCP configuration. The client runs <code>docker exec</code> to
+                communicate with the MCP server over stdio:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerMcpConfig} staticMode={staticMode} />
 
-                  <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
-                    Use the CLI from Docker
-                  </h3>
-                  <p className="text-[15px] leading-7 mb-4">
-                    The <code>neotoma</code> CLI is available inside the container. Prefix commands
-                    with <code>docker exec</code>:
-                  </p>
-                  <CodeBlock code={SITE_CODE_SNIPPETS.dockerCliExample} staticMode={staticMode} />
-                  <p className="text-[15px] leading-7 mb-4">
-                    The API is also available at <code>http://localhost:3080</code> for direct HTTP
-                    access.
-                  </p>
-                </TabsContent>
-              </Tabs>
+              <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
+                Use the CLI from Docker
+              </h3>
+              <p className="text-[15px] leading-7 mb-4">
+                The <code>neotoma</code> CLI is available inside the container. Prefix commands with{" "}
+                <code>docker exec</code>:
+              </p>
+              <CodeBlock code={SITE_CODE_SNIPPETS.dockerCliExample} staticMode={staticMode} />
+              <p className="text-[15px] leading-7 mb-4">
+                The API is also available at <code>http://localhost:3080</code> for direct HTTP
+                access.
+              </p>
 
               <SectionDivider />
               <div className="rounded-lg p-6 md:p-8 -mx-4 px-4 md:-mx-8 md:px-8 mt-6 [&_h2]:!mt-0">
