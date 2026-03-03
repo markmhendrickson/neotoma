@@ -101,7 +101,7 @@ describe("MCP OAuth Service", () => {
     it("creates valid OAuth authorization URL", async () => {
       const state = "test-state-123";
       const codeChallenge = "test-challenge-456";
-      const redirectUri = "http://localhost:8080/mcp/oauth/callback";
+      const redirectUri = "http://localhost:3080/mcp/oauth/callback";
 
       const url = await createAuthUrl(state, codeChallenge, redirectUri);
       const parsedUrl = new URL(url);
@@ -261,7 +261,7 @@ describe("MCP OAuth Service", () => {
         const url = await createAuthUrl(
           "valid-state-token",
           "challenge",
-          "http://localhost:8080/callback"
+          "http://localhost:3080/callback"
         );
         expect(url).toBeDefined();
       });

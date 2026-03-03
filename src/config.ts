@@ -36,8 +36,8 @@ function getOpenAIConfig() {
   return process.env.OPENAI_API_KEY || "";
 }
 
-// Default ports: 8080 dev, 8180 prod, 8280 WS (spaced to avoid cascade when prod bumps)
-const defaultHttpPort = env === "production" ? "8180" : "8080";
+// Default ports: 3080 dev, 3180 prod, 8280 WS (spaced to avoid cascade when prod bumps)
+const defaultHttpPort = env === "production" ? "3180" : "3080";
 const httpPort = parseInt(
   process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT || defaultHttpPort,
   10

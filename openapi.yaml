@@ -6,7 +6,7 @@ info:
 servers:
   - url: https://mcp.neotoma.io
     description: Set from NEOTOMA_HOST_URL when served by the API; default shown for static/codegen use.
-  - url: http://localhost:8080
+  - url: http://localhost:3080
     description: Local development server
 security:
   - bearerAuth: []

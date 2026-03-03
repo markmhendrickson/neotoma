@@ -12,7 +12,7 @@ import net from 'net';
 import path from 'path';
 import { platform } from 'os';
 
-const BASE_HTTP_PORT = 8080;
+const BASE_HTTP_PORT = 3080;
 const BASE_VITE_PORT = 5173;
 const BASE_WS_PORT = 8081;
 const OWNER_PID_ENV = 'BRANCH_PORTS_OWNER_PID';
@@ -42,8 +42,9 @@ const TERMINATE_TIMEOUT_MS = 5000;
 const TERMINATE_POLL_INTERVAL_MS = 150;
 
 function ensureStateDir() {
-  if (!fs.existsSync(STATE_DIR)) {
-    fs.mkdirSync(STATE_DIR, { recursive: true });
+  const dir = path.dirname(STATE_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 }
 

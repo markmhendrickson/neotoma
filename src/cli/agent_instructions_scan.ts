@@ -174,8 +174,8 @@ const ACTIVE_ENV_END = "<!-- neotoma:active-env:end -->";
  */
 function buildEnvSection(env: "dev" | "prod"): string {
   const otherEnv = env === "dev" ? "prod" : "dev";
-  const activePort = env === "dev" ? "8080" : "8180";
-  const otherPort = env === "dev" ? "8180" : "8080";
+  const activePort = env === "dev" ? "3080" : "3180";
+  const otherPort = env === "dev" ? "3180" : "3080";
   return [
     ACTIVE_ENV_START,
     `## Active environment: ${env}`,
@@ -724,6 +724,7 @@ export async function offerAddPreferCliRule(
 
   const root = result.projectRoot;
   const body = await loadCliAgentInstructions(root);
+  const hasCliInstructionDoc = await fileExists(path.join(root, CLI_AGENT_INSTRUCTIONS_DOC_PATH));
   // When env is provided, build env-specific content and write real files.
   // Without env, use symlinks so files stay in sync with the docs source.
   const envBody = options?.env ? buildEnvSpecificInstructions(body, options.env) : null;
@@ -734,7 +735,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(p, envBody);
       } else {
-        await createSymlinkToDoc(root, p);
+        if (hasCliInstructionDoc) {
+          await createSymlinkToDoc(root, p);
+        } else {
+          await writePreferCliRule(p, body);
+        }
       }
       added.push(p);
     }
@@ -743,7 +748,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(p, envBody);
       } else {
-        await createSymlinkToDoc(root, p);
+        if (hasCliInstructionDoc) {
+          await createSymlinkToDoc(root, p);
+        } else {
+          await writePreferCliRule(p, body);
+        }
       }
       added.push(p);
     }
@@ -752,7 +761,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(p, envBody);
       } else {
-        await createSymlinkToDoc(root, p);
+        if (hasCliInstructionDoc) {
+          await createSymlinkToDoc(root, p);
+        } else {
+          await writePreferCliRule(p, body);
+        }
       }
       added.push(p);
     }
@@ -765,7 +778,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(userPaths.cursor, envBody);
       } else {
-        await createUserSymlinkToDoc(root, userPaths.cursor);
+        if (hasCliInstructionDoc) {
+          await createUserSymlinkToDoc(root, userPaths.cursor);
+        } else {
+          await writePreferCliRule(userPaths.cursor, body);
+        }
       }
       added.push(userPaths.cursor);
     }
@@ -773,7 +790,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(userPaths.claude, envBody);
       } else {
-        await createUserSymlinkToDoc(root, userPaths.claude);
+        if (hasCliInstructionDoc) {
+          await createUserSymlinkToDoc(root, userPaths.claude);
+        } else {
+          await writePreferCliRule(userPaths.claude, body);
+        }
       }
       added.push(userPaths.claude);
     }
@@ -781,7 +802,11 @@ export async function offerAddPreferCliRule(
       if (envBody) {
         await writePreferCliRule(userPaths.codex, envBody);
       } else {
-        await createUserSymlinkToDoc(root, userPaths.codex);
+        if (hasCliInstructionDoc) {
+          await createUserSymlinkToDoc(root, userPaths.codex);
+        } else {
+          await writePreferCliRule(userPaths.codex, body);
+        }
       }
       added.push(userPaths.codex);
     }

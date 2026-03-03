@@ -32,8 +32,9 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       "playwright/tests/**/*",
-      // Backup folders (do not run tests from data.backup.*)
+      // Backup folders (do not run tests from data.backup.* or data_backups/)
       "data.backup.*/**",
+      "data_backups/**",
       // Imported app tests (data/imports): run only with RUN_REMOTE_TESTS=1
       ...(!runRemoteTests ? ["data/imports/**"] : []),
       // Integration/service tests that fail on local SQLite (run with RUN_REMOTE_TESTS=1)

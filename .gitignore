@@ -19,6 +19,7 @@ data
 data/
 data*
 data.backup.*/
+data_backups/
 # Vite build output (outDir: public/); source is frontend/
 public/
 # Build output from build:pages:site (CI regenerates on deploy)
@@ -53,3 +54,5 @@ keys.backup.*
 # Local backup/debug artifacts
 *-debug.png
 
+# Builds
+neotoma*.tgz

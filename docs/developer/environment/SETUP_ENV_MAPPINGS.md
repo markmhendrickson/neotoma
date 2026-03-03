@@ -45,7 +45,7 @@ Based on `.env.example`, these variables should be mapped to 1Password:
 ### Server Configuration (Optional - usually local)
 These can be excluded from 1Password sync as they're typically local development values:
 - `PORT` / `NEOTOMA_PORT` - MCP Server port (default: 3000)
-- `HTTP_PORT` / `NEOTOMA_HTTP_PORT` - HTTP Actions Server port (default: 8080 for development, 8180 for production)
+- `HTTP_PORT` / `NEOTOMA_HTTP_PORT` - HTTP Actions Server port (default: 3080 for development, 3180 for production)
 - `WS_PORT` / `NEOTOMA_WS_PORT` - WebSocket MCP Bridge port (default: 8280)
 - `ACTIONS_BEARER_TOKEN` - Bearer token for HTTP Actions API
 - `NEOTOMA_HOST_URL` - Host URL for API and MCP

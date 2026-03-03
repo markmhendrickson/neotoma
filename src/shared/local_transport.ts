@@ -10,6 +10,7 @@ type LocalTransportClient = ReturnType<typeof createClient<paths>>;
 
 let localClientPromise: Promise<LocalTransportClient> | null = null;
 let localApiChild: ChildProcess | null = null;
+let localTransportKillHandler: (() => void) | null = null;
 
 function resolveProjectRoot(): string {
   const __filename = fileURLToPath(import.meta.url);
@@ -24,7 +25,7 @@ function inferEnvFromBaseUrl(baseUrl?: string): "production" | "development" {
   try {
     const parsed = new URL(baseUrl);
     const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
-    return port === 8180 ? "production" : "development";
+    return port === 3180 ? "production" : "development";
   } catch {
     return "development";
   }
@@ -88,6 +89,7 @@ export async function getLocalTransportClient(options: {
       const killChild = () => {
         if (localApiChild && !localApiChild.killed) localApiChild.kill("SIGTERM");
       };
+      localTransportKillHandler = killChild;
       process.once("exit", killChild);
       process.once("SIGINT", killChild);
       process.once("SIGTERM", killChild);
@@ -123,4 +125,37 @@ export async function getLocalTransportClient(options: {
   }
 
   return localClientPromise;
+}
+
+export async function shutdownLocalTransport(): Promise<void> {
+  if (localTransportKillHandler) {
+    process.removeListener("exit", localTransportKillHandler);
+    process.removeListener("SIGINT", localTransportKillHandler);
+    process.removeListener("SIGTERM", localTransportKillHandler);
+    localTransportKillHandler = null;
+  }
+
+  const child = localApiChild;
+  localApiChild = null;
+  localClientPromise = null;
+  if (!child || child.exitCode != null || child.killed) return;
+
+  child.kill("SIGTERM");
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      if (!child.killed && child.exitCode == null) child.kill("SIGKILL");
+      finish();
+    }, 2000);
+    timeoutId.unref?.();
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      child.removeListener("exit", onExit);
+      resolve();
+    };
+    const onExit = () => finish();
+    child.once("exit", onExit);
+  });
 }

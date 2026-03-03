@@ -73,6 +73,13 @@ npm install -g neotoma
 
 # Initialize
 neotoma init`,
+  agentInstallPrompt: `Install and initialize Neotoma for me using npm, then report what changed.
+
+Use this exact sequence:
+1) npm install -g neotoma
+2) neotoma init
+
+After init, preview any personal data you already have in this session/context, show me a proposed save list, and ask for my confirmation before saving anything to Neotoma.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -96,7 +103,7 @@ cd neotoma
 docker build -t neotoma .`,
   dockerRun: `docker run -d \\
   --name neotoma \\
-  -p 8080:8080 \\
+  -p 3080:3080 \\
   -v neotoma-data:/app/data \\
   neotoma`,
   dockerInit: `docker exec neotoma neotoma init --yes --data-dir /app/data`,

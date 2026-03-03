@@ -507,12 +507,12 @@ test.describe('OAuth Consent Page (/oauth/consent)', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          redirect_url: 'http://localhost:8080/api/mcp/oauth/callback?code=test-code',
+          redirect_url: 'http://localhost:3080/api/mcp/oauth/callback?code=test-code',
           client_name: 'Test MCP Client',
           scopes: ['Access your Neotoma data'],
           authorization_id: authorizationId,
           client_id: 'test-client-id',
-          redirect_uri: 'http://localhost:8080/api/mcp/oauth/callback',
+          redirect_uri: 'http://localhost:3080/api/mcp/oauth/callback',
         }),
       });
     });

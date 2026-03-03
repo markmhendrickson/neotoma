@@ -110,16 +110,37 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   const sectionIds = useMemo(() => SITE_SECTIONS.map((section) => section.id), []);
 
   useEffect(() => {
+    const scrollToSection = (id: string) => {
+      const el = document.getElementById(id);
+      if (el) {
+        requestAnimationFrame(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+        return true;
+      }
+      return false;
+    };
+
     const updateFromHash = () => {
       const hash = window.location.hash.replace(/^#/, "");
       if (hash && sectionIds.includes(hash)) {
         setActiveSection(hash);
+        if (!scrollToSection(hash)) {
+          // On initial load the section may not be in the DOM yet; retry after layout
+          const retryId = window.setTimeout(() => {
+            scrollToSection(hash);
+          }, 100);
+          return () => window.clearTimeout(retryId);
+        }
       }
     };
 
-    updateFromHash();
+    const cleanup = updateFromHash();
     window.addEventListener("hashchange", updateFromHash);
-    return () => window.removeEventListener("hashchange", updateFromHash);
+    return () => {
+      window.removeEventListener("hashchange", updateFromHash);
+      if (typeof cleanup === "function") cleanup();
+    };
   }, [sectionIds]);
 
   useEffect(() => {
