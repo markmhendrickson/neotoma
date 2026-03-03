@@ -32,6 +32,34 @@ npm install
 npm run type-check
 ```
 
+### Testing a local package (pack + install in another project)
+
+To test a built package from another project (e.g. `neotoma-tests`):
+
+1. In the neotoma repo: `npm run pack:local` (clean build then `npm pack`).
+2. In the other project: `rm -rf node_modules/neotoma && npm install /path/to/neotoma/neotoma-0.3.6.tgz`.
+3. Run the **project’s** CLI so you don’t use a global `neotoma`:
+   - `npx neotoma init` or `./node_modules/.bin/neotoma init`
+
+If you type `neotoma` and have a global install, the shell may run that instead of the installed package. Use `which neotoma` to confirm; prefer `npx neotoma` when testing the local tarball.
+
+## First-run onboarding paths
+
+### Agent path
+
+If you want your assistant to execute setup for you, use the onboarding workflow in [Agent onboarding](agent_onboarding.md). The sequence starts with:
+
+```bash
+npm install -g neotoma
+neotoma init
+```
+
+Then the agent previews candidate personal data from current session context/tool outputs and asks for confirmation before first save.
+
+### Human path
+
+If you are running setup directly yourself, use the install commands above and continue with the normal setup steps in this guide.
+
 ## Local storage model
 
 Neotoma now runs in local-only mode:

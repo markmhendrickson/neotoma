@@ -43,7 +43,15 @@ Examples: `neotoma prod`, `neotoma dev`, `neotoma prod storage info`. Equivalent
 
 ### Default: interactive session (use-existing only)
 
-When you run `neotoma` with **no arguments**, the CLI resolves environment status in this order: detected source checkout (`project_root`/`repo_root` in `~/.config/neotoma/config.json`, `NEOTOMA_REPO_ROOT`, or current directory), then user-level env at `~/.config/neotoma/.env` when no checkout is detected. With a source checkout, the CLI:
+When you run `neotoma` with **no arguments**, source checkout selection follows this precedence:
+
+1. explicit CLI flags (for commands that accept root/path flags)
+2. `NEOTOMA_REPO_ROOT`
+3. directory-local checkout (walk up from current directory)
+4. saved config `project_root` (legacy `repo_root`) in `~/.config/neotoma/config.json`
+5. user-level env at `~/.config/neotoma/.env` when no checkout is detected
+
+With a source checkout, the CLI:
 
 1. Uses **use-existing** policy only (no automatic server start).
 2. Discovers running API instances from session ports, default ports (`3080`, `3180`), remembered ports, and optional extra configured ports.
@@ -182,7 +190,7 @@ For environment and ports, see [Getting started](getting_started.md#start-develo
 - `--base-url <url>`: Override API base URL.
 - `--env <env>`: Environment selector (`dev` or `prod`). Required for server commands such as `api start`, `api stop`, `api logs`, and `watch`.
 - `--offline`: Force in-process local transport for data commands (no external API process required).
-- `--api-only`: Disable offline fallback and fail fast when API is unreachable.
+- `--api-only`: Force API-only mode; fail when API is unreachable (use when you want to avoid loading the local DB).
 - `--json`: Output machine readable JSON.
 - `--pretty`: Output formatted JSON.
 - `--no-session`: With no arguments, show intro then command menu (prompt `> `, `? for shortcuts`). No servers started.
@@ -206,11 +214,13 @@ When the CLI runs in an interactive context (TTY, not `--json`), it may check th
 
 ### Offline support matrix
 
-- **Data commands (entities, relationships, sources, observations, timeline, store, schemas, stats, corrections, snapshots):** API-first with automatic local in-process fallback on connection failures.
-- **Forced local path:** pass `--offline`.
+- **Data commands (entities, relationships, sources, observations, timeline, store, schemas, stats, corrections, snapshots):** offline-first in-process local transport by default (no API server required).
+- **Explicit local path:** pass `--offline`.
 - **Strict remote path:** pass `--api-only`.
 - **Server lifecycle commands (`api start|stop|status|logs|processes`):** server-management behavior is unchanged and not redirected to local fallback.
 - **Watch/storage/logs/backup:** already local backend commands and continue to run without a running API.
+
+**Transport default rationale:** The CLI defaults to offline-first so that data commands work without a running API (e.g. `neotoma entities list` works right after `neotoma init`). The native SQLite addon is lazy-loaded only when a data command actually uses the local DB, so entry points that never touch the DB (e.g. `neotoma --help`, `neotoma api start`) do not trigger macOS permission prompts. The first time a user runs a data command, the local DB may be opened and the OS may show a one-time permission prompt for the native addon; this is an accepted tradeoff for out-of-the-box usability. Use `--api-only` if you want to avoid loading the local DB and require the API instead.
 
 **Examples:**
 
@@ -456,7 +466,7 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 - `neotoma dev <script>`: Run a script from `package.json` (equivalent to `npm run <script>`).
 - `neotoma dev run <script>`: Run a script by name (same as `neotoma dev <script>`).
 - Use `-- <args>` to pass through extra arguments to the npm script.
-- The source checkout is found by: config `project_root` (legacy `repo_root` is still read), then `NEOTOMA_REPO_ROOT`, then walking up from the current directory.
+- The source checkout is found by: explicit CLI inputs (where supported), then `NEOTOMA_REPO_ROOT`, then walking up from the current directory, then saved config `project_root` (legacy `repo_root` is still read).
 
 ### Debugging and testing (e.g. with an agent)
 

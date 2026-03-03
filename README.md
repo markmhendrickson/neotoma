@@ -236,14 +236,16 @@ neotoma init
 neotoma api start
 ```
 
-CLI transport defaults are API-first. Use `--offline` only when you explicitly want in-process local transport:
+Source checkout resolution precedence is: explicit CLI inputs (where supported), then `NEOTOMA_REPO_ROOT`, then directory-local checkout from current working directory, then saved config fallback.
+
+CLI transport defaults are offline-first. Use `--api-only` when you explicitly want remote API transport:
 
 ```bash
-# Default (API transport; no implicit local fallback)
+# Default (in-process local transport; no API server required)
 neotoma entities list --type task
 
-# Explicit local inline mode (no API server required)
-neotoma --offline entities list --type task
+# Explicit remote API mode (fail if API is unreachable)
+neotoma --api-only entities list --type task
 ```
 
 After installation, configure MCP for your AI tool:
@@ -251,6 +253,8 @@ After installation, configure MCP for your AI tool:
 ```bash
 neotoma mcp config
 ```
+
+For first-run agent-guided setup (install + init + preview-before-save confirmation), see [Agent onboarding](docs/developer/agent_onboarding.md).
 
 Marketing site: **https://neotoma.io** (GitHub Pages, deployed from **main**; custom domain set in repo Settings → Pages). See [Deployment](docs/infrastructure/deployment.md#marketing-site-neotomaio).
 
@@ -314,6 +318,8 @@ After installation:
 3. In the same conversation, ask it to list your open tasks.
 
 This gives you a quick end-to-end validation that memory is persisting and retrievable across sessions and tools. For full setup steps, see [Getting started](docs/developer/getting_started.md).
+
+If you want onboarding handled by an agent, use the first-run confirmation workflow in [Agent onboarding](docs/developer/agent_onboarding.md). That flow is onboarding-only and does not replace normal ongoing behavior.
 
 ---
 

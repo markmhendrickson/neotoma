@@ -14,13 +14,9 @@ import {
 import thinkingAndPlanningDemo from "../assets/thinking-and-planning-demo.gif";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogTrigger,
-} from "./ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { TableScrollWrapper } from "./ui/table-scroll-wrapper";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { SeoHead } from "./SeoHead";
 
 interface SitePageProps {
@@ -138,24 +134,18 @@ function CodeBlock({ code, staticMode = false }: { code: string; staticMode?: bo
           type="button"
           variant="outline"
           size="sm"
-          className="absolute top-2 right-2 gap-1.5"
-          aria-label="Copy code"
+          className="absolute top-2 right-2 gap-0 shrink-0"
+          aria-label={copied ? "Copied" : "Copy code"}
           onClick={onCopy}
         >
           {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5" />
-              Copied
-            </>
+            <Check className="h-3.5 w-3.5" />
           ) : (
-            <>
-              <Copy className="h-3.5 w-3.5" />
-              Copy
-            </>
+            <Copy className="h-3.5 w-3.5" />
           )}
         </Button>
       ) : null}
-      <pre className="rounded-lg border border-border bg-muted p-4 overflow-x-auto font-mono text-[14px] text-foreground">
+      <pre className="rounded-lg border border-border bg-muted p-4 pr-12 overflow-x-auto font-mono text-[14px] text-foreground whitespace-pre-wrap break-words">
         <code>{code}</code>
       </pre>
     </div>
@@ -269,31 +259,51 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
               <SectionDivider />
               <SectionHeading id="install">Install with npm</SectionHeading>
-              <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} staticMode={staticMode} />
-              <p className="text-[15px] leading-7 mb-4">
-                Running <code>neotoma init</code> creates a local data folder where Neotoma stores
-                your memory, logs, and ingested files, keeps development and production data
-                separate, and writes a config file you can edit later if needed.
-              </p>
-              <p className="text-[15px] leading-7 mb-4">
-                Init will also connect Neotoma to your tools, saving CLI instructions and
-                configuring MCP servers for Claude, Claude, Codex and/or Cursor so agents use MCP
-                when available and fall back to the CLI.
-              </p>
-              <p className="text-[15px] leading-7 mb-4">
-                You don’t need to run the API server for normal MCP or CLI use. Run it only if you
-                want app-based access.
-              </p>
-              <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
-              <p className="text-[15px] leading-7 mb-4">
-                Prefer to run in a container? See{" "}
-                <a
-                  href="#docker"
-                  className="text-foreground underline underline-offset-2 hover:no-underline"
-                >
-                  Run with Docker
-                </a>{" "}
-              </p>
+              <Tabs defaultValue="agent" className="mb-4">
+                <TabsList className="mb-3">
+                  <TabsTrigger value="agent">Agent</TabsTrigger>
+                  <TabsTrigger value="human">Human</TabsTrigger>
+                </TabsList>
+                <TabsContent value="agent">
+                  <p className="text-[15px] leading-7 mb-4">
+                    If you want your assistant to handle setup, give it instructions like the
+                    prompt below. This path starts with npm install, then init.
+                  </p>
+                  <CodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} staticMode={staticMode} />
+                  <p className="text-[15px] leading-7 mb-4">
+                    During first-run onboarding, the agent should preview any personal data it can
+                    already see from your in-session context or explicit tool outputs and ask for
+                    confirmation before saving.
+                  </p>
+                </TabsContent>
+                <TabsContent value="human">
+                  <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} staticMode={staticMode} />
+                  <p className="text-[15px] leading-7 mb-4">
+                    Running <code>neotoma init</code> creates a local data folder where Neotoma
+                    stores your memory, logs, and ingested files, keeps development and production
+                    data separate, and writes a config file you can edit later if needed.
+                  </p>
+                  <p className="text-[15px] leading-7 mb-4">
+                    Init will also connect Neotoma to your tools, saving CLI instructions and
+                    configuring MCP servers for Claude, Claude, Codex and/or Cursor so agents use
+                    MCP when available and fall back to the CLI.
+                  </p>
+                  <p className="text-[15px] leading-7 mb-4">
+                    You don’t need to run the API server for normal MCP or CLI use. Run it only if
+                    you want app-based access.
+                  </p>
+                  <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} staticMode={staticMode} />
+                  <p className="text-[15px] leading-7 mb-4">
+                    Prefer to run in a container? See{" "}
+                    <a
+                      href="#docker"
+                      className="text-foreground underline underline-offset-2 hover:no-underline"
+                    >
+                      Run with Docker
+                    </a>{" "}
+                  </p>
+                </TabsContent>
+              </Tabs>
 
               <SectionDivider />
               <SectionHeading id="get-started">Get started</SectionHeading>
@@ -304,24 +314,24 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </p>
               <ol className="list-decimal pl-5 mb-2">
                 <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  Restart your tool so it picks up the new MCP configuration (for Claude Desktop
-                  and Cursor) or start a new session (for Claude Code and Codex).
+                  Restart your tool so it picks up the new MCP configuration (for Claude Desktop and
+                  Cursor) or start a new session (for Claude Code and Codex).
                 </li>
                 <li className="text-[15px] leading-7 mt-2 first:mt-0">
                   Tell the agent something like &quot;Remind me to review my subscription
                   Friday.&quot;
                 </li>
                 <li className="text-[15px] leading-7 mt-2 first:mt-0">
-                  In the same conversation, ask it to list your open tasks. The one you just
-                  created should appear.
+                  In the same conversation, ask it to list your open tasks. The one you just created
+                  should appear.
                 </li>
               </ol>
               <p className="text-[15px] leading-7 mt-4 mb-4">
                 Behind the scenes the agent also stores the conversation itself and every turn you
                 exchange, so the full thread is available as persistent, queryable memory the next
-                time you or any connected tool needs it. Below, a sped-up screen recording shows
-                the agent thinking and planning: breaking down a request into steps and using
-                memory as it works.
+                time you or any connected tool needs it. Below, a screen recording shows the agent
+                thinking and planning: breaking down a request into steps and using memory as it
+                works.
               </p>
               <div className="my-6">
                 <Dialog>
@@ -339,9 +349,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </button>
                   </DialogTrigger>
                   <DialogContent className="max-w-[95vw] max-h-[95vh] w-max p-0 border-0 [&>div]:p-0 [&>div]:overflow-visible">
-                    <DialogTitle className="sr-only">
-                      Screen recording full size
-                    </DialogTitle>
+                    <DialogTitle className="sr-only">Screen recording full size</DialogTitle>
                     <img
                       src={thinkingAndPlanningDemo}
                       alt="Screen recording: agent thinking and planning (sped up)"
@@ -349,21 +357,22 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     />
                   </DialogContent>
                 </Dialog>
-                <p className="mt-2 text-[13px] text-muted-foreground">
-                  Click to view full size
-                </p>
+                <p className="mt-2 text-[13px] text-muted-foreground">Click to view full size</p>
               </div>
 
               <SectionDivider />
               <SectionHeading id="use-cases">Use cases</SectionHeading>
               <p className="text-[15px] leading-7 mb-4">
                 Neotoma gives every connected AI tool a shared, persistent memory. Anything you
-                store in one session is available in every other session and every other tool without
-                re-explaining context. It&apos;s for AI-native individual operators, knowledge
-                workers with scattered data, and builders of agentic systems. The table below shows
-                what each needs and the kinds of data they ask Neotoma to remember.
+                store in one session is available in every other session and every other tool
+                without re-explaining context. It&apos;s for AI-native individual operators,
+                knowledge workers with scattered data, and builders of agentic systems. The table
+                below shows what each needs and the kinds of data they ask Neotoma to remember.
               </p>
-              <TableScrollWrapper className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent" showHint={!staticMode}>
+              <TableScrollWrapper
+                className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent"
+                showHint={!staticMode}
+              >
                 <table
                   className={`${RESPONSIVE_TABLE_CLASS} md:[&_th]:max-w-[23ch] md:[&_td]:max-w-[23ch] md:[&_th:first-child]:max-w-[17ch] md:[&_td:first-child]:max-w-[17ch] [&_th]:whitespace-normal [&_td]:whitespace-normal [&_td]:items-center [&_th]:!align-middle [&_td]:!align-middle md:[&_th]:!align-middle md:[&_td]:!align-middle`}
                 >
@@ -419,7 +428,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
               <SectionDivider />
               <SectionHeading id="terminology">Core terminology</SectionHeading>
-              <TableScrollWrapper className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent" showHint={!staticMode}>
+              <TableScrollWrapper
+                className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent"
+                showHint={!staticMode}
+              >
                 <table className={RESPONSIVE_TABLE_CLASS}>
                   <thead>
                     <tr>
@@ -551,7 +563,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 . The table below lists each endpoint and the capability it provides.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent" showHint={!staticMode}>
+                <TableScrollWrapper
+                  className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent"
+                  showHint={!staticMode}
+                >
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
@@ -627,7 +642,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 tunnel access.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent" showHint={!staticMode}>
+                <TableScrollWrapper
+                  className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent"
+                  showHint={!staticMode}
+                >
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>
@@ -692,9 +710,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 for an interactive REPL (<code>neotoma&gt; </code> prompt).
               </p>
               <p className="text-[15px] leading-7 mb-4">
-                Data commands (store, entities, relationships, etc.) are API-first with automatic
-                local fallback if the API is unreachable. Use <code>--offline</code> to force local
-                or <code>--api-only</code> to require the API.
+                Data commands (store, entities, relationships, etc.) are offline-first and run via
+                in-process local transport by default. Use <code>--api-only</code> to require the
+                API, or <code>--offline</code> to force local explicitly.
               </p>
               <p className="text-[15px] leading-7 mb-4">
                 Every command is available as <code>neotoma &lt;subcommand&gt;</code> or{" "}
@@ -702,7 +720,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 and subcommand help for usage.
               </p>
               <div>
-                <TableScrollWrapper className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent" showHint={!staticMode}>
+                <TableScrollWrapper
+                  className="my-6 md:rounded-lg md:bg-white dark:md:bg-transparent"
+                  showHint={!staticMode}
+                >
                   <table className={RESPONSIVE_TABLE_CLASS}>
                     <thead>
                       <tr>

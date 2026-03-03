@@ -2,7 +2,7 @@
 // Used when storageBackend === "local" and OPENAI_API_KEY is set
 
 import { createRequire } from "node:module";
-import type Database from "better-sqlite3";
+import type { SqliteDatabase } from "../repositories/sqlite/sqlite_driver.js";
 import { config } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { getSqliteDb } from "../repositories/sqlite/sqlite_client.js";
@@ -16,12 +16,12 @@ let sqliteVecLoaded: boolean | null = null;
  * Load sqlite-vec extension lazily. Caches success/failure.
  * Returns true if loaded, false if failed (e.g. wrong platform).
  */
-export function ensureSqliteVecLoaded(db: Database.Database): boolean {
+export function ensureSqliteVecLoaded(db: SqliteDatabase): boolean {
   if (sqliteVecLoaded !== null) {
     return sqliteVecLoaded;
   }
   try {
-    const sqliteVec = createRequireFromMeta("sqlite-vec") as { load: (d: Database.Database) => void };
+    const sqliteVec = createRequireFromMeta("sqlite-vec") as { load: (d: SqliteDatabase) => void };
     sqliteVec.load(db);
     sqliteVecLoaded = true;
     return true;
@@ -36,7 +36,7 @@ export function ensureSqliteVecLoaded(db: Database.Database): boolean {
  * Ensure vec0 virtual table exists. Call after ensureSqliteVecLoaded.
  * entity_embedding_rows is created by sqlite_client schema.
  */
-function ensureVecSchema(db: Database.Database): void {
+function ensureVecSchema(db: SqliteDatabase): void {
   db.exec(`
     CREATE VIRTUAL TABLE IF NOT EXISTS entity_embeddings_vec USING vec0(
       embedding float[${EMBEDDING_DIM}]

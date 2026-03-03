@@ -1,11 +1,9 @@
-import type Database from "better-sqlite3";
 import { mkdirSync } from "fs";
-import { createRequire } from "node:module";
 import path from "path";
 import { config } from "../../config.js";
+import Database, { type SqliteDatabase } from "./sqlite_driver.js";
 
-let cachedDb: Database.Database | null = null;
-const nodeRequire = createRequire(import.meta.url);
+let cachedDb: SqliteDatabase | null = null;
 
 const SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS sources (
@@ -293,7 +291,7 @@ const DEPRECATED_TABLES = [
 
 /** Add a column to a table if it does not exist (for existing SQLite DBs). */
 function addColumnIfMissing(
-  db: Database.Database,
+  db: SqliteDatabase,
   table: string,
   column: string,
   type: string
@@ -303,7 +301,7 @@ function addColumnIfMissing(
   db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`).run();
 }
 
-function ensureSchema(db: Database.Database): void {
+function ensureSchema(db: SqliteDatabase): void {
   const transaction = db.transaction(() => {
     db.pragma("foreign_keys = OFF");
     for (const table of DEPRECATED_TABLES) {
@@ -361,24 +359,37 @@ export function clearSqliteCache(): void {
   }
 }
 
-export function getSqliteDb(): Database.Database {
+export function getSqliteDb(): SqliteDatabase {
   if (cachedDb) {
     return cachedDb;
   }
 
-  // Lazy-load native addon so CLI/entry points that never use the DB don't trigger macOS permission prompts.
-  const DatabaseConstructor = nodeRequire("better-sqlite3") as new (
-    path: string
-  ) => Database.Database;
   const dbPath = config.sqlitePath;
   const dir = path.dirname(dbPath);
   mkdirSync(dir, { recursive: true });
 
-  const db = new DatabaseConstructor(dbPath);
+  const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
 
   ensureSchema(db);
   cachedDb = db;
   return db;
+}
+
+/**
+ * Ensure a SQLite database file exists with Neotoma schema initialized.
+ * Used by init to eagerly provision both dev and prod databases.
+ */
+export function ensureSqliteDbInitialized(dbPath: string): void {
+  const dir = path.dirname(dbPath);
+  mkdirSync(dir, { recursive: true });
+  const db = new Database(dbPath);
+  try {
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+    ensureSchema(db);
+  } finally {
+    db.close();
+  }
 }

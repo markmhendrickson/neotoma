@@ -73,6 +73,13 @@ npm install -g neotoma
 
 # Initialize
 neotoma init`,
+  agentInstallPrompt: `Install and initialize Neotoma for me using npm, then report what changed.
+
+Use this exact sequence:
+1) npm install -g neotoma
+2) neotoma init
+
+After init, preview any personal data you already have in this session/context, show me a proposed save list, and ask for my confirmation before saving anything to Neotoma.`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 

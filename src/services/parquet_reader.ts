@@ -118,9 +118,10 @@ async function readParquetFileInternal(
     // Ensure file is available (especially for iCloud Drive files)
     await ensureFileAvailable(filePath);
     
-    // Dynamic import for CommonJS module
-    const parquet = await import("@dsnp/parquetjs");
+    const fsPromises = await import("node:fs/promises");
     const path = await import("path");
+    const { Type, tableFromIPC } = await import("apache-arrow");
+    const parquetWasm = await import("parquet-wasm");
     
     // Infer entity type from filename if not provided
     // e.g., "transactions.parquet" -> "transaction"
@@ -130,45 +131,24 @@ async function readParquetFileInternal(
       entityType = inferEntityType(basename);
     }
     
-    // Open parquet file
-    const { ParquetReader } = parquet.default || parquet;
-    const reader = await ParquetReader.openFile(filePath);
-    
-    // Get schema
-    const schema = reader.getSchema();
-    const fieldNames = Object.keys(schema.fields);
-    const rawRowCount = reader.getRowCount();
-    
+    const parquetBytes = new Uint8Array(await fsPromises.readFile(filePath));
+    const wasmTable = parquetWasm.readParquet(parquetBytes);
+    const arrowTable = tableFromIPC(wasmTable.intoIPCStream());
+    const fieldNames = arrowTable.schema.fields.map((field) => field.name);
+
     // Extract schema metadata for type inference
     const schemaMetadata: Record<string, { type: string; optional: boolean }> = {};
-    for (const [fieldName, field] of Object.entries(schema.fields)) {
-      const parquetType = (field as any).primitiveType || (field as any).type || "UNKNOWN";
-      const optional = (field as any).optional !== false; // Default to optional
-      schemaMetadata[fieldName] = {
-        type: parquetType,
-        optional,
+    for (const field of arrowTable.schema.fields) {
+      const typeName = Type[field.typeId] ?? field.type.toString();
+      schemaMetadata[field.name] = {
+        type: String(typeName),
+        optional: field.nullable,
       };
     }
-    
-    // Convert BigInt/Int64 to number (handle various formats)
-    let rowCount: number;
-    if (typeof rawRowCount === "bigint") {
-      rowCount = Number(rawRowCount);
-    } else if ((rawRowCount as any)?.toNumber) {
-      rowCount = (rawRowCount as any).toNumber();
-    } else if (typeof rawRowCount === "number") {
-      rowCount = rawRowCount;
-    } else {
-      // Fallback: try to convert to number
-      rowCount = Number(rawRowCount);
-      if (isNaN(rowCount)) {
-        throw new Error(`Invalid row count format: ${typeof rawRowCount}`);
-      }
-    }
-    
-    // Read all rows
+
+    const rowCount = arrowTable.numRows;
+    const rows = arrowTable.toArray() as Array<Record<string, unknown>>;
     const entities: Array<Record<string, unknown>> = [];
-    const cursor = reader.getCursor();
     
     // Progress tracking
     const PROGRESS_INTERVAL = options?.batchSize || 1000; // Log every N rows (default 1000)
@@ -178,53 +158,53 @@ async function readParquetFileInternal(
     logger.error(`[PARQUET] Starting to read ${rowCount} rows from ${filePath}`);
     
     for (let i = 0; i < rowCount; i++) {
-      const record = await cursor.next();
-      if (record) {
-        // Convert BigInt values to numbers for JSON serialization
-        // Use a more aggressive conversion that handles all edge cases
-        const convertedRecord = convertBigIntValues(record as Record<string, unknown>);
-        
-        // Double-check: ensure no BigInt values remain
-        const finalRecord: Record<string, unknown> = {
-          entity_type: entityType,
-        };
-        for (const [key, value] of Object.entries(convertedRecord)) {
-          if (typeof value === "bigint") {
-            finalRecord[key] = Number(value);
-          } else {
-            finalRecord[key] = value;
-          }
+      const record = rows[i];
+      if (!record) {
+        continue;
+      }
+
+      // Convert BigInt values to numbers for JSON serialization
+      // Use a more aggressive conversion that handles all edge cases
+      const convertedRecord = convertBigIntValues(record);
+
+      // Double-check: ensure no BigInt values remain
+      const finalRecord: Record<string, unknown> = {
+        entity_type: entityType,
+      };
+      for (const [key, value] of Object.entries(convertedRecord)) {
+        if (typeof value === "bigint") {
+          finalRecord[key] = Number(value);
+        } else {
+          finalRecord[key] = value;
         }
-        
-        entities.push(finalRecord);
-        
-        // Progress callback
-        if (options?.onProgress && ((i + 1) % PROGRESS_INTERVAL === 0 || i === rowCount - 1)) {
-          options.onProgress(i + 1, rowCount);
-        }
-        
-        // Progress logging
-        if ((i + 1) % PROGRESS_INTERVAL === 0 || i === rowCount - 1) {
-          const now = Date.now();
-          const elapsed = (now - lastLogTime) / 1000; // seconds
-          const rate = PROGRESS_INTERVAL / elapsed; // rows per second
-          const remaining = rowCount - i - 1;
-          const eta = remaining / rate;
-          const progress = ((i + 1) / rowCount * 100).toFixed(1);
-          
-          logger.error(
-            `[PARQUET] Progress: ${i + 1}/${rowCount} rows (${progress}%) - ` +
-            `Rate: ${rate.toFixed(0)} rows/s - ETA: ${eta.toFixed(0)}s`
-          );
-          lastLogTime = now;
-        }
+      }
+
+      entities.push(finalRecord);
+
+      // Progress callback
+      if (options?.onProgress && ((i + 1) % PROGRESS_INTERVAL === 0 || i === rowCount - 1)) {
+        options.onProgress(i + 1, rowCount);
+      }
+
+      // Progress logging
+      if ((i + 1) % PROGRESS_INTERVAL === 0 || i === rowCount - 1) {
+        const now = Date.now();
+        const elapsed = (now - lastLogTime) / 1000; // seconds
+        const rate = PROGRESS_INTERVAL / Math.max(elapsed, 0.001); // rows per second
+        const remaining = rowCount - i - 1;
+        const eta = remaining / rate;
+        const progress = ((i + 1) / Math.max(rowCount, 1) * 100).toFixed(1);
+
+        logger.error(
+          `[PARQUET] Progress: ${i + 1}/${rowCount} rows (${progress}%) - ` +
+          `Rate: ${rate.toFixed(0)} rows/s - ETA: ${eta.toFixed(0)}s`
+        );
+        lastLogTime = now;
       }
     }
     
     const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
     logger.error(`[PARQUET] Completed reading ${rowCount} rows in ${totalTime}s`);
-    
-    await reader.close();
     
     // Final pass: ensure no BigInt values remain in entities array
     const sanitizedEntities = entities.map(entity => {

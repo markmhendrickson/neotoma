@@ -12,7 +12,7 @@
  * Run before `npm publish` to catch pack/list/postinstall issues.
  */
 
-import { execSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,23 @@ const repoRoot = path.resolve(__dirname, "..");
 function run(cmd, opts = {}) {
   const cwd = opts.cwd ?? repoRoot;
   execSync(cmd, { cwd, stdio: "inherit", ...opts });
+}
+
+function runAndCapture(command, args, opts = {}) {
+  const cwd = opts.cwd ?? repoRoot;
+  const result = spawnSync(command, args, {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    ...opts,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  if (result.status !== 0) {
+    throw new Error(
+      `${command} ${args.join(" ")} failed with status ${result.status}\n${output}`
+    );
+  }
+  return output;
 }
 
 function main() {
@@ -51,7 +68,15 @@ function main() {
     console.log("\nStep 3: Installing tarball in temp dir:", tmpDir);
 
     run("npm init -y", { cwd: tmpDir });
-    run(`npm install "${tarballPath}"`, { cwd: tmpDir });
+    const installOutput = runAndCapture("npm", ["install", tarballPath], { cwd: tmpDir });
+    process.stdout.write(installOutput);
+    const disallowedWarnings = [/deprecated\s+q@/i, /deprecated\s+prebuild-install@/i];
+    const matchedWarning = disallowedWarnings.find((pattern) => pattern.test(installOutput));
+    if (matchedWarning) {
+      throw new Error(
+        `Install output contains targeted deprecated dependency warning: ${matchedWarning}`
+      );
+    }
 
     console.log("\nStep 4: Verifying installed binary...");
     run("npx neotoma --help", { cwd: tmpDir });

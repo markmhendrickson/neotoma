@@ -12,7 +12,7 @@ import { promisify } from "util";
 import { mkdtemp, mkdir, readFile, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import Database from "better-sqlite3";
+import Database from "../../src/repositories/sqlite/sqlite_driver.js";
 
 const execAsync = promisify(exec);
 const CLI_PATH = "node dist/cli/index.js";
@@ -46,6 +46,12 @@ async function setupTempNeotomaRepo(root: string): Promise<void> {
       2
     )
   );
+}
+
+async function writeCliConfig(home: string, config: Record<string, unknown>): Promise<void> {
+  const configDir = join(home, ".config", "neotoma");
+  await mkdir(configDir, { recursive: true });
+  await writeFile(join(configDir, "config.json"), JSON.stringify(config, null, 2));
 }
 
 async function execCliWithRepoRoot(command: string, repoRoot: string): Promise<{
@@ -317,6 +323,34 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(result).toHaveProperty("storage_paths");
       expect(result.storage_paths).toHaveProperty("data_dir");
       expect(result.storage_paths).toHaveProperty("sqlite_db");
+    });
+
+    it("site configure prefers directory-local checkout over saved config repo root", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-site-config-local-precedence-"));
+      const home = join(root, "home");
+      const localRepoRoot = join(root, "local-repo");
+      const configuredRepoRoot = join(root, "configured-repo");
+      const cliPathAbsolute = join(process.cwd(), "dist", "cli", "index.js");
+      await mkdir(home, { recursive: true });
+      await mkdir(localRepoRoot, { recursive: true });
+      await mkdir(configuredRepoRoot, { recursive: true });
+      await setupTempNeotomaRepo(localRepoRoot);
+      await setupTempNeotomaRepo(configuredRepoRoot);
+      await writeCliConfig(home, { project_root: configuredRepoRoot, repo_root: configuredRepoRoot });
+
+      await execAsync(`node "${cliPathAbsolute}" site configure --ga-measurement-id G-LOCALTEST`, {
+        cwd: localRepoRoot,
+        env: {
+          ...process.env,
+          HOME: home,
+          USERPROFILE: home,
+          NEOTOMA_REPO_ROOT: "",
+        },
+      });
+
+      const localEnv = await readFile(join(localRepoRoot, ".env"), "utf-8");
+      expect(localEnv).toMatch(/VITE_GA_MEASUREMENT_ID=G-LOCALTEST/);
+      await expect(readFile(join(configuredRepoRoot, ".env"), "utf-8")).rejects.toBeDefined();
     });
 
     it("storage backup create and restore should work with temporary directories", async () => {

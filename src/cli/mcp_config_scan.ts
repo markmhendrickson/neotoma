@@ -5,9 +5,11 @@
  */
 
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as readline from "node:readline";
+import { fileURLToPath } from "node:url";
 
 import { InitAbortError } from "./init_abort.js";
 import { blackBox } from "./format.js";
@@ -63,6 +65,7 @@ async function syncCodexUserConfig(repoRoot: string, sessionPorts?: SessionPorts
   const userPath = getUserLevelCodexConfigPath();
   if (!userPath) return;
 
+  const launchTarget = resolveMcpLaunchTarget(repoRoot);
   const entries = neotomaServerEntries(repoRoot, sessionPorts);
   const blocks: string[] = [];
   for (const [id, config] of Object.entries(entries)) {
@@ -71,7 +74,7 @@ async function syncCodexUserConfig(repoRoot: string, sessionPorts?: SessionPorts
       lines.push(`url = ${escapeTomlString(config.url)}`);
     } else if ("command" in config && typeof config.command === "string") {
       lines.push(`command = ${escapeTomlString(config.command)}`);
-      lines.push(`cwd = ${escapeTomlString(repoRoot)}`);
+      lines.push(`cwd = ${escapeTomlString(launchTarget.root)}`);
     }
     if ("args" in config && Array.isArray(config.args) && config.args.length) {
       lines.push(`args = [${config.args.map((a) => escapeTomlString(a)).join(", ")}]`);
@@ -234,12 +237,23 @@ export function detectNeotomaServers(
   let hasDev = false;
   let hasProd = false;
 
-  for (const config of Object.values(mcpServers)) {
+  for (const [serverId, config] of Object.entries(mcpServers)) {
     if (!config || typeof config !== "object") continue;
-    const serverConfig = config as { command?: string; url?: string };
+    const serverConfig = config as {
+      command?: string;
+      url?: string;
+      args?: unknown;
+      env?: Record<string, unknown>;
+    };
 
     const command = serverConfig.command || "";
     const url = serverConfig.url || "";
+    const args = Array.isArray(serverConfig.args) ? serverConfig.args.map((arg) => String(arg)) : [];
+    const envMode = String(serverConfig.env?.NEOTOMA_ENV ?? "").toLowerCase();
+    const hasDistArg = args.some((arg) => isDistMcpEntrypointArg(arg));
+    const id = serverId.toLowerCase();
+    const idHintsDev = id.includes("dev");
+    const idHintsProd = id === "neotoma" || id.includes("prod");
 
     const isDevCommand =
       command.includes("run_neotoma_mcp_stdio.sh") || command.includes("run_neotoma_mcp_stdio_dev_watch.sh");
@@ -270,6 +284,20 @@ export function detectNeotomaServers(
     }
     if (isDevCommand) hasDev = true;
     if (isProdCommand) hasProd = true;
+    if (hasDistArg) {
+      if (envMode === "production" || envMode === "prod") {
+        hasProd = true;
+      } else if (envMode === "development" || envMode === "dev") {
+        hasDev = true;
+      } else if (idHintsDev) {
+        hasDev = true;
+      } else if (idHintsProd) {
+        hasProd = true;
+      } else {
+        hasDev = true;
+        hasProd = true;
+      }
+    }
   }
 
   return { hasDev, hasProd };
@@ -293,13 +321,16 @@ export function analyzeMcpConfigIssues(
 
   for (const [serverId, config] of Object.entries(mcpServers)) {
     if (!config || typeof config !== "object") continue;
-    const serverConfig = config as { command?: string; url?: string };
+    const serverConfig = config as { command?: string; url?: string; args?: unknown };
     const url = serverConfig.url || "";
     const command = serverConfig.command || "";
+    const args = Array.isArray(serverConfig.args) ? serverConfig.args.map((arg) => String(arg)) : [];
+    const hasDistArg = args.some((arg) => isDistMcpEntrypointArg(arg));
 
     const isNeotoma =
       serverId.toLowerCase().includes("neotoma") ||
       command.includes("run_neotoma_mcp") ||
+      hasDistArg ||
       (url.includes("localhost") && url.includes("/mcp"));
 
     if (!isNeotoma) continue;
@@ -348,6 +379,40 @@ export function analyzeMcpConfigIssues(
  */
 type McpServerEntry = { url: string } | { command: string; args?: string[]; env?: Record<string, string> };
 
+function hasRequiredMcpScripts(root: string): boolean {
+  const scriptsDir = path.join(root, "scripts");
+  return (
+    existsSync(path.join(scriptsDir, "run_neotoma_mcp_stdio.sh")) &&
+    existsSync(path.join(scriptsDir, "run_neotoma_mcp_stdio_prod.sh"))
+  );
+}
+
+function getInstalledCliRoot(): string {
+  // Works in both source checkouts and globally installed/built CLI packages.
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+}
+
+function hasDistMcpEntrypoint(root: string): boolean {
+  return existsSync(path.join(root, "dist", "index.js"));
+}
+
+function isDistMcpEntrypointArg(arg: string): boolean {
+  const normalized = arg.replace(/\\/g, "/").toLowerCase();
+  return normalized.includes("/dist/index.js") && normalized.includes("neotoma");
+}
+
+function resolveMcpLaunchTarget(repoRoot: string): { root: string; mode: "scripts" | "dist" } {
+  const installedRoot = getInstalledCliRoot();
+  const candidates = [installedRoot, repoRoot];
+  for (const root of candidates) {
+    if (hasRequiredMcpScripts(root)) return { root, mode: "scripts" };
+  }
+  for (const root of candidates) {
+    if (hasDistMcpEntrypoint(root)) return { root, mode: "dist" };
+  }
+  return { root: repoRoot, mode: "scripts" };
+}
+
 export function neotomaServerEntries(
   repoRoot: string,
   _sessionPorts?: SessionPorts
@@ -355,9 +420,23 @@ export function neotomaServerEntries(
   "neotoma-dev": McpServerEntry;
   neotoma: McpServerEntry;
 } {
+  const launchTarget = resolveMcpLaunchTarget(repoRoot);
+  if (launchTarget.mode === "scripts") {
+    return {
+      "neotoma-dev": { command: path.join(launchTarget.root, "scripts", "run_neotoma_mcp_stdio.sh") },
+      neotoma: { command: path.join(launchTarget.root, "scripts", "run_neotoma_mcp_stdio_prod.sh") },
+    };
+  }
+
+  const distEntrypoint = path.join(launchTarget.root, "dist", "index.js");
+  const baseEnv = { NEOTOMA_ACTIONS_DISABLE_AUTOSTART: "1" };
   return {
-    "neotoma-dev": { command: path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio.sh") },
-    neotoma: { command: path.join(repoRoot, "scripts", "run_neotoma_mcp_stdio_prod.sh") },
+    "neotoma-dev": { command: process.execPath, args: [distEntrypoint], env: baseEnv },
+    neotoma: {
+      command: process.execPath,
+      args: [distEntrypoint],
+      env: { ...baseEnv, NEOTOMA_ENV: "production" },
+    },
   };
 }
 
@@ -725,6 +804,15 @@ type InstallTargetChoice =
 
 type InstallEnvChoice = "dev" | "prod" | "both" | "skip";
 
+export function parseInstallEnvironmentChoice(answer: string): InstallEnvChoice {
+  const a = (answer ?? "").trim().toLowerCase();
+  if (a === "4" || a === "skip" || a === "s") return "skip";
+  if (a === "1" || a === "dev" || a === "d") return "dev";
+  if (a === "3" || a === "both" || a === "b") return "both";
+  if (a === "2" || a === "prod" || a === "p") return "prod";
+  return "prod";
+}
+
 async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -750,11 +838,7 @@ async function promptInstallEnvironment(): Promise<InstallEnvChoice> {
         if (settled) return;
         settled = true;
         rl.close();
-        const a = (answer ?? "").trim().toLowerCase();
-        if (a === "4" || a === "skip" || a === "s") return resolve("skip");
-        if (a === "1" || a === "dev") return resolve("dev");
-        if (a === "2" || a === "prod") return resolve("prod");
-        return resolve("prod");
+        return resolve(parseInstallEnvironmentChoice(answer));
       }
     );
   });
@@ -841,6 +925,11 @@ function isProjectLevelConfig(configPath: string, repoRoot: string): boolean {
   return normalizedPath.startsWith(normalizedRoot + path.sep) || normalizedPath === normalizedRoot;
 }
 
+function isKnownUserLevelConfig(configPath: string): boolean {
+  const normalized = path.normalize(configPath);
+  return getUserLevelConfigPaths().some(({ path: userPath }) => path.normalize(userPath) === normalized);
+}
+
 /** Map MCP install target to agent-instructions scope so we can reuse the choice and avoid a second prompt. */
 function installChoiceToScope(choice: Exclude<InstallTargetChoice, "skip">): "project" | "user" | "both" {
   if (choice === "project_all") return "project";
@@ -856,7 +945,8 @@ function filterConfigsByInstallChoice(
   if (choice === "skip") return [];
   if (choice === "both_all") return configs;
   if (choice === "project_all") return configs.filter((c) => isProjectLevelConfig(c.path, repoRoot));
-  if (choice === "user_all") return configs.filter((c) => !isProjectLevelConfig(c.path, repoRoot));
+  // User scope should only include canonical user-level MCP config files.
+  if (choice === "user_all") return configs.filter((c) => isKnownUserLevelConfig(c.path));
   if (choice === "cursor_only") return configs.filter((c) => classifyConfigClient(c.path) === "cursor");
   if (choice === "claude_only") return configs.filter((c) => classifyConfigClient(c.path) === "claude");
   if (choice === "codex_only") return configs.filter((c) => classifyConfigClient(c.path) === "codex");
@@ -1095,6 +1185,22 @@ export async function offerInstall(
     env
       ? configs.filter((c) => (env === "dev" ? !c.hasDev : !c.hasProd))
       : configs.filter((c) => !c.hasDev || !c.hasProd);
+  const getConfigsForScope = (allConfigs: ConfigStatus[]): ConfigStatus[] => {
+    if (options?.autoInstallScope === "user") {
+      return filterConfigsByInstallChoice(allConfigs, "user_all", repoRoot);
+    }
+    if (options?.autoInstallScope === "project") {
+      return filterConfigsByInstallChoice(allConfigs, "project_all", repoRoot);
+    }
+    return allConfigs;
+  };
+  const getMissingFromConfigs = (
+    targetConfigs: ConfigStatus[],
+    env: "dev" | "prod" | null
+  ): ConfigStatus[] =>
+    env
+      ? targetConfigs.filter((c) => (env === "dev" ? !c.hasDev : !c.hasProd))
+      : targetConfigs.filter((c) => !c.hasDev || !c.hasProd);
 
   const configsWithIssues = configs.filter((c) => c.issues && c.issues.length > 0);
   if (!silent && options?.currentEnv == null) {
@@ -1110,6 +1216,8 @@ export async function offerInstall(
     }
   }
   const missingConfigs = getMissingConfigs(selectedEnv);
+  let scopedTargetConfigs = getConfigsForScope(configs);
+  let scopedMissingConfigs = getMissingFromConfigs(scopedTargetConfigs, selectedEnv);
 
   // First offer to fix misconfigurations if any
   if (configsWithIssues.length > 0 && !silent) {
@@ -1123,7 +1231,7 @@ export async function offerInstall(
       // Re-scan to see if we still need to add missing servers
       const { configs: rescanned } = await scanForMcpConfigs(process.cwd(), {
         includeUserLevel: true,
-        userLevelFirst: true,
+        userLevelFirst: false,
         devPort: options?.devPort,
         prodPort: options?.prodPort,
       });
@@ -1136,22 +1244,30 @@ export async function offerInstall(
       // Fall through to offer adding missing
       missingConfigs.length = 0;
       missingConfigs.push(...stillMissing);
-    } else if (missingConfigs.length === 0) {
+      scopedTargetConfigs = getConfigsForScope(rescanned);
+      scopedMissingConfigs = getMissingFromConfigs(scopedTargetConfigs, selectedEnv);
+    } else if (scopedMissingConfigs.length === 0) {
       // User declined fix; no missing servers (only had misconfig)
       return { installed: false, message: "No changes made." };
     }
   }
 
-  if (missingConfigs.length === 0) {
+  if (scopedTargetConfigs.length > 0 && scopedMissingConfigs.length === 0) {
+    const scopeSuffix =
+      options?.autoInstallScope === "user"
+        ? " in user-level MCP configs."
+        : options?.autoInstallScope === "project"
+          ? " in project-level MCP configs."
+          : ".";
     const message = selectedEnv
-      ? `${selectedEnv === "dev" ? "Dev" : "Prod"} Neotoma server is already configured.`
-      : "Dev and prod Neotoma servers are already configured.";
+      ? `${selectedEnv === "dev" ? "Dev" : "Prod"} Neotoma server is already configured${scopeSuffix}`
+      : `Dev and prod Neotoma servers are already configured${scopeSuffix}`;
     if (!silent) process.stdout.write(message + "\n");
     return { installed: false, message };
   }
 
-  // If no configs found at all, ask user-level vs project-level then create
-  if (configs.length === 0) {
+  // If no configs found in the selected scope, create a config in that scope.
+  if (scopedTargetConfigs.length === 0) {
     if (silent) {
       return {
         installed: false,
@@ -1160,9 +1276,14 @@ export async function offerInstall(
     }
 
     process.stdout.write("No MCP config files found.\n");
-    const choice = await promptUserOrProject(
-      "Create user-level (~/.cursor/mcp.json) or project-level (.cursor/mcp.json in current project)? (u/p)"
-    );
+    const choice =
+      options?.autoInstallScope === "user"
+        ? "user"
+        : options?.autoInstallScope === "project"
+          ? "project"
+          : await promptUserOrProject(
+              "Create user-level (~/.cursor/mcp.json) or project-level (.cursor/mcp.json in current project)? (u/p)"
+            );
     if (choice === null) {
       return { installed: false, message: "Installation cancelled." };
     }
@@ -1210,7 +1331,7 @@ export async function offerInstall(
 
   const boxAlreadyShown = options?.boxAlreadyShown ?? false;
   if (!boxAlreadyShown) {
-    process.stdout.write("\n" + formatMcpStatusBox(configs) + "\n");
+    process.stdout.write("\n" + formatMcpStatusBox(scopedTargetConfigs) + "\n");
   }
   const runningFromSourceCheckout =
     cwd === repoRoot || cwd.startsWith(repoRoot + path.sep);
@@ -1229,7 +1350,7 @@ export async function offerInstall(
   }
   const scope = installChoiceToScope(installChoice);
   let selectedMissingConfigs = filterConfigsByInstallChoice(
-    missingConfigs,
+    scopedMissingConfigs,
     installChoice,
     repoRoot
   );
