@@ -172,7 +172,6 @@
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.344.0",
     "morgan": "^1.10.0",
-    "neotoma": "file:neotoma-0.3.6.tgz",
     "openai": "^6.25.0",
     "openapi-fetch": "^0.15.0",
     "papaparse": "^5.5.3",
