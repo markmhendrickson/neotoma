@@ -485,8 +485,8 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         .mockReturnValueOnce(mockUpdateDeactivate) // activate() - deactivate
         .mockReturnValueOnce(mockUpdateActivate); // activate() - activate
 
-      // Spy on console.log to verify skip message
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      // Spy on stderr logger to verify skip message
+      const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
 
       await service.updateSchemaIncremental({
         entity_type: "transaction",
@@ -495,11 +495,11 @@ describe("SchemaRegistryService - Incremental Updates", () => {
         ],
       });
 
-      expect(consoleSpy).toHaveBeenCalledWith(
+      expect(stderrSpy).toHaveBeenCalledWith(
         expect.stringContaining("already exists in schema"),
       );
 
-      consoleSpy.mockRestore();
+      stderrSpy.mockRestore();
     });
 
     it("should activate schema by default", async () => {

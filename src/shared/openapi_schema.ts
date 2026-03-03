@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import yaml from "js-yaml";
 import { MCP_TOOL_TO_OPERATION_ID, OPENAPI_OPERATION_MAPPINGS } from "./contract_mappings.js";
+import { readOpenApiFile } from "./openapi_file.js";
 
 type OpenApiSchema = Record<string, unknown>;
 
@@ -33,8 +32,7 @@ function loadOpenApiSpec(): OpenApiSpec {
   if (cachedSpec) {
     return cachedSpec;
   }
-  const openApiPath = join(process.cwd(), "openapi.yaml");
-  const raw = readFileSync(openApiPath, "utf-8");
+  const raw = readOpenApiFile();
   cachedSpec = yaml.load(raw) as OpenApiSpec;
   return cachedSpec;
 }

@@ -193,7 +193,11 @@ describe("Cross-layer: CLI store commands → Database", () => {
           `store-unstructured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
         );
       } catch (e) {
-        if (String(e).includes("429") || String(e).includes("quota")) {
+        if (
+          String(e).includes("429") ||
+          String(e).includes("quota") ||
+          String(e).includes("Incorrect API key")
+        ) {
           return;
         }
         throw e;
@@ -214,7 +218,11 @@ describe("Cross-layer: CLI store commands → Database", () => {
           `store-unstructured --file-path "${filePath}" --user-id "${TEST_USER_ID}"`
         );
       } catch (e) {
-        if (String(e).includes("429") || String(e).includes("quota")) {
+        if (
+          String(e).includes("429") ||
+          String(e).includes("quota") ||
+          String(e).includes("Incorrect API key")
+        ) {
           return;
         }
         throw e;
