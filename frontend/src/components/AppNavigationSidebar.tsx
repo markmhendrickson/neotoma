@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +33,7 @@ import {
   Sun,
   Terminal,
   Users,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
@@ -59,6 +60,7 @@ const SIDEBAR_ICONS: Record<string, LucideIcon> = {
   Server,
   Terminal,
   Users,
+  Zap,
 };
 
 const sectionLinkClass = (active: boolean) =>
@@ -104,8 +106,10 @@ function ThemeToggle() {
 }
 
 export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
-  const { isMobile, setOpenMobile, state } = useSidebar();
+  const { isMobile, setOpen, setOpenMobile, state } = useSidebar();
   const [activeSection, setActiveSection] = useState<string>(SITE_SECTIONS[0]?.id ?? "install");
+  const hasManualSidebarToggleRef = useRef(false);
+  const autoSidebarStateRef = useRef<boolean | null>(null);
 
   const sectionIds = useMemo(() => SITE_SECTIONS.map((section) => section.id), []);
 
@@ -142,6 +146,49 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
       if (typeof cleanup === "function") cleanup();
     };
   }, [sectionIds]);
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    // Desktop behavior for site home: auto-collapse while in quick-start,
+    // auto-expand below it, unless user has manually toggled.
+    const quickStart = document.getElementById("quick-start");
+    if (!quickStart) return;
+
+    const syncSidebarToScroll = () => {
+      if (hasManualSidebarToggleRef.current) return;
+      const threshold = quickStart.getBoundingClientRect().bottom + window.scrollY - 120;
+      const shouldBeOpen = window.scrollY >= threshold;
+      if (autoSidebarStateRef.current !== shouldBeOpen) {
+        setOpen(shouldBeOpen);
+        autoSidebarStateRef.current = shouldBeOpen;
+      }
+    };
+
+    let rafId = 0;
+    const onScroll = () => {
+      rafId = window.requestAnimationFrame(syncSidebarToScroll);
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    syncSidebarToScroll();
+
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [isMobile, setOpen]);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "b") {
+        hasManualSidebarToggleRef.current = true;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMobile]);
 
   useEffect(() => {
     const headingElements = sectionIds
@@ -188,6 +235,10 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
     }
   };
 
+  const onSidebarTriggerClick = () => {
+    hasManualSidebarToggleRef.current = true;
+  };
+
   const menuContent = (
     <SidebarGroup>
       <SidebarGroupContent>
@@ -224,7 +275,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
       <SidebarHeader className="flex-row items-center gap-2 py-2 px-3 h-16 border-b border-sidebar-border">
         {state !== "collapsed" ? (
           <>
-            <SidebarTrigger className="shrink-0" />
+            <SidebarTrigger className="shrink-0" onClick={onSidebarTriggerClick} />
             <a
               href="#"
               onClick={onSectionClick}
@@ -234,7 +285,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
             </a>
           </>
         ) : (
-          <SidebarTrigger className="shrink-0" />
+          <SidebarTrigger className="shrink-0" onClick={onSidebarTriggerClick} />
         )}
       </SidebarHeader>
       <SidebarContent className="bg-sidebar md:pb-4">

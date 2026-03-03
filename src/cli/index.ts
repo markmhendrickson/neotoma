@@ -3816,10 +3816,14 @@ const initCommand = program
   .option("--force", "Overwrite existing configuration")
   .option("--skip-db", "Skip database initialization")
   .option("--skip-env", "Skip interactive .env creation and variable prompts")
-  .option("-y, --yes", "Apply the default init plan without prompts")
+  .option("-y, --yes", "Apply the default init plan without prompts (default behavior)")
+  .option(
+    "--interactive",
+    "Enable interactive setup prompts (plan review + personalization prompts)"
+  )
   .option(
     "--advanced",
-    "Use personalization mode (step-by-step setup prompts, including optional source path prompts)"
+    "Alias for --interactive (step-by-step setup prompts, including optional source path prompts)"
   )
   .option(
     "--auth-mode <mode>",
@@ -3865,6 +3869,7 @@ const initCommand = program
       skipDb?: boolean;
       skipEnv?: boolean;
       yes?: boolean;
+      interactive?: boolean;
       advanced?: boolean;
       authMode?: string;
       scope?: string;
@@ -3879,7 +3884,9 @@ const initCommand = program
     }) => {
       try {
         const outputMode = resolveOutputMode();
-        let useAdvancedPrompts = Boolean(opts.advanced);
+        const interactiveRequested = Boolean(opts.interactive || opts.advanced);
+        let useAdvancedPrompts = interactiveRequested;
+        const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
         const authModeFromFlag = normalizeInitAuthMode(opts.authMode);
         if (opts.authMode && (!authModeFromFlag || authModeFromFlag === "skip")) {
           throw new Error("Invalid --auth-mode. Use dev_local, oauth, or key_derived.");
@@ -3967,7 +3974,7 @@ const initCommand = program
         let forceSyncDataDirToEnv = Boolean(opts.dataDir?.trim());
         const shouldOfferPackageTargetPrompt =
           process.stdout.isTTY &&
-          !opts.yes &&
+          !applyDefaultsWithoutPrompts &&
           useCurrentDirTargetsFromFlag == null &&
           (repoRoot == null || repoRootSource === "config");
         if (shouldOfferPackageTargetPrompt) {
@@ -4026,13 +4033,21 @@ const initCommand = program
             "Neotoma is already initialized at " +
             pathStyle(detectedInitializedDataDir) +
             ". Run init again?";
-          if (process.stdout.isTTY && outputMode === "pretty" && !opts.yes) {
+          const alreadyInitializedContinueMessage =
+            "Neotoma is already initialized at " +
+            pathStyle(detectedInitializedDataDir) +
+            ". Continuing with init (non-interactive mode).";
+          if (
+            process.stdout.isTTY &&
+            outputMode === "pretty" &&
+            !applyDefaultsWithoutPrompts
+          ) {
             const shouldContinue = await askYesNo(`${alreadyInitializedMessage} [y/N]: `);
             if (!shouldContinue) {
               throw new InitAbortError();
             }
           } else if (process.stdout.isTTY && outputMode === "pretty") {
-            process.stdout.write(bullet(dim(alreadyInitializedMessage + " Continuing.")) + "\n");
+            process.stdout.write(bullet(dim(alreadyInitializedContinueMessage)) + "\n");
           }
         }
         if (process.stdout.isTTY && useAdvancedPrompts) {
@@ -4247,7 +4262,12 @@ const initCommand = program
         let personalizedAuthMode: InitAuthMode | null = null;
         let earlyOpenAiPrompted = false;
         let earlyOpenAiInput = "";
-        if (outputMode === "pretty" && process.stdout.isTTY && !opts.yes && !useAdvancedPrompts) {
+        if (
+          outputMode === "pretty" &&
+          process.stdout.isTTY &&
+          !applyDefaultsWithoutPrompts &&
+          !useAdvancedPrompts
+        ) {
           const configuredAuth = await detectConfiguredAuthMode(envPath);
           const envExists = envPath ? await pathExists(envPath) : false;
           const plannedAuthMode = authModeFromFlag ?? configuredAuth?.mode ?? defaultInitAuthMode;
@@ -4603,7 +4623,14 @@ const initCommand = program
           }
         }
 
-        if (!useAdvancedPrompts && !opts.skipEnv && envPath && outputMode === "pretty" && process.stdout.isTTY) {
+        if (
+          interactiveRequested &&
+          !useAdvancedPrompts &&
+          !opts.skipEnv &&
+          envPath &&
+          outputMode === "pretty" &&
+          process.stdout.isTTY
+        ) {
           let existingOpenAi = (process.env.OPENAI_API_KEY ?? "").trim();
           if (!existingOpenAi) {
             try {
@@ -4932,7 +4959,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
             process.stdout.write(nl());
             const resolvedKeySource: InitKeySource =
               keySourceFromFlag ??
-              (opts.yes ? "skip" : normalizeInitKeySource(
+              (applyDefaultsWithoutPrompts ? "skip" : normalizeInitKeySource(
                 await askQuestion("Create new key [1] or path to existing key [2] [default: 1]: ")
               ) ??
                 "create");
@@ -5078,7 +5105,7 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
         if (opts.skipEnv || !envPath) {
           const reason = opts.skipEnv ? "--skip-env" : "no env target";
           setInitProgress("env", "skipped", reason);
-        } else if (process.stdout.isTTY) {
+        } else {
           setInitProgress("env", "in_progress");
           suspendLiveProgress();
           const envPathStr = envPath;
@@ -5158,7 +5185,8 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           if (openAiSet) {
             envOpenAiOutcome = "already_set";
           }
-          const shouldPromptOpenAi = !opts.yes && outputMode === "pretty" && process.stdout.isTTY;
+          const shouldPromptOpenAi =
+            interactiveRequested && outputMode === "pretty" && process.stdout.isTTY;
           if (!openAiSet && openAiKeyFromFlag) {
             let envText: string;
             try {
@@ -5291,8 +5319,6 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
           envSummaryLines = buildEnvSummaryLines(finalResolved);
           setInitProgress("env", "done", envDetailParts.join(", "));
           setInitProgressSummaryLines("env", envSummaryLines);
-        } else {
-          setInitProgress("env", "skipped", "non-interactive output");
         }
         if (keyPath) {
           suspendLiveProgress();
@@ -5750,6 +5776,47 @@ NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY=${mcpTokenEncryptionKey}
 
         process.stdout.write(nl() + heading("✓ Neotoma initialized!") + nl());
         process.stdout.write("Run " + pathStyle("neotoma") + " to start a session." + nl());
+        if (outputMode === "pretty") {
+          process.stdout.write(nl() + heading("Additional configuration options") + nl());
+          process.stdout.write(
+            bullet(
+              "Interactive setup walkthrough: " + pathStyle("neotoma init --interactive")
+            ) + "\n"
+          );
+          process.stdout.write(
+            bullet(
+              "Set OpenAI key later: " +
+                pathStyle("neotoma init --yes --skip-db --openai-api-key <key>")
+            ) + "\n"
+          );
+          process.stdout.write(
+            bullet("Check/update MCP config: " + pathStyle("neotoma mcp check")) + "\n"
+          );
+          process.stdout.write(
+            bullet(
+              "Refresh CLI instructions: " + pathStyle("neotoma cli-instructions check")
+            ) + "\n"
+          );
+          process.stdout.write(
+            bullet("API status: " + pathStyle("neotoma api status")) + "\n"
+          );
+          process.stdout.write(
+            bullet(
+              "Start API server: " + pathStyle("neotoma api start --env dev --background")
+            ) + "\n"
+          );
+          process.stdout.write(
+            bullet("View API logs: " + pathStyle("neotoma api logs --env dev --follow")) + "\n"
+          );
+          process.stdout.write(
+            bullet(
+              "Authentication status/login: " +
+                pathStyle("neotoma auth status") +
+                " / " +
+                pathStyle("neotoma auth login")
+            ) + "\n"
+          );
+        }
         // Release stdin after interactive prompts so Node can exit immediately.
         process.stdin.pause();
         await new Promise<void>((resolve) => process.stdout.write("", () => resolve()));
@@ -5936,9 +6003,12 @@ program
   .description(
     "Reset local Neotoma to a clean slate: back up and remove local Neotoma state, clean MCP/config instructions, and attempt global npm uninstall only when run from within a Neotoma repo (never back up/remove data dir configured via NEOTOMA_DATA_DIR in .env)"
   )
-  .option("-y, --yes", "Skip confirmation prompt")
-  .action(async (opts: { yes?: boolean }) => {
+  .option("-y, --yes", "Skip confirmation prompt (default behavior)")
+  .option("--interactive", "Enable confirmation prompt before reset")
+  .action(async (opts: { yes?: boolean; interactive?: boolean }) => {
     const outputMode = resolveOutputMode();
+    const interactiveRequested = Boolean(opts.interactive);
+    const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
     const { repoRoot } = await resolveRepoRootFromInitContext();
     const ts = backupTimestamp();
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -5985,7 +6055,7 @@ program
       mcpConfigTargets.add(path.join(repoRoot, ".codex", "config.toml"));
     }
 
-    if (process.stdout.isTTY && !opts.yes && outputMode !== "json") {
+    if (process.stdout.isTTY && !applyDefaultsWithoutPrompts && outputMode !== "json") {
       process.stdout.write(heading("Neotoma reset") + nl() + nl());
       process.stdout.write("This will:" + nl());
       process.stdout.write(
@@ -11599,6 +11669,19 @@ export async function getInitContextStatus(
   return { dataDirExists, envFileExists, dataDir, envFilePath: envPath, envTarget };
 }
 
+/**
+ * Treat init as satisfied if either project-scoped or user-scoped context is ready.
+ * This avoids false negatives when one scope is configured and the other is not.
+ */
+export async function hasAnyInitializedContext(repoRoot: string | null): Promise<boolean> {
+  const projectContext = await getInitContextStatus(repoRoot);
+  if (projectContext?.envFileExists && projectContext.dataDirExists) {
+    return true;
+  }
+  const userContext = await getInitContextStatus(null);
+  return Boolean(userContext?.envFileExists && userContext.dataDirExists);
+}
+
 export function buildInstallationBoxLines(
   mcpConfigs: McpConfigStatus[],
   cliScan: CliInstructionScanSummary | null,
@@ -12192,8 +12275,8 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
   // For plain `neotoma` startup, require init before rendering any status boxes or prompts.
   if (noArgs && !isInitCommand && !isResetCommand) {
     const { repoRoot } = await resolveRepoRootFromInitContext();
-    const initContext = await getInitContextStatus(repoRoot);
-    if (!initContext?.envFileExists || !initContext.dataDirExists) {
+    const hasInitializedContext = await hasAnyInitializedContext(repoRoot);
+    if (!hasInitializedContext) {
       process.stderr.write(NO_ARGS_INIT_REQUIRED_MESSAGE + "\n");
       process.exitCode = 1;
       return;

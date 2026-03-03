@@ -1,7 +1,6 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
-import { PanelLeft } from "lucide-react";
 
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -325,21 +324,50 @@ const SidebarTrigger = React.forwardRef<
   const { toggleSidebar } = useSidebar();
 
   return (
-    <Button
-      ref={ref}
-      data-sidebar="trigger"
-      variant="ghost"
-      size="icon"
-      className={cn("h-7 w-7", className)}
-      onClick={(event) => {
-        onClick?.(event);
-        toggleSidebar();
-      }}
-      {...props}
-    >
-      <PanelLeft className="size-4 shrink-0" />
-      <span className="sr-only">Toggle Sidebar</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          ref={ref}
+          data-sidebar="trigger"
+          variant="ghost"
+          size="icon"
+          className={cn("h-7 w-7", className)}
+          title="Toggle sidebar"
+          onClick={(event) => {
+            onClick?.(event);
+            toggleSidebar();
+          }}
+          {...props}
+        >
+          <svg
+            viewBox="0 0 16 16"
+            aria-hidden="true"
+            className="size-4 shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <linearGradient id="sidebar-favicon-gradient" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0" stopColor="#000000" />
+                <stop offset="1" stopColor="#4c1d95" />
+              </linearGradient>
+            </defs>
+            <rect width="16" height="16" rx="3" fill="url(#sidebar-favicon-gradient)" />
+            <text
+              x="8"
+              y="11"
+              textAnchor="middle"
+              fontFamily="Arial, sans-serif"
+              fontSize="9"
+              fill="#ffffff"
+            >
+              N
+            </text>
+          </svg>
+          <span className="sr-only">Toggle Sidebar</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="right">Toggle sidebar</TooltipContent>
+    </Tooltip>
   );
 });
 SidebarTrigger.displayName = "SidebarTrigger";
