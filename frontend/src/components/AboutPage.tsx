@@ -12,7 +12,7 @@ export function AboutPage() {
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-4">About Neotoma</h1>
         <p className="text-lg text-muted-foreground mb-4">
-          A deterministic truth layer that transforms fragmented personal data into structured, queryable knowledge for AI agents.
+          A deterministic truth layer that transforms fragmented data into structured, queryable knowledge for AI agents.
         </p>
         <p className="text-muted-foreground">
           Neotoma builds persistent structured memory for AI agents through <strong>dual-path storing</strong>: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide structured data during agent conversations that gets stored and integrated into your memory graph. As you interact with ChatGPT, Claude, or Cursor, agents can read your accumulated memory, write new structured data, correct mistakes, and trigger reinterpretation.
@@ -82,7 +82,7 @@ export function AboutPage() {
               Timeline generation
             </h3>
             <p className="text-sm text-muted-foreground">
-              Automatic chronological ordering from date fields creates timeline sequences across all personal data.
+              Automatic chronological ordering from date fields creates timeline sequences across all stored data.
             </p>
           </div>
 

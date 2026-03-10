@@ -1,9 +1,9 @@
 ---
-description: "Load when user mentions new release, internal release, create release, release vX.Y.Z, split out features, prior release, or version numbers in release context: confirm then run release workflow."
+description: "Automatically detects release intent from user patterns and triggers the release creation workflow. Load when user mentions release, version, or launch."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/release_detection.mdc -->
+<!-- Source: foundation/.cursor/rules/release_detection.mdc -->
 
 # Release Detection Rule
 
@@ -61,7 +61,7 @@ If context suggests a release (mentions "release", version numbers, "split out",
 
 1. **Load required documents:**
    - `foundation/development/release_workflow.md` (primary workflow)
-   - `foundation/agent_instructions/cursor_commands/create_release.md` (command implementation, or `.claude/skills/foundation_create_release.md` if symlinked)
+   - Skill `create-release` (`.cursor/skills/create-release/SKILL.md` or `foundation/agent_instructions/cursor_skills/create-release/SKILL.md`)
    - `foundation/development/feature_unit_workflow.md` (for FU creation, if feature units enabled)
    - Repository-specific execution instructions (if they exist)
 

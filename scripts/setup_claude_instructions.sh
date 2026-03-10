@@ -125,13 +125,24 @@ RULES_DIR="$FOUNDATION_DIR/agent_instructions/cursor_rules"
 COMMANDS_DIR="$FOUNDATION_DIR/agent_instructions/cursor_commands"
 
 if [ ! -d "$RULES_DIR" ]; then
-    print_error "Cursor rules directory not found: $RULES_DIR"
-    exit 1
+    ALT_RULES_DIR="$FOUNDATION_DIR/.cursor/rules"
+    if [ -d "$ALT_RULES_DIR" ]; then
+        RULES_DIR="$ALT_RULES_DIR"
+        print_warn "Using fallback rules directory: $RULES_DIR"
+    else
+        print_warn "No rules directory found at $RULES_DIR or $ALT_RULES_DIR; skipping Claude instruction sync."
+        exit 0
+    fi
 fi
 
 if [ ! -d "$COMMANDS_DIR" ]; then
-    print_error "Cursor commands directory not found: $COMMANDS_DIR"
-    exit 1
+    ALT_COMMANDS_DIR="$FOUNDATION_DIR/.cursor/skills"
+    if [ -d "$ALT_COMMANDS_DIR" ]; then
+        COMMANDS_DIR="$ALT_COMMANDS_DIR"
+        print_warn "Using fallback command/skill directory: $COMMANDS_DIR"
+    else
+        print_warn "No command directory found at $COMMANDS_DIR or $ALT_COMMANDS_DIR; skipping command-to-skill sync."
+    fi
 fi
 
 # Create .claude directories if they don't exist
@@ -222,9 +233,13 @@ SKILLS_COPIED=0
 # High-value commands to convert to skills
 SKILL_COMMANDS=("create_release" "fix_feature_bug" "create_feature_unit" "setup_symlinks" "pull" "commit")
 
-for cmd_file in "$COMMANDS_DIR"/*.md; do
+for cmd_file in "$COMMANDS_DIR"/*.md "$COMMANDS_DIR"/*/SKILL.md; do
     if [ -f "$cmd_file" ]; then
-        cmd_name=$(basename "$cmd_file" .md)
+        cmd_name=$(basename "$cmd_file")
+        cmd_name="${cmd_name%.md}"
+        if [ "$cmd_name" = "SKILL" ]; then
+            cmd_name=$(basename "$(dirname "$cmd_file")")
+        fi
         
         # Check if this is a high-value command
         convert_to_skill=false
@@ -376,6 +391,7 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 - **Feature Units**: `docs/feature_units/standards/` (spec, manifest, execution)
 - **Code conventions**: `docs/conventions/code_conventions.md` (TypeScript, SQL, YAML, Shell)
 - **Documentation standards**: `docs/conventions/documentation_standards.md`
+- **First-run install and migration**: \`install.md\` (repo root) — agent install workflow, bootstrap from context, and migration from platform memory / conversation history / project config. See \`docs/foundation/what_to_store.md\` for what to store.
 
 ## Additional Instructions
 

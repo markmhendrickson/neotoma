@@ -1,9 +1,10 @@
 ---
-description: "Load when deciding whether to ask user: proceed without asking for routine implementation, tests, docs, lint; stop and ask only for unclear architectural/design choices with high stakes (schema, layer boundaries, consistency model)."
+description: "Proceed without asking except for high-stakes architectural or design ambiguities. Load when deciding whether to ask for approval or proceed autonomously."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/autonomous_execution.mdc -->
+<!-- Source: foundation/.cursor/rules/autonomous_execution.mdc -->
+
 
 # Autonomous Execution Rule
 

@@ -4,6 +4,8 @@ import {
   FUNCTIONALITY_MATRIX,
   LEARN_MORE_POSTS,
   MCP_ACTIONS_TABLE,
+  REPO_RELEASES_COUNT,
+  REPO_VERSION,
   SITE_CODE_SNIPPETS,
   SITE_SECTIONS,
 } from "./site_data";
@@ -11,17 +13,13 @@ import {
 describe("site_data", () => {
   it("defines sidebar sections in expected order", () => {
     expect(SITE_SECTIONS.map((section) => section.id)).toEqual([
-      "quick-start",
       "intro",
-      "install",
-      "get-started",
-      "use-cases",
-      "terminology",
-      "agent-instructions",
-      "functionality",
-      "configure-mcp",
-      "cli",
-      "docker",
+      "failure-scenarios",
+      "memory-guarantees",
+      "architecture",
+      "quick-start",
+      "who-is-it-for",
+      "interfaces",
       "learn-more",
     ]);
   });
@@ -38,6 +36,14 @@ describe("site_data", () => {
     expect(SITE_CODE_SNIPPETS.installCommands).toContain("npm install -g neotoma");
     expect(SITE_CODE_SNIPPETS.stdioConfigJson).toContain("\"mcpServers\"");
     expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma upload");
+  });
+
+  it("exposes repo version and releases count from repo_info", () => {
+    expect(typeof REPO_VERSION).toBe("string");
+    expect(REPO_VERSION.length).toBeGreaterThan(0);
+    expect(REPO_VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(typeof REPO_RELEASES_COUNT).toBe("number");
+    expect(REPO_RELEASES_COUNT).toBeGreaterThanOrEqual(0);
   });
 
   it("keeps learn-more card ordering stable", () => {

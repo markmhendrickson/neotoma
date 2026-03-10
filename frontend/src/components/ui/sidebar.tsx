@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { PanelLeft, PanelLeftClose } from "lucide-react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_WIDTH_COOKIE_NAME = "sidebar_width";
@@ -198,6 +199,8 @@ const Sidebar = React.forwardRef<
     side?: "left" | "right";
     variant?: "sidebar" | "floating" | "inset";
     collapsible?: "offcanvas" | "icon" | "none";
+    /** When true, positions sidebar below a fixed header (top-12, height calc(100svh - 3rem)) */
+    belowHeader?: boolean;
   }
 >(
   (
@@ -205,6 +208,7 @@ const Sidebar = React.forwardRef<
       side = "left",
       variant = "sidebar",
       collapsible = "offcanvas",
+      belowHeader = false,
       className,
       children,
       ...props
@@ -280,14 +284,19 @@ const Sidebar = React.forwardRef<
         />
         <div
           className={cn(
-            "fixed inset-y-0 z-40 hidden h-svh w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+            "fixed z-40 hidden w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
+            belowHeader
+              ? "top-12 h-[calc(100svh-3rem)]"
+              : "inset-y-0 h-svh",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
               : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
             // Adjust the padding for floating and inset variants.
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "pb-2 pt-2 px-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l",
+              : belowHeader
+                ? "pb-2 pt-0 pr-2 group-data-[side=right]:pl-2 group-data-[side=right]:pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l"
+                : "pb-2 pt-2 pr-2 group-data-[side=right]:pl-2 group-data-[side=right]:pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l",
             className
           )}
           {...props}
@@ -295,7 +304,7 @@ const Sidebar = React.forwardRef<
           <div
             data-sidebar="sidebar"
             className={cn(
-              "flex h-full w-full flex-col bg-sidebar rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
+              "flex h-full w-full flex-col bg-sidebar/90 backdrop-blur-sm rounded-r-lg group-data-[side=right]:rounded-r-none group-data-[side=right]:rounded-l-lg group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
               "transition-opacity duration-300 ease-in",
               isMounted ? "opacity-100" : "opacity-0"
             )}
@@ -321,7 +330,8 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
+  const isExpanded = state === "expanded";
 
   return (
     <Tooltip>
@@ -332,41 +342,23 @@ const SidebarTrigger = React.forwardRef<
           variant="ghost"
           size="icon"
           className={cn("h-7 w-7", className)}
-          title="Toggle sidebar"
           onClick={(event) => {
             onClick?.(event);
             toggleSidebar();
           }}
           {...props}
         >
-          <svg
-            viewBox="0 0 16 16"
-            aria-hidden="true"
-            className="size-4 shrink-0"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <defs>
-              <linearGradient id="sidebar-favicon-gradient" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0" stopColor="#000000" />
-                <stop offset="1" stopColor="#4c1d95" />
-              </linearGradient>
-            </defs>
-            <rect width="16" height="16" rx="3" fill="url(#sidebar-favicon-gradient)" />
-            <text
-              x="8"
-              y="11"
-              textAnchor="middle"
-              fontFamily="Arial, sans-serif"
-              fontSize="9"
-              fill="#ffffff"
-            >
-              N
-            </text>
-          </svg>
-          <span className="sr-only">Toggle Sidebar</span>
+          {isExpanded ? (
+            <PanelLeftClose className="size-4 shrink-0" aria-hidden />
+          ) : (
+            <PanelLeft className="size-4 shrink-0" aria-hidden />
+          )}
+          <span className="sr-only">{isExpanded ? "Collapse sidebar" : "Expand sidebar"}</span>
         </Button>
       </TooltipTrigger>
-      <TooltipContent side="right">Toggle sidebar</TooltipContent>
+      <TooltipContent side="right">
+        {isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+      </TooltipContent>
     </Tooltip>
   );
 });

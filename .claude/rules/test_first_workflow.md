@@ -1,9 +1,9 @@
 ---
-description: "Load when implementing new features, API endpoints, UI components, or DB operations: write tests first or alongside implementation; run tests frequently; verify coverage before marking complete."
+description: "Enforce test-first or test-alongside development. Load when implementing new features, APIs, or UI components."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/test_first_workflow.mdc -->
+<!-- Source: foundation/.cursor/rules/test_first_workflow.mdc -->
 
 
 # Test-First Workflow Rules

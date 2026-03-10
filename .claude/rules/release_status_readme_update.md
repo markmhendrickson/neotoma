@@ -1,9 +1,9 @@
 ---
-description: "Load when release status.md changes: pre-commit hook updates README release section; or run scripts/update_readme_release_status.py manually; use exact status values from workflow."
+description: "README.md must reflect current status of all releases. Load when updating releases or release status."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/release_status_readme_update.mdc -->
+<!-- Source: foundation/.cursor/rules/release_status_readme_update.mdc -->
 
 # Release Status README Update Rule
 
@@ -11,52 +11,57 @@ alwaysApply: false
 
 Ensures the README.md file always reflects the current status of all releases, maintaining accurate project status visibility for all developers and stakeholders.
 
-## Implementation
+## Trigger Patterns
 
-**Automated:** README release status updates are enforced by a pre-commit hook that runs when release `status.md` files change.
-
-**Hook:** `scripts/update_readme_release_status.py` (configured in `.pre-commit-config.yaml` as `release-status-readme`)
-
-**How it works:**
-1. When `docs/releases/*/status.md` is staged, the hook runs automatically
-2. Script parses all release status files
-3. Updates corresponding entries in README.md Releases section
-4. Stages the updated README.md automatically
-
-**Manual execution:**
-```bash
-python scripts/update_readme_release_status.py
-```
+When a release status changes (e.g., from `planning` to `in_progress`, `in_progress` to `ready_for_deployment`, `ready_for_deployment` to `deployed`), agents MUST update the README.md Releases section immediately.
 
 ## Agent Actions
 
-Agents do NOT need to manually update README when release status changes — the pre-commit hook handles this automatically.
+### Step 1: Detect Status Change
 
-If manually updating release status outside of a commit:
-1. Update `docs/releases/{version}/status.md`
-2. Either commit (hook will update README) or run the script manually: `python scripts/update_readme_release_status.py`
+1. When release status changes in `docs/releases/{version}/status.md`
+2. Identify the new status value
+3. Locate the corresponding release entry in README.md (lines 167-179)
+
+### Step 2: Update README.md
+
+1. Read the current README.md Releases section
+2. Find the release entry matching the version
+3. Update the status in parentheses (e.g., `(planning)` → `(ready_for_deployment)`)
+4. Preserve all other content in the release entry
+5. Verify the status matches exactly what's in the release status.md file
+
+### Step 3: Verify Update
+
+1. Confirm the status in README.md matches the status in `docs/releases/{version}/status.md`
+2. Ensure no other release entries were accidentally modified
 
 ## Constraints
 
-- **MUST** use exact status values from release workflow (planning, in_progress, in_testing, ready_for_deployment, deployed, completed)
-- **MUST NOT** bypass the pre-commit hook
-- If manually running the script, verify README is updated correctly before committing
+- MUST update README.md immediately when release status changes
+- MUST NOT defer this update to a later conversation or task
+- MUST preserve all other content in the release entry (description, links, etc.)
+- MUST use exact status values from the release status.md file
+- MUST update during the same conversation where status changes
 
-## Configuration
+## Status Values
 
-Release status file path is configurable in `foundation-config.yaml`:
+Valid status values (from release workflow):
+- `planning`
+- `in_progress`
+- `in_testing`
+- `ready_for_deployment`
+- `deployed`
+- `completed`
 
-```yaml
-orchestration:
-  release:
-    enabled: true
-    directory: "docs/releases/"  # Or configured path
-    status_file: "status.md"
+## Example
+
+**Before:**
+```markdown
+- **v0.2.0**: Minimal Ingestion + Correction Loop (`planning`). Sources-first ingestion...
 ```
 
-## Related Files
-
-- `scripts/update_readme_release_status.py` — Script implementation
-- `.pre-commit-config.yaml` — Hook configuration (release-status-readme)
-- `foundation-config.yaml` — Release directory configuration
-
+**After (when status changes to `ready_for_deployment`):**
+```markdown
+- **v0.2.0**: Minimal Ingestion + Correction Loop (`ready_for_deployment`). Sources-first ingestion...
+```

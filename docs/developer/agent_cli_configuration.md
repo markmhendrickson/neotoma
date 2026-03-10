@@ -19,7 +19,7 @@ To add the rule so it is applied in Cursor, Claude Code, and Codex, run `neotoma
 
 `neotoma init` and `neotoma mcp check` also surface this workflow. They can remind you to run `neotoma cli-instructions check`, and in interactive runs they can offer to add missing CLI instructions after MCP setup.
 
-For a first-run onboarding UX where a human asks an agent to run install/init and request confirmation before first save, see [Agent onboarding](agent_onboarding.md). That flow is onboarding-only and does not replace the ongoing MCP/CLI behavior contract in this document.
+For a first-run onboarding UX where a human asks an agent to run install/init and request confirmation before first save, see [install.md](../../install.md). That flow is onboarding-only and does not replace the ongoing MCP/CLI behavior contract in this document.
 
 ## Configuration strategy
 
@@ -41,6 +41,15 @@ The sync script updates:
 - **`.codex/config.toml`** — Appends `[mcp_servers.<id>]` for each stdio server in `.cursor/mcp.json` so Codex sees the same servers.
 
 Run `npm run sync:mcp` after changing `.cursor/mcp.json` (or add it to your workflow). Cursor Agent CLI uses Cursor’s MCP config when running in a project that has `.cursor/mcp.json`.
+
+### Other MCP clients (including OpenClaw)
+
+If a client supports standard MCP server configuration, point it at the same Neotoma server definitions used in `.cursor/mcp.json`:
+
+- Local same-machine usage: prefer stdio (`run_neotoma_mcp_stdio*.sh`)
+- Remote/tunnel/deployed usage: prefer HTTP MCP endpoints
+
+For an OpenClaw-specific setup path, see [MCP OpenClaw setup](mcp_openclaw_setup.md).
 
 ### Transport: stdio for local, HTTP for remote
 
@@ -140,3 +149,4 @@ Use the user config paths above so the same behavior applies in every project. F
 - [CLI overview](cli_overview.md) — Neotoma CLI usage
 - [MCP Cursor setup](mcp_cursor_setup.md) — Cursor IDE MCP integration
 - [MCP Claude Code setup](mcp_claude_code_setup.md) — Claude Code MCP integration
+- [MCP OpenClaw setup](mcp_openclaw_setup.md) — OpenClaw MCP integration

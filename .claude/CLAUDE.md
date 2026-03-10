@@ -71,6 +71,7 @@ In those cases: ask a short, concrete question with 1–2 options or "proceed wi
 - **Feature Units**: `docs/feature_units/standards/` (spec, manifest, execution)
 - **Code conventions**: `docs/conventions/code_conventions.md` (TypeScript, SQL, YAML, Shell)
 - **Documentation standards**: `docs/conventions/documentation_standards.md`
+- **First-run install and migration**: \`install.md\` (repo root) — agent install workflow, bootstrap from context, and migration from platform memory / conversation history / project config. See \`docs/foundation/what_to_store.md\` for what to store.
 
 ## Additional Instructions
 

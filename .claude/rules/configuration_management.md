@@ -1,9 +1,9 @@
 ---
-description: "Load when adding or moving config: repo-specific config in repository foundation-config.yaml; shared config in foundation config/repo-adapters/; never put single-repo config in foundation submodule."
+description: "Place configuration in correct location by scope (repo foundation-config.yaml vs foundation repo-adapters). Load when adding or moving config."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/configuration_management.mdc -->
+<!-- Source: foundation/.cursor/rules/configuration_management.mdc -->
 
 # Configuration Management Rule
 

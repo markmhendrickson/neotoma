@@ -302,8 +302,7 @@ describe("CLI init interactive flows", () => {
         } finally {
           restoreTty();
         }
-        // Canceling at the plan step may or may not create data directories depending on
-        // environment/port probing timing; the core contract is clean exit without throw.
+        await expect(fs.stat(path.join(homeDir, "neotoma", "data"))).resolves.toBeDefined();
       });
     });
   });

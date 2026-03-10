@@ -1,9 +1,9 @@
 ---
-description: "Load when creating or editing essays, articles, posts, docs, or marketing copy: apply anti-AI patterns from writing style guide; remove filler, hype, em dashes; use active voice and authentic human voice."
+description: "Enforce anti-AI patterns and authentic human voice in essays, posts, docs, and marketing copy. Load when creating or editing publishable content."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/content_style_enforcement.mdc -->
+<!-- Source: foundation/.cursor/rules/content_style_enforcement.mdc -->
 
 
 # Content Style Enforcement Rule

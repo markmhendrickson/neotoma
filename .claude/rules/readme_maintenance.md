@@ -1,9 +1,9 @@
 ---
-description: "Load when creating, modifying, or deleting documentation or making material doc changes: regenerate README from primary sources; update README in same batch as doc changes; verify links."
+description: "README.md must stay synchronized with documentation changes. Load when editing docs that affect project overview or when updating README."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/readme_maintenance.mdc -->
+<!-- Source: foundation/.cursor/rules/readme_maintenance.mdc -->
 
 # README Maintenance Rule
 

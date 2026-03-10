@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# After git pull (merge), refresh .cursor/ from foundation only if the submodule commit changed
+REPO_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
+REF_FILE="$REPO_ROOT/.git/foundation_cursor_sync_ref"
+if [ -d "$REPO_ROOT/foundation" ]; then
+  CURRENT=$(cd "$REPO_ROOT" && git ls-tree HEAD foundation 2>/dev/null | awk '{print $3}') || true
+  if [ -n "$CURRENT" ]; then
+    if [ ! -f "$REF_FILE" ] || [ "$(cat "$REF_FILE" 2>/dev/null)" != "$CURRENT" ]; then
+      REPO_ROOT="$REPO_ROOT" "$REPO_ROOT/scripts/setup_cursor_from_foundation.sh" && echo "$CURRENT" > "$REF_FILE"
+    fi
+  fi
+fi

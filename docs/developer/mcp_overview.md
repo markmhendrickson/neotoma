@@ -35,6 +35,7 @@ See setup guides for config examples and comparison table.
 - **Cursor setup**: `docs/developer/mcp_cursor_setup.md`
 - **ChatGPT setup**: `docs/developer/mcp_chatgpt_setup.md`
 - **Claude Code setup**: `docs/developer/mcp_claude_code_setup.md`
+- **OpenClaw setup**: `docs/developer/mcp_openclaw_setup.md`
 - **Agent CLI config** (unified MCP for Cursor, Claude Code, Codex): `docs/developer/agent_cli_configuration.md`
 - **OAuth implementation**: `docs/developer/mcp_oauth_implementation.md`
 - **Authentication summary**: `docs/developer/mcp_authentication_summary.md`

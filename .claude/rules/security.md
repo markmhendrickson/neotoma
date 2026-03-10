@@ -1,9 +1,9 @@
 ---
-description: "Load when committing, configuring pre-commit, or adding protected paths: security audit blocks commits of protected_paths, .env*, data/; gitleaks scans for credentials; do not bypass hooks."
+description: "Prevent accidental commits of private, sensitive, or confidential data; run pre-commit security audit. Load when staging or committing, or when editing protected paths."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/security.mdc -->
+<!-- Source: foundation/.cursor/rules/security.mdc -->
 
 # Security Rule
 
@@ -13,156 +13,149 @@ Configuration: This rule uses protected paths configured in `foundation-config.y
 
 ## Pre-Commit Security Audit
 
-**Implementation:** The security audit is enforced by `scripts/linters/security_audit.py` and configured in `.pre-commit-config.yaml` under the `security-audit` hook.
+Before staging or committing ANY changes, agents MUST perform the following checks:
 
-**Configuration:** All settings are in `foundation-config.yaml` under `security.pre_commit_audit`:
-- `protected_paths` — paths that must never be committed
-- `check_env_files` — enable/disable .env file checking
-- `check_data_directory` — enable/disable data/ directory checking
-- Secrets detection is handled by gitleaks (separate hook)
+### 1. Protected Paths Check
 
-### Checks Performed
-
-The pre-commit hook (`scripts/linters/security_audit.py`) performs:
-
-1. **Protected Paths Check** — Checks staged and unstaged files against configured `protected_paths`
-2. **Environment Files Check** — Detects `.env*` files (if `check_env_files: true`)
-3. **Data Directory Check** — Detects files in `data/` or `$DATA_DIR/` (if `check_data_directory: true`)
-
-**Gitleaks** (separate hook in `.pre-commit-config.yaml`) handles:
-
-4. **Hardcoded Credentials Scan** — Scans for API keys, passwords, secrets, tokens in staged files
-
-### Security Audit Execution
-
-The security audit runs automatically before every commit via pre-commit hooks:
+Check for any files in protected paths (configured in `foundation-config.yaml`):
 
 ```bash
-# Runs automatically on commit
-git commit -m "message"
+# Load protected paths from config (example paths shown)
+PROTECTED_PATHS=("docs/private/" "data/")  # Configured per repository
 
-# Or manually via pre-commit
-pre-commit run security-audit --all-files
-pre-commit run gitleaks --all-files
-
-```bash
-#!/bin/bash
-set -e
-
-echo "🔒 Running pre-commit security audit..."
-
-# Load protected paths from foundation-config.yaml
-# (Implementation depends on YAML parsing - use yq, python, or node)
-PROTECTED_PATHS=($(yq eval '.security.pre_commit_audit.protected_paths[]' foundation-config.yaml 2>/dev/null || echo ""))
-
-# Check 1: Protected paths
+# Check unstaged changes
 for path in "${PROTECTED_PATHS[@]}"; do
   if git status --porcelain | grep -E "^[AM]|^\?\?" | grep -qE "$path"; then
     echo "❌ SECURITY VIOLATION: Files in $path detected!"
-    echo "Files:"
     git status --porcelain | grep -E "^[AM]|^\?\?" | grep "$path"
-    exit 1
-  fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "$path"; then
-    echo "❌ SECURITY VIOLATION: Files in $path already staged!"
-    echo "Files:"
-    git diff --cached --name-only | grep "$path"
     exit 1
   fi
 done
 
-# Check 2: Environment files (if enabled)
-if yq eval '.security.pre_commit_audit.check_env_files' foundation-config.yaml 2>/dev/null | grep -q "true"; then
-  if git status --porcelain | grep -qE "\.env"; then
-    echo "❌ SECURITY VIOLATION: .env files detected!"
-    git status --porcelain | grep "\.env"
+# Check staged changes (if any exist)
+for path in "${PROTECTED_PATHS[@]}"; do
+  if git diff --cached --name-only 2>/dev/null | grep -qE "$path"; then
+    echo "❌ SECURITY VIOLATION: Files in $path already staged!"
+    git diff --cached --name-only | grep "$path"
     exit 1
   fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "\.env"; then
-    echo "❌ SECURITY VIOLATION: .env files already staged!"
-    git diff --cached --name-only | grep "\.env"
-    exit 1
-  fi
-fi
-
-# Check 3: Data directory (if enabled)
-if yq eval '.security.pre_commit_audit.check_data_directory' foundation-config.yaml 2>/dev/null | grep -q "true"; then
-  if git status --porcelain | grep -E "^[AM]|^\?\?" | grep -qE "^data/"; then
-    echo "❌ SECURITY VIOLATION: Files in data/ directory detected!"
-    git status --porcelain | grep -E "^[AM]|^\?\?" | grep "^data/"
-    exit 1
-  fi
-
-  if git diff --cached --name-only 2>/dev/null | grep -qE "^data/"; then
-    echo "❌ SECURITY VIOLATION: Files in data/ directory already staged!"
-    git diff --cached --name-only | grep "^data/"
-    exit 1
-  fi
-fi
-
-echo "✅ Security audit passed"
+done
 ```
+
+If any files match protected paths, ABORT the commit immediately and alert the user.
+
+### 2. Environment Files Check
+
+Check for any `.env*` files (should be in `.gitignore` but verify):
+
+```bash
+if git status --porcelain | grep -qE "\.env"; then
+  echo "❌ SECURITY VIOLATION: .env files detected!"
+  git status --porcelain | grep "\.env"
+  exit 1
+fi
+
+if git diff --cached --name-only 2>/dev/null | grep -qE "\.env"; then
+  echo "❌ SECURITY VIOLATION: .env files already staged!"
+  git diff --cached --name-only | grep "\.env"
+  exit 1
+fi
+```
+
+If any `.env*` files are detected, ABORT the commit.
+
+Configuration: Enable/disable via `security.pre_commit_audit.check_env_files` in `foundation-config.yaml`.
+
+### 3. Sensitive File Pattern Check
+
+Check for files with sensitive naming patterns:
+
+```bash
+# Check for files with "secret" or "private" in path (excluding legitimate code)
+git status --porcelain | grep -vE "(test|spec|property_keys)" | grep -iE "(secret|private)" | grep -vE "$(IFS='|'; echo "${PROTECTED_PATHS[*]}")" && echo "WARNING: Suspicious file patterns detected" && exit 1
+```
+
+**Note**: This check excludes test files and legitimate code files. Protected paths are also excluded.
+
+### 4. Data Directory Check
+
+Check for files in `data/` directory (should be in `.gitignore`):
+
+```bash
+if git status --porcelain | grep -E "^[AM]|^\?\?" | grep -qE "^data/"; then
+  echo "❌ SECURITY VIOLATION: Files in data/ directory detected!"
+  git status --porcelain | grep -E "^[AM]|^\?\?" | grep "^data/"
+  exit 1
+fi
+
+if git diff --cached --name-only 2>/dev/null | grep -qE "^data/"; then
+  echo "❌ SECURITY VIOLATION: Files in data/ directory already staged!"
+  git diff --cached --name-only | grep "^data/"
+  exit 1
+fi
+```
+
+**Configuration**: Enable/disable via `security.pre_commit_audit.check_data_directory` in `foundation-config.yaml`.
+
+### 5. Hardcoded Credentials Scan
+
+Scan staged and unstaged files for common credential patterns:
+
+```bash
+# Only scan text files, exclude binary files
+git diff --cached --name-only | xargs -I {} sh -c 'file {} | grep -q "text" && grep -lE "(api[_-]?key|password|secret|token)\s*[:=]\s*['\''\"][^'\''\"]{10,}" {}' && echo "WARNING: Potential hardcoded credentials detected" && exit 1
+```
+
+If potential credentials are found, review manually before proceeding.
+
+## Security Audit Execution
+
+The security audit must be executed BEFORE running `git add -A` or staging any files.
 
 ### Agent Responsibilities
 
+Agents MUST:
+- Perform security audit checks before staging or committing files
+- Load protected paths from `foundation-config.yaml` if available
+- Abort commit immediately if any violations are detected
+- Alert user clearly about security violations
+
 Agents MUST NOT:
-- Bypass or skip the pre-commit security audit
+- Bypass or skip security checks
 - Commit files in protected paths
 - Suggest workarounds to security checks
-- Use `--no-verify` flag to skip hooks
-
-Agents SHOULD:
-- Respect the pre-commit hook enforcement
-- Alert user if security violations are detected during normal operations
-- Recommend fixing violations (moving files, updating .gitignore) rather than bypassing checks
+- Use `--no-verify` flag to skip hooks (if hooks are configured)
 
 ## Enforcement
 
-The security audit is enforced automatically by pre-commit hooks:
-- Runs on every `git commit`
-- Cannot be bypassed without explicit `--no-verify` flag
-- Configuration-driven via `foundation-config.yaml`
+This security audit must be run:
+1. Before any `git add` command
+2. Before any `git commit` command
+3. As part of the commit command workflow
 
 ## Failure Behavior
 
-If the security audit hook fails:
-1. Commit is blocked
-2. Clear error message displays with violating files
-3. User must resolve violations (remove files, update .gitignore, or exclude from commit)
-4. Commit again after resolving
+If the security audit fails:
+1. STOP all git operations immediately
+2. Do NOT stage or commit any files
+3. Display clear error message to user
+4. List the specific files that triggered the violation
+5. Wait for user to resolve the issue before proceeding
 
 ## Configuration
 
-All security audit configuration is in `foundation-config.yaml`:
+Configure protected paths and audit checks in `foundation-config.yaml`:
 
 ```yaml
 security:
   pre_commit_audit:
-    enabled: true
     protected_paths:
-      - "$DATA_DIR/imports/"
-      - "$DATA_DIR/attachments/"
-      - "docs/private/"
-      - ".env*"
+      - "docs/private/"  # Example: repository-specific protected paths
+      - "data/"          # Example: data directory
     check_env_files: true
     check_data_directory: true
 ```
 
-See `foundation-config.yaml` in your repository for the actual configuration.
+## Exceptions
 
-## Related Files
-
-- `scripts/linters/security_audit.py` — Security audit implementation
-- `.pre-commit-config.yaml` — Hook configuration (security-audit and gitleaks)
-- `.gitleaks.toml` — Gitleaks configuration for credential scanning
-
-
-
-
-
-
-
-
-
+No exceptions. Private documentation must never be committed to public repositories.

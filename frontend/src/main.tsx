@@ -4,6 +4,8 @@ import { BrowserRouter } from "react-router-dom";
 import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
 import { initGoogleAnalytics } from "./utils/analytics";
+import { LocaleProvider } from "./i18n/LocaleContext";
+import { ThemeProvider } from "./hooks/useTheme";
 import "./index.css";
 
 initGoogleAnalytics();
@@ -35,7 +37,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <HelmetProvider>
       <BrowserRouter basename={getRouterBasename()}>
-        <App />
+        <LocaleProvider>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </LocaleProvider>
       </BrowserRouter>
     </HelmetProvider>
   </React.StrictMode>

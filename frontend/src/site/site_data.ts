@@ -1,3 +1,10 @@
+import repoInfo from "./repo_info.json";
+
+/** Version from package.json (updated by scripts/repo_info.ts). */
+export const REPO_VERSION: string = repoInfo.version;
+/** Published GitHub releases count (updated by scripts/repo_info.ts). */
+export const REPO_RELEASES_COUNT: number = repoInfo.releasesCount;
+
 export interface SiteSection {
   id: string;
   label: string;
@@ -44,27 +51,310 @@ export interface GlossaryRow {
   definition: string;
 }
 
+export type GuaranteeLevel =
+  | "guaranteed"
+  | "not-provided"
+  | "manual"
+  | "partial"
+  | "common"
+  | "possible"
+  | "prevented";
+
+export interface MemoryGuaranteeRow {
+  property: string;
+  tooltip: string;
+  slug: string;
+  platform: GuaranteeLevel;
+  retrieval: GuaranteeLevel;
+  file: GuaranteeLevel;
+  neotoma: GuaranteeLevel;
+}
+
+export const MEMORY_GUARANTEE_ROWS: MemoryGuaranteeRow[] = [
+  {
+    property: "Deterministic state evolution",
+    slug: "deterministic-state-evolution",
+    tooltip:
+      "Given the same set of observations, the system always produces the same entity state regardless of when or in what order they are processed. This eliminates ordering bugs and makes state transitions predictable and testable.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Versioned history",
+    slug: "versioned-history",
+    tooltip:
+      "Every change to an entity creates a new version rather than overwriting the previous one. Earlier states are preserved and accessible, so you can review what an entity looked like at any point in time.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "manual",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Replayable timeline",
+    slug: "replayable-timeline",
+    tooltip:
+      "The full sequence of observations and state changes can be replayed from the beginning to reconstruct any historical state. This enables debugging, auditing, and verifying that the current state is correct.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Auditable change log",
+    slug: "auditable-change-log",
+    tooltip:
+      "Every modification records who made it, when, and from what source. This provides a complete audit trail that can be reviewed to understand how and why the current state came to be.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "partial",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Schema constraints",
+    slug: "schema-constraints",
+    tooltip:
+      "Entities conform to defined types and validation rules. The system rejects malformed or invalid data rather than silently accepting it, preventing garbage-in-garbage-out failures across agents.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Silent mutation risk",
+    slug: "silent-mutation-risk",
+    tooltip:
+      "The likelihood that data changes without explicit user awareness or consent. Systems with high silent mutation risk may overwrite, merge, or drop facts without leaving a trace, making it impossible to know what changed or when.",
+    platform: "common",
+    retrieval: "common",
+    file: "common",
+    neotoma: "prevented",
+  },
+  {
+    property: "Conflicting facts risk",
+    slug: "conflicting-facts-risk",
+    tooltip:
+      "The likelihood that two or more contradictory statements coexist in memory without detection. Without conflict resolution, a system may store that someone lives in Barcelona and San Francisco simultaneously without flagging the inconsistency.",
+    platform: "common",
+    retrieval: "common",
+    file: "possible",
+    neotoma: "prevented",
+  },
+  {
+    property: "Reproducible state reconstruction",
+    slug: "reproducible-state-reconstruction",
+    tooltip:
+      "The ability to rebuild the complete current state from raw inputs alone. If the database is lost, the system can reconstruct it exactly from its observation log, the way a ledger balances to zero from its entries.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "not-provided",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Human inspectability (diffs/lineage)",
+    slug: "human-inspectability",
+    tooltip:
+      "The ability for a human to examine exactly what changed between any two versions of an entity and trace where each fact originated. This makes memory transparent rather than opaque, so trust does not depend on blind faith in the system.",
+    platform: "partial",
+    retrieval: "partial",
+    file: "partial",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Zero-setup onboarding",
+    slug: "zero-setup-onboarding",
+    tooltip:
+      "Whether memory is available immediately without any installation, configuration, or infrastructure setup. Platform memory is built into the chat product and works from the first message with no action required from the user.",
+    platform: "guaranteed",
+    retrieval: "not-provided",
+    file: "not-provided",
+    neotoma: "not-provided",
+  },
+  {
+    property: "Semantic similarity search",
+    slug: "semantic-similarity-search",
+    tooltip:
+      "The ability to find relevant prior context by meaning rather than exact match. Retrieval systems search over unstructured documents using vector embeddings. Neotoma searches over structured entity snapshots using the same technique, scoped by entity type and structural filters.",
+    platform: "not-provided",
+    retrieval: "guaranteed",
+    file: "not-provided",
+    neotoma: "guaranteed",
+  },
+  {
+    property: "Direct human editability",
+    slug: "direct-human-editability",
+    tooltip:
+      "Whether a person can open the memory store in a standard editor (e.g. VS Code, Notepad) and modify it directly. File-based systems use plain text formats like Markdown or JSON that any tool can read and write without a runtime or API layer. Platform memory (e.g. ChatGPT, Claude) may offer in-app UIs to view or edit memories, but the underlying store is not exposed as an editable file.",
+    platform: "not-provided",
+    retrieval: "not-provided",
+    file: "guaranteed",
+    neotoma: "not-provided",
+  },
+];
+
+export const MEMORY_MODEL_VENDORS: Record<string, string> = {
+  platform: "Claude, ChatGPT, Gemini, Copilot",
+  retrieval: "Mem0, Zep, LangChain Memory",
+  file: "Markdown files, JSON stores, CRDT docs",
+  neotoma: "Neotoma",
+};
+
+export const MEMORY_TYPE_SLUGS: Record<string, string> = {
+  platform: "platform-memory",
+  retrieval: "retrieval-memory",
+  file: "file-based-memory",
+  neotoma: "deterministic-memory",
+};
+
+export interface FoundationCard {
+  title: string;
+  icon: string;
+  lines: string[];
+  link: string;
+}
+
+export const THREE_FOUNDATIONS: FoundationCard[] = [
+  {
+    title: "Privacy-first",
+    icon: "ShieldCheck",
+    link: "/privacy-first",
+    lines: [
+      "Your data stays local. Never used for training.",
+      "User-controlled storage, optional encryption at rest.",
+      "Full export and deletion control.",
+    ],
+  },
+  {
+    title: "Deterministic",
+    icon: "Fingerprint",
+    link: "/deterministic-memory",
+    lines: [
+      "Same input always produces same output.",
+      "Schema-first extraction, hash-based entity IDs, full provenance.",
+      "No silent mutation.",
+    ],
+  },
+  {
+    title: "Cross-platform",
+    icon: "Globe2",
+    link: "/cross-platform",
+    lines: [
+      "One state graph across Claude, Cursor, Codex, and CLI.",
+      "MCP-based access. No platform lock-in.",
+      "Works alongside native memory features. Nothing to uninstall.",
+    ],
+  },
+];
+
 export const SITE_SECTIONS: SiteSection[] = [
-  { id: "install", label: "Install with npm", shortLabel: "Install", icon: "Package" },
-  { id: "get-started", label: "Get started", shortLabel: "Get started", icon: "Rocket" },
-  { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Users" },
-  { id: "terminology", label: "Core terminology", shortLabel: "Terminology", icon: "BookText" },
-  { id: "agent-instructions", label: "Instructions", shortLabel: "Instructions", icon: "Bot" },
+  { id: "intro", label: "Intro", shortLabel: "Intro", icon: "Zap" },
+  { id: "failure-scenarios", label: "Before / After", shortLabel: "Before / After", icon: "AlertTriangle" },
+  { id: "memory-guarantees", label: "Guarantees", shortLabel: "Guarantees", icon: "ShieldCheck" },
+  { id: "architecture", label: "Architecture", shortLabel: "Architecture", icon: "Layers" },
+  { id: "quick-start", label: "Quick start", shortLabel: "Quick start", icon: "Rocket" },
+  { id: "who-is-it-for", label: "Who is it for", shortLabel: "Who is it for", icon: "Users" },
+  { id: "interfaces", label: "Interfaces", shortLabel: "Interfaces", icon: "SatelliteDish" },
+  { id: "learn-more", label: "Learn more", shortLabel: "Resources", icon: "GraduationCap" },
+];
+
+export interface DocNavItem {
+  label: string;
+  href: string;
+  /** Lucide icon name for collapsed sidebar (e.g. "Rocket", "Terminal"). */
+  icon?: string;
+}
+
+export interface DocNavCategory {
+  title: string;
+  items: DocNavItem[];
+}
+
+export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
-    id: "functionality",
-    label: "API and OpenAPI specification",
-    shortLabel: "API",
-    icon: "SatelliteDish",
+    title: "Getting started",
+    items: [
+      { label: "Install and first run", href: "/#quick-start", icon: "Rocket" },
+      { label: "Docker setup", href: "/docker", icon: "Container" },
+    ],
   },
   {
-    id: "configure-mcp",
-    label: "Model Context Protocol (MCP) server",
-    shortLabel: "MCP",
-    icon: "Server",
+    title: "Reference",
+    items: [
+      { label: "REST API", href: "/api", icon: "Globe" },
+      { label: "MCP server", href: "/mcp", icon: "Server" },
+      { label: "CLI", href: "/cli", icon: "Terminal" },
+      { label: "Architecture", href: "/architecture", icon: "Building2" },
+      { label: "Terminology", href: "/terminology", icon: "BookOpen" },
+      { label: "Data model walkthrough", href: "/data-model", icon: "BookOpen" },
+      { label: "Schema management", href: "/schema-management", icon: "BookOpen" },
+      { label: "Troubleshooting", href: "/troubleshooting", icon: "Terminal" },
+      { label: "Changelog", href: "/changelog", icon: "BookOpen" },
+    ],
   },
-  { id: "cli", label: "Command-line interface (CLI)", shortLabel: "CLI", icon: "Terminal" },
-  { id: "docker", label: "Run with Docker", shortLabel: "Docker", icon: "Container" },
-  { id: "learn-more", label: "Resources", shortLabel: "Resources", icon: "GraduationCap" },
+  {
+    title: "Memory guarantees",
+    items: [
+      { label: "Deterministic state evolution", href: "/deterministic-state-evolution", icon: "Zap" },
+      { label: "Versioned history", href: "/versioned-history", icon: "BookOpen" },
+      { label: "Replayable timeline", href: "/replayable-timeline", icon: "BookOpen" },
+      { label: "Auditable change log", href: "/auditable-change-log", icon: "BookOpen" },
+      { label: "Schema constraints", href: "/schema-constraints", icon: "BookOpen" },
+      { label: "Silent mutation risk", href: "/silent-mutation-risk", icon: "BookOpen" },
+      { label: "Conflicting facts risk", href: "/conflicting-facts-risk", icon: "BookOpen" },
+      { label: "Reproducible state reconstruction", href: "/reproducible-state-reconstruction", icon: "BookOpen" },
+      { label: "Human inspectability", href: "/human-inspectability", icon: "BookOpen" },
+    ],
+  },
+  {
+    title: "Memory models",
+    items: [
+      { label: "Platform memory", href: "/platform-memory", icon: "MessageSquare" },
+      { label: "Retrieval memory", href: "/retrieval-memory", icon: "Server" },
+      { label: "File-based memory", href: "/file-based-memory", icon: "BookOpen" },
+      { label: "Deterministic memory", href: "/deterministic-memory", icon: "Zap" },
+      { label: "Memory model comparison", href: "/memory-vendors", icon: "BookOpen" },
+    ],
+  },
+  {
+    title: "Foundations",
+    items: [
+      { label: "Privacy-first", href: "/privacy-first", icon: "BookOpen" },
+      { label: "Cross-platform", href: "/cross-platform", icon: "Globe" },
+    ],
+  },
+  {
+    title: "Agent behavior",
+    items: [{ label: "Agent instructions", href: "/agent-instructions", icon: "Bot" }],
+  },
+  {
+    title: "Use cases",
+    items: [
+      { label: "AI infrastructure engineers", href: "/ai-infrastructure-engineers", icon: "Cpu" },
+      { label: "Agent system builders", href: "/agentic-systems-builders", icon: "Zap" },
+      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
+      { label: "Knowledge workers", href: "/knowledge-workers", icon: "Users" },
+      { label: "Founders and teams", href: "/founders-teams", icon: "Users" },
+    ],
+  },
+  {
+    title: "Integrations",
+    items: [
+      { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
+      { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
+      { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageSquare" },
+      { label: "Codex", href: "/neotoma-with-codex", icon: "Terminal" },
+      { label: "Cursor", href: "/neotoma-with-cursor", icon: "Code" },
+      { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Bot" },
+    ],
+  },
+  {
+    title: "External",
+    items: [
+      { label: "GitHub", href: "https://github.com/markmhendrickson/neotoma", icon: "Github" },
+      { label: "npm", href: "https://www.npmjs.com/package/neotoma", icon: "Package" },
+    ],
+  },
 ];
 
 export const SITE_CODE_SNIPPETS = {
@@ -73,13 +363,18 @@ npm install -g neotoma
 
 # Initialize
 neotoma init`,
-  agentInstallPrompt: `Install and initialize Neotoma for me using npm, then report what changed.
+  agentInstallPrompt: `Install and initialize Neotoma, then follow this workflow:
 
-Use this exact sequence:
-1) npm install -g neotoma
-2) neotoma init
+1. Install Neotoma with npm install -g neotoma.
+2. Initialize Neotoma with neotoma init.
+3. Report what changed after install/init.
+4. If I ask for integration setup after init, link the matching setup guide in docs/developer/ (for example mcp_cursor_setup.md, mcp_claude_code_setup.md, mcp_openclaw_setup.md).
+5. Gather candidate data from available context, including facts this tool already remembers about me.
+6. Present one preview list with provenance, mark already-stored vs new, and ask for explicit confirmation.
+7. Save only what I explicitly confirm.
+8. Pause after asking for confirmation. Do not save or continue until I approve.
 
-After init, preview any personal data you already have in this session/context, show me a proposed save list, and ask for my confirmation before saving anything to Neotoma.`,
+Canonical source: https://github.com/markmhendrickson/neotoma/blob/main/install.md`,
   postInstallCommands: `# Run API server (development)
 neotoma api start --env dev
 
@@ -98,6 +393,8 @@ neotoma api start --env production`,
   syncConfigCommands: `cd /path/to/neotoma
 # Add neotoma-dev and neotoma to .cursor/mcp.json (see mcp_cursor_setup.md Option A)
 npm run sync:mcp`,
+  dockerAgentPrompt: `Follow the instructions at:
+https://github.com/markmhendrickson/neotoma/blob/main/docs/developer/agent_docker_instructions.md`,
   dockerBuild: `git clone https://github.com/markmhendrickson/neotoma.git
 cd neotoma
 docker build -t neotoma .`,
@@ -553,10 +850,19 @@ export const LEARN_MORE_REPO_CARD: LearnMoreCardItem = {
   label: "Repository",
   title: "Neotoma on GitHub",
   description:
-    "Source code, README with installation and MCP setup, and the rationale for the truth layer. Clone, contribute, or open issues.",
-  href: "https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#neotoma-truth-layer-for-persistent-agent-memory",
+    "Source code, README with installation and MCP setup, and the deterministic state layer architecture. Clone, contribute, or open issues.",
+  href: "https://github.com/markmhendrickson/neotoma?tab=readme-ov-file#neotoma",
   imageUrl: "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
   ctaLabel: "Visit repo →",
+};
+
+export const LEARN_MORE_GUARANTEES_CARD: LearnMoreCardItem = {
+  label: "Deep dive",
+  title: "Memory guarantees explained",
+  description:
+    "State integrity, deterministic evolution, state invariants, and why agent reliability depends on them. Architecture, pipeline, and guarantee reference.",
+  href: "/architecture",
+  ctaLabel: "Read architecture →",
 };
 
 export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
@@ -567,6 +873,15 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
       "Announcing the developer release: local CLI, MCP, and API with tunnel support; for developers comfortable with early-stage tooling and feedback.",
     href: "https://markmhendrickson.com/posts/neotoma-developer-release",
     imageUrl: "https://markmhendrickson.com/images/posts/neotoma-developer-release-hero.png",
+  },
+  {
+    label: "Related post",
+    title: "Your AI remembers your vibe but not your work",
+    description:
+      "A breakdown of convenience memory, retrieval memory, and durable operational memory, and why they are not interchangeable.",
+    href: "https://markmhendrickson.com/posts/your-ai-remembers-your-vibe-but-not-your-work",
+    imageUrl:
+      "https://markmhendrickson.com/images/posts/your-ai-remembers-your-vibe-but-not-your-work-hero.png",
   },
   {
     label: "Related post",
@@ -598,7 +913,8 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
     description:
       "Why similarity search works for exploration but breaks for durable state, and how schema-first memory closes the gap.",
     href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
-    imageUrl: "https://markmhendrickson.com/images/posts/why-agent-memory-needs-more-than-rag-hero.png",
+    imageUrl:
+      "https://markmhendrickson.com/images/posts/why-agent-memory-needs-more-than-rag-hero.png",
   },
   {
     label: "Related post",
@@ -611,12 +927,167 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
   },
 ];
 
+export interface IcpProfile {
+  slug: string;
+  name: string;
+  shortName: string;
+  tagline: string;
+  painPoints: string[];
+  failureModes: string[];
+  dataTypes: string[];
+  schemaHotSpots: string[];
+  solutionSummary: string;
+}
+
+export const ICP_PROFILES: IcpProfile[] = [
+  {
+    slug: "ai-infrastructure-engineers",
+    name: "AI Infrastructure Engineers",
+    shortName: "AI infrastructure engineers",
+    tagline: "Platform-layer state integrity guarantees for runtimes and orchestration",
+    painPoints: [
+      "Cannot reproduce agent runs — same inputs yield different state",
+      "State mutations invisible to debugging and observability tooling",
+      "Debugging production failures requires manual log archaeology",
+      "No provenance trail for state changes across pipeline steps",
+    ],
+    failureModes: [
+      "Non-reproducible agent runs in production",
+      "Invisible state mutation across sessions",
+      "No provenance linking outputs to source data",
+      "Ordering-sensitive state drift across orchestration steps",
+    ],
+    dataTypes: [
+      "session state",
+      "agent actions",
+      "pipelines",
+      "evaluations",
+      "audit trails",
+      "tool configs",
+      "runbooks",
+      "entity graphs",
+    ],
+    schemaHotSpots: [
+      "agent_session",
+      "action",
+      "pipeline",
+      "evaluation",
+      "audit_event",
+      "tool_config",
+    ],
+    solutionSummary:
+      "Deterministic state evolution, versioned history, replayable timeline, and schema constraints provide the guarantees missing from ad-hoc state management. Append-only observation log enables full state reconstruction.",
+  },
+  {
+    slug: "agentic-systems-builders",
+    name: "Builders of Agentic Systems",
+    shortName: "Agent system builders",
+    tagline: "Application-layer deterministic memory for shipped agents and toolchains",
+    painPoints: [
+      "No shared state for agents — token-based or conversation-only; no cross-session, cross-agent state",
+      "No provenance — cannot trace agent decisions or outputs to source data",
+      "No deterministic layer — need reproducible, explainable state for eval, debug, and compliance",
+      "Fragmented context across orchestration steps and multi-agent workflows",
+    ],
+    failureModes: [
+      "Silent state mutation between agent sessions",
+      "Non-replayable pipelines — can't reconstruct agent reasoning",
+      "Context loss across orchestration steps and agent handoffs",
+      "Evaluation gaps — no audit trail linking outputs to source facts",
+    ],
+    dataTypes: [
+      "session state",
+      "agent actions",
+      "pipelines",
+      "evaluations",
+      "audit trails",
+      "tool configs",
+      "runbooks",
+      "entity graphs",
+    ],
+    schemaHotSpots: [
+      "agent_session",
+      "action",
+      "pipeline",
+      "evaluation",
+      "audit_event",
+      "tool_config",
+    ],
+    solutionSummary:
+      "Neotoma provides a deterministic, MCP-backed state layer for agent frameworks, orchestration pipelines, and observability stacks. Same input, same output. Every fact traces to provenance. Cross-session state with full audit trail.",
+  },
+  {
+    slug: "ai-native-operators",
+    name: "AI-Native Individual Operators",
+    shortName: "AI-native operators",
+    tagline: "State that follows you across every tool and session",
+    painPoints: [
+      "No persistent state across sessions — every AI conversation starts from zero",
+      "Fragmented document sources scattered across email, drives, and screenshots",
+      "Repetitive context-setting in every new AI interaction",
+      "Lost commitments and forgotten action items between sessions",
+    ],
+    failureModes: [
+      "Lost commitments across tools",
+      "Tool-to-tool context loss",
+      "Silent state drift over time",
+      "Weak correction loop — no way to fix what the agent got wrong",
+    ],
+    dataTypes: [
+      "tasks",
+      "preferences",
+      "contacts",
+      "deadlines",
+      "notes",
+      "conversations",
+      "receipts",
+      "travel docs",
+      "meeting notes",
+    ],
+    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
+    solutionSummary:
+      "Neotoma persists every conversation, extracted entity, and commitment as versioned, schema-bound state. Switch between Claude, Cursor, and Codex without losing context. Corrections propagate deterministically.",
+  },
+  {
+    slug: "knowledge-workers",
+    name: "High-Context Knowledge Workers",
+    shortName: "Knowledge workers",
+    tagline: "Cross-document reasoning with entity resolution and timelines",
+    painPoints: [
+      "Information overload — hundreds of documents across multiple projects",
+      "No entity unification across documents, tools, and projects",
+      "Timeline fragmentation — no chronological view of events",
+      "Search limitations — can't find information across document types",
+    ],
+    failureModes: [
+      "Duplicate entities that diverge silently",
+      "Contradictory state across sources",
+      "Non-replayable decisions — can't reconstruct what was known when",
+      "Opaque relationship logic between entities",
+    ],
+    dataTypes: [
+      "people",
+      "companies",
+      "contracts",
+      "events",
+      "evidence chains",
+      "citations",
+      "timelines",
+      "research notes",
+      "financial records",
+    ],
+    schemaHotSpots: ["person", "contact", "company", "relationship", "event", "contract", "note"],
+    solutionSummary:
+      "Neotoma resolves entities across all your documents with canonical IDs, constructs timelines automatically, and lets you query relationships across sources. Every fact traces back to its provenance.",
+  },
+];
+
 export const SITE_METADATA = {
   canonicalUrl: "https://neotoma.io/",
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
-  pageTitle: "Neotoma | The truth layer for persistent AI agent memory",
+  pageTitle: "Neotoma | Deterministic state layer for long-running agents",
   pageDescription:
-    "Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory.",
+    "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
   heroImageUrl: "neotoma-hero.png",
 };
 

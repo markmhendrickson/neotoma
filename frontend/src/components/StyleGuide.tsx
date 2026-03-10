@@ -67,71 +67,71 @@ interface ColorSwatch {
 }
 
 const lightColors: ColorSwatch[] = [
-  { name: "Background Primary", value: "#FFFFFF", description: "Main canvas" },
+  { name: "Background Primary", value: "#FCFCFF", description: "Main canvas" },
   {
     name: "Background Secondary",
-    value: "#F9FAFB",
+    value: "#F4F2FF",
     description: "Cards/sections",
   },
   {
     name: "Background Tertiary",
-    value: "#F3F4F6",
+    value: "#EDE9FE",
     description: "Hover states",
   },
-  { name: "Foreground Primary", value: "#111827", description: "Primary text" },
+  { name: "Foreground Primary", value: "#1F1A33", description: "Primary text" },
   {
     name: "Foreground Secondary",
-    value: "#6B7280",
+    value: "#4C4566",
     description: "Secondary text",
   },
   {
     name: "Foreground Tertiary",
-    value: "#9CA3AF",
+    value: "#7B7399",
     description: "Tertiary text",
   },
-  { name: "Border", value: "#E5E7EB", description: "Borders" },
-  { name: "Primary", value: "#0066CC", description: "Trust/Action" },
-  { name: "Success", value: "#10B981", description: "Success states" },
-  { name: "Error", value: "#EF4444", description: "Error states" },
-  { name: "Warning", value: "#F59E0B", description: "Warning states" },
+  { name: "Border", value: "#DDD6FE", description: "Borders" },
+  { name: "Primary", value: "#7C3AED", description: "Brand violet" },
+  { name: "Success", value: "#059669", description: "Success states" },
+  { name: "Error", value: "#DC2626", description: "Error states" },
+  { name: "Warning", value: "#D97706", description: "Warning states" },
 ];
 
 const darkColors: ColorSwatch[] = [
-  { name: "Background Primary", value: "#0F172A", description: "Main canvas" },
+  { name: "Background Primary", value: "#0F0B1A", description: "Main canvas" },
   {
     name: "Background Secondary",
-    value: "#1E293B",
+    value: "#1A1230",
     description: "Cards/sections",
   },
   {
     name: "Background Tertiary",
-    value: "#334155",
+    value: "#2A1E4A",
     description: "Hover states",
   },
-  { name: "Foreground Primary", value: "#F1F5F9", description: "Primary text" },
+  { name: "Foreground Primary", value: "#F4F1FF", description: "Primary text" },
   {
     name: "Foreground Secondary",
-    value: "#94A3B8",
+    value: "#C9BEF3",
     description: "Secondary text",
   },
   {
     name: "Foreground Tertiary",
-    value: "#64748B",
+    value: "#9E8FD3",
     description: "Tertiary text",
   },
-  { name: "Border", value: "#334155", description: "Borders" },
-  { name: "Primary", value: "#3B82F6", description: "Trust/Action" },
-  { name: "Success", value: "#22C55E", description: "Success states" },
+  { name: "Border", value: "#3A2A63", description: "Borders" },
+  { name: "Primary", value: "#A78BFA", description: "Brand violet (dark mode)" },
+  { name: "Success", value: "#34D399", description: "Success states" },
   { name: "Error", value: "#F87171", description: "Error states" },
   { name: "Warning", value: "#FBBF24", description: "Warning states" },
 ];
 
 const entityColors: ColorSwatch[] = [
   { name: "Person", value: "#6366F1", description: "Indigo" },
-  { name: "Company", value: "#8B5CF6", description: "Purple" },
-  { name: "Location", value: "#EC4899", description: "Pink" },
+  { name: "Company", value: "#8B5CF6", description: "Violet" },
+  { name: "Location", value: "#14B8A6", description: "Teal" },
   { name: "Event", value: "#F59E0B", description: "Amber" },
-  { name: "Document", value: "#10B981", description: "Green" },
+  { name: "Document", value: "#10B981", description: "Emerald" },
 ];
 
 const spacingScale = [

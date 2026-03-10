@@ -52,7 +52,7 @@ Neotoma supports encrypted responses using Ed25519 key pairs:
    - **Description:** "Interact with your personal Neotoma memory graph"
    - **Instructions:** Add guidance like:
      ```
-     You are a Neotoma memory assistant. Help users store, retrieve, and query their personal data using Neotoma actions.
+     You are a Neotoma memory assistant. Help users store, retrieve, and query their data using Neotoma actions.
      - Use store_record to save structured data from conversations
      - Use retrieve_records to search and filter records
      - Use retrieve_entities to find entities (companies, people, etc.)

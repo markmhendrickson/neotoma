@@ -18,22 +18,72 @@ import {
 } from "lucide-react";
 
 const SECTIONS = [
-  { id: "colors", label: "Colors", icon: Palette, description: "Base colors, semantic colors, and entity type colors" },
-  { id: "typography", label: "Typography", icon: Type, description: "Font families, type scale, and text styles" },
-  { id: "style-guide", label: "Style Guide", icon: BookOpen, description: "UI copy rules and writing guidelines" },
-  { id: "page-formats", label: "Page formats", icon: FileTextIcon, description: "Page layout patterns and card usage guidelines" },
-  { id: "spacing", label: "Spacing", icon: Layout, description: "Spacing scale and layout density" },
-  { id: "buttons", label: "Buttons", icon: MousePointerClick, description: "Button variants and states" },
+  {
+    id: "colors",
+    label: "Colors",
+    icon: Palette,
+    description: "Base colors, semantic colors, and entity type colors",
+  },
+  {
+    id: "typography",
+    label: "Typography",
+    icon: Type,
+    description: "Font families, type scale, and text styles",
+  },
+  {
+    id: "style-guide",
+    label: "Style Guide",
+    icon: BookOpen,
+    description: "UI copy rules and writing guidelines",
+  },
+  {
+    id: "page-formats",
+    label: "Page formats",
+    icon: FileTextIcon,
+    description: "Page layout patterns and card usage guidelines",
+  },
+  {
+    id: "spacing",
+    label: "Spacing",
+    icon: Layout,
+    description: "Spacing scale and layout density",
+  },
+  {
+    id: "buttons",
+    label: "Buttons",
+    icon: MousePointerClick,
+    description: "Button variants and states",
+  },
   { id: "inputs", label: "Inputs", icon: Edit, description: "Input fields and form controls" },
-  { id: "tables", label: "Tables", icon: TableIcon, description: "Table components and functionality" },
+  {
+    id: "tables",
+    label: "Tables",
+    icon: TableIcon,
+    description: "Table components and functionality",
+  },
   { id: "cards", label: "Cards", icon: FileText, description: "Card components and layouts" },
   { id: "badges", label: "Badges", icon: Tag, description: "Badge and tag components" },
   { id: "tabs", label: "Tabs", icon: FileText, description: "Tab navigation components" },
-  { id: "progress", label: "Progress", icon: Loader2, description: "Progress indicators and loading states" },
-  { id: "skeleton", label: "Skeleton", icon: FileText, description: "Skeleton loading placeholders" },
+  {
+    id: "progress",
+    label: "Progress",
+    icon: Loader2,
+    description: "Progress indicators and loading states",
+  },
+  {
+    id: "skeleton",
+    label: "Skeleton",
+    icon: FileText,
+    description: "Skeleton loading placeholders",
+  },
   { id: "switch", label: "Switch", icon: Settings, description: "Toggle switch components" },
   { id: "tooltip", label: "Tooltip", icon: HelpCircle, description: "Tooltip components" },
-  { id: "collapsible", label: "Collapsible", icon: ChevronDown, description: "Collapsible sections" },
+  {
+    id: "collapsible",
+    label: "Collapsible",
+    icon: ChevronDown,
+    description: "Collapsible sections",
+  },
 ];
 
 export function DesignSystemIndex() {

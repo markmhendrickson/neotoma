@@ -1,42 +1,67 @@
-import { useState, useEffect } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark" | "system";
+export type Theme = "light" | "dark" | "system";
 
-export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Read from localStorage or default to system
-    const stored = localStorage.getItem("theme") as Theme | null;
-    return stored || "system";
-  });
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "system";
+  const stored = localStorage.getItem("theme") as Theme | null;
+  return stored && ["light", "dark", "system"].includes(stored) ? stored : "system";
+}
+
+function applyThemeToDOM(themeValue: Theme) {
+  const root = document.documentElement;
+  root.classList.remove("dark");
+  if (themeValue === "system") {
+    const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (systemPrefersDark) root.classList.add("dark");
+  } else if (themeValue === "dark") {
+    root.classList.add("dark");
+  }
+}
+
+type ThemeContextValue = {
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
+  cycleTheme: () => void;
+};
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
+
+  const setTheme = useCallback((next: Theme) => {
+    setThemeState(next);
+  }, []);
+
+  const cycleTheme = useCallback(() => {
+    setThemeState((prev) =>
+      prev === "light" ? "dark" : prev === "dark" ? "system" : "light"
+    );
+  }, []);
 
   useEffect(() => {
-    const root = document.documentElement;
-    const applyTheme = (themeValue: Theme) => {
-      // Remove existing dark class first
-      root.classList.remove("dark");
-      
-      if (themeValue === "system") {
-        const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        if (systemPrefersDark) {
-          root.classList.add("dark");
-        }
-      } else if (themeValue === "dark") {
-        root.classList.add("dark");
-      }
-      // light mode: don't add dark class (already removed above)
-    };
-
-    applyTheme(theme);
+    applyThemeToDOM(theme);
     localStorage.setItem("theme", theme);
-
-    // Listen for system theme changes when using system mode
     if (theme === "system") {
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = () => applyTheme("system");
+      const handleChange = () => applyThemeToDOM("system");
       mediaQuery.addEventListener("change", handleChange);
       return () => mediaQuery.removeEventListener("change", handleChange);
     }
   }, [theme]);
 
-  return { theme, setTheme };
+  return (
+    <ThemeContext.Provider value={{ theme, setTheme, cycleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme(): ThemeContextValue {
+  const value = useContext(ThemeContext);
+  if (!value) {
+    throw new Error("useTheme must be used within ThemeProvider");
+  }
+  return value;
 }
