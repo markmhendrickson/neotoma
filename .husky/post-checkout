@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Repo root (husky runs from repo root)
+REPO_ROOT="$(cd "$(dirname -- "$0")/.." && pwd)"
+
+# 1) Worktree env copy (same behavior as legacy .git/hooks/post-checkout)
+WORKTREE_PATH=""
+if [ -n "$GIT_DIR" ] && [ "$GIT_DIR" != ".git" ]; then
+  if [ -f "$GIT_DIR/gitdir" ]; then
+    GITDIR_CONTENT="$(cat "$GIT_DIR/gitdir" 2>/dev/null)"
+    [ -n "$GITDIR_CONTENT" ] && WORKTREE_PATH="$(echo "$GITDIR_CONTENT" | sed 's|/.git$||')"
+  fi
+fi
+if [ -z "$WORKTREE_PATH" ]; then
+  CURRENT_DIR="$(pwd)"
+  if [ -f "$CURRENT_DIR/.git" ] || [ -d "$CURRENT_DIR/.git/worktrees" ]; then
+    WORKTREE_PATH="$CURRENT_DIR"
+  fi
+fi
+if [ -n "$WORKTREE_PATH" ] && [ "$WORKTREE_PATH" != "$REPO_ROOT" ]; then
+  COPY_SCRIPT="$REPO_ROOT/scripts/copy-env-to-worktree.js"
+  [ -f "$COPY_SCRIPT" ] && command -v node >/dev/null 2>&1 && (cd "$WORKTREE_PATH" && node "$COPY_SCRIPT" 2>/dev/null) || true
+fi
+
+# 2) Refresh .cursor/ from foundation only when submodule commit actually changed
+#    (branch checkout: $3=1; then check if foundation changed between $1 and $2)
+REF_FILE="$REPO_ROOT/.git/foundation_cursor_sync_ref"
+if [ -d "$REPO_ROOT/foundation" ] && [ "$3" = "1" ]; then
+  FOUNDATION_CHANGED=$(cd "$REPO_ROOT" && git diff-tree -r "$1" "$2" --name-only 2>/dev/null | grep -q '^foundation' && echo 1) || true
+  if [ -n "$FOUNDATION_CHANGED" ]; then
+    CURRENT=$(cd "$REPO_ROOT" && git ls-tree "$2" foundation 2>/dev/null | awk '{print $3}') || true
+    [ -n "$CURRENT" ] && REPO_ROOT="$REPO_ROOT" "$REPO_ROOT/scripts/setup_cursor_from_foundation.sh" && echo "$CURRENT" > "$REF_FILE"
+  fi
+fi

@@ -190,7 +190,7 @@ export function MCPConfigurationPage() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">MCP Server Setup</h1>
         <p className="text-muted-foreground">
-          Neotoma is a privacy-first, idempotent, cross-platform personal-data substrate designed for AI-native workflows.
+          Neotoma is a privacy-first, idempotent, cross-platform data substrate designed for AI-native workflows.
         </p>
       </div>
 

@@ -1,9 +1,9 @@
 ---
-description: "Load when working in a git worktree or Cursor worktree: env files live in main repo root; run npm run copy:env or setup:env-hook; never commit .env*."
+description: "Rules for managing environment files when working in git worktrees, especially Cursor worktrees. Load when in a worktree or configuring .env across branches."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/worktree_env.mdc -->
+<!-- Source: foundation/.cursor/rules/worktree_env.mdc -->
 
 # Worktree Environment Rules
 

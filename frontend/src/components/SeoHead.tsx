@@ -20,7 +20,7 @@ export function SeoHead({ routePath }: SeoHeadProps) {
       <link rel="canonical" href={metadata.canonicalUrl} />
       <meta property="og:type" content={metadata.ogType} />
       <meta property="og:site_name" content={SEO_DEFAULTS.siteName} />
-      <meta property="og:locale" content={SEO_DEFAULTS.locale} />
+      <meta property="og:locale" content={metadata.ogLocale} />
       <meta property="og:title" content={metadata.title} />
       <meta property="og:description" content={metadata.description} />
       <meta property="og:url" content={metadata.canonicalUrl} />
@@ -34,7 +34,12 @@ export function SeoHead({ routePath }: SeoHeadProps) {
       <meta name="twitter:image" content={metadata.ogImageUrl} />
       <meta name="twitter:image:width" content={String(SEO_DEFAULTS.ogImageWidth)} />
       <meta name="twitter:image:height" content={String(SEO_DEFAULTS.ogImageHeight)} />
-      <script type="application/ld+json">{JSON.stringify(metadata.jsonLd)}</script>
+      {metadata.alternates.map((alternate) => (
+        <link key={`${alternate.hrefLang}:${alternate.href}`} rel="alternate" hrefLang={alternate.hrefLang} href={alternate.href} />
+      ))}
+      {metadata.jsonLd.map((entry, i) => (
+        <script key={i} type="application/ld+json">{JSON.stringify(entry)}</script>
+      ))}
     </Helmet>
   );
 }

@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { mkdirSync, readFileSync } from "fs";
 import fs from "fs/promises";
 import path from "path";
-import { getSqliteDb } from "./sqlite_client.js";
+import { clearSqliteCache, getSqliteDb } from "./sqlite_client.js";
 import { config } from "../../config.js";
 import { encryptColumn, decryptColumn, isEncryptedColumn } from "../../crypto/column_encryption.js";
 import { deriveKeys, deriveKeysFromMnemonic, hexToKey } from "../../crypto/key_derivation.js";
@@ -166,6 +166,14 @@ function mapSqliteErrorToPostgres(error: { errno?: number; code?: string; messag
   if (code === "SQLITE_CONSTRAINT" && msg.includes("unique")) return "23505";
   if (code === "SQLITE_CONSTRAINT" && msg.includes("foreign key")) return "23503";
   return undefined;
+}
+
+function isRecoverableSqliteIoError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const e = error as { code?: string; message?: string };
+  const code = (e.code || "").toUpperCase();
+  const message = (e.message || "").toLowerCase();
+  return code.startsWith("SQLITE_IOERR") || message.includes("disk i/o error");
 }
 
 function fromDbRow(table: string, row: Record<string, unknown>): Record<string, unknown> {
@@ -565,7 +573,6 @@ class LocalQueryBuilder {
   }
 
   async execute(): Promise<QueryResult<any>> {
-    const db = getSqliteDb();
     const whereClauses: string[] = [];
     const values: unknown[] = [];
 
@@ -583,53 +590,55 @@ class LocalQueryBuilder {
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-    try {
-      if (this.operation === "select") {
-        const countRow = this.countExact
-          ? db.prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`).get(values) as { count: number } | undefined
-          : undefined;
-        const count = countRow?.count;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const db = getSqliteDb();
+      try {
+        if (this.operation === "select") {
+          const countRow = this.countExact
+            ? db.prepare(`SELECT COUNT(*) as count FROM ${this.table} ${whereSql}`).get(values) as { count: number } | undefined
+            : undefined;
+          const count = countRow?.count;
 
-        if (this.countHead) {
-          return { data: null, error: null, count };
-        }
-
-        const orderSql =
-          this.orderBy.length > 0
-            ? `ORDER BY ${this.orderBy
-                .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
-                .join(", ")}`
-            : "";
-        const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
-        const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
-
-        const sql = `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
-        const rows = db.prepare(sql).all(values).map((row: any) => fromDbRow(this.table, row));
-
-        if (this.expectSingle) {
-          const row = rows[0] || null;
-          if (!row && !this.allowNullSingle) {
-            const detail =
-              whereSql ||
-              "no filter applied";
-            return {
-              data: null,
-              error: {
-                message: `SELECT on table '${this.table}' returned no rows (expected exactly one). Query had: ${detail}.`,
-                code: "PGRST116",
-              },
-            };
+          if (this.countHead) {
+            return { data: null, error: null, count };
           }
-          return { data: row, error: null, count };
+
+          const orderSql =
+            this.orderBy.length > 0
+              ? `ORDER BY ${this.orderBy
+                  .map((o) => `${o.column} ${o.ascending ? "ASC" : "DESC"}`)
+                  .join(", ")}`
+              : "";
+          const limitSql = this.limitValue !== null ? `LIMIT ${this.limitValue}` : "";
+          const offsetSql = this.offsetValue !== null ? `OFFSET ${this.offsetValue}` : "";
+
+          const sql = `SELECT ${this.selectColumns || "*"} FROM ${this.table} ${whereSql} ${orderSql} ${limitSql} ${offsetSql}`.trim();
+          const rows = db.prepare(sql).all(values).map((row: any) => fromDbRow(this.table, row));
+
+          if (this.expectSingle) {
+            const row = rows[0] || null;
+            if (!row && !this.allowNullSingle) {
+              const detail =
+                whereSql ||
+                "no filter applied";
+              return {
+                data: null,
+                error: {
+                  message: `SELECT on table '${this.table}' returned no rows (expected exactly one). Query had: ${detail}.`,
+                  code: "PGRST116",
+                },
+              };
+            }
+            return { data: row, error: null, count };
+          }
+
+          return { data: rows, error: null, count };
         }
 
-        return { data: rows, error: null, count };
-      }
-
-      if (this.operation === "insert" && this.insertPayload) {
-        const inserted: Record<string, unknown>[] = [];
-        for (const item of this.insertPayload) {
-          const payload = { ...item };
+        if (this.operation === "insert" && this.insertPayload) {
+          const inserted: Record<string, unknown>[] = [];
+          for (const item of this.insertPayload) {
+            const payload = { ...item };
 
           // Compatibility: observations.priority -> observations.source_priority
           if (
@@ -710,49 +719,49 @@ class LocalQueryBuilder {
             }
           }
 
-        }
-
-        if (this.selectColumns) {
-          return { data: this.expectSingle ? inserted[0] : inserted, error: null };
-        }
-        return { data: null, error: null };
-      }
-
-      if (this.operation === "update" && this.updatePayload) {
-        const payload = { ...this.updatePayload };
-        const columns = Object.keys(payload);
-        const updateValues = columns.map((column) => toDbValue(this.table, column, payload[column]));
-        const updateSql = columns.map((column) => `${column} = ?`).join(", ");
-
-        db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([...updateValues, ...values]);
-
-        if (this.selectColumns) {
-          const rows = db.prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`).all(values).map((row: any) => fromDbRow(this.table, row));
-          if (this.expectSingle) {
-            const row = rows[0] || null;
-            if (!row && !this.allowNullSingle) {
-              const detail =
-                whereSql ||
-                "no filter applied";
-              return {
-                data: null,
-                error: {
-                  message: `UPDATE on table '${this.table}' then SELECT returned no rows (expected exactly one). Query had: ${detail}.`,
-                  code: "PGRST116",
-                },
-              };
-            }
-            return { data: row, error: null };
           }
-          return { data: rows, error: null };
-        }
-        return { data: null, error: null };
-      }
 
-      if (this.operation === "upsert" && this.upsertPayload) {
-        const inserted: Record<string, unknown>[] = [];
-        for (const item of this.upsertPayload) {
-          const payload = { ...item };
+          if (this.selectColumns) {
+            return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+          }
+          return { data: null, error: null };
+        }
+
+        if (this.operation === "update" && this.updatePayload) {
+          const payload = { ...this.updatePayload };
+          const columns = Object.keys(payload);
+          const updateValues = columns.map((column) => toDbValue(this.table, column, payload[column]));
+          const updateSql = columns.map((column) => `${column} = ?`).join(", ");
+
+          db.prepare(`UPDATE ${this.table} SET ${updateSql} ${whereSql}`).run([...updateValues, ...values]);
+
+          if (this.selectColumns) {
+            const rows = db.prepare(`SELECT ${this.selectColumns} FROM ${this.table} ${whereSql}`).all(values).map((row: any) => fromDbRow(this.table, row));
+            if (this.expectSingle) {
+              const row = rows[0] || null;
+              if (!row && !this.allowNullSingle) {
+                const detail =
+                  whereSql ||
+                  "no filter applied";
+                return {
+                  data: null,
+                  error: {
+                    message: `UPDATE on table '${this.table}' then SELECT returned no rows (expected exactly one). Query had: ${detail}.`,
+                    code: "PGRST116",
+                  },
+                };
+              }
+              return { data: row, error: null };
+            }
+            return { data: rows, error: null };
+          }
+          return { data: null, error: null };
+        }
+
+        if (this.operation === "upsert" && this.upsertPayload) {
+          const inserted: Record<string, unknown>[] = [];
+          for (const item of this.upsertPayload) {
+            const payload = { ...item };
 
           if (this.table === "entity_snapshots" && !("canonical_name" in payload)) {
             const derived = deriveCanonicalNameFromObject(payload["snapshot"]);
@@ -776,24 +785,31 @@ class LocalQueryBuilder {
           if (this.table === "entity_snapshots") {
             await ensureEntityRowForSnapshot(db, payload);
           }
+          }
+          if (this.selectColumns) {
+            return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+          }
+          return { data: null, error: null };
         }
-        if (this.selectColumns) {
-          return { data: this.expectSingle ? inserted[0] : inserted, error: null };
+
+        if (this.operation === "delete") {
+          db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
+          return { data: null, error: null };
         }
-        return { data: null, error: null };
-      }
 
-      if (this.operation === "delete") {
-        db.prepare(`DELETE FROM ${this.table} ${whereSql}`).run(values);
-        return { data: null, error: null };
+        return { data: null, error: { message: "Unsupported operation" } };
+      } catch (error: any) {
+        if (attempt === 0 && isRecoverableSqliteIoError(error)) {
+          clearSqliteCache();
+          continue;
+        }
+        const msg = error.message || String(error);
+        const code = mapSqliteErrorToPostgres(error);
+        return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
       }
-
-      return { data: null, error: { message: "Unsupported operation" } };
-    } catch (error: any) {
-      const msg = error.message || String(error);
-      const code = mapSqliteErrorToPostgres(error);
-      return { data: null, error: { message: msg, ...(code ? { code } : {}) } };
     }
+
+    return { data: null, error: { message: "SQLite recovery retry exhausted" } };
   }
 
   then<TResult1 = QueryResult<any>, TResult2 = never>(

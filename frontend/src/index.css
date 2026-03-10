@@ -244,3 +244,19 @@
   white-space: nowrap;
 }
 
+
+/* Code blocks: Neotoma palette, desaturated for readability (Surface, Border, Text primary) */
+@layer components {
+  .code-block-palette {
+    border-width: 1px;
+    border-color: #E5E2EC;
+    background-color: #FAF9FC;
+    color: #1F1A33;
+  }
+  .dark .code-block-palette {
+    border-color: #2D2A3A;
+    background-color: #1E1C28;
+    color: #F4F1FF;
+  }
+}
+

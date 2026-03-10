@@ -3,7 +3,18 @@ name: commit
 description: commit
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_commands/commit.md -->
+<!-- Source: foundation/.cursor/skills/commit/SKILL.md -->
+
+---
+name: commit
+description: Commit submodules and/or main repo with structured messages; supports /commit repo, /commit <submodule>.
+triggers:
+  - commit
+  - commit repo
+  - commit foundation
+  - submodule commit
+  - /commit
+---
 
 # commit
 
@@ -14,6 +25,8 @@ description: commit
 1. **No parameter** (default): Commit ALL submodules first, then the main repository
 2. **"repo" parameter** (e.g., `/commit repo`): Commit ONLY the main repository, skip all submodules
 3. **Submodule name parameter** (e.g., `/commit foundation`): Commit ONLY that specific submodule, skip main repository
+
+**PUSH RECONCILIATION:** Whenever a push is rejected because the remote has commits you do not have, always: (1) pull to reconcile: `git pull --rebase origin <branch>` or `git pull origin <branch> --no-rebase --no-edit`, (2) resolve any merge/rebase conflicts, (3) push again: `git push origin HEAD`. Do not report push failure without attempting reconciliation.
 
 ---
 
@@ -136,9 +149,15 @@ fi
 
    if git remote | grep -q .; then
      echo "📤 Pushing submodule to remote..."
-     git push origin HEAD
+     git push origin HEAD || {
+       echo "📥 Push rejected: reconciling with remote..."
+       BRANCH=$(git branch --show-current)
+       git pull --rebase origin "$BRANCH"  # resolve conflicts if any, then:
+       git push origin HEAD
+     }
    fi
    ```
+   **Push reconciliation:** If push is rejected (remote has commits you do not have), always: (1) pull to reconcile: `git pull --rebase origin <branch>` or `git pull origin <branch> --no-rebase --no-edit`, (2) resolve any conflicts, (3) push again. Do not report push failure without attempting reconciliation.
 
 7. **Display commit message:**
    ```bash
@@ -227,11 +246,14 @@ fi
            exit 1
          }
 
-         # Push submodule (if remote exists)
+         # Push submodule (if remote exists); reconcile and retry if rejected
          if git remote | grep -q .; then
            echo "  📤 Pushing to remote..."
            git push origin HEAD || {
-             echo "  ⚠️  Warning: Failed to push submodule: $submodule"
+             echo "  📥 Push rejected: reconciling with remote..."
+             BRANCH=$(git branch --show-current)
+             git pull --rebase origin "$BRANCH"
+             git push origin HEAD || echo "  ⚠️  Warning: Failed to push submodule: $submodule"
            }
          fi
 
@@ -366,12 +388,17 @@ Nested repositories must be committed BEFORE the main repository to maintain con
              exit 1
            }
 
-           # Push nested repo (if remote exists and configured)
+           # Push nested repo (if remote exists); reconcile and retry if rejected
            if git remote | grep -q .; then
              echo "  📤 Pushing to remote..."
              git push || {
-               echo "  ⚠️  Warning: Failed to push nested repository: $repo_path"
-               echo "  Continuing with main repository commit..."
+               echo "  📥 Push rejected: reconciling with remote..."
+               BRANCH=$(git branch --show-current)
+               git pull --rebase origin "$BRANCH"
+               git push || {
+                 echo "  ⚠️  Warning: Failed to push nested repository: $repo_path"
+                 echo "  Continuing with main repository commit..."
+               }
              }
            else
              echo "  ℹ️  No remote configured, skipping push"
@@ -561,7 +588,7 @@ development:
      - Configuration (`*.json`, `*.yaml`, `*.toml`, `*.config.*`)
      - Tests (`**/*.test.*`, `**/*.spec.*`, or configured test paths)
      - Build/deployment (`Dockerfile`, `*.sh`, or configured paths)
-     - **Database migrations** (`**/migrations/*.sql`) - these indicate release execution
+     - **Database migrations** (`supabase/migrations/**`, `**/migrations/*.sql`) - these indicate release execution
    - Identify major functional areas affected
 
 3. **Analyze Change Magnitude:**
@@ -707,7 +734,7 @@ fi
 # (Same check as above if nested repos are configured)
 ```
 
-If final security check passes, proceed to git commit with the comprehensive commit message and push to origin.
+If final security check passes, proceed to git commit with the comprehensive commit message and push to origin. **If push is rejected** (remote has new commits): run `git pull --rebase origin <current_branch>` (or `git pull origin <current_branch> --no-rebase --no-edit`), resolve any conflicts, then `git push origin HEAD` again. Always reconcile and retry before reporting push failure.
 
 **WORKTREE DETECTION:** Follow the Worktree Rule (`.claude/rules/foundation_worktree_env.md` or `foundation/agent_instructions/cursor_rules/worktree_env.md`) to restrict all commit activity to the current worktree.
 

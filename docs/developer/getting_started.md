@@ -47,14 +47,14 @@ If you type `neotoma` and have a global install, the shell may run that instead 
 
 ### Agent path
 
-If you want your assistant to execute setup for you, use the onboarding workflow in [Agent onboarding](agent_onboarding.md). The sequence starts with:
+If you want your assistant to execute setup for you, use the onboarding workflow in [install.md](../../install.md). The sequence starts with:
 
 ```bash
 npm install -g neotoma
 neotoma init
 ```
 
-Then the agent previews candidate personal data from current session context/tool outputs and asks for confirmation before first save.
+Then the agent previews candidate data from current session context/tool outputs and asks for confirmation before first save.
 
 ### Human path
 

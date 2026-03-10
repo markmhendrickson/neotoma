@@ -1,9 +1,9 @@
 ---
-description: "Load when checking logs, configuring services, querying DBs, or managing resources: prefer CLI over dashboard; check which tool available; use Management API if CLI fails; provide install steps if missing."
+description: "Prefer CLI tools over dashboard/UI for logs, DB queries, config, and admin tasks. Load when checking logs, configuring services, or querying data."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/prefer_cli_tools.mdc -->
+<!-- Source: foundation/.cursor/rules/prefer_cli_tools.mdc -->
 
 
 # Prefer CLI Tools Rule
@@ -18,9 +18,9 @@ Ensures agents always prefer CLI tools over dashboard/UI access when checking lo
 
 When any of the following occur, agents MUST use CLI tools instead of dashboard/UI:
 
-- **Checking logs** (SendGrid, application logs)
-- **Querying databases** (PostgreSQL)
-- **Configuring services** (SMTP, environment variables)
+- **Checking logs** (Supabase, SendGrid, application logs)
+- **Querying databases** (Supabase, PostgreSQL)
+- **Configuring services** (Supabase settings, SMTP, environment variables)
 - **Managing resources** (users, projects, deployments)
 - **Checking status** (service health, configuration state)
 - **Installing dependencies** (package managers, tools)
@@ -33,7 +33,7 @@ Before suggesting dashboard access, check if CLI tools are available:
 
 1. **Check if tool is installed:**
    ```bash
-   which psql
+   which supabase
    which op
    which gh
    which aws
@@ -51,8 +51,10 @@ Before suggesting dashboard access, check if CLI tools are available:
 
 ### Step 2: Use CLI Tools
 
-**For PostgreSQL:**
-- Use `psql` for database queries
+**For Supabase:**
+- Use `supabase` CLI for logs, configuration, database queries
+- Install if not available: `brew install supabase/tap/supabase`
+- Authenticate: `supabase login`
 
 **For 1Password:**
 - Use `op` CLI for credential access
@@ -89,17 +91,20 @@ If CLI is not installed, provide installation steps:
 
 ## Examples
 
-### ✅ Correct: Use PostgreSQL CLI for Queries
+### ✅ Correct: Use Supabase CLI for Logs
 
 ```bash
-# Check if psql is installed
-if ! command -v psql &> /dev/null; then
-  echo "Installing PostgreSQL client..."
-  brew install libpq
+# Check if Supabase CLI is installed
+if ! command -v supabase &> /dev/null; then
+  echo "Installing Supabase CLI..."
+  brew install supabase/tap/supabase
 fi
 
+# View auth logs
+supabase projects logs --project-ref {PROJECT_ID} --type auth
+
 # Query database
-psql "$DATABASE_URL" -c "SELECT * FROM users ORDER BY created_at DESC LIMIT 5"
+supabase db query "SELECT * FROM auth.users ORDER BY created_at DESC LIMIT 5"
 ```
 
 ### ✅ Correct: Use 1Password CLI
@@ -123,14 +128,14 @@ gh run list --workflow=ci.yml
 
 ```bash
 # WRONG - Don't suggest dashboard without checking CLI first
-echo "Go to Dashboard → Authentication → Logs"
+echo "Go to Supabase Dashboard → Authentication → Logs"
 ```
 
 ### ❌ Incorrect: Skip CLI Installation
 
 ```bash
 # WRONG - Don't skip CLI if it can be installed
-if ! command -v psql &> /dev/null; then
+if ! command -v supabase &> /dev/null; then
   echo "CLI not available, use dashboard"  # Should install CLI instead
 fi
 ```
@@ -139,19 +144,18 @@ fi
 
 **Always check for CLI tools in this order:**
 
-1. **Official CLI** (psql, op, gh, aws, gcloud)
+1. **Official CLI** (supabase, op, gh, aws, gcloud)
 2. **Package manager tools** (brew, npm, pip)
-3. **Management/API tools** (REST APIs)
-4. **Script-based tools** (curl + API, custom scripts)
-5. **Dashboard/UI** (only as last resort)
+3. **Script-based tools** (curl + API, custom scripts)
+4. **Dashboard/UI** (only as last resort)
 
 ## Installation Commands
 
 **Common CLI tools:**
 
 ```bash
-# PostgreSQL client
-brew install libpq
+# Supabase CLI
+brew install supabase/tap/supabase
 
 # GitHub CLI
 brew install gh
@@ -183,10 +187,10 @@ Dashboard/UI access is acceptable only when:
 
 1. **CLI tool doesn't exist** for the functionality
 2. **CLI tool is not available** and cannot be installed
-3. **CLI tool lacks required functionality** AND Management/API alternatives don't exist
+3. **CLI tool lacks required functionality** (rare edge cases)
 4. **User explicitly requests dashboard** access
 
-Even in these cases, document that CLI or Management API would be preferred if available.
+Even in these cases, document that CLI would be preferred if available.
 
 ## Related Documents
 
@@ -215,7 +219,7 @@ Load this document when:
 2. Provide installation steps if CLI is not installed
 3. Use CLI tools when available and functional
 4. Verify CLI functionality after installation
-5. Document CLI/API preference even when dashboard is used
+5. Document CLI preference even when dashboard is used
 
 ### Forbidden Patterns
 
@@ -230,4 +234,4 @@ Load this document when:
 - [ ] Provided installation steps if CLI not installed
 - [ ] Used CLI tool for the task (if available)
 - [ ] Verified CLI functionality after installation
-- [ ] Documented CLI/API preference in scripts/docs
+- [ ] Documented CLI preference in scripts/docs

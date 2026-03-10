@@ -1,9 +1,9 @@
 ---
-description: "Load when executing a plan that includes test tasks: implement full test logic and assertions, not skeleton TODOs; run tests; mark test todos complete only after tests are implemented."
+description: "Implement tests as part of plan execution, not just skeleton files. Load when executing plans that include test tasks."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/plan_execution_testing.mdc -->
+<!-- Source: foundation/.cursor/rules/plan_execution_testing.mdc -->
 
 # Plan Execution Testing Rule
 

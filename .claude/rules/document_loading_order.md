@@ -1,9 +1,9 @@
 ---
-description: "Load at session start or when uncertain about doc order: load foundation docs first, then foundation submodule when needed, then task-specific docs; follow dependency graph."
+description: "Load documentation in the correct order to establish context before proceeding. Load when starting work that requires multiple docs or rule files."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/document_loading_order.mdc -->
+<!-- Source: foundation/.cursor/rules/document_loading_order.mdc -->
 
 # Document Loading Order Rule
 

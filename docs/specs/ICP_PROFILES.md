@@ -1,6 +1,8 @@
 # Neotoma ICP Profiles
 *(Detailed Profiles for All Target User Segments)*
+
 ## Scope
+
 This document covers:
 - Total addressable market summary (deduplicated across ICPs)
 - Detailed profiles for all ICPs across all tiers
@@ -8,241 +10,624 @@ This document covers:
 - Key acquisition channels (how to reach each ICP)
 - Estimated worldwide population (market size estimates)
 - Pain points and use cases per ICP
-- Document types and workflows
 - Value propositions and adoption characteristics
 - A-ha moments (when users realize the value)
 - Ready-to-pay thresholds (when users are willing to pay)
 - Key barriers to acquisition, activation, and retention
 - Product solutions for each barrier
 - Technical requirements and constraints
+
 This document does NOT cover:
 - Tier prioritization (see ICP_PRIORITY_TIERS.md)
 - GTM strategy (see ICP_PRIORITY_TIERS.md)
 - Product roadmap (see MVP_OVERVIEW.md)
+
 ## Total Addressable Market Summary
-### Tier 1 (MVP Target) - ~15-30M individuals
-- **AI-Native Individual Operators:** 2-5M
-- **High-Context Knowledge Workers:** 10-20M (some overlap with AI-Native)
-- **AI-Native Founders & Small Teams:** 500K-1M founders (2-5M potential team users)
-- **Builders of agentic systems:** 200K-500K (overlap with Tier 2 Developer Integrators and AI Tool Integrators)
-- **Note:** Significant overlap between AI-Native and Knowledge Workers (~30-40% overlap estimated)
-- **Deduplicated Tier 1:** ~12-25M individuals
-### Tier 2 (Early B2B) - ~4-8M users
+
+### Tier 1 (Developer Release — Primary) - ~2-7M individuals
+- **AI Infrastructure Engineers:** 200K-500K
+- **Agent System Builders:** 200K-500K (overlap with AI Infrastructure Engineers ~20-30%)
+- **AI-native Operators (builder-grade):** 2-5M (overlap with Agent System Builders ~20-30%)
+- **Note:** Significant overlap between Operators and Builders (~20-30% estimated)
+- **Deduplicated Tier 1:** ~2-5M individuals
+
+### Tier 2 (Developer Release — Secondary) - ~100K-300K
+- **Toolchain Integrators:** 100K-300K (framework/SDK maintainers who would add Neotoma as a dependency)
+- **Note:** High overlap with Tier 1 Agent System Builders and AI Infrastructure Engineers (~40-50%)
+- **Deduplicated Tier 2:** ~50K-200K individuals
+
+### Tier 3 (Future — Post Developer Release) - ~10-25M individuals
+- **Knowledge Workers:** 10-20M
+- **Small Teams (2-20):** 500K-1M founders (2-5M potential team users)
+- **Note:** Knowledge Workers require GUI and simplified onboarding. Small Teams require multi-user features.
+- **Deduplicated Tier 3:** ~10-22M individuals
+
+### Deferred B2B ICPs - ~4-8M users
 - **Hybrid Product Teams:** 50K-100K teams (2-5M users)
 - **Cross-Functional Ops Teams:** 30K-60K teams (1-2M users)
-- **Developer Integrators:** 500K-1M
-- **AI Tool Integrators:** 200K-500K (overlap with Developer Integrators)
-- **Note:** Overlap between Developer Integrators and AI Tool Integrators (~50% overlap)
-- **Deduplicated Tier 2:** ~3-6M users
-### Tier 3 (B2C Power Users) - ~150-300M individuals
+- **Note:** These ICPs require multi-user features and organizational semantics not in developer-release scope.
+- **Deduplicated Deferred B2B:** ~3-6M users
+
+### B2C Power Users (Long-Term) - ~150-300M individuals
 - **Cross-Border Solopreneurs:** 5-10M
 - **Multi-System Information Workers:** 50-100M
 - **High-Entropy Households:** 100-200M
-- **Note:** Significant overlap between these segments (many solopreneurs are also multi-system workers; family managers overlap with both)
-- **Deduplicated Tier 3:** ~100-150M individuals
-### Tier 4 (Strategy Layer - Agentic Portfolio) - ~4-8M individuals
+- **Note:** Significant overlap between segments. Requires education and lower friction than developer release provides.
+- **Deduplicated B2C:** ~100-150M individuals
+
+### Future Product Layer: Strategy (Agentic Portfolio) - ~4-8M individuals
 - **High-Net-Worth Individuals:** 2-5M
 - **Multi-Jurisdiction Residents:** 10-20M (overlap with HNW)
 - **Crypto-Native Power Users:** 500K-1M
-- **Startup Founders with Equity:** 200K-500K (overlap with Tier 1 founders)
+- **Startup Founders with Equity:** 200K-500K
 - **Family-Office-Lite:** 1-2M (overlap with HNW)
-- **Note:** Significant overlap between HNW, Multi-Jurisdiction, and Family-Office-Lite
-- **Deduplicated Tier 4:** ~3-6M individuals
-### Tier 5 (Execution Layer - Agentic Wallet) - ~400K-900K users
+- **Deduplicated Strategy Layer:** ~3-6M individuals
+
+### Future Product Layer: Execution (Agentic Wallet) - ~400K-900K users
 - **High-Frequency On-Chain Actors:** 50K-100K
 - **Agent-Compatible Crypto Users:** 100K-200K
 - **Protocol Explorers:** 200K-500K
 - **Bitcoin/Stacks Power Users:** 50K-100K
-- **Note:** Overlap between crypto segments (~40-50% overlap)
-- **Deduplicated Tier 5:** ~300K-600K users
-### Tier 6 (Enterprise) - ~17K-35K companies
+- **Deduplicated Execution Layer:** ~300K-600K users
+
+### Future Product Layer: Enterprise - ~17K-35K companies
 - **Mid-Market + Enterprise Teams:** 10K-20K companies
 - **Companies with Dozens of AI Agents:** 5K-10K companies
 - **Organizations Requiring AI Governance:** 2K-5K organizations
-- **Note:** Significant overlap (governance orgs are subset of enterprise)
-- **Deduplicated Tier 6:** ~12K-25K companies
-### Cross-Tier Overlap Analysis
-**Major Cross-Tier Overlaps:**
-- **Tier 1 Founders ↔ Tier 4 Startup Founders:** ~50-70% overlap (200K-500K of Tier 1 founders also in Tier 4)
-- **Tier 1 AI-Native ↔ Tier 2 Developer Integrators:** ~20-30% overlap (100K-300K overlap)
-- **Tier 1 Knowledge Workers ↔ Tier 3 Multi-System Workers:** ~30-40% overlap (3-8M overlap)
-- **Tier 4 Crypto Users ↔ Tier 5 Crypto Users:** ~30-50% overlap (150K-500K overlap)
-- **Tier 2 Team Members ↔ Tier 1 Individuals:** ~40-60% overlap (team members also counted as individuals)
-### Unique Addressable Market (Fully Deduplicated)
-**Tier 1 (Unique):** ~10-20M individuals
-- After removing cross-tier overlaps with Tier 2, Tier 3, Tier 4
-**Tier 2 (Unique):** ~2-4M users
-- After removing overlaps with Tier 1 and internal overlaps
-**Tier 3 (Unique):** ~80-120M individuals
-- After removing overlaps with Tier 1 and internal overlaps
-**Tier 4 (Unique):** ~2-4M individuals
-- After removing overlaps with Tier 1, Tier 5, and internal overlaps
-**Tier 5 (Unique):** ~200K-400K users
-- After removing overlaps with Tier 4 and internal overlaps
-**Tier 6 (Unique):** ~10K-20K companies
-- After removing internal overlaps
-**Total Unique Addressable Market:** ~95-150M unique individuals + ~10K-20K unique companies
-### Addressable Market (Purchasing Power Adjusted)
-**Economic Constraints:**
-- Tier 1: ~60-70% have purchasing power → **6-14M addressable**
-- Tier 2: ~80-90% have purchasing power (B2B) → **1.6-3.6M addressable**
-- Tier 3: ~20-30% have purchasing power → **16-36M addressable**
-- Tier 4: ~80-90% have purchasing power (HNW) → **1.6-3.6M addressable**
-- Tier 5: ~70-80% have purchasing power → **140K-320K addressable**
-- Tier 6: ~70-80% have purchasing power (enterprise) → **7K-16K addressable**
-**Total Addressable Market (Purchasing Power Adjusted):** ~26-58M individuals + ~7K-16K companies
-### Summary
-- **Total Unique Market (all tiers):** ~95-150M individuals + ~10K-20K companies
-- **Addressable Market (with purchasing power):** ~26-58M individuals + ~7K-16K companies
-- **MVP Target Market (Tier 1, purchasing power adjusted):** ~6-14M individuals
-**Key Constraints:**
-- Cross-tier overlaps reduce unique market by ~20-30%
-- Geographic/economic constraints reduce addressable market by ~60-70% for B2C, ~20-30% for B2B
-- MVP focus on Tier 1 represents ~10-25% of total addressable market
-# TIER 1 — MVP Target ICPs
+- **Deduplicated Enterprise:** ~12K-25K companies
+
+### Developer Release Target Market Summary
+- **Developer Release Target (Tier 1, deduplicated):** ~2-5M individuals
+- **Developer Release Addressable (with purchasing power, ~70-80%):** ~1.5-4M individuals
+- **Key constraint:** Developer release serves infrastructure-adjacent builders, not broad consumer or knowledge-worker audiences
+# TIER 1 — Primary ICPs (Developer Release)
+
+These ICPs align directly with Neotoma's developer release: a deterministic state layer distributed as a local npm package with MCP, CLI, and API interfaces. They experience immediate pain from non-deterministic agent state and are willing to adopt infrastructure-grade tooling.
+
 ## Tier 1 Key Acquisition Channels Summary
+
 ### Community Channels (Highest Priority)
-- **AI tool communities:** Reddit (r/ChatGPT, r/ClaudeAI, r/Cursor), Discord servers for AI tools
-- **Developer communities:** GitHub, Hacker News, Indie Hackers, Product Hunt
-- **Startup communities:** Y Combinator, Indie Hackers, Product Hunt, Hacker News, startup Discord servers
-- **Professional communities:** LinkedIn (targeted to analysts, researchers, consultants, lawyers), industry-specific forums
+- **Infrastructure and AI engineering communities:** GitHub, Hacker News, AI/ML Discord servers, agent framework communities (LangChain, CrewAI, AutoGen)
+- **AI tool communities:** Reddit (r/ChatGPT, r/ClaudeAI, r/Cursor, r/LocalLLaMA), Discord servers for AI tools
+- **Developer communities:** Indie Hackers, Product Hunt, Dev.to, Stack Overflow
+
 ### Content Marketing
-- **AI tool content:** AI tool comparison blogs, YouTube channels, Twitter/X AI communities, AI productivity content
-- **Professional content:** Case studies, research methodology blogs, legal tech publications, consulting industry publications
-- **Startup content:** Startup tool blogs, founder case studies, "tools for startups" content
+- **Agent architecture content:** Blog posts on state integrity patterns, deterministic memory vs RAG, debugging agent workflows
+- **Integration content:** MCP integration tutorials, CLI usage guides, API reference content
+- **Comparison content:** "Neotoma vs RAG memory" explainers, memory model guarantee comparisons
+
 ### Partnerships & Integrations
-- **AI tool integrations:** Integration marketplace listings (Cursor, Raycast), MCP server directories
-- **Professional tool integrations:** Legal tech platforms, research tools, consulting software integrations
-- **Startup partnerships:** Startup accelerators, co-working spaces, founder communities
+- **Agent framework integrations:** LangChain, CrewAI, AutoGen ecosystem listings
+- **MCP server directories:** MCP server registries, tool directories
+- **AI tool integrations:** Cursor, Claude, ChatGPT integration marketplace listings
+
 ### SEO Keywords
-- **AI memory:** "AI memory", "persistent AI context", "ChatGPT memory"
-- **Professional tools:** "document management for researchers", "legal research tools", "consultant knowledge base"
-- **Startup tools:** "startup knowledge base", "founder tools", "startup document management"
-### Paid Channels
-- **Google Ads:** AI tool keywords, professional tool keywords
-- **LinkedIn Ads:** Job title targeting (analysts, researchers, consultants, lawyers, founders)
-- **Twitter/X Ads:** AI tool users, startup community
-- **Product Hunt:** Launches for early adopter visibility
-### Conferences & Events
-- **Professional:** Legal tech conferences, research methodology conferences, consulting conferences
-- **Startup:** Y Combinator events, startup accelerators, founder meetups
+- **Infrastructure:** "deterministic agent memory", "agent state management", "memory invariant"
+- **Builder:** "MCP memory server", "persistent agent memory", "agent memory backend"
+- **Operator:** "AI memory across tools", "persistent AI context", "cross-tool memory"
+
 ### Priority Ranking
-1. **AI tool communities** (Reddit, Discord) - highest intent, immediate activation
-2. **Developer communities** (GitHub, Hacker News) - early adopters, strong word-of-mouth
-3. **LinkedIn targeting** (professional roles) - scalable, high-quality leads
-4. **Product Hunt launches** - early adopter visibility, founder reach
-5. **MCP server directories** - direct integration with target tools
-6. **Content marketing** - SEO and thought leadership
-7. **Paid ads** - scalable but lower intent
-## 1. AI-Native Individual Operators
+1. **GitHub + Hacker News** — highest-signal builder communities
+2. **Agent framework communities** — direct access to agent system builders
+3. **MCP server directories** — direct integration with target tools
+4. **AI tool communities** (Reddit, Discord) — reach builder-grade operators
+5. **Content marketing** — SEO and thought leadership on state integrity
+6. **Product Hunt** — early adopter visibility
+
+## 1. AI Infrastructure Engineers
+
 ### Profile
-Heavy users of ChatGPT, Claude, Raycast, Cursor, and other AI-native tools. They use AI tools daily for work and personal tasks. They understand the limitations of stateless AI interactions and feel the pain of fragmented memory most acutely.
+Engineers building the runtimes, orchestration layers, evaluation harnesses, and observability pipelines that agents run on. They evaluate Neotoma as a dependency that provides state integrity guarantees their own systems lack. Adoption is evaluation-first: they assess Neotoma's guarantees, then adopt in development workflows before recommending to downstream builders.
+
 ### Key Visible Criteria
-- **Tool usage:** Active ChatGPT Plus/Pro subscriber, Claude Pro user, or Cursor/Raycast user
-- **Activity signals:** Posts in AI tool communities (Reddit, Discord), follows AI tool creators on Twitter/X
-- **Behavior:** Uses AI tools daily, mentions AI tools in social profiles, has AI tool integrations
-- **Proxy indicators:** GitHub profile with AI-related projects, Product Hunt early adopter badge, Indie Hackers member
-- **Content consumption:** Engages with AI tool comparison content, AI productivity content, MCP/server content
+- **Job titles:** Platform Engineer, ML Infrastructure Engineer, AI/ML Engineer, Agent Infrastructure Lead, Reliability Engineer
+- **Activity signals:** Builds or maintains agent runtimes, orchestration frameworks, evaluation pipelines; posts about agent reliability, state management, observability
+- **Tool usage:** Kubernetes, Ray, Temporal, event sourcing frameworks, state machines, observability tools (Datadog, Grafana)
+- **Proxy indicators:** GitHub repos with agent infrastructure projects, conference talks on agent reliability, contributions to orchestration frameworks
+- **Content consumption:** Engages with infrastructure engineering content, distributed systems content, agent reliability content
+
+### Key Acquisition Channels
+- **Developer communities:** GitHub, Hacker News, AI/ML infrastructure Discord servers
+- **Content marketing:** Blog posts on agent state management, deterministic memory patterns, state integrity architecture
+- **Conferences:** AI infrastructure conferences, MLOps conferences, distributed systems meetups
+- **Partnerships:** Agent framework maintainers, MLOps vendors, observability tool integrations
+- **SEO:** "agent state management", "deterministic agent memory", "agent observability", "agent reliability" keywords
+
+### Estimated Worldwide Population
+**200K-500K** (engineers working on agent infrastructure, MLOps, and agent platform engineering globally)
+
+### Pain Points
+- **Cannot reproduce agent runs:** Same inputs produce different outputs; no way to trace why
+- **State mutations invisible:** Agent state changes without audit trail; debugging requires manual log archaeology
+- **No provenance trail:** Cannot trace agent decisions back to source observations
+- **Evaluation is non-deterministic:** Cannot replay agent state to validate behavior changes
+- **Infrastructure fragmentation:** Each agent system invents its own state management
+
+### Use Cases
+- **State management dependency:** Integrate Neotoma as the state layer in agent runtime infrastructure
+- **Evaluation harnesses:** Use replayable timeline for agent evaluation and regression testing
+- **Observability pipelines:** Feed Neotoma's versioned history into observability and debugging tools
+- **Production debugging:** Replay agent state to reproduce and diagnose production failures
+
+### Workflows
+1. **Evaluate guarantees** → Review Neotoma's invariants (determinism, versioning, replayability)
+2. **Integrate in dev environment** → Wire Neotoma into agent runtime via MCP or API
+3. **Validate reproducibility** → Run agent workflows and verify state is deterministic
+4. **Recommend to team** → Propose Neotoma as standard state layer for agent infrastructure
+
+### Value Proposition
+- **Deterministic state evolution:** Same observations always produce the same entity state
+- **Replayable timeline:** Full state reconstruction from observation log enables debugging and evaluation
+- **Schema constraints:** Reject malformed data rather than silently accepting garbage
+- **Append-only observation log:** Complete provenance trail for every state change
+
+### A-ha Moment
+When they replay an agent's state history from the observation log and can pinpoint exactly which observation introduced a bug — something their current state management makes impossible.
+
+### Ready-to-Pay Threshold
+After successfully integrating Neotoma into an agent runtime and demonstrating reproducible state across runs. They've validated the guarantees and are ready to recommend and pay for ongoing usage.
+
+### Adoption Characteristics
+- **Activation:** Medium (evaluation-first, need to validate guarantees)
+- **Willingness to pay:** High (infrastructure dependency, expense-able)
+- **Retention:** Very strong (becomes core infrastructure)
+- **Expansion:** Pull Neotoma into team/org through infrastructure standardization
+
+### Pricing Sensitivity & Price Points
+- **Current spend:** $100-1000/month on infrastructure tools, monitoring, state management
+- **Price sensitivity:** Low (infrastructure expense, values reliability)
+- **Acceptable range:** $50-200/month for individual, $500-5000/month for team
+- **Value anchor:** Compares to event sourcing tools, state management infrastructure, observability platforms
+- **Payment method:** Company credit card, annual contracts, enterprise billing
+
+### Competitive Alternatives
+- **Current solutions:** Custom state management, event sourcing frameworks, ad-hoc logging, no unified agent state layer
+- **Workarounds:** Building custom state management per agent, manual logging, log archaeology for debugging
+- **Why they'd switch:** No current solution provides deterministic agent state with replayability; custom solutions are expensive to maintain
+- **Switching barriers:** Low-medium (adopting a dependency, not replacing existing tool)
+
+### Sales Cycle & Decision Process
+- **Sales cycle:** 14-60 days (evaluation → integration → validation → adoption)
+- **Decision maker:** Tech lead / infrastructure lead (may need manager approval for team adoption)
+- **Decision process:** Discover → evaluate guarantees → integrate in dev → validate → propose to team → adopt
+- **Touchpoints:** GitHub, Hacker News, infrastructure communities, conference talks
+- **Sales model:** Self-serve with developer documentation, evaluation guides
+
+### Key Objections
+- **"Not production-ready"** → Open-source, MIT-licensed, deterministic guarantees are testable; dev release is suitable for evaluation and dev-environment integration
+- **"API surface stability"** → Versioned MCP protocol, API versioning policy, changelog
+- **"Local-only limitation"** → Local-first suits evaluation; hosted deployment planned for later
+- **"Integration complexity"** → MCP standard protocol, clear API docs, integration examples
+- **"Lock-in concerns"** → MIT license, open-source, append-only log is portable
+
+### Buying Signals
+- **Strong signals:** Building agent infrastructure, posts about state management problems, evaluating agent reliability tools
+- **Medium signals:** ML/AI infrastructure role, agent framework contributions, observability tool usage
+- **Weak signals:** General infrastructure interest, agent development questions
+
+### Expansion Path
+- **Individual → Team:** After successful evaluation, proposes as team standard
+- **Expansion trigger:** Successful integration in dev environment, reproducibility validation
+- **Expansion mechanics:** Team-wide adoption as infrastructure dependency, standardization
+- **Expansion timeline:** 1-3 months from evaluation to team adoption
+
+### Key Barriers & Product Solutions
+**Acquisition Barriers:**
+- **Barrier:** Don't know Neotoma exists; framing as "AI memory" obscures infrastructure value
+- **Solution:** Infrastructure-first messaging: "deterministic state layer for agents" with guarantee comparison table
+- **Barrier:** Assume they need to build custom state management
+- **Solution:** Blog posts comparing custom vs Neotoma state management; open-source evaluation path
+
+**Activation Barriers:**
+- **Barrier:** Evaluation overhead (need to validate guarantees before adopting)
+- **Solution:** Clear guarantee documentation, evaluation guide, reproducibility tests, integration examples
+- **Barrier:** Local-only deployment limits production evaluation
+- **Solution:** Local-first suits dev/evaluation; document roadmap for hosted deployment
+
+**Retention Barriers:**
+- **Barrier:** API changes break integration
+- **Solution:** API versioning, deprecation policy, changelog, backward compatibility
+- **Barrier:** Performance at scale concerns
+- **Solution:** Performance benchmarks, SQLite optimization, scaling documentation
+
+### Technical Requirements
+- Stable MCP and API interface
+- Deterministic state guarantees (verifiable)
+- Append-only observation log with replay
+- Schema validation and constraints
+- Local-first deployment for evaluation
+
+## 2. Agent System Builders
+
+### Profile
+Developers and teams building agents that execute multi-step workflows with tool calling. They wire Neotoma into systems they ship to others and need memory that does not drift, conflict, or silently mutate. They sit at the application layer, consuming infrastructure.
+
+### Key Visible Criteria
+- **Activity signals:** Builds or integrates with CrewAI, LangGraph, AutoGPT, or similar; posts about agent memory, agent orchestration, MCP
+- **Job titles:** Software Engineer, AI Engineer, Agent Developer, Full-Stack Developer building agent products
+- **Company signals:** Agent-powered SaaS, AI automation companies, agent infrastructure startups
+- **Proxy indicators:** GitHub repos with agent/automation/MCP projects, multiple AI agent deployments
+- **Content consumption:** Engages with agent architecture content, MCP content, agent memory content, LLM workflow content
+
+### Key Acquisition Channels
+- **Developer communities:** GitHub, Hacker News, AI/ML Discord servers, MCP and agent framework communities
+- **Content marketing:** Agent memory case studies, deterministic memory content, MCP integration tutorials
+- **Partnerships:** Agent framework maintainers (LangChain, CrewAI, AutoGen), AI Ops vendors
+- **SEO:** "agent memory", "deterministic memory for agents", "MCP memory backend", "persistent agent state"
+- **Conferences:** AI/ML developer conferences, agent architecture meetups
+
+### Estimated Worldwide Population
+**200K–500K** (developers building agent systems, multi-step AI workflows, and agent-powered products globally)
+
+### Pain Points
+- **Drift across sessions:** Agent memory changes unpredictably between runs
+- **Conflicting facts:** Multiple agents or tools write contradictory state; no conflict detection
+- **No reproducibility:** Cannot replay a failed run to find root cause
+- **Silent mutation:** State changes without audit trail; impossible to know what changed or when
+- **Garbage-in-garbage-out:** No schema validation means malformed data propagates across agents
+
+### Use Cases
+- **Agent memory backend:** Neotoma as MCP-backed memory for agent frameworks
+- **Multi-step workflow state:** Structured memory and versioned history for multi-step agent pipelines
+- **Cross-agent coordination:** Shared state substrate for multi-agent systems
+- **Debugging and evaluation:** Replay agent state to reproduce bugs and validate behavior changes
+- **Provenance and audit:** Trace agent decisions back to source observations
+
+### Workflows
+1. **Integrate via MCP** → Wire Neotoma as memory backend for agent framework
+2. **Store structured entities** → Agents write observations; Neotoma produces deterministic state
+3. **Query across sessions** → Agents retrieve prior state for continuity
+4. **Debug failures** → Replay observation log to identify where state diverged
+
+### Value Proposition
+- **Deterministic state:** Same input observations always produce the same entity state
+- **Schema-bound entities:** Prevent garbage-in-garbage-out across agents
+- **Versioned history:** Every state change creates a new version; nothing is silently lost
+- **Replayable timeline:** Reconstruct any historical state from the observation log
+- **Cross-platform MCP:** One memory layer for any agent or toolchain
+
+### A-ha Moment
+When an agent or pipeline queries Neotoma for structured context and gets deterministic, traceable results — enabling reliable multi-step reasoning and auditability that their previous memory solution could not provide.
+
+### Ready-to-Pay Threshold
+After integrating Neotoma as memory backend for an agent framework or pipeline and seeing deterministic recall and provenance in production or eval workflows. Debugging time drops measurably.
+
+### Adoption Characteristics
+- **Activation:** Low friction (developers understand APIs and MCP)
+- **Willingness to pay:** Medium-high (infrastructure dependency, may be company-expensed)
+- **Retention:** Very strong (becomes core agent infrastructure)
+- **Expansion:** Natural expansion as they build more agents
+
+### Pricing Sensitivity & Price Points
+- **Current spend:** $0-200/month on agent tools, memory solutions, API services
+- **Price sensitivity:** Medium (values reliable infrastructure, but cost-conscious early)
+- **Acceptable range:** $20-100/month for individual, $100-500/month for team
+- **Value anchor:** Compares to RAG memory services, agent framework memory modules, custom state management cost
+- **Payment method:** Credit card, company expense, usage-based pricing preferred
+
+### Competitive Alternatives
+- **Current solutions:** RAG memory (Mem0, Zep), LangChain/LangGraph memory, file-based memory (Markdown/JSON), vector DB memory, custom state management
+- **Workarounds:** Building custom memory per agent, manual context injection, no persistent state
+- **Why they'd switch:** Existing memory solutions lack deterministic guarantees; custom solutions are expensive; debugging is impossible without versioned history
+- **Switching barriers:** Low (adopting new memory backend, not replacing entire stack)
+
+### Sales Cycle & Decision Process
+- **Sales cycle:** 7-30 days (API exploration → integration → validation → adoption)
+- **Decision maker:** Developer (individual decision for personal projects; may need lead approval for team)
+- **Decision process:** Discover → test MCP integration → see deterministic results → adopt
+- **Touchpoints:** GitHub, agent framework communities, MCP server directories, Hacker News
+- **Sales model:** Self-serve with developer documentation
+
+### Key Objections
+- **"How is this different from RAG memory?"** → Neotoma enforces deterministic state evolution; RAG does context lookup. Different guarantees.
+- **"API stability concerns"** → Versioned MCP protocol, API versioning, changelog, backward compatibility
+- **"Local-only limitation"** → Local-first suits dev and small-scale agent deployments; hosted planned
+- **"Integration effort"** → Standard MCP protocol, clear docs, integration examples, SDK
+- **"Lock-in"** → MIT license, open-source, portable observation log
+
+### Buying Signals
+- **Strong signals:** Building agent systems, posts about agent memory problems, MCP integrations, agent debugging frustration
+- **Medium signals:** Developer with agent/automation projects, agent framework usage, multi-step workflow development
+- **Weak signals:** General agent development interest, LLM workflow questions
+
+### Expansion Path
+- **Individual → Team:** After successful agent integration, team adopts as standard memory backend
+- **Expansion trigger:** Agent ships with Neotoma; team standardizes on it for new agents
+- **Expansion mechanics:** Team-wide adoption, shared memory substrate, standardized integration
+- **Expansion timeline:** 1-2 months from individual integration to team adoption
+
+### Key Barriers & Product Solutions
+**Acquisition Barriers:**
+- **Barrier:** Assume RAG/vector memory is sufficient for agents
+- **Solution:** Guarantee comparison table showing what RAG lacks (determinism, versioning, replayability, schema constraints)
+- **Barrier:** Don't know Neotoma exists
+- **Solution:** Presence in agent framework communities, MCP directories, agent architecture blog posts
+
+**Activation Barriers:**
+- **Barrier:** Integration effort with existing agent framework
+- **Solution:** MCP standard protocol, framework-specific integration guides, code examples
+- **Barrier:** Empty state (no existing data to query)
+- **Solution:** Quick start guide, sample data, store_structured examples, instant feedback loop
+
+**Retention Barriers:**
+- **Barrier:** Memory not useful if agent architecture changes
+- **Solution:** Schema flexibility, entity type evolution, migration guides
+- **Barrier:** Performance concerns at scale
+- **Solution:** Performance benchmarks, SQLite optimization, query optimization guides
+
+### Technical Requirements
+- MCP integration (primary interface)
+- Deterministic state evolution (core guarantee)
+- Schema validation and entity resolution
+- Versioned history and replayable timeline
+- Provenance and audit trail
+- Local or self-hosted deployment
+
+### Side-by-Side: AI Infrastructure Engineers vs Agent System Builders
+
+- **Primary layer:** Infrastructure engineers build runtimes, orchestration, and observability foundations; agent system builders build application-layer agents and shipped workflows on top.
+- **Adoption motion:** Infrastructure engineers are evaluation-first (validate guarantees before rollout); agent builders are integration-first (wire via MCP and iterate quickly).
+- **Decision owner:** Infrastructure adoption is usually led by platform/reliability leads; builder adoption is often led by individual developers or product engineering teams.
+- **Cycle length:** Infrastructure cycles are typically longer (14-60 days) because standardization risk is higher; builder cycles are faster (7-30 days) because scope is narrower.
+- **Success metric:** Infrastructure teams optimize for platform reproducibility and auditability; builders optimize for reliable multi-step execution, lower debugging time, and stable shipped behavior.
+- **Budget profile:** Infrastructure engineers generally have larger infra-tool budgets and lower price sensitivity; builders are more cost-sensitive, especially at individual or early-team stages.
+
+## 3. AI-native Operators (builder-grade)
+
+### Profile
+Power users of Claude, Cursor, ChatGPT, and other AI tools who have automation habits and feel the memory gap across every tool switch. They adopt Neotoma for their own cross-tool workflows, not for systems they ship to others. Distinguished from Agent System Builders by adoption motion: operators use Neotoma for personal workflow continuity; builders wire it into products.
+
+### Key Visible Criteria
+- **Tool usage:** Active ChatGPT Plus/Pro subscriber, Claude Pro user, Cursor user, Raycast user — uses 3+ AI tools daily
+- **Activity signals:** Posts in AI tool communities (Reddit, Discord), follows AI tool creators on Twitter/X, shares MCP configs
+- **Behavior:** Automation habits (scripts, MCP server configs, custom prompts), tool-calling workflows
+- **Proxy indicators:** GitHub profile with automation/AI projects, Product Hunt early adopter, MCP server usage
+- **Content consumption:** Engages with AI tool comparison content, MCP content, AI productivity content
+
 ### Key Acquisition Channels
 - **AI tool communities:** Reddit (r/ChatGPT, r/ClaudeAI, r/Cursor), Discord servers for AI tools
 - **Developer communities:** GitHub, Hacker News, Indie Hackers, Product Hunt
-- **Content marketing:** AI tool comparison blogs, YouTube channels, Twitter/X AI communities
+- **Content marketing:** AI tool comparison blogs, MCP integration guides, cross-tool memory content
 - **Partnerships:** Integration marketplace listings (Cursor, Raycast), MCP server directories
-- **SEO:** "AI memory", "persistent AI context", "ChatGPT memory" keywords
-- **Paid:** Google Ads (AI tool keywords), Twitter/X ads targeting AI tool users
+- **SEO:** "AI memory across tools", "persistent AI context", "MCP memory server" keywords
+
 ### Estimated Worldwide Population
-**2-5 million** (heavy AI tool users who use ChatGPT/Claude daily and understand memory limitations)
+**2-5 million** (heavy AI tool users with automation habits who use 3+ tools daily and understand memory limitations)
+
 ### Pain Points
-- **No memory across sessions:** Every AI conversation starts from zero
-- **Fragmented document sources:** Files scattered across email, downloads, screenshots, cloud drives
-- **No cross-document reasoning:** AI can't connect information across multiple documents
-- **Repetitive context-setting:** Must re-explain context in every AI interaction
-- **Lost institutional knowledge:** Can't build on previous AI interactions or document insights
+- **Context fragmentation across tools:** Each AI tool has its own memory; switching tools loses context
+- **Repetitive context-setting:** Must re-explain the same project context to Claude, Cursor, ChatGPT separately
+- **Lost commitments and decisions:** Decisions made in a ChatGPT session three days ago are gone
+- **Broken handoffs:** Starting a task in Claude and continuing in Cursor requires manual context transfer
+- **No cross-session continuity:** Every new session starts from zero unless you manually paste context
+
 ### Use Cases
-- **Research synthesis:** Upload research papers, articles, notes → ask AI to synthesize findings
-- **Contract analysis:** Upload contracts → ask AI to compare terms, identify risks
-- **Travel planning:** Upload flight confirmations, hotel bookings, itineraries → ask AI to create timeline
-- **Invoice management:** Upload invoices and receipts → ask AI to categorize, track expenses
-- **Meeting notes:** Upload meeting notes across time → ask AI to track decisions and action items
-### Document Types
-- PDFs (research papers, contracts, invoices, receipts)
-- Images (screenshots, scanned documents, photos)
-- Email attachments (Gmail integration)
-- Notes and markdown files
-- Travel documents (itineraries, boarding passes, confirmations)
+- **Cross-tool memory:** Store context once, query from any MCP-compatible tool
+- **Project continuity:** Maintain project state across sessions and tools
+- **Decision tracking:** Record decisions and commitments that persist across conversations
+- **Research synthesis:** Accumulate findings across multiple AI research sessions
+- **Workflow automation:** Use MCP to give all AI tools access to structured personal data
+
 ### Workflows
-1. **Upload documents** → See structured extraction
-2. **Query via AI** → "What are all my travel events next month?"
-3. **Cross-document synthesis** → "Summarize all contracts involving Acme Corp"
-4. **Timeline exploration** → View chronological events from all documents
+1. **Install and configure MCP** → Connect Neotoma to Claude, Cursor, and other tools
+2. **Store context via conversations** → AI tools write observations to Neotoma during normal use
+3. **Query across tools** → Ask Claude about something stored via Cursor; context persists
+4. **Review and manage** → Use CLI to inspect, query, or correct stored entities
+
 ### Value Proposition
-- **Persistent AI memory:** AI remembers your documents across all sessions
-- **Cross-document reasoning:** AI can connect information across multiple documents
-- **Structured truth:** Deterministic extraction means AI always has accurate data
-- **MCP integration:** Works seamlessly with ChatGPT, Claude, Cursor
+- **Unified memory across tools:** Single state layer that persists across all MCP-compatible tools
+- **No repeated context:** Facts stored once are available everywhere
+- **Versioned and auditable:** Nothing is silently lost or overwritten
+- **Schema-bound consistency:** Prevents contradictory state across tools
+- **Privacy-first:** Data stays local; no provider access
+
 ### A-ha Moment
-The moment when they ask an AI tool a question about a document they uploaded weeks ago, and the AI answers correctly using that document's context—without them having to re-upload or re-explain anything. They realize their AI tools now have persistent memory.
+When they switch from Cursor to Claude and ask about the same project, and Claude has the context from their Cursor session — without re-explaining anything. They realize memory is truly unified across tools.
+
 ### Ready-to-Pay Threshold
-After successfully querying 3-5 documents via AI and seeing cross-document synthesis work (e.g., "Summarize all contracts involving Acme Corp" pulls from multiple documents). They've experienced the value and are willing to pay to maintain this capability.
+After successfully using cross-tool memory for 1-2 weeks and seeing context persist where it previously did not. They've experienced the value and are willing to pay to maintain this capability.
+
 ### Adoption Characteristics
-- **Activation:** Immediate (understand value proposition instantly)
+- **Activation:** Immediate (understand value proposition instantly; MCP setup is familiar)
 - **Willingness to pay:** High (already paying for AI tools)
 - **Retention:** Strong (daily use, core workflow dependency)
-- **Expansion:** Natural champions for team adoption
+- **Expansion:** Natural champions for team adoption; vocal in tool communities
+
 ### Pricing Sensitivity & Price Points
-- **Current spend:** $20-50/month on AI tools (ChatGPT Plus $20, Claude Pro $20, Cursor $20)
-- **Price sensitivity:** Low (already paying for tools, understand value of productivity tools)
+- **Current spend:** $20-60/month on AI tools (ChatGPT Plus $20, Claude Pro $20, Cursor $20)
+- **Price sensitivity:** Low (already paying for tools, understand value of developer tools)
 - **Acceptable range:** $10-30/month for individual, $50-200/month for team
-- **Value anchor:** Compares to AI tool subscriptions, not document storage tools
+- **Value anchor:** Compares to AI tool subscriptions and developer tool subscriptions
 - **Payment method:** Credit card, comfortable with subscription model
+
 ### Competitive Alternatives
-- **Current solutions:** Manual document organization (Google Drive, Dropbox), no AI memory solution
-- **Workarounds:** Re-uploading documents to AI tools, copying context between sessions, using multiple AI tools
-- **Why they'd switch:** No current solution provides persistent AI memory; workarounds are time-consuming
-- **Switching barriers:** Low (no existing tool to migrate from, just adding new capability)
+- **Current solutions:** Platform memory (Claude memory, ChatGPT memory), notes/PKM tools (Obsidian, Notion), manual context management
+- **Workarounds:** Re-uploading documents, copy-pasting context between tools, no cross-tool memory
+- **Why they'd switch:** Platform memory is tool-specific and non-deterministic; PKM lacks MCP integration; no current solution provides cross-tool deterministic state
+- **Switching barriers:** Low (new capability, not replacing existing tool)
+
 ### Sales Cycle & Decision Process
 - **Sales cycle:** 0-7 days (self-serve, no sales team needed)
 - **Decision maker:** Individual (no approval needed)
-- **Decision process:** Try → see value → pay (typical freemium model)
-- **Touchpoints:** Product Hunt launch, community posts, tool integration discovery
-- **Sales model:** Self-serve with optional support
+- **Decision process:** Discover → install → configure MCP → see cross-tool value → pay
+- **Touchpoints:** AI tool communities, MCP directories, Product Hunt, tool comparison content
+- **Sales model:** Self-serve with clear setup docs
+
 ### Key Objections
-- **"Another tool to manage"** → Emphasize MCP integration (works with existing tools)
-- **"Will it work with my AI tools?"** → Show MCP integration, compatibility matrix
-- **"How is this different from [tool]?"** → Emphasize AI memory vs file storage
-- **"Privacy concerns"** → Clear privacy policy, encryption, RLS, data residency options
-- **"Setup complexity"** → One-click MCP setup, quick start guide, sample data
+- **"Another tool to manage"** → Runs as MCP server behind your existing tools; no new UI required
+- **"How is this different from ChatGPT memory?"** → ChatGPT memory is tool-specific and non-deterministic; Neotoma is cross-tool, versioned, schema-bound
+- **"Setup complexity"** → `npx neotoma` install, MCP config in 5 minutes
+- **"Privacy concerns"** → Local-first, data stays on your machine, no cloud sync required
+- **"Will it work with my tools?"** → MCP standard protocol; works with Claude, Cursor, ChatGPT, any MCP-compatible tool
+
 ### Buying Signals
-- **Strong signals:** Active ChatGPT Plus/Claude Pro subscriber, posts about AI tool limitations, mentions "AI memory" or "context loss"
+- **Strong signals:** Uses 3+ AI tools daily, posts about context loss or "AI amnesia", mentions MCP servers, automation habits
 - **Medium signals:** Multiple AI tool subscriptions, developer with automation projects, early adopter behavior
 - **Weak signals:** General AI tool interest, productivity tool usage
+
 ### Expansion Path
-- **Individual → Team:** After 2-3 weeks of individual use, naturally invites team members
-- **Expansion trigger:** Shares query result with team, realizes team value
-- **Expansion mechanics:** "Invite team" CTA, team workspace setup, shared memory demonstration
+- **Individual → Team:** After 2-3 weeks of use, recommends to colleagues and team members
+- **Expansion trigger:** Shares a query result that pulls context from multiple tools; others want the same capability
+- **Expansion mechanics:** Simple install recommendation, MCP config sharing, team workspace (future)
 - **Expansion timeline:** 2-4 weeks from individual to team adoption
+
 ### Key Barriers & Product Solutions
 **Acquisition Barriers:**
-- **Barrier:** Don't know Neotoma exists or understand the value proposition
-- **Solution:** Clear messaging: "Persistent memory for AI tools" with demo showing before/after AI interactions
+- **Barrier:** Don't know Neotoma exists; platform memory seems "good enough"
+- **Solution:** Guarantee comparison table showing what platform memory lacks (cross-tool, versioned, schema-bound, replayable)
 - **Barrier:** Skeptical of "another tool" to manage
-- **Solution:** Emphasize MCP integration (works with existing tools, no new workflow)
+- **Solution:** Runs as background MCP server; no new UI; works inside tools they already use
+
 **Activation Barriers:**
-- **Barrier:** Setup friction (need to upload documents, configure MCP)
-- **Solution:** One-click MCP setup, drag-and-drop upload, Gmail quick connect, instant extraction preview
-- **Barrier:** Don't see immediate value (empty state problem)
-- **Solution:** Sample documents/onboarding flow, instant extraction feedback, "try with sample data" option
+- **Barrier:** MCP configuration friction
+- **Solution:** `npx neotoma` one-line install, auto-generated MCP config, tool-specific setup guides
+- **Barrier:** Empty state after install (no data yet)
+- **Solution:** Instant feedback on first store; onboarding flow that demonstrates cross-tool persistence
+
 **Retention Barriers:**
-- **Barrier:** Forgetting to upload new documents (habit formation)
-- **Solution:** Gmail auto-import, browser extension for quick saves, mobile app for photos
-- **Barrier:** MCP connection issues or complexity
-- **Solution:** Reliable MCP server, clear error messages, auto-reconnect, simple setup docs
+- **Barrier:** MCP connection issues
+- **Solution:** Reliable MCP server, clear error messages, auto-reconnect, health check CLI command
+- **Barrier:** Not seeing enough value (memory not queried often enough)
+- **Solution:** Proactive memory retrieval in agent instructions; periodic "did you know" prompts via CLI
+
 ### Technical Requirements
-- Single-user (no multi-user features needed)
+- Single-user (no multi-user features needed for dev release)
 - MCP integration (primary access method)
-- Fast ingestion (<5s for typical documents)
-- Deterministic extraction (trust in AI responses)
-## 2. High-Context Knowledge Workers
+- CLI for inspection and management
+- Local-first architecture (privacy, no cloud dependency)
+- Deterministic state (trust in stored data)
+# TIER 2 — Secondary ICPs (Adjacent / Later in Dev Release)
+
+## 4. Toolchain Integrators
+
+### Profile
+Framework and devtool authors who would add Neotoma as a recommended or default memory backend for downstream builders. They build SDKs, orchestration libraries, editor plugins, and deployment platforms that other developers adopt. Adoption depends on API stability demonstrated by Tier 1 usage.
+
+### Key Visible Criteria
+- **Job titles:** Framework Maintainer, SDK Author, Developer Tools Engineer, Platform Engineer, Open Source Maintainer
+- **Activity signals:** Maintains agent frameworks, orchestration libraries, editor plugins; evaluates memory adapters for downstream users
+- **Tool usage:** Maintains npm/PyPI packages, contributes to open-source frameworks, builds developer tools
+- **Proxy indicators:** GitHub repos with 100+ stars, framework maintainer status, developer tool author
+- **Content consumption:** Engages with devtool ecosystem content, framework comparison content, developer platform content
+
+### Key Acquisition Channels
+- **Direct outreach:** GitHub issues/PRs on agent frameworks, direct messages to framework maintainers
+- **Developer communities:** GitHub, Hacker News, framework-specific communities
+- **Content marketing:** Integration guides, "add deterministic state to your framework" content
+- **Conferences:** Developer tool conferences, open-source conferences, framework meetups
+
+### Estimated Worldwide Population
+**100K-300K** (framework/SDK maintainers and devtool authors globally)
+
+### Pain Points
+- **Existing memory adapters lack guarantees:** Downstream builders report drift and inconsistency
+- **No standard for deterministic agent state:** Each framework invents its own memory module
+- **Integration maintenance burden:** Memory adapters break across versions
+- **Downstream builder complaints:** Users want persistent, deterministic memory; framework lacks it
+
+### Use Cases
+- **Framework integration:** Add Neotoma as a supported memory backend in agent framework
+- **SDK development:** Build Neotoma SDK or adapter for framework ecosystem
+- **Default memory backend:** Make Neotoma the default/recommended memory for framework
+- **Integration guide authoring:** Create integration documentation for downstream builders
+
+### Workflows
+1. **Evaluate API surface** → Review Neotoma's MCP/API stability and guarantees
+2. **Build adapter/integration** → Create framework-specific integration
+3. **Test with downstream users** → Validate integration with real builder workflows
+4. **Ship as supported backend** → List Neotoma as supported memory option
+
+### Value Proposition
+- **Open-source, MIT-licensed:** No licensing barriers to integration
+- **Standard MCP protocol:** Well-defined integration surface
+- **Deterministic guarantees:** Guarantees can be documented and passed through to downstream builders
+- **Active development:** Responsive to integration feedback and API requirements
+
+### A-ha Moment
+When a downstream builder integrates Neotoma through their framework and reports that agent state is finally deterministic and debuggable — validating the framework's decision to integrate.
+
+### Ready-to-Pay Threshold
+After successful integration and positive downstream builder feedback. May not pay directly but drives volume through downstream adoption.
+
+### Adoption Characteristics
+- **Activation:** Slow (requires API stability evaluation, integration development)
+- **Willingness to pay:** Low-medium (open-source maintainers often have limited budgets; value comes from downstream volume)
+- **Retention:** Strong once integrated (integration becomes framework standard)
+- **Expansion:** High leverage (one integration reaches many downstream builders)
+
+### Pricing Sensitivity & Price Points
+- **Current spend:** $0-100/month on developer tools (many open-source, some paid APIs)
+- **Price sensitivity:** High for personal, low for company-sponsored
+- **Acceptable range:** Free tier for open-source integrations, $50-200/month for commercial frameworks
+- **Value anchor:** Compares to memory adapter maintenance cost, framework module development cost
+- **Payment method:** Credit card, company expense, usage-based pricing
+
+### Competitive Alternatives
+- **Current solutions:** Built-in memory modules, custom adapters, RAG integrations, no standard state layer
+- **Workarounds:** Building custom memory adapters, recommending ad-hoc solutions to downstream builders
+- **Why they'd switch:** Neotoma provides guarantees they can't offer with custom adapters; reduces integration maintenance
+- **Switching barriers:** Medium (requires integration development, documentation update, downstream communication)
+
+### Sales Cycle & Decision Process
+- **Sales cycle:** 30-90 days (evaluation → integration development → testing → ship)
+- **Decision maker:** Framework maintainer / devtool lead
+- **Decision process:** Discover → evaluate API stability → build integration → test → ship
+- **Touchpoints:** GitHub, direct outreach, conference conversations, integration guides
+- **Sales model:** Developer relations, direct engagement with maintainers
+
+### Key Objections
+- **"API not stable enough"** → API versioning policy, deprecation guarantees, stable MCP protocol
+- **"Integration maintenance burden"** → Stable protocol, backward compatibility, integration support
+- **"Downstream adoption uncertain"** → Case studies from Tier 1 builders, demo integration
+- **"No hosted option"** → Local-first suits development; hosted deployment planned
+- **"Lock-in concerns"** → MIT license, open-source, portable observation log, standard MCP
+
+### Buying Signals
+- **Strong signals:** Evaluating memory adapters for framework, posts about memory integration challenges, framework with memory module gaps
+- **Medium signals:** Framework maintainer, devtool author, open-source contributor, integration developer
+- **Weak signals:** General framework development interest, devtool questions
+
+### Expansion Path
+- **Integration → Ecosystem:** After framework integration, drives downstream builder adoption
+- **Expansion trigger:** Successful integration, positive downstream feedback, framework release with Neotoma support
+- **Expansion mechanics:** Framework documentation, integration examples, ecosystem listing
+- **Expansion timeline:** 3-6 months from integration to meaningful downstream adoption
+
+### Key Barriers & Product Solutions
+**Acquisition Barriers:**
+- **Barrier:** Don't know Neotoma exists or see it as relevant to their framework
+- **Solution:** Direct outreach, GitHub integration PRs, framework-specific integration guides
+- **Barrier:** Assume existing memory modules are sufficient
+- **Solution:** Guarantee comparison showing what existing modules lack (determinism, versioning, replayability)
+
+**Activation Barriers:**
+- **Barrier:** Integration development effort
+- **Solution:** Clear API docs, integration examples, SDK, responsive support for integration questions
+- **Barrier:** API stability uncertainty
+- **Solution:** API versioning policy, deprecation guarantees, stable MCP protocol, changelog
+
+**Retention Barriers:**
+- **Barrier:** API changes break integration
+- **Solution:** Backward compatibility, migration guides, pre-release testing access, integration health monitoring
+- **Barrier:** Downstream builders don't adopt the integration
+- **Solution:** Co-marketing, integration documentation, case studies, demo projects
+
+### Technical Requirements
+- Stable MCP and API interface (critical for downstream reliability)
+- API versioning and deprecation policy
+- Integration examples and SDK
+- Clear documentation for downstream builders
+
+---
+
+# TIER 3 — Future ICPs (Post Developer Release)
+
+These ICPs get value from Neotoma's guarantees but are not aligned with the developer release's distribution model, interface complexity, or feature scope. They are strong candidates for post-developer-release expansion once the interface broadens.
+
+## 5. Knowledge Workers
+
+*Deferred from developer release. Requires GUI, simplified onboarding, and lower conceptual complexity.*
+
 ### Profile
 Analysts, researchers, consultants, lawyers, strategists, and other professionals who work with complex information flows. They rely heavily on cross-document synthesis and need to maintain context across long research cycles.
 ### Key Visible Criteria
@@ -352,9 +737,12 @@ After successfully using entity-based queries and timeline analysis on a real pr
 - Timeline accuracy (dates must be correct)
 - Bulk upload support
 - Advanced search capabilities
-## 3. AI-Native Founders & Small Teams (2–20 people)
+## 6. Small Teams (2–20)
+
+*Deferred from developer release. Requires multi-user permissions, sharing, and governance features not in scope.*
+
 ### Profile
-Startup founders and small teams who are early adopters of AI tools. They initially adopt Neotoma individually, then expand to team usage organically. They bridge B2C → B2B expansion.
+Startup founders and small teams who are early adopters of AI tools. They initially adopt Neotoma individually, then expand to team usage organically. Individual team members may adopt as AI-native Operators during the developer release; team expansion is a post-dev-release motion.
 ### Key Visible Criteria
 - **Job titles:** Founder, Co-Founder, CEO (at early-stage company), Startup Founder
 - **Company signals:** Company size 2-20 employees, early-stage startup (pre-Series B), YC/accelerator alumni
@@ -462,43 +850,12 @@ After the founder uses it individually for 2-3 weeks and then successfully share
 - Shared memory (team-wide queries)
 - Access controls (who can see what)
 - Team onboarding workflows
-## 4. Builders of agentic systems
-### Profile
-Developers and teams building agentic systems (agent frameworks, orchestration pipelines, multi-agent workflows, observability stacks) who need a deterministic memory and provenance layer. They need cross-session state, entity resolution, and full audit trails so agents and toolchains can reason over structured personal or operational data.
-### Key Visible Criteria
-- **Activity signals:** Builds or integrates with CrewAI, LangGraph, AutoGPT, or similar; posts about agent memory, agent orchestration, MCP
-- **Company signals:** Agent infrastructure, AI Ops, agent orchestration tooling
-- **Proxy indicators:** Multiple AI agent deployments, agent platforms, agent infrastructure, agent teams
-### Key Acquisition Channels
-- **Developer communities:** GitHub, Hacker News, AI/ML Discord servers, MCP and agent framework communities
-- **Content marketing:** Agent memory case studies, deterministic memory content, MCP integration content
-- **Partnerships:** Agent framework maintainers, AI Ops vendors, system integrators
-- **SEO:** "agent memory", "deterministic memory for agents", "MCP memory backend"
-### Estimated Worldwide Population
-**200K–500K** (overlap with Developer Integrators and AI Tool Integrators in Tier 2)
-### Pain Points
-- **No shared memory for agents:** Token-based or conversation-only memory; no cross-session, cross-agent state
-- **No provenance:** Cannot trace agent decisions or outputs to source data
-- **No deterministic layer:** Need reproducible, explainable memory for eval, debug, and compliance
-### Use Cases
-- **Agent memory backend:** Neotoma as MCP-backed memory for agent frameworks
-- **Orchestration pipelines:** Structured memory and timelines for multi-step workflows
-- **Observability and eval:** Provenance and audit trail for agent actions and reasoning
-### Value Proposition
-- **Deterministic memory substrate:** Same input → same output; hash-based IDs; full provenance
-- **Cross-platform MCP:** One memory layer for any agent or toolchain
-- **Privacy-first:** User-controlled data; no provider access; suitable for localhost agents
-### A-ha Moment
-When an agent or pipeline queries Neotoma for structured context and gets deterministic, traceable results—enabling reliable reasoning and auditability.
-### Ready-to-Pay Threshold
-After integrating Neotoma as memory backend for an agent framework or pipeline and seeing deterministic recall and provenance in production or eval workflows.
-### Technical Requirements
-- MCP integration (primary interface)
-- Deterministic extraction and entity resolution
-- Provenance and audit trail
-- Local or self-hosted option for privacy-sensitive deployments
-# TIER 2 — Early B2B Expansion
-## 5. Hybrid Product Teams (PM + Eng + Design + Marketing)
+*Note: The former "Builders of agentic systems" bridge ICP has been expanded and promoted to Tier 1 as "Agent System Builders" (profile #2 above).*
+# Deferred B2B ICPs — Post Developer Release
+
+These ICPs from the former Tier 2 require multi-user features, organizational semantics, and team workflows not in developer-release scope. Profiles preserved for future reference.
+
+## 7. Hybrid Product Teams (PM + Eng + Design + Marketing)
 ### Profile
 Cross-functional product teams that struggle with coordination breakdown. They use many AI tools but lack shared memory. High ROI from unified memory substrate.
 ### Key Visible Criteria
@@ -609,7 +966,7 @@ After 2-3 successful cross-functional queries that saved significant time (e.g.,
 - Role-based access controls
 - Shared memory and queries
 - Integration with existing tools (Slack, Notion, etc.)
-## 6. Cross-Functional Operational Teams (Ops, RevOps, Marketing Ops)
+## 8. Cross-Functional Operational Teams (Ops, RevOps, Marketing Ops)
 ### Profile
 Operations teams that rely heavily on content, workflows, and repetitive AI tasks. They crave consistency and need shared memory for operational processes.
 ### Key Visible Criteria
@@ -720,7 +1077,10 @@ After successfully using it to answer 5-10 operational questions that would have
 - Process documentation support
 - Compliance tracking features
 - Integration with ops tools
-## 7. Developer Integrators
+## 9. Developer Integrators
+
+*Note: This ICP overlaps substantially with Tier 1 "Agent System Builders" and Tier 2 "Toolchain Integrators". Preserved for reference; see those profiles for the developer-release-aligned versions.*
+
 ### Profile
 Developers who build internal tools, automations, and agent systems. They require stable truth APIs to integrate Neotoma into their systems.
 ### Key Visible Criteria
@@ -829,7 +1189,10 @@ After successfully integrating Neotoma into a production system or building a wo
 - Webhook support
 - Developer documentation
 - Integration examples and SDKs
-## 8. AI Tool Integrators (Cursor, Raycast, VSCode, Claude Tools)
+## 10. AI Tool Integrators (Cursor, Raycast, VSCode, Claude Tools)
+
+*Note: This ICP overlaps with Tier 1 "AI-native Operators (builder-grade)" and Tier 2 "Toolchain Integrators". Preserved for reference.*
+
 ### Profile
 Developers and teams who integrate Neotoma into AI-native tools (Cursor, Raycast, VSCode, Claude) to provide persistent memory across tools.
 ### Key Visible Criteria
@@ -937,8 +1300,11 @@ After successfully using memory across 2-3 different AI tools (e.g., Cursor, Cla
 - Tool-specific integration guides
 - API stability for integrations
 - Webhook support for real-time updates
-# TIER 3 — B2C Power Users
-## 9. Cross-Border Solopreneurs
+# B2C Power Users — Long-Term Organic Growth
+
+These ICPs get value from Neotoma but are not ideal developer-release targets. They will convert gradually through inbound, bottom-up adoption once the product has lower friction.
+
+## 11. Cross-Border Solopreneurs
 ### Profile
 Solo entrepreneurs who operate across multiple jurisdictions. High document entropy from receipts, invoicing, travel, and compliance requirements.
 ### Key Visible Criteria
@@ -1047,7 +1413,7 @@ During tax season when they successfully organize documents by jurisdiction and 
 - Multi-jurisdiction organization
 - Receipt OCR accuracy
 - Tax document categorization
-## 10. Multi-System Information Workers
+## 12. Multi-System Information Workers
 ### Profile
 Knowledge workers who use multiple systems (Gmail, Notes, Drive, PDFs, screenshots) interchangeably. Benefit from unification but require education.
 ### Key Visible Criteria
@@ -1155,7 +1521,7 @@ After successfully finding information 3-5 times that they couldn't find before 
 - Cloud drive integration
 - Screenshot handling
 - Multi-source ingestion
-## 11. High-Entropy Households / Family Managers
+## 13. High-Entropy Households / Family Managers
 ### Profile
 Family managers who handle documents for entire households. Strong personal need but slow adoption curve.
 ### Key Visible Criteria
@@ -1232,8 +1598,11 @@ After successfully organizing documents for 2-3 family members and receiving use
 - Expiration date tracking
 - Medical record handling
 - School form recognition
-# TIER 4 — Strategy-Layer ICPs (Agentic Portfolio)
-## 12. High-Net-Worth Individuals
+# Future Product Layer: Strategy (Agentic Portfolio)
+
+Requires later product maturity and asset/tax modeling stack.
+
+## 14. High-Net-Worth Individuals
 ### Profile
 High-net-worth individuals who need sophisticated financial planning and asset management. Require Agentic Portfolio capabilities built on Neotoma.
 ### Key Visible Criteria
@@ -1328,7 +1697,7 @@ After successfully using Agentic Portfolio for 2-3 months and seeing measurable 
 - Tax optimization capabilities
 - Risk management features
 - Multi-jurisdiction support
-## 13. Multi-Jurisdiction Residents
+## 15. Multi-Jurisdiction Residents
 ### Profile
 Individuals who live or work across multiple jurisdictions. Need sophisticated tax and compliance management.
 ### Key Visible Criteria
@@ -1422,7 +1791,7 @@ After successfully organizing documents and running tax optimization scenarios t
 - Tax optimization capabilities
 - Compliance tracking features
 - Currency management
-## 14. Crypto-Native Power Users (staking, LPs, vaults)
+## 16. Crypto-Native Power Users (staking, LPs, vaults)
 ### Profile
 Crypto-native users who engage in staking, liquidity provision, vault strategies. Need sophisticated portfolio management and strategy planning.
 ### Key Visible Criteria
@@ -1516,7 +1885,7 @@ After successfully using Agentic Portfolio for crypto portfolio management and s
 - Yield optimization capabilities
 - Risk management features
 - Crypto tax support
-## 15. Startup Founders with Equity Docs
+## 17. Startup Founders with Equity Docs
 ### Profile
 Startup founders who need to manage equity documents, cap tables, and financial planning.
 ### Key Visible Criteria
@@ -1612,7 +1981,7 @@ After successfully using Agentic Portfolio for equity planning and seeing tax sa
 - Cap table management
 - Financial planning features
 - Tax optimization
-## 16. Family-Office-Lite Users
+## 18. Family-Office-Lite Users
 ### Profile
 High-net-worth individuals who need family-office-like services but at a lower scale.
 ### Key Visible Criteria
@@ -1706,8 +2075,11 @@ After successfully using Agentic Portfolio for family wealth management and seei
 - Tax optimization capabilities
 - Estate planning features
 - Compliance tracking
-# TIER 5 — Execution-Layer ICPs (Agentic Wallet)
-## 17. High-Frequency On-Chain Actors
+# Future Product Layer: Execution (Agentic Wallet)
+
+Dependent on Agentic Portfolio + chain execution layer.
+
+## 19. High-Frequency On-Chain Actors
 ### Profile
 Users who engage in high-frequency on-chain activities. Require Agentic Wallet execution layer.
 ### Key Visible Criteria
@@ -1794,7 +2166,7 @@ After successfully executing 10-20 automated transactions with measurable profit
 - Gas optimization
 - Risk management features
 - Safety systems
-## 18. Agent-Compatible Crypto Users
+## 20. Agent-Compatible Crypto Users
 ### Profile
 Crypto users who want agent-compatible wallet functionality.
 ### Key Visible Criteria
@@ -1881,7 +2253,7 @@ After successfully automating 5-10 crypto operations with their AI agent and see
 - Automation features
 - Safety systems
 - Multi-chain support
-## 19. Protocol Explorers
+## 21. Protocol Explorers
 ### Profile
 Users who explore and interact with new protocols. Need execution layer for protocol interactions.
 ### Key Visible Criteria
@@ -1968,7 +2340,7 @@ After successfully exploring 3-5 new protocols with risk assessment and safe exe
 - Safety systems
 - Risk management features
 - Multi-chain support
-## 20. Bitcoin/Stacks Ecosystem Power Users
+## 22. Bitcoin/Stacks Ecosystem Power Users
 ### Profile
 Power users in Bitcoin and Stacks ecosystems. Need execution layer for Bitcoin/Stacks operations.
 ### Key Visible Criteria
@@ -2055,8 +2427,11 @@ After successfully executing 5-10 Bitcoin/Stacks operations with measurable resu
 - Stacks ecosystem integration
 - Safety systems
 - Strategy execution capabilities
-# TIER 6 — Enterprise AI Deployments
-## 21. Mid-Market + Enterprise Teams (200–10,000 employees)
+# Future Product Layer: Enterprise AI Deployments
+
+Only when Neotoma supports full org-wide agent orchestration.
+
+## 23. Mid-Market + Enterprise Teams (200–10,000 employees)
 ### Profile
 Large organizations deploying AI agents at scale. Require full organizational memory architecture.
 ### Key Visible Criteria
@@ -2144,7 +2519,7 @@ After successfully deploying 5-10 AI agents with shared memory and seeing measur
 - Agent orchestration
 - Advanced permissions
 - Compliance and auditability
-## 22. Companies Deploying Dozens of Internal AI Agents
+## 24. Companies Deploying Dozens of Internal AI Agents
 ### Profile
 Companies deploying many internal AI agents. Need shared memory substrate for agent coordination.
 ### Key Visible Criteria
@@ -2232,7 +2607,7 @@ After successfully coordinating 20+ agents for 2-3 months and seeing measurable 
 - Context sharing capabilities
 - Governance features
 - Compliance and auditability
-## 23. Organizations Requiring AI Governance + Auditability
+## 25. Organizations Requiring AI Governance + Auditability
 ### Profile
 Organizations with strict governance and auditability requirements. Need full organizational memory with governance.
 ### Key Visible Criteria
@@ -2328,18 +2703,21 @@ Load when:
 - Planning product roadmap by ICP
 - Understanding pain points and use cases
 - Writing marketing or sales materials
+- Evaluating whether a feature serves Tier 1 ICPs (AI Infrastructure Engineers, Agent System Builders, AI-native Operators)
 ### Required Co-Loaded Documents
-- `docs/specs/ICP_PRIORITY_TIERS.md` (for tier prioritization)
+- `docs/specs/ICP_PRIORITY_TIERS.md` (for tier prioritization — developer release structure)
 - `docs/NEOTOMA_MANIFEST.md` (for foundational context)
 - `docs/specs/MVP_OVERVIEW.md` (for MVP scope)
 ### Constraints Agents Must Enforce
-1. MVP features MUST serve Tier 1 ICPs
-2. Tier 2+ features require explicit product maturity milestones
-3. Tier 4+ ICPs require Agentic Portfolio/Wallet layers (not Neotoma MVP scope)
-4. All features must align with ICP pain points and use cases
+1. Developer release features MUST serve Tier 1 ICPs (AI Infrastructure Engineers, Agent System Builders, AI-native Operators)
+2. Tier 2 features (Toolchain Integrators) require API stability milestones
+3. Tier 3 features (Knowledge Workers, Small Teams) are explicitly post-developer-release
+4. Future Product Layer ICPs require Agentic Portfolio/Wallet/Enterprise layers (not developer-release scope)
+5. All features must align with ICP pain points and use cases
+6. Language must use infrastructure/guarantees framing, not "AI memory tool"
 ### Validation Checklist
 - [ ] Feature addresses specific ICP pain point
 - [ ] Use case is clearly defined for target ICP
-- [ ] Document types are supported for target ICP
-- [ ] Workflow matches target ICP's needs
-- [ ] Value proposition is clear for target ICP
+- [ ] Feature serves Tier 1 ICPs (developer release requirement)
+- [ ] Tier 2+ features clearly marked as post-initial-dev-release
+- [ ] Messaging uses state integrity vocabulary (deterministic, versioned, replayable, auditable, schema-bound)

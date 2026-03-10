@@ -73,22 +73,14 @@ const sectionLinkClass = (active: boolean) =>
  * Site-only app navigation sidebar.
  * On mobile, section links are in a bar at the bottom of the sheet (thumb-friendly); sheet slides from the right.
  */
-type ThemeOption = "light" | "dark" | "system";
-
-const THEME_ORDER: ThemeOption[] = ["light", "dark", "system"];
-
 function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const cycleTheme = () => {
-    const idx = THEME_ORDER.indexOf(theme as ThemeOption);
-    setTheme(THEME_ORDER[(idx + 1) % THEME_ORDER.length]);
-  };
+  const { theme, cycleTheme } = useTheme();
   const label =
     theme === "system"
-      ? "Theme: System (follows device)"
+      ? "System"
       : theme === "dark"
-        ? "Theme: Dark"
-        : "Theme: Light";
+        ? "Dark"
+        : "Light";
   const shortLabel = theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light";
   const Icon = theme === "system" ? Monitor : theme === "dark" ? Moon : Sun;
   return (
@@ -253,7 +245,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
                   tooltip={section.shortLabel}
                   className={sectionLinkClass(activeSection === section.id)}
                 >
-                  <a href={`#${section.id}`} onClick={onSectionClick}>
+                  <a href={`/#${section.id}`} onClick={onSectionClick}>
                     {Icon && (
                       <span className="flex shrink-0 text-current [&>svg]:size-5 [&>svg]:fill-none [&>svg]:stroke-current md:[&>svg]:size-4">
                         <Icon aria-hidden />
@@ -288,24 +280,33 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
           <SidebarTrigger className="shrink-0" onClick={onSidebarTriggerClick} />
         )}
       </SidebarHeader>
-      <SidebarContent className="bg-sidebar md:pb-4">
+      <SidebarContent className="bg-sidebar md:pb-4 flex flex-col min-h-0">
         {isMobile ? (
-          <div className="flex-1 min-h-0" aria-hidden="true" />
+          <>
+            <div className="flex-1 min-h-0" aria-hidden="true" />
+            <div
+              className="flex flex-col gap-1 border-t border-sidebar-border px-2 pt-4 pb-2 text-sidebar-foreground md:hidden"
+              style={{ paddingBottom: MOBILE_NAV_BOTTOM }}
+            >
+              <nav className="flex flex-col gap-1 p-0">
+                {menuContent}
+              </nav>
+              <div className="mt-auto border-t border-sidebar-border p-2 flex flex-col gap-1">
+                <ThemeToggle />
+              </div>
+            </div>
+          </>
         ) : (
           menuContent
         )}
       </SidebarContent>
-      <SidebarSeparator className="mx-2" />
-      <SidebarFooter className="mt-auto border-t border-sidebar-border pt-2">
-        <ThemeToggle />
-      </SidebarFooter>
-      {isMobile && (
-        <div
-          className="absolute inset-x-0 flex flex-col gap-2 border-t border-sidebar-border bg-sidebar px-2 pt-4 pb-6 text-sidebar-foreground md:hidden"
-          style={{ bottom: MOBILE_NAV_BOTTOM }}
-        >
-          {menuContent}
-        </div>
+      {!isMobile && (
+        <>
+          <SidebarSeparator className="mx-2" />
+          <SidebarFooter className="mt-auto border-t border-sidebar-border pt-2">
+            <ThemeToggle />
+          </SidebarFooter>
+        </>
       )}
     </Sidebar>
   );

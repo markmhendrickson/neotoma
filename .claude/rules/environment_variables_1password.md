@@ -1,9 +1,10 @@
 ---
-description: "Load when scripts or config need env vars stored in 1Password: use sync command to load into .env first; scripts read from .env only; add mappings if missing; never fetch from 1Password at runtime."
+description: "Fetch environment variables from 1Password when code or config needs credentials, API keys, or secrets. Load when setting up integrations, deploying, or env vars are missing."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/environment_variables_1password.mdc -->
+<!-- Source: foundation/.cursor/rules/environment_variables_1password.mdc -->
+
 
 # Environment Variables from 1Password Rule
 
@@ -35,17 +36,13 @@ When code or scripts need environment variables:
    - Identify which variables are required
    - Determine if they exist in 1Password
 
-2. **Check if mappings exist:**
-   - Query `env_var_mappings` parquet to see if variables are mapped
-   - If not mapped but exist in 1Password, **proactively add mappings** (see Step 1a)
+2. **Check if mappings exist:** Query `env_var_mappings` from the truth layer (per `neotoma_parquet_migration_rules.mdc`). If not mapped but exist in 1Password, **proactively add mappings** (see Step 1a).
 
 ### Step 1a: Add Missing Mappings (Proactive)
 
 **If a required variable exists in 1Password but is not in mappings:**
 
-1. **Add mapping to env_var_mappings parquet:**
-   - Use MCP parquet `add_record` to add the mapping
-   - Include: `env_var`, `op_reference`, `vault`, `item_name`, `service`, `is_optional`
+1. **Add mapping to env_var_mappings** via truth layer (per `neotoma_parquet_migration_rules.mdc`). Include: `env_var`, `op_reference`, `vault`, `item_name`, `service`, `is_optional`
    - Format: `op://{vault}/{item_name}/{field_label}`
 
 2. **Example:**
@@ -96,9 +93,7 @@ When code or scripts need environment variables:
 
 **For variables not in mappings:**
 
-1. **Add to env_var_mappings first** (if it's a recurring need):
-   - Use MCP parquet `add_record` to add mapping
-   - Then run sync command to load into `.env`
+1. **Add to env_var_mappings first** (if it's a recurring need) via truth layer (per `neotoma_parquet_migration_rules.mdc`). Then run sync command to load into `.env`.
 
 2. **If one-time use only:**
    - Manually fetch from 1Password and add to `.env`
@@ -140,7 +135,7 @@ fi
 #!/bin/bash
 # Script reads from .env (variables loaded via sync command)
 if [ -f .env ]; then
-  DATABASE_URL=$(grep "^DATABASE_URL=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
+  SUPABASE_PROJECT_ID=$(grep "^SUPABASE_PROJECT_ID=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
   SENDGRID_API_KEY=$(grep "^SENDGRID_API_KEY=" .env | cut -d '=' -f2- | sed 's/^"//;s/"$//' | tr -d '\n')
 fi
 ```
@@ -197,7 +192,7 @@ fi
 5. **When variables are missing** from `.env`
 
 **The sync command:**
-- Reads mappings from `env_var_mappings` parquet (via MCP)
+- Reads mappings from truth layer (per `neotoma_parquet_migration_rules.mdc`)
 - Fetches values from 1Password using `op` CLI
 - Updates `.env` file with resolved values
 - Preserves unmanaged variables
@@ -235,7 +230,7 @@ fi
    ```
 
 2. **If still missing:**
-   - Check if variable is in `env_var_mappings` parquet
+   - Check if variable is in `env_var_mappings` (truth layer per `neotoma_parquet_migration_rules.mdc`)
    - If not, add mapping first, then re-run sync
    - If mapping exists, verify 1Password item/field exists
 
@@ -263,7 +258,7 @@ fi
 ## Related Documents
 
 - `foundation/scripts/op_sync_env_from_1password.py` - Environment sync script
-- `foundation/agent_instructions/cursor_commands/sync_env_from_1password.md` - Sync command documentation
+- Skill `sync-env-from-1password` (`.cursor/skills/sync-env-from-1password/SKILL.md` or `foundation/agent_instructions/cursor_skills/sync-env-from-1password/SKILL.md`)
 - `foundation/agent_instructions/cursor_rules/configuration_management.md` - Configuration management
 
 ## Agent Instructions
@@ -279,7 +274,7 @@ Load this document when:
 ### Required Co-Loaded Documents
 
 - `foundation/agent_instructions/cursor_rules/configuration_management.md` - Configuration management
-- `foundation/agent_instructions/cursor_commands/sync_env_from_1password.md` - Sync command reference
+- Skill `sync-env-from-1password` - Sync workflow reference
 
 ### Constraints Agents Must Enforce
 

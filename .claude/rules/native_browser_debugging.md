@@ -1,9 +1,9 @@
 ---
-description: "Load when debugging or verifying UI flows, OAuth, or frontend behavior: use native browser tools to reproduce and confirm; check console for errors; do not claim UI fixes without browser confirmation."
+description: "Use native browser for UI verification and debugging; check console for errors. Load when investigating or fixing UI, OAuth, or frontend behavior."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/native_browser_debugging.mdc -->
+<!-- Source: foundation/.cursor/rules/native_browser_debugging.mdc -->
 
 
 # Native Browser Debugging Rule

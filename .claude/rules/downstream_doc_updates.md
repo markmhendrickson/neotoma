@@ -1,9 +1,9 @@
 ---
-description: "Load when modifying foundation, architecture, specs, or subsystem docs: identify downstream dependencies via doc_dependencies.yaml, update all downstream docs that restate or depend on the change, run validation script."
+description: "When upstream documentation is updated, update all downstream docs that depend on it. Load when editing docs that other docs reference."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/downstream_doc_updates.mdc -->
+<!-- Source: foundation/.cursor/rules/downstream_doc_updates.mdc -->
 
 # Downstream Documentation Update Rule
 

@@ -712,6 +712,21 @@ async function maybeRunInitForMissingRepo(promptEnabled: boolean): Promise<strin
   return repoRoot;
 }
 
+async function canRunSourceWatchScripts(repoRoot: string): Promise<boolean> {
+  const requiredPaths = [
+    path.join(repoRoot, "scripts", "pick-port.js"),
+    path.join(repoRoot, "src", "actions.ts"),
+  ];
+  for (const requiredPath of requiredPaths) {
+    const exists = await fs
+      .access(requiredPath)
+      .then(() => true)
+      .catch(() => false);
+    if (!exists) return false;
+  }
+  return true;
+}
+
 async function loadNpmScripts(): Promise<{ repoRoot: string; scripts: NpmScript[] }> {
   const repoRoot =
     (await resolveAndPersistRepoRootFromInitContext()) ?? (await resolveRepoRootFromInstalledCli());
@@ -8303,13 +8318,28 @@ apiCommand
       logStream.write(logLine);
 
       const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+      const hasSourceWatchScripts = await canRunSourceWatchScripts(repoRoot);
+      if (opts.tunnel && !hasSourceWatchScripts) {
+        const error =
+          "Tunnel mode requires a source checkout with scripts and src files. Reinstall from source or run without --tunnel.";
+        if (outputMode === "json") {
+          writeOutput({ ok: false, error }, outputMode);
+          return;
+        }
+        process.stderr.write(`neotoma api start: ${error}\n`);
+        return;
+      }
       const childScript = opts.tunnel
         ? envOpt === "prod"
           ? "watch:prod:tunnel"
           : "dev:api"
         : envOpt === "prod"
-          ? "dev:prod"
-          : "dev:server";
+          ? hasSourceWatchScripts
+            ? "dev:prod"
+            : "start:api"
+          : hasSourceWatchScripts
+            ? "dev:server"
+            : "start:api";
       const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
       if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
       const child = spawn(npmCmd, ["run", childScript], {
@@ -8408,13 +8438,24 @@ apiCommand
       );
     }
     const npmCmd = process.platform === "win32" ? "npm.cmd" : "npm";
+    const hasSourceWatchScripts = await canRunSourceWatchScripts(repoRoot);
+    if (useTunnel && !hasSourceWatchScripts) {
+      process.stderr.write(
+        "neotoma api start: Tunnel mode requires a source checkout with scripts and src files. Reinstall from source or run without --tunnel.\n"
+      );
+      return;
+    }
     const childScript = useTunnel
       ? envOpt === "prod"
         ? "watch:prod:tunnel"
         : "dev:api"
       : envOpt === "prod"
-        ? "dev:prod"
-        : "dev:server";
+        ? hasSourceWatchScripts
+          ? "dev:prod"
+          : "start:api"
+        : hasSourceWatchScripts
+          ? "dev:server"
+          : "start:api";
     const spawnEnv: Record<string, string> = { ...process.env, NEOTOMA_ENV: effectiveEnv };
     if (tunnelProvider) spawnEnv.NEOTOMA_TUNNEL_PROVIDER = tunnelProvider;
     const child = spawn(npmCmd, ["run", childScript], {

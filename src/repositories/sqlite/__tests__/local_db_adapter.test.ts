@@ -135,4 +135,33 @@ describe("local db adapter", () => {
 
     rmSync(tempDir, { recursive: true, force: true });
   });
+
+  it("recovers from sqlite disk I/O errors by reopening connection", async () => {
+    const tempDir = path.join(process.cwd(), "tmp", `neotoma-ioerr-${Date.now()}`);
+    const db = await loadDb(tempDir);
+
+    const { error: insertError } = await db
+      .from("sources")
+      .insert({
+        id: "src_ioerr_test",
+        user_id: "user_ioerr_test",
+        content_hash: "hash_ioerr",
+        mime_type: "text/plain",
+        storage_url: "file:///tmp/ioerr.txt",
+        created_at: new Date().toISOString(),
+      });
+    expect(insertError).toBeNull();
+
+    // Force stale handle state: delete SQLite files while adapter still has a cached connection.
+    const dbPath = path.join(tempDir, "neotoma.db");
+    rmSync(dbPath, { force: true });
+    rmSync(`${dbPath}-wal`, { force: true });
+    rmSync(`${dbPath}-shm`, { force: true });
+
+    // Query should not bubble disk I/O error; adapter retries once after cache reset.
+    const { error: fetchError } = await db.from("sources").select("*").eq("id", "src_ioerr_test");
+    expect(fetchError).toBeNull();
+
+    rmSync(tempDir, { recursive: true, force: true });
+  });
 });

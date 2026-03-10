@@ -298,7 +298,7 @@ Claude Code's localhost architecture aligns perfectly with Neotoma's privacy-fir
 **Deterministic Context:**
 - Claude Code accesses Neotoma's deterministic extraction
 - Same queries return consistent, reproducible results
-- Verifiable domain for personal data
+- Verifiable domain for stored data
 - Compensates for LLM "jagged intelligence"
 
 **Cross-Platform Memory:**

@@ -1,9 +1,9 @@
 ---
-description: "Load when creating or maintaining documentation: minimize context use, reference files instead of inlining, keep rules under 500 lines, follow doc structure and writing style standards."
+description: "Create and maintain documentation to minimize context usage while keeping clarity. Load when creating or editing documentation files."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/documentation_rules.mdc -->
+<!-- Source: foundation/.cursor/rules/documentation_rules.mdc -->
 
 # Documentation Rules
 

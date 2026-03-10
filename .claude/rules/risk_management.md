@@ -1,9 +1,9 @@
 ---
-description: "Load when considering schema changes, foundation doc changes, security/auth changes, or constraint violations: stop and request approval for high-risk changes; explain risk and get explicit confirmation before proceeding."
+description: "Stop and request human approval for high-risk changes (schema, security, foundation docs, architectural). Load when proposing schema, auth, or architectural changes."
 alwaysApply: false
 ---
 
-<!-- Source: foundation/agent_instructions/cursor_rules/risk_management.mdc -->
+<!-- Source: foundation/.cursor/rules/risk_management.mdc -->
 
 # Risk Management and Hold Points Rule
 
