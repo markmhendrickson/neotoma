@@ -60,7 +60,7 @@ neotoma schemas register --file ./contact_schema.json`}</pre>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
-        <Link to="/schema-constraints" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <Link to="/memory-guarantees#schema-constraints" className="text-foreground underline underline-offset-2 hover:no-underline">
           schema constraints
         </Link>
         ,{" "}

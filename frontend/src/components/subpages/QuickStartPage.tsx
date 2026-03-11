@@ -31,13 +31,15 @@ function CodeBlock({ code }: { code: string }) {
         type="button"
         variant="outline"
         size="sm"
-        className="absolute top-2 right-2 gap-0 shrink-0"
+        className="absolute top-2 right-2 h-8 gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950"
         aria-label={copied ? "Copied" : "Copy code"}
         onClick={onCopy}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+        <span className="text-[11px] font-semibold tracking-wide">{copied ? "Copied" : "Copy"}</span>
       </Button>
-      <pre className="rounded-lg border code-block-palette p-4 pr-12 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+        <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{code}</code>
       </pre>
     </div>
@@ -48,11 +50,11 @@ export function QuickStartPage() {
   return (
     <DetailPage title="Quick start">
       <div className="flex flex-wrap gap-2 mb-6">
-        <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
           5-minute integration
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Fully reversible
         </span>

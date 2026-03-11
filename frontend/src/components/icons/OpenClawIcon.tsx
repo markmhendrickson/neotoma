@@ -2,7 +2,7 @@ import lobsterOutlineSvg from "./openclaw_lobster_outline.svg?raw";
 import { cn } from "@/lib/utils";
 
 /**
- * OpenClaw icon — outline lobster from openclaw_lobster_outline.svg.
+ * OpenClaw icon — silhouette from openclaw_lobster_outline.svg.
  * Used in hero "Works with" badge and OpenClaw docs page.
  */
 export function OpenClawIcon({

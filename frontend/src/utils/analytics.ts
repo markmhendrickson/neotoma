@@ -54,7 +54,6 @@ export type CtaName =
   | "view_guarantees"
   | "view_architecture"
   | "view_docs"
-  | "quick_start"
   | "view_repo";
 
 /** Track a CTA button/link click with the CTA name and current page. */
