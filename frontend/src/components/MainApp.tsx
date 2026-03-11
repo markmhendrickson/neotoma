@@ -37,7 +37,6 @@ import { DeterministicMemoryPage } from "@/components/subpages/DeterministicMemo
 import { MemoryVendorsPage } from "@/components/subpages/MemoryVendorsPage";
 import { PrivacyFirstPage } from "@/components/subpages/PrivacyFirstPage";
 import { CrossPlatformPage } from "@/components/subpages/CrossPlatformPage";
-import { DataModelPage } from "@/components/subpages/DataModelPage";
 import { SchemaManagementPage } from "@/components/subpages/SchemaManagementPage";
 import { TroubleshootingPage } from "@/components/subpages/TroubleshootingPage";
 import { ChangelogPage } from "@/components/subpages/ChangelogPage";
@@ -65,7 +64,6 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/cli", element: <CliReferencePage /> },
   { path: "/docker", element: <DockerPage /> },
   { path: "/architecture", element: <ArchitecturePage /> },
-  { path: "/data-model", element: <DataModelPage /> },
   { path: "/schema-management", element: <SchemaManagementPage /> },
   { path: "/troubleshooting", element: <TroubleshootingPage /> },
   { path: "/changelog", element: <ChangelogPage /> },
