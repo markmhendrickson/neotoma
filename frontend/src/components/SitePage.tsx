@@ -52,14 +52,14 @@ import { SectionDotNav } from "./SectionDotNav";
 import { CursorIcon } from "./icons/CursorIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { StateFlowDiagram } from "./illustrations/StateFlowDiagram";
-const icpOptionBInfra = "/images/icp/icp-option-b-infra.png";
-const icpOptionBBuilders = "/images/icp/icp-option-b-builders.png";
-const icpOptionBOperators = "/images/icp/icp-option-b-operators.png";
-const interfacesOptionBRest = "/images/interfaces/interfaces-option-b-rest.png";
-const interfacesOptionBMcp = "/images/interfaces/interfaces-option-b-mcp.png";
-const interfacesOptionBCli = "/images/interfaces/interfaces-option-b-cli.png";
-const learnMoreDocumentationImage = "/images/interfaces/learn_more_documentation.svg";
-const learnMoreDeepDiveImage = "/images/interfaces/learn_more_deep_dive.svg";
+import icpOptionBInfra from "@/assets/images/icp/icp-option-b-infra.png";
+import icpOptionBBuilders from "@/assets/images/icp/icp-option-b-builders.png";
+import icpOptionBOperators from "@/assets/images/icp/icp-option-b-operators.png";
+import interfacesOptionBRest from "@/assets/images/interfaces/interfaces-option-b-rest.png";
+import interfacesOptionBMcp from "@/assets/images/interfaces/interfaces-option-b-mcp.png";
+import interfacesOptionBCli from "@/assets/images/interfaces/interfaces-option-b-cli.png";
+import learnMoreDocumentationImage from "@/assets/images/interfaces/learn_more_documentation.svg";
+import learnMoreDeepDiveImage from "@/assets/images/interfaces/learn_more_deep_dive.svg";
 import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
 interface SitePageProps {
   staticMode?: boolean;
@@ -1390,7 +1390,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <h1 className="text-[28px] font-medium tracking-[-0.02em]">
                       Your production agent has{" "}
                       <span className="intro-hero-word-wrap">
-                        <span className="text-foreground">amnesia</span>
+                        <span className="text-foreground">amnesia.</span>
                       </span>
                     </h1>
 

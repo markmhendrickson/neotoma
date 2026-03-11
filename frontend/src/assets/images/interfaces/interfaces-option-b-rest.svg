@@ -1,0 +1,48 @@
+<svg width="280" height="280" viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="restBg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(140 134) rotate(90) scale(140)">
+      <stop offset="0" stop-color="#F8F4FF"/>
+      <stop offset="1" stop-color="#EFE7FF"/>
+    </radialGradient>
+    <linearGradient id="restDish" x1="80" y1="50" x2="200" y2="170" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C7B6F5"/>
+      <stop offset="1" stop-color="#9B7EDE"/>
+    </linearGradient>
+    <linearGradient id="restAgent" x1="100" y1="180" x2="180" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E8DEFF"/>
+      <stop offset="1" stop-color="#D2BEFA"/>
+    </linearGradient>
+    <filter id="restGlow" x="0" y="0" width="280" height="280" filterUnits="userSpaceOnUse">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="10" y="10" width="260" height="260" rx="20" fill="url(#restBg)"/>
+  <circle cx="220" cy="58" r="28" fill="#E4D6FF" opacity="0.6"/>
+  <circle cx="58" cy="222" r="34" fill="#DFCCFF" opacity="0.5"/>
+
+  <!-- Satellite dish (parabolic) -->
+  <ellipse cx="140" cy="118" rx="72" ry="28" fill="url(#restDish)" stroke="#8E6AE8" stroke-width="1.5"/>
+  <path d="M78 118 Q140 82 202 118 Q140 128 78 118" fill="#B59CEC" opacity="0.4"/>
+  <circle cx="140" cy="108" r="14" fill="#FFFFFF" stroke="#8E6AE8" stroke-width="1.5"/>
+  <circle cx="140" cy="108" r="6" fill="#A27BF0"/>
+
+  <!-- Dish stand -->
+  <rect x="132" y="128" width="16" height="42" rx="4" fill="#D2BEFA"/>
+  <rect x="126" y="168" width="28" height="8" rx="4" fill="#C7B6F5"/>
+
+  <!-- Agent (simple figure): head, body, arms on dish controls -->
+  <circle cx="140" cy="198" r="22" fill="url(#restAgent)" stroke="#B59CEC" stroke-width="1.5"/>
+  <circle cx="140" cy="194" r="14" fill="#F3EEFF" stroke="#C7B6F5"/>
+  <ellipse cx="138" cy="193" rx="3" ry="4" fill="#5B3FB8"/>
+  <path d="M118 208 L132 218 L140 214 L148 218 L162 208" fill="none" stroke="#B59CEC" stroke-width="3" stroke-linecap="round"/>
+  <rect x="108" y="218" width="64" height="24" rx="12" fill="url(#restAgent)" stroke="#B59CEC" stroke-width="1"/>
+  <!-- Arm reaching toward dish base -->
+  <path d="M124 212 L130 168 L138 158" fill="none" stroke="#C7B6F5" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="138" cy="156" r="6" fill="#D2BEFA"/>
+
+  <!-- Signal arcs (conceptual) -->
+  <path d="M68 98 Q140 60 212 98" fill="none" stroke="#8E6AE8" stroke-width="2" stroke-dasharray="6 4" opacity="0.6"/>
+  <path d="M72 108 Q140 74 208 108" fill="none" stroke="#A27BF0" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.4"/>
+</svg>

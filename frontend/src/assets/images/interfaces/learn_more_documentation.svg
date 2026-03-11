@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 320" role="img" aria-label="Engraved documentation illustration">
+  <rect width="480" height="320" fill="#000"/>
+  <g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M68 82h168a10 10 0 0 1 10 10v146a10 10 0 0 1-10 10H68a10 10 0 0 1-10-10V92a10 10 0 0 1 10-10z" stroke-width="2.6"/>
+    <path d="M92 106h124M92 122h128M92 138h116M92 154h128M92 170h110M92 186h124M92 202h106M92 218h118" stroke-width="1.35" opacity=".95"/>
+    <path d="M270 70h154a10 10 0 0 1 10 10v162a10 10 0 0 1-10 10H270a10 10 0 0 1-10-10V80a10 10 0 0 1 10-10z" stroke-width="2.6"/>
+    <path d="M294 96h106M294 112h114M294 128h104M294 144h116M294 160h92M294 176h110M294 192h98M294 208h104" stroke-width="1.35" opacity=".95"/>
+    <path d="M246 120l20-20M246 148l20-20M246 176l20-20M246 204l20-20" stroke-width="1.1" opacity=".7"/>
+    <circle cx="350" cy="252" r="46" stroke-width="2.4"/>
+    <circle cx="350" cy="252" r="30" stroke-width="1.6" opacity=".9"/>
+    <circle cx="350" cy="252" r="13" stroke-width="1.8"/>
+    <path d="M350 206v18M350 280v18M304 252h18M378 252h18M319 221l13 13M381 283l13 13M381 221l-13 13M319 283l-13 13" stroke-width="1.4"/>
+    <path d="M74 248l158-158M84 248l158-158M96 248l148-148M108 248l136-136M120 248l124-124M132 248l112-112M144 248l100-100M156 248l88-88" stroke-width=".62" opacity=".35"/>
+    <path d="M274 252l148-148M286 252l138-138M298 252l126-126M310 252l114-114M322 252l102-102M334 252l90-90M346 252l78-78M358 252l66-66" stroke-width=".62" opacity=".35"/>
+    <path d="M48 264h388" stroke-width=".9" opacity=".55"/>
+  </g>
+</svg>

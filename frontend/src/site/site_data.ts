@@ -201,10 +201,10 @@ export const MEMORY_MODEL_VENDORS: Record<string, string> = {
 };
 
 export const MEMORY_TYPE_SLUGS: Record<string, string> = {
-  platform: "platform-memory",
-  retrieval: "retrieval-memory",
-  file: "file-based-memory",
-  neotoma: "deterministic-memory",
+  platform: "memory-models#platform-memory",
+  retrieval: "memory-models#retrieval-memory",
+  file: "memory-models#file-based-memory",
+  neotoma: "memory-models#deterministic-memory",
 };
 
 export interface FoundationCard {
@@ -218,7 +218,7 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
   {
     title: "Privacy-first",
     icon: "ShieldCheck",
-    link: "/privacy-first",
+    link: "/foundations#privacy-first",
     lines: [
       "Your data stays local. Never used for training.",
       "User-controlled storage, optional encryption at rest.",
@@ -228,7 +228,7 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
   {
     title: "Deterministic",
     icon: "Fingerprint",
-    link: "/deterministic-memory",
+    link: "/foundations#deterministic",
     lines: [
       "Same input always produces same output.",
       "Schema-first extraction, hash-based entity IDs, full provenance.",
@@ -238,7 +238,7 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
   {
     title: "Cross-platform",
     icon: "Globe2",
-    link: "/cross-platform",
+    link: "/foundations#cross-platform",
     lines: [
       "One state graph across Claude, Cursor, Codex, and CLI.",
       "MCP-based access. No platform lock-in.",
@@ -249,10 +249,11 @@ export const THREE_FOUNDATIONS: FoundationCard[] = [
 
 export const SITE_SECTIONS: SiteSection[] = [
   { id: "intro", label: "Intro", shortLabel: "Intro", icon: "Zap" },
-  { id: "failure-scenarios", label: "Before / After", shortLabel: "Before / After", icon: "AlertTriangle" },
+  { id: "outcomes", label: "Before / After", shortLabel: "Before / After", icon: "AlertTriangle" },
   { id: "memory-guarantees", label: "Guarantees", shortLabel: "Guarantees", icon: "ShieldCheck" },
+  { id: "install", label: "Install", shortLabel: "Install", icon: "Rocket" },
+  { id: "inspect", label: "Inspect", shortLabel: "Inspect", icon: "Search" },
   { id: "architecture", label: "Architecture", shortLabel: "Architecture", icon: "Layers" },
-  { id: "quick-start", label: "Quick start", shortLabel: "Quick start", icon: "Rocket" },
   { id: "who-is-it-for", label: "Who is it for", shortLabel: "Who is it for", icon: "Users" },
   { id: "interfaces", label: "Interfaces", shortLabel: "Interfaces", icon: "SatelliteDish" },
   { id: "learn-more", label: "Learn more", shortLabel: "Resources", icon: "GraduationCap" },
@@ -274,8 +275,8 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Getting started",
     items: [
-      { label: "Install and first run", href: "/#quick-start", icon: "Rocket" },
-      { label: "Docker setup", href: "/docker", icon: "Container" },
+      { label: "Documentation", href: "/docs", icon: "Home" },
+      { label: "Install", href: "/install", icon: "Rocket" },
     ],
   },
   {
@@ -284,57 +285,24 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "REST API", href: "/api", icon: "Globe" },
       { label: "MCP server", href: "/mcp", icon: "Server" },
       { label: "CLI", href: "/cli", icon: "Terminal" },
+      { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
+      { label: "Memory models", href: "/memory-models", icon: "BookOpen" },
+      { label: "Foundations", href: "/foundations", icon: "Layers" },
+      { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
       { label: "Architecture", href: "/architecture", icon: "Building2" },
-      { label: "Terminology", href: "/terminology", icon: "BookOpen" },
-      { label: "Data model walkthrough", href: "/data-model", icon: "BookOpen" },
-      { label: "Schema management", href: "/schema-management", icon: "BookOpen" },
-      { label: "Troubleshooting", href: "/troubleshooting", icon: "Terminal" },
-      { label: "Changelog", href: "/changelog", icon: "BookOpen" },
+      { label: "Terminology", href: "/terminology", icon: "Bookmark" },
+      { label: "Data model walkthrough", href: "/data-model", icon: "Boxes" },
+      { label: "Schema management", href: "/schema-management", icon: "Database" },
+      { label: "Troubleshooting", href: "/troubleshooting", icon: "Bug" },
+      { label: "Changelog", href: "/changelog", icon: "History" },
     ],
-  },
-  {
-    title: "Memory guarantees",
-    items: [
-      { label: "Deterministic state evolution", href: "/deterministic-state-evolution", icon: "Zap" },
-      { label: "Versioned history", href: "/versioned-history", icon: "BookOpen" },
-      { label: "Replayable timeline", href: "/replayable-timeline", icon: "BookOpen" },
-      { label: "Auditable change log", href: "/auditable-change-log", icon: "BookOpen" },
-      { label: "Schema constraints", href: "/schema-constraints", icon: "BookOpen" },
-      { label: "Silent mutation risk", href: "/silent-mutation-risk", icon: "BookOpen" },
-      { label: "Conflicting facts risk", href: "/conflicting-facts-risk", icon: "BookOpen" },
-      { label: "Reproducible state reconstruction", href: "/reproducible-state-reconstruction", icon: "BookOpen" },
-      { label: "Human inspectability", href: "/human-inspectability", icon: "BookOpen" },
-    ],
-  },
-  {
-    title: "Memory models",
-    items: [
-      { label: "Platform memory", href: "/platform-memory", icon: "MessageSquare" },
-      { label: "Retrieval memory", href: "/retrieval-memory", icon: "Server" },
-      { label: "File-based memory", href: "/file-based-memory", icon: "BookOpen" },
-      { label: "Deterministic memory", href: "/deterministic-memory", icon: "Zap" },
-      { label: "Memory model comparison", href: "/memory-vendors", icon: "BookOpen" },
-    ],
-  },
-  {
-    title: "Foundations",
-    items: [
-      { label: "Privacy-first", href: "/privacy-first", icon: "BookOpen" },
-      { label: "Cross-platform", href: "/cross-platform", icon: "Globe" },
-    ],
-  },
-  {
-    title: "Agent behavior",
-    items: [{ label: "Agent instructions", href: "/agent-instructions", icon: "Bot" }],
   },
   {
     title: "Use cases",
     items: [
+      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
       { label: "AI infrastructure engineers", href: "/ai-infrastructure-engineers", icon: "Cpu" },
       { label: "Agent system builders", href: "/agentic-systems-builders", icon: "Zap" },
-      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
-      { label: "Knowledge workers", href: "/knowledge-workers", icon: "Users" },
-      { label: "Founders and teams", href: "/founders-teams", icon: "Users" },
     ],
   },
   {
@@ -342,10 +310,10 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     items: [
       { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
       { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
-      { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageSquare" },
-      { label: "Codex", href: "/neotoma-with-codex", icon: "Terminal" },
-      { label: "Cursor", href: "/neotoma-with-cursor", icon: "Code" },
-      { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Bot" },
+      { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageCircle" },
+      { label: "Codex", href: "/neotoma-with-codex", icon: "Monitor" },
+      { label: "Cursor", href: "/neotoma-with-cursor", icon: "PanelRight" },
+      { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Sparkles" },
     ],
   },
   {
@@ -927,13 +895,21 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
   },
 ];
 
+/** A failure mode with a label and Lucide icon name for the component to render. */
+export interface FailureModeItem {
+  label: string;
+  /** Lucide icon name (e.g. "BookmarkX", "Unlink") — should symbolize this failure. */
+  icon: string;
+}
+
 export interface IcpProfile {
   slug: string;
+  /** Page title: use sentence case (e.g. "Builders of agentic systems"). */
   name: string;
   shortName: string;
   tagline: string;
   painPoints: string[];
-  failureModes: string[];
+  failureModes: FailureModeItem[];
   dataTypes: string[];
   schemaHotSpots: string[];
   solutionSummary: string;
@@ -941,84 +917,8 @@ export interface IcpProfile {
 
 export const ICP_PROFILES: IcpProfile[] = [
   {
-    slug: "ai-infrastructure-engineers",
-    name: "AI Infrastructure Engineers",
-    shortName: "AI infrastructure engineers",
-    tagline: "Platform-layer state integrity guarantees for runtimes and orchestration",
-    painPoints: [
-      "Cannot reproduce agent runs — same inputs yield different state",
-      "State mutations invisible to debugging and observability tooling",
-      "Debugging production failures requires manual log archaeology",
-      "No provenance trail for state changes across pipeline steps",
-    ],
-    failureModes: [
-      "Non-reproducible agent runs in production",
-      "Invisible state mutation across sessions",
-      "No provenance linking outputs to source data",
-      "Ordering-sensitive state drift across orchestration steps",
-    ],
-    dataTypes: [
-      "session state",
-      "agent actions",
-      "pipelines",
-      "evaluations",
-      "audit trails",
-      "tool configs",
-      "runbooks",
-      "entity graphs",
-    ],
-    schemaHotSpots: [
-      "agent_session",
-      "action",
-      "pipeline",
-      "evaluation",
-      "audit_event",
-      "tool_config",
-    ],
-    solutionSummary:
-      "Deterministic state evolution, versioned history, replayable timeline, and schema constraints provide the guarantees missing from ad-hoc state management. Append-only observation log enables full state reconstruction.",
-  },
-  {
-    slug: "agentic-systems-builders",
-    name: "Builders of Agentic Systems",
-    shortName: "Agent system builders",
-    tagline: "Application-layer deterministic memory for shipped agents and toolchains",
-    painPoints: [
-      "No shared state for agents — token-based or conversation-only; no cross-session, cross-agent state",
-      "No provenance — cannot trace agent decisions or outputs to source data",
-      "No deterministic layer — need reproducible, explainable state for eval, debug, and compliance",
-      "Fragmented context across orchestration steps and multi-agent workflows",
-    ],
-    failureModes: [
-      "Silent state mutation between agent sessions",
-      "Non-replayable pipelines — can't reconstruct agent reasoning",
-      "Context loss across orchestration steps and agent handoffs",
-      "Evaluation gaps — no audit trail linking outputs to source facts",
-    ],
-    dataTypes: [
-      "session state",
-      "agent actions",
-      "pipelines",
-      "evaluations",
-      "audit trails",
-      "tool configs",
-      "runbooks",
-      "entity graphs",
-    ],
-    schemaHotSpots: [
-      "agent_session",
-      "action",
-      "pipeline",
-      "evaluation",
-      "audit_event",
-      "tool_config",
-    ],
-    solutionSummary:
-      "Neotoma provides a deterministic, MCP-backed state layer for agent frameworks, orchestration pipelines, and observability stacks. Same input, same output. Every fact traces to provenance. Cross-session state with full audit trail.",
-  },
-  {
     slug: "ai-native-operators",
-    name: "AI-Native Individual Operators",
+    name: "AI-native individual operators",
     shortName: "AI-native operators",
     tagline: "State that follows you across every tool and session",
     painPoints: [
@@ -1026,12 +926,18 @@ export const ICP_PROFILES: IcpProfile[] = [
       "Fragmented document sources scattered across email, drives, and screenshots",
       "Repetitive context-setting in every new AI interaction",
       "Lost commitments and forgotten action items between sessions",
+      "Personal data — receipts, contacts, preferences — stored in provider memory with no control over retention or training use",
     ],
     failureModes: [
-      "Lost commitments across tools",
-      "Tool-to-tool context loss",
-      "Silent state drift over time",
-      "Weak correction loop — no way to fix what the agent got wrong",
+      { label: "Lost commitments across tools", icon: "BookmarkX" },
+      { label: "Tool-to-tool context loss", icon: "Unlink" },
+      { label: "Silent state drift over time", icon: "Activity" },
+      { label: "Weak correction loop — no way to fix what the agent got wrong", icon: "RefreshCw" },
+      {
+        label: "Personal data in opaque provider memory with no deletion control",
+        icon: "ShieldAlert",
+      },
+      { label: "Memory locked to one vendor's ecosystem", icon: "Lock" },
     ],
     dataTypes: [
       "tasks",
@@ -1049,36 +955,94 @@ export const ICP_PROFILES: IcpProfile[] = [
       "Neotoma persists every conversation, extracted entity, and commitment as versioned, schema-bound state. Switch between Claude, Cursor, and Codex without losing context. Corrections propagate deterministically.",
   },
   {
-    slug: "knowledge-workers",
-    name: "High-Context Knowledge Workers",
-    shortName: "Knowledge workers",
-    tagline: "Cross-document reasoning with entity resolution and timelines",
+    slug: "ai-infrastructure-engineers",
+    name: "AI infrastructure engineers",
+    shortName: "AI infrastructure engineers",
+    tagline: "Platform-layer state integrity guarantees for runtimes and orchestration",
     painPoints: [
-      "Information overload — hundreds of documents across multiple projects",
-      "No entity unification across documents, tools, and projects",
-      "Timeline fragmentation — no chronological view of events",
-      "Search limitations — can't find information across document types",
+      "Cannot reproduce agent runs — same inputs yield different state",
+      "State mutations invisible to debugging and observability tooling",
+      "Debugging production failures requires manual log archaeology",
+      "No provenance trail for state changes across pipeline steps",
+      "Agent state routed through third-party services with no data residency or compliance guarantees",
+      "No portable state layer — agent memory locked to one vendor's runtime",
     ],
     failureModes: [
-      "Duplicate entities that diverge silently",
-      "Contradictory state across sources",
-      "Non-replayable decisions — can't reconstruct what was known when",
-      "Opaque relationship logic between entities",
+      { label: "Non-reproducible agent runs in production", icon: "Repeat" },
+      { label: "Invisible state mutation across sessions", icon: "EyeOff" },
+      { label: "No provenance linking outputs to source data", icon: "LinkOff" },
+      { label: "Ordering-sensitive state drift across orchestration steps", icon: "GitBranch" },
+      { label: "No proof of data residency or access control for compliance", icon: "ShieldAlert" },
+      { label: "State layer locked to one vendor — no portability across runtimes", icon: "Lock" },
     ],
     dataTypes: [
-      "people",
-      "companies",
-      "contracts",
-      "events",
-      "evidence chains",
-      "citations",
-      "timelines",
-      "research notes",
-      "financial records",
+      "session state",
+      "agent actions",
+      "pipelines",
+      "evaluations",
+      "audit trails",
+      "run state",
+      "orchestration logs",
+      "tool configs",
+      "runbooks",
+      "entity graphs",
     ],
-    schemaHotSpots: ["person", "contact", "company", "relationship", "event", "contract", "note"],
+    schemaHotSpots: [
+      "agent_session",
+      "action",
+      "pipeline",
+      "evaluation",
+      "audit_event",
+      "tool_config",
+    ],
     solutionSummary:
-      "Neotoma resolves entities across all your documents with canonical IDs, constructs timelines automatically, and lets you query relationships across sources. Every fact traces back to its provenance.",
+      "Deterministic state evolution, versioned history, replayable timeline, and schema constraints provide the guarantees missing from ad-hoc state management. Append-only observation log enables full state reconstruction.",
+  },
+  {
+    slug: "agentic-systems-builders",
+    name: "Builders of agentic systems",
+    shortName: "Agent system builders",
+    tagline: "Application-layer deterministic memory for shipped agents and toolchains",
+    painPoints: [
+      "No shared state for agents — token-based or conversation-only; no cross-session, cross-agent state",
+      "No provenance — cannot trace agent decisions or outputs to source data",
+      "No deterministic layer — need reproducible, explainable state for eval, debug, and compliance",
+      "Fragmented context across orchestration steps and multi-agent workflows",
+      "Sensitive client data flows through external memory services with no storage or access audit",
+    ],
+    failureModes: [
+      { label: "Silent state mutation between agent sessions", icon: "ZapOff" },
+      { label: "Non-replayable pipelines — can't reconstruct agent reasoning", icon: "RotateCcw" },
+      { label: "Context loss across orchestration steps and agent handoffs", icon: "Hand" },
+      {
+        label: "Evaluation gaps — no audit trail linking outputs to source facts",
+        icon: "FileText",
+      },
+      { label: "Client data in third-party memory with no access audit", icon: "ShieldAlert" },
+      { label: "Framework-specific memory — no portability across agent tools", icon: "Lock" },
+    ],
+    dataTypes: [
+      "session state",
+      "agent actions",
+      "pipelines",
+      "evaluations",
+      "audit trails",
+      "conversations",
+      "tool outputs",
+      "tool configs",
+      "runbooks",
+      "entity graphs",
+    ],
+    schemaHotSpots: [
+      "agent_session",
+      "action",
+      "pipeline",
+      "evaluation",
+      "audit_event",
+      "tool_config",
+    ],
+    solutionSummary:
+      "Neotoma provides a deterministic, MCP-backed state layer for agent frameworks, orchestration pipelines, and observability stacks. Same input, same output. Every fact traces to provenance. Cross-session state with full audit trail.",
   },
 ];
 

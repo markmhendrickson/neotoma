@@ -286,7 +286,7 @@ const Sidebar = React.forwardRef<
           className={cn(
             "fixed z-40 hidden w-[--sidebar-width] transition-[left,right,width] duration-200 ease-linear md:flex",
             belowHeader
-              ? "top-12 h-[calc(100svh-3rem)]"
+              ? "top-12 bottom-0"
               : "inset-y-0 h-svh",
             side === "left"
               ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
@@ -295,7 +295,7 @@ const Sidebar = React.forwardRef<
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : belowHeader
-                ? "pb-2 pt-0 pr-2 group-data-[side=right]:pl-2 group-data-[side=right]:pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l"
+                ? "pb-0 pt-0 pr-2 group-data-[side=right]:pl-2 group-data-[side=right]:pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l"
                 : "pb-2 pt-2 pr-2 group-data-[side=right]:pl-2 group-data-[side=right]:pr-0 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))] group-data-[side=right]:border-l",
             className
           )}
@@ -304,7 +304,9 @@ const Sidebar = React.forwardRef<
           <div
             data-sidebar="sidebar"
             className={cn(
-              "flex h-full w-full flex-col bg-sidebar/90 backdrop-blur-sm rounded-r-lg group-data-[side=right]:rounded-r-none group-data-[side=right]:rounded-l-lg group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
+              "flex h-full w-full flex-col bg-sidebar/90 backdrop-blur-sm",
+              !belowHeader && "rounded-r-lg group-data-[side=right]:rounded-r-none group-data-[side=right]:rounded-l-lg",
+              "group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow",
               "transition-opacity duration-300 ease-in",
               isMounted ? "opacity-100" : "opacity-0"
             )}
