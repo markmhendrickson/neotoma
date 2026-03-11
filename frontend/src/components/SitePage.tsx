@@ -1619,7 +1619,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="outcomes" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-8 max-w-5xl mx-auto">
+              <div className="space-y-8 w-full">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     The problem
