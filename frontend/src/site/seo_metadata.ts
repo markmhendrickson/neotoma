@@ -38,6 +38,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ogType: "website",
     jsonLdType: "WebSite",
   },
+  "/install": {
+    title: "Install | Neotoma",
+    description:
+      "Install Neotoma in 5 minutes. Agent-assisted and manual install, Docker setup, API server startup, and MCP configuration.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Install", path: "/install" },
+    ],
+  },
   "/docs": {
     title: "Neotoma Documentation | Setup, API, MCP, CLI References",
     description:
@@ -110,18 +121,6 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "CLI", path: "/cli" },
     ],
   },
-  "/docker": {
-    title: "Run with Docker | Neotoma",
-    description:
-      "Run Neotoma in a Docker container for isolated, reproducible deployments with persistent storage.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Docs", path: "/docs" },
-      { name: "Docker", path: "/docker" },
-    ],
-  },
   "/architecture": {
     title: "Architecture | Neotoma",
     description:
@@ -135,47 +134,36 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/ai-infrastructure-engineers": {
-    title: "For AI Infrastructure Engineers | Neotoma",
+    title: "For AI infrastructure engineers | Neotoma",
     description:
       "How Neotoma solves agent memory drift for AI infrastructure engineers building stateful agent systems.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "AI Infrastructure Engineers", path: "/ai-infrastructure-engineers" },
+      { name: "AI infrastructure engineers", path: "/ai-infrastructure-engineers" },
     ],
   },
   "/ai-native-operators": {
-    title: "For AI-Native Operators | Neotoma",
+    title: "For AI-native operators | Neotoma",
     description:
       "Persistent, cross-session memory for AI-native operators who run agents across tools and platforms daily.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "AI-Native Operators", path: "/ai-native-operators" },
-    ],
-  },
-  "/knowledge-workers": {
-    title: "For Knowledge Workers | Neotoma",
-    description:
-      "Cross-document reasoning with entity resolution for knowledge workers managing complex information across tools.",
-    robots: "index,follow",
-    jsonLdType: "WebPage",
-    breadcrumb: [
-      { name: "Home", path: "/" },
-      { name: "Knowledge Workers", path: "/knowledge-workers" },
+      { name: "AI-native operators", path: "/ai-native-operators" },
     ],
   },
   "/agentic-systems-builders": {
-    title: "For Agentic Systems Builders | Neotoma",
+    title: "For builders of agentic systems | Neotoma",
     description:
       "Deterministic memory and provenance layer for builders of multi-agent systems and AI toolchains.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
-      { name: "Agentic Systems Builders", path: "/agentic-systems-builders" },
+      { name: "Builders of agentic systems", path: "/agentic-systems-builders" },
     ],
   },
   "/neotoma-with-cursor": {
@@ -358,6 +346,42 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Human Inspectability", path: "/human-inspectability" },
     ],
   },
+  "/zero-setup-onboarding": {
+    title: "Zero-Setup Onboarding | Neotoma",
+    description:
+      "How zero-setup memory works in platform products and what you trade for the convenience of no installation.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "Zero-Setup Onboarding", path: "/zero-setup-onboarding" },
+    ],
+  },
+  "/semantic-similarity-search": {
+    title: "Semantic Similarity Search | Neotoma",
+    description:
+      "Find relevant prior context by meaning, not exact match — applied to structured entity snapshots with type and relationship scoping.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "Semantic Similarity Search", path: "/semantic-similarity-search" },
+    ],
+  },
+  "/direct-human-editability": {
+    title: "Direct Human Editability | Neotoma",
+    description:
+      "How file-based memory enables direct editing in any text editor and the trade-offs versus structured, schema-validated systems.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Guarantees", path: "/#memory-guarantees" },
+      { name: "Direct Human Editability", path: "/direct-human-editability" },
+    ],
+  },
   "/platform-memory": {
     title: "Platform Memory | Neotoma",
     description:
@@ -404,6 +428,28 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Memory Models", path: "/#memory-guarantees" },
       { name: "Deterministic Memory", path: "/deterministic-memory" },
+    ],
+  },
+  "/memory-guarantees": {
+    title: "Memory Guarantees | Neotoma",
+    description:
+      "Memory properties that determine reliability under production load: deterministic state evolution, versioned history, replayable timeline, auditable change log, schema constraints, and more.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Memory Guarantees", path: "/memory-guarantees" },
+    ],
+  },
+  "/foundations": {
+    title: "Foundations | Neotoma",
+    description:
+      "Neotoma's architectural foundations: privacy-first local data with no cloud sync, and cross-platform memory across all AI tools via MCP.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Foundations", path: "/foundations" },
     ],
   },
   "/privacy-first": {
@@ -565,10 +611,14 @@ function buildAlternates(pathname: string): { hrefLang: string; href: string }[]
 export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const locale = getLocaleFromPath(pathname) ?? DEFAULT_LOCALE;
   const routeMetadata = getSeoMetadataForPath(pathname);
+  const robots =
+    typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
+      ? "noindex,follow"
+      : routeMetadata.robots;
   return {
     title: routeMetadata.title,
     description: routeMetadata.description,
-    robots: routeMetadata.robots,
+    robots,
     canonicalUrl: buildCanonicalUrl(pathname),
     ogType: routeMetadata.ogType ?? "website",
     locale,
@@ -587,7 +637,8 @@ export function buildSitemapXml(paths: readonly string[] = SITEMAP_PATHS): strin
 }
 
 export function buildRobotsTxt(): string {
-  const sitemapUrl = `${SEO_DEFAULTS.baseUrl.replace(/\/$/, "")}/sitemap.xml`;
+  const base = SEO_DEFAULTS.baseUrl.replace(/\/$/, "");
+  const sitemapUrl = `${base}/sitemap.xml`;
   return `User-agent: *\nAllow: /\n\nSitemap: ${sitemapUrl}\n`;
 }
 

@@ -1,11 +1,18 @@
 # Deploy marketing site to GitHub Pages from the main branch. Configure custom domain
 # neotoma.io in repo Settings → Pages → Custom domain so the site is served at https://neotoma.io.
+# Push to main only triggers deploy when site content changes (paths below); workflow_dispatch always runs.
 name: Deploy site (GitHub Pages)
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "frontend/**"
+      - "public/**"
+      - "scripts/build_github_pages_site.tsx"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
 
 permissions:
