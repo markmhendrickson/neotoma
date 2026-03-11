@@ -52,14 +52,14 @@ import { SectionDotNav } from "./SectionDotNav";
 import { CursorIcon } from "./icons/CursorIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { StateFlowDiagram } from "./illustrations/StateFlowDiagram";
-const icpOptionBInfra = "/neotoma-hero.png";
-const icpOptionBBuilders = "/neotoma-hero.png";
-const icpOptionBOperators = "/neotoma-hero.png";
-const interfacesOptionBRest = "/neotoma-hero.png";
-const interfacesOptionBMcp = "/neotoma-hero.png";
-const interfacesOptionBCli = "/neotoma-hero.png";
-const learnMoreDocumentationImage = "/neotoma-hero.png";
-const learnMoreDeepDiveImage = "/neotoma-hero.png";
+const icpOptionBInfra = "/images/icp/icp-option-b-infra.png";
+const icpOptionBBuilders = "/images/icp/icp-option-b-builders.png";
+const icpOptionBOperators = "/images/icp/icp-option-b-operators.png";
+const interfacesOptionBRest = "/images/interfaces/interfaces-option-b-rest.png";
+const interfacesOptionBMcp = "/images/interfaces/interfaces-option-b-mcp.png";
+const interfacesOptionBCli = "/images/interfaces/interfaces-option-b-cli.png";
+const learnMoreDocumentationImage = "/images/interfaces/learn_more_documentation.svg";
+const learnMoreDeepDiveImage = "/images/interfaces/learn_more_deep_dive.svg";
 import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
 interface SitePageProps {
   staticMode?: boolean;
@@ -1619,7 +1619,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="outcomes" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-8 w-full">
+              <div className="space-y-8 max-w-5xl mx-auto">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     The problem
