@@ -1,6 +1,8 @@
 import React from "react";
 import { useLocation } from "react-router-dom";
 import { SeoHead } from "./SeoHead";
+import { getDocPageIcon } from "@/site/doc_icons";
+import { stripLocaleFromPath } from "@/i18n/routing";
 import { SectionDivider } from "./ui/section_divider";
 
 interface DetailPageProps {
@@ -47,12 +49,19 @@ function addAutoSectionDividers(children: React.ReactNode): React.ReactNode {
 export function DetailPage({ title, children }: DetailPageProps) {
   const { pathname } = useLocation();
   const renderedChildren = addAutoSectionDividers(children);
+  const canonicalPath = stripLocaleFromPath(pathname);
+  const TitleIcon = getDocPageIcon(canonicalPath);
   return (
     <>
       <SeoHead routePath={pathname} />
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
-          <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-6">{title}</h1>
+          <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-6 flex items-start gap-3">
+            {TitleIcon ? (
+              <TitleIcon className="mt-1 size-7 shrink-0 text-muted-foreground" aria-hidden />
+            ) : null}
+            {title}
+          </h1>
           <div className="post-prose [&_a]:underline [&_a]:hover:text-foreground">
             {renderedChildren}
           </div>
