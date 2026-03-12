@@ -1248,7 +1248,8 @@ const SECTION_WITH_VISUAL_GRID =
   "grid gap-12 lg:gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center";
 const VISUAL_PANEL_CLASS = "w-full min-h-[320px] sm:min-h-[360px] lg:min-h-[460px]";
 
-const IN_VIEW_THRESHOLD = 0.2;
+// Keep fade-in permissive so very tall sections never stay fully hidden.
+const IN_VIEW_THRESHOLD = 0.01;
 
 function isModifiedClick(event: React.MouseEvent<HTMLElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
@@ -1290,7 +1291,7 @@ function FadeSection({
         Math.min(elRect.bottom, rootRect.bottom) - Math.max(elRect.top, rootRect.top)
       );
       const visibleRatio = overlapTop / height;
-      return visibleRatio >= IN_VIEW_THRESHOLD;
+      return visibleRatio > 0;
     };
 
     setInView(checkInView());
@@ -1302,7 +1303,7 @@ function FadeSection({
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          setInView(entry.isIntersecting && entry.intersectionRatio >= IN_VIEW_THRESHOLD);
+          setInView(entry.isIntersecting && entry.intersectionRatio > 0);
         }
       },
       {
