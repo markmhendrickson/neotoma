@@ -47,7 +47,7 @@ export default defineConfig({
       "/server-info": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/mcp": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/auth": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
-      "/me": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
+      "^/me$": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/entities": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/sources": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/observations": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },

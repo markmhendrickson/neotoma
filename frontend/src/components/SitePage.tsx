@@ -47,7 +47,7 @@ import { useCopyFeedback } from "../lib/copy_feedback";
 import { copyTextToClipboard } from "../lib/copy_to_clipboard";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
-import { MemoryGuaranteesTable } from "./MemoryGuaranteesTable";
+import { GuaranteeCell, MemoryGuaranteesTable } from "./MemoryGuaranteesTable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { SeoHead } from "./SeoHead";

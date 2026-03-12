@@ -250,82 +250,96 @@ export function DocsIndexPage() {
       <div className="[&_a]:!no-underline [&_a]:hover:!no-underline [&_a]:focus:!no-underline">
         <p className="text-[15px] leading-7 text-muted-foreground mb-10">{dict.docsIntro}</p>
 
-        {DOC_CATEGORIES.map((cat) => (
-        <section key={cat.title} className="mb-12">
-          <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-4">
-            {translateCategoryTitle(cat.title)}
-          </h2>
-          <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {cat.items.map((item) => {
-              const isExternal = item.href.startsWith("http");
-              const linkProps = isExternal
-                ? { target: "_blank" as const, rel: "noopener noreferrer" }
-                : {};
-              const BrandIcon =
-                item.href.startsWith("/") ? INTEGRATION_BRAND_ICONS[item.href] : null;
-              const iconName = ICON_BY_HREF[item.href];
-              const LucideIconComponent = iconName
-                ? DOC_NAV_ICONS[iconName]
-                : DOC_NAV_ICONS.BookOpen;
-              const Icon = BrandIcon ?? LucideIconComponent;
-              const desc = "desc" in item ? item.desc : null;
+        {DOC_CATEGORIES.map((cat) => {
+          const lgGridColsClass =
+            cat.items.length >= 3
+              ? "lg:grid-cols-3"
+              : cat.items.length === 2
+                ? "lg:grid-cols-2"
+                : "lg:grid-cols-1";
 
-              const linkContent = (
-                <Card className="h-full transition-colors hover:bg-muted/50 border border-border [&_a]:no-underline [&_a]:hover:no-underline">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <span
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
-                        aria-hidden
-                      >
-                        {Icon ? <Icon className="h-5 w-5 shrink-0" aria-hidden /> : null}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <span className="font-medium text-[15px] text-foreground block">
-                          {item.label}
-                        </span>
-                        {desc && (
-                          <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
-                            {desc}
+          return (
+            <section key={cat.title} className="mb-12">
+              <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-4">
+                {translateCategoryTitle(cat.title)}
+              </h2>
+              <ul
+                className={`list-none pl-0 grid grid-cols-1 sm:grid-cols-2 ${lgGridColsClass} auto-rows-fr gap-3`}
+              >
+                {cat.items.map((item) => {
+                  const isExternal = item.href.startsWith("http");
+                  const linkProps = isExternal
+                    ? { target: "_blank" as const, rel: "noopener noreferrer" }
+                    : {};
+                  const BrandIcon = item.href.startsWith("/")
+                    ? INTEGRATION_BRAND_ICONS[item.href]
+                    : null;
+                  const iconName = ICON_BY_HREF[item.href];
+                  const LucideIconComponent = iconName
+                    ? DOC_NAV_ICONS[iconName]
+                    : DOC_NAV_ICONS.BookOpen;
+                  const Icon = BrandIcon ?? LucideIconComponent;
+                  const desc = "desc" in item ? item.desc : null;
+
+                  const linkContent = (
+                    <Card className="h-full transition-colors hover:bg-muted/50 border border-border [&_a]:no-underline [&_a]:hover:no-underline">
+                      <CardContent className="p-4 h-full">
+                        <div className="flex items-start gap-3">
+                          <span
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                            aria-hidden
+                          >
+                            {Icon ? <Icon className="h-5 w-5 shrink-0" aria-hidden /> : null}
                           </span>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-[15px] text-foreground block">
+                              {item.label}
+                            </span>
+                            {desc && (
+                              <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
+                                {desc}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
 
-              return (
-                <li key={item.href}>
-                  {isExternal ? (
-                    <a
-                      href={item.href.startsWith("/") ? localizePath(item.href, locale) : item.href}
-                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
-                      {...linkProps}
-                    >
-                      {linkContent}
-                    </a>
-                  ) : item.href.startsWith("/#") ? (
-                    <a
-                      href={localizePath(item.href, locale)}
-                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
-                    >
-                      {linkContent}
-                    </a>
-                  ) : (
-                    <Link
-                      to={localizePath(item.href, locale)}
-                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
-                    >
-                      {linkContent}
-                    </Link>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-        ))}
+                  return (
+                    <li key={item.href} className="h-full">
+                      {isExternal ? (
+                        <a
+                          href={
+                            item.href.startsWith("/") ? localizePath(item.href, locale) : item.href
+                          }
+                          className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+                          {...linkProps}
+                        >
+                          {linkContent}
+                        </a>
+                      ) : item.href.startsWith("/#") ? (
+                        <a
+                          href={localizePath(item.href, locale)}
+                          className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+                        >
+                          {linkContent}
+                        </a>
+                      ) : (
+                        <Link
+                          to={localizePath(item.href, locale)}
+                          className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+                        >
+                          {linkContent}
+                        </Link>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
       </div>
     </DetailPage>
   );

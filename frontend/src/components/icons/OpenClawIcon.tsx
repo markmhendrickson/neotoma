@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  */
 export function OpenClawIcon({
   className,
-  size = 16,
+  size,
   ...props
 }: React.SVGAttributes<SVGSVGElement> & { size?: number }) {
   const svgWithProps = lobsterOutlineSvg.replace(
@@ -16,8 +16,8 @@ export function OpenClawIcon({
   );
   return (
     <span
-      className={cn("inline-flex shrink-0", className)}
-      style={{ width: size, height: size }}
+      className={cn("inline-flex shrink-0 size-4", className)}
+      style={size ? { width: size, height: size } : undefined}
       dangerouslySetInnerHTML={{ __html: svgWithProps }}
       {...(props as React.HTMLAttributes<HTMLSpanElement>)}
     />

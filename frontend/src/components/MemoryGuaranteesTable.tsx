@@ -55,7 +55,7 @@ const GUARANTEE_LEVEL_META: Record<
   },
 };
 
-function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
+export function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
   const { icon, label, className, cellClassName } = GUARANTEE_LEVEL_META[level];
 
   return (

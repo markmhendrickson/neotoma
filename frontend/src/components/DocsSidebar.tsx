@@ -1,40 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import {
-  Bookmark,
-  BookOpen,
-  Bot,
-  Boxes,
-  Briefcase,
-  Building2,
-  Bug,
-  ChevronRight,
-  Code,
-  Container,
-  Cpu,
-  Database,
-  Github,
-  Globe,
-  History,
-  Home,
-  Layers,
-  MessageCircle,
-  MessageSquare,
-  Monitor,
-  Package,
-  PanelRight,
-  Play,
-  Rocket,
-  SatelliteDish,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  Terminal,
-  Users,
-  Zap,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { SiClaude, SiOpenai } from "react-icons/si";
+import { ChevronRight } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -46,55 +12,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { CursorIcon } from "@/components/icons/CursorIcon";
-import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
+import { DOC_NAV_ICONS, INTEGRATION_BRAND_ICONS } from "@/site/doc_icons";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
-
-/** Branded icons for Integrations nav items (by canonical href). */
-const INTEGRATION_BRAND_ICONS: Record<string, React.ComponentType<{ className?: string; "aria-hidden"?: boolean; size?: number }>> = {
-  "/neotoma-with-claude-code": SiClaude,
-  "/neotoma-with-claude": SiClaude,
-  "/neotoma-with-chatgpt": SiOpenai,
-  "/neotoma-with-codex": SiOpenai,
-  "/neotoma-with-cursor": CursorIcon,
-  "/neotoma-with-openclaw": OpenClawIcon,
-};
-
-const DOC_NAV_ICONS: Record<string, LucideIcon> = {
-  Bookmark,
-  BookOpen,
-  Bot,
-  Boxes,
-  Briefcase,
-  Building2,
-  Bug,
-  Code,
-  Container,
-  Cpu,
-  Database,
-  Github,
-  Globe,
-  History,
-  Home,
-  Layers,
-  MessageCircle,
-  MessageSquare,
-  Monitor,
-  Package,
-  PanelRight,
-  Play,
-  Rocket,
-  SatelliteDish,
-  Server,
-  ShieldCheck,
-  Sparkles,
-  Terminal,
-  Users,
-  Zap,
-};
 
 const SECTION_PREVIEW_COUNT = 3;
 
@@ -116,6 +38,20 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   const { pathname, hash } = useLocation();
   const { isMobile, setOpenMobile, state: sidebarState } = useSidebar();
   const { locale, dict } = useLocale();
+  const orderedCategories = useMemo(() => {
+    const categories = [...DOC_NAV_CATEGORIES];
+    const referenceIndex = categories.findIndex((category) => category.title === "Reference");
+    const useCasesIndex = categories.findIndex((category) => category.title === "Use cases");
+    if (
+      referenceIndex >= 0 &&
+      useCasesIndex >= 0 &&
+      useCasesIndex > referenceIndex
+    ) {
+      const [useCasesCategory] = categories.splice(useCasesIndex, 1);
+      categories.splice(referenceIndex, 0, useCasesCategory);
+    }
+    return categories;
+  }, []);
   const isItemActive = (href: string) => {
     const localizedHref = href.startsWith("/") ? localizePath(href, locale) : href;
     const currentFullPath = `${pathname}${hash}`;
@@ -125,26 +61,26 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   };
 
   const defaultOpenCategories = useMemo(() => {
-    const open = new Set<string>(DOC_NAV_CATEGORIES.map((category) => category.title));
-    DOC_NAV_CATEGORIES.forEach((category) => {
+    const open = new Set<string>(orderedCategories.map((category) => category.title));
+    orderedCategories.forEach((category) => {
       if (category.items.some((item) => item.href.startsWith("/") && isItemActive(item.href))) {
         open.add(category.title);
       }
     });
     return open;
-  }, [pathname, hash, locale]);
+  }, [orderedCategories, pathname, hash, locale]);
 
   const [openCategories, setOpenCategories] = useState<Set<string>>(defaultOpenCategories);
   const defaultExpandedCategoryItems = useMemo(() => {
     const expanded = new Set<string>();
-    DOC_NAV_CATEGORIES.forEach((category) => {
+    orderedCategories.forEach((category) => {
       const activeIndex = category.items.findIndex(
         (item) => item.href.startsWith("/") && isItemActive(item.href),
       );
       if (activeIndex >= SECTION_PREVIEW_COUNT) expanded.add(category.title);
     });
     return expanded;
-  }, [pathname, hash, locale]);
+  }, [orderedCategories, pathname, hash, locale]);
   const [expandedCategoryItems, setExpandedCategoryItems] = useState<Set<string>>(
     defaultExpandedCategoryItems,
   );
@@ -196,7 +132,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
 
   const navContent = (
     <>
-      {DOC_NAV_CATEGORIES.map((cat) => (
+      {orderedCategories.map((cat) => (
         <SidebarGroup key={cat.title}>
           {(() => {
             const isCategoryOpen = openCategories.has(cat.title);

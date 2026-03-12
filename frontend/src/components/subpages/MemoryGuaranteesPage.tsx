@@ -11,8 +11,10 @@ export function MemoryGuaranteesPage() {
         invariant stack that Neotoma enforces.
       </p>
 
-      <div className="overflow-x-auto -mx-2 px-2 mb-8">
-        <MemoryGuaranteesTable />
+      <div className="mb-8 overflow-x-auto w-full md:relative md:left-1/2 md:-translate-x-1/2 md:max-w-none md:w-[min(calc(100vw-var(--sidebar-width,16rem)-2rem),calc(100%+28rem))]">
+        <div className="min-w-[980px]">
+          <MemoryGuaranteesTable />
+        </div>
       </div>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
