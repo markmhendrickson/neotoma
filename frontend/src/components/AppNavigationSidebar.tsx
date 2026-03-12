@@ -13,7 +13,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { SITE_SECTIONS } from "@/site/site_data";
+import { getLocalizedSiteSections } from "@/site/site_data_localized";
 import { cn } from "@/lib/utils";
 import {
   AlertTriangle,
@@ -106,12 +106,13 @@ function ThemeToggle() {
 
 export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   const { isMobile, setOpen, setOpenMobile, state } = useSidebar();
-  const { direction } = useLocale();
-  const [activeSection, setActiveSection] = useState<string>(SITE_SECTIONS[0]?.id ?? "install");
+  const { direction, pack } = useLocale();
+  const siteSections = useMemo(() => getLocalizedSiteSections(pack), [pack]);
+  const [activeSection, setActiveSection] = useState<string>(siteSections[0]?.id ?? "install");
   const hasManualSidebarToggleRef = useRef(false);
   const autoSidebarStateRef = useRef<boolean | null>(null);
 
-  const sectionIds = useMemo(() => SITE_SECTIONS.map((section) => section.id), []);
+  const sectionIds = useMemo(() => siteSections.map((section) => section.id), [siteSections]);
 
   useEffect(() => {
     const scrollToSection = (id: string) => {
@@ -243,7 +244,7 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
     <SidebarGroup>
       <SidebarGroupContent>
         <SidebarMenu>
-          {SITE_SECTIONS.map((section) => {
+          {siteSections.map((section) => {
             const Icon = SIDEBAR_ICONS[section.icon];
             return (
               <SidebarMenuItem key={section.id}>

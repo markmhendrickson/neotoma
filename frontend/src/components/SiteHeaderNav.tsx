@@ -65,7 +65,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
-import { DOC_NAV_CATEGORIES } from "@/site/site_data";
+import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
 import { sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
 
 const sidebarNavItemClass =
@@ -129,15 +129,6 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Users,
   Zap,
 };
-
-/** Dropdown category order: prioritize Integrations after Getting started. */
-const DOC_DROPDOWN_CATEGORY_ORDER = [
-  "Getting started",
-  "Integrations",
-  "Reference",
-  "Use cases",
-  "External",
-];
 
 function isModifiedClick(event: React.MouseEvent<HTMLElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
@@ -367,16 +358,18 @@ function SiteNavSearch({
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(alwaysShowInput);
 
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
+
   const pages = useMemo(() => {
     const byHref = new Map<string, SearchablePageItem>();
-    for (const category of DOC_NAV_CATEGORIES) {
+    for (const category of localizedDocCategories) {
       for (const item of category.items) {
         if (!item.href.startsWith("/") || byHref.has(item.href)) continue;
         byHref.set(item.href, { label: item.label, href: item.href, category: category.title });
       }
     }
     return [...byHref.values()];
-  }, []);
+  }, [localizedDocCategories]);
 
   const topPages = useMemo(() => {
     const byHref = new Map(pages.map((p) => [p.href, p]));
@@ -398,8 +391,10 @@ function SiteNavSearch({
       .slice(0, 8);
   }, [pages, query]);
 
-  const displayItems = query.trim().length > 0 ? results : topPages;
-  const isShowingTopPages = query.trim().length === 0;
+  const hasQuery = query.trim().length > 0;
+  const shouldShowDefaultSuggestions = !alwaysShowInput;
+  const displayItems = hasQuery ? results : shouldShowDefaultSuggestions ? topPages : [];
+  const isShowingTopPages = !hasQuery && shouldShowDefaultSuggestions;
 
   const collapse = useCallback(() => {
     setExpanded(false);
@@ -483,14 +478,16 @@ function SiteNavSearch({
           }}
           placeholder={searchLabel}
           aria-label={searchLabel}
-          className={`absolute top-1/2 h-8 -translate-y-1/2 border-sidebar-border bg-sidebar/70 pl-8 text-[13px] text-sidebar-foreground placeholder:text-sidebar-foreground/60 transition-[width,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-inset focus-visible:border-sidebar-border ${
+          className={`absolute top-1/2 h-8 -translate-y-1/2 border-sidebar-border bg-sidebar/70 pl-8 ${
+            alwaysShowInput ? "text-base" : "text-[13px]"
+          } text-sidebar-foreground placeholder:text-sidebar-foreground/60 transition-[width,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-inset focus-visible:border-sidebar-border ${
             showInput
               ? "left-0 w-full opacity-100"
               : "left-9 w-0 overflow-hidden opacity-0 pointer-events-none"
           }`}
         />
       </div>
-      {open && (
+      {open && (hasQuery || shouldShowDefaultSuggestions) && (
         <div
           className={`absolute right-0 z-[70] max-h-[min(60vh,320px)] w-full min-w-[260px] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-md ${
             alwaysShowInput ? "bottom-full mb-1" : "top-full mt-1"
@@ -540,30 +537,29 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const { pathname } = useLocation();
   const { locale, dict } = useLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
-  const translateCategoryTitle = (title: string) => {
-    if (title === "Getting started") return dict.categoryGettingStarted;
-    if (title === "Reference") return dict.categoryReference;
-    if (title === "Agent behavior") return dict.categoryAgentBehavior;
-    if (title === "Use cases") return dict.categoryUseCases;
-    if (title === "Integration guides" || title === "Integrations")
-      return dict.categoryIntegrationGuides;
-    if (title === "External") return dict.categoryExternal;
-    return title;
-  };
-
-  const featuredByCategory = new Map(
-    DOC_NAV_CATEGORIES.map((category) => [
-      category.title,
-      {
+  const featuredDocCategories = useMemo(() => {
+    const featured = localizedDocCategories
+      .map((category) => ({
         ...category,
         items: category.items.filter((item) => DOC_DROPDOWN_FEATURED_HREFS.has(item.href)),
-      },
-    ])
-  );
-  const featuredDocCategories = DOC_DROPDOWN_CATEGORY_ORDER.map((title) =>
-    featuredByCategory.get(title)
-  ).filter((cat): cat is NonNullable<typeof cat> => !!cat && cat.items.length > 0);
+      }))
+      .filter((category) => category.items.length > 0);
+
+    const pick = (matcher: (hrefs: string[]) => boolean) =>
+      featured.find((category) => matcher(category.items.map((item) => item.href)));
+
+    const ordered = [
+      pick((hrefs) => hrefs.includes("/docs")),
+      pick((hrefs) => hrefs.some((href) => href.startsWith("/neotoma-with-"))),
+      pick((hrefs) => hrefs.includes("/api")),
+      pick((hrefs) => hrefs.includes("/ai-infrastructure-engineers")),
+      pick((hrefs) => hrefs.some((href) => href.startsWith("https://"))),
+    ].filter((category): category is NonNullable<typeof category> => !!category);
+
+    return ordered;
+  }, [localizedDocCategories]);
 
   return (
     <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between h-12 pl-2 pr-4 md:pr-6 bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
@@ -696,13 +692,15 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 {featuredDocCategories.map((cat) => (
                   <li key={cat.title}>
                     <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
-                      {translateCategoryTitle(cat.title)}
+                      {cat.title}
                     </div>
                     <ul className="list-none p-0">
                       {cat.items.map((item) => (
                         <li key={item.href}>
                           {(() => {
-                            const isIntegrations = cat.title === "Integrations";
+                            const isIntegrations = cat.items.some((candidate) =>
+                              candidate.href.startsWith("/neotoma-with-")
+                            );
                             const BrandIcon =
                               isIntegrations && item.href.startsWith("/")
                                 ? INTEGRATION_BRAND_ICONS[item.href]

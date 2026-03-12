@@ -5,6 +5,7 @@ import {
   MEMORY_MODEL_VENDORS,
   type GuaranteeLevel,
 } from "../site/site_data";
+import { useLocale } from "@/i18n/LocaleContext";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 const GUARANTEE_LEVEL_META: Record<
@@ -75,6 +76,8 @@ export function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
 }
 
 export function MemoryGuaranteesTable() {
+  const { pack } = useLocale();
+  const memory = pack.memory;
   const memoryModelKeys = ["platform", "retrieval", "file", "neotoma"] as const;
 
   return (
@@ -100,7 +103,7 @@ export function MemoryGuaranteesTable() {
               className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
             >
               <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">Platform</span>
+                <span className="truncate">{memory.platform}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link
@@ -122,7 +125,7 @@ export function MemoryGuaranteesTable() {
               className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
             >
               <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">Retrieval / RAG</span>
+                <span className="truncate">{memory.retrievalRag}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link
@@ -144,7 +147,7 @@ export function MemoryGuaranteesTable() {
               className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
             >
               <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">Files</span>
+                <span className="truncate">{memory.files}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link
@@ -166,7 +169,7 @@ export function MemoryGuaranteesTable() {
               className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
             >
               <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">Deterministic</span>
+                <span className="truncate">{memory.deterministic}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link
@@ -195,7 +198,7 @@ export function MemoryGuaranteesTable() {
               className="text-left px-3 py-2.5 font-medium text-foreground min-w-0 overflow-hidden"
             >
               <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
-                <span className="truncate">Vendors</span>
+                <span className="truncate">{memory.vendors}</span>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link

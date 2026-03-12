@@ -6,14 +6,17 @@ import { GuaranteeCell, MemoryGuaranteesTable } from "../MemoryGuaranteesTable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { TooltipProvider } from "../ui/tooltip";
 import { MEMORY_GUARANTEE_ROWS, MEMORY_MODEL_VENDORS } from "../../site/site_data";
+import { useLocale } from "@/i18n/LocaleContext";
 
 const MOBILE_GUARANTEE_PREVIEW_COUNT = 4;
 
 export function MemoryGuaranteesPage() {
+  const { pack } = useLocale();
+  const memory = pack.memory;
   const [showAllMobileGuarantees, setShowAllMobileGuarantees] = useState(false);
 
   return (
-    <DetailPage title="Memory guarantees">
+    <DetailPage title={pack.seo.memoryGuarantees.title.replace(" | Neotoma", "")}>
       <p className="text-[15px] leading-7 mb-4">
         These are the properties that determine whether an agent memory system is reliable under
         production load. Each guarantee addresses a specific failure mode; together they form the
@@ -34,9 +37,9 @@ export function MemoryGuaranteesPage() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="text-[13px] font-medium text-foreground">Vendors</span>
+                      <span className="text-[13px] font-medium text-foreground">{memory.vendors}</span>
                       <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
-                        Representative providers for each memory approach
+                        {memory.representativeProviders}
                       </p>
                     </div>
                     <ChevronDown
@@ -53,12 +56,12 @@ export function MemoryGuaranteesPage() {
                   <div key={key} className="px-3 py-1.5 flex items-center justify-between gap-2">
                     <dt className="font-medium text-foreground shrink-0">
                       {key === "neotoma"
-                        ? "Deterministic"
+                        ? memory.deterministic
                         : key === "retrieval"
-                          ? "Retrieval / RAG"
+                          ? memory.retrievalRag
                           : key === "file"
-                            ? "Files"
-                            : "Platform"}
+                            ? memory.files
+                            : memory.platform}
                     </dt>
                     <dd className="text-muted-foreground text-right truncate">
                       {MEMORY_MODEL_VENDORS[key]}
@@ -104,10 +107,10 @@ export function MemoryGuaranteesPage() {
                 <div className="grid grid-cols-4 divide-x divide-border/50">
                   {(
                     [
-                      { key: "platform" as const, label: "Plat." },
-                      { key: "retrieval" as const, label: "RAG" },
-                      { key: "file" as const, label: "Files" },
-                      { key: "neotoma" as const, label: "Det." },
+                      { key: "platform" as const, label: memory.platformShort },
+                      { key: "retrieval" as const, label: memory.ragShort },
+                      { key: "file" as const, label: memory.filesShort },
+                      { key: "neotoma" as const, label: memory.deterministicShort },
                     ] as const
                   ).map(({ key, label }) => (
                     <div key={key} className="flex flex-col items-center gap-0.5 px-1 py-1.5">
@@ -128,8 +131,8 @@ export function MemoryGuaranteesPage() {
               onClick={() => setShowAllMobileGuarantees(!showAllMobileGuarantees)}
             >
               {showAllMobileGuarantees
-                ? "Show fewer"
-                : `Show all ${MEMORY_GUARANTEE_ROWS.length} guarantees`}
+                ? memory.showFewer
+                : memory.showAllGuarantees(MEMORY_GUARANTEE_ROWS.length)}
             </button>
           )}
         </TooltipProvider>
@@ -142,7 +145,7 @@ export function MemoryGuaranteesPage() {
       </div>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
-        <p className="text-[14px] font-medium mb-2">On this page</p>
+        <p className="text-[14px] font-medium mb-2">{memory.onThisPage}</p>
         <ul className="list-none pl-0 space-y-1 text-[14px]">
           <li>
             <a
