@@ -185,7 +185,7 @@ Before creating a Feature Unit, verify:
 4. **Implementation requirements:**
    - Follow all architectural invariants
    - Maintain determinism where required
-   - Respect layer boundaries (Truth Layer purity)
+   - Respect layer boundaries (State Layer purity)
    - Include comprehensive tests
    - Update subsystem docs if patterns change
    - Add error codes to `docs/reference/error_codes.md` if new codes

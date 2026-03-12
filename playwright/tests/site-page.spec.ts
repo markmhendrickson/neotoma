@@ -84,7 +84,7 @@ test.describe("sitePage coverage", () => {
     expect(title).toContain("Neotoma");
 
     const desc = page.locator('meta[name="description"]');
-    await expect(desc).toHaveAttribute("content", /truth layer|deterministic/i);
+    await expect(desc).toHaveAttribute("content", /state layer|deterministic/i);
 
     const canonical = page.locator('link[rel="canonical"]');
     await expect(canonical).toHaveAttribute("href", /neotoma\.io/);

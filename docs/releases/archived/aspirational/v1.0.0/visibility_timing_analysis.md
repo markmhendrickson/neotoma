@@ -151,7 +151,7 @@
 **Examples:**
 - "Week 3 of building Neotoma: Here's what I learned about deterministic OCR"
 - "MCP integration patterns: Lessons from replacing parquet MCP in ateles"
-- "Why I'm building a truth layer instead of using semantic search"
+- "Why I'm building a state layer instead of using semantic search"
 
 **Time Investment**: ~5-10 hours/month (ongoing)
 

@@ -41,7 +41,7 @@ docs/NEOTOMA_MANIFEST.md:
       reason: Release plans reference manifest
     - path: docs/ui/**/*.md
       type: implicit
-      reason: UI docs reference Truth Layer constraints
+      reason: UI docs reference State Layer constraints
     - path: docs/developer/*.md
       type: implicit
       reason: Developer guides reference manifest
@@ -59,7 +59,7 @@ docs/NEOTOMA_MANIFEST.md:
       reason: Writing style guide references manifest
     - path: docs/reports/*.md
       type: implicit
-      reason: Reports reference Truth Layer constraints and canonical error codes
+      reason: Reports reference State Layer constraints and canonical error codes
     - path: docs/templates/pr_template.md
       type: implicit
       reason: PR template references manifest
@@ -83,10 +83,10 @@ docs/foundation/core_identity.md:
       reason: Restates core identity in overview
     - path: docs/proposals/mcp-cli-action-items.md
       type: implicit
-      reason: Proposal references Truth Layer constraints and core identity
+      reason: Proposal references State Layer constraints and core identity
     - path: docs/reports/mcp_cli_action_items_fidelity_report.md
       type: implicit
-      reason: Report references Truth Layer constraints and core identity
+      reason: Report references State Layer constraints and core identity
 
 docs/private/governance/00_GENERATION.md:
   downstream:

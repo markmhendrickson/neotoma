@@ -33,7 +33,7 @@ It does not cover:
 - **Agent instructions**: The required closing section that defines how agents must use the document.
 
 ## Documentation doctrine
-Neotoma is a Truth Layer. It is not an app, agent, or strategy or execution system.
+Neotoma is a State Layer. It is not an app, agent, or strategy or execution system.
 Core invariants:
 - Deterministic: Same input yields same output
 - Immutable: Truth never changes after storage

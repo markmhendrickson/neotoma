@@ -20,8 +20,8 @@
 ## README Structure
 ### Required Sections (In Order)
 1. **Title and Tagline** (1-2 lines)
-   - Project name: "Neotoma — Truth Layer for AI Memory"
-   - One-sentence description: deterministic truth layer that transforms fragmented personal data
+   - Project name: "Neotoma — State Layer for AI Memory"
+   - One-sentence description: deterministic state layer that transforms fragmented personal data
 2. **What It Does** (3-5 paragraphs)
    - Core value proposition
    - How it works (high-level workflow)
@@ -44,7 +44,7 @@
    - Ingestion → Extraction → Schema → Entity Resolution → Observations → Reducers → Events → Graph → AI Access
 8. **Architecture** (High-level overview)
    - Five-layer architecture
-   - Truth Layer positioning
+   - State Layer positioning
    - Link to detailed architecture docs
 9. **Releases** (All releases)
    - Current releases with status and links
@@ -226,5 +226,5 @@ A documentation change is "materially affecting" if it:
 ```
 Neotoma builds persistent structured memory for AI agents through **dual-path ingestion**: upload documents (PDFs, images, receipts, contracts) that get automatically structured, or provide contextual information during agent conversations that gets remembered for future sessions. As you interact with ChatGPT, Claude, or Cursor, agents can both read your accumulated memory and write new structured data, creating an incremental knowledge base that grows more accurate and comprehensive over time.
 The system transforms fragmented personal data into a unified memory graph—connecting people, companies, events, and relationships across all your data. Every fact traces back to its source, dates automatically create timelines, and entities are unified across all records so "Acme Corp" in one invoice matches "Acme Corp" in agent-created data, regardless of when you created them.
-All memory is exposed to AI tools via Model Context Protocol (MCP), ensuring agents have structured, validated access to your truth layer. This enables agents to maintain context across sessions, answer questions about your personal data, and build on previous interactions—turning fragmented personal data into a persistent, queryable memory that scales with your agent usage.
+All memory is exposed to AI tools via Model Context Protocol (MCP), ensuring agents have structured, validated access to your state layer. This enables agents to maintain context across sessions, answer questions about your personal data, and build on previous interactions—turning fragmented personal data into a persistent, queryable memory that scales with your agent usage.
 ```

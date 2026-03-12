@@ -175,7 +175,7 @@ Requires later product maturity and asset/tax modeling stack.
 - **Startup Founders with Equity Docs**
 - **Family-Office-Lite Users**
 
-High future ACV. Complex requirements (risk, tax, multi-asset planning). Requires a mature truth layer + strategy engine.
+High future ACV. Complex requirements (risk, tax, multi-asset planning). Requires a mature state layer + strategy engine.
 
 ## Tier 5 — Execution Layer (Agentic Wallet)
 

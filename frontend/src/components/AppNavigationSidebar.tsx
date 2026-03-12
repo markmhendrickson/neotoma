@@ -40,6 +40,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { useLocale } from "@/i18n/LocaleContext";
 
 interface AppNavigationSidebarProps {
   siteName: string;
@@ -105,6 +106,7 @@ function ThemeToggle() {
 
 export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   const { isMobile, setOpen, setOpenMobile, state } = useSidebar();
+  const { direction } = useLocale();
   const [activeSection, setActiveSection] = useState<string>(SITE_SECTIONS[0]?.id ?? "install");
   const hasManualSidebarToggleRef = useRef(false);
   const autoSidebarStateRef = useRef<boolean | null>(null);
@@ -269,7 +271,10 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   );
 
   return (
-    <Sidebar collapsible="icon" side={isMobile ? "right" : "left"}>
+    <Sidebar
+      collapsible="icon"
+      side={isMobile ? "right" : direction === "rtl" ? "right" : "left"}
+    >
       <SidebarHeader className="flex-row items-center gap-2 py-2 px-3 h-16 border-b border-sidebar-border">
         {state !== "collapsed" ? (
           <>

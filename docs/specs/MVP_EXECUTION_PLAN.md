@@ -315,7 +315,7 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 - **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`
 - **Manual Time:** 1-1.5h (spec design, review output format)
 - **Agent Time:** 4-6h (CLI implementation, format parsers, tests)
-- **Risk:** Low (standalone tool, outside Truth Layer)
+- **Risk:** Low (standalone tool, outside State Layer)
 - **Dependencies:** None (can be developed in parallel)
 **Steps:**
 1. **Agent:** Use `Create New Feature Unit` with `feature_id=FU-106` → no dependencies
@@ -324,7 +324,7 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 4. **Agent:** Use `Run Feature Workflow` to implement:
    - CLI script in `scripts/chat-to-json.ts` (Node.js)
    - Parsers for common export formats (ChatGPT JSON, HTML, text)
-   - LLM-based interpretation (OpenAI/Anthropic API calls allowed, outside Truth Layer)
+   - LLM-based interpretation (OpenAI/Anthropic API calls allowed, outside State Layer)
    - Interactive field mapping/correction mode
    - JSON output in standard record format (one file per record with type, properties, file_urls)
    - Documentation and usage examples
@@ -336,7 +336,7 @@ This expansion happens as part of FU-100 implementation (add new types to `recor
 7. **Agent:** Update after human feedback
 8. **Human:** Approve for merge
 **Output:** Standalone CLI tool that users run: `npm run chat-to-json -- input.json output_dir/`
-**Rationale:** Chat transcripts require non-deterministic interpretation that violates Truth Layer constraints. Separating this into a pre-processing CLI preserves Truth Layer determinism while enabling chat transcript ingestion.
+**Rationale:** Chat transcripts require non-deterministic interpretation that violates State Layer constraints. Separating this into a pre-processing CLI preserves State Layer determinism while enabling chat transcript ingestion.
 #### FU-101: Entity Resolution
 - **Execution:** Hybrid (Human spec review → Agent implementation → Human review)
 - **Cursor Command:** `Create New Feature Unit` → `Run Feature Workflow` → `Final Review`

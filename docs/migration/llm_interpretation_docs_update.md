@@ -70,7 +70,7 @@ Updated documentation to reflect that AI interpretation is allowed for unstructu
    - Replaced "no LLM extraction" with "AI interpretation with auditability"
 
 9. **`docs/releases/v1.0.0/acceptance_criteria.md`**
-   - Updated Truth Layer criteria
+   - Updated State Layer criteria
    - Changed validation from "no OpenAI calls" to "interpretation config logged"
 
 ### Supporting Documentation

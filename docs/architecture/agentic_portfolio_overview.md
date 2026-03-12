@@ -7,7 +7,7 @@ It is the canonical representation of **intent**, **strategy**, **constraints**,
 The Agentic Portfolio is not an executor.
 It defines strategy-as-data and exposes it so that agents—including the Agentic Wallet—can compute compliant actions.
 ## Role in Neotoma Architecture
-Neotoma = Truth Layer (event-sourced, reducer-driven)
+Neotoma = State Layer (event-sourced, reducer-driven)
 Strategy Layer = Pure Cognition (Agentic Portfolio is an example instance)
 Execution Layer = Pure Effect (Agentic Wallet is part of this layer)
 ### Strategy Layer Responsibilities (Agentic Portfolio as Example)
@@ -57,7 +57,7 @@ Core objects:
 - **Trajectory Plans**
   - multi-step objectives
   - long-horizon allocation envelopes
-All fields are deterministic, versioned, and validated by the Neotoma Truth Layer.
+All fields are deterministic, versioned, and validated by the Neotoma State Layer.
 ## Relationship with Execution Layer (Agentic Wallet + Domain Agents)
 - The Agentic Portfolio (Strategy Layer) defines the _goal state_ and _rules_.
 - The Execution Layer (including Agentic Wallet) takes Commands and executes them via adapters.
@@ -78,7 +78,7 @@ Execution Layer (Agentic Wallet + Domain Agents)
   ↓ Performs side effects via adapters
   ↓ Emits Domain Events
   ↓
-Neotoma (Truth Layer)
+Neotoma (State Layer)
   ↓ Reducers process Domain Events
   ↓ Updated world state
   ↓

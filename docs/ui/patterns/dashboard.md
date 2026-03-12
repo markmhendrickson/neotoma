@@ -55,4 +55,4 @@ Load `docs/ui/patterns/dashboard.md` when:
 - Omitting empty/error states for widgets
 - Building inaccessible widgets without headings or focus management
 ### Validation Checklist
-- [ ] Widgets have clear headings and keyboard focus behavior\n- [ ] Loading/empty/error states implemented\n- [ ] Text and numbers localized\n- [ ] Dashboard respects Truth Layer boundaries (inspection, not mutation)\n*** End Patch```}"}]}} to=functions.apply_patchственной  মিনিট to=functions.apply_patch_COMMENTARY  利盛 to=functions.apply_patch ***!
+- [ ] Widgets have clear headings and keyboard focus behavior\n- [ ] Loading/empty/error states implemented\n- [ ] Text and numbers localized\n- [ ] Dashboard respects State Layer boundaries (inspection, not mutation)\n*** End Patch```}"}]}} to=functions.apply_patchственной  মিনিট to=functions.apply_patch_COMMENTARY  利盛 to=functions.apply_patch ***!

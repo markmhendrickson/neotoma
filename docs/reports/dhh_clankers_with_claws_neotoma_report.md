@@ -63,7 +63,7 @@ Provide a single reference for: (1) what DHH claimed and showed, (2) whether his
 ### 2.4 Where his view strengthens Neotoma
 
 - **Privacy:** He isolated the agent from his data. That aligns with "give the agent a bounded memory layer you control" (Neotoma) instead of full machine access.
-- **Multi-tool users:** His experiment was one agent. Users who use multiple agents or tools (Cursor, ChatGPT, Claude, OpenClaw) need one truth layer so "what I know" is not siloed per platform.
+- **Multi-tool users:** His experiment was one agent. Users who use multiple agents or tools (Cursor, ChatGPT, Claude, OpenClaw) need one state layer so "what I know" is not siloed per platform.
 - **Structured, auditable memory:** As agents do more, the need for "what does the user know?" in a structured, auditable form grows. Neotoma's deterministic, provenance-backed layer is where that lives.
 
 ---
@@ -82,7 +82,7 @@ Provide a single reference for: (1) what DHH claimed and showed, (2) whether his
 
 ## 4. Recommendations
 
-1. **Positioning:** Add "Truth Layer vs. execution layer" and "memory MCP vs. execution MCP" to `docs/foundation/product_positioning.md` (or equivalent). State explicitly that Neotoma's MCP is the interface to **cross-source structured memory**, not to execution.
+1. **Positioning:** Add "State Layer vs. execution layer" and "memory MCP vs. execution MCP" to `docs/foundation/product_positioning.md` (or equivalent). State explicitly that Neotoma's MCP is the interface to **cross-source structured memory**, not to execution.
 2. **Messaging:** Use one clear line in content and talks: "Agents that use human affordances (web, email) still need structured, user-controlled memory for cross-source truth. Neotoma is that layer."
 3. **Reference architecture:** Document "agent in isolated environment (e.g. VM) + Neotoma MCP for approved personal data" as a recommended, privacy-aligned pattern.
 4. **Monitor narrative:** If "we don't need MCP" spreads, consistently separate memory MCP (Neotoma) from execution MCP so Neotoma is not lumped with "unnecessary tooling."
@@ -91,7 +91,7 @@ Provide a single reference for: (1) what DHH claimed and showed, (2) whether his
 
 ## 5. Conclusion
 
-DHH's general point—agents can navigate human interfaces and may not need agent-specific execution interfaces—**does not undermine** the need for Neotoma when that need is defined as: a user-owned, cross-platform, **structured truth layer** for personal data that agents (and humans) can query and update via a bounded interface. It would undermine Neotoma only if Neotoma were positioned as **execution** infrastructure or as the only way agents can remember anything. Applied critically, his thesis **sharpens** positioning: Neotoma is the **canonical, structured memory** for the user's personal and professional data, regardless of how agents execute. There is no single human interface for that; Neotoma's MCP is the interface to a view only a dedicated truth layer can provide.
+DHH's general point—agents can navigate human interfaces and may not need agent-specific execution interfaces—**does not undermine** the need for Neotoma when that need is defined as: a user-owned, cross-platform, **structured state layer** for personal data that agents (and humans) can query and update via a bounded interface. It would undermine Neotoma only if Neotoma were positioned as **execution** infrastructure or as the only way agents can remember anything. Applied critically, his thesis **sharpens** positioning: Neotoma is the **canonical, structured memory** for the user's personal and professional data, regardless of how agents execute. There is no single human interface for that; Neotoma's MCP is the interface to a view only a dedicated state layer can provide.
 
 ---
 

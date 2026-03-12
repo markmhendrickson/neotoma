@@ -169,7 +169,7 @@ FU-XXX: Feature Description
 - [ ] Maintains determinism (same input → same output)
 - [ ] Error handling uses ErrorEnvelope
 - [ ] No PII in logs
-- [ ] Respects Truth Layer boundaries (no strategy/execution logic)
+- [ ] Respects State Layer boundaries (no strategy/execution logic)
 ```
 ## Code Review Process
 ### Review Criteria
@@ -177,7 +177,7 @@ FU-XXX: Feature Description
 1. **Architectural Compliance:**
    - Respects layer boundaries (no upward dependencies)
    - Follows determinism rules
-   - Maintains Truth Layer purity (no strategy/execution logic)
+   - Maintains State Layer purity (no strategy/execution logic)
 2. **Code Quality:**
    - TypeScript types are correct
    - Error handling is structured (ErrorEnvelope)

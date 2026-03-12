@@ -24,7 +24,7 @@ Neotoma positions as the substrate layer beneath the emerging "LLM app layer" (a
 **LLM Stack Architecture:**
 - **LLM Labs** (OpenAI, Anthropic, Google): Produce foundation models
 - **LLM App Layer** (Cursor, vertical-specific apps): Orchestrate LLM calls, provide context engineering, application-specific GUIs
-- **Neotoma (Truth Layer)**: Provides structured personal data substrate—the private data that enables LLM apps to be effective
+- **Neotoma (State Layer)**: Provides structured personal data substrate—the private data that enables LLM apps to be effective
 
 **vs. Provider Memory:** ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, provider-controlled). Neotoma provides structured personal data memory with entity resolution, timelines, and cross-platform access via MCP.
 ## 7.2 Differentiation
@@ -64,6 +64,6 @@ These features are valuable but not defensible alone (competitors are developing
 - **Type-stable graph:** No orphans, no cycles, typed edges
 **Strategic Positioning:** Neotoma combines defensible differentiators (privacy-first, deterministic, cross-platform) with feature capabilities (entity resolution, timelines, dual-path ingestion). Competitors can replicate features but cannot pursue the same architectural choices due to structural constraints.
 
-**Compensating for Jagged Intelligence:** LLMs display ["jagged intelligence"](https://x.com/karpathy/status/2002118205729562949)—simultaneously genius and cognitively challenged, strong in verifiable domains but inconsistent elsewhere. Neotoma's deterministic substrate compensates for this by providing a reliable truth layer that agents can depend on. By creating a verifiable domain for personal data with objective (non-gameable) results, Neotoma ensures consistent, reproducible outcomes despite LLM inconsistency.
+**Compensating for Jagged Intelligence:** LLMs display ["jagged intelligence"](https://x.com/karpathy/status/2002118205729562949)—simultaneously genius and cognitively challenged, strong in verifiable domains but inconsistent elsewhere. Neotoma's deterministic substrate compensates for this by providing a reliable state layer that agents can depend on. By creating a verifiable domain for personal data with objective (non-gameable) results, Neotoma ensures consistent, reproducible outcomes despite LLM inconsistency.
 
 **This is a new category: Deterministic Personal Memory Engine (DPME).**

@@ -365,7 +365,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Priority:** P1
 - **Risk:** Low
 - **Complexity:** Medium
-- **Dependencies:** None (standalone CLI, outside Truth Layer)
+- **Dependencies:** None (standalone CLI, outside State Layer)
 - **Release:** Internal Release v0.2.0 (pre-MVP)
 - **Deliverables:**
   - CLI tool for converting chat transcripts (e.g., ChatGPT exports) to structured JSON files
@@ -374,8 +374,8 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
   - Deterministic JSON output with schema types from normalized transcript
   - Documentation and usage examples
 - **Constraints (per GENERAL_REQUIREMENTS.md):**
-  - **MUST be separate from Truth Layer** (non-deterministic interpretation prohibited in ingestion pipeline)
-  - **MAY use LLMs or heuristics** (not constrained by Truth Layer determinism requirements)
+  - **MUST be separate from State Layer** (non-deterministic interpretation prohibited in ingestion pipeline)
+  - **MAY use LLMs or heuristics** (not constrained by State Layer determinism requirements)
   - **MUST output well-structured JSON** with schema types that can be ingested deterministically
   - **SHOULD support user correction/review** before final JSON export
 - **Tests:**
@@ -386,7 +386,7 @@ Adds UI layer, multi-user support (auth + RLS), billing, onboarding, and provide
 - **Status:** ⏳ Not Started
 - **Implementation Notes:**
   - CLI runs independently from Neotoma server (Node.js script in `scripts/` or separate package)
-  - Can use OpenAI/Anthropic APIs for interpretation (outside Truth Layer)
+  - Can use OpenAI/Anthropic APIs for interpretation (outside State Layer)
   - Output JSON follows standard record format (type, properties, file_urls, summary)
   - Each JSON file contains one record object with schema type and extracted properties
   - See `docs/specs/GENERAL_REQUIREMENTS.md` for motivation and requirements
@@ -1807,7 +1807,7 @@ Load when:
 - Starting downstream FU without completing dependencies
 - Implementing without spec
 - Skipping tests
-- Violating Truth Layer boundaries in any FU
+- Violating State Layer boundaries in any FU
 - Introducing nondeterminism
 - Breaking backward compatibility
 **Note:** For tactical constraints, Cursor command usage patterns, and daily execution workflows, see [`docs/specs/MVP_EXECUTION_PLAN.md`](./MVP_EXECUTION_PLAN.md) section "Agent Instructions".

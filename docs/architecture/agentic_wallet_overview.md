@@ -13,7 +13,7 @@ Unlike the Strategy Layer, the Agentic Wallet (Execution Layer):
 - Handles complex multi-chain routing  
 The Wallet is an **agentic executor**, not the origin of strategy.
 ## Role in Neotoma Architecture
-- Neotoma = Truth Layer (event-sourced, reducer-driven)  
+- Neotoma = State Layer (event-sourced, reducer-driven)  
 - Strategy Layer = Pure Cognition ("what should happen", e.g., Agentic Portfolio)  
 - Execution Layer = Pure Effect ("how it should happen", Agentic Wallet is part of this layer)  
 ### Execution Layer Responsibilities (Agentic Wallet as Part)
@@ -71,7 +71,7 @@ Execution Layer (Agentic Wallet + Domain Agents)
   ↓ Performs side effects via adapters
   ↓ Emits Domain Events (TRADE_EXECUTED, PAYMENT_INITIATED, etc.)
   ↓
-Neotoma (Truth Layer)
+Neotoma (State Layer)
   ↓ Reducers process Domain Events
   ↓ Updated world state
   ↓

@@ -37,6 +37,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { SeoHead } from "../SeoHead";
 import { SectionDivider } from "../ui/section_divider";
+import { getDocPageIcon } from "../../site/doc_icons";
 import type { FailureModeItem, IcpProfile } from "../../site/site_data";
 
 const FAILURE_MODE_ICONS: Record<string, LucideIcon> = {
@@ -212,12 +213,16 @@ export function IcpDetailPage({
   dataTypeDetails,
   closingStatement,
 }: IcpDetailPageProps) {
+  const TitleIcon = getDocPageIcon(`/${profile.slug}`);
   return (
     <>
       <SeoHead routePath={`/${profile.slug}`} />
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
-          <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-2">
+          <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-2 flex items-start gap-3">
+            {TitleIcon ? (
+              <TitleIcon className="mt-1 size-7 shrink-0 text-muted-foreground" aria-hidden />
+            ) : null}
             {profile.name}
           </h1>
           <p className="text-[17px] leading-7 text-muted-foreground mb-10">

@@ -57,7 +57,7 @@ test: "tests/integration/documentation_web.test.ts"
 1. Ensure documentation generated and web server operational
 2. Access landing page at root URL
 3. Verify landing page content:
-   - What Neotoma is (Truth Layer for AI Memory)
+   - What Neotoma is (State Layer for AI Memory)
    - Problems solved (fragmented data, no AI memory, etc.)
    - Target users (AI-native individuals, knowledge workers, teams)
    - Core workflow overview

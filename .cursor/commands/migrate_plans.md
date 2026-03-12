@@ -380,7 +380,7 @@ To determine if a plan is architecturally aligned:
    - `docs/architecture/architectural_decisions.md`
 
 3. **Red flags:**
-   - Plan contradicts Truth Layer boundaries
+   - Plan contradicts State Layer boundaries
    - Plan assumes features explicitly marked as "not in MVP"
    - Plan depends on removed/deprecated systems
 

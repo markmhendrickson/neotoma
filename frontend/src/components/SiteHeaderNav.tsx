@@ -43,8 +43,8 @@ import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiGithub, SiNpm, SiOpenai } from "react-icons/si";
 import { useTheme } from "@/hooks/useTheme";
 import { useLocale } from "@/i18n/LocaleContext";
-import { type SupportedLocale } from "@/i18n/config";
-import { localizeHashHref, localizePath, stripLocaleFromPath } from "@/i18n/routing";
+import { LOCALE_LANGUAGE_NAME, SUPPORTED_LOCALES, type SupportedLocale } from "@/i18n/config";
+import { localizeHashHref, localizePath, saveLocale, stripLocaleFromPath } from "@/i18n/routing";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -54,6 +54,12 @@ import {
   NavigationMenuTrigger,
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
@@ -156,7 +162,7 @@ function NavLink({
   external?: boolean;
 }) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const localizedHref = href.startsWith("#")
     ? localizeHashHref(href, locale)
     : href.startsWith("/")
@@ -260,6 +266,70 @@ function ThemeToggleNavButton({
   );
 }
 
+function LanguageNavButton({
+  mobile = false,
+  onSelect,
+}: {
+  mobile?: boolean;
+  onSelect?: () => void;
+} = {}) {
+  const navigate = useNavigate();
+  const { pathname, hash } = useLocation();
+  const { locale, languageName, dict } = useLocale();
+
+  const handleSelect = (newLocale: SupportedLocale) => {
+    if (newLocale === locale) return;
+    saveLocale(newLocale);
+    onSelect?.();
+    const targetPath = localizePath(pathname, newLocale);
+    const target = `${targetPath}${hash || ""}`;
+    if (typeof window !== "undefined") {
+      window.location.assign(target);
+      return;
+    }
+    navigate(target);
+  };
+
+  const trigger = mobile ? (
+    <button
+      type="button"
+      className="inline-flex w-full items-center gap-2 rounded-md px-3 py-2 text-[14px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+      aria-label={dict.language}
+      title={dict.language}
+    >
+      <Globe className="h-4 w-4 shrink-0" aria-hidden />
+      <span>{languageName}</span>
+    </button>
+  ) : (
+    <button
+      type="button"
+      aria-label={dict.language}
+      title={dict.language}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-md ${sidebarNavItemClass}`}
+    >
+      <Globe className="h-4 w-4" aria-hidden />
+    </button>
+  );
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[10rem] bg-popover" translate="no">
+        {SUPPORTED_LOCALES.map((loc) => (
+          <DropdownMenuItem
+            key={loc}
+            onClick={() => handleSelect(loc)}
+            className="cursor-pointer"
+          >
+            {LOCALE_LANGUAGE_NAME[loc]}
+            {loc === locale ? " ✓" : ""}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 interface SearchablePageItem {
   label: string;
   href: string;
@@ -290,6 +360,7 @@ function SiteNavSearch({
   alwaysShowInput?: boolean;
 }) {
   const navigate = useNavigate();
+  const { dict } = useLocale();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
@@ -427,12 +498,12 @@ function SiteNavSearch({
         >
           {isShowingTopPages && (
             <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
-              Top pages
+              {dict.topPages}
             </div>
           )}
           {displayItems.length === 0 ? (
             <div className="px-3 py-2 text-[12px] text-sidebar-foreground/70">
-              {query.trim().length > 0 ? "No pages found" : "No suggestions"}
+              {dict.noResults}
             </div>
           ) : (
             <ul className="list-none p-1">
@@ -696,6 +767,9 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
             </NavLink>
           </NavigationMenuItem>
           <NavigationMenuItem>
+            <LanguageNavButton />
+          </NavigationMenuItem>
+          <NavigationMenuItem>
             <ThemeToggleNavButton />
           </NavigationMenuItem>
         </NavigationMenuList>
@@ -748,6 +822,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               style={{ paddingBottom: "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))" }}
             >
               <div className="border-b border-sidebar-border pb-2 flex flex-col gap-1">
+                <LanguageNavButton mobile onSelect={() => setMobileMenuOpen(false)} />
                 <ThemeToggleNavButton mobile />
               </div>
               <nav className="flex flex-col gap-1">

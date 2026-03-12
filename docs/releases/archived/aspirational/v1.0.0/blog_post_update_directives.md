@@ -327,7 +327,7 @@ Brief summary of key points. No CTA, just sharing learnings.
 ```markdown
 ## Getting Started
 
-Neotoma is a privacy-first truth layer for AI memory. You can get started by:
+Neotoma is a privacy-first state layer for AI memory. You can get started by:
 
 1. Sign up for early access
 2. Upload your first document
@@ -409,13 +409,13 @@ Before finalizing any blog post update, verify:
 ```markdown
 # Why I'm Building Neotoma: The Problem with AI Memory
 
-I'm building Neotoma for my ateles integration to replace the parquet MCP. As I work through the architecture, I'm learning that AI memory needs a truth layer foundation.
+I'm building Neotoma for my ateles integration to replace the parquet MCP. As I work through the architecture, I'm learning that AI memory needs a state layer foundation.
 
 ## The Fragmentation Problem
 
 If you rely on provider memory systems, you're building on sand. ChatGPT memory disappears when OpenAI resets your session. Claude memory is locked to Anthropic's platform.
 
-I'm building Neotoma to solve this as a privacy-first, deterministic, cross-platform truth layer.
+I'm building Neotoma to solve this as a privacy-first, deterministic, cross-platform state layer.
 
 ## How I'm Approaching the Build
 

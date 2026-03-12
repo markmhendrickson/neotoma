@@ -38,7 +38,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
 #### 2.2 Personal Twitter/X Account (@markymark)
 **Timeline**: Week 0-12 (ongoing during build)
 **Profile Setup** (Week 0):
-- [ ] Update bio: "Building Neotoma — Privacy-first truth layer for AI memory | MCP integration | Building for ateles integration"
+- [ ] Update bio: "Building Neotoma — Privacy-first state layer for AI memory | MCP integration | Building for ateles integration"
 - [ ] Pin tweet: Build-in-public announcement (no waitlist link, just sharing journey)
 - [ ] Add Neotoma website link in bio (if website exists)
 - [ ] Add location/company info if relevant
@@ -103,7 +103,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
   - **No CTA**: Just technical insights
   - ~2000 words
 
-- [ ] **Post 3**: "Building a Truth Layer: Neotoma's Architecture"
+- [ ] **Post 3**: "Building a State Layer: Neotoma's Architecture"
   - Four-layer truth model (Document → Entity → Observation → Snapshot)
   - Entity resolution (how I'm implementing it)
   - Timeline generation (architectural decisions)
@@ -138,7 +138,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
 #### 2.4 Personal LinkedIn Account
 **Timeline**: Week 0-12 (ongoing during build)
 **Profile Setup** (Week 0):
-- [ ] Update headline: "Building Neotoma | Privacy-First Truth Layer for AI Memory | Building for ateles integration"
+- [ ] Update headline: "Building Neotoma | Privacy-First State Layer for AI Memory | Building for ateles integration"
 - [ ] Add Neotoma to experience section
 - [ ] Update "About" section to mention Neotoma (building for personal use)
 - [ ] Add Neotoma website link (if website exists)
@@ -391,7 +391,7 @@ This document defines build-in-public content activities for v1.0.0 during the b
    - **No explicit ask**: Just sharing progress
 **Social Media Post Template** (No Explicit Ask):
 ```
-Building Neotoma for my ateles integration - a privacy-first truth layer for AI memory 🧠
+Building Neotoma for my ateles integration - a privacy-first state layer for AI memory 🧠
 Sharing progress and learnings as I build: https://github.com/neotoma/neotoma
 #BuildInPublic #AI #MCP
 ```
@@ -439,7 +439,7 @@ I'm building Neotoma and sharing updates on Twitter. Would love if you'd follow 
 ```
 **LinkedIn Post**:
 ```
-I'm building Neotoma - a privacy-first truth layer for AI memory.
+I'm building Neotoma - a privacy-first state layer for AI memory.
 Follow along for build-in-public updates and insights on AI memory, MCP integration, and privacy-first architecture.
 #BuildInPublic #AI #MCP
 ```
@@ -537,7 +537,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 - Tags/keywords
 
 **Neotoma-Specific Materials** (Prepare during build):
-- **Description**: "Privacy-first deterministic truth layer that transforms personal documents into structured memory for AI agents via MCP. Features schema-first extraction, entity resolution, timeline generation, and cross-platform access (ChatGPT, Claude, Cursor)."
+- **Description**: "Privacy-first deterministic state layer that transforms personal documents into structured memory for AI agents via MCP. Features schema-first extraction, entity resolution, timeline generation, and cross-platform access (ChatGPT, Claude, Cursor)."
 - **Key Features**:
   - Privacy-first architecture (user-controlled, no provider access)
   - Deterministic schema-first extraction
@@ -573,7 +573,7 @@ Follow along for build-in-public updates and insights on AI memory, MCP integrat
 **Blog Posts** (on personal website, flexible schedule):
 - "Why I'm Building Neotoma: The Problem with AI Memory" (from building experience)
 - "Deterministic Extraction: Why It Matters for Personal Data" (technical deep-dive)
-- "Building a Truth Layer: Neotoma's Architecture" (architectural decisions)
+- "Building a State Layer: Neotoma's Architecture" (architectural decisions)
 - "Privacy-First AI Memory: Why User Control Matters" (thought leadership)
 - "MCP Integration Patterns: Lessons from Building Neotoma" (technical insights)
 - **Developer Preview Announcement**: Short announcement with precision disclaimers and explicit mutation guarantees

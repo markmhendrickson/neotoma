@@ -13,7 +13,7 @@ This report evaluates current codebase fidelity against the action items in `doc
 Provide a factual assessment of where the codebase aligns with the proposal and where gaps remain. Each action item includes current evidence and required changes.
 
 ## Invariants
-1. Truth Layer boundaries remain intact. No strategy or execution logic is introduced.
+1. State Layer boundaries remain intact. No strategy or execution logic is introduced.
 2. Determinism requirements remain enforced across ingestion, reducers, and tool calls.
 3. MCP tooling remains schema bound and auditable.
 4. Documentation must use active voice, short sentences, and no em dashes.
@@ -169,14 +169,14 @@ Load this document when evaluating MCP and CLI alignment, contract surface chang
 - `docs/conventions/writing_style_guide.md`
 
 ### Constraints Agents Must Enforce
-1. Truth Layer boundaries remain intact.
+1. State Layer boundaries remain intact.
 2. Determinism requirements remain enforced.
 3. MCP tool behavior remains schema bound.
 4. Documentation uses active voice and short sentences.
 5. No em dashes are used.
 
 ### Forbidden Patterns
-- Introducing strategy or execution logic into Truth Layer code.
+- Introducing strategy or execution logic into State Layer code.
 - Parsing non JSON CLI output in MCP tools.
 - Returning free form string errors in MCP or REST.
 - Introducing composite MCP tools without explicit contract justification.

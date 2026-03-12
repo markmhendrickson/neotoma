@@ -3,14 +3,14 @@
 ### 1.1 Architectural Composability
 Neotoma is designed as a **composable substrate** that enables multiple layers to build on top:
 **Layered Architecture Model:**
-- **Truth Layer (Neotoma):** Event-sourced, reducer-driven deterministic world model
+- **State Layer (Neotoma):** Event-sourced, reducer-driven deterministic world model
 - **Strategy Layer:** Pure cognition (e.g., Agentic Portfolio) — reads truth, outputs Decisions + Commands
 - **Execution Layer:** Pure effect (e.g., Agentic Wallet) — takes Commands, performs side effects, emits Domain Events
 **Key Composability Mechanisms:**
 1. **Read-Only Boundaries:** Upper layers can read truth but cannot mutate it directly
 2. **Domain Event → Reducer Pattern:** All truth updates flow through reducers processing Domain Events
 3. **Protocol-Based Interfaces:** MCP exposes structured, validated access points
-4. **Clear Layer Separation:** Strategy and Execution layers are architecturally distinct from Truth Layer
+4. **Clear Layer Separation:** Strategy and Execution layers are architecturally distinct from State Layer
 ### 1.2 Integration Composability
 **MCP Protocol Integration:**
 - Standardized interface enables any MCP-compatible agent to integrate
@@ -42,7 +42,7 @@ Neotoma is designed as a **composable substrate** that enables multiple layers t
 ### 2.2 Composability (Layered Building)
 **Definition:** Ability for external systems to build layers on top of Neotoma, creating new capabilities through composition.
 **Neotoma's Composability:**
-- Strategy Layer and Execution Layer can build on Truth Layer
+- Strategy Layer and Execution Layer can build on State Layer
 - Clear boundaries enable independent layer development
 - Domain Event → Reducer pattern enables predictable composition
 - **Current Status:** Architecturally fundamental but not explicitly articulated as differentiator
@@ -111,11 +111,11 @@ Neotoma is designed as a **composable substrate** that enables multiple layers t
 - **Read-only boundaries:** Upper layers can read truth but cannot mutate it directly
 - **Domain Event → Reducer pattern:** All truth updates flow through reducers processing Domain Events
 - **Protocol-based interfaces:** MCP exposes structured, validated access points
-- **Clear layer separation:** Strategy and Execution layers are architecturally distinct from Truth Layer
+- **Clear layer separation:** Strategy and Execution layers are architecturally distinct from State Layer
 **Layer Composition:**
 - Strategy Layer (pure cognition): Reads world state, outputs Decisions + Commands
 - Execution Layer (pure effect): Takes Commands, performs side effects, emits Domain Events
-- Truth Layer (Neotoma): Processes Domain Events through reducers to update state
+- State Layer (Neotoma): Processes Domain Events through reducers to update state
 **Why Composability:**
 - Enables ecosystem building (others can build on Neotoma)
 - Creates network effects and platform value
@@ -128,7 +128,7 @@ Add to "Core Architectural Choices (Defensible Differentiators)" section:
 ```markdown
 **Architectural Principles (Enabling Differentiators):**
 4. **Composability (Layered Architecture)**
-   - Read-only boundaries enable Strategy/Execution layers to build on Truth Layer
+   - Read-only boundaries enable Strategy/Execution layers to build on State Layer
    - Domain Event → Reducer pattern enables predictable composition
    - Protocol-based interfaces (MCP) enable ecosystem integration
    - **Why Enabling:** Enables ecosystem building and platform value, distinguishes from monolithic systems
@@ -138,19 +138,19 @@ Add to "Core Architectural Choices (Defensible Differentiators)" section:
 Add to positioning section:
 ```markdown
 **Architectural Enablers (Supporting Differentiators):**
-- **Composability:** Layered architecture enables Strategy/Execution layers to build on Truth Layer. Protocol-based interfaces enable ecosystem integration. Distinguishes Neotoma from monolithic systems.
+- **Composability:** Layered architecture enables Strategy/Execution layers to build on State Layer. Protocol-based interfaces enable ecosystem integration. Distinguishes Neotoma from monolithic systems.
 ```
 **Distinguish from Interoperability:**
 ```markdown
 **Composability vs. Interoperability:**
 - **Interoperability (Differentiator #3):** Works across multiple AI platforms (ChatGPT, Claude, Cursor) via MCP. Horizontal integration.
-- **Composability (Architectural Principle):** Enables Strategy/Execution layers to build on Truth Layer. Vertical composition. Enables ecosystem building.
+- **Composability (Architectural Principle):** Enables Strategy/Execution layers to build on State Layer. Vertical composition. Enables ecosystem building.
 ```
 ### 4.4 Update README
 **Add to "Neotoma's Structured Personal Data Memory" section:**
 ```markdown
 **4. Composability (Layered Architecture)**
-- Read-only boundaries enable Strategy/Execution layers to build on Truth Layer
+- Read-only boundaries enable Strategy/Execution layers to build on State Layer
 - Domain Event → Reducer pattern enables predictable composition
 - Protocol-based interfaces enable ecosystem integration
 - Foundation for agent-native personal computing
@@ -293,7 +293,7 @@ Bitcoin's whitepaper solved double-spending with minimal primitives:
 - Complexity emerged in ecosystem (exchanges, wallets, layer-2s)
 - Protocol itself stayed simple
 **Recommendation:**
-- Keep core Truth Layer minimal (like Bitcoin's protocol)
+- Keep core State Layer minimal (like Bitcoin's protocol)
 - Push complexity to upper layers (Strategy/Execution layers, like Bitcoin's ecosystem)
 - Defer features until core is validated (like v0.2.0 deferred async retry until v0.3.0)
 ## 7. Summary
@@ -302,7 +302,7 @@ Bitcoin's whitepaper solved double-spending with minimal primitives:
 - **Interoperability** = horizontal (works across platforms) — explicit differentiator #3
 - **Composability** = vertical (layers build on top) — architectural principle
 **Bitcoin-Like Minimalism:**
-- Core Truth Layer should remain minimal (like Bitcoin's protocol)
+- Core State Layer should remain minimal (like Bitcoin's protocol)
 - Complexity belongs in upper layers (Strategy/Execution, like Bitcoin's ecosystem)
 - Defer features until core is validated (release history shows this pattern)
-**Recommendation:** Articulate composability as architectural principle now, consider elevating to differentiator once ecosystem value is proven. Apply Bitcoin-like minimalism to core Truth Layer: single merge strategy, untyped relationships, implicit provenance, hardcoded schemas initially.
+**Recommendation:** Articulate composability as architectural principle now, consider elevating to differentiator once ecosystem value is proven. Apply Bitcoin-like minimalism to core State Layer: single merge strategy, untyped relationships, implicit provenance, hardcoded schemas initially.

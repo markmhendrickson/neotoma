@@ -141,7 +141,7 @@
 - Not marketed release - deploys to production without marketing activities.
 - All releases deploy to production at neotoma.io.
 - No UI or multi-user infrastructure required.
-- Focus on MCP-only validation of core Truth Layer capabilities.
+- Focus on MCP-only validation of core State Layer capabilities.
 - Type detection analytics implemented as part of FU-100 (see `type_detection_analytics.md`).
 - Release workflow pattern defined in `docs/feature_units/standards/release_workflow.md`.
 - This status file is the **single source of truth** for v0.1.0 release progress.

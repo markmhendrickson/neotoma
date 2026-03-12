@@ -8,7 +8,7 @@ triggers:
 
 # Analyze Project
 
-Analyze any project (URL or term) from both competitive and partnership perspectives relative to **all** repositories (comparative analysis across your repos). Load repo list from the truth layer (per `neotoma_parquet_migration_rules.mdc`).
+Analyze any project (URL or term) from both competitive and partnership perspectives relative to **all** repositories (comparative analysis across your repos). Load repo list from the state layer (per `neotoma_parquet_migration_rules.mdc`).
 
 ## Command
 
@@ -35,7 +35,7 @@ analyze <url_or_term>
 This command performs systematic analysis following the framework defined in `foundation/strategy/project_assessment_framework.md`. The analysis type depends on the resource:
 
 **For Products/Projects:**
-1. Load all repos from truth layer (per `neotoma_parquet_migration_rules.mdc`)
+1. Load all repos from state layer (per `neotoma_parquet_migration_rules.mdc`)
 2. Discover repo context for current repo and all repos in the loaded list
 3. Research target project via web scraper MCP (if ChatGPT/Twitter URL) or browser tools
 4. Generate competitive analysis using standardized template (compare target vs. each repo)
@@ -44,7 +44,7 @@ This command performs systematic analysis following the framework defined in `fo
 7. Present summary to user (including comparative summary across repos)
 
 **For Content/Thought Leadership (Articles, Research, etc.):**
-1. Load all repos from truth layer (per `neotoma_parquet_migration_rules.mdc`)
+1. Load all repos from state layer (per `neotoma_parquet_migration_rules.mdc`)
 2. Discover repo context for current repo and all repos in the loaded list
 3. Research target resource via web scraper MCP (if ChatGPT/Twitter URL) or browser tools
 4. Generate holistic relevance analysis using relevance template (applicable to each repo)
@@ -62,13 +62,13 @@ This command performs systematic analysis following the framework defined in `fo
 
 ## Execution Instructions
 
-### Step 1a: Load All Repos from Truth Layer (REQUIRED FIRST)
+### Step 1a: Load All Repos from State Layer (REQUIRED FIRST)
 
 **Objective:** Load the list of all repositories so analysis is comparative across all your repos.
 
 **Actions:**
 
-1. **Load repo list from truth layer** (per `neotoma_parquet_migration_rules.mdc`). For repositories: Neotoma first, then Parquet with `data_type="repositories"`. If still no records: run `execution/scripts/sync_repos_to_parquet.py` with `DATA_DIR` set, then query again; or warn that comparison will use only the current repo.
+1. **Load repo list from state layer** (per `neotoma_parquet_migration_rules.mdc`). For repositories: Neotoma first, then Parquet with `data_type="repositories"`. If still no records: run `execution/scripts/sync_repos_to_parquet.py` with `DATA_DIR` set, then query again; or warn that comparison will use only the current repo.
 
 2. **Store repo list and paths:**
    - For each record: `name`, `path`, `parent_dir`, `core_identity_path`, `product_positioning_path`, `problem_statement_path`, `philosophy_path`.
@@ -556,7 +556,7 @@ If configuration doesn't exist, use defaults:
 ## Notes
 
 - This command is generic and works for any repo using foundation as submodule
-- **Comparative analysis:** All analysis is relative to **all** repos. Load repos from truth layer (per `neotoma_parquet_migration_rules.mdc`). Parquet fallback: `data_type="repositories"`; if empty, run `execution/scripts/sync_repos_to_parquet.py` (with `DATA_DIR` set).
+- **Comparative analysis:** All analysis is relative to **all** repos. Load repos from state layer (per `neotoma_parquet_migration_rules.mdc`). Parquet fallback: `data_type="repositories"`; if empty, run `execution/scripts/sync_repos_to_parquet.py` (with `DATA_DIR` set).
 - Output documents are confidential and stored in private docs submodule
 - **Resource Type Detection:** Command automatically detects if resource is a product/project (competitive/partnership analysis) or content/thought leadership (relevance analysis)
 - Templates ensure consistent, thorough analysis across all assessments

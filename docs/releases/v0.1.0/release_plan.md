@@ -179,7 +179,7 @@ The detailed test specifications for these flows live in `docs/releases/v0.1.0/i
   - Not marketed release - deploys to production without marketing activities
   - All releases deploy to production at neotoma.io
   - No UI or multi-user infrastructure required.
-  - Focus on MCP-only validation of core Truth Layer capabilities.
+  - Focus on MCP-only validation of core State Layer capabilities.
   - Type detection analytics implemented for schema expansion insights (see `type_detection_analytics.md`).
   - Observation architecture builds on event-sourcing foundation (FU-050 through FU-054).
   - Four-layer truth model (Document → Entity → Observation → Snapshot) enables multi-source entity resolution and full provenance tracking.

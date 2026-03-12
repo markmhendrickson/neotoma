@@ -2,7 +2,7 @@
 ### 1. Purpose
 Define the **integration test suite** for Release `v0.1.0` (Internal MCP Release). These tests:
 - Span multiple Feature Units.
-- Validate the full Truth Layer pipeline via MCP (ingestion → extraction → entities → events → graph → search).
+- Validate the full State Layer pipeline via MCP (ingestion → extraction → entities → events → graph → search).
 - Are required to pass before release approval.
 - Validate determinism and graph integrity.
 ### 2. Test Matrix (High-Level)

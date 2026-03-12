@@ -68,7 +68,7 @@ This design system prioritizes:
 3. **Trust:** Consistent patterns, clear feedback, reliable interactions
 4. **ICP Alignment:** Matches preferences from ChatGPT, Cursor, GitHub, research tools, legal platforms
 
-The system balances information density with readability, maintains brand consistency, and aligns with Tier 1 ICP aesthetic preferences while supporting Neotoma's positioning as a minimal, technical, trustworthy truth layer.
+The system balances information density with readability, maintains brand consistency, and aligns with Tier 1 ICP aesthetic preferences while supporting Neotoma's positioning as a minimal, technical, trustworthy state layer.
 
 ## Agent Instructions
 
@@ -83,7 +83,7 @@ Load `docs/ui/design_system.md` when:
 
 ### Required Co-Loaded Documents
 
-- `docs/NEOTOMA_MANIFEST.md` (Truth Layer principles and UI philosophy)
+- `docs/NEOTOMA_MANIFEST.md` (State Layer principles and UI philosophy)
 - `docs/ui/dsl_spec.md` (UI DSL definitions)
 - `docs/ui/patterns/navigation.md` (navigation sidebar patterns, when working on navigation)
 - `docs/ui/design_system_sync_rules.mdc` (synchronization rules with StyleGuide component, when modifying design system or StyleGuide)
@@ -111,7 +111,7 @@ Load `docs/ui/design_system.md` when:
 - [ ] UI changes conform to design tokens and component guidelines
 - [ ] Accessibility checks (keyboard, ARIA, contrast) pass
 - [ ] Localization checks (translatability, formatting) pass
-- [ ] UI behavior matches Neotoma's Truth Layer philosophy (inspection window only)
+- [ ] UI behavior matches Neotoma's State Layer philosophy (inspection window only)
 - [ ] Design system and StyleGuide component are synchronized (if either was modified)
 - No randomness
 

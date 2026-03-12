@@ -109,6 +109,15 @@ function getCoreWithPadding(raw: string): { core: string; prefix: string; suffix
   return { core, prefix: raw.slice(0, start), suffix: raw.slice(end) };
 }
 
+function isNoTranslate(el: Element | null): boolean {
+  let cur = el;
+  while (cur) {
+    if (cur.getAttribute("translate") === "no") return true;
+    cur = cur.parentElement;
+  }
+  return false;
+}
+
 function collectTextNodes(root: ParentNode): Text[] {
   const nodes: Text[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -121,6 +130,10 @@ function collectTextNodes(root: ParentNode): Text[] {
       continue;
     }
     if (["SCRIPT", "STYLE", "NOSCRIPT", "CODE", "PRE"].includes(parent.tagName)) {
+      node = walker.nextNode();
+      continue;
+    }
+    if (isNoTranslate(parent)) {
       node = walker.nextNode();
       continue;
     }
@@ -141,6 +154,7 @@ function collectAttributeTargets(root: ParentNode): Array<{ element: Element; at
   const targets: Array<{ element: Element; attr: TranslatableAttribute }> = [];
   for (const attr of TRANSLATABLE_ATTRIBUTES) {
     root.querySelectorAll(`[${attr}]`).forEach((element) => {
+      if (isNoTranslate(element as Element)) return;
       const value = element.getAttribute(attr);
       if (value && shouldTranslateText(value)) {
         targets.push({ element, attr });

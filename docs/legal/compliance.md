@@ -57,7 +57,7 @@ This document does NOT cover:
 1. User requests correction via support ticket
 2. Verify user identity and data ownership
 3. Identify incorrect data (record, entity, or property)
-4. **Limitation:** Neotoma stores immutable truth layer — cannot modify extracted data
+4. **Limitation:** Neotoma stores immutable state layer — cannot modify extracted data
 5. **Solution:** User uploads corrected document → new record created with correct data
 6. Document original record as superseded (add `superseded_by` field if needed)
 7. Notify user of correction method

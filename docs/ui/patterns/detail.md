@@ -52,7 +52,7 @@ Load `docs/ui/patterns/detail.md` when:
 - Modifying layout, sections, or actions in a detail screen
 - Planning accessibility or i18n behavior for detail pages
 ### Required Co-Loaded Documents
-- `docs/NEOTOMA_MANIFEST.md` (UI principles, Truth Layer boundaries)
+- `docs/NEOTOMA_MANIFEST.md` (UI principles, State Layer boundaries)
 - `docs/ui/design_system.md` (visual styles, spacing, typography)
 - `docs/subsystems/accessibility.md` (A11y requirements)
 - `docs/subsystems/i18n.md` (localization behavior)
@@ -61,7 +61,7 @@ Load `docs/ui/patterns/detail.md` when:
 2. MUST ensure actions are keyboard accessible and properly labeled
 3. MUST keep detail views as inspection/inspection+light-action surfaces, not heavy workflows
 ### Forbidden Patterns
-- Mutating Truth Layer directly from detail UI without going through MCP/actions
+- Mutating State Layer directly from detail UI without going through MCP/actions
 - Omitting error or not-found states
 - Using non-semantic headings or inaccessible controls
 ### Validation Checklist

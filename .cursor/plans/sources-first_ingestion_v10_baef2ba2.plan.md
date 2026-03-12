@@ -43,7 +43,7 @@ todos:
 
 ## Scope
 
-Greenfield build. No migration. AI agent execution via MCP. Uses existing Truth Layer primitives (`observations`, `entity_snapshots`, `schema_registry`, `entities`) and adds sources-first storage + interpretation runs.---
+Greenfield build. No migration. AI agent execution via MCP. Uses existing State Layer primitives (`observations`, `entity_snapshots`, `schema_registry`, `entities`) and adds sources-first storage + interpretation runs.---
 
 ## Goals
 

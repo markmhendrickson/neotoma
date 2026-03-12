@@ -1,7 +1,7 @@
 # Neotoma Core Identity
 
 ## What Neotoma Is
-Neotoma is a **Truth Layer** — a privacy-first, idempotent, cross-platform data substrate designed for AI-native workflows.
+Neotoma is a **state layer** — a privacy-first, idempotent, cross-platform data substrate designed for AI-native workflows.
 It is:
 - The **lowest-level, canonical source of truth** for any data that benefits from deterministic state evolution — personal records, professional context, project metadata, external facts, and third-party data the user chooses to track (see [`what_to_store.md`](what_to_store.md))
 - A **substrate** for AI-native computing

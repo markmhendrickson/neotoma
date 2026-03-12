@@ -421,7 +421,7 @@ Proposed Content:
 Add new section:
 "## Data Persistence Tool Selection
 
-**MANDATORY:** Use the truth layer for structured data per `neotoma_parquet_migration_rules.mdc`. MUST NOT use direct file operations (pandas, csv, json) for structured data in `$DATA_DIR/`. Exception: Direct file operations allowed only for temporary analysis in `tmp/` directory."
+**MANDATORY:** Use the state layer for structured data per `neotoma_parquet_migration_rules.mdc`. MUST NOT use direct file operations (pandas, csv, json) for structured data in `$DATA_DIR/`. Exception: Direct file operations allowed only for temporary analysis in `tmp/` directory."
 
 Alignment Check:
 - Strategy: aligned (standardized data operations)

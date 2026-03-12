@@ -13,7 +13,7 @@ Provide a single root of truth for Neotoma. All documentation, code, and tests m
 
 ## Scope
 This document covers:
-- Truth Layer identity and boundaries
+- State Layer identity and boundaries
 - Determinism and immutability requirements
 - Schema first processing constraints
 - Entity and timeline doctrine
@@ -24,7 +24,7 @@ It does not cover:
 - Feature unit templates or manifests
 
 ## Invariants
-1. Neotoma is a Truth Layer. It does not implement strategy or execution logic.
+1. Neotoma is a State Layer. It does not implement strategy or execution logic.
 2. Determinism is mandatory. The same input must produce the same output.
 3. Truth is immutable. Raw text, schema type, and extracted fields do not change after storage.
 4. Provenance is required. Every field must trace to a source and rule.
@@ -33,7 +33,7 @@ It does not cover:
 7. Privacy is required. No PII in logs and no hidden access paths.
 
 ## Definitions
-- **Truth Layer**: The canonical storage and computation layer for structured personal data.
+- **State Layer**: The canonical storage and computation layer for structured personal data.
 - **Observation**: A source specific fact extracted from a payload or agent submission.
 - **Entity**: A canonical representation of a real world object with a deterministic ID.
 - **Snapshot**: A deterministic reducer output that represents current truth.
@@ -61,8 +61,8 @@ flowchart TD
 - Only user provided data is ingested.
 - No background scanning or implicit ingestion.
 
-### 5.3 Truth Layer boundaries
-- No inference, prediction, or strategy logic in the Truth Layer.
+### 5.3 State Layer boundaries
+- No inference, prediction, or strategy logic in the State Layer.
 - No execution side effects. All mutations are via explicit actions.
 
 ### 5.4 Truth is immutable
@@ -106,7 +106,7 @@ Schema detection must use two or more patterns per type. See `docs/subsystems/re
 - Events are immutable after creation.
 
 ## Product positioning
-Neotoma is a deterministic, privacy first, cross platform Truth Layer for AI tools. It is not a note app or a strategy engine. See `docs/foundation/product_positioning.md`.
+Neotoma is a deterministic, privacy first, cross platform State Layer for AI tools. It is not a note app or a strategy engine. See `docs/foundation/product_positioning.md`.
 
 ## Examples
 **Deterministic entity ID**
@@ -135,7 +135,7 @@ Load this manifest before any code or documentation work.
 - `docs/architecture/determinism.md`
 
 ### Constraints Agents Must Enforce
-1. No strategy or execution logic in the Truth Layer.
+1. No strategy or execution logic in the State Layer.
 2. No nondeterministic logic in core components.
 3. No schema mutation after assignment.
 4. All outputs trace to provenance.
@@ -146,7 +146,7 @@ Load this manifest before any code or documentation work.
 - Implicit ingestion or hidden data collection
 
 ### Validation Checklist
-- [ ] Truth Layer boundaries respected
+- [ ] State Layer boundaries respected
 - [ ] No nondeterministic logic introduced
 - [ ] Schema first constraints enforced
 - [ ] Provenance preserved
