@@ -15,13 +15,13 @@ This document does NOT cover:
 **Neotoma MUST NOT embed its own chat UI or conversational interfaces.**
 **Neotoma MUST externalize all conversational interactions to MCP-compatible agents.**
 ### 1.2 Decision Context
-Neotoma is architected as a **deterministic Truth Layer** that provides structured, schema-bound, entity-centric operations. The question of whether to embed conversational UX internally or externalize it to MCP-compatible agents directly impacts:
+Neotoma is architected as a **deterministic State Layer** that provides structured, schema-bound, entity-centric operations. The question of whether to embed conversational UX internally or externalize it to MCP-compatible agents directly impacts:
 - Architectural purity and separation of concerns
 - Determinism guarantees
 - Maintenance burden and UX volatility
 - Future evolution toward protocol-first, decentralized architecture
 ## 2. Core Arguments Validation
-### 2.1 Neotoma = Deterministic Truth Layer
+### 2.1 Neotoma = Deterministic State Layer
 **Principle:** All writes must be typed, replayable domain events.
 **Validation:**
 Neotoma's core invariants require determinism (see `docs/architecture/determinism.md`):
@@ -33,8 +33,8 @@ Neotoma's core invariants require determinism (see `docs/architecture/determinis
 - Conversational context creates implicit state that cannot be deterministically replayed
 - User intent interpretation varies across conversations
 - Chat transcripts become shadow state that diverges from canonical truth
-- Reasoning and inference inside Neotoma violates Truth Layer boundaries
-**Conclusion:** Internal chat violates determinism and Truth Layer purity.
+- Reasoning and inference inside Neotoma violates State Layer boundaries
+**Conclusion:** Internal chat violates determinism and State Layer purity.
 ### 2.2 External Chat via MCP = Leverage + Modularity
 **Principle:** Users already engage through ChatGPT/Cursor; MCP standardizes capabilities.
 **Validation:**
@@ -49,7 +49,7 @@ flowchart LR
     User[User]
     Agent[External Agent<br/>ChatGPT/Cursor/Claude]
     MCP[MCP Server<br/>Neotoma]
-    Truth[Truth Layer<br/>Deterministic Operations]
+    Truth[State Layer<br/>Deterministic Operations]
     User -->|Conversation| Agent
     Agent -->|MCP Protocol| MCP
     MCP -->|Typed Actions| Truth
@@ -66,14 +66,14 @@ flowchart LR
 **Validation:**
 - **User expectations:** Internal chat UI creates expectation that Neotoma provides reasoning, strategy, or planning
 - **Architectural violation:** Neotoma MUST NOT implement strategy, execution, or agent logic (see `docs/architecture/architecture.md` section 1.1)
-- **Truth Layer purity:** Neotoma = truth; Agents = intelligence
-- **Separation of concerns:** Reasoning belongs in upper layers (Strategy Layer, e.g., Agentic Portfolio; Execution Layer, e.g., Agentic Wallet), not Truth Layer
+- **State Layer purity:** Neotoma = truth; Agents = intelligence
+- **Separation of concerns:** Reasoning belongs in upper layers (Strategy Layer, e.g., Agentic Portfolio; Execution Layer, e.g., Agentic Wallet), not State Layer
 **Forbidden patterns:**
 - ❌ LLM-based extraction (violates determinism)
-- ❌ Autonomous agents in Truth Layer
+- ❌ Autonomous agents in State Layer
 - ❌ Predictive analytics (belongs in Strategy Layer, e.g., Agentic Portfolio)
 - ❌ Conversational reasoning (belongs in external agents)
-**Conclusion:** Internal chat creates architectural drag and violates Truth Layer boundaries.
+**Conclusion:** Internal chat creates architectural drag and violates State Layer boundaries.
 ### 2.4 UX Volatility
 **Principle:** Providers iterate conversational UX faster than Neotoma can.
 **Validation:**
@@ -84,7 +84,7 @@ flowchart LR
   - Retrieval and context management
   - Multimodal parsing (images, documents)
   - Conversation state management
-- **Resource allocation:** Neotoma resources should focus on Truth Layer capabilities, not conversational UX
+- **Resource allocation:** Neotoma resources should focus on State Layer capabilities, not conversational UX
 - **Competitive disadvantage:** Neotoma cannot match provider UX velocity
 **Conclusion:** Offloading chat eliminates maintenance burden and aligns with Neotoma's core mission.
 ### 2.5 Protocol-First Future Evolution
@@ -134,7 +134,7 @@ flowchart TD
         Actions[MCP Actions]
     end
     subgraph Domain["Domain Layer"]
-        Truth[Truth Layer<br/>Deterministic Operations]
+        Truth[State Layer<br/>Deterministic Operations]
     end
     Agent -->|MCP Protocol| MCP
     MCP -->|Typed Actions| Actions
@@ -147,8 +147,8 @@ flowchart TD
     style Truth fill:#e6ffe6
 ```
 **Critical Invariant:** All conversational interactions occur in external agents. Neotoma provides only deterministic, typed operations via MCP.
-### 4.2 Truth Layer Purity
-Neotoma maintains Truth Layer purity by:
+### 4.2 State Layer Purity
+Neotoma maintains State Layer purity by:
 - **Deterministic operations only:** All operations are replayable and reproducible
 - **Schema-bound writes:** All writes conform to typed schemas
 - **Event-sourced state:** All state mutations are domain events
@@ -183,16 +183,16 @@ Neotoma maintains Truth Layer purity by:
 - [x] All conversational interactions externalized to MCP-compatible agents
 - [x] No internal chat UI or conversational state management
 - [x] MCP tool definitions complete and documented
-- [x] Truth Layer purity maintained (no reasoning, no strategy, no execution)
+- [x] State Layer purity maintained (no reasoning, no strategy, no execution)
 ### 6.2 Determinism Validation
 - [x] All operations are replayable and reproducible
 - [x] No nondeterministic state mutation paths introduced
 - [x] All writes are typed domain events
 - [x] Graph operations maintain integrity
 ### 6.3 Separation of Concerns
-- [x] Neotoma = deterministic truth layer
+- [x] Neotoma = deterministic state layer
 - [x] External agents = reasoning and conversational UX
-- [x] Clear boundaries between Truth Layer and agent layers
+- [x] Clear boundaries between State Layer and agent layers
 - [x] No shadow intelligence inside Neotoma
 ## 7. References
 ### 7.1 Related Documents
@@ -201,7 +201,7 @@ Neotoma maintains Truth Layer purity by:
 - `docs/specs/MCP_SPEC.md` — MCP specification and action catalog
 - `docs/NEOTOMA_MANIFEST.md` — Unified architectural context
 ### 7.2 Architectural Principles
-- **Truth Layer purity:** Neotoma is a Truth Layer — not an app, agent, or strategy/execution system
+- **State Layer purity:** Neotoma is a State Layer — not an app, agent, or strategy/execution system
 - **Determinism:** Same input → same output, always
 - **Schema-first:** All extraction derives from schemas
 - **Event-sourced:** All state mutations are domain events
@@ -224,7 +224,7 @@ Load `docs/architecture/conversational_ux_architecture.md` when:
 2. **Deterministic operations only:** All Neotoma operations MUST be replayable and reproducible
 3. **Schema-bound writes:** All writes MUST conform to typed schemas
 4. **MCP-only interface:** All external access MUST be via MCP protocol
-5. **Truth Layer purity:** No reasoning, strategy, or execution logic in Neotoma
+5. **State Layer purity:** No reasoning, strategy, or execution logic in Neotoma
 ### Forbidden Patterns
 - ❌ Chat UI components inside Neotoma
 - ❌ Conversational state management
@@ -233,7 +233,7 @@ Load `docs/architecture/conversational_ux_architecture.md` when:
 - ❌ Conversational context management
 - ❌ Internal chat endpoints or APIs
 ### Validation Checklist
-- [ ] Change respects Truth Layer boundaries
+- [ ] Change respects State Layer boundaries
 - [ ] No conversational UI introduced
 - [ ] All operations are deterministic
 - [ ] MCP tool definitions updated if needed

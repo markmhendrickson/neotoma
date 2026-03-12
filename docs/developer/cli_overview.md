@@ -3,10 +3,10 @@
 This document covers user-facing CLI usage, authentication, and common workflows. It does not cover MCP usage, server implementation details, or non CLI API clients.
 
 ## Purpose
-Provide a concise, user-facing guide to the Neotoma CLI for interacting with the Truth Layer.
+Provide a concise, user-facing guide to the Neotoma CLI for interacting with the State Layer.
 
 ## Invariants
-1. CLI interactions MUST respect Truth Layer boundaries and explicit user control.
+1. CLI interactions MUST respect State Layer boundaries and explicit user control.
 2. CLI output MUST remain deterministic for the same inputs and server state.
 3. CLI examples MUST use synthetic data and never include credentials.
 
@@ -192,7 +192,7 @@ Load this document when updating or describing CLI usage or onboarding users to 
 
 ### Constraints Agents Must Enforce
 1. Examples MUST use synthetic data and no credentials.
-2. CLI usage MUST respect Truth Layer boundaries and explicit user control.
+2. CLI usage MUST respect State Layer boundaries and explicit user control.
 3. Output mode descriptions MUST remain accurate to current CLI flags.
 
 ### Forbidden Patterns

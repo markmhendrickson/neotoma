@@ -26,7 +26,7 @@ This document does NOT cover:
 
 **Relevance:** Neotoma uses LLMs for AI interpretation of unstructured files (PDFs, images). Current implementation uses `temperature` and `top_p` but does not log `top_k`, and interpretation config lacks task-specific presets. Adding full sampling parameter support improves control over extraction quality and supports auditability.
 
-**Architecture Alignment:** Verified. Aligns with interpretation auditability in `docs/architecture/determinism.md`. Parameters are part of interpretation config, not Truth Layer core logic.
+**Architecture Alignment:** Verified. Aligns with interpretation auditability in `docs/architecture/determinism.md`. Parameters are part of interpretation config, not State Layer core logic.
 
 ## Purpose
 
@@ -85,7 +85,7 @@ Based on prompt engineering best practices (factual extraction vs creative tasks
 |--------|----------|-------------|-------|-------|-----------|
 | `factual_extraction` | Document field extraction, interpretation | 0 | 20 | 1 | Maximum determinism; temp=0 picks most likely token; top-K=20 narrows vocabulary |
 | `balanced` | Schema recommendation, icon matching | 0.2 | 30 | 0.95 | Slight flexibility; avoids repetition loop |
-| `creative` | Future: summaries, descriptions | 0.7 | 40 | 0.99 | More variety; not for Truth Layer extraction |
+| `creative` | Future: summaries, descriptions | 0.7 | 40 | 0.99 | More variety; not for State Layer extraction |
 
 Default for interpretation: `factual_extraction`.
 
@@ -185,7 +185,7 @@ Load when implementing or modifying interpretation configuration, LLM sampling p
 ### Forbidden Patterns
 
 - Adding sampling parameters without updating InterpretationConfig
-- Using creative preset for Truth Layer interpretation (extraction must use factual or balanced)
+- Using creative preset for State Layer interpretation (extraction must use factual or balanced)
 
 ### Validation Checklist
 

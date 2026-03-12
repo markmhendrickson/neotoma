@@ -1110,7 +1110,7 @@ Developers who build internal tools, automations, and agent systems. They requir
 - **Workflow automation:** Automate document processing and ingestion
 - **Internal tools:** Build internal tools that leverage Neotoma memory
 - **Integration development:** Integrate Neotoma into existing developer tools
-- **API-first workflows:** Programmatic access to truth layer
+- **API-first workflows:** Programmatic access to state layer
 ### Document Types
 - API documentation
 - Integration code and configs
@@ -1124,7 +1124,7 @@ Developers who build internal tools, automations, and agent systems. They requir
 4. **Agent development** → Build agents that use Neotoma memory
 ### Value Proposition
 - **Stable APIs:** MCP actions provide consistent, versioned APIs
-- **Programmatic access:** Full programmatic access to truth layer
+- **Programmatic access:** Full programmatic access to state layer
 - **Integration support:** Easy integration into existing developer tools
 - **Automation support:** Webhooks and events for automation
 ### A-ha Moment

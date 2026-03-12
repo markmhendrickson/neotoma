@@ -177,14 +177,14 @@ describe("seo_metadata", () => {
   describe("injectRouteMetaIntoHtml", () => {
     const TEMPLATE = [
       '<!doctype html><html lang="en"><head>',
-      '<title>Neotoma | The truth layer for persistent AI agent memory</title>',
+      '<title>Neotoma | The state layer for persistent AI agent memory</title>',
       '<meta name="description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<meta name="robots" content="index,follow" />',
       '<link rel="canonical" href="https://neotoma.io/" />',
-      '<meta property="og:title" content="Neotoma | The truth layer for persistent AI agent memory" />',
+      '<meta property="og:title" content="Neotoma | The state layer for persistent AI agent memory" />',
       '<meta property="og:description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<meta property="og:url" content="https://neotoma.io/" />',
-      '<meta name="twitter:title" content="Neotoma | The truth layer for persistent AI agent memory" />',
+      '<meta name="twitter:title" content="Neotoma | The state layer for persistent AI agent memory" />',
       '<meta name="twitter:description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>',
       '</head><body><div id="root"></div></body></html>',
@@ -193,7 +193,7 @@ describe("seo_metadata", () => {
     it("replaces title for a subpage route", () => {
       const result = injectRouteMetaIntoHtml(TEMPLATE, "/architecture");
       expect(result).toContain("<title>Architecture | Neotoma</title>");
-      expect(result).not.toContain("The truth layer for persistent AI agent memory</title>");
+      expect(result).not.toContain("The state layer for persistent AI agent memory</title>");
     });
 
     it("replaces canonical URL for a subpage route", () => {
@@ -222,7 +222,7 @@ describe("seo_metadata", () => {
 
     it("leaves homepage template mostly unchanged for root route", () => {
       const result = injectRouteMetaIntoHtml(TEMPLATE, "/");
-      expect(result).toContain("<title>Neotoma | The truth layer for persistent AI agent memory</title>");
+      expect(result).toContain("<title>Neotoma | The state layer for persistent AI agent memory</title>");
       expect(result).toContain('href="https://neotoma.io/"');
     });
   });

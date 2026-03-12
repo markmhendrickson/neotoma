@@ -278,7 +278,7 @@ Load `docs/ui/patterns/navigation.md` when:
 - Integrating search into navigation
 
 ### Required Co-Loaded Documents
-- `docs/NEOTOMA_MANIFEST.md` (UI principles, Truth Layer boundaries)
+- `docs/NEOTOMA_MANIFEST.md` (UI principles, State Layer boundaries)
 - `docs/ui/design_system.md` (visual styles, spacing, typography, colors)
 - `docs/subsystems/accessibility.md` (A11y requirements)
 - `docs/subsystems/i18n.md` (localization behavior)

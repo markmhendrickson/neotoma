@@ -109,7 +109,7 @@ If FU fails, update status:
 ## Constraints
 ### Repository-Wide Constraints
 Follow all constraints from `docs/foundation/agent_instructions.md`:
-1. **Never violate Truth Layer boundaries** (no strategy/execution logic)
+1. **Never violate State Layer boundaries** (no strategy/execution logic)
 2. **Never introduce nondeterminism** (no random IDs, no LLM extraction in MVP)
 3. **Never generate features outside MVP scope** (no semantic search, no agents)
 4. **Always follow schema-first principles** (type-driven, not inference-driven)

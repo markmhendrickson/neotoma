@@ -329,21 +329,21 @@ cat > .claude/CLAUDE.md << 'EOF'
 
 1. **`docs/context/index_rules.mdc`** — Primary entrypoint; complete documentation map, reading strategies, dependency graph
 2. **Foundation documents** from `docs/foundation/` in this order:
-   - `core_identity.md` — What Neotoma is and is not (Truth Layer scope)
+   - `core_identity.md` — What Neotoma is and is not (State Layer scope)
    - `philosophy.md` — Core principles and architectural invariants
-   - `layered_architecture.md` — Truth Layer, Strategy Layer, Execution Layer
+   - `layered_architecture.md` — State Layer, Strategy Layer, Execution Layer
    - `product_principles.md` — Product design principles
    - `agent_instructions_rules.mdc` — Repository-wide agent instructions and validation checklist
 3. **Task-specific docs** as indicated by the index (e.g. subsystems, architecture, testing)
 
-**Why this order:** Foundation establishes constraints (determinism, immutability, Truth Layer boundaries) that all work must respect.
+**Why this order:** Foundation establishes constraints (determinism, immutability, State Layer boundaries) that all work must respect.
 
 ## Core Constraints (Summary)
 
 Full constraints in `docs/foundation/agent_instructions_rules.mdc` and `.claude/rules/`. Summary:
 
 **MUST enforce:**
-- **Truth Layer boundaries**: No strategy/execution logic in Neotoma
+- **State Layer boundaries**: No strategy/execution logic in Neotoma
 - **Determinism**: No random IDs, no unstable sorting, hash-based entity/event IDs
 - **Immutability**: Observations and source are immutable (reinterpretation creates NEW observations)
 - **Schema-first**: Use application types from `docs/subsystems/record_types.md`
@@ -375,7 +375,7 @@ Full constraints in `docs/foundation/agent_instructions_rules.mdc` and `.claude/
 
 **Stop and ask the user only when:**
 1. There is an **unclear architectural or design choice** (e.g. where to put a module, which abstraction, how to cross subsystem boundaries)
-2. **Getting it wrong would likely cause substantively wrong assumptions** (e.g. wrong layer, wrong consistency model, violating Truth Layer)
+2. **Getting it wrong would likely cause substantively wrong assumptions** (e.g. wrong layer, wrong consistency model, violating State Layer)
 
 In those cases: ask a short, concrete question with 1–2 options or "proceed with X unless you prefer Y."
 

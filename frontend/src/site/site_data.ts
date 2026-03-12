@@ -298,7 +298,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "MCP server", href: "/mcp", icon: "Server" },
       { label: "CLI", href: "/cli", icon: "Terminal" },
       { label: "Memory guarantees", href: "/memory-guarantees", icon: "ShieldCheck" },
-      { label: "Memory models", href: "/memory-models", icon: "BookOpen" },
+      { label: "Memory models", href: "/memory-models", icon: "Container" },
       { label: "Foundations", href: "/foundations", icon: "Layers" },
       { label: "Agent instructions", href: "/agent-instructions", icon: "Bot" },
       { label: "Architecture", href: "/architecture", icon: "Building2" },
@@ -396,7 +396,7 @@ neotoma upload --local ./invoice.pdf   # run in-process, no API server required`
 
 export const GLOSSARY_ROWS: GlossaryRow[] = [
   {
-    term: "Truth Layer",
+    term: "State layer",
     definition:
       "Neotoma's role: a deterministic, immutable structured memory substrate that other layers read and write.",
   },
@@ -889,7 +889,7 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
     label: "Related post",
     title: "Agent command centers need one source of truth",
     description:
-      "Positioning Neotoma as the backend for agent dashboards and command centers; multi-layer memory above the truth layer.",
+      "Positioning Neotoma as the backend for agent dashboards and command centers; multi-layer memory above the state layer.",
     href: "https://markmhendrickson.com/posts/agent-command-centers-source-of-truth",
     imageUrl:
       "https://markmhendrickson.com/images/posts/agent-command-centers-source-of-truth-hero.png",

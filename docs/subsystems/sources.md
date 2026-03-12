@@ -358,7 +358,7 @@ correct({
 
 ## 9. Ingestion Validation Contract
 
-### 9.1 ETL → Truth Layer Boundary
+### 9.1 ETL → State Layer Boundary
 
 **Policy:** All AI-produced data MUST pass strict schema validation before [observations](../vocabulary/canonical_terms.md#observation) are written. The `schema_registry` is the single source of truth.
 

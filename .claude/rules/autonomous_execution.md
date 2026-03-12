@@ -50,7 +50,7 @@ This rule defines:
    - Data model changes (new tables, new entity types, new relationships)
 
 2. **High stakes**: Choosing wrong would likely cause:
-   - Wrong layer (strategy/execution logic in Truth Layer)
+   - Wrong layer (strategy/execution logic in State Layer)
    - Wrong consistency model (eventual when strong required)
    - Violating architectural boundaries (cross-layer dependencies)
    - Breaking determinism (introducing nondeterministic logic)

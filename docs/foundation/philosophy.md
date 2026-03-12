@@ -22,7 +22,7 @@ A given operation MUST always produce the same final state:
 - User controls all data entry
 
 ## 5.3 Strong Boundaries
-The Truth Layer MUST contain **no**:
+The state layer MUST contain **no**:
 - Inference or prediction
 - Heuristics beyond allowed extraction rules
 - Semantic-only retrieval (MVP: structural retrieval primary; entity semantic search allowed as optional path over structured state when text query provided)
@@ -81,7 +81,7 @@ Every output MUST trace to:
 12. **Explainability:** Every output traces to input + rule
 13. **Privacy:** No PII in logs, RLS for data protection
 14. **Explicit control:** User approves all ingestion
-15. **Truth Layer boundaries:** No strategy or execution logic
+15. **State layer boundaries:** No strategy or execution logic
 16. **Event-sourced updates:** All state changes via Domain Events → Reducers
 17. **Pure Strategy:** Strategy Layer has no side effects
 18. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly

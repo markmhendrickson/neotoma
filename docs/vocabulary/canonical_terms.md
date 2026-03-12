@@ -82,7 +82,7 @@
 
 **Definition:** The process of querying and retrieving [entities](#entity), [observations](#observation), [entity snapshots](#entity-snapshot), and related data from the [memory graph](#memory-graph). [Retrieving](#retrieving) operations include querying [entities](#entity) by type or identifier, getting [entity snapshots](#entity-snapshot) with [provenance](#provenance), listing [observations](#observation) for an [entity](#entity), and traversing [relationships](#relationship).
 
-**Use:** "[Retrieving](#retrieving) operations query the Truth Layer to access stored [entities](#entity) and [observations](#observation). Use `retrieve_entities` to query [entities](#entity) by type, or `retrieve_entity_snapshot` to retrieve current truth for an [entity](#entity)."
+**Use:** "[Retrieving](#retrieving) operations query the state layer to access stored [entities](#entity) and [observations](#observation). Use `retrieve_entities` to query [entities](#entity) by type, or `retrieve_entity_snapshot` to retrieve current truth for an [entity](#entity)."
 
 **Example:** "The `retrieve_entities` action queries [entities](#entity) with filters like `entity_type: 'invoice'` and returns [entities](#entity) with their [entity snapshots](#entity-snapshot). The `retrieve_entity_snapshot` action retrieves the current truth for a specific [entity](#entity), computed by merging all [observations](#observation) about that [entity](#entity)."
 
@@ -226,15 +226,16 @@
 - ❌ "document" (ambiguous)
 - ❌ "source" ([source](#source) is the unified term; "source" was the old term for unstructured only)
 
-### Truth Layer
+### State Layer
 
 **Definition:** Neotoma's architectural role — deterministic, immutable structured memory substrate.
 
-**Use:** "Neotoma is the Truth Layer beneath Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)."
+**Use:** "Neotoma is the state layer beneath Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)."
 
-**Example:** "The Truth Layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling other layers to make decisions based on accurate historical data."
+**Example:** "The state layer stores all invoices, transactions, and contracts with full [provenance](#provenance), whether [stored](#storing) as unstructured [source](#source) (files) or structured [source](#source) (JSON with entity types), enabling other layers to make decisions based on accurate historical data."
 
 **Forbidden Synonyms:**
+- ❌ "truth layer" (deprecated; use "state layer")
 - ❌ "data layer" (too generic)
 - ❌ "memory layer" (ambiguous)
 - ❌ "knowledge base" (implies semantic search)

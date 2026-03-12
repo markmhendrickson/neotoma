@@ -68,7 +68,7 @@ You have the right to:
 **How to Exercise Rights:**
 - Email: data_request@neotoma.com
 - Response Time: Within 30 days (or 60 days with extension notice)
-**Note:** Neotoma stores immutable truth layer — we cannot modify extracted data. To correct data, upload a corrected document (new record created).
+**Note:** Neotoma stores immutable state layer — we cannot modify extracted data. To correct data, upload a corrected document (new record created).
 ## 7. Data Retention
 - **User Data:** Retained until you request deletion
 - **Legal Obligations:** Retained if required by law (e.g., tax records, 7 years)

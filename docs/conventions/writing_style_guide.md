@@ -23,8 +23,8 @@ This guide ensures consistent, professional technical writing that avoids AI-gen
 ✅ "Neotoma transforms fragmented personal data into a unified memory graph. The graph connects people, companies, and events."
 ❌ "The system processes files—validates them—and stores records."
 ✅ "The system processes files, validates them, and stores records."
-❌ "Neotoma provides persistent structured memory—ensuring agents can access truth layer data—with full provenance tracking."
-✅ "Neotoma provides persistent structured memory with full provenance tracking. Agents can access truth layer data via MCP."
+❌ "Neotoma provides persistent structured memory—ensuring agents can access state layer data—with full provenance tracking."
+✅ "Neotoma provides persistent structured memory with full provenance tracking. Agents can access state layer data via MCP."
 ### Conversational Transitions
 **NEVER use:**
 - "Now, let's..."

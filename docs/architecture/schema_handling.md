@@ -2,7 +2,7 @@
 ## 1. Three-Layer Storage Model
 Neotoma uses a **three-layer storage model** to reconcile two requirements:
 1. **Preserve all extracted data** (users can upload any [source](#source) without data loss)
-2. **Maintain deterministic [entity schemas](#entity-schema)** (structured, queryable truth layer)
+2. **Maintain deterministic [entity schemas](#entity-schema)** (structured, queryable state layer)
 ### Layer 1: `raw_text` (Immutable Original)
 **Purpose:** Store the original extracted text exactly as extracted.
 **Characteristics:**

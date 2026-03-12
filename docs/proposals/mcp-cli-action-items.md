@@ -18,7 +18,7 @@ Provide a single, actionable reference that links each action item to current co
 This proposal follows the Neotoma Documentation Doctrine in `docs/conventions/documentation_standards_rules.mdc`.
 
 ```
-Neotoma is a Truth Layer - not an app, agent, or strategy or execution system.
+Neotoma is a State Layer - not an app, agent, or strategy or execution system.
 Core invariants:
 - Deterministic: Same input -> same output, always
 - Immutable: Truth never changes after storage
@@ -45,19 +45,19 @@ Layered architecture (example: financial system):
 └────────────▲─────────────────────────────────┘
              │ Reads Only
 ┌────────────▼─────────────────────────────────┐
-│ Neotoma (Truth Layer)                         │
+│ Neotoma (State Layer)                         │
 │ Event-sourced, Reducer-driven                 │
 │ Domain Events -> Reducers -> State            │
 └───────────────────────────────────────────────┘
 Note: Agentic Portfolio is an example instance of Strategy Layer. Agentic Wallet is part of Execution Layer alongside domain agents. Many other agent-driven layers are possible.
-This document enforces Truth Layer purity.
+This document enforces State Layer purity.
 ```
 
 ## Invariants
 1. The contract surface remains the single source of truth for tool and CLI behavior.
 2. MCP tools MUST be schema bound and deterministic, with no hidden side effects.
 3. CLI behavior MUST remain auditable and machine stable when using `--json`.
-4. Truth Layer boundaries MUST remain intact. No strategy or execution logic is introduced.
+4. State Layer boundaries MUST remain intact. No strategy or execution logic is introduced.
 5. Documentation MUST avoid AI generated writing patterns and em dashes.
 
 ## Definitions
@@ -188,11 +188,11 @@ Load this document when planning or evaluating changes to MCP tooling, CLI behav
 1. Contract surface remains canonical and consistent across MCP and CLI.
 2. MCP tools remain deterministic and schema bound.
 3. CLI outputs are machine stable when using `--json`.
-4. No Truth Layer boundary violations.
+4. No State Layer boundary violations.
 5. Documentation uses active voice, short sentences, and no em dashes.
 
 ### Forbidden Patterns
-- Introducing strategy or execution logic into Truth Layer code.
+- Introducing strategy or execution logic into State Layer code.
 - Parsing non JSON CLI output in MCP tools.
 - Free form string error responses in MCP or REST.
 - Adding composite MCP tools without explicit contract justification.

@@ -99,7 +99,7 @@
 ### 2.4 Authenticity Gap
 
 **Pre-Launch Marketing Message:**
-- "Join the waitlist for Neotoma - a privacy-first truth layer for AI memory"
+- "Join the waitlist for Neotoma - a privacy-first state layer for AI memory"
 - Implies: Product is being built for you (external users)
 - Expectation: Product will be ready for external users
 
@@ -134,7 +134,7 @@
 **1. Technical Threads (Twitter/X)**
 - "Building Neotoma for my ateles integration - here's what I'm learning about deterministic extraction"
 - "Replacing parquet MCP with Neotoma - MCP integration patterns I'm discovering"
-- "Why I'm building a truth layer instead of using semantic search"
+- "Why I'm building a state layer instead of using semantic search"
 - **No CTA**: Just sharing learnings, not asking for waitlist signups
 
 **2. Blog Posts (Personal Website)**
@@ -151,7 +151,7 @@
 
 **4. Hacker News "Show HN" (Developer Preview)**
 - Post once developer preview is ready during dogfooding
-- "Show HN: Neotoma - Privacy-first truth layer I built for my ateles integration"
+- "Show HN: Neotoma - Privacy-first state layer I built for my ateles integration"
 - **Timing**: During dogfooding with precision disclaimers
 
 **Time Investment**: ~10-15 hours (vs. 35 hours for pre-launch marketing)  

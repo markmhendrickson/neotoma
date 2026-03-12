@@ -7,7 +7,7 @@ Provide a single entry point for MCP documentation with links to setup guides, t
 
 ## Invariants
 1. MCP actions MUST follow the MCP specification.
-2. MCP mutations MUST respect Truth Layer boundaries and explicit user control.
+2. MCP mutations MUST respect State Layer boundaries and explicit user control.
 3. MCP examples MUST be deterministic and free of credentials.
 
 ## Definitions
@@ -51,8 +51,8 @@ MCP exposes structured actions for:
 ```mermaid
 flowchart TD
     aiTool[AITool] -->|"MCP action"| mcpServer[McpServer]
-    mcpServer -->|"Validate and store"| truthLayer[TruthLayer]
-    truthLayer -->|"Response"| mcpServer
+    mcpServer -->|"Validate and store"| stateLayer[TruthLayer]
+    stateLayer -->|"Response"| mcpServer
     mcpServer -->|"MCP response"| aiTool
 ```
 

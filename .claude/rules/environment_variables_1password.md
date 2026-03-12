@@ -36,13 +36,13 @@ When code or scripts need environment variables:
    - Identify which variables are required
    - Determine if they exist in 1Password
 
-2. **Check if mappings exist:** Query `env_var_mappings` from the truth layer (per `neotoma_parquet_migration_rules.mdc`). If not mapped but exist in 1Password, **proactively add mappings** (see Step 1a).
+2. **Check if mappings exist:** Query `env_var_mappings` from the state layer (per `neotoma_parquet_migration_rules.mdc`). If not mapped but exist in 1Password, **proactively add mappings** (see Step 1a).
 
 ### Step 1a: Add Missing Mappings (Proactive)
 
 **If a required variable exists in 1Password but is not in mappings:**
 
-1. **Add mapping to env_var_mappings** via truth layer (per `neotoma_parquet_migration_rules.mdc`). Include: `env_var`, `op_reference`, `vault`, `item_name`, `service`, `is_optional`
+1. **Add mapping to env_var_mappings** via state layer (per `neotoma_parquet_migration_rules.mdc`). Include: `env_var`, `op_reference`, `vault`, `item_name`, `service`, `is_optional`
    - Format: `op://{vault}/{item_name}/{field_label}`
 
 2. **Example:**
@@ -93,7 +93,7 @@ When code or scripts need environment variables:
 
 **For variables not in mappings:**
 
-1. **Add to env_var_mappings first** (if it's a recurring need) via truth layer (per `neotoma_parquet_migration_rules.mdc`). Then run sync command to load into `.env`.
+1. **Add to env_var_mappings first** (if it's a recurring need) via state layer (per `neotoma_parquet_migration_rules.mdc`). Then run sync command to load into `.env`.
 
 2. **If one-time use only:**
    - Manually fetch from 1Password and add to `.env`
@@ -192,7 +192,7 @@ fi
 5. **When variables are missing** from `.env`
 
 **The sync command:**
-- Reads mappings from truth layer (per `neotoma_parquet_migration_rules.mdc`)
+- Reads mappings from state layer (per `neotoma_parquet_migration_rules.mdc`)
 - Fetches values from 1Password using `op` CLI
 - Updates `.env` file with resolved values
 - Preserves unmanaged variables
@@ -230,7 +230,7 @@ fi
    ```
 
 2. **If still missing:**
-   - Check if variable is in `env_var_mappings` (truth layer per `neotoma_parquet_migration_rules.mdc`)
+   - Check if variable is in `env_var_mappings` (state layer per `neotoma_parquet_migration_rules.mdc`)
    - If not, add mapping first, then re-run sync
    - If mapping exists, verify 1Password item/field exists
 

@@ -129,7 +129,7 @@ Load when implementing ingestion, reducer, or timeline changes.
 - Missing idempotency keys in store or correct requests
 
 ### Validation Checklist
-- [ ] Change respects Truth Layer boundaries
+- [ ] Change respects State Layer boundaries
 - [ ] Idempotency enforced for store and correct
 - [ ] Observations remain immutable
 - [ ] Reducer output deterministic

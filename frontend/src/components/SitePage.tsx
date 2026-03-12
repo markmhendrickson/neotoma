@@ -147,22 +147,22 @@ function CodeBlock({
   };
 
   return (
-    <div className="relative mb-4 min-w-0">
-      {!staticMode ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
-          aria-label={copied ? "Copied" : "Copy"}
-          onClick={onCopy}
-        >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-        </Button>
-      ) : null}
+    <div className="mb-4 min-w-0">
       <pre
-        className={`rounded-lg border code-block-palette p-4 pr-24 overflow-x-auto overflow-y-auto font-mono text-[14px] whitespace-pre-wrap break-words break-all max-w-full min-w-0 ${showFullCode ? "" : "max-h-60 md:max-h-none"}`}
+        className={`rounded-lg border code-block-palette p-4 overflow-x-auto overflow-y-auto font-mono text-[14px] whitespace-pre-wrap break-words max-w-full min-w-0 ${showFullCode ? "" : "max-h-60 md:max-h-none"}`}
       >
+        {!staticMode ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="float-right relative z-10 ml-2 mb-2 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+            aria-label={copied ? "Copied" : "Copy"}
+            onClick={onCopy}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </Button>
+        ) : null}
         <code>{displayCode}</code>
       </pre>
       {canExpand ? (
@@ -1161,7 +1161,7 @@ function SuccessIllustration({ human, succeed }: { human: string; succeed: strin
   );
 }
 
-const SLIDE_CLASS = "min-h-[100svh] snap-start flex items-center justify-center relative";
+const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
 const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
 const SECTION_WITH_VISUAL_GRID =
   "grid gap-12 lg:gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center";
@@ -1290,7 +1290,7 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
       {previousId ? (
         <a
           href={previousId === "intro" ? "/" : `#${previousId}`}
-          className="absolute top-6 left-1/2 -translate-x-1/2 inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
+          className="absolute top-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
           aria-label="Go to previous section"
           onClick={(e) => {
             if (isModifiedClick(e)) return;
@@ -1305,7 +1305,7 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
       {nextId ? (
         <a
           href={`#${nextId}`}
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
+          className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
           aria-label="Go to next section"
           onClick={(e) => {
             if (isModifiedClick(e)) return;
@@ -1369,7 +1369,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
       <div
         ref={scrollContainerRef}
-        className="h-screen overflow-y-auto snap-y snap-mandatory scroll-smooth motion-reduce:snap-none"
+        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
       >
         {!staticMode && (
           <SectionDotNav

@@ -9,7 +9,7 @@ triggers:
 
 # Sync Environment Variables from 1Password
 
-Sync environment variables from 1Password to local `.env` file using environment variable mappings stored in the truth layer (per `neotoma_parquet_migration_rules.mdc`).
+Sync environment variables from 1Password to local `.env` file using environment variable mappings stored in the state layer (per `neotoma_parquet_migration_rules.mdc`).
 
 ## Command
 
@@ -25,7 +25,7 @@ sync env from 1password
 
 ## Purpose
 
-This command syncs environment variables from 1Password to your local `.env` file based on mappings stored in the truth layer (per `neotoma_parquet_migration_rules.mdc`). Parquet path when used: `$DATA_DIR/env_var_mappings/env_var_mappings.parquet`.
+This command syncs environment variables from 1Password to your local `.env` file based on mappings stored in the state layer (per `neotoma_parquet_migration_rules.mdc`). Parquet path when used: `$DATA_DIR/env_var_mappings/env_var_mappings.parquet`.
 
 **Key features:**
 - Automatic backup before modification
@@ -98,7 +98,7 @@ This command syncs environment variables from 1Password to your local `.env` fil
 
 ### Environment Variable Mappings
 
-Mappings are in the truth layer (per `neotoma_parquet_migration_rules.mdc`). Parquet path when used: `$DATA_DIR/env_var_mappings/env_var_mappings.parquet`.
+Mappings are in the state layer (per `neotoma_parquet_migration_rules.mdc`). Parquet path when used: `$DATA_DIR/env_var_mappings/env_var_mappings.parquet`.
 
 **Schema:**
 - `env_var` (string): Environment variable name (e.g., `OPENAI_API_KEY`)

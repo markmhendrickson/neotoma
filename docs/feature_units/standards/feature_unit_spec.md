@@ -303,7 +303,7 @@ Load when planning a new Feature Unit, reviewing a Feature Unit spec, or underst
 2. All Feature Units MUST include manifest
 3. All Feature Units MUST specify tests
 4. All Feature Units MUST document observability
-5. All Feature Units MUST respect Truth Layer boundaries
+5. All Feature Units MUST respect State Layer boundaries
 6. All Feature Units MUST be deterministic where applicable
 ### Forbidden Patterns
 - Starting implementation without spec

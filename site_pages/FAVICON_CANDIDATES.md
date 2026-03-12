@@ -13,7 +13,7 @@ Five favicon concepts for the Neotoma site, inspired by:
 | `favicon-2-n-box.svg` | "N" in rounded blue square | Strong brand "N", aligns with app favicon style. |
 | `favicon-3-waves.svg` | Two horizontal wave lines | Echoes logo ribbon flow; abstract. |
 | `favicon-4-n-minimal.svg` | Bold "N" only, no shape | Typographic mark; works on light backgrounds. |
-| `favicon-5-bars.svg` | Three stacked rounded bars | Suggests "layers" / truth layer; simple. |
+| `favicon-5-bars.svg` | Three stacked rounded bars | Suggests "layers" / state layer; simple. |
 
 **Current default:** The build script writes `favicon.svg` (same as `favicon-1-diamond.svg`). To switch:
 

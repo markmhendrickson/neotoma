@@ -148,12 +148,12 @@ test('MCP responses reference real records', async () => {
   }
 });
 ```
-### 5.2 Truth Layer Purity
+### 5.2 State Layer Purity
 | Metric | Definition | Required | Target |
 |--------|------------|----------|--------|
 | `neotoma_nondeterminism_violations` | Count of nondeterministic operations detected | 0 | 0 |
 | `neotoma_truth_mutation_violations` | Count of immutability violations | 0 | 0 |
-| `neotoma_layer_boundary_violations` | Strategy/execution logic in Truth Layer | 0 | 0 |
+| `neotoma_layer_boundary_violations` | Strategy/execution logic in State Layer | 0 | 0 |
 **Measurement:**
 - Code review checklist compliance
 - Static analysis for forbidden patterns (random IDs, LLM extraction)

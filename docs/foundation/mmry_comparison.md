@@ -22,7 +22,7 @@ Both products address fragmented personal data but through fundamentally differe
 - Neotoma = vertical memory substrate for AI-native workflows
 ## Executive Summary
 **mmry.io** is a privacy-first personal search engine that indexes content you've already seen online (Twitter, Reddit, YouTube, bookmarks) to enable search across your digital history.
-**Neotoma** is a deterministic truth layer that transforms fragmented personal data into structured, queryable knowledge for AI agents via MCP.
+**Neotoma** is a deterministic state layer that transforms fragmented personal data into structured, queryable knowledge for AI agents via MCP.
 Both products address fragmented personal data, but serve fundamentally different use cases: mmry focuses on **searching web content you've consumed**, while Neotoma focuses on **structuring documents and conversation context for AI agents**.
 ## Core Value Propositions
 ### mmry.io
@@ -79,7 +79,7 @@ Both products address fragmented personal data, but serve fundamentally differen
 - **Storage:** PostgreSQL with row-level security
 - **Processing:** Deterministic extraction (regex/parsing), no LLM in MVP
 - **Extensibility:** MCP actions, external providers (Gmail, Plaid)
-- **Security:** Encryption, immutable truth layer, full provenance
+- **Security:** Encryption, immutable state layer, full provenance
 ## Market Positioning
 ### mmry.io
 **Category:** Personal Search Engine / Digital Memory Tool
@@ -143,7 +143,7 @@ Both products address fragmented personal data, but serve fundamentally differen
 **Lead with Defensible Differentiators:**
 - "Privacy-first deterministic memory for AI tools"
 - "User-controlled, cross-platform via MCP"
-- "Truth Layer for AI Memory"
+- "State Layer for AI Memory"
 - "Deterministic personal knowledge substrate"
 - "The truth engine behind your AI tools"
 - "The foundation for agent-native personal computing"

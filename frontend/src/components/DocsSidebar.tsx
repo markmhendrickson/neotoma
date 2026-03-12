@@ -37,7 +37,7 @@ interface DocsSidebarProps {
 export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarProps) {
   const { pathname, hash } = useLocation();
   const { isMobile, setOpenMobile, state: sidebarState } = useSidebar();
-  const { locale, dict } = useLocale();
+  const { locale, dict, direction } = useLocale();
   const orderedCategories = useMemo(() => {
     const categories = [...DOC_NAV_CATEGORIES];
     const referenceIndex = categories.findIndex((category) => category.title === "Reference");
@@ -204,7 +204,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                     aria-expanded={isShowingAllItems}
                     className="h-8 w-full rounded-md px-2 text-left text-[12px] text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground group-data-[collapsible=icon]:hidden"
                   >
-                    {isShowingAllItems ? "Show less" : "Show more"}
+                    {isShowingAllItems ? dict.showLess : dict.showMore}
                   </button>
                 </SidebarMenuItem>
               )}
@@ -219,7 +219,11 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   );
 
   return (
-    <Sidebar collapsible="icon" side={isMobile ? "right" : "left"} belowHeader={belowHeader}>
+    <Sidebar
+      collapsible="icon"
+      side={isMobile ? "right" : direction === "rtl" ? "right" : "left"}
+      belowHeader={belowHeader}
+    >
       <SidebarContent className="md:pb-4">
         {isMobile ? (
           <div className="flex-1 min-h-0" aria-hidden="true" />

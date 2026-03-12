@@ -6,7 +6,7 @@ This report lists code, test, and documentation changes produced by executing th
 Provide a single, deterministic record of all changes made during plan execution.
 
 ## Invariants
-1. Truth Layer boundaries remain unchanged.
+1. State Layer boundaries remain unchanged.
 2. All changes preserve deterministic behavior.
 3. Error responses use structured ErrorEnvelope formats.
 4. Documentation updates follow Neotoma documentation standards.

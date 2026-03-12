@@ -8,7 +8,7 @@
 - [`docs/subsystems/`](../subsystems/) — Detailed subsystem documentation
 **In case of conflict, detailed subsystem docs are authoritative.**
 ## 1. What is Neotoma?
-Neotoma is a **Truth Layer** — a deterministic, structured memory substrate that transforms fragmented personal data into AI-ready knowledge via dual-path ingestion.
+Neotoma is a **State Layer** — a deterministic, structured memory substrate that transforms fragmented personal data into AI-ready knowledge via dual-path ingestion.
 **In One Sentence:**
 Neotoma ingests personal data (PDFs, images, agent interactions), extracts structured fields, identifies entities, builds timelines, and exposes everything to AI via MCP.
 **vs. Provider Memory:**
@@ -23,7 +23,7 @@ ChatGPT, Claude, and Gemini offer conversation-only memory (platform-locked, pro
 - The foundation for Strategy Layer (e.g., Agentic Portfolio) and Execution Layer (e.g., Agentic Wallet)
 - A deterministic personal and team memory engine with dual-path ingestion (supports individuals and small teams 2–20 people)
 ## 2. Layered Architecture
-Neotoma is designed as a **Truth Layer** that can support multiple upper layers. One important example is a financial system:
+Neotoma is designed as a **State Layer** that can support multiple upper layers. One important example is a financial system:
 ```
 ┌───────────────────────────────────────────────┐
 │      Execution Layer                          │
@@ -38,13 +38,13 @@ Neotoma is designed as a **Truth Layer** that can support multiple upper layers.
 └────────────▲─────────────────────────────────┘
              │ Reads Only
 ┌────────────▼─────────────────────────────────┐
-│    Neotoma (Truth Layer)                     │
+│    Neotoma (State Layer)                     │
 │  Event-sourced, Reducer-driven              │
 │  Domain Events → Reducers → State           │
 └─────────────────────────────────────────────┘
 ```
 Neotoma is the **bottom layer** — event-sourced, reducer-driven truth, no strategy, no execution.
-**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose Truth Layer substrate, not limited to financial use cases.
+**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose State Layer substrate, not limited to financial use cases.
 ## 3. Core Capabilities (MVP)
 ### 3.1 Ingestion
 - Upload PDFs, JPG, PNG (max 50MB) — single and bulk

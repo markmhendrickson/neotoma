@@ -89,9 +89,9 @@ See `docs/releases/v2.0.0/` and `docs/architecture/local_first_e2ee_architecture
 - US state privacy law compliance (GPC signals, sensitive data opt-in, right to correct)
 See `docs/releases/v2.1.0/` for detailed release plan.
 ## 1. Neotoma in Context: Layered Architecture
-Neotoma is designed as a **Truth Layer** that can support multiple upper layers implementing agent-driven data processing and action execution. Understanding this layered architecture is **critical** to maintaining architectural purity.
+Neotoma is designed as a **State Layer** that can support multiple upper layers implementing agent-driven data processing and action execution. Understanding this layered architecture is **critical** to maintaining architectural purity.
 ### 1.1 Core Architectural Model
-Neotoma is the **truth layer** providing structured personal data memory:
+Neotoma is the **state layer** providing structured personal data memory:
 - Event-sourced
 - Reducer-driven
 - Deterministic world model
@@ -123,7 +123,7 @@ flowchart TD
     User[User / AI Agent]
     User --> Execution[Execution Layer]
     User --> Strategy[Strategy Layer]
-    User --> Neotoma[Neotoma - Truth Layer]
+    User --> Neotoma[Neotoma - State Layer]
     Execution --> Strategy
     Strategy --> Neotoma
     Execution -.->|Reads Only| Neotoma
@@ -139,7 +139,7 @@ flowchart TD
         StrategyEngine[General Strategy Engine]
         StrategyResp["• Reads world state<br/>• Evaluates priorities/constraints<br/>• Outputs Decisions + Commands<br/>• Pure cognition: State → Decisions"]
     end
-    subgraph TruthLayer["Truth Layer (Neotoma)"]
+    subgraph TruthLayer["State Layer (Neotoma)"]
         Neotoma
         Reducers[Reducers]
         EventLog[Event Log]
@@ -152,7 +152,7 @@ flowchart TD
     style StrategyLayer fill:#fff4e6
     style TruthLayer fill:#e6f7ff
 ```
-_Figure: Layered architecture showing Strategy Layer (pure cognition) and Execution Layer (pure effect) above Neotoma's event-sourced truth layer. Agentic Portfolio is an example instance of the Strategy Layer; Agentic Wallet is part of the Execution Layer alongside domain agents._
+_Figure: Layered architecture showing Strategy Layer (pure cognition) and Execution Layer (pure effect) above Neotoma's event-sourced state layer. Agentic Portfolio is an example instance of the Strategy Layer; Agentic Wallet is part of the Execution Layer alongside domain agents._
 ### 1.2 Event Flow & State Management
 The closed loop of autonomy:
 ```
@@ -197,7 +197,7 @@ sequenceDiagram
     State->>Strategy: Updated world state
 ```
 _Figure: Event flow showing the closed loop from inbound signals through normalization, strategy evaluation, execution, and back to state updates via reducers._
-### 1.3 Truth Layer Responsibilities (Neotoma)
+### 1.3 State Layer Responsibilities (Neotoma)
 Neotoma MUST:
 - Ingest user-provided files (explicit upload, Gmail attachments)
 - Extract structured data via deterministic rules
@@ -252,7 +252,7 @@ Execution Agents MUST NOT:
 1. Domain Events emitted by Execution Layer
 2. Reducers processing Domain Events
 3. Updated world state
-**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose Truth Layer substrate.
+**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose State Layer substrate.
 ## 1.7 Required Engineering Patterns
 All strategy/execution code MUST follow these patterns:
 ### 1.7.1 Pure Strategy Functions
@@ -369,7 +369,7 @@ flowchart TD
 - MUST handle transient errors (retries, circuit breakers)
 - MUST NOT contain domain logic
 #### Layer 3: Domain Layer
-**Responsibility:** Core Truth Layer business logic — ingestion, extraction, entity resolution, graph construction.
+**Responsibility:** Core State Layer business logic — ingestion, extraction, entity resolution, graph construction.
 **Components:**
 - **Raw Storage Service (v0.2.0+):** Content-addressed file storage (SHA-256 hashing, cloud storage), source deduplication, storage path management (`sources/{user_id}/{content_hash}`)
 - **Interpretation Service (v0.2.0+):** AI-powered field extraction, schema validation, unknown field routing to raw_fragments, interpretation tracking
@@ -733,7 +733,7 @@ Application layer MUST distinguish and signal retry eligibility.
 7. **Raw text MUST NOT be modified after ingestion**
 8. **Entities MUST NOT be inferred** (only extracted)
 9. **Search MUST NOT use semantic embeddings for ranking** (MVP)
-10. **MCP MUST NOT expose strategy or execution logic** (Truth Layer only)
+10. **MCP MUST NOT expose strategy or execution logic** (State Layer only)
 11. **Reducers MUST NOT be nondeterministic** (must be pure functions)
 12. **Entity snapshots MUST NOT be computed without observations** (observations are source of truth)
 13. **Schema changes MUST NOT break existing data** (must be backward compatible)
@@ -766,9 +766,9 @@ See `docs/releases/v2.1.0/` for detailed release plan.
 **Graph Query Language:**
 - Custom query language for graph traversal (e.g., "Find all entities linked to records from Q1 2024")
 ### 10.2 Non-Goals (Never)
-- Autonomous agents in Truth Layer (belongs in Strategy Layer or Execution Layer)
+- Autonomous agents in State Layer (belongs in Strategy Layer or Execution Layer)
 - Predictive analytics (belongs in Strategy Layer)
-- Strategy or execution logic in Truth Layer (belongs in upper layers)
+- Strategy or execution logic in State Layer (belongs in upper layers)
 - Direct truth mutations (all updates via Domain Events → Reducers)
 - Side effects in Strategy Layer (belongs in Execution Layer)
 
@@ -800,7 +800,7 @@ Load `docs/architecture/architecture.md` when:
 5. **Transactional writes:** All graph writes in transactions
 6. **User isolation:** RLS enforced for all user data
 7. **No global state:** Dependency injection for all services
-8. **Truth Layer purity:** No strategy, execution, or agent logic in Neotoma
+8. **State Layer purity:** No strategy, execution, or agent logic in Neotoma
 9. **Event-sourced updates:** All state changes via Domain Events → Reducers
 10. **Pure Strategy:** Strategy Layer has no side effects
 11. **Pure Execution:** Execution Layer emits Domain Events, never writes truth directly

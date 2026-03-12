@@ -28,7 +28,7 @@ This proposal was migrated from `.cursor/plans/sources-first_ingestion_v10_baef2
 
 ## Scope
 
-Greenfield build. No migration. AI agent execution via MCP. Uses existing Truth Layer primitives (`observations`, `entity_snapshots`, `schema_registry`, `entities`) and adds sources-first storage + interpretation runs.---
+Greenfield build. No migration. AI agent execution via MCP. Uses existing State Layer primitives (`observations`, `entity_snapshots`, `schema_registry`, `entities`) and adds sources-first storage + interpretation runs.---
 
 ## Goals
 

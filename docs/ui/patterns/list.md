@@ -62,7 +62,7 @@ Load `docs/ui/patterns/list.md` when:
 2. MUST support keyboard navigation and ARIA labels for sort and selection
 3. MUST keep list views as inspection surfaces, not action-heavy workflows
 ### Forbidden Patterns
-- Building list views that mutate Truth Layer directly from UI
+- Building list views that mutate State Layer directly from UI
 - Omitting loading/empty/error states
 - Using non-semantic markup for tabular data
 ### Validation Checklist

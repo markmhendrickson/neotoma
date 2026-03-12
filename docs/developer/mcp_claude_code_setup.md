@@ -238,7 +238,7 @@ Instructions are generated from sources via `scripts/setup_claude_instructions.s
 - Then task-specific docs (architecture, subsystems, testing)
 
 **4. Core constraints:**
-- Truth Layer boundaries (no strategy/execution logic)
+- State Layer boundaries (no strategy/execution logic)
 - Determinism (hash-based IDs, no randomness, stable sorting)
 - Immutability (observations/source never modified after creation)
 - Schema-first processing

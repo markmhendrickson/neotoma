@@ -45,7 +45,7 @@
     "status": "completed",
     "target_date": "2024-11-30",
     "description": "Deterministic entity deduplication and merging",
-    "notes": "Core Truth Layer capability"
+    "notes": "Core State Layer capability"
   },
   {
     "schema_version": "1.0",

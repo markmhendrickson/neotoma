@@ -1,7 +1,7 @@
 # Neotoma Layered Architecture
 ## Core Architectural Model
-Neotoma is designed as a **Truth Layer** that can support multiple upper layers implementing agent-driven data processing and action execution.
-Neotoma is the **truth layer**:
+Neotoma is designed as a **state layer** that can support multiple upper layers implementing agent-driven data processing and action execution.
+Neotoma is the **state layer**:
 - Event-sourced
 - Reducer-driven
 - Deterministic world model
@@ -45,12 +45,12 @@ One important example is a financial system built on Neotoma:
                                 │ Reads Only
                                 ▼
 ┌───────────────────────────────────────────────┐
-│               Neotoma (Truth Layer)           │
+│               Neotoma (State Layer)           │
 │   Event-sourced, Reducer-driven,              │
 │   Domain Events → State Updates               │
 └───────────────────────────────────────────────┘
 ```
-**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose Truth Layer substrate, not limited to financial use cases.
+**Note:** Agentic Portfolio is an example instance of the Strategy Layer. Agentic Wallet is part of the Execution Layer alongside domain agents. Many other agent-driven layers are possible. Neotoma is a general-purpose state layer substrate, not limited to financial use cases.
 ## Event Flow & State Management
 The closed loop of autonomy:
 ```
@@ -73,7 +73,7 @@ Reducers → Updated State
 Next Tick
 ```
 ## Layer Boundaries (Critical Invariant)
-**Truth Layer (Neotoma):**
+**State Layer (Neotoma):**
 - Ingests, extracts, structures, stores
 - Provides deterministic truth via event-sourced, reducer-driven model
 - Processes Domain Events through reducers to update state

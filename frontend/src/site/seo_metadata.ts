@@ -31,9 +31,9 @@ export const SEO_DEFAULTS = {
 
 const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
-    title: "Neotoma | The truth layer for persistent AI agent memory",
+    title: "Neotoma | Deterministic state layer for long-running agents",
     description:
-      "Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory.",
+      "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",

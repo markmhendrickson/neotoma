@@ -14,9 +14,9 @@ This document does NOT cover:
 **Decision:** Neotoma MUST NOT embed its own chat UI or conversational interfaces. All conversational interactions MUST be externalized to MCP-compatible agents (ChatGPT, Cursor, Claude, etc.).
 **Rationale:** See `docs/architecture/conversational_ux_architecture.md` for complete assessment.
 **Key Points:**
-- Neotoma = deterministic truth layer
+- Neotoma = deterministic state layer
 - External agents = reasoning and conversational UX
-- Internal chat violates determinism and Truth Layer purity
+- Internal chat violates determinism and State Layer purity
 - MCP provides standardized interface for external agents
 ## 2. Impact on Release v1.0.0
 ### 2.1 Feature Unit FU-307 Status

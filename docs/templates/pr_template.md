@@ -55,7 +55,7 @@ List foundational and subsystem docs loaded before implementation:
 ### Events Emitted
 - Event 1: _______________
 ## Checklist (from `docs/private/governance/review_checklist_mark.md`)
-- [ ] Respects Truth Layer boundaries
+- [ ] Respects State Layer boundaries
 - [ ] Deterministic (if applicable)
 - [ ] Tests verify determinism
 - [ ] Schema changes are additive

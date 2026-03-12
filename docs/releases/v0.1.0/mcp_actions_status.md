@@ -84,7 +84,7 @@
 ## Release Breakdown
 ### v0.1.0 (Internal MCP Release)
 - **Total Actions:** 13 (11 required + 2 optional)
-- **Focus:** Core Truth Layer validation via MCP
+- **Focus:** Core State Layer validation via MCP
 - **Provider Actions:** Optional (FU-208)
 ### v0.2.2 (Capability Discovery)
 - **Total Actions:** 14 (13 from v0.1.0 + 1 capability discovery action)
