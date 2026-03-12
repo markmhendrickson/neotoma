@@ -1,12 +1,55 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Clock, Copy, RotateCcw } from "lucide-react";
+import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
 import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
+import { Card, CardContent } from "../ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { CursorIcon } from "../icons/CursorIcon";
+import { OpenClawIcon } from "../icons/OpenClawIcon";
+
+const INTEGRATIONS = [
+  {
+    label: "Claude Code",
+    href: "/neotoma-with-claude-code",
+    desc: "Persistent memory for Claude Code's local CLI agent",
+    Icon: SiClaude,
+  },
+  {
+    label: "Claude",
+    href: "/neotoma-with-claude",
+    desc: "Structured state alongside Claude platform memory",
+    Icon: SiClaude,
+  },
+  {
+    label: "ChatGPT",
+    href: "/neotoma-with-chatgpt",
+    desc: "Deterministic memory for ChatGPT conversations",
+    Icon: SiOpenai,
+  },
+  {
+    label: "Codex",
+    href: "/neotoma-with-codex",
+    desc: "Cross-task memory and CLI fallback",
+    Icon: SiOpenai,
+  },
+  {
+    label: "Cursor",
+    href: "/neotoma-with-cursor",
+    desc: "Persistent memory alongside Cursor context",
+    Icon: CursorIcon,
+  },
+  {
+    label: "OpenClaw",
+    href: "/neotoma-with-openclaw",
+    desc: "User-owned memory for OpenClaw agents",
+    Icon: OpenClawIcon,
+  },
+] as const;
 
 function sanitizeCodeForCopy(rawCode: string): string {
   return rawCode
@@ -71,6 +114,39 @@ export function InstallPage() {
         and MCP configuration.
       </p>
       <CodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} />
+
+      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-4">Integrations</h2>
+      <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3 mb-10 [&_a]:!no-underline [&_a]:hover:!no-underline">
+        {INTEGRATIONS.map(({ label, href, desc, Icon }) => (
+          <li key={href} className="h-full">
+            <Link
+              to={href}
+              className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+            >
+              <Card className="h-full transition-colors hover:bg-muted/50 border border-border">
+                <CardContent className="p-4 h-full">
+                  <div className="flex items-start gap-3">
+                    <span
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                      aria-hidden
+                    >
+                      <Icon className="h-5 w-5 shrink-0" aria-hidden />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <span className="font-medium text-[15px] text-foreground block">
+                        {label}
+                      </span>
+                      <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
+                        {desc}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          </li>
+        ))}
+      </ul>
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Manual install</h2>
       <p className="text-[15px] leading-7 mb-4">
@@ -156,7 +232,7 @@ export function InstallPage() {
         </TabsContent>
       </Tabs>
 
-      <div className="mt-10 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3">
         <Link
           to="/cli"
           className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
