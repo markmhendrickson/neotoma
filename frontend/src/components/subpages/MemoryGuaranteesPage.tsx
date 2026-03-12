@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { DetailPage } from "../DetailPage";
+import { MemoryGuaranteesTable } from "../MemoryGuaranteesTable";
 
 export function MemoryGuaranteesPage() {
   return (
@@ -9,6 +10,10 @@ export function MemoryGuaranteesPage() {
         production load. Each guarantee addresses a specific failure mode; together they form the
         invariant stack that Neotoma enforces.
       </p>
+
+      <div className="overflow-x-auto -mx-2 px-2 mb-8">
+        <MemoryGuaranteesTable />
+      </div>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
         <p className="text-[14px] font-medium mb-2">On this page</p>

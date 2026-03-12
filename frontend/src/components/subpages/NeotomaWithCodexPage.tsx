@@ -158,21 +158,23 @@ export function NeotomaWithCodexPage() {
       </p>
       <ol className="list-decimal pl-5 space-y-4 mb-6">
         <li className="text-[15px] leading-7">
-          <strong>Start the API server</strong>
-          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
+          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
+          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
+            The tunnel URL is printed to the console and written to{" "}
+            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
+            instead of <code>--tunnel</code>.
+          </p>
         </li>
         <li className="text-[15px] leading-7">
-          <strong>Expose the API externally</strong> &mdash; use a reverse proxy or tunnel to make your
-          Neotoma API reachable at a public HTTPS URL. The API runs on{" "}
-          <code>http://localhost:3080</code> by default.
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Configure HTTP transport with OAuth</strong> in your Codex config
+          <strong>Configure HTTP transport with OAuth</strong> in your Codex config &mdash; replace the
+          URL with your tunnel URL
           <CopyableCodeBlock
             code={`# .codex/config.toml
 [mcp_servers.neotoma]
 type = "http"
-url = "https://your-neotoma-host.example.com/mcp"`}
+url = "https://<tunnel-host>/mcp"`}
             className="mt-2 mb-1"
           />
           <p className="text-[14px] leading-6 text-muted-foreground mt-2">

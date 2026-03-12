@@ -44,8 +44,16 @@ export function MemoryModelsPage() {
       <section id="platform-memory" className="scroll-mt-20 mb-12">
         <h2 className="text-[22px] font-medium tracking-[-0.01em] mb-4">Platform memory</h2>
         <p className="text-[15px] leading-7 mb-4">
-          Platform memory is the built-in memory provided by model vendors (Claude, ChatGPT, Gemini, Copilot).
-          It is convenient but opaque: storage and eviction policies are controlled by the provider.
+          Platform memory is the built-in memory provided by model vendors (
+          <Link to="/neotoma-with-claude" className="text-foreground underline hover:text-foreground">
+            Claude
+          </Link>
+          ,{" "}
+          <Link to="/neotoma-with-chatgpt" className="text-foreground underline hover:text-foreground">
+            ChatGPT
+          </Link>
+          , Gemini, Copilot). It is convenient but opaque: storage and eviction policies are controlled by the
+          provider.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           Typical behavior: you ask a model to remember a preference, and future sessions may include it. There is
@@ -195,11 +203,19 @@ neotoma entities list --type task --limit 5`}</pre>
           </a>
         </h3>
         <p className="text-[15px] leading-7 mb-4">
-          <strong>Claude, ChatGPT, Gemini, Copilot.</strong> These are the
-          built-in memory features offered directly by model providers. They
-          manage memory behind the scenes, typically as convenience layers tied
-          to a specific product. Platform memory is the easiest to adopt but the
-          hardest to audit, version, or port between providers.
+          <strong>
+            <Link to="/neotoma-with-claude" className="text-foreground underline hover:text-foreground">
+              Claude
+            </Link>
+            ,{" "}
+            <Link to="/neotoma-with-chatgpt" className="text-foreground underline hover:text-foreground">
+              ChatGPT
+            </Link>
+            , Gemini, Copilot.
+          </strong>{" "}
+          These are the built-in memory features offered directly by model providers. They manage memory behind the
+          scenes, typically as convenience layers tied to a specific product. Platform memory is the easiest to adopt
+          but the hardest to audit, version, or port between providers.
         </p>
 
         <h3 className="text-[18px] font-medium mb-3 mt-6">

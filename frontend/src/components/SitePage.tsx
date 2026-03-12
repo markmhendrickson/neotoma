@@ -42,10 +42,12 @@ import {
   MEMORY_MODEL_VENDORS,
   THREE_FOUNDATIONS,
   type LearnMoreCardItem,
-  type GuaranteeLevel,
 } from "../site/site_data";
+import { useCopyFeedback } from "../lib/copy_feedback";
+import { copyTextToClipboard } from "../lib/copy_to_clipboard";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { MemoryGuaranteesTable } from "./MemoryGuaranteesTable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { SeoHead } from "./SeoHead";
@@ -100,72 +102,6 @@ const LEARN_MORE_GUARANTEES_CARD_WITH_IMAGE: LearnMoreCardItem = {
 const MOBILE_OUTCOME_PREVIEW_COUNT = 2;
 const MOBILE_GUARANTEE_PREVIEW_COUNT = 4;
 
-const GUARANTEE_LEVEL_META: Record<
-  GuaranteeLevel,
-  { icon: string; label: string; className: string; cellClassName: string }
-> = {
-  guaranteed: {
-    icon: "\u2713",
-    label: "Guaranteed",
-    className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
-  },
-  "not-provided": {
-    icon: "\u2717",
-    label: "Not provided",
-    className: "text-muted-foreground font-semibold text-[20px] leading-none",
-    cellClassName: "bg-muted/40 dark:bg-muted/20",
-  },
-  manual: {
-    icon: "\u26A0",
-    label: "Possible (manual)",
-    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-  },
-  partial: {
-    icon: "\u26A0",
-    label: "Possible (partial)",
-    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-  },
-  common: {
-    icon: "\u26A0",
-    label: "Common",
-    className: "text-rose-600 dark:text-rose-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-rose-500/10 dark:bg-rose-500/15",
-  },
-  possible: {
-    icon: "\u26A0",
-    label: "Possible",
-    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-  },
-  prevented: {
-    icon: "\u2713",
-    label: "Prevented",
-    className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
-    cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
-  },
-};
-
-function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
-  const { icon, label, className, cellClassName } = GUARANTEE_LEVEL_META[level];
-  return (
-    <div className={`${cellClassName} w-full px-3 py-2.5 flex items-center justify-center`}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className={`${className} inline-flex`} aria-label={label}>
-            {icon}
-          </span>
-        </TooltipTrigger>
-        <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-          <p>{label}</p>
-        </TooltipContent>
-      </Tooltip>
-    </div>
-  );
-}
-
 function sanitizeCodeForCopy(rawCode: string): string {
   return rawCode
     .split("\n")
@@ -193,9 +129,8 @@ function CodeBlock({
   staticMode?: boolean;
   previewLineCount?: number;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, markCopied] = useCopyFeedback(`site-page:${code}`, 0);
   const [showFullCode, setShowFullCode] = useState(false);
-  const copyResetTimeoutRef = useRef<number | null>(null);
   const lines = code.split("\n");
   const canExpand =
     !staticMode &&
@@ -205,25 +140,10 @@ function CodeBlock({
   const displayCode =
     canExpand && !showFullCode ? `${lines.slice(0, previewLineCount).join("\n")}\n...` : code;
 
-  useEffect(() => {
-    return () => {
-      if (copyResetTimeoutRef.current !== null) {
-        window.clearTimeout(copyResetTimeoutRef.current);
-      }
-    };
-  }, []);
-
   const onCopy = async () => {
     const normalizedCode = sanitizeCodeForCopy(code);
-    setCopied(true);
-    if (copyResetTimeoutRef.current !== null) {
-      window.clearTimeout(copyResetTimeoutRef.current);
-    }
-    copyResetTimeoutRef.current = window.setTimeout(() => {
-      setCopied(false);
-      copyResetTimeoutRef.current = null;
-    }, 4000);
-    await navigator.clipboard.writeText(normalizedCode);
+    markCopied();
+    await copyTextToClipboard(normalizedCode);
   };
 
   return (
@@ -233,12 +153,11 @@ function CodeBlock({
           type="button"
           variant="outline"
           size="sm"
-          className="absolute top-2 right-2 z-10 h-8 gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950"
-          aria-label={copied ? "Copied" : "Copy code"}
+          className="absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+          aria-label={copied ? "Copied" : "Copy"}
           onClick={onCopy}
         >
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-          <span>{copied ? "Copied" : "Copy"}</span>
         </Button>
       ) : null}
       <pre
@@ -1957,220 +1876,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   className="hidden md:block overflow-x-auto -mx-2 px-2"
                   style={{ WebkitOverflowScrolling: "touch" }}
                 >
-                  <TooltipProvider delayDuration={200}>
-                    <table className="w-full table-fixed text-[14px] leading-6 border-collapse">
-                      <colgroup>
-                        <col className="w-[28%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[18%]" />
-                        <col className="w-[18%]" />
-                      </colgroup>
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th
-                            scope="col"
-                            className="text-left px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 align-top"
-                          >
-                            <span className="block break-words whitespace-normal">Property</span>
-                          </th>
-                          <th
-                            scope="col"
-                            className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
-                          >
-                            <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                              <span className="truncate">Platform</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Link
-                                    to="/platform-memory"
-                                    className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                    aria-label="More info about Platform memory"
-                                  >
-                                    <Info className="h-3.5 w-3.5" aria-hidden />
-                                  </Link>
-                                </TooltipTrigger>
-                                <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-                                  <p>
-                                    Memory and controls provided directly by the model platform.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          </th>
-                          <th
-                            scope="col"
-                            className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
-                          >
-                            <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                              <span className="truncate">Retrieval / RAG</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Link
-                                    to="/retrieval-memory"
-                                    className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                    aria-label="More info about Retrieval memory"
-                                  >
-                                    <Info className="h-3.5 w-3.5" aria-hidden />
-                                  </Link>
-                                </TooltipTrigger>
-                                <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-                                  <p>
-                                    Memory reconstructed by searching prior context at query time.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          </th>
-                          <th
-                            scope="col"
-                            className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
-                          >
-                            <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                              <span className="truncate">Files</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Link
-                                    to="/file-based-memory"
-                                    className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                    aria-label="More info about File-based memory"
-                                  >
-                                    <Info className="h-3.5 w-3.5" aria-hidden />
-                                  </Link>
-                                </TooltipTrigger>
-                                <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-                                  <p>
-                                    Memory stored in files or artifacts outside a structured memory
-                                    system.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          </th>
-                          <th
-                            scope="col"
-                            className="text-center px-3 py-2.5 font-medium text-foreground bg-muted/50 min-w-0 overflow-hidden"
-                          >
-                            <span className="inline-flex items-center justify-center gap-1 min-w-0 max-w-full">
-                              <span className="truncate">Deterministic</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Link
-                                    to="/deterministic-memory"
-                                    className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                    aria-label="More info about Deterministic memory"
-                                  >
-                                    <Info className="h-3.5 w-3.5" aria-hidden />
-                                  </Link>
-                                </TooltipTrigger>
-                                <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
-                                  <p>
-                                    Memory with deterministic state evolution, immutable history,
-                                    and formal guarantees. Neotoma is the reference implementation.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-border/50">
-                          <th
-                            scope="row"
-                            className="text-left px-3 py-2.5 font-medium text-foreground min-w-0 overflow-hidden"
-                          >
-                            <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
-                              <span className="truncate">Vendors</span>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Link
-                                    to="/memory-vendors"
-                                    className="ml-1 inline-flex align-middle rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                    aria-label="More info about Vendors"
-                                  >
-                                    <Info className="h-3.5 w-3.5" aria-hidden />
-                                  </Link>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="right"
-                                  className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal"
-                                >
-                                  <p>
-                                    Representative model providers commonly used for each memory
-                                    approach.
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </span>
-                          </th>
-                          {(["platform", "retrieval", "file", "neotoma"] as const).map((key) => (
-                            <td
-                              key={key}
-                              className="px-3 py-2.5 text-[12px] text-muted-foreground align-middle text-center min-w-0 overflow-hidden"
-                            >
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="block truncate cursor-default">
-                                    {MEMORY_MODEL_VENDORS[key]}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent
-                                  side="top"
-                                  className="w-max max-w-[min(24rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal"
-                                >
-                                  <p>{MEMORY_MODEL_VENDORS[key]}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </td>
-                          ))}
-                        </tr>
-                        {MEMORY_GUARANTEE_ROWS.map((row) => (
-                          <tr key={row.property} className="border-b border-border/50">
-                            <th
-                              scope="row"
-                              className="text-left px-3 py-2.5 font-medium text-foreground min-w-0 align-top"
-                            >
-                              <span className="inline-flex items-start gap-1 min-w-0 max-w-full">
-                                <span className="break-words whitespace-normal">
-                                  {row.property}
-                                </span>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Link
-                                      to={`/memory-guarantees#${row.slug}`}
-                                      className="ml-1 mt-0.5 inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                                      aria-label={`More info about ${row.property}`}
-                                    >
-                                      <Info className="h-3.5 w-3.5" aria-hidden />
-                                    </Link>
-                                  </TooltipTrigger>
-                                  <TooltipContent
-                                    side="right"
-                                    className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal"
-                                  >
-                                    <p>{row.tooltip}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </span>
-                            </th>
-                            <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
-                              <GuaranteeCell level={row.platform} />
-                            </td>
-                            <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
-                              <GuaranteeCell level={row.retrieval} />
-                            </td>
-                            <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
-                              <GuaranteeCell level={row.file} />
-                            </td>
-                            <td className="px-0 py-0 align-middle text-center min-w-0 overflow-hidden">
-                              <GuaranteeCell level={row.neotoma} />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </TooltipProvider>
+                  <MemoryGuaranteesTable />
                 </div>
               </div>
             </div>

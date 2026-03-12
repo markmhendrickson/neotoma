@@ -27,6 +27,7 @@ import {
   Package,
   PanelRight,
   PanelRightClose,
+  Play,
   Rocket,
   SatelliteDish,
   Search,
@@ -112,6 +113,7 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Monitor,
   Package,
   PanelRight,
+  Play,
   Rocket,
   SatelliteDish,
   Server,
@@ -479,8 +481,6 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
     return title;
   };
 
-  /** True when the current page shows the docs sidebar (any non-home route). */
-  const isDocsPage = stripLocaleFromPath(pathname) !== "/";
   const featuredByCategory = new Map(
     DOC_NAV_CATEGORIES.map((category) => [
       category.title,
@@ -498,8 +498,8 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
     <header className="fixed top-0 inset-x-0 z-50 flex items-center justify-between h-12 pl-2 pr-4 md:pr-6 bg-sidebar/90 text-sidebar-foreground backdrop-blur-sm shadow-[inset_0_-10px_20px_-10px_rgba(0,0,0,0.05)]">
       <div className="flex items-center gap-3">
         {showSidebarTrigger && <SidebarTrigger className="shrink-0" aria-label="Toggle sidebar" />}
-        <Link
-          to={localizePath("/", locale)}
+        <a
+          href="/"
           className={`text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors ${!showSidebarTrigger ? "pl-3" : ""}`}
           aria-label="Neotoma home"
           onClick={(e) => {
@@ -514,7 +514,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           }}
         >
           Neotoma
-        </Link>
+        </a>
         <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
           <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
           <a
@@ -613,32 +613,31 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               </NavigationMenuLink>
             )}
           </NavigationMenuItem>
-          {!isDocsPage && (
-            <NavigationMenuItem className="hidden md:flex">
-              <NavigationMenuTrigger
-                className={`text-[14px] ${sidebarNavItemClass}`}
-                onClick={() => navigate(localizePath("/docs", locale))}
-              >
-                {dict.docs}
-              </NavigationMenuTrigger>
-              <NavigationMenuContent>
-                <ul className="grid w-[260px] max-h-[min(70vh,520px)] overflow-y-auto overscroll-contain gap-0.5 p-2 border border-sidebar-border bg-sidebar text-sidebar-foreground rounded-md shadow-sm">
-                  {featuredDocCategories.map((cat) => (
-                    <li key={cat.title}>
-                      <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
-                        {translateCategoryTitle(cat.title)}
-                      </div>
-                      <ul className="list-none p-0">
-                        {cat.items.map((item) => (
-                          <li key={item.href}>
-                            {(() => {
-                              const isIntegrations = cat.title === "Integrations";
-                              const BrandIcon =
-                                isIntegrations && item.href.startsWith("/")
-                                  ? INTEGRATION_BRAND_ICONS[item.href]
-                                  : null;
-                              const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
-                              return (
+          <NavigationMenuItem className="hidden md:flex">
+            <NavigationMenuTrigger
+              className={`text-[14px] ${sidebarNavItemClass}`}
+              onClick={() => navigate(localizePath("/docs", locale))}
+            >
+              {dict.docs}
+            </NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <ul className="grid w-[260px] max-h-[min(70vh,520px)] overflow-y-auto overscroll-contain gap-0.5 p-2 border border-sidebar-border bg-sidebar text-sidebar-foreground rounded-md shadow-sm">
+                {featuredDocCategories.map((cat) => (
+                  <li key={cat.title}>
+                    <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
+                      {translateCategoryTitle(cat.title)}
+                    </div>
+                    <ul className="list-none p-0">
+                      {cat.items.map((item) => (
+                        <li key={item.href}>
+                          {(() => {
+                            const isIntegrations = cat.title === "Integrations";
+                            const BrandIcon =
+                              isIntegrations && item.href.startsWith("/")
+                                ? INTEGRATION_BRAND_ICONS[item.href]
+                                : null;
+                            const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
+                            return (
                             <NavigationMenuLink asChild>
                               <Link
                                 to={
@@ -659,25 +658,24 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                             </NavigationMenuLink>
                               );
                             })()}
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                  <li className="border-t border-sidebar-border mt-1 pt-1">
-                    <NavigationMenuLink asChild>
-                      <Link
-                        to={localizePath("/docs", locale)}
-                        className="block select-none rounded-sm px-3 py-2 text-[13px] leading-none text-sidebar-foreground/70 no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
-                      >
-                        {dict.viewAll} →
-                      </Link>
-                    </NavigationMenuLink>
+                        </li>
+                      ))}
+                    </ul>
                   </li>
-                </ul>
-              </NavigationMenuContent>
-            </NavigationMenuItem>
-          )}
+                ))}
+                <li className="border-t border-sidebar-border mt-1 pt-1">
+                  <NavigationMenuLink asChild>
+                    <Link
+                      to={localizePath("/docs", locale)}
+                      className="block select-none rounded-sm px-3 py-2 text-[13px] leading-none text-sidebar-foreground/70 no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
+                    >
+                      {dict.viewAll} →
+                    </Link>
+                  </NavigationMenuLink>
+                </li>
+              </ul>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
           <NavigationMenuItem className="hidden lg:flex px-1">
             <SiteNavSearch
               locale={locale}
@@ -727,8 +725,8 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
           <SheetTitle className="sr-only">Site navigation</SheetTitle>
           <div className="flex h-full flex-col">
             <div className="flex h-12 items-center border-b border-sidebar-border px-4">
-              <Link
-                to={localizePath("/", locale)}
+              <a
+                href="/"
                 className="text-[15px] font-semibold text-sidebar-foreground no-underline hover:text-sidebar-accent-foreground transition-colors"
                 onClick={(e) => {
                   setMobileMenuOpen(false);
@@ -743,7 +741,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 }}
               >
                 Neotoma
-              </Link>
+              </a>
             </div>
             <div
               className="mt-auto border-t border-sidebar-border p-2 flex flex-col gap-1"
@@ -802,15 +800,13 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                     </Link>
                   </>
                 )}
-                {!isDocsPage && (
-                  <Link
-                    to={localizePath("/docs", locale)}
-                    className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    {dict.docs}
-                  </Link>
-                )}
+                <Link
+                  to={localizePath("/docs", locale)}
+                  className="rounded-md px-3 py-2 text-[14px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  {dict.docs}
+                </Link>
                 <a
                   href="https://github.com/markmhendrickson/neotoma"
                   target="_blank"

@@ -121,6 +121,19 @@ export function NeotomaWithClaudePage() {
         Keep Claude&apos;s memory and projects on. They handle conversational context and preferences;
         Neotoma handles structured state. Both are active simultaneously with no conflict.
       </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-4">
+        If you also use Claude Code, its{" "}
+        <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+          auto memory
+        </a>{" "}
+        records build commands, debugging insights, and code style preferences locally per project.
+        Neotoma complements auto memory by storing structured entities and cross-tool state that
+        persist beyond a single machine. See{" "}
+        <Link to="/neotoma-with-claude-code" className={extLink}>
+          Neotoma with Claude Code
+        </Link>{" "}
+        for details.
+      </p>
       <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
         <thead>
           <tr className="border-b border-border">
@@ -183,18 +196,19 @@ export function NeotomaWithClaudePage() {
       </p>
       <ol className="list-decimal pl-5 space-y-4 mb-6">
         <li className="text-[15px] leading-7">
-          <strong>Start the API server</strong>
-          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
-          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
-          The API runs on <code>http://localhost:3080</code> by default.
+          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
+          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
+          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
+            The tunnel URL is printed to the console and written to{" "}
+            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
+            instead of <code>--tunnel</code>.
+          </p>
         </li>
         <li className="text-[15px] leading-7">
           <strong>Connect in claude.ai</strong> &mdash; go to Settings &rarr; MCP Servers and add
-          your Neotoma API&apos;s remote MCP endpoint URL. Claude authenticates via OAuth; the Neotoma
-          API supports the{" "}
+          your tunnel URL (e.g. <code>https://&lt;tunnel-host&gt;/mcp</code>). Claude authenticates
+          via OAuth; the Neotoma API supports the{" "}
           <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
             MCP OAuth authorization flow
           </a>

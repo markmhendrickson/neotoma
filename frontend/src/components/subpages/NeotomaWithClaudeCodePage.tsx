@@ -35,7 +35,7 @@ export function NeotomaWithClaudeCodePage() {
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <span>
             Session memory plus{" "}
-            <a href="https://docs.anthropic.com/en/docs/claude-code/memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+            <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
               auto memory
             </a>{" "}
             that records corrections and preferences across sessions
@@ -44,7 +44,7 @@ export function NeotomaWithClaudeCodePage() {
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <span>
-            <a href="https://docs.anthropic.com/en/docs/claude-code/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
+            <a href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
               MCP server support
             </a>{" "}
             via <code>.mcp.json</code> at your project root — stdio, SSE, and HTTP transports
@@ -53,7 +53,7 @@ export function NeotomaWithClaudeCodePage() {
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <span>
-            <a href="https://docs.anthropic.com/en/docs/claude-code/memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+            <a href="https://code.claude.com/docs/en/memory#claudemd-files" target="_blank" rel="noopener noreferrer" className={extLink}>
               CLAUDE.md
             </a>{" "}
             project context files for persistent instructions at project, user, or org scope
@@ -110,8 +110,15 @@ export function NeotomaWithClaudeCodePage() {
         Using them together
       </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Keep auto memory and CLAUDE.md on. They handle what they are good at; Neotoma handles
-        what they cannot. Both are active simultaneously with no conflict.
+        Keep{" "}
+        <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+          auto memory
+        </a>{" "}
+        and CLAUDE.md on. Auto memory saves build commands, debugging insights, and code style
+        preferences to <code>~/.claude/projects/&lt;project&gt;/memory/</code> &mdash; the first 200
+        lines of <code>MEMORY.md</code> load into every session. It&apos;s machine-local and
+        per-project, so it handles what it&apos;s good at; Neotoma handles what it cannot. Both are
+        active simultaneously with no conflict.
       </p>
       <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
         <thead>
@@ -130,6 +137,11 @@ export function NeotomaWithClaudeCodePage() {
           <tr className="border-b border-border">
             <td className="py-2 pr-4">Project instructions</td>
             <td className="py-2 pr-4">CLAUDE.md</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Build commands &amp; debugging notes</td>
+            <td className="py-2 pr-4">Auto memory (MEMORY.md)</td>
             <td className="py-2">&mdash;</td>
           </tr>
           <tr className="border-b border-border">
@@ -173,21 +185,28 @@ export function NeotomaWithClaudeCodePage() {
       <ul className="list-none pl-0 space-y-1.5 mb-6">
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
-          <a href="https://docs.anthropic.com/en/docs/claude-code/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
+          <a href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
             MCP in Claude Code
           </a>
           <span className="text-muted-foreground">— connecting external tools via .mcp.json</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
-          <a href="https://docs.anthropic.com/en/docs/claude-code/memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+          <a href="https://code.claude.com/docs/en/memory" target="_blank" rel="noopener noreferrer" className={extLink}>
             Memory in Claude Code
           </a>
           <span className="text-muted-foreground">— CLAUDE.md files and auto memory</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
-          <a href="https://docs.anthropic.com/en/docs/claude-code/settings" target="_blank" rel="noopener noreferrer" className={extLink}>
+          <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Auto memory
+          </a>
+          <span className="text-muted-foreground">— how Claude learns preferences and patterns across sessions</span>
+        </li>
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://code.claude.com/docs/en/settings" target="_blank" rel="noopener noreferrer" className={extLink}>
             Settings
           </a>
           <span className="text-muted-foreground">— project and user-level configuration</span>

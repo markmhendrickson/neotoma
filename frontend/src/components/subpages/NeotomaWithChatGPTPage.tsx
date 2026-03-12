@@ -176,13 +176,14 @@ export function NeotomaWithChatGPTPage() {
       </p>
       <ol className="list-decimal pl-5 space-y-4 mb-6">
         <li className="text-[15px] leading-7">
-          <strong>Start the API server</strong>
-          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
-          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
-          The API runs on <code>http://localhost:3080</code> by default.
+          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
+          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
+          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
+            The tunnel URL is printed to the console and written to{" "}
+            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
+            instead of <code>--tunnel</code>.
+          </p>
         </li>
         <li className="text-[15px] leading-7">
           <strong>Enable developer mode</strong> in ChatGPT &mdash; go to{" "}
@@ -193,8 +194,8 @@ export function NeotomaWithChatGPTPage() {
         </li>
         <li className="text-[15px] leading-7">
           <strong>Add Neotoma as a remote MCP server</strong> &mdash; in ChatGPT&apos;s developer mode
-          settings, add your Neotoma API&apos;s remote MCP endpoint URL. ChatGPT authenticates via
-          OAuth; the Neotoma API supports the{" "}
+          settings, add your tunnel URL (e.g. <code>https://&lt;tunnel-host&gt;/mcp</code>). ChatGPT
+          authenticates via OAuth; the Neotoma API supports the{" "}
           <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
             MCP OAuth authorization flow
           </a>
@@ -214,7 +215,7 @@ export function NeotomaWithChatGPTPage() {
       </p>
       <ol className="list-decimal pl-5 space-y-4 mb-6">
         <li className="text-[15px] leading-7">
-          <strong>Start and expose the API server</strong> (same as steps 1&ndash;2 above).
+          <strong>Start the API server with a tunnel</strong> (same as step 1 above).
         </li>
         <li className="text-[15px] leading-7">
           <strong>Create or edit a custom GPT</strong> &mdash; go to{" "}
@@ -227,7 +228,7 @@ export function NeotomaWithChatGPTPage() {
           <strong>Add a new action</strong> &mdash; under Actions, click &ldquo;Create new
           action&rdquo; and import the OpenAPI spec from your Neotoma API:
           <CopyableCodeBlock
-            code={`https://your-neotoma-host.example.com/openapi.json`}
+            code={`https://<tunnel-host>/openapi.json`}
             className="mt-2 mb-1"
           />
         </li>

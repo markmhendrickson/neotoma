@@ -277,7 +277,18 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     items: [
       { label: "Documentation", href: "/docs", icon: "Home" },
       { label: "Install", href: "/install", icon: "Rocket" },
-      { label: "Developer walkthrough", href: "/developer-walkthrough", icon: "Play" },
+      { label: "Developer walkthrough", href: "/developer-walkthrough", icon: "Code" },
+    ],
+  },
+  {
+    title: "Integrations",
+    items: [
+      { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
+      { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
+      { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageCircle" },
+      { label: "Codex", href: "/neotoma-with-codex", icon: "Monitor" },
+      { label: "Cursor", href: "/neotoma-with-cursor", icon: "PanelRight" },
+      { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Sparkles" },
     ],
   },
   {
@@ -304,17 +315,6 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "AI infrastructure engineers", href: "/ai-infrastructure-engineers", icon: "Cpu" },
       { label: "Agent system builders", href: "/agentic-systems-builders", icon: "Zap" },
       { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
-    ],
-  },
-  {
-    title: "Integrations",
-    items: [
-      { label: "Claude Code", href: "/neotoma-with-claude-code", icon: "Code" },
-      { label: "Claude", href: "/neotoma-with-claude", icon: "MessageSquare" },
-      { label: "ChatGPT", href: "/neotoma-with-chatgpt", icon: "MessageCircle" },
-      { label: "Codex", href: "/neotoma-with-codex", icon: "Monitor" },
-      { label: "Cursor", href: "/neotoma-with-cursor", icon: "PanelRight" },
-      { label: "OpenClaw", href: "/neotoma-with-openclaw", icon: "Sparkles" },
     ],
   },
   {
