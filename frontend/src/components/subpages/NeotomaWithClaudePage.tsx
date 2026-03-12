@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -112,31 +114,93 @@ export function NeotomaWithClaudePage() {
         ))}
       </ul>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">How they connect</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Using them together
+      </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Claude Desktop supports{" "}
-        <a href="https://modelcontextprotocol.io/docs/develop/connect-local-servers" target="_blank" rel="noopener noreferrer" className={extLink}>
-          local MCP servers
-        </a>
-        . Same Neotoma install and server block as Claude Code — only the config file location
-        differs. Add Neotoma in your Claude Desktop config and the agent stores every conversation
-        turn and extracted entities before responding.
+        Keep Claude&apos;s memory and projects on. They handle conversational context and preferences;
+        Neotoma handles structured state. Both are active simultaneously with no conflict.
       </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">
-        {`// Claude Desktop: ~/Library/Application Support/Claude/claude_desktop_config.json
-{
-  "mcpServers": {
-    "neotoma": {
-      "command": "neotoma",
-      "args": ["mcp", "stdio"]
-    }
-  }
-}`}
-      </pre>
+      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Claude</th>
+            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Conversation preferences</td>
+            <td className="py-2 pr-4">Memory</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Project-scoped documents &amp; instructions</td>
+            <td className="py-2 pr-4">Projects</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Cross-tool state</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Shared memory graph</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4">Versioned history &amp; audit trail</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Observation history</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started &mdash; Claude Desktop (local)
+      </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        For claude.ai on the web, remote MCP support is being rolled out. Once available, you can
-        connect Neotoma as a remote MCP server from your account settings.
+        Paste this prompt into another agent tool (e.g. Claude Code or Cursor) to install Neotoma
+        and configure it for Claude Desktop. The agent handles npm install, initialization, and MCP
+        configuration.
       </p>
+      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        Claude Desktop uses local stdio &mdash; Neotoma runs on the same machine. No API server or
+        remote access is required. The agent writes to{" "}
+        <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> and
+        you restart Claude Desktop to pick up the new MCP server.
+      </p>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started &mdash; claude.ai (remote)
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        claude.ai connects to MCP servers over the network. Start with the same agentic install
+        above, then configure remote access:
+      </p>
+      <ol className="list-decimal pl-5 space-y-4 mb-6">
+        <li className="text-[15px] leading-7">
+          <strong>Start the API server</strong>
+          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
+          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
+          The API runs on <code>http://localhost:3080</code> by default.
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Connect in claude.ai</strong> &mdash; go to Settings &rarr; MCP Servers and add
+          your Neotoma API&apos;s remote MCP endpoint URL. Claude authenticates via OAuth; the Neotoma
+          API supports the{" "}
+          <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
+            MCP OAuth authorization flow
+          </a>
+          .
+        </li>
+      </ol>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
         Claude documentation
@@ -174,10 +238,18 @@ export function NeotomaWithClaudePage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference
         </Link>{" "}
-        for full setup and{" "}
+        for full setup,{" "}
+        <Link to="/cli" className={extLink}>
+          CLI reference
+        </Link>{" "}
+        for terminal usage, and{" "}
         <Link to="/agent-instructions" className={extLink}>
           agent instructions
         </Link>{" "}

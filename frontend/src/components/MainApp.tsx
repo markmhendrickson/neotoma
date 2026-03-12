@@ -34,6 +34,7 @@ import { FoundationsPage } from "@/components/subpages/FoundationsPage";
 import { SchemaManagementPage } from "@/components/subpages/SchemaManagementPage";
 import { TroubleshootingPage } from "@/components/subpages/TroubleshootingPage";
 import { ChangelogPage } from "@/components/subpages/ChangelogPage";
+import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { sendPageView } from "@/utils/analytics";
 import { DEFAULT_LOCALE, isSupportedLocale } from "@/i18n/config";
 import {
@@ -56,6 +57,7 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/mcp", element: <McpReferencePage /> },
   { path: "/cli", element: <CliReferencePage /> },
   { path: "/install", element: <InstallPage /> },
+  { path: "/developer-walkthrough", element: <DeveloperWalkthroughPage /> },
   { path: "/architecture", element: <ArchitecturePage /> },
   { path: "/schema-management", element: <SchemaManagementPage /> },
   { path: "/troubleshooting", element: <TroubleshootingPage /> },

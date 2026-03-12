@@ -1,6 +1,6 @@
 import {
   CalendarClock,
-  Flame,
+  Scale,
   Bot,
   Brain,
   BookOpen,
@@ -46,6 +46,7 @@ import {
 } from "../site/site_data";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { SeoHead } from "./SeoHead";
 import { SectionDotNav } from "./SectionDotNav";
@@ -96,55 +97,59 @@ const LEARN_MORE_GUARANTEES_CARD_WITH_IMAGE: LearnMoreCardItem = {
   imageUrl: learnMoreDeepDiveImage,
 };
 
+const MOBILE_OUTCOME_PREVIEW_COUNT = 2;
+const MOBILE_GUARANTEE_PREVIEW_COUNT = 4;
+
+const GUARANTEE_LEVEL_META: Record<
+  GuaranteeLevel,
+  { icon: string; label: string; className: string; cellClassName: string }
+> = {
+  guaranteed: {
+    icon: "\u2713",
+    label: "Guaranteed",
+    className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
+  },
+  "not-provided": {
+    icon: "\u2717",
+    label: "Not provided",
+    className: "text-muted-foreground font-semibold text-[20px] leading-none",
+    cellClassName: "bg-muted/40 dark:bg-muted/20",
+  },
+  manual: {
+    icon: "\u26A0",
+    label: "Possible (manual)",
+    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
+  },
+  partial: {
+    icon: "\u26A0",
+    label: "Possible (partial)",
+    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
+  },
+  common: {
+    icon: "\u26A0",
+    label: "Common",
+    className: "text-rose-600 dark:text-rose-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-rose-500/10 dark:bg-rose-500/15",
+  },
+  possible: {
+    icon: "\u26A0",
+    label: "Possible",
+    className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
+  },
+  prevented: {
+    icon: "\u2713",
+    label: "Prevented",
+    className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
+    cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
+  },
+};
+
 function GuaranteeCell({ level }: { level: GuaranteeLevel }) {
-  const map: Record<
-    GuaranteeLevel,
-    { icon: string; label: string; className: string; cellClassName: string }
-  > = {
-    guaranteed: {
-      icon: "\u2713",
-      label: "Guaranteed",
-      className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
-    },
-    "not-provided": {
-      icon: "\u2717",
-      label: "Not provided",
-      className: "text-muted-foreground font-semibold text-[20px] leading-none",
-      cellClassName: "bg-muted/40 dark:bg-muted/20",
-    },
-    manual: {
-      icon: "\u26A0",
-      label: "Possible (manual)",
-      className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-    },
-    partial: {
-      icon: "\u26A0",
-      label: "Possible (partial)",
-      className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-    },
-    common: {
-      icon: "\u26A0",
-      label: "Common",
-      className: "text-rose-600 dark:text-rose-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-rose-500/10 dark:bg-rose-500/15",
-    },
-    possible: {
-      icon: "\u26A0",
-      label: "Possible",
-      className: "text-amber-700 dark:text-amber-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-amber-500/10 dark:bg-amber-500/15",
-    },
-    prevented: {
-      icon: "\u2713",
-      label: "Prevented",
-      className: "text-emerald-700 dark:text-emerald-300 font-semibold text-[20px] leading-none",
-      cellClassName: "bg-emerald-500/10 dark:bg-emerald-500/15",
-    },
-  };
-  const { icon, label, className, cellClassName } = map[level];
+  const { icon, label, className, cellClassName } = GUARANTEE_LEVEL_META[level];
   return (
     <div className={`${cellClassName} w-full px-3 py-2.5 flex items-center justify-center`}>
       <Tooltip>
@@ -190,6 +195,7 @@ function CodeBlock({
 }) {
   const [copied, setCopied] = useState(false);
   const [showFullCode, setShowFullCode] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
   const lines = code.split("\n");
   const canExpand =
     !staticMode &&
@@ -199,15 +205,29 @@ function CodeBlock({
   const displayCode =
     canExpand && !showFullCode ? `${lines.slice(0, previewLineCount).join("\n")}\n...` : code;
 
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const onCopy = async () => {
     const normalizedCode = sanitizeCodeForCopy(code);
     await navigator.clipboard.writeText(normalizedCode);
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyResetTimeoutRef.current = null;
+    }, 4000);
   };
 
   return (
-    <div className="relative mb-4">
+    <div className="relative mb-4 min-w-0">
       {!staticMode ? (
         <Button
           type="button"
@@ -221,7 +241,9 @@ function CodeBlock({
           <span>{copied ? "Copied" : "Copy"}</span>
         </Button>
       ) : null}
-      <pre className="rounded-lg border code-block-palette p-4 pr-24 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+      <pre
+        className={`rounded-lg border code-block-palette p-4 pr-24 overflow-x-auto overflow-y-auto font-mono text-[14px] whitespace-pre-wrap break-words break-all max-w-full min-w-0 ${showFullCode ? "" : "max-h-60 md:max-h-none"}`}
+      >
         <code>{displayCode}</code>
       </pre>
       {canExpand ? (
@@ -258,7 +280,7 @@ function LearnMoreCard({ item }: { item: LearnMoreCardItem }) {
         <img
           src={item.imageUrl}
           alt=""
-          className="w-full md:w-[120px] md:h-[120px] md:shrink-0 rounded object-cover"
+          className="hidden md:block w-full md:w-[120px] md:h-[120px] md:shrink-0 rounded object-cover"
         />
       )}
       <div className="min-w-0 flex-1 flex flex-col gap-1">
@@ -469,14 +491,16 @@ function GetStartedSimulationVisual({ className = "" }: { className?: string }) 
               return (
                 <div
                   key={index}
-                  className={`flex ${step.role === "system" ? "justify-start" : "justify-end"} transition-all duration-300`}
+                  className={`flex transition-all duration-300 ${
+                    step.role === "system" ? "justify-end" : "justify-start"
+                  }`}
                   style={{ opacity }}
                 >
                   <div
-                    className={`max-w-[90%] rounded-md border px-2.5 py-1.5 font-mono text-[11px] leading-4 shadow-sm ${
-                      step.role === "agent"
-                        ? "min-w-[3ch] text-right border-emerald-500/35 bg-emerald-100 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-100"
-                        : "border-slate-300 bg-slate-200 text-slate-800 dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
+                    className={`font-mono text-[11px] leading-4 ${
+                      step.role === "system"
+                        ? "w-fit max-w-[88%] rounded-md border border-slate-300 bg-slate-200 px-2.5 py-1.5 text-right text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
+                        : "w-full border-l-2 border-emerald-500/45 px-2 py-1 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100"
                     }`}
                   >
                     {isTypingStep ? (
@@ -760,12 +784,37 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
   const [elapsed, setElapsed] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [dragging, setDragging] = useState(false);
+  const [isInView, setIsInView] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const wasInViewRef = useRef(false);
   const prevElapsedWithinRunRef = useRef(0);
 
   useEffect(() => {
-    if (!playing || dragging) return;
+    const node = viewportRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const nowInView = entry.isIntersecting;
+        setIsInView(nowInView);
+        if (nowInView && !wasInViewRef.current) {
+          prevElapsedWithinRunRef.current = 0;
+          setElapsed(0);
+          setPlaying(true);
+        }
+        wasInViewRef.current = nowInView;
+      },
+      { threshold: 0.35 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!playing || dragging || !isInView) return;
     let prev = performance.now();
     const intervalId = window.setInterval(() => {
       const now = performance.now();
@@ -783,7 +832,7 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
       });
     }, 80);
     return () => window.clearInterval(intervalId);
-  }, [playing, dragging]);
+  }, [playing, dragging, isInView]);
 
   const isBefore = elapsed < PHASE_MS;
   const isAfter = elapsed >= PHASE_MS + TRANS_MS;
@@ -888,6 +937,7 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
 
   return (
     <div
+      ref={viewportRef}
       className={`relative h-[400px] overflow-hidden rounded-xl p-3 transition-colors duration-500 md:h-[500px] ${
         failMode
           ? "border border-rose-500/25 bg-gradient-to-b from-white via-slate-50 to-rose-50/30 shadow-[0_14px_50px_rgba(0,0,0,0.08)] dark:border-rose-400/30 dark:from-slate-950 dark:via-slate-950 dark:to-slate-900 dark:shadow-[0_14px_50px_rgba(0,0,0,0.45)]"
@@ -916,15 +966,15 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
               : "border-emerald-500/25 text-emerald-800/90 dark:border-emerald-400/20 dark:text-emerald-200/70"
           }`}
         >
-          <div className="flex items-center gap-1.5">
+          <div className="hidden sm:flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-rose-400/75 dark:bg-rose-500/80" />
             <span className="h-2 w-2 rounded-full bg-amber-300/75 dark:bg-amber-500/80" />
             <span className="h-2 w-2 rounded-full bg-emerald-400/75 dark:bg-emerald-500/80" />
           </div>
-          <span className="text-center">
+          <span className="col-span-3 sm:col-span-1 text-center">
             agent session — {failMode ? "without state layer" : "with state layer"}
           </span>
-          <div />
+          <div className="hidden sm:block" />
         </div>
         <div
           ref={scrollRef}
@@ -955,16 +1005,16 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
               return (
                 <div
                   key={m.key}
-                  className={`flex ${m.role === "human" ? "justify-start" : "justify-end"}`}
+                  className={`flex ${m.role === "human" ? "justify-end" : "justify-start"}`}
                   style={{ opacity }}
                 >
                   <div
-                    className={`max-w-[88%] rounded-md border px-2.5 py-1.5 font-mono text-[11px] shadow-sm ${
+                    className={`font-mono text-[11px] ${
                       m.role === "human"
-                        ? "border-slate-300 bg-slate-200 text-slate-800 dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
+                        ? "w-fit max-w-[88%] rounded-md border border-slate-300 bg-slate-200 px-2.5 py-1.5 text-right text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
                         : m.fail
-                          ? "min-w-[3ch] text-right border-rose-500/35 bg-rose-100 text-rose-900 dark:border-rose-400/50 dark:bg-rose-500/10 dark:text-rose-100"
-                          : "min-w-[3ch] text-right border-emerald-500/35 bg-emerald-100 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-100"
+                          ? "w-full border-l-2 border-rose-500/45 px-2 py-1 text-rose-900 dark:border-rose-400/55 dark:text-rose-100"
+                          : "w-full border-l-2 border-emerald-500/45 px-2 py-1 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100"
                     }`}
                   >
                     {m.thinking ? (
@@ -1144,13 +1194,13 @@ function FailureIllustration({ human, fail }: { human: string; fail: string }) {
           <div />
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
-          <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+          <div className="flex justify-end">
+            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
               {human}
             </div>
           </div>
-          <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-rose-500/35 bg-rose-100 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 shadow-sm dark:border-rose-400/50 dark:bg-rose-500/10 dark:text-rose-100">
+          <div className="flex justify-start">
+            <div className="w-full border-l-2 border-rose-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 dark:border-rose-400/55 dark:text-rose-100">
               {fail}
             </div>
           </div>
@@ -1176,13 +1226,13 @@ function SuccessIllustration({ human, succeed }: { human: string; succeed: strin
           <div />
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
-          <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+          <div className="flex justify-end">
+            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
               {human}
             </div>
           </div>
-          <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-emerald-500/35 bg-emerald-100 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 shadow-sm dark:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <div className="flex justify-start">
+            <div className="w-full border-l-2 border-emerald-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100">
               {succeed}
             </div>
           </div>
@@ -1193,7 +1243,7 @@ function SuccessIllustration({ human, succeed }: { human: string; succeed: strin
 }
 
 const SLIDE_CLASS = "min-h-[100svh] snap-start flex items-center justify-center relative";
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
 const SECTION_WITH_VISUAL_GRID =
   "grid gap-12 lg:gap-16 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center";
 const VISUAL_PANEL_CLASS = "w-full min-h-[320px] sm:min-h-[360px] lg:min-h-[460px]";
@@ -1216,10 +1266,12 @@ function FadeSection({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [inView, setInView] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [disableFadeOnMobile, setDisableFadeOnMobile] = useState(false);
 
   useLayoutEffect(() => {
     if (staticMode || typeof window === "undefined") return;
     setReduceMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    setDisableFadeOnMobile(window.matchMedia("(max-width: 767px)").matches);
   }, [staticMode]);
 
   useLayoutEffect(() => {
@@ -1231,15 +1283,21 @@ function FadeSection({
     const checkInView = (): boolean => {
       const rootRect = scrollEl.getBoundingClientRect();
       const elRect = wrapperEl.getBoundingClientRect();
+      const height = elRect.height;
+      if (height <= 0) return true;
       const overlapTop = Math.max(
         0,
         Math.min(elRect.bottom, rootRect.bottom) - Math.max(elRect.top, rootRect.top)
       );
-      const visibleRatio = overlapTop / elRect.height;
+      const visibleRatio = overlapTop / height;
       return visibleRatio >= IN_VIEW_THRESHOLD;
     };
 
     setInView(checkInView());
+
+    const raf = requestAnimationFrame(() => {
+      setInView(checkInView());
+    });
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -1254,10 +1312,13 @@ function FadeSection({
       }
     );
     observer.observe(wrapperEl);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
   }, [scrollContainerRef, staticMode]);
 
-  if (staticMode || reduceMotion) {
+  if (staticMode || reduceMotion || disableFadeOnMobile) {
     return <>{children}</>;
   }
 
@@ -1326,6 +1387,28 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
 
 export function SitePage({ staticMode = false }: SitePageProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showAllMobileGuarantees, setShowAllMobileGuarantees] = useState(false);
+  const [showAllMobileOutcomes, setShowAllMobileOutcomes] = useState(false);
+  const [showAllMobileLearnMore, setShowAllMobileLearnMore] = useState(false);
+  const mobileToggleCooldownRef = useRef(false);
+  const toggleMobileReveal = useCallback(
+    (setExpanded: (updater: (currentValue: boolean) => boolean) => void) => {
+      if (mobileToggleCooldownRef.current) return;
+      mobileToggleCooldownRef.current = true;
+      const scrollEl = scrollContainerRef.current;
+      if (scrollEl) scrollEl.style.scrollSnapType = "none";
+      setExpanded((v) => !v);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            if (scrollEl) scrollEl.style.scrollSnapType = "";
+            mobileToggleCooldownRef.current = false;
+          }, 400);
+        });
+      });
+    },
+    []
+  );
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
@@ -1384,13 +1467,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="intro" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-6 pt-12">
+              <div className="space-y-6 pt-0 md:pt-12">
                 <div className="grid gap-10 lg:gap-14 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center">
                   <div className="space-y-5">
                     <h1 className="text-[28px] font-medium tracking-[-0.02em]">
                       Your production agent has{" "}
                       <span className="intro-hero-word-wrap">
-                        <span className="text-foreground">amnesia.</span>
+                        <span className="text-foreground">amnesia</span>
                       </span>
                     </h1>
 
@@ -1482,10 +1565,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       silent mutation.
                     </p>
 
-                    <div className="flex flex-wrap gap-3">
+                    <div className="flex flex-col sm:flex-row flex-wrap gap-3">
                       <a
                         href="#memory-guarantees"
-                        className="inline-flex items-center gap-1.5 rounded-md border border-foreground bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline hover:bg-foreground/90 transition-colors"
+                        className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-foreground bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline hover:bg-foreground/90 transition-colors"
                         onClick={(e) => {
                           sendCtaClick("view_guarantees");
                           if (isModifiedClick(e)) return;
@@ -1500,7 +1583,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       </a>
                       <a
                         href="#install"
-                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors"
+                        className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 transition-colors"
                         onClick={(e) => {
                           sendCtaClick("install");
                           if (isModifiedClick(e)) return;
@@ -1511,7 +1594,10 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         }}
                       >
                         <Download className="h-4 w-4 shrink-0" aria-hidden />
-                        Install deterministic memory in 5 minutes
+                        <span className="hidden sm:inline">
+                          Install deterministic memory in 5 minutes
+                        </span>
+                        <span className="sm:hidden">Install in 5 minutes</span>
                       </a>
                     </div>
 
@@ -1619,13 +1705,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="outcomes" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-8 max-w-5xl mx-auto">
+              <div className="space-y-5 md:space-y-8 max-w-5xl mx-auto">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     The problem
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Flame className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <Scale
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Same question, different outcome</span>
                   </h2>
                   <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
@@ -1634,32 +1723,50 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   </p>
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
-                  {FAILURE_CARDS.map(({ category, Icon, title, description, scenarioIndex }) => {
-                    const s = SCENARIOS[scenarioIndex];
-                    return (
-                      <div key={category} className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                            {category}
-                          </span>
+                  {FAILURE_CARDS.map(
+                    ({ category, Icon, title, description, scenarioIndex }, idx) => {
+                      const s = SCENARIOS[scenarioIndex];
+                      const hiddenOnMobile =
+                        !showAllMobileOutcomes && idx >= MOBILE_OUTCOME_PREVIEW_COUNT;
+                      return (
+                        <div
+                          key={category}
+                          className={`space-y-3${hiddenOnMobile ? " hidden lg:block" : ""}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              {category}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                            <FailureIllustration human={s.left} fail={s.fail} />
+                            <SuccessIllustration human={s.left} succeed={s.succeed} />
+                          </div>
+                          <div className="space-y-1 px-0.5">
+                            <p className="text-[14px] font-medium leading-5 text-foreground">
+                              {title}
+                            </p>
+                            <p className="text-[13px] leading-5 text-muted-foreground">
+                              {description}
+                            </p>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                          <FailureIllustration human={s.left} fail={s.fail} />
-                          <SuccessIllustration human={s.left} succeed={s.succeed} />
-                        </div>
-                        <div className="space-y-1 px-0.5">
-                          <p className="text-[14px] font-medium leading-5 text-foreground">
-                            {title}
-                          </p>
-                          <p className="text-[13px] leading-5 text-muted-foreground">
-                            {description}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    }
+                  )}
                 </div>
+                {FAILURE_CARDS.length > MOBILE_OUTCOME_PREVIEW_COUNT && (
+                  <button
+                    type="button"
+                    className="w-full lg:hidden rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                    onClick={() => toggleMobileReveal(setShowAllMobileOutcomes)}
+                  >
+                    {showAllMobileOutcomes
+                      ? "Show fewer"
+                      : `Show all ${FAILURE_CARDS.length} examples`}
+                  </button>
+                )}
               </div>
             </div>
             <SectionEdgeIndicators sectionId="outcomes" />
@@ -1670,13 +1777,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="memory-guarantees" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-8 max-w-5xl mx-auto">
+              <div className="space-y-5 md:space-y-8 max-w-5xl mx-auto">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     Guarantees
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <ShieldCheck className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <ShieldCheck
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Agent memory systems make different guarantees</span>
                   </h2>
                   <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
@@ -1684,7 +1794,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     integrity.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="hidden md:flex flex-wrap gap-2">
                   {(
                     [
                       {
@@ -1706,8 +1816,144 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </Link>
                   ))}
                 </div>
+                <div className="md:hidden -mt-2 space-y-2 text-[13px] leading-5 text-muted-foreground">
+                  <ul className="list-none pl-0 space-y-1.5">
+                    <li>
+                      <span className="font-medium text-foreground">Platform</span>: built-in
+                      chat memory from Claude, ChatGPT, Gemini and others.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Retrieval / RAG</span>:
+                      vector stores like Mem0 and Zep that recall by similarity.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Files</span>: markdown,
+                      JSON, or CRDT docs the agent reads and writes directly.
+                    </li>
+                    <li>
+                      <span className="font-medium text-foreground">Deterministic</span>:
+                      Neotoma&rsquo;s append-only state layer with versioned, auditable guarantees.
+                    </li>
+                  </ul>
+                </div>
+                <div className="space-y-2 md:hidden">
+                  <TooltipProvider delayDuration={200}>
+                    <Collapsible className="rounded-lg border border-border bg-card overflow-hidden">
+                      <header className="bg-muted/50 border-b border-border/50">
+                        <CollapsibleTrigger asChild>
+                          <button
+                            type="button"
+                            className="group w-full px-3 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="text-[13px] font-medium text-foreground">
+                                  Vendors
+                                </span>
+                                <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
+                                  Representative providers for each memory approach
+                                </p>
+                              </div>
+                              <ChevronDown
+                                className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                                aria-hidden
+                              />
+                            </div>
+                          </button>
+                        </CollapsibleTrigger>
+                      </header>
+                      <CollapsibleContent>
+                        <dl className="text-[12px] leading-5 divide-y divide-border/50">
+                          {(["platform", "retrieval", "file", "neotoma"] as const).map((key) => (
+                            <div
+                              key={key}
+                              className="px-3 py-1.5 flex items-center justify-between gap-2"
+                            >
+                              <dt className="font-medium text-foreground shrink-0">
+                                {key === "neotoma"
+                                  ? "Deterministic"
+                                  : key === "retrieval"
+                                    ? "Retrieval / RAG"
+                                    : key === "file"
+                                      ? "Files"
+                                      : "Platform"}
+                              </dt>
+                              <dd className="text-muted-foreground text-right truncate">
+                                {MEMORY_MODEL_VENDORS[key]}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </CollapsibleContent>
+                    </Collapsible>
+                    {(showAllMobileGuarantees
+                      ? MEMORY_GUARANTEE_ROWS
+                      : MEMORY_GUARANTEE_ROWS.slice(0, MOBILE_GUARANTEE_PREVIEW_COUNT)
+                    ).map((row) => (
+                      <Collapsible
+                        key={row.property}
+                        defaultOpen
+                        className="rounded-lg border border-border bg-card overflow-hidden"
+                      >
+                        <header className="bg-muted/50 border-b border-border/50">
+                          <CollapsibleTrigger asChild>
+                            <button
+                              type="button"
+                              className="group w-full px-3 py-1.5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="min-w-0">
+                                  <span className="text-[13px] font-medium text-foreground">
+                                    {row.property}
+                                  </span>
+                                  <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
+                                    {row.tooltip}
+                                  </p>
+                                </div>
+                                <ChevronDown
+                                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"
+                                  aria-hidden
+                                />
+                              </div>
+                            </button>
+                          </CollapsibleTrigger>
+                        </header>
+                        <CollapsibleContent>
+                          <div className="grid grid-cols-4 divide-x divide-border/50">
+                            {(
+                              [
+                                { key: "platform" as const, label: "Plat." },
+                                { key: "retrieval" as const, label: "RAG" },
+                                { key: "file" as const, label: "Files" },
+                                { key: "neotoma" as const, label: "Det." },
+                              ] as const
+                            ).map(({ key, label }) => (
+                              <div key={key} className="flex flex-col items-center gap-0.5 px-1 py-1.5">
+                                <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  {label}
+                                </span>
+                                <GuaranteeCell level={row[key]} />
+                              </div>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    ))}
+                    {MEMORY_GUARANTEE_ROWS.length > MOBILE_GUARANTEE_PREVIEW_COUNT && (
+                      <button
+                        type="button"
+                        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        onClick={() => toggleMobileReveal(setShowAllMobileGuarantees)}
+                      >
+                        {showAllMobileGuarantees
+                          ? "Show fewer"
+                          : `Show all ${MEMORY_GUARANTEE_ROWS.length} guarantees`}
+                      </button>
+                    )}
+                  </TooltipProvider>
+                </div>
                 <div
-                  className="overflow-x-auto -mx-2 px-2"
+                  className="hidden md:block overflow-x-auto -mx-2 px-2"
                   style={{ WebkitOverflowScrolling: "touch" }}
                 >
                   <TooltipProvider delayDuration={200}>
@@ -1884,7 +2130,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                               scope="row"
                               className="text-left px-3 py-2.5 font-medium text-foreground min-w-0 align-top"
                             >
-                              <span className="inline-flex items-center gap-1 min-w-0 max-w-full">
+                              <span className="inline-flex items-start gap-1 min-w-0 max-w-full">
                                 <span className="break-words whitespace-normal">
                                   {row.property}
                                 </span>
@@ -1892,7 +2138,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                                   <TooltipTrigger asChild>
                                     <Link
                                       to={`/memory-guarantees#${row.slug}`}
-                                      className="ml-1 inline-flex align-middle rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                                      className="ml-1 mt-0.5 inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                                       aria-label={`More info about ${row.property}`}
                                     >
                                       <Info className="h-3.5 w-3.5" aria-hidden />
@@ -1941,12 +2187,15 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     Get started
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Download className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <Download
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Agents install Neotoma themselves</span>
                   </h2>
                 </div>
                 <div className={SECTION_WITH_VISUAL_GRID}>
-                  <div className="space-y-4">
+                  <div className="min-w-0 space-y-4">
                     <p className="text-[15px] leading-7 text-foreground/90">
                       Paste this prompt into Claude Code, Codex, Cursor, or OpenClaw. The agent
                       handles npm install, initialization, and MCP configuration.
@@ -1997,13 +2246,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         CLI reference
                       </Link>
                     </p>
-                    <pre className="rounded-lg border code-block-palette p-3 overflow-x-auto font-mono text-[12px] leading-5 whitespace-pre text-muted-foreground">
-                      {`$ npm install -g neotoma
-$ neotoma init
-✓ Data directory created
-✓ Schema registry initialized
-✓ Ready — run neotoma api start --env dev`}
-                    </pre>
                   </div>
                   <div>
                     <GetStartedSimulationVisual className={VISUAL_PANEL_CLASS} />
@@ -2028,65 +2270,80 @@ $ neotoma init
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     State inspection
                   </p>
-                  <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Eye className="h-5 w-5 text-muted-foreground" aria-hidden />
+                  <h2 className="flex items-center gap-2 text-[22px] sm:text-[24px] font-medium tracking-[-0.02em]">
+                    <Eye
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Inspect agent state like version control</span>
                   </h2>
-                  <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
+                  <p className="text-[14px] sm:text-[15px] leading-6 sm:leading-7 text-foreground/90 max-w-2xl">
                     When a production agent sends the wrong data, you need to trace why. Neotoma
                     stores every state mutation as a versioned observation so the full timeline can
                     be inspected and replayed.
                   </p>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-2">
+                <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
                   <div className="space-y-2">
                     <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
                       Observation timeline
                     </p>
-                    <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[13px] leading-6 whitespace-pre">
-                      {`$ neotoma observations list --entity-id contract:Kline
-
-  #   observed_at   source              change
+                    <pre className="rounded-lg border code-block-palette p-3 sm:p-4 overflow-x-auto font-mono text-[11px] sm:text-[13px] leading-5 sm:leading-6 whitespace-pre-wrap md:whitespace-pre break-words">
+                      <code>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                          $ neotoma observations list --entity-id contract:Kline
+                        </span>
+                        {"\n\n"}
+                        <span className="text-foreground/90 dark:text-foreground/80">
+                          {`  #   observed_at   source              change
   1   Oct 10        import:drive        (created)
   2   Oct 12        agent:renewal       renewal_date
   3   Oct 14        agent:amendment     payment_terms`}
+                        </span>
+                      </code>
                     </pre>
                   </div>
                   <div className="space-y-2">
                     <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
                       Entity snapshot with version history
                     </p>
-                    <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[13px] leading-6 whitespace-pre">
-                      {`$ neotoma entities get contract:Kline
-
-  entity_type:   contract
+                    <pre className="rounded-lg border code-block-palette p-3 sm:p-4 overflow-x-auto font-mono text-[11px] sm:text-[13px] leading-5 sm:leading-6 whitespace-pre-wrap md:whitespace-pre break-words">
+                      <code>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                          $ neotoma entities get contract:Kline
+                        </span>
+                        {"\n\n"}
+                        <span className="text-foreground/90 dark:text-foreground/80">
+                          {`  entity_type:   contract
   entity_id:     contract:Kline
   version:       3
   payment_terms: Net 30
   renewal_date:  2026-01-15
 
   Previous (v2): payment_terms: Net 60`}
+                        </span>
+                      </code>
                     </pre>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3">
+                <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 sm:gap-3">
                   <Link
                     to="/cli"
-                    className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                   >
                     CLI reference →
                   </Link>
                   <Link
                     to="/replayable-timeline"
-                    className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                   >
                     Replayable timeline →
                   </Link>
                   <Link
                     to="/auditable-change-log"
-                    className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    className="inline-flex w-full sm:w-auto items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                   >
                     Auditable change log →
                   </Link>
@@ -2107,7 +2364,10 @@ $ neotoma init
                     How it works
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Network className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <Network
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Architecture</span>
                   </h2>
                 </div>
@@ -2193,13 +2453,13 @@ $ neotoma init
                     <div className="flex flex-wrap gap-3">
                       <Link
                         to="/architecture"
-                        className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                       >
                         Full architecture →
                       </Link>
                       <Link
                         to="/terminology"
-                        className="inline-flex items-center rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                        className="inline-flex items-center justify-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                       >
                         Terminology →
                       </Link>
@@ -2222,10 +2482,13 @@ $ neotoma init
                     Built for
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Users className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <Users
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Who&apos;s it for</span>
                   </h2>
-                  <p className="text-[15px] text-muted-foreground max-w-2xl leading-6">
+                  <p className="text-[14px] md:text-[15px] text-muted-foreground max-w-2xl leading-6">
                     One memory layer. Three worlds: infrastructure pipelines, agent systems, and the
                     tools you use every day. Pick your lens.
                   </p>
@@ -2260,31 +2523,31 @@ $ neotoma init
                       <Link
                         key={icp.slug}
                         to={`/${icp.slug}`}
-                        className={`flex flex-col overflow-hidden rounded-lg border no-underline transition-[transform,color,border-color] duration-200 ease-out group hover:scale-[1.03] hover:border-opacity-80 ${contentZoneClass}`}
+                        className={`flex flex-row md:flex-col overflow-hidden rounded-lg border no-underline transition-[transform,color,border-color] duration-200 ease-out group hover:scale-[1.03] hover:border-opacity-80 ${contentZoneClass}`}
                         onClick={(e) => {
                           if (isModifiedClick(e)) e.stopPropagation();
                         }}
                       >
                         <div
-                          className={`flex items-center justify-center rounded-t-lg pt-4 px-5 pb-3 ${imageZoneBg}`}
+                          className={`hidden md:flex w-[116px] shrink-0 items-center justify-center rounded-l-lg p-2 md:w-auto md:rounded-l-none md:rounded-t-lg md:pt-4 md:px-5 md:pb-3 ${imageZoneBg}`}
                         >
                           <img
                             src={imageSrc}
                             alt=""
                             width={280}
                             height={280}
-                            className="aspect-square size-[280px] object-contain object-center"
+                            className="aspect-square size-[96px] object-contain object-center md:size-[280px]"
                             loading="lazy"
                           />
                         </div>
-                        <div className="flex flex-1 flex-col px-5 py-4">
-                          <p className="text-[18px] font-medium text-foreground mb-1">
+                        <div className="flex flex-1 flex-col min-h-0 px-3 py-3 md:px-5 md:py-4">
+                          <p className="text-[16px] md:text-[18px] font-medium text-foreground mb-1">
                             {icp.shortName}
                           </p>
-                          <p className="text-[15px] text-muted-foreground leading-6 mb-3 flex-1">
+                          <p className="text-[14px] md:text-[15px] text-muted-foreground leading-6 mb-3 flex-1">
                             {icp.tagline}
                           </p>
-                          <div className="flex flex-wrap gap-1.5 mb-3">
+                          <div className="hidden md:flex flex-wrap gap-1.5 mb-3">
                             {icp.dataTypes.slice(0, 4).map((tag) => (
                               <span key={tag} className={pillClass}>
                                 {tag}
@@ -2320,10 +2583,13 @@ $ neotoma init
                     Interfaces
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Waypoints className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <Waypoints
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Three interfaces. One state invariant.</span>
                   </h2>
-                  <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
+                  <p className="text-[14px] md:text-[15px] leading-7 text-foreground/90 max-w-2xl">
                     Every interface provides the same deterministic behavior regardless of how you
                     access the agent state layer.
                   </p>
@@ -2388,29 +2654,31 @@ $ neotoma init
                     <Link
                       key={iface.name}
                       to={iface.link}
-                      className={`flex flex-col overflow-hidden rounded-lg border no-underline transition-[transform,color,border-color] duration-200 ease-out group hover:scale-[1.03] hover:border-opacity-80 ${iface.contentZoneClass}`}
+                      className={`flex flex-row md:flex-col overflow-hidden rounded-lg border no-underline transition-[transform,color,border-color] duration-200 ease-out group hover:scale-[1.03] hover:border-opacity-80 ${iface.contentZoneClass}`}
                     >
                       <div
-                        className={`flex items-center justify-center rounded-t-lg pt-4 px-5 pb-3 ${iface.imageZoneBg}`}
+                        className={`hidden md:flex w-[116px] shrink-0 items-center justify-center rounded-l-lg p-2 md:w-auto md:rounded-l-none md:rounded-t-lg md:pt-4 md:px-5 md:pb-3 ${iface.imageZoneBg}`}
                       >
                         <img
                           src={iface.imageSrc}
                           alt={iface.imageAlt}
                           width={280}
                           height={280}
-                          className="aspect-square size-[280px] object-contain object-center"
+                          className="aspect-square size-[96px] object-contain object-center md:size-[280px]"
                           loading="lazy"
                         />
                       </div>
-                      <div className="flex flex-1 flex-col px-5 py-4">
+                      <div className="flex flex-1 flex-col min-h-0 px-3 py-3 md:px-5 md:py-4">
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <p className="text-[18px] font-medium text-foreground">{iface.name}</p>
+                          <p className="text-[16px] md:text-[18px] font-medium text-foreground">
+                            {iface.name}
+                          </p>
                           <span className={iface.pillClass}>{iface.count}</span>
                         </div>
-                        <p className="text-[15px] text-muted-foreground leading-6 mb-3 flex-1">
+                        <p className="text-[14px] md:text-[15px] text-muted-foreground leading-6 mb-3 flex-1">
                           {iface.desc}
                         </p>
-                        <div className="flex flex-wrap gap-1.5 mb-3">
+                        <div className="hidden md:flex flex-wrap gap-1.5 mb-3">
                           {iface.details.map((detail) => (
                             <span key={detail} className={iface.pillClass}>
                               {detail}
@@ -2434,24 +2702,59 @@ $ neotoma init
         <section id="learn-more" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
-              <div className="space-y-8 max-w-3xl mx-auto">
+              <div className="space-y-5 md:space-y-8 max-w-3xl mx-auto">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
                     Resources
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <BookOpen className="h-5 w-5 text-muted-foreground" aria-hidden />
+                    <BookOpen
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
                     <span>Learn more</span>
                   </h2>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <LearnMoreCard item={LEARN_MORE_REPO_CARD} />
-                  <LearnMoreCard item={LEARN_MORE_DOCUMENTATION_CARD} />
-                  <LearnMoreCard item={LEARN_MORE_GUARANTEES_CARD_WITH_IMAGE} />
-                  {LEARN_MORE_POSTS.slice(0, 5).map((post) => (
-                    <LearnMoreCard key={post.href} item={post} />
-                  ))}
-                </div>
+                {(() => {
+                  const allItems = [
+                    LEARN_MORE_REPO_CARD,
+                    LEARN_MORE_DOCUMENTATION_CARD,
+                    LEARN_MORE_GUARANTEES_CARD_WITH_IMAGE,
+                    ...LEARN_MORE_POSTS.slice(0, 5),
+                  ];
+                  const MOBILE_LEARN_MORE_PREVIEW = 3;
+                  const visibleItems = showAllMobileLearnMore
+                    ? allItems
+                    : allItems.slice(0, MOBILE_LEARN_MORE_PREVIEW);
+                  const hiddenItems = showAllMobileLearnMore
+                    ? []
+                    : allItems.slice(MOBILE_LEARN_MORE_PREVIEW);
+                  return (
+                    <>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {visibleItems.map((item) => (
+                          <LearnMoreCard key={item.href} item={item} />
+                        ))}
+                        {hiddenItems.map((item) => (
+                          <div key={item.href} className="hidden sm:block">
+                            <LearnMoreCard item={item} />
+                          </div>
+                        ))}
+                      </div>
+                      {allItems.length > MOBILE_LEARN_MORE_PREVIEW && (
+                        <button
+                          type="button"
+                          className="w-full sm:hidden rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                          onClick={() => toggleMobileReveal(setShowAllMobileLearnMore)}
+                        >
+                          {showAllMobileLearnMore
+                            ? "Show fewer"
+                            : `Show all ${allItems.length} resources`}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             <SectionEdgeIndicators sectionId="learn-more" />

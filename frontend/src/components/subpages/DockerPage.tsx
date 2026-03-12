@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
@@ -22,10 +22,26 @@ function sanitizeCodeForCopy(rawCode: string): string {
 
 function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const onCopy = async () => {
     await navigator.clipboard.writeText(sanitizeCodeForCopy(code));
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyResetTimeoutRef.current = null;
+    }, 4000);
   };
 
   return (

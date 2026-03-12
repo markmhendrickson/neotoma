@@ -184,6 +184,57 @@ export function ArchitecturePage() {
 
       <SectionDivider />
 
+      {/* How data enters */}
+      <SectionHeading id="how-data-enters">How data enters Neotoma</SectionHeading>
+      <p className="text-[15px] leading-7 mb-4">
+        Data enters through two paths. Which path runs depends on what the caller sends.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
+          <p className="text-[14px] font-medium text-foreground">Structured path</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            Agent calls <code className="bg-muted px-1 py-0.5 rounded text-[12px]">store</code> with
+            an <code className="bg-muted px-1 py-0.5 rounded text-[12px]">entities</code> array
+            (typed JSON). Observations are created directly. No LLM calls. No interpretation pipeline.
+          </p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            The agent&apos;s own reasoning produces the structured data. Neotoma validates against schema,
+            deduplicates, and records with full provenance.
+          </p>
+          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
+            Chat, tool output, agent-extracted facts &rarr; this path.
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
+          <p className="text-[14px] font-medium text-foreground">Unstructured path</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            Caller sends a file (PDF, image, CSV, text). Neotoma stores the raw content
+            (content-addressed, immutable), then runs interpretation: text extraction followed by
+            schema-first entity extraction.
+          </p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            CSV files use deterministic row mapping (no LLM). Other files use LLM extraction
+            with <code className="bg-muted px-1 py-0.5 rounded text-[12px]">temperature:&nbsp;0</code> and
+            a fixed seed for reproducibility. Interpretation creates new observations without modifying the source.
+          </p>
+          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
+            File uploads, document ingestion &rarr; this path.
+          </p>
+        </div>
+      </div>
+
+      <p className="text-[15px] leading-7 font-medium text-foreground mb-2">
+        The agent is the author; Neotoma is the ledger.
+      </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        Most agent interactions use the structured path. The agent decides what to store; Neotoma
+        ensures it is schema-valid, deduplicated, and provenance-tracked. There is no hidden LLM
+        between the agent and the data layer.
+      </p>
+
+      <SectionDivider />
+
       {/* Guarantees */}
       <SectionHeading id="guarantees">Guarantees</SectionHeading>
       <ul className="list-none pl-0 space-y-3 mb-6">

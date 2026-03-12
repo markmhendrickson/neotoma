@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Clock, Copy, RotateCcw } from "lucide-react";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
@@ -23,10 +23,26 @@ function sanitizeCodeForCopy(rawCode: string): string {
 
 function CodeBlock({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
+  const copyResetTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const onCopy = async () => {
     await navigator.clipboard.writeText(sanitizeCodeForCopy(code));
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    if (copyResetTimeoutRef.current !== null) {
+      window.clearTimeout(copyResetTimeoutRef.current);
+    }
+    copyResetTimeoutRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyResetTimeoutRef.current = null;
+    }, 4000);
   };
 
   return (
@@ -77,7 +93,7 @@ export function InstallPage() {
       </p>
       <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} />
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">After installation</h2>
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">After installation</h3>
       <ol className="list-decimal pl-5 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
           Run <code className="text-foreground">neotoma init</code>, choose your client, and

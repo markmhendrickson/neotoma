@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -88,22 +90,104 @@ export function NeotomaWithCodexPage() {
         ))}
       </ul>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">How they connect</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Using them together
+      </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Configure Neotoma as an MCP server in{" "}
-        <a href="https://developers.openai.com/codex/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
-          <code>.codex/config.toml</code>
-        </a>{" "}
-        (user-level at <code>~/.codex/config.toml</code> or project-scoped). You can also add
-        servers via <code>codex mcp add</code>. When MCP is not available, agents can use the{" "}
-        <code>neotoma</code> CLI directly from the terminal.
+        Codex provides the execution sandbox; Neotoma provides the persistent state layer.
+        Each sandbox starts fresh, but Neotoma carries structured memory across every task.
       </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">
-        {`# .codex/config.toml
+      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Codex</th>
+            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Task execution environment</td>
+            <td className="py-2 pr-4">Sandbox</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Session context</td>
+            <td className="py-2 pr-4">Within current task</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Persistent state across tasks</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP or CLI</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP or CLI</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4">Cross-tool state &amp; audit trail</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Shared memory graph</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started &mdash; local (stdio)
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        Paste this prompt into Codex. The agent handles npm install, initialization, and MCP
+        configuration.
+      </p>
+      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        The agent writes to <code>.codex/config.toml</code> (project-level) or{" "}
+        <code>~/.codex/config.toml</code> (user-level). Codex discovers the MCP server from your
+        config automatically.
+      </p>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started &mdash; remote (HTTP with OAuth)
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        Codex sandboxes can connect to remote MCP servers over HTTP. Use this when Neotoma is not
+        installed locally in the sandbox. Start with the agentic install above on your host machine,
+        then configure remote access:
+      </p>
+      <ol className="list-decimal pl-5 space-y-4 mb-6">
+        <li className="text-[15px] leading-7">
+          <strong>Start the API server</strong>
+          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Expose the API externally</strong> &mdash; use a reverse proxy or tunnel to make your
+          Neotoma API reachable at a public HTTPS URL. The API runs on{" "}
+          <code>http://localhost:3080</code> by default.
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Configure HTTP transport with OAuth</strong> in your Codex config
+          <CopyableCodeBlock
+            code={`# .codex/config.toml
 [mcp_servers.neotoma]
-command = "neotoma"
-args = ["mcp", "stdio"]`}
-      </pre>
+type = "http"
+url = "https://your-neotoma-host.example.com/mcp"`}
+            className="mt-2 mb-1"
+          />
+          <p className="text-[14px] leading-6 text-muted-foreground mt-2">
+            Codex handles the{" "}
+            <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
+              MCP OAuth authorization flow
+            </a>{" "}
+            automatically.
+          </p>
+        </li>
+      </ol>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        When MCP is not available in the sandbox, agents can use the <code>neotoma</code> CLI
+        directly as a fallback.
+      </p>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
         Codex documentation
@@ -134,14 +218,22 @@ args = ["mcp", "stdio"]`}
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference
         </Link>{" "}
-        for MCP setup and{" "}
+        for MCP setup,{" "}
         <Link to="/cli" className={extLink}>
           CLI reference
         </Link>{" "}
-        for terminal usage.
+        for terminal usage, and{" "}
+        <Link to="/agent-instructions" className={extLink}>
+          agent instructions
+        </Link>{" "}
+        for behavioral details.
       </p>
     </DetailPage>
   );

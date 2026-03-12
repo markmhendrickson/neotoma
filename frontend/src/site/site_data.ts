@@ -277,6 +277,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     items: [
       { label: "Documentation", href: "/docs", icon: "Home" },
       { label: "Install", href: "/install", icon: "Rocket" },
+      { label: "Developer walkthrough", href: "/developer-walkthrough", icon: "Play" },
     ],
   },
   {
@@ -300,9 +301,9 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
   {
     title: "Use cases",
     items: [
-      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
       { label: "AI infrastructure engineers", href: "/ai-infrastructure-engineers", icon: "Cpu" },
       { label: "Agent system builders", href: "/agentic-systems-builders", icon: "Zap" },
+      { label: "AI-native operators", href: "/ai-native-operators", icon: "SatelliteDish" },
     ],
   },
   {
@@ -331,7 +332,7 @@ npm install -g neotoma
 
 # Initialize
 neotoma init`,
-  agentInstallPrompt: `Install and initialize Neotoma, then follow this workflow:
+  agentInstallPrompt: `Follow this workflow to set up Neotoma:
 
 1. Install Neotoma with npm install -g neotoma.
 2. Initialize Neotoma with neotoma init.
@@ -917,44 +918,6 @@ export interface IcpProfile {
 
 export const ICP_PROFILES: IcpProfile[] = [
   {
-    slug: "ai-native-operators",
-    name: "AI-native individual operators",
-    shortName: "AI-native operators",
-    tagline: "State that follows you across every tool and session",
-    painPoints: [
-      "No persistent state across sessions — every AI conversation starts from zero",
-      "Fragmented document sources scattered across email, drives, and screenshots",
-      "Repetitive context-setting in every new AI interaction",
-      "Lost commitments and forgotten action items between sessions",
-      "Personal data — receipts, contacts, preferences — stored in provider memory with no control over retention or training use",
-    ],
-    failureModes: [
-      { label: "Lost commitments across tools", icon: "BookmarkX" },
-      { label: "Tool-to-tool context loss", icon: "Unlink" },
-      { label: "Silent state drift over time", icon: "Activity" },
-      { label: "Weak correction loop — no way to fix what the agent got wrong", icon: "RefreshCw" },
-      {
-        label: "Personal data in opaque provider memory with no deletion control",
-        icon: "ShieldAlert",
-      },
-      { label: "Memory locked to one vendor's ecosystem", icon: "Lock" },
-    ],
-    dataTypes: [
-      "tasks",
-      "preferences",
-      "contacts",
-      "deadlines",
-      "notes",
-      "conversations",
-      "receipts",
-      "travel docs",
-      "meeting notes",
-    ],
-    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
-    solutionSummary:
-      "Neotoma persists every conversation, extracted entity, and commitment as versioned, schema-bound state. Switch between Claude, Cursor, and Codex without losing context. Corrections propagate deterministically.",
-  },
-  {
     slug: "ai-infrastructure-engineers",
     name: "AI infrastructure engineers",
     shortName: "AI infrastructure engineers",
@@ -1043,6 +1006,44 @@ export const ICP_PROFILES: IcpProfile[] = [
     ],
     solutionSummary:
       "Neotoma provides a deterministic, MCP-backed state layer for agent frameworks, orchestration pipelines, and observability stacks. Same input, same output. Every fact traces to provenance. Cross-session state with full audit trail.",
+  },
+  {
+    slug: "ai-native-operators",
+    name: "AI-native individual operators",
+    shortName: "AI-native operators",
+    tagline: "State that follows you across every tool and session",
+    painPoints: [
+      "No persistent state across sessions — every AI conversation starts from zero",
+      "Fragmented document sources scattered across email, drives, and screenshots",
+      "Repetitive context-setting in every new AI interaction",
+      "Lost commitments and forgotten action items between sessions",
+      "Personal data — receipts, contacts, preferences — stored in provider memory with no control over retention or training use",
+    ],
+    failureModes: [
+      { label: "Lost commitments across tools", icon: "BookmarkX" },
+      { label: "Tool-to-tool context loss", icon: "Unlink" },
+      { label: "Silent state drift over time", icon: "Activity" },
+      { label: "Weak correction loop — no way to fix what the agent got wrong", icon: "RefreshCw" },
+      {
+        label: "Personal data in opaque provider memory with no deletion control",
+        icon: "ShieldAlert",
+      },
+      { label: "Memory locked to one vendor's ecosystem", icon: "Lock" },
+    ],
+    dataTypes: [
+      "tasks",
+      "preferences",
+      "contacts",
+      "deadlines",
+      "notes",
+      "conversations",
+      "receipts",
+      "travel docs",
+      "meeting notes",
+    ],
+    schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
+    solutionSummary:
+      "Neotoma persists every conversation, extracted entity, and commitment as versioned, schema-bound state. Switch between Claude, Cursor, and Codex without losing context. Corrections propagate deterministically.",
   },
 ];
 
