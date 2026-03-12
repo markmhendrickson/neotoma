@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -109,23 +111,145 @@ export function NeotomaWithChatGPTPage() {
         ))}
       </ul>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">How they connect</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Using them together
+      </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        ChatGPT supports MCP via{" "}
+        Keep ChatGPT&apos;s memory on for conversational preferences. Neotoma handles structured
+        entities and cross-tool state. Both are active simultaneously with no conflict.
+      </p>
+      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
+            <th className="text-left py-2 pr-4 font-medium text-foreground">ChatGPT</th>
+            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Conversation preferences</td>
+            <td className="py-2 pr-4">Memory</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Custom instructions &amp; GPT personas</td>
+            <td className="py-2 pr-4">Custom GPTs</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Cross-tool state</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Shared memory graph</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4">Versioned history &amp; audit trail</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Observation history</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        Paste this prompt into an agent tool (e.g. Claude Code, Codex, or Cursor) to install Neotoma.
+        The agent handles npm install, initialization, and local MCP configuration.
+      </p>
+      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-8 mb-3">
+        Connect ChatGPT via remote MCP
+      </h3>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        ChatGPT connects to MCP servers over the network via{" "}
         <a href="https://help.openai.com/en/articles/12584461" target="_blank" rel="noopener noreferrer" className={extLink}>
           developer mode
         </a>
-        . Build a remote MCP server for Neotoma using the{" "}
-        <a href="https://platform.openai.com/docs/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
-          OpenAI MCP guide
-        </a>{" "}
-        and connect it from your ChatGPT settings. The agent stores every conversation turn and
-        extracted entities before responding.
+        . After the agentic install above, configure remote access:
       </p>
+      <ol className="list-decimal pl-5 space-y-4 mb-6">
+        <li className="text-[15px] leading-7">
+          <strong>Start the API server</strong>
+          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
+          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
+          The API runs on <code>http://localhost:3080</code> by default.
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Enable developer mode</strong> in ChatGPT &mdash; go to{" "}
+          <a href="https://help.openai.com/en/articles/12584461" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Settings &rarr; Developer mode
+          </a>{" "}
+          (requires Business or Enterprise account).
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Add Neotoma as a remote MCP server</strong> &mdash; in ChatGPT&apos;s developer mode
+          settings, add your Neotoma API&apos;s remote MCP endpoint URL. ChatGPT authenticates via
+          OAuth; the Neotoma API supports the{" "}
+          <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
+            MCP OAuth authorization flow
+          </a>
+          .
+        </li>
+      </ol>
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-8 mb-3">
+        Connect via custom GPT with OpenAPI
+      </h3>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Neotoma's CLI and API can also be used alongside ChatGPT — store facts from ChatGPT
-        conversations using the CLI, and they'll be available in your next session across any
-        connected tool.
+        You can also integrate Neotoma as an action inside a{" "}
+        <a href="https://help.openai.com/en/articles/20001049-apps-in-custom-gpts-for-business-accounts-beta" target="_blank" rel="noopener noreferrer" className={extLink}>
+          custom GPT
+        </a>
+        . This approach uses the Neotoma API&apos;s OpenAPI spec directly and works with any ChatGPT
+        plan that supports custom GPTs.
+      </p>
+      <ol className="list-decimal pl-5 space-y-4 mb-6">
+        <li className="text-[15px] leading-7">
+          <strong>Start and expose the API server</strong> (same as steps 1&ndash;2 above).
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Create or edit a custom GPT</strong> &mdash; go to{" "}
+          <a href="https://chatgpt.com/gpts/editor" target="_blank" rel="noopener noreferrer" className={extLink}>
+            chatgpt.com/gpts/editor
+          </a>{" "}
+          and open the <strong>Configure</strong> tab.
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Add a new action</strong> &mdash; under Actions, click &ldquo;Create new
+          action&rdquo; and import the OpenAPI spec from your Neotoma API:
+          <CopyableCodeBlock
+            code={`https://your-neotoma-host.example.com/openapi.json`}
+            className="mt-2 mb-1"
+          />
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Configure authentication</strong> &mdash; set the authentication type to
+          &ldquo;OAuth&rdquo; and enter your Neotoma API&apos;s OAuth credentials (client ID, client
+          secret, authorization URL, and token URL). The Neotoma API supports the{" "}
+          <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
+            standard OAuth 2.0 flow
+          </a>
+          .
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Save and publish</strong> &mdash; the custom GPT now has full read/write access to
+          your Neotoma memory graph via the API&apos;s REST endpoints.
+        </li>
+      </ol>
+
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        Neotoma&apos;s CLI can also be used alongside ChatGPT without MCP or custom GPTs &mdash;
+        store facts from ChatGPT conversations using the CLI, and they&apos;ll be available in your
+        next session across any connected tool.
       </p>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
@@ -164,6 +288,10 @@ export function NeotomaWithChatGPTPage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference
         </Link>{" "}

@@ -1,8 +1,45 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { FlaskConical, Menu, Monitor, Moon, PanelRightClose, Search, Sun } from "lucide-react";
-import { SiGithub, SiNpm } from "react-icons/si";
+import {
+  Bookmark,
+  BookOpen,
+  Bot,
+  Boxes,
+  Briefcase,
+  Building2,
+  Bug,
+  Code,
+  Container,
+  Cpu,
+  Database,
+  FlaskConical,
+  Github,
+  Globe,
+  History,
+  Home,
+  Layers,
+  Menu,
+  MessageCircle,
+  MessageSquare,
+  Monitor,
+  Moon,
+  Package,
+  PanelRight,
+  PanelRightClose,
+  Rocket,
+  SatelliteDish,
+  Search,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Terminal,
+  Users,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { SiClaude, SiGithub, SiNpm, SiOpenai } from "react-icons/si";
 import { useTheme } from "@/hooks/useTheme";
 import { useLocale } from "@/i18n/LocaleContext";
 import { type SupportedLocale } from "@/i18n/config";
@@ -19,6 +56,8 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
+import { CursorIcon } from "@/components/icons/CursorIcon";
+import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
 import { sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
 
@@ -38,6 +77,50 @@ const DOC_DROPDOWN_FEATURED_HREFS = new Set([
   "/memory-guarantees",
   "/schema-management",
 ]);
+
+const INTEGRATION_BRAND_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string; "aria-hidden"?: boolean; size?: number }>
+> = {
+  "/neotoma-with-claude-code": SiClaude,
+  "/neotoma-with-claude": SiClaude,
+  "/neotoma-with-chatgpt": SiOpenai,
+  "/neotoma-with-codex": SiOpenai,
+  "/neotoma-with-cursor": CursorIcon,
+  "/neotoma-with-openclaw": OpenClawIcon,
+};
+
+const DOC_NAV_ICONS: Record<string, LucideIcon> = {
+  Bookmark,
+  BookOpen,
+  Bot,
+  Boxes,
+  Briefcase,
+  Building2,
+  Bug,
+  Code,
+  Container,
+  Cpu,
+  Database,
+  Github,
+  Globe,
+  History,
+  Home,
+  Layers,
+  MessageCircle,
+  MessageSquare,
+  Monitor,
+  Package,
+  PanelRight,
+  Rocket,
+  SatelliteDish,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Users,
+  Zap,
+};
 
 /** Dropdown category order: prioritize Integrations after Getting started. */
 const DOC_DROPDOWN_CATEGORY_ORDER = [
@@ -195,18 +278,21 @@ function SiteNavSearch({
   searchLabel,
   className,
   onNavigate,
+  alwaysShowInput = false,
 }: {
   locale: SupportedLocale;
   searchLabel: string;
   className?: string;
   onNavigate?: () => void;
+  /** When true, input is always visible (e.g. mobile sidebar). */
+  alwaysShowInput?: boolean;
 }) {
   const navigate = useNavigate();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(alwaysShowInput);
 
   const pages = useMemo(() => {
     const byHref = new Map<string, SearchablePageItem>();
@@ -280,26 +366,29 @@ function SiteNavSearch({
     onNavigate?.();
   };
 
+  const showInput = expanded || alwaysShowInput;
   return (
     <div ref={rootRef} className="relative flex h-9 items-center">
       <div
         className={`relative flex h-9 items-center overflow-hidden transition-[width] duration-200 ease-out ${
-          expanded ? className ?? "" : "w-9 shrink-0"
+          showInput ? className ?? "" : "w-9 shrink-0"
         }`}
       >
-        <button
-          type="button"
-          onClick={() => setExpanded(true)}
-          aria-label={searchLabel}
-          className={`absolute left-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground transition-opacity duration-200 hover:bg-sidebar-accent focus:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-sidebar-accent focus:ring-offset-0 ${
-            expanded ? "pointer-events-none opacity-0" : "opacity-100"
-          }`}
-        >
-          <Search className="h-4 w-4" aria-hidden />
-        </button>
+        {!alwaysShowInput && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            aria-label={searchLabel}
+            className={`absolute left-0 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-md text-sidebar-foreground transition-opacity duration-200 hover:bg-sidebar-accent focus:bg-sidebar-accent focus:outline-none focus:ring-2 focus:ring-sidebar-accent focus:ring-offset-0 ${
+              showInput ? "pointer-events-none opacity-0" : "opacity-100"
+            }`}
+          >
+            <Search className="h-4 w-4" aria-hidden />
+          </button>
+        )}
         <Search
           className={`pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-sidebar-foreground/60 transition-opacity duration-200 ${
-            expanded ? "opacity-100" : "opacity-0"
+            showInput ? "opacity-100" : "opacity-0"
           }`}
           aria-hidden
         />
@@ -322,14 +411,18 @@ function SiteNavSearch({
           placeholder={searchLabel}
           aria-label={searchLabel}
           className={`absolute top-1/2 h-8 -translate-y-1/2 border-sidebar-border bg-sidebar/70 pl-8 text-[13px] text-sidebar-foreground placeholder:text-sidebar-foreground/60 transition-[width,opacity] duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-accent focus-visible:ring-inset focus-visible:border-sidebar-border ${
-            expanded
+            showInput
               ? "left-0 w-full opacity-100"
               : "left-9 w-0 overflow-hidden opacity-0 pointer-events-none"
           }`}
         />
       </div>
       {open && (
-        <div className="absolute right-0 top-full z-[70] mt-1 max-h-[min(60vh,320px)] w-full min-w-[260px] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-md">
+        <div
+          className={`absolute right-0 z-[70] max-h-[min(60vh,320px)] w-full min-w-[260px] overflow-y-auto rounded-md border border-sidebar-border bg-sidebar shadow-md ${
+            alwaysShowInput ? "bottom-full mb-1" : "top-full mt-1"
+          }`}
+        >
           {isShowingTopPages && (
             <div className="px-3 pt-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/50">
               Top pages
@@ -441,6 +534,51 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         </span>
       </div>
 
+      {/* Mobile: Install + Architecture in header */}
+      <nav className="md:hidden flex items-center gap-1" aria-label="Install and Architecture">
+        {stripLocaleFromPath(pathname) === "/" ? (
+          <>
+            <a
+              href={localizeHashHref("#install", locale)}
+              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={(e) => {
+                if (isModifiedClick(e)) return;
+                e.preventDefault();
+                document.getElementById("install")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              {dict.install}
+            </a>
+            <a
+              href={localizeHashHref("#architecture", locale)}
+              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              onClick={(e) => {
+                if (isModifiedClick(e)) return;
+                e.preventDefault();
+                document.getElementById("architecture")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              {dict.architecture}
+            </a>
+          </>
+        ) : (
+          <>
+            <Link
+              to={localizePath("/install", locale)}
+              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              {dict.install}
+            </Link>
+            <Link
+              to={localizePath("/architecture", locale)}
+              className="rounded-md px-2 py-1.5 text-[13px] text-sidebar-foreground no-underline hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              {dict.architecture}
+            </Link>
+          </>
+        )}
+      </nav>
+
       <NavigationMenu className="hidden md:block">
         <NavigationMenuList>
           <NavigationMenuItem>
@@ -493,6 +631,14 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                       <ul className="list-none p-0">
                         {cat.items.map((item) => (
                           <li key={item.href}>
+                            {(() => {
+                              const isIntegrations = cat.title === "Integrations";
+                              const BrandIcon =
+                                isIntegrations && item.href.startsWith("/")
+                                  ? INTEGRATION_BRAND_ICONS[item.href]
+                                  : null;
+                              const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
+                              return (
                             <NavigationMenuLink asChild>
                               <Link
                                 to={
@@ -500,12 +646,19 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                                     ? localizePath(item.href, locale)
                                     : item.href
                                 }
-                                className="block select-none rounded-sm px-3 py-2 text-[14px] leading-none text-sidebar-foreground no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
+                                className="flex select-none items-center gap-2 rounded-sm px-3 py-2 text-[14px] leading-none text-sidebar-foreground no-underline outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:bg-sidebar-accent focus:text-sidebar-accent-foreground"
                                 onClick={() => sendDocsNavClick(item.href, "header_nav")}
                               >
-                                {item.label}
+                                {BrandIcon ? (
+                                  <BrandIcon className="h-4 w-4 shrink-0" aria-hidden />
+                                ) : Icon ? (
+                                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                                ) : null}
+                                <span>{item.label}</span>
                               </Link>
                             </NavigationMenuLink>
+                              );
+                            })()}
                           </li>
                         ))}
                       </ul>
@@ -596,12 +749,9 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               className="mt-auto border-t border-sidebar-border p-2 flex flex-col gap-1"
               style={{ paddingBottom: "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))" }}
             >
-              <SiteNavSearch
-                locale={locale}
-                searchLabel={dict.search}
-                className="w-full px-1 pb-1"
-                onNavigate={() => setMobileMenuOpen(false)}
-              />
+              <div className="border-b border-sidebar-border pb-2 flex flex-col gap-1">
+                <ThemeToggleNavButton mobile />
+              </div>
               <nav className="flex flex-col gap-1">
                 {stripLocaleFromPath(pathname) === "/" ? (
                   <>
@@ -687,7 +837,13 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
                 </a>
               </nav>
               <div className="border-t border-sidebar-border pt-2 flex flex-col gap-1">
-                <ThemeToggleNavButton mobile />
+                <SiteNavSearch
+                  locale={locale}
+                  searchLabel={dict.search}
+                  className="w-full px-1 pb-1"
+                  onNavigate={() => setMobileMenuOpen(false)}
+                  alwaysShowInput
+                />
               </div>
             </div>
           </div>

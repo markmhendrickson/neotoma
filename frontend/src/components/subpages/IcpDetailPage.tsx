@@ -13,7 +13,6 @@ import {
   FileStack,
   FileText,
   Fingerprint,
-  Flame,
   GitBranch,
   Hand,
   History,
@@ -145,13 +144,15 @@ function OutcomeFailIllustration({ human, fail }: { human: string; fail: string 
           <div />
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
-          <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
-              {human}
+          <div className="flex justify-end">
+            <div className="w-fit max-w-[90%]">
+              <div className="rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-left font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+                {human}
+              </div>
             </div>
           </div>
-          <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-rose-500/35 bg-rose-100 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 shadow-sm dark:border-rose-400/50 dark:bg-rose-500/10 dark:text-rose-100">
+          <div className="flex justify-start">
+            <div className="w-full border-l-2 border-rose-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 dark:border-rose-400/55 dark:text-rose-100">
               {fail}
             </div>
           </div>
@@ -183,13 +184,15 @@ function OutcomeSuccessIllustration({
           <div />
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
-          <div className="flex justify-start">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
-              {human}
+          <div className="flex justify-end">
+            <div className="w-fit max-w-[90%]">
+              <div className="rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-left font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+                {human}
+              </div>
             </div>
           </div>
-          <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-emerald-500/35 bg-emerald-100 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 shadow-sm dark:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-100">
+          <div className="flex justify-start">
+            <div className="w-full border-l-2 border-emerald-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100">
               {succeed}
             </div>
           </div>
@@ -374,7 +377,7 @@ export function IcpDetailPage({
           {outcomes && outcomes.length > 0 && (
             <section className="mb-12">
               <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-2 flex items-center gap-2">
-                <Flame className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
+                <Scale className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
                 Same question, different outcome
               </h2>
               <p className="text-[15px] leading-7 text-muted-foreground mb-6">

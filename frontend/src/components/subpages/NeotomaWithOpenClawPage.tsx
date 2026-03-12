@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
@@ -98,43 +100,108 @@ export function NeotomaWithOpenClawPage() {
         ))}
       </ul>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">How they connect</h2>
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Using them together
+      </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Neotoma runs as an MCP server. Point OpenClaw at Neotoma's stdio or HTTP endpoint via the{" "}
-        <a href="https://www.getopenclaw.ai/docs/configuration" target="_blank" rel="noopener noreferrer" className={extLink}>
-          configuration file
-        </a>
-        . The agent stores conversations and extracted entities automatically; retrieval happens
-        before every response.
+        OpenClaw is the execution layer &mdash; it gives the agent a machine and the ability to act.
+        Neotoma is the state layer &mdash; it holds the user&apos;s structured memory that any agent
+        can read and write. The two are complementary with no conflict.
       </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">
-        {`{
-  "mcpServers": {
-    "neotoma": {
-      "command": "neotoma",
-      "args": ["mcp", "stdio"]
-    }
-  }
-}`}
-      </pre>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        If MCP is not yet available in your OpenClaw environment, use the Neotoma CLI directly from
-        the same machine:
-      </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">
-        {`neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"}]'
-neotoma entities list --type task`}
-      </pre>
+      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
+            <th className="text-left py-2 pr-4 font-medium text-foreground">OpenClaw</th>
+            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Agent execution &amp; persistent machines</td>
+            <td className="py-2 pr-4">Agent-scoped machines</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Conversational memory &amp; reminders</td>
+            <td className="py-2 pr-4">Long-term memory</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Multi-channel gateway</td>
+            <td className="py-2 pr-4">WhatsApp, Telegram, etc.</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Structured entities across tools</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Cross-platform state</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Shared memory graph</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4">Versioned history &amp; audit trail</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Observation history</td>
+          </tr>
+        </tbody>
+      </table>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Execution layer vs. state layer
+        Getting started &mdash; local (stdio)
       </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-6">
-        OpenClaw is execution — it gives the agent a machine and the ability to act. Neotoma is the
-        state layer — it holds the user's structured memory that any agent can read and write. The
-        two are complementary: agents use OpenClaw for actions and Neotoma for durable,
-        cross-platform structured data.
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        Paste this prompt into an agent tool (e.g. Claude Code, Codex, or Cursor) to install Neotoma.
+        The agent handles npm install, initialization, and MCP configuration.
       </p>
+      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        After installation, add Neotoma to your OpenClaw{" "}
+        <a href="https://www.getopenclaw.ai/docs/configuration" target="_blank" rel="noopener noreferrer" className={extLink}>
+          configuration file
+        </a>{" "}
+        and restart OpenClaw to pick up the new MCP server.
+      </p>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started &mdash; remote (HTTP)
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        If OpenClaw runs on a different machine or in the cloud, start with the agentic install above
+        on your host machine, then configure remote access:
+      </p>
+      <ol className="list-decimal pl-5 space-y-4 mb-6">
+        <li className="text-[15px] leading-7">
+          <strong>Start the API server</strong>
+          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
+          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
+          The API runs on <code>http://localhost:3080</code> by default.
+        </li>
+        <li className="text-[15px] leading-7">
+          <strong>Point OpenClaw at the remote endpoint</strong> &mdash; use the Neotoma API&apos;s
+          OpenAPI spec URL (<code>https://your-neotoma-host.example.com/openapi.json</code>) or
+          the remote MCP endpoint. The Neotoma API supports the{" "}
+          <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
+            MCP OAuth authorization flow
+          </a>{" "}
+          for authenticated access.
+        </li>
+      </ol>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        If MCP is not yet available in your OpenClaw environment, use the Neotoma CLI directly from
+        the same machine as a fallback:
+      </p>
+      <CopyableCodeBlock
+        code={`neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"}]'
+neotoma entities list --type task`}
+        className="mb-6"
+      />
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
         OpenClaw documentation
@@ -172,14 +239,22 @@ neotoma entities list --type task`}
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference
         </Link>{" "}
-        for full setup and{" "}
+        for full setup,{" "}
         <Link to="/cli" className={extLink}>
           CLI reference
         </Link>{" "}
-        for terminal access.
+        for terminal usage, and{" "}
+        <Link to="/agent-instructions" className={extLink}>
+          agent instructions
+        </Link>{" "}
+        for behavioral details.
       </p>
     </DetailPage>
   );
