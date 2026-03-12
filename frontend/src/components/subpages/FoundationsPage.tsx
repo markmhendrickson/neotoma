@@ -1,10 +1,14 @@
 import { Link } from "react-router-dom";
 import { Fingerprint, Globe2, ShieldCheck } from "lucide-react";
 import { DetailPage } from "../DetailPage";
+import { useLocale } from "@/i18n/LocaleContext";
 
 export function FoundationsPage() {
+  const { pack } = useLocale();
+  const foundations = pack.foundations;
+
   return (
-    <DetailPage title="Foundations">
+    <DetailPage title={foundations.title}>
       <p className="text-[15px] leading-7 mb-4">
         Neotoma is built on three architectural commitments: your data stays on your machine, the
         same input always produces the same output, and your memory works across every AI tool you
@@ -12,21 +16,21 @@ export function FoundationsPage() {
       </p>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
-        <p className="text-[14px] font-medium mb-2">On this page</p>
+        <p className="text-[14px] font-medium mb-2">{foundations.onThisPage}</p>
         <ul className="list-none pl-0 space-y-1 text-[14px]">
           <li>
             <a href="#privacy-first" className="text-foreground underline hover:text-foreground">
-              Privacy-first
+              {foundations.privacyFirst}
             </a>
           </li>
           <li>
             <a href="#deterministic" className="text-foreground underline hover:text-foreground">
-              Deterministic
+              {foundations.deterministic}
             </a>
           </li>
           <li>
             <a href="#cross-platform" className="text-foreground underline hover:text-foreground">
-              Cross-platform
+              {foundations.crossPlatform}
             </a>
           </li>
         </ul>
@@ -36,7 +40,7 @@ export function FoundationsPage() {
       <section id="privacy-first" className="scroll-mt-20 mb-12">
         <h2 className="flex items-start gap-2 text-[22px] font-medium tracking-[-0.01em] mb-4">
           <ShieldCheck className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <span>Privacy-first</span>
+          <span>{foundations.privacyFirst}</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Your data stays on your machine. Neotoma runs locally — no cloud sync, no remote telemetry,
@@ -76,7 +80,7 @@ export function FoundationsPage() {
       <section id="deterministic" className="scroll-mt-20 mb-12">
         <h2 className="flex items-start gap-2 text-[22px] font-medium tracking-[-0.01em] mb-4">
           <Fingerprint className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <span>Deterministic</span>
+          <span>{foundations.deterministic}</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Same input always produces the same output. Entity IDs are hash-based, observations are
@@ -117,7 +121,7 @@ export function FoundationsPage() {
       <section id="cross-platform" className="scroll-mt-20 mb-12">
         <h2 className="flex items-start gap-2 text-[22px] font-medium tracking-[-0.01em] mb-4">
           <Globe2 className="mt-1 size-5 shrink-0 text-muted-foreground" aria-hidden />
-          <span>Cross-platform</span>
+          <span>{foundations.crossPlatform}</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
           Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex,

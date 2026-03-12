@@ -251,20 +251,13 @@ export function DocsIndexPage() {
         <p className="text-[15px] leading-7 text-muted-foreground mb-10">{dict.docsIntro}</p>
 
         {DOC_CATEGORIES.map((cat) => {
-          const lgGridColsClass =
-            cat.items.length >= 3
-              ? "lg:grid-cols-3"
-              : cat.items.length === 2
-                ? "lg:grid-cols-2"
-                : "lg:grid-cols-1";
-
           return (
             <section key={cat.title} className="mb-12">
               <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-4">
                 {translateCategoryTitle(cat.title)}
               </h2>
               <ul
-                className={`list-none pl-0 grid grid-cols-1 sm:grid-cols-2 ${lgGridColsClass} auto-rows-fr gap-3`}
+                className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 auto-rows-fr gap-3"
               >
                 {cat.items.map((item) => {
                   const isExternal = item.href.startsWith("http");

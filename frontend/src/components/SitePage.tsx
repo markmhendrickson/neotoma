@@ -63,6 +63,7 @@ import interfacesOptionBMcp from "@/assets/images/interfaces/interfaces-option-b
 import interfacesOptionBCli from "@/assets/images/interfaces/interfaces-option-b-cli.png";
 import learnMoreDocumentationImage from "@/assets/images/interfaces/learn_more_documentation.svg";
 import learnMoreDeepDiveImage from "@/assets/images/interfaces/learn_more_deep_dive.svg";
+import { useLocale } from "@/i18n/LocaleContext";
 import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
 interface SitePageProps {
   staticMode?: boolean;
@@ -129,6 +130,7 @@ function CodeBlock({
   staticMode?: boolean;
   previewLineCount?: number;
 }) {
+  const { dict } = useLocale();
   const [copied, markCopied] = useCopyFeedback(`site-page:${code}`, 0);
   const [showFullCode, setShowFullCode] = useState(false);
   const lines = code.split("\n");
@@ -157,7 +159,7 @@ function CodeBlock({
             variant="outline"
             size="sm"
             className="float-right relative z-10 ml-2 mb-2 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
-            aria-label={copied ? "Copied" : "Copy"}
+            aria-label={copied ? dict.copied : dict.copy}
             onClick={onCopy}
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -172,17 +174,17 @@ function CodeBlock({
           size="sm"
           className="mt-2 px-2 h-8 text-[12px] text-muted-foreground hover:text-foreground"
           onClick={() => setShowFullCode((prev) => !prev)}
-          aria-label={showFullCode ? "Show fewer lines" : "Show full instructions"}
+          aria-label={showFullCode ? dict.showLess : dict.showMore}
         >
           {showFullCode ? (
             <>
               <ChevronUp className="h-3.5 w-3.5 mr-1" />
-              Show fewer lines
+              {dict.showLess}
             </>
           ) : (
             <>
               <ChevronDown className="h-3.5 w-3.5 mr-1" />
-              View full instructions
+              {dict.showMore}
             </>
           )}
         </Button>

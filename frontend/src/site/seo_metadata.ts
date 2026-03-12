@@ -6,6 +6,7 @@ import {
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from "@/i18n/config";
+import { getStaticLocalePack } from "@/i18n/locales/static_packs";
 import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "@/i18n/routing";
 
 export interface SeoRouteMetadata {
@@ -610,22 +611,37 @@ function buildAlternates(pathname: string): { hrefLang: string; href: string }[]
 
 export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
   const locale = getLocaleFromPath(pathname) ?? DEFAULT_LOCALE;
+  const normalizedPath = normalizePath(stripLocaleFromPath(pathname));
   const routeMetadata = getSeoMetadataForPath(pathname);
+  const pack = getStaticLocalePack(locale);
+  const localizedOverride: Partial<SeoRouteMetadata> =
+    normalizedPath === "/"
+      ? pack.seo.home
+      : normalizedPath === "/docs"
+        ? pack.seo.docs
+        : normalizedPath === "/install"
+          ? pack.seo.install
+          : normalizedPath === "/foundations"
+            ? pack.seo.foundations
+            : normalizedPath === "/memory-guarantees"
+              ? pack.seo.memoryGuarantees
+              : {};
+  const resolvedRouteMetadata = { ...routeMetadata, ...localizedOverride };
   const robots =
     typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
       ? "noindex,follow"
-      : routeMetadata.robots;
+      : resolvedRouteMetadata.robots;
   return {
-    title: routeMetadata.title,
-    description: routeMetadata.description,
+    title: resolvedRouteMetadata.title,
+    description: resolvedRouteMetadata.description,
     robots,
     canonicalUrl: buildCanonicalUrl(pathname),
-    ogType: routeMetadata.ogType ?? "website",
+    ogType: resolvedRouteMetadata.ogType ?? "website",
     locale,
     ogLocale: LOCALE_TO_OG[locale],
     alternates: buildAlternates(pathname),
     ogImageUrl: SEO_DEFAULTS.ogImageUrl,
-    jsonLd: buildJsonLd(pathname, routeMetadata),
+    jsonLd: buildJsonLd(pathname, resolvedRouteMetadata),
   };
 }
 

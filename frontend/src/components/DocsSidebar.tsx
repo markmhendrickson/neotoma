@@ -12,11 +12,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { DOC_NAV_CATEGORIES } from "@/site/site_data";
 import { DOC_NAV_ICONS, INTEGRATION_BRAND_ICONS } from "@/site/doc_icons";
 import { cn } from "@/lib/utils";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
+import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
 
 const SECTION_PREVIEW_COUNT = 3;
 
@@ -39,9 +39,13 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
   const { isMobile, setOpenMobile, state: sidebarState } = useSidebar();
   const { locale, dict, direction } = useLocale();
   const orderedCategories = useMemo(() => {
-    const categories = [...DOC_NAV_CATEGORIES];
-    const referenceIndex = categories.findIndex((category) => category.title === "Reference");
-    const useCasesIndex = categories.findIndex((category) => category.title === "Use cases");
+    const categories = [...getLocalizedDocNavCategories(dict)];
+    const referenceIndex = categories.findIndex((category) =>
+      category.items.some((item) => item.href === "/api")
+    );
+    const useCasesIndex = categories.findIndex((category) =>
+      category.items.some((item) => item.href === "/ai-infrastructure-engineers")
+    );
     if (
       referenceIndex >= 0 &&
       useCasesIndex >= 0 &&
@@ -51,7 +55,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
       categories.splice(referenceIndex, 0, useCasesCategory);
     }
     return categories;
-  }, []);
+  }, [dict]);
   const isItemActive = (href: string) => {
     const localizedHref = href.startsWith("/") ? localizePath(href, locale) : href;
     const currentFullPath = `${pathname}${hash}`;
@@ -100,16 +104,6 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
     });
   }, [defaultExpandedCategoryItems]);
 
-  const translateCategoryTitle = (title: string) => {
-    if (title === "Getting started") return dict.categoryGettingStarted;
-    if (title === "Reference") return dict.categoryReference;
-    if (title === "Agent behavior") return dict.categoryAgentBehavior;
-    if (title === "Use cases") return dict.categoryUseCases;
-    if (title === "Integration guides" || title === "Integrations") return dict.categoryIntegrationGuides;
-    if (title === "External") return dict.categoryExternal;
-    return title;
-  };
-
   const closeMobileOnClick = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -137,7 +131,9 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
           {(() => {
             const isCategoryOpen = openCategories.has(cat.title);
             const isPreviewExpanded = expandedCategoryItems.has(cat.title);
-            const isIntegrationsCategory = cat.title === "Integrations";
+            const isIntegrationsCategory = cat.items.some((item) =>
+              item.href.startsWith("/neotoma-with-")
+            );
             const visibleItems =
               isIntegrationsCategory
                 ? cat.items
@@ -162,7 +158,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                 )}
                 aria-hidden
               />
-              {translateCategoryTitle(cat.title)}
+              {cat.title}
             </button>
           </SidebarGroupLabel>
           <SidebarGroupContent className={cn(!isCategoryOpen && "hidden")}>
@@ -172,7 +168,9 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                   ? localizePath(item.href, locale)
                   : item.href;
                 const isActive = isItemActive(item.href);
-                const isIntegrations = cat.title === "Integrations";
+                const isIntegrations = cat.items.some((candidate) =>
+                  candidate.href.startsWith("/neotoma-with-")
+                );
                 const BrandIcon =
                   isIntegrations && item.href.startsWith("/") ? INTEGRATION_BRAND_ICONS[item.href] : null;
                 const Icon = BrandIcon ?? DOC_NAV_ICONS[item.icon ?? "BookOpen"];
