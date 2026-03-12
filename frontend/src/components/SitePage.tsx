@@ -215,7 +215,6 @@ function CodeBlock({
 
   const onCopy = async () => {
     const normalizedCode = sanitizeCodeForCopy(code);
-    await navigator.clipboard.writeText(normalizedCode);
     setCopied(true);
     if (copyResetTimeoutRef.current !== null) {
       window.clearTimeout(copyResetTimeoutRef.current);
@@ -224,6 +223,7 @@ function CodeBlock({
       setCopied(false);
       copyResetTimeoutRef.current = null;
     }, 4000);
+    await navigator.clipboard.writeText(normalizedCode);
   };
 
   return (
@@ -233,7 +233,7 @@ function CodeBlock({
           type="button"
           variant="outline"
           size="sm"
-          className="absolute top-2 right-2 h-8 gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950"
+          className="absolute top-2 right-2 z-10 h-8 gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950"
           aria-label={copied ? "Copied" : "Copy code"}
           onClick={onCopy}
         >
@@ -1279,7 +1279,11 @@ function FadeSection({
     if (staticMode || typeof window === "undefined") return;
     const scrollEl = scrollContainerRef?.current;
     const wrapperEl = wrapperRef.current;
-    if (!scrollEl || !wrapperEl) return;
+    if (!scrollEl || !wrapperEl) {
+      // Never leave content permanently hidden if refs are not ready yet.
+      setInView(true);
+      return;
+    }
 
     const checkInView = (): boolean => {
       const rootRect = scrollEl.getBoundingClientRect();
@@ -1294,11 +1298,16 @@ function FadeSection({
       return visibleRatio > 0;
     };
 
-    setInView(checkInView());
+    const syncInView = () => {
+      setInView(checkInView());
+    };
+
+    syncInView();
 
     const raf = requestAnimationFrame(() => {
-      setInView(checkInView());
+      syncInView();
     });
+    const timeout = window.setTimeout(syncInView, 120);
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -1313,8 +1322,14 @@ function FadeSection({
       }
     );
     observer.observe(wrapperEl);
+    scrollEl.addEventListener("scroll", syncInView, { passive: true });
+    window.addEventListener("resize", syncInView);
+
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(timeout);
+      scrollEl.removeEventListener("scroll", syncInView);
+      window.removeEventListener("resize", syncInView);
       observer.disconnect();
     };
   }, [scrollContainerRef, staticMode]);
@@ -1391,25 +1406,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   const [showAllMobileGuarantees, setShowAllMobileGuarantees] = useState(false);
   const [showAllMobileOutcomes, setShowAllMobileOutcomes] = useState(false);
   const [showAllMobileLearnMore, setShowAllMobileLearnMore] = useState(false);
-  const mobileToggleCooldownRef = useRef(false);
-  const toggleMobileReveal = useCallback(
-    (setExpanded: (updater: (currentValue: boolean) => boolean) => void) => {
-      if (mobileToggleCooldownRef.current) return;
-      mobileToggleCooldownRef.current = true;
-      const scrollEl = scrollContainerRef.current;
-      if (scrollEl) scrollEl.style.scrollSnapType = "none";
-      setExpanded((v) => !v);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            if (scrollEl) scrollEl.style.scrollSnapType = "";
-            mobileToggleCooldownRef.current = false;
-          }, 400);
-        });
-      });
-    },
-    []
-  );
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
@@ -1761,7 +1757,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                   <button
                     type="button"
                     className="w-full lg:hidden rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                    onClick={() => toggleMobileReveal(setShowAllMobileOutcomes)}
+                    onClick={() =>
+                      setShowAllMobileOutcomes(!showAllMobileOutcomes)
+                    }
                   >
                     {showAllMobileOutcomes
                       ? "Show fewer"
@@ -1944,7 +1942,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       <button
                         type="button"
                         className="w-full rounded-lg border border-border bg-card px-3 py-2 text-[12px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                        onClick={() => toggleMobileReveal(setShowAllMobileGuarantees)}
+                        onClick={() =>
+                          setShowAllMobileGuarantees(!showAllMobileGuarantees)
+                        }
                       >
                         {showAllMobileGuarantees
                           ? "Show fewer"
@@ -2746,7 +2746,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         <button
                           type="button"
                           className="w-full sm:hidden rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-                          onClick={() => toggleMobileReveal(setShowAllMobileLearnMore)}
+                          onClick={() =>
+                            setShowAllMobileLearnMore(!showAllMobileLearnMore)
+                          }
                         >
                           {showAllMobileLearnMore
                             ? "Show fewer"
