@@ -175,18 +175,20 @@ export function NeotomaWithOpenClawPage() {
       </p>
       <ol className="list-decimal pl-5 space-y-4 mb-6">
         <li className="text-[15px] leading-7">
-          <strong>Start the API server</strong>
-          <CopyableCodeBlock code={`neotoma api start --env prod`} className="mt-2 mb-1" />
+          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
+          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
+          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
+          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
+            The tunnel URL is printed to the console and written to{" "}
+            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
+            instead of <code>--tunnel</code>.
+          </p>
         </li>
         <li className="text-[15px] leading-7">
-          <strong>Expose the API externally</strong> &mdash; use a reverse proxy (nginx, Caddy) or
-          tunnel (ngrok, Cloudflare Tunnel) to make your Neotoma API reachable at a public HTTPS URL.
-          The API runs on <code>http://localhost:3080</code> by default.
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Point OpenClaw at the remote endpoint</strong> &mdash; use the Neotoma API&apos;s
-          OpenAPI spec URL (<code>https://your-neotoma-host.example.com/openapi.json</code>) or
-          the remote MCP endpoint. The Neotoma API supports the{" "}
+          <strong>Point OpenClaw at the remote endpoint</strong> &mdash; use the tunnel URL for the
+          Neotoma API&apos;s OpenAPI spec (<code>https://&lt;tunnel-host&gt;/openapi.json</code>) or
+          the remote MCP endpoint (<code>https://&lt;tunnel-host&gt;/mcp</code>). The Neotoma API
+          supports the{" "}
           <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
             MCP OAuth authorization flow
           </a>{" "}

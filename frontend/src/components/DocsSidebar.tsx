@@ -8,6 +8,7 @@ import {
   Briefcase,
   Building2,
   Bug,
+  ChevronRight,
   Code,
   Container,
   Cpu,
@@ -22,6 +23,7 @@ import {
   Monitor,
   Package,
   PanelRight,
+  Play,
   Rocket,
   SatelliteDish,
   Server,
@@ -30,7 +32,6 @@ import {
   Terminal,
   Users,
   Zap,
-  ChevronRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
@@ -84,6 +85,7 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Monitor,
   Package,
   PanelRight,
+  Play,
   Rocket,
   SatelliteDish,
   Server,
@@ -95,11 +97,6 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
 };
 
 const SECTION_PREVIEW_COUNT = 3;
-const INTEGRATIONS_COLLAPSED_HREFS = new Set([
-  "/neotoma-with-claude-code",
-  "/neotoma-with-codex",
-  "/neotoma-with-cursor",
-]);
 
 const linkClass = (active: boolean) =>
   cn(
@@ -204,12 +201,15 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
           {(() => {
             const isCategoryOpen = openCategories.has(cat.title);
             const isPreviewExpanded = expandedCategoryItems.has(cat.title);
-            const visibleItems = isPreviewExpanded
-              ? cat.items
-              : cat.title === "Integrations"
-                ? cat.items.filter((item) => INTEGRATIONS_COLLAPSED_HREFS.has(item.href))
-                : cat.items.slice(0, SECTION_PREVIEW_COUNT);
+            const isIntegrationsCategory = cat.title === "Integrations";
+            const visibleItems =
+              isIntegrationsCategory
+                ? cat.items
+                : isPreviewExpanded
+                  ? cat.items
+                  : cat.items.slice(0, SECTION_PREVIEW_COUNT);
             const isShowingAllItems = visibleItems.length >= cat.items.length;
+            const showExpandCollapse = !isIntegrationsCategory && cat.items.length > SECTION_PREVIEW_COUNT && sidebarState === "expanded";
             return (
               <>
           <SidebarGroupLabel className="px-0">
@@ -260,7 +260,7 @@ export function DocsSidebar({ siteName: _siteName, belowHeader }: DocsSidebarPro
                   </SidebarMenuItem>
                 );
               })}
-              {cat.items.length > SECTION_PREVIEW_COUNT && sidebarState === "expanded" && (
+              {showExpandCollapse && (
                 <SidebarMenuItem>
                   <button
                     type="button"
