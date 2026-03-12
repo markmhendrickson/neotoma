@@ -14,10 +14,11 @@ describe("site_data", () => {
   it("defines sidebar sections in expected order", () => {
     expect(SITE_SECTIONS.map((section) => section.id)).toEqual([
       "intro",
-      "failure-scenarios",
+      "outcomes",
       "memory-guarantees",
+      "install",
+      "inspect",
       "architecture",
-      "quick-start",
       "who-is-it-for",
       "interfaces",
       "learn-more",

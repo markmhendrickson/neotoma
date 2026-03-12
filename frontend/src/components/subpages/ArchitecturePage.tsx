@@ -3,6 +3,7 @@ import { Check } from "lucide-react";
 import { GLOSSARY_ROWS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
 import { StateFlowDiagram } from "../illustrations/StateFlowDiagram";
+import { SectionDivider } from "../ui/section_divider";
 
 const FOUNDATIONS = [
   {
@@ -25,7 +26,8 @@ const FOUNDATIONS = [
 const PROBLEMS_SOLVED = [
   {
     problem: "Personal data is fragmented",
-    solution: "Dual-path storing from file uploads and agent interactions into one source of truth.",
+    solution:
+      "Dual-path storing from file uploads and agent interactions into one source of truth.",
   },
   {
     problem: "Provider memory is conversation-only",
@@ -98,34 +100,43 @@ const PREVIEW_NOT_GUARANTEED = [
 ];
 
 const CORE_PRINCIPLES = [
-  { name: "Deterministic", detail: "Same input, same output. No probabilistic behavior at the data layer." },
-  { name: "Schema-first", detail: "Entity types have schemas; extraction is structured, not freeform." },
-  { name: "Explainable", detail: "Every value traces to a source and operation. No opaque transformations." },
-  { name: "Entity-unified", detail: "Hash-based canonical IDs resolve duplicates across all data." },
+  {
+    name: "Deterministic",
+    detail: "Same input, same output. No probabilistic behavior at the data layer.",
+  },
+  {
+    name: "Schema-first",
+    detail: "Entity types have schemas; extraction is structured, not freeform.",
+  },
+  {
+    name: "Explainable",
+    detail: "Every value traces to a source and operation. No opaque transformations.",
+  },
+  {
+    name: "Entity-unified",
+    detail: "Hash-based canonical IDs resolve duplicates across all data.",
+  },
   { name: "Timeline-aware", detail: "Date fields generate timeline events automatically." },
   { name: "Cross-platform", detail: "MCP, CLI, and REST API expose the same contract." },
-  { name: "Privacy-first", detail: "User-controlled. Never used for training. Encryption at rest." },
+  {
+    name: "Privacy-first",
+    detail: "User-controlled. Never used for training. Encryption at rest.",
+  },
   { name: "Immutable", detail: "Observations are append-only. History is never rewritten." },
   { name: "Provenance", detail: "Every fact links to its source, timestamp, and interpretation." },
-  { name: "Explicit control", detail: "Nothing updates memory implicitly. The user decides what goes in." },
+  {
+    name: "Explicit control",
+    detail: "Nothing updates memory implicitly. The user decides what goes in.",
+  },
   { name: "Four-layer model", detail: "Source → Interpretation → Observation → Entity Snapshot." },
 ];
 
 const RESPONSIVE_TABLE_CLASS =
   "w-full caption-bottom border-0 text-[15px] leading-7 [&_th]:max-w-[50ch] [&_td]:max-w-[50ch] [&_th]:break-words [&_td]:break-words [&_th]:align-top [&_td]:align-top [&_thead]:sr-only [&_thead]:absolute [&_thead]:w-px [&_thead]:h-px [&_thead]:overflow-hidden [&_thead]:whitespace-nowrap [&_tbody]:block [&_tr]:block [&_tr]:mb-0 [&_tr]:rounded-none [&_tr]:border-b [&_tr]:border-border [&_tbody_tr:first-child]:border-t [&_tbody_tr:first-child]:border-border md:[&_tbody_tr:first-child]:border-t-0 [&_tr]:bg-transparent [&_tr]:py-4 [&_td]:grid [&_td]:grid-cols-[8rem_minmax(0,1fr)] [&_td]:gap-3 [&_td]:items-start [&_td]:p-0 [&_td]:border-0 [&_td]:text-[14px] [&_td]:leading-5 [&_td]:py-4 [&_td.align-top]:py-2 [&_td::before]:content-[attr(data-label)] [&_td::before]:font-semibold [&_td::before]:text-foreground md:w-full md:border md:border-border md:border-collapse md:rounded-lg md:overflow-hidden md:[&_thead]:not-sr-only md:[&_thead]:static md:[&_thead]:w-auto md:[&_thead]:h-auto md:[&_thead]:overflow-visible md:[&_thead]:whitespace-normal md:[&_thead_th]:bg-muted md:[&_thead_th:first-child]:rounded-tl-lg md:[&_thead_th:last-child]:rounded-tr-lg md:[&_tbody_tr:last-child_td:first-child]:rounded-bl-lg md:[&_tbody_tr:last-child_td:last-child]:rounded-br-lg md:[&_thead_tr]:border-b md:[&_thead_tr]:border-border md:[&_tbody]:table-row-group md:[&_tbody_tr]:border-b md:[&_tbody_tr]:border-border md:[&_tbody_tr:last-child]:border-b-0 md:[&_tr]:table-row md:[&_tr]:h-10 md:[&_tr]:mb-0 md:[&_tr]:rounded-none md:[&_tr]:border-0 md:[&_tr]:bg-transparent md:[&_tr]:py-4 md:[&_tr]:transition-colors md:[&_tbody_tr:hover]:bg-muted/50 md:[&_td]:table-cell md:[&_td]:px-4 md:[&_td]:py-3 md:[&_td]:align-middle md:[&_td]:text-body md:[&_td:has([role=checkbox])]:pr-0 md:[&_td::before]:hidden md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:text-left md:[&_th]:align-middle md:[&_th]:font-semibold md:[&_th]:text-foreground md:[&_th:has([role=checkbox])]:pr-0";
 
-function SectionHeading({
-  id,
-  children,
-}: {
-  id: string;
-  children: string;
-}) {
+function SectionHeading({ id, children }: { id: string; children: string }) {
   return (
-    <h2
-      id={id}
-      className="group scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3"
-    >
+    <h2 id={id} className="group scroll-mt-6 text-[20px] font-medium tracking-[-0.02em] mt-14 mb-3">
       {children}
       <a
         href={`#${id}`}
@@ -135,16 +146,6 @@ function SectionHeading({
         #
       </a>
     </h2>
-  );
-}
-
-function SectionDivider() {
-  return (
-    <div className="flex items-center gap-3 my-12" aria-hidden="true">
-      <span className="h-px flex-1 bg-border" />
-      <span className="text-[8px] text-muted-foreground leading-none">&#9670;</span>
-      <span className="h-px flex-1 bg-border" />
-    </div>
   );
 }
 
@@ -183,15 +184,63 @@ export function ArchitecturePage() {
 
       <SectionDivider />
 
+      {/* How data enters */}
+      <SectionHeading id="how-data-enters">How data enters Neotoma</SectionHeading>
+      <p className="text-[15px] leading-7 mb-4">
+        Data enters through two paths. Which path runs depends on what the caller sends.
+      </p>
+
+      <div className="grid gap-4 md:grid-cols-2 mb-6">
+        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
+          <p className="text-[14px] font-medium text-foreground">Structured path</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            Agent calls <code className="bg-muted px-1 py-0.5 rounded text-[12px]">store</code> with
+            an <code className="bg-muted px-1 py-0.5 rounded text-[12px]">entities</code> array
+            (typed JSON). Observations are created directly. No LLM calls. No interpretation pipeline.
+          </p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            The agent&apos;s own reasoning produces the structured data. Neotoma validates against schema,
+            deduplicates, and records with full provenance.
+          </p>
+          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
+            Chat, tool output, agent-extracted facts &rarr; this path.
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 md:p-5 space-y-3">
+          <p className="text-[14px] font-medium text-foreground">Unstructured path</p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            Caller sends a file (PDF, image, CSV, text). Neotoma stores the raw content
+            (content-addressed, immutable), then runs interpretation: text extraction followed by
+            schema-first entity extraction.
+          </p>
+          <p className="text-[13px] leading-5 text-muted-foreground">
+            CSV files use deterministic row mapping (no LLM). Other files use LLM extraction
+            with <code className="bg-muted px-1 py-0.5 rounded text-[12px]">temperature:&nbsp;0</code> and
+            a fixed seed for reproducibility. Interpretation creates new observations without modifying the source.
+          </p>
+          <p className="text-[12px] font-mono text-emerald-600 dark:text-emerald-400">
+            File uploads, document ingestion &rarr; this path.
+          </p>
+        </div>
+      </div>
+
+      <p className="text-[15px] leading-7 font-medium text-foreground mb-2">
+        The agent is the author; Neotoma is the ledger.
+      </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        Most agent interactions use the structured path. The agent decides what to store; Neotoma
+        ensures it is schema-valid, deduplicated, and provenance-tracked. There is no hidden LLM
+        between the agent and the data layer.
+      </p>
+
+      <SectionDivider />
+
       {/* Guarantees */}
       <SectionHeading id="guarantees">Guarantees</SectionHeading>
       <ul className="list-none pl-0 space-y-3 mb-6">
         {GUARANTEES.map((g) => (
           <li key={g.name} className="text-[15px] leading-7 flex items-start gap-2">
-            <span
-              className="text-emerald-500 mt-0.5 shrink-0 font-medium"
-              aria-hidden="true"
-            >
+            <span className="text-emerald-500 mt-0.5 shrink-0 font-medium" aria-hidden="true">
               &rarr;
             </span>
             <span>
@@ -237,8 +286,8 @@ export function ArchitecturePage() {
       {/* How agents remember */}
       <SectionHeading id="agent-loop">How agents remember</SectionHeading>
       <p className="text-[15px] leading-7 mb-3">
-        Every agent follows a mandatory loop: retrieve context, store the conversation and
-        entities, extract structured facts, then respond. Storage completes before any reply.
+        Every agent follows a mandatory loop: retrieve context, store the conversation and entities,
+        extract structured facts, then respond. Storage completes before any reply.
       </p>
       <div className="space-y-2 mb-4">
         {[
@@ -248,10 +297,11 @@ export function ArchitecturePage() {
           { step: "Respond", desc: "Reply only after storage completes." },
         ].map((s) => (
           <div key={s.step} className="flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5 shrink-0 font-medium font-mono text-[13px]">&rarr;</span>
+            <span className="text-emerald-500 mt-0.5 shrink-0 font-medium font-mono text-[13px]">
+              &rarr;
+            </span>
             <span className="text-[15px] leading-7">
-              <strong>{s.step}.</strong>{" "}
-              <span className="text-muted-foreground">{s.desc}</span>
+              <strong>{s.step}.</strong> <span className="text-muted-foreground">{s.desc}</span>
             </span>
           </div>
         ))}
@@ -261,10 +311,13 @@ export function ArchitecturePage() {
       </p>
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
-        <Link to="/agent-instructions" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <Link
+          to="/agent-instructions"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           agent instructions
-        </Link>
-        {" "}for full behavioral requirements.
+        </Link>{" "}
+        for full behavioral requirements.
       </p>
 
       <SectionDivider />
@@ -274,13 +327,14 @@ export function ArchitecturePage() {
       <p className="text-[15px] leading-7 mb-3">
         Neotoma is not a RAG pipeline or embedding-first retrieval layer. Its core is structured,
         schema-based, and deterministic. Optional similarity search is available when an embedding
-        provider is configured (via <code className="bg-muted px-1 py-0.5 rounded text-[13px]">OPENAI_API_KEY</code>),
-        but retrieval falls back to keyword matching without it.
+        provider is configured (via{" "}
+        <code className="bg-muted px-1 py-0.5 rounded text-[13px]">OPENAI_API_KEY</code>), but
+        retrieval falls back to keyword matching without it.
       </p>
       <p className="text-[15px] leading-7 mb-3">
         It is not an app, agent, or workflow engine. It is the lowest-level canonical source of
-        truth for structured data (documents and agent-created data), exposed to AI tools via
-        Model Context Protocol (MCP).
+        truth for structured data (documents and agent-created data), exposed to AI tools via Model
+        Context Protocol (MCP).
       </p>
       <p className="text-[15px] leading-7">
         Retrieval layers can read from Neotoma. Neotoma governs what they read.
@@ -348,7 +402,8 @@ export function ArchitecturePage() {
         {[
           {
             label: "MCP Server",
-            detail: "For AI agents (Claude, Cursor, Codex). Agents store and retrieve via tool calls.",
+            detail:
+              "For AI agents (Claude, Cursor, Codex). Agents store and retrieve via tool calls.",
             link: "/mcp",
             linkLabel: "MCP reference",
           },
@@ -360,7 +415,8 @@ export function ArchitecturePage() {
           },
           {
             label: "REST API",
-            detail: "For apps and integrations. OpenAPI-first; every operation is an HTTP endpoint.",
+            detail:
+              "For apps and integrations. OpenAPI-first; every operation is an HTTP endpoint.",
             link: "/api",
             linkLabel: "API reference",
           },
@@ -385,10 +441,7 @@ export function ArchitecturePage() {
       <ul className="list-none pl-0 space-y-2 mb-6">
         {CORE_PRINCIPLES.map((p) => (
           <li key={p.name} className="text-[15px] leading-7 flex items-start gap-2">
-            <Check
-              className="h-4 w-4 shrink-0 mt-1 text-emerald-500 stroke-[2.5]"
-              aria-hidden
-            />
+            <Check className="h-4 w-4 shrink-0 mt-1 text-emerald-500 stroke-[2.5]" aria-hidden />
             <span>
               <strong>{p.name}.</strong> {p.detail}
             </span>
@@ -411,7 +464,9 @@ export function ArchitecturePage() {
       <ul className="list-none pl-0 space-y-1.5 mb-6">
         {PREVIEW_GUARANTEED.map((item) => (
           <li key={item} className="text-[14px] leading-6 text-foreground flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+              &rarr;
+            </span>
             {item}
           </li>
         ))}
@@ -422,8 +477,13 @@ export function ArchitecturePage() {
       </h3>
       <ul className="list-none pl-0 space-y-1.5 mb-4">
         {PREVIEW_NOT_GUARANTEED.map((item) => (
-          <li key={item} className="text-[14px] leading-6 text-muted-foreground flex items-start gap-2">
-            <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
+          <li
+            key={item}
+            className="text-[14px] leading-6 text-muted-foreground flex items-start gap-2"
+          >
+            <span className="text-rose-400 shrink-0" aria-hidden>
+              &times;
+            </span>
             {item}
           </li>
         ))}
@@ -438,10 +498,7 @@ export function ArchitecturePage() {
       <SectionHeading id="go-deeper">Go deeper</SectionHeading>
       <ul className="list-none pl-0 space-y-2 text-[15px] leading-7">
         <li>
-          <Link
-            to="/"
-            className="text-foreground underline underline-offset-2 hover:no-underline"
-          >
+          <Link to="/" className="text-foreground underline underline-offset-2 hover:no-underline">
             Home
           </Link>
           {" \u2014 hero, install, use cases, and how agents remember"}
@@ -457,7 +514,7 @@ export function ArchitecturePage() {
         </li>
         <li>
           <Link
-            to="/docker"
+            to="/install#docker"
             className="text-foreground underline underline-offset-2 hover:no-underline"
           >
             Docker

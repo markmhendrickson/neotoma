@@ -1,20 +1,25 @@
 import { Link } from "react-router-dom";
+import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+
+const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
 export function NeotomaWithClaudeCodePage() {
   return (
     <DetailPage title="Neotoma with Claude Code">
       <section className="mb-8">
         <p className="text-[15px] leading-7 text-foreground mb-4">
-          Claude Code is Anthropic's local CLI agent for development tasks. It runs in your
-          terminal with direct filesystem access. Neotoma adds persistent structured memory
-          that survives across sessions and tools via MCP or CLI fallback.
+          Claude Code is Anthropic's local CLI agent for development tasks. It runs in your terminal
+          with direct filesystem access. Neotoma adds persistent structured memory that survives
+          across sessions and tools via MCP or CLI fallback.
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground">
           Looking for Claude's web, mobile, or desktop apps? See{" "}
-          <Link to="/neotoma-with-claude" className="text-foreground underline underline-offset-2 hover:no-underline">
+          <Link to="/neotoma-with-claude" className={extLink}>
             Neotoma with Claude
-          </Link>.
+          </Link>
+          .
         </p>
       </section>
 
@@ -22,33 +27,63 @@ export function NeotomaWithClaudeCodePage() {
         What Claude Code provides
       </h2>
       <ul className="list-none pl-0 space-y-1.5 mb-6">
-        {[
-          "Local terminal agent with direct filesystem and shell access",
-          "Session memory within the current Claude Code session",
-          "MCP server support via .mcp.json at your project root",
-          "CLAUDE.md project context files for persistent instructions",
-        ].map((item) => (
-          <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
-            {item}
-          </li>
-        ))}
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          Local terminal agent with direct filesystem and shell access
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <span>
+            Session memory plus{" "}
+            <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+              auto memory
+            </a>{" "}
+            that records corrections and preferences across sessions
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <span>
+            <a href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
+              MCP server support
+            </a>{" "}
+            via <code>.mcp.json</code> at your project root — stdio, SSE, and HTTP transports
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <span>
+            <a href="https://code.claude.com/docs/en/memory#claudemd-files" target="_blank" rel="noopener noreferrer" className={extLink}>
+              CLAUDE.md
+            </a>{" "}
+            project context files for persistent instructions at project, user, or org scope
+          </span>
+        </li>
       </ul>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
         What Claude Code doesn't handle
       </h2>
       <ul className="list-none pl-0 space-y-1.5 mb-6">
-        {[
-          "Memory that persists across sessions after terminal closes",
-          "Structured entity resolution or typed data storage",
-          "Cross-tool access — session context is local to Claude Code",
-        ].map((item) => (
-          <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
-            <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
-            <span className="text-muted-foreground">{item}</span>
-          </li>
-        ))}
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
+          <span className="text-muted-foreground">
+            Memory that persists across sessions after terminal closes — auto memory stores
+            preferences but not structured entity data
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
+          <span className="text-muted-foreground">
+            Structured entity resolution or typed data storage
+          </span>
+        </li>
+        <li className="text-[15px] leading-7 flex items-start gap-2">
+          <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
+          <span className="text-muted-foreground">
+            Cross-tool access — session context is local to Claude Code
+          </span>
+        </li>
       </ul>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
@@ -63,49 +98,139 @@ export function NeotomaWithClaudeCodePage() {
           "Cross-tool continuity — memory shared with Claude, Cursor, Codex, and ChatGPT",
         ].map((item) => (
           <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
-            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+            <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
+              &rarr;
+            </span>
             {item}
           </li>
         ))}
       </ul>
 
       <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        How they connect
+        Using them together
       </h2>
       <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Add Neotoma as an MCP server in <code>.mcp.json</code> at your project root. Claude
-        Code picks it up automatically. The same install and server block work for{" "}
-        <Link to="/neotoma-with-claude" className="text-foreground underline underline-offset-2 hover:no-underline">Claude Desktop</Link>;
-        only the config file location differs (Desktop uses a user-level config file). When
-        MCP is not available, agents can use the <code>neotoma</code> CLI directly from the
-        terminal.
+        Keep{" "}
+        <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+          auto memory
+        </a>{" "}
+        and CLAUDE.md on. Auto memory saves build commands, debugging insights, and code style
+        preferences to <code>~/.claude/projects/&lt;project&gt;/memory/</code> &mdash; the first 200
+        lines of <code>MEMORY.md</code> load into every session. It&apos;s machine-local and
+        per-project, so it handles what it&apos;s good at; Neotoma handles what it cannot. Both are
+        active simultaneously with no conflict.
       </p>
-      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">
-{`// .mcp.json (project root)
-{
-  "mcpServers": {
-    "neotoma": {
-      "command": "neotoma",
-      "args": ["mcp", "stdio"]
-    }
-  }
-}`}
-      </pre>
+      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        <thead>
+          <tr className="border-b border-border">
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
+            <th className="text-left py-2 pr-4 font-medium text-foreground">Claude Code</th>
+            <th className="text-left py-2 font-medium text-foreground">Neotoma</th>
+          </tr>
+        </thead>
+        <tbody className="text-muted-foreground">
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Coding preferences &amp; corrections</td>
+            <td className="py-2 pr-4">Auto memory</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Project instructions</td>
+            <td className="py-2 pr-4">CLAUDE.md</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Build commands &amp; debugging notes</td>
+            <td className="py-2 pr-4">Auto memory (MEMORY.md)</td>
+            <td className="py-2">&mdash;</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Structured entities (people, tasks, decisions)</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Store via MCP</td>
+          </tr>
+          <tr className="border-b border-border">
+            <td className="py-2 pr-4">Cross-tool state</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Shared memory graph</td>
+          </tr>
+          <tr>
+            <td className="py-2 pr-4">Audit trail &amp; provenance</td>
+            <td className="py-2 pr-4">&mdash;</td>
+            <td className="py-2">Observation history</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Getting started
+      </h2>
+      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+        Paste this prompt into Claude Code. The agent handles npm install, initialization, and MCP
+        configuration.
+      </p>
+      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+      <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        This is a local integration &mdash; Neotoma runs on the same machine via stdio. No API server
+        or remote access is required. The agent writes to <code>.mcp.json</code> at your project root.
+      </p>
+      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        When MCP is not available, agents can use the <code>neotoma</code> CLI directly from the
+        terminal as a fallback.
+      </p>
+
+      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
+        Claude Code documentation
+      </h2>
+      <ul className="list-none pl-0 space-y-1.5 mb-6">
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
+            MCP in Claude Code
+          </a>
+          <span className="text-muted-foreground">— connecting external tools via .mcp.json</span>
+        </li>
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://code.claude.com/docs/en/memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Memory in Claude Code
+          </a>
+          <span className="text-muted-foreground">— CLAUDE.md files and auto memory</span>
+        </li>
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Auto memory
+          </a>
+          <span className="text-muted-foreground">— how Claude learns preferences and patterns across sessions</span>
+        </li>
+        <li className="text-[14px] leading-6 flex items-start gap-2">
+          <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
+          <a href="https://code.claude.com/docs/en/settings" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Settings
+          </a>
+          <span className="text-muted-foreground">— project and user-level configuration</span>
+        </li>
+      </ul>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}
-        <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <Link to="/install" className={extLink}>
+          install guide
+        </Link>{" "}
+        for more options,{" "}
+        <Link to="/mcp" className={extLink}>
           MCP reference
-        </Link>
-        {" "}for MCP setup,{" "}
-        <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
+        </Link>{" "}
+        for MCP setup,{" "}
+        <Link to="/cli" className={extLink}>
           CLI reference
-        </Link>
-        {" "}for terminal usage, and{" "}
-        <Link to="/agent-instructions" className="text-foreground underline underline-offset-2 hover:no-underline">
+        </Link>{" "}
+        for terminal usage, and{" "}
+        <Link to="/agent-instructions" className={extLink}>
           agent instructions
-        </Link>
-        {" "}for behavioral details.
+        </Link>{" "}
+        for behavioral details.
       </p>
     </DetailPage>
   );

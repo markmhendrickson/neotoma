@@ -60,13 +60,13 @@ export function TerminalInstallIllustration({ className }: TerminalInstallIllust
           {STEPS.map((step, index) => (
             <div
               key={index}
-              className={`flex ${step.role === "system" ? "justify-start" : "justify-end"}`}
+              className={`flex ${step.role === "system" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[90%] rounded-md border px-2.5 py-1.5 font-mono text-[11px] leading-4 shadow-sm ${
-                  step.role === "agent"
-                    ? "border-emerald-500/35 bg-emerald-100 text-emerald-900 dark:border-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-100"
-                    : "border-slate-300 bg-slate-200 text-slate-800 dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
+                className={`font-mono text-[11px] leading-4 ${
+                  step.role === "system"
+                    ? "max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2.5 py-1.5 text-right text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200"
+                    : "w-full border-l-2 border-emerald-500/45 px-2 py-1 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100"
                 }`}
               >
                 <p>{step.text}</p>

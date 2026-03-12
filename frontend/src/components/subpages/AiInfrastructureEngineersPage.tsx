@@ -1,21 +1,76 @@
+import { GitBranch, Eye, ShieldCheck, RotateCcw } from "lucide-react";
 import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
+import type { IcpOutcomeCard } from "./IcpDetailPage";
 
 const profile = ICP_PROFILES.find((p) => p.slug === "ai-infrastructure-engineers")!;
+
+const outcomes: IcpOutcomeCard[] = [
+  {
+    category: "Pipeline reproducibility",
+    Icon: GitBranch,
+    title: "Same pipeline, different results",
+    description:
+      "Two runs of the same pipeline with identical inputs returned different entity states. Without content-addressed versioning, there was no way to detect — or prevent — the drift.",
+    scenario: {
+      left: "Replay yesterday's ingestion pipeline.",
+      fail: "Pipeline completed. 3 entity conflicts unresolved.",
+      succeed: "Pipeline replayed deterministically. State matches v47.",
+    },
+  },
+  {
+    category: "State mutation visibility",
+    Icon: Eye,
+    title: "Invisible overwrite, broken downstream",
+    description:
+      "An upstream agent silently overwrote a shared entity. Downstream consumers read stale state and produced incorrect outputs. The mutation was invisible to observability tooling.",
+    scenario: {
+      left: "What changed on entity acme-config since deploy?",
+      fail: "No changes detected.",
+      succeed: "2 mutations: field 'rate_limit' updated at 14:32, 'region' at 14:38.",
+    },
+  },
+  {
+    category: "Compliance & audit",
+    Icon: ShieldCheck,
+    title: "Missing provenance, failed audit",
+    description:
+      "An evaluation harness needed to trace an agent's output to its source data. Without an immutable observation log, the audit trail had to be reconstructed manually from logs.",
+    scenario: {
+      left: "Trace output of eval run 2841 to source.",
+      fail: "Source data unavailable. Log retention expired.",
+      succeed: "Output traces to observations #4091, #4092. Full chain available.",
+    },
+  },
+  {
+    category: "State reconstruction",
+    Icon: RotateCcw,
+    title: "Can't reconstruct state after failure",
+    description:
+      "A production agent crashed mid-run. The in-memory state was lost. Without an append-only observation log, the team had no way to reconstruct what the agent knew at the time of failure.",
+    scenario: {
+      left: "Reconstruct agent state at 03:12 UTC crash.",
+      fail: "State unavailable. Last checkpoint: 22:00 UTC.",
+      succeed: "State reconstructed from 847 observations. Timeline to 03:12 ready.",
+    },
+  },
+];
 
 export function AiInfrastructureEngineersPage() {
   return (
     <IcpDetailPage
       profile={profile}
+      outcomes={outcomes}
       aiNeeds={[
-        "Deterministic state evolution: same observations always produce the same entity state",
-        "Full provenance chain from agent outputs back to source data",
-        "Replayable timelines for debugging production agent failures",
-        "Schema constraints that reject malformed data at write time, not after the fact",
-        "Append-only observation log for complete state reconstruction after failure",
+        { label: "Deterministic state evolution: same observations always produce the same entity state", href: "/deterministic-state-evolution", linkTerm: "Deterministic state evolution" },
+        { label: "Full provenance chain from agent outputs back to source data", href: "/auditable-change-log", linkTerm: "Full provenance chain" },
+        { label: "Replayable timelines for debugging production agent failures", href: "/replayable-timeline", linkTerm: "Replayable timelines" },
+        { label: "Schema constraints that reject malformed data at write time, not after the fact", href: "/schema-constraints", linkTerm: "Schema constraints" },
+        { label: "Append-only observation log for complete state reconstruction after failure", href: "/reproducible-state-reconstruction", linkTerm: "Append-only observation log" },
       ]}
       keyDifferences={{
         comparedTo: "Agent system builders",
+        comparedToHref: "/agentic-systems-builders",
         points: [
           "Primary layer: infrastructure/platform (runtimes, orchestration, observability), not application workflows",
           "Adoption motion: evaluate guarantees first, then standardize across teams",
@@ -54,10 +109,33 @@ export function AiInfrastructureEngineersPage() {
             </p>
           ),
         },
+        {
+          heading: "No data residency guarantees for agent state",
+          body: (
+            <p>
+              Agent state flows through third-party APIs with no contractual guarantee about where
+              it's stored, who can access it, or whether it's used for model training. For teams
+              with SOC 2, HIPAA, or GDPR obligations, opaque provider memory is a compliance gap
+              that manual audits cannot close.
+            </p>
+          ),
+        },
+        {
+          heading: "State layer locked to one vendor's runtime",
+          body: (
+            <p>
+              Each agent runtime provides its own memory abstraction — none portable, none
+              interoperable. Migrating to a new orchestration framework means rebuilding state
+              management from scratch. There is no standard state layer that works across vendors.
+            </p>
+          ),
+        },
       ]}
       solutions={[
         {
           heading: "Deterministic state evolution",
+          icon: "Repeat",
+          href: "/deterministic-state-evolution",
           body: (
             <p>
               Every state transition is content-addressed and versioned. Same observations always
@@ -68,6 +146,8 @@ export function AiInfrastructureEngineersPage() {
         },
         {
           heading: "Append-only observation log",
+          icon: "FileStack",
+          href: "/reproducible-state-reconstruction",
           body: (
             <p>
               Observations are immutable. Corrections add new data — they never overwrite.
@@ -77,6 +157,8 @@ export function AiInfrastructureEngineersPage() {
         },
         {
           heading: "Full provenance and replayable timeline",
+          icon: "History",
+          href: "/replayable-timeline",
           body: (
             <p>
               Every entity, relationship, and fact links back to the observation that created it.
@@ -87,6 +169,8 @@ export function AiInfrastructureEngineersPage() {
         },
         {
           heading: "Schema-first validation",
+          icon: "Shield",
+          href: "/schema-constraints",
           body: (
             <p>
               Entity types enforce schema constraints at write time. Malformed or invalid data
@@ -106,7 +190,7 @@ export function AiInfrastructureEngineersPage() {
         { type: "entity_graph", description: "Resolved entities with typed relationships and temporal evolution" },
         { type: "runbook", description: "Operational procedures and agent behavioral rules with version history" },
       ]}
-      closingStatement="Infrastructure engineers need guarantees, not features. Neotoma provides deterministic state evolution, append-only observations, and full provenance — the invariants missing from ad-hoc agent state management."
+      closingStatement="You need guarantees, not features. Neotoma provides deterministic state evolution, append-only observations, and full provenance — the invariants missing from ad-hoc agent state management."
     />
   );
 }

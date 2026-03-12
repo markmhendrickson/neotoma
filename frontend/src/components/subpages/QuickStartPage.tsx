@@ -2,11 +2,14 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Check, Clock, Copy, RotateCcw } from "lucide-react";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { useCopyFeedback } from "../../lib/copy_feedback";
+import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
 
 function CodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, markCopied] = useCopyFeedback(`quick-start:${code}`);
+
   const onCopy = async () => {
     const cleaned = code
       .split("\n")
@@ -20,9 +23,8 @@ function CodeBlock({ code }: { code: string }) {
       })
       .filter((l) => l !== "")
       .join("\n");
-    await navigator.clipboard.writeText(cleaned);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    markCopied();
+    await copyTextToClipboard(cleaned);
   };
 
   return (
@@ -31,13 +33,14 @@ function CodeBlock({ code }: { code: string }) {
         type="button"
         variant="outline"
         size="sm"
-        className="absolute top-2 right-2 gap-0 shrink-0"
-        aria-label={copied ? "Copied" : "Copy code"}
+        className="absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+        aria-label={copied ? "Copied" : "Copy"}
         onClick={onCopy}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </Button>
-      <pre className="rounded-lg border code-block-palette p-4 pr-12 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+        <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{code}</code>
       </pre>
     </div>
@@ -48,11 +51,11 @@ export function QuickStartPage() {
   return (
     <DetailPage title="Quick start">
       <div className="flex flex-wrap gap-2 mb-6">
-        <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
           5-minute integration
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+        <span className="inline-flex items-center gap-1.5 rounded border border-sky-500/20 bg-sky-500/5 px-2.5 py-1 text-[12px] font-medium text-sky-600 dark:text-sky-400">
           <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
           Fully reversible
         </span>
@@ -71,7 +74,7 @@ export function QuickStartPage() {
       </p>
       <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} />
 
-      <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">After installation</h2>
+      <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">After installation</h3>
       <ol className="list-decimal pl-5 space-y-2 mb-6">
         <li className="text-[15px] leading-7 text-muted-foreground">
           Run <code className="text-foreground">neotoma init</code>, choose your client, and
