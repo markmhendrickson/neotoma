@@ -1,0 +1,53 @@
+name: Deploy dev site (dev.neotoma.io)
+
+on:
+  push:
+    branches:
+      - dev
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-dev-site
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build UI (for compiled Tailwind CSS)
+        run: npm run build:ui
+
+      - name: Build site for preview
+        env:
+          SITE_PREVIEW: "1"
+        run: npm run build:pages:site
+
+      - name: Set custom domain for dev Pages site
+        run: echo "dev.neotoma.io" > site_pages/CNAME
+
+      - name: Deploy to external Pages repository
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.DEV_PAGES_DEPLOY_TOKEN }}
+          external_repository: markmhendrickson/neotoma-dev-site
+          publish_branch: gh-pages
+          publish_dir: ./site_pages
+          force_orphan: true
+          commit_message: "Deploy dev site from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"

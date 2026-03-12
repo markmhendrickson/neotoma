@@ -12,9 +12,7 @@ function stripQueryAndHash(pathname: string): string {
 }
 
 function splitPath(pathname: string): string[] {
-  return stripQueryAndHash(pathname)
-    .split("/")
-    .filter(Boolean);
+  return stripQueryAndHash(pathname).split("/").filter(Boolean);
 }
 
 export function getLocaleFromPath(pathname: string): SupportedLocale | null {
@@ -32,9 +30,12 @@ export function stripLocaleFromPath(pathname: string): string {
 }
 
 export function localizePath(pathname: string, locale: SupportedLocale): string {
+  const hashIndex = pathname.indexOf("#");
+  const hash = hashIndex >= 0 ? pathname.slice(hashIndex) : "";
   const basePath = stripLocaleFromPath(pathname);
-  if (locale === DEFAULT_LOCALE) return basePath;
-  return basePath === "/" ? `/${locale}` : `/${locale}${basePath}`;
+  if (locale === DEFAULT_LOCALE) return `${basePath}${hash}`;
+  const localized = basePath === "/" ? `/${locale}` : `/${locale}${basePath}`;
+  return `${localized}${hash}`;
 }
 
 export function localizeHashHref(hashHref: string, locale: SupportedLocale): string {

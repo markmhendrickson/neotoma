@@ -16,6 +16,7 @@ import {
 import { SITE_SECTIONS } from "@/site/site_data";
 import { cn } from "@/lib/utils";
 import {
+  AlertTriangle,
   BookOpen,
   Bot,
   BookText,
@@ -23,6 +24,7 @@ import {
   Container,
   ExternalLink,
   GraduationCap,
+  Layers,
   MessageSquare,
   Monitor,
   Moon,
@@ -30,6 +32,7 @@ import {
   Rocket,
   SatelliteDish,
   Server,
+  ShieldCheck,
   Sun,
   Terminal,
   Users,
@@ -46,6 +49,7 @@ interface AppNavigationSidebarProps {
 const MOBILE_NAV_BOTTOM = "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))";
 
 const SIDEBAR_ICONS: Record<string, LucideIcon> = {
+  AlertTriangle,
   BookOpen,
   Bot,
   BookText,
@@ -53,11 +57,13 @@ const SIDEBAR_ICONS: Record<string, LucideIcon> = {
   Container,
   ExternalLink,
   GraduationCap,
+  Layers,
   MessageSquare,
   Package,
   Rocket,
   SatelliteDish,
   Server,
+  ShieldCheck,
   Terminal,
   Users,
   Zap,
@@ -142,14 +148,14 @@ export function AppNavigationSidebar({ siteName }: AppNavigationSidebarProps) {
   useEffect(() => {
     if (isMobile) return;
 
-    // Desktop behavior for site home: auto-collapse while in quick-start,
+    // Desktop behavior for site home: auto-collapse while in install section,
     // auto-expand below it, unless user has manually toggled.
-    const quickStart = document.getElementById("quick-start");
-    if (!quickStart) return;
+    const installSection = document.getElementById("install");
+    if (!installSection) return;
 
     const syncSidebarToScroll = () => {
       if (hasManualSidebarToggleRef.current) return;
-      const threshold = quickStart.getBoundingClientRect().bottom + window.scrollY - 120;
+      const threshold = installSection.getBoundingClientRect().bottom + window.scrollY - 120;
       const shouldBeOpen = window.scrollY >= threshold;
       if (autoSidebarStateRef.current !== shouldBeOpen) {
         setOpen(shouldBeOpen);

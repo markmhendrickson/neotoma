@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { useCopyFeedback } from "../../lib/copy_feedback";
+import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -21,11 +23,11 @@ function sanitizeCodeForCopy(rawCode: string): string {
 }
 
 function CodeBlock({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
+  const [copied, markCopied] = useCopyFeedback(`docker:${code}`);
+
   const onCopy = async () => {
-    await navigator.clipboard.writeText(sanitizeCodeForCopy(code));
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 2000);
+    markCopied();
+    await copyTextToClipboard(sanitizeCodeForCopy(code));
   };
 
   return (
@@ -34,13 +36,14 @@ function CodeBlock({ code }: { code: string }) {
         type="button"
         variant="outline"
         size="sm"
-        className="absolute top-2 right-2 gap-0 shrink-0"
-        aria-label={copied ? "Copied" : "Copy code"}
+        className="absolute top-2 right-2 z-10 min-w-[88px] h-8 justify-center gap-1.5 shrink-0 border-emerald-600 bg-emerald-600 px-2.5 text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400 dark:hover:text-emerald-950 after:text-[11px] after:font-semibold after:tracking-wide after:content-[attr(aria-label)]"
+        aria-label={copied ? "Copied" : "Copy"}
         onClick={onCopy}
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </Button>
-      <pre className="rounded-lg border code-block-palette p-4 pr-12 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+      <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words">
+        <span className="float-right h-8 w-20 shrink-0" aria-hidden />
         <code>{code}</code>
       </pre>
     </div>

@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
 import { initGoogleAnalytics } from "./utils/analytics";
+import { installViteChunkRecovery } from "./utils/vite_chunk_recovery";
 import { LocaleProvider } from "./i18n/LocaleContext";
 import { ThemeProvider } from "./hooks/useTheme";
 import "./index.css";
@@ -25,12 +26,15 @@ function initializeTheme() {
 
 // Initialize theme before React renders
 initializeTheme();
+installViteChunkRecovery();
 const { HelmetProvider } = ReactHelmetAsync;
 
-// GitHub Pages project site is served at /neotoma/; custom domain (neotoma.io) at /. One build for both.
+// GitHub Pages at /neotoma/; custom domain (neotoma.io) at /; Cursor/IDE at /neotoma-with-claude-code. One build for all.
 function getRouterBasename(): string | undefined {
   const p = typeof window !== "undefined" ? window.location.pathname : "";
-  return p.startsWith("/neotoma") ? "/neotoma" : undefined;
+  if (!p || p === "/") return undefined;
+  const firstSegment = p.replace(/^\//, "").split("/")[0] ?? "";
+  return firstSegment.toLowerCase().startsWith("neotoma") ? `/${firstSegment}` : undefined;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

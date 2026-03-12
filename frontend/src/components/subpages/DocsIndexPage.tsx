@@ -1,130 +1,104 @@
 import { Link } from "react-router-dom";
+import {
+  BookOpen,
+  Bookmark,
+  Bot,
+  Boxes,
+  Bug,
+  Building2,
+  Code,
+  Cpu,
+  Database,
+  Github,
+  Globe,
+  History,
+  Layers,
+  MessageCircle,
+  MessageSquare,
+  Monitor,
+  Package,
+  PanelRight,
+  Rocket,
+  SatelliteDish,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Zap,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { SiClaude, SiOpenai } from "react-icons/si";
 import { DetailPage } from "../DetailPage";
 import { useLocale } from "@/i18n/LocaleContext";
 import { localizePath } from "@/i18n/routing";
+import { Card, CardContent } from "@/components/ui/card";
+import { CursorIcon } from "@/components/icons/CursorIcon";
+import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
+import { DOC_NAV_CATEGORIES } from "@/site/site_data";
+
+/** Same branded icons as DocsSidebar for integration hrefs. */
+const INTEGRATION_BRAND_ICONS: Record<
+  string,
+  React.ComponentType<{ className?: string; "aria-hidden"?: boolean; size?: number }>
+> = {
+  "/neotoma-with-claude-code": SiClaude,
+  "/neotoma-with-claude": SiClaude,
+  "/neotoma-with-chatgpt": SiOpenai,
+  "/neotoma-with-codex": SiOpenai,
+  "/neotoma-with-cursor": CursorIcon,
+  "/neotoma-with-openclaw": OpenClawIcon,
+};
+
+const DOC_NAV_ICONS: Record<string, LucideIcon> = {
+  BookOpen,
+  Bookmark,
+  Bot,
+  Boxes,
+  Bug,
+  Building2,
+  Code,
+  Cpu,
+  Database,
+  Github,
+  Globe,
+  History,
+  Layers,
+  MessageCircle,
+  MessageSquare,
+  Monitor,
+  Package,
+  PanelRight,
+  Rocket,
+  SatelliteDish,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Terminal,
+  Zap,
+};
+
+/** href -> icon name from DOC_NAV_CATEGORIES (External uses full URL). */
+const ICON_BY_HREF = (() => {
+  const map: Record<string, string> = {};
+  for (const cat of DOC_NAV_CATEGORIES) {
+    for (const item of cat.items) {
+      if ("icon" in item && typeof item.icon === "string") {
+        map[item.href] = item.icon;
+      }
+    }
+  }
+  return map;
+})();
 
 const DOC_CATEGORIES = [
   {
     title: "Getting started",
     items: [
-      { label: "Install and first run", href: "/#quick-start" },
-      { label: "Docker setup", href: "/docker" },
-    ],
-  },
-  {
-    title: "Reference",
-    items: [
-      { label: "REST API", href: "/api", desc: "OpenAPI endpoints and parameters" },
-      { label: "MCP server", href: "/mcp", desc: "Model Context Protocol actions" },
-      { label: "CLI", href: "/cli", desc: "Commands, flags, and REPL" },
+      { label: "Install", href: "/install", desc: "Install and initialize Neotoma locally" },
       {
-        label: "Architecture",
-        href: "/architecture",
-        desc: "State flow, guarantees, and principles",
-      },
-      { label: "Terminology", href: "/terminology", desc: "Glossary of key concepts" },
-      {
-        label: "Data model walkthrough",
-        href: "/data-model",
-        desc: "How sources, observations, entities, snapshots, and relationships connect",
-      },
-      {
-        label: "Schema management",
-        href: "/schema-management",
-        desc: "Define, inspect, and evolve schema constraints safely",
-      },
-      {
-        label: "Troubleshooting",
-        href: "/troubleshooting",
-        desc: "Common failure modes and practical fixes",
-      },
-      {
-        label: "Changelog",
-        href: "/changelog",
-        desc: "Release history and documentation updates",
-      },
-    ],
-  },
-  {
-    title: "Memory guarantees",
-    items: [
-      {
-        label: "Deterministic state evolution",
-        href: "/deterministic-state-evolution",
-        desc: "Same observations always produce the same state",
-      },
-      { label: "Versioned history", href: "/versioned-history", desc: "Every state change remains queryable" },
-      { label: "Replayable timeline", href: "/replayable-timeline", desc: "Reconstruct any past state from the log" },
-      { label: "Auditable change log", href: "/auditable-change-log", desc: "Every fact is traceable to provenance" },
-      { label: "Schema constraints", href: "/schema-constraints", desc: "Invalid writes fail fast at store time" },
-      { label: "Silent mutation risk", href: "/silent-mutation-risk", desc: "Why hidden memory edits break trust" },
-      { label: "Conflicting facts risk", href: "/conflicting-facts-risk", desc: "How contradictions are detected and resolved" },
-      {
-        label: "Reproducible state reconstruction",
-        href: "/reproducible-state-reconstruction",
-        desc: "Recover state exactly from raw observations",
-      },
-      { label: "Human inspectability", href: "/human-inspectability", desc: "Diffs and field lineage for every change" },
-    ],
-  },
-  {
-    title: "Memory models",
-    items: [
-      { label: "Platform memory", href: "/platform-memory", desc: "Built-in platform convenience memory" },
-      { label: "Retrieval memory", href: "/retrieval-memory", desc: "RAG and vector retrieval memory patterns" },
-      { label: "File-based memory", href: "/file-based-memory", desc: "Markdown and JSON memory artifacts" },
-      { label: "Deterministic memory", href: "/deterministic-memory", desc: "Versioned, replayable state invariants" },
-      { label: "Memory model comparison", href: "/memory-vendors", desc: "Compare models with representative tools" },
-    ],
-  },
-  {
-    title: "Foundations",
-    items: [
-      {
-        label: "Privacy-first",
-        href: "/privacy-first",
-        desc: "Local control, exportability, and user ownership",
-      },
-      { label: "Cross-platform", href: "/cross-platform", desc: "One invariant across all AI interfaces" },
-    ],
-  },
-  {
-    title: "Agent behavior",
-    items: [
-      {
-        label: "Agent instructions",
-        href: "/agent-instructions",
-        desc: "Mandatory behavioral rules for agents using Neotoma",
-      },
-    ],
-  },
-  {
-    title: "Use cases",
-    items: [
-      {
-        label: "AI infrastructure engineers",
-        href: "/ai-infrastructure-engineers",
-        desc: "Deterministic state for runtimes and orchestration",
-      },
-      {
-        label: "AI-native operators",
-        href: "/ai-native-operators",
-        desc: "Memory across every tool and session",
-      },
-      {
-        label: "Knowledge workers",
-        href: "/knowledge-workers",
-        desc: "Cross-document reasoning with entity resolution",
-      },
-      {
-        label: "Agentic systems builders",
-        href: "/agentic-systems-builders",
-        desc: "Deterministic memory and provenance layer for agents and toolchains",
-      },
-      {
-        label: "Founders and teams",
-        href: "/founders-teams",
-        desc: "Shared institutional memory for fast-moving teams",
+        label: "Developer walkthrough",
+        href: "/developer-walkthrough",
+        desc: "Hands-on setup and implementation guide for engineers",
       },
     ],
   },
@@ -164,6 +138,81 @@ const DOC_CATEGORIES = [
     ],
   },
   {
+    title: "Reference",
+    items: [
+      { label: "Install", href: "/install", desc: "Install and initialize Neotoma locally" },
+      { label: "REST API", href: "/api", desc: "OpenAPI endpoints and parameters" },
+      { label: "MCP server", href: "/mcp", desc: "Model Context Protocol actions" },
+      { label: "CLI", href: "/cli", desc: "Commands, flags, and REPL" },
+      {
+        label: "Memory guarantees",
+        href: "/memory-guarantees",
+        desc: "All memory properties on one page",
+      },
+      {
+        label: "Memory models",
+        href: "/memory-models",
+        desc: "Platform, retrieval, file-based, and deterministic memory compared",
+      },
+      {
+        label: "Foundations",
+        href: "/foundations",
+        desc: "Privacy-first architecture and cross-platform design",
+      },
+      {
+        label: "Agent instructions",
+        href: "/agent-instructions",
+        desc: "Mandatory behavioral rules for agents using Neotoma",
+      },
+      {
+        label: "Architecture",
+        href: "/architecture",
+        desc: "State flow, guarantees, and principles",
+      },
+      { label: "Terminology", href: "/terminology", desc: "Glossary of key concepts" },
+      {
+        label: "Data model walkthrough",
+        href: "/data-model",
+        desc: "How sources, observations, entities, snapshots, and relationships connect",
+      },
+      {
+        label: "Schema management",
+        href: "/schema-management",
+        desc: "Define, inspect, and evolve schema constraints safely",
+      },
+      {
+        label: "Troubleshooting",
+        href: "/troubleshooting",
+        desc: "Common failure modes and practical fixes",
+      },
+      {
+        label: "Changelog",
+        href: "/changelog",
+        desc: "Release history and documentation updates",
+      },
+    ],
+  },
+  {
+    title: "Use cases",
+    items: [
+      {
+        label: "AI-native operators",
+        href: "/ai-native-operators",
+        desc: "Memory across every tool and session",
+      },
+      {
+        label: "AI infrastructure engineers",
+        href: "/ai-infrastructure-engineers",
+        desc: "Deterministic state for runtimes and orchestration",
+      },
+      {
+        label: "Agentic systems builders",
+        href: "/agentic-systems-builders",
+        desc: "Deterministic memory and provenance layer for agents and toolchains",
+      },
+    ],
+  },
+  {
     title: "External",
     items: [
       {
@@ -190,59 +239,94 @@ export function DocsIndexPage() {
     if (title === "Foundations") return "Foundations";
     if (title === "Agent behavior") return dict.categoryAgentBehavior;
     if (title === "Use cases") return dict.categoryUseCases;
-    if (title === "Integration guides" || title === "Integrations") return dict.categoryIntegrationGuides;
+    if (title === "Integration guides" || title === "Integrations")
+      return dict.categoryIntegrationGuides;
     if (title === "External") return dict.categoryExternal;
     return title;
   };
+
   return (
     <DetailPage title={dict.allDocumentation}>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-8">
-        {dict.docsIntro}
-      </p>
+      <div className="[&_a]:!no-underline [&_a]:hover:!no-underline [&_a]:focus:!no-underline">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-10">{dict.docsIntro}</p>
 
-      {DOC_CATEGORIES.map((cat) => (
-        <section key={cat.title} className="mb-10">
-          <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-3">{translateCategoryTitle(cat.title)}</h2>
-          <ul className="list-none pl-0 space-y-2">
+        {DOC_CATEGORIES.map((cat) => (
+        <section key={cat.title} className="mb-12">
+          <h2 className="text-[18px] font-medium tracking-[-0.01em] mb-4">
+            {translateCategoryTitle(cat.title)}
+          </h2>
+          <ul className="list-none pl-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cat.items.map((item) => {
               const isExternal = item.href.startsWith("http");
               const linkProps = isExternal
                 ? { target: "_blank" as const, rel: "noopener noreferrer" }
                 : {};
+              const BrandIcon =
+                item.href.startsWith("/") ? INTEGRATION_BRAND_ICONS[item.href] : null;
+              const iconName = ICON_BY_HREF[item.href];
+              const LucideIconComponent = iconName
+                ? DOC_NAV_ICONS[iconName]
+                : DOC_NAV_ICONS.BookOpen;
+              const Icon = BrandIcon ?? LucideIconComponent;
+              const desc = "desc" in item ? item.desc : null;
+
+              const linkContent = (
+                <Card className="h-full transition-colors hover:bg-muted/50 border border-border [&_a]:no-underline [&_a]:hover:no-underline">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+                        aria-hidden
+                      >
+                        {Icon ? <Icon className="h-5 w-5 shrink-0" aria-hidden /> : null}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium text-[15px] text-foreground block">
+                          {item.label}
+                        </span>
+                        {desc && (
+                          <span className="text-[13px] leading-snug text-muted-foreground block mt-0.5">
+                            {desc}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+
               return (
-                <li key={item.href} className="text-[15px] leading-7">
+                <li key={item.href}>
                   {isExternal ? (
                     <a
                       href={item.href.startsWith("/") ? localizePath(item.href, locale) : item.href}
-                      className="text-foreground underline underline-offset-2 hover:no-underline"
+                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
                       {...linkProps}
                     >
-                      {item.label}
+                      {linkContent}
                     </a>
                   ) : item.href.startsWith("/#") ? (
                     <a
                       href={localizePath(item.href, locale)}
-                      className="text-foreground underline underline-offset-2 hover:no-underline"
+                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
                     >
-                      {item.label}
+                      {linkContent}
                     </a>
                   ) : (
                     <Link
                       to={localizePath(item.href, locale)}
-                      className="text-foreground underline underline-offset-2 hover:no-underline"
+                      className="block no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
                     >
-                      {item.label}
+                      {linkContent}
                     </Link>
-                  )}
-                  {"desc" in item && item.desc && (
-                    <span className="text-muted-foreground"> — {item.desc}</span>
                   )}
                 </li>
               );
             })}
           </ul>
         </section>
-      ))}
+        ))}
+      </div>
     </DetailPage>
   );
 }

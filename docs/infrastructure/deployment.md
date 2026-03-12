@@ -13,13 +13,31 @@ This document does NOT cover:
 - Infrastructure scaling (post-MVP)
 - Advanced monitoring (post-MVP)
 ## Marketing site (neotoma.io)
-The static marketing site is built with `npm run build:pages:site` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`) on push to **main**. The canonical URL is **https://neotoma.io**.
+The static marketing site is built with `npm run build:pages:site` (output: `site_pages/`) and deployed to **GitHub Pages** (`.github/workflows/deploy-pages-site.yml`).
+
+- **Prod:** Push to **main** (or run the workflow manually). Served at **https://neotoma.io** (root).
+- **Dev preview:** Push to **dev** and deploy to a **separate repository** via `.github/workflows/deploy-pages-dev-site.yml`. Served at **https://dev.neotoma.io**.
+
 ### One-time: Enable GitHub Pages from Actions
 1. In the repo on GitHub: **Settings → Pages** (under "Code and automation").
 2. Under **Build and deployment**, set **Source** to **GitHub Actions** (not "Deploy from a branch"). Save.
-3. The workflow runs on the next push to **main** or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
+3. The prod workflow runs on push to **main** or when run manually (Actions → "Deploy site (GitHub Pages)" → Run workflow).
 ### Deploy
-No extra secrets: the workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually from the Actions tab) to build and deploy. The site is served at **https://neotoma.io** after custom domain configuration.
+No extra secrets: the prod workflow uses the repo’s GitHub Pages environment. Push to **main** (or run the workflow manually from the Actions tab) to build and deploy production at **https://neotoma.io**.
+
+### Dev preview site (dev.neotoma.io, isolated from prod)
+Use a dedicated Pages repository so preview deploys never modify the prod Pages artifact.
+
+1. Create repository `markmhendrickson/neotoma-dev-site` (or adjust the workflow `external_repository` value).
+2. In `neotoma-dev-site`: **Settings → Pages**:
+   - Set source to **Deploy from a branch**.
+   - Branch: `gh-pages` / root.
+3. In this repo (`neotoma`) add secret `DEV_PAGES_DEPLOY_TOKEN` with a PAT that can push to `neotoma-dev-site`.
+4. Push to **dev** (or run Actions → "Deploy dev site (dev.neotoma.io)").
+5. In `neotoma-dev-site` Pages settings, set custom domain to **dev.neotoma.io**.
+6. Add DNS record for `dev.neotoma.io`:
+   - **CNAME** `dev` -> `markmhendrickson.github.io`
+7. Enable **Enforce HTTPS** once available.
 ### Custom domain (neotoma.io)
 1. In the repo: **Settings → Pages** (under "Code and automation").
 2. Under **Custom domain**, enter **neotoma.io** and click **Save**. GitHub will add a CNAME file or show DNS instructions.
