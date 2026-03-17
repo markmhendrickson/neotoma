@@ -1,6 +1,6 @@
 {
   "name": "neotoma",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "MCP server for structured personal data memory with unified source ingestion",
   "main": "dist/index.js",
   "type": "module",
@@ -115,7 +115,8 @@
     "monitor:snapshots": "tsx scripts/monitor_and_fix_snapshots.ts",
     "check:snapshots": "tsx scripts/check_stale_snapshots.ts",
     "simulate:install": "node scripts/simulate_npm_install.js",
-    "check:bundlephobia": "node scripts/check_bundlephobia.js"
+    "check:bundlephobia": "node scripts/check_bundlephobia.js",
+    "validate:locales": "tsx --tsconfig frontend/tsconfig.json scripts/validate_locale_parity.ts"
   },
   "keywords": [
     "mcp",
