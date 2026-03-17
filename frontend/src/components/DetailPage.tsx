@@ -50,10 +50,12 @@ export function DetailPage({ title, children }: DetailPageProps) {
   const { pathname } = useLocation();
   const renderedChildren = addAutoSectionDividers(children);
   const canonicalPath = stripLocaleFromPath(pathname);
+  const seoPathname =
+    typeof window !== "undefined" ? window.location.pathname : pathname;
   const TitleIcon = getDocPageIcon(canonicalPath);
   return (
     <>
-      <SeoHead routePath={pathname} />
+      <SeoHead routePath={seoPathname} />
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-[52em] mx-auto px-4 py-10 md:py-16">
           <h1 className="text-[28px] font-medium tracking-[-0.02em] mb-6 flex items-start gap-3">
