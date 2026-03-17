@@ -222,7 +222,7 @@ describe("seo_metadata", () => {
 
     it("leaves homepage template mostly unchanged for root route", () => {
       const result = injectRouteMetaIntoHtml(TEMPLATE, "/");
-      expect(result).toContain("<title>Neotoma | The state layer for persistent AI agent memory</title>");
+      expect(result).toContain("<title>Neotoma | Deterministic state layer for long-running agents</title>");
       expect(result).toContain('href="https://neotoma.io/"');
     });
   });

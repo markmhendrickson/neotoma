@@ -1,8 +1,11 @@
 #!/usr/bin/env tsx
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAVICON_SVG } from "../frontend/src/site/site_data";
+import { SUPPORTED_LOCALES } from "../frontend/src/i18n/config";
+import { localizePath } from "../frontend/src/i18n/routing";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -63,7 +66,97 @@ function buildHtmlForRoute(rootHtml: string, routePath: string): string {
   return html;
 }
 
-function main() {
+function getOutputPathForRoute(routePath: string): string {
+  if (routePath === "/") return outputFile;
+  return path.join(outputDir, routePath.replace(/^\//, ""), "index.html");
+}
+
+function getContentType(filePath: string): string {
+  if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
+  if (filePath.endsWith(".js")) return "application/javascript; charset=utf-8";
+  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".svg")) return "image/svg+xml";
+  if (filePath.endsWith(".png")) return "image/png";
+  if (filePath.endsWith(".xml")) return "application/xml; charset=utf-8";
+  if (filePath.endsWith(".txt")) return "text/plain; charset=utf-8";
+  return "application/octet-stream";
+}
+
+function startStaticServer(rootDir: string): Promise<{ origin: string; close: () => Promise<void> }> {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url || "/", "http://localhost");
+      const rawPath = decodeURIComponent(url.pathname);
+      const cleanPath = rawPath.replace(/^\/+/, "");
+      const candidates = [
+        path.join(rootDir, cleanPath),
+        path.join(rootDir, cleanPath, "index.html"),
+      ];
+      if (rawPath === "/") {
+        candidates.unshift(path.join(rootDir, "index.html"));
+      }
+
+      let filePath = candidates.find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+      let statusCode = 200;
+
+      if (!filePath) {
+        filePath = path.join(rootDir, "404.html");
+        statusCode = 404;
+      }
+
+      try {
+        const content = fs.readFileSync(filePath);
+        res.statusCode = statusCode;
+        res.setHeader("Content-Type", getContentType(filePath));
+        res.end(content);
+      } catch {
+        res.statusCode = 500;
+        res.end("Internal server error");
+      }
+    });
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        reject(new Error("Failed to start prerender HTTP server."));
+        return;
+      }
+      resolve({
+        origin: `http://127.0.0.1:${address.port}`,
+        close: () => new Promise<void>((done, fail) => server.close((err) => (err ? fail(err) : done()))),
+      });
+    });
+  });
+}
+
+async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void> {
+  const { chromium } = await import("playwright");
+  const server = await startStaticServer(outputDir);
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage();
+
+  try {
+    for (const routePath of routePaths) {
+      const targetUrl = `${server.origin}${routePath}`;
+      await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.waitForTimeout(250);
+      const renderedHtml = await page.content();
+      fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
+    }
+
+    await page.goto(`${server.origin}/404`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(250);
+    const notFoundHtml = await page.content();
+    fs.writeFileSync(notFoundFile, `<!DOCTYPE html>\n${notFoundHtml}\n`, "utf-8");
+  } finally {
+    await page.close();
+    await browser.close();
+    await server.close();
+  }
+}
+
+async function main() {
   fs.mkdirSync(outputDir, { recursive: true });
   const legacyCssFile = path.join(outputDir, "site.css");
   if (fs.existsSync(legacyCssFile)) {
@@ -77,10 +170,17 @@ function main() {
 
   const rootHtml = readPublicHtml();
 
-  // Homepage gets root-level meta tags (already correct from the template)
-  fs.writeFileSync(outputFile, injectRouteMetaIntoHtml(rootHtml, "/"), "utf-8");
+  // Seed static route files with route-specific metadata.
+  fs.writeFileSync(outputFile, buildHtmlForRoute(rootHtml, "/"), "utf-8");
 
   // Pre-render per-route HTML so bots see correct meta tags without executing JS
+  for (const locale of SUPPORTED_LOCALES) {
+    const localizedRoot = localizePath("/", locale);
+    if (!SITEMAP_PATHS.includes(localizedRoot)) {
+      throw new Error(`SITEMAP_PATHS missing localized root route: ${localizedRoot}`);
+    }
+  }
+
   let routeCount = 0;
   for (const routePath of SITEMAP_PATHS) {
     if (routePath === "/") continue;
@@ -95,9 +195,7 @@ function main() {
     routeCount++;
   }
 
-  // GitHub Pages serves 404.html for unknown paths — acts as SPA fallback.
-  // Uses homepage meta (React Helmet will override client-side).
-  fs.writeFileSync(notFoundFile, rootHtml, "utf-8");
+  fs.writeFileSync(notFoundFile, buildHtmlForRoute(rootHtml, "/404"), "utf-8");
 
   fs.writeFileSync(noJekyllFile, "", "utf-8");
   fs.writeFileSync(faviconFile, FAVICON_SVG.trim(), "utf-8");
@@ -111,14 +209,15 @@ function main() {
   }
   fs.writeFileSync(robotsFile, buildRobotsTxt(), "utf-8");
   fs.writeFileSync(sitemapFile, buildSitemapXml(), "utf-8");
+  await prerenderHtmlRoutes(SITEMAP_PATHS);
 
   console.log(`Built site page: ${path.relative(repoRoot, outputFile)}`);
-  console.log(`Built ${routeCount} route pages (pre-rendered meta tags)`);
-  console.log(`Built 404.html (SPA fallback)`);
+  console.log(`Built ${routeCount} route pages (fully pre-rendered HTML)`);
+  console.log(`Built 404.html (pre-rendered fallback)`);
   console.log(`Copied assets: ${path.relative(repoRoot, outputAssetsDir)}`);
   console.log(`Built favicon: ${path.relative(repoRoot, faviconFile)}`);
   console.log(`Built robots: ${path.relative(repoRoot, robotsFile)}`);
   console.log(`Built sitemap: ${path.relative(repoRoot, sitemapFile)}`);
 }
 
-main();
+void main();
