@@ -111,7 +111,7 @@ const BASENAME_TO_ROOT_PAGE: Record<string, JSX.Element> = {
 };
 
 function getRootElement(): JSX.Element {
-  if (typeof window === "undefined") return <SitePage />;
+  if (typeof window === "undefined") return <SitePage staticMode />;
   const segment = window.location.pathname.replace(/^\//, "").split("/")[0] ?? "";
   const basename = segment ? `/${segment}` : "";
   return BASENAME_TO_ROOT_PAGE[basename] ?? <SitePage />;
