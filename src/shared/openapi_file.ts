@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const OPENAPI_FILENAME = "openapi.yaml";
+const OPENAPI_ACTIONS_FILENAME = "openapi_actions.yaml";
 
 function getPackageRootFromModule(): string {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -30,4 +31,17 @@ export function resolveOpenApiPath(): string {
 
 export function readOpenApiFile(): string {
   return readFileSync(resolveOpenApiPath(), "utf-8");
+}
+
+export function resolveOpenApiActionsPath(): string {
+  const root = getPackageRootFromModule();
+  const path = join(root, OPENAPI_ACTIONS_FILENAME);
+  if (!existsSync(path)) {
+    throw new Error(`OpenAPI actions schema not found: ${path}`);
+  }
+  return path;
+}
+
+export function readOpenApiActionsFile(): string {
+  return readFileSync(resolveOpenApiActionsPath(), "utf-8");
 }

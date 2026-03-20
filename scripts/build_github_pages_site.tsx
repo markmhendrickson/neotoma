@@ -4,8 +4,8 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FAVICON_SVG } from "../frontend/src/site/site_data";
-import { SUPPORTED_LOCALES } from "../frontend/src/i18n/config";
-import { localizePath } from "../frontend/src/i18n/routing";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from "../frontend/src/i18n/config";
+import { getLocaleFromPath, localizePath, stripLocaleFromPath } from "../frontend/src/i18n/routing";
 import {
   buildRobotsTxt,
   buildSitemapXml,
@@ -33,6 +33,22 @@ const buildId =
   process.env.GITHUB_SHA?.slice(0, 7) ||
   process.env.BUILD_ID ||
   `local-${Date.now()}`;
+
+const LOCALE_TO_GOOGLE_CODE: Record<SupportedLocale, string> = {
+  en: "en",
+  es: "es",
+  ca: "ca",
+  zh: "zh-CN",
+  hi: "hi",
+  ar: "ar",
+  fr: "fr",
+  pt: "pt",
+  ru: "ru",
+  bn: "bn",
+  ur: "ur",
+  id: "id",
+  de: "de",
+};
 
 /** Read Vite build output and convert to relative asset paths for the root. */
 function readPublicHtml(): string {
@@ -140,7 +156,7 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
     for (const routePath of routePaths) {
       const targetUrl = `${server.origin}${routePath}`;
       await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
-      await page.waitForTimeout(250);
+      await translatePageForRoute(page, routePath);
       const renderedHtml = await page.content();
       fs.writeFileSync(getOutputPathForRoute(routePath), `<!DOCTYPE html>\n${renderedHtml}\n`, "utf-8");
     }
@@ -154,6 +170,157 @@ async function prerenderHtmlRoutes(routePaths: readonly string[]): Promise<void>
     await browser.close();
     await server.close();
   }
+}
+
+async function translatePageForRoute(
+  page: import("playwright").Page,
+  routePath: string,
+): Promise<void> {
+  const locale = getLocaleFromPath(routePath) ?? DEFAULT_LOCALE;
+  if (locale === DEFAULT_LOCALE) {
+    await page.waitForTimeout(50);
+    return;
+  }
+  if (stripLocaleFromPath(routePath) !== "/") {
+    await page.waitForTimeout(50);
+    return;
+  }
+  const target = LOCALE_TO_GOOGLE_CODE[locale];
+  const translationScript = `
+    (async () => {
+      const target = ${JSON.stringify(target)};
+      const locale = ${JSON.stringify(locale)};
+      const hasLetters = (value) => /[A-Za-z]/.test(value);
+      const shouldTranslateText = (value) => {
+        const trimmed = value.trim();
+        if (!trimmed || trimmed.length < 2) return false;
+        if (!hasLetters(trimmed)) return false;
+        if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("/") || trimmed.startsWith("#")) {
+          return false;
+        }
+        return true;
+      };
+      const isNoTranslate = (el) => {
+        let cur = el;
+        while (cur) {
+          if (cur.getAttribute("translate") === "no") return true;
+          cur = cur.parentElement;
+        }
+        return false;
+      };
+      const getCoreWithPadding = (raw) => {
+        const core = raw.trim();
+        if (!shouldTranslateText(core)) return null;
+        const start = raw.indexOf(core);
+        const end = start + core.length;
+        return { core, prefix: raw.slice(0, start), suffix: raw.slice(end) };
+      };
+      const collectTextNodes = () => {
+        const nodes = [];
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node = walker.nextNode();
+        while (node) {
+          const textNode = node;
+          const parent = textNode.parentElement;
+          if (parent && !["SCRIPT", "STYLE", "NOSCRIPT", "CODE", "PRE"].includes(parent.tagName) && !isNoTranslate(parent)) {
+            const raw = textNode.textContent || "";
+            if (getCoreWithPadding(raw)) nodes.push(textNode);
+          }
+          node = walker.nextNode();
+        }
+        return nodes;
+      };
+      const collectAttributeTargets = () => {
+        const attrs = ["title", "aria-label", "placeholder"];
+        const targets = [];
+        for (const attr of attrs) {
+          document.querySelectorAll("[" + attr + "]").forEach((element) => {
+            if (isNoTranslate(element)) return;
+            const value = element.getAttribute(attr);
+            if (value && shouldTranslateText(value)) targets.push({ element, attr });
+          });
+        }
+        return targets;
+      };
+      const collectMetaTargets = () =>
+        Array.from(document.querySelectorAll("meta[name='description'],meta[property='og:title'],meta[property='og:description'],meta[name='twitter:title'],meta[name='twitter:description']"));
+      const phraseSet = new Set();
+      const textNodes = collectTextNodes();
+      const attributeTargets = collectAttributeTargets();
+      const metaTargets = collectMetaTargets();
+      for (const textNode of textNodes) {
+        const raw = textNode.textContent || "";
+        const parsed = getCoreWithPadding(raw);
+        if (parsed) phraseSet.add(parsed.core);
+      }
+      for (const targetSpec of attributeTargets) {
+        const value = targetSpec.element.getAttribute(targetSpec.attr);
+        if (value && shouldTranslateText(value)) phraseSet.add(value.trim());
+      }
+      for (const meta of metaTargets) {
+        const content = meta.getAttribute("content");
+        if (content && shouldTranslateText(content)) phraseSet.add(content.trim());
+      }
+      const titleText = document.title;
+      if (titleText && shouldTranslateText(titleText)) phraseSet.add(titleText.trim());
+      if (!window.__ntBuildTranslateCache) window.__ntBuildTranslateCache = {};
+      const byLocale = window.__ntBuildTranslateCache;
+      const cache = byLocale[locale] || {};
+      byLocale[locale] = cache;
+      const translateText = async (text) => {
+        if (cache[text]) return cache[text];
+        const query = new URLSearchParams({ client: "gtx", sl: "en", tl: target, dt: "t", q: text });
+        const response = await fetch("https://translate.googleapis.com/translate_a/single?" + query.toString());
+        if (!response.ok) return text;
+        const payload = await response.json();
+        const top = Array.isArray(payload) ? payload[0] : null;
+        if (!Array.isArray(top)) return text;
+        const translated = top.map((segment) => (Array.isArray(segment) && typeof segment[0] === "string" ? segment[0] : "")).join("");
+        return translated || text;
+      };
+      const missing = Array.from(phraseSet).slice(0, 250).filter((phrase) => !cache[phrase]);
+      const queue = missing.slice();
+      const workers = Array.from({ length: 8 }, async () => {
+        while (queue.length) {
+          const phrase = queue.shift();
+          if (!phrase) return;
+          try {
+            cache[phrase] = await translateText(phrase);
+          } catch {
+            cache[phrase] = phrase;
+          }
+        }
+      });
+      await Promise.all(workers);
+      for (const textNode of textNodes) {
+        const raw = textNode.textContent || "";
+        const parsed = getCoreWithPadding(raw);
+        if (!parsed) continue;
+        textNode.textContent = parsed.prefix + (cache[parsed.core] || parsed.core) + parsed.suffix;
+      }
+      for (const targetSpec of attributeTargets) {
+        const value = targetSpec.element.getAttribute(targetSpec.attr);
+        if (!value) continue;
+        const trimmed = value.trim();
+        if (!shouldTranslateText(trimmed)) continue;
+        targetSpec.element.setAttribute(targetSpec.attr, cache[trimmed] || trimmed);
+      }
+      for (const meta of metaTargets) {
+        const content = meta.getAttribute("content");
+        if (!content) continue;
+        const trimmed = content.trim();
+        if (!shouldTranslateText(trimmed)) continue;
+        meta.setAttribute("content", cache[trimmed] || trimmed);
+      }
+      if (titleText && shouldTranslateText(titleText)) {
+        const trimmed = titleText.trim();
+        document.title = cache[trimmed] || trimmed;
+      }
+      document.documentElement.lang = locale;
+    })();
+  `;
+  await page.evaluate(translationScript);
+  await page.waitForTimeout(50);
 }
 
 async function main() {

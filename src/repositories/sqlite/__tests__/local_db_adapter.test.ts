@@ -136,6 +136,51 @@ describe("local db adapter", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("supports PostgREST-style JSON path filters for snapshots", async () => {
+    const tempDir = path.join(process.cwd(), "tmp", `neotoma-json-path-${Date.now()}`);
+    const db = await loadDb(tempDir);
+
+    const now = new Date().toISOString();
+    const { error: entityError } = await db.from("entities").insert({
+      id: "ent_json_path_post",
+      entity_type: "post",
+      canonical_name: "json path post",
+      user_id: "user_json_path_test",
+      created_at: now,
+      updated_at: now,
+    });
+    expect(entityError).toBeNull();
+
+    const { error: snapshotError } = await db.from("entity_snapshots").insert({
+      entity_id: "ent_json_path_post",
+      entity_type: "post",
+      user_id: "user_json_path_test",
+      schema_version: "1.0",
+      snapshot: {
+        published: true,
+        published_date: "2026-03-16",
+      },
+      observation_count: 1,
+      last_observation_at: now,
+      computed_at: now,
+    });
+    expect(snapshotError).toBeNull();
+
+    const { data: filtered, error: filterError } = await db
+      .from("entity_snapshots")
+      .select("entity_id")
+      .eq("entity_type", "post")
+      .eq("snapshot->>published", "true")
+      .gte("snapshot->>published_date", "2026-01-01")
+      .lte("snapshot->>published_date", "2026-12-31");
+
+    expect(filterError).toBeNull();
+    expect(filtered?.length).toBe(1);
+    expect(filtered?.[0]?.entity_id).toBe("ent_json_path_post");
+
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
   it("recovers from sqlite disk I/O errors by reopening connection", async () => {
     const tempDir = path.join(process.cwd(), "tmp", `neotoma-ioerr-${Date.now()}`);
     const db = await loadDb(tempDir);

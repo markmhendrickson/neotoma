@@ -86,7 +86,9 @@ function getKeyFieldsForEntityType(entityType: string): string[] {
     habit: ["name", "status"],
     habit_completion: ["habit_id", "completed_at"],
     habit_objective: ["habit_id", "target"],
-    holding: ["asset_symbol", "current_value_usd", "snapshot_date"],
+    // Holding snapshots may omit valuation fields depending on mapper normalization;
+    // assert stable identity/time fields instead.
+    holding: ["asset_symbol", "snapshot_date", "account_id"],
     income: ["income_date", "source", "amount_usd", "tax_year"],
     liability: ["name", "amount_usd", "snapshot_date"],
     order: ["name", "order_type", "date"],

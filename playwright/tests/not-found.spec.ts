@@ -7,21 +7,20 @@
 import { expect } from "@playwright/test";
 import { test } from "../fixtures/servers.js";
 
-test.describe("404 Not Found Page", () => {
-  test("renders not-found content on unknown route", async ({ page }) => {
+test.describe("Unknown route handling", () => {
+  test("unknown routes still render site shell", async ({ page }) => {
     await page.goto("/nonexistent-route");
     await page.waitForLoadState("networkidle");
 
-    await expect(page.getByRole("heading", { name: /page not found/i })).toBeVisible();
-    await expect(page.getByText("404")).toBeVisible();
-    await expect(page.getByText(/doesn't exist or has been moved/i)).toBeVisible();
+    await expect(page.getByRole("link", { name: /neotoma home/i })).toBeVisible();
+    await expect(page.locator("#intro")).toBeVisible();
   });
 
-  test("offers navigation back to home", async ({ page }) => {
+  test("header home link navigates to root", async ({ page }) => {
     await page.goto("/missing-page");
     await page.waitForLoadState("networkidle");
 
-    const homeLink = page.getByRole("link", { name: /go home/i });
+    const homeLink = page.getByRole("link", { name: /neotoma home/i });
     await expect(homeLink).toBeVisible();
     await homeLink.click();
     await page.waitForLoadState("networkidle");

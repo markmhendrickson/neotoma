@@ -216,6 +216,39 @@ describe("CLI entity subcommands", () => {
         expect(capturedBody).toMatchObject({ entity_type: "person" });
       });
     });
+
+    it("should accept --query alias for identifier", async () => {
+      await withTempHome(async (homeDir) => {
+        await setupConfig(homeDir);
+        let capturedBody: Record<string, unknown> = {};
+        const fetchMock = vi.fn(async (input: RequestInfo | Request, init?: RequestInit) => {
+          const bodyRaw =
+            init?.body ??
+            (typeof input !== "string" && (input as Request).body
+              ? await (input as Request).clone().text()
+              : undefined);
+          if (bodyRaw) {
+            capturedBody = JSON.parse(
+              typeof bodyRaw === "string" ? bodyRaw : await new Response(bodyRaw).text()
+            ) as Record<string, unknown>;
+          }
+          return new Response(JSON.stringify({ entities: [] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        const { runCli } = await loadCli();
+        const stdout = captureStdout();
+        try {
+          await runCli(["node", "cli", "entities", "search", "--query", "alias@example.com", "--json"]);
+        } finally {
+          stdout.restore();
+        }
+        expect(capturedBody).toMatchObject({ identifier: "alias@example.com" });
+      });
+    });
   });
 
   // ── entities related (mock-fetch) ────────────────────────────────────────────

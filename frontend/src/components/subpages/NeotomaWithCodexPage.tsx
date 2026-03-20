@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { SITE_CODE_SNIPPETS } from "../../site/site_data";
-import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+import { IntegrationLinkCard } from "../IntegrationLinkCard";
+import { IntegrationSection } from "../IntegrationSection";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -16,8 +16,8 @@ export function NeotomaWithCodexPage() {
         </p>
       </section>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">What Codex provides</h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-codex-provides" title="What Codex provides" dividerBefore={false}>
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           Sandbox environment with project access for each task
@@ -45,12 +45,11 @@ export function NeotomaWithCodexPage() {
             for integration with other MCP clients
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        What Codex doesn't handle
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-codex-does-not-handle" title="What Codex doesn't handle">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
@@ -69,12 +68,11 @@ export function NeotomaWithCodexPage() {
             Cross-tool access — sandbox state is isolated per task
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Deterministic guarantees Neotoma provides
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="deterministic-guarantees" title="Deterministic guarantees Neotoma provides">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         {[
           "Persistent memory graph accessible across all Codex tasks",
           "Deterministic state — same observations always produce the same entity snapshots",
@@ -88,16 +86,15 @@ export function NeotomaWithCodexPage() {
             {item}
           </li>
         ))}
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Using them together
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+      <IntegrationSection sectionKey="using-them-together" title="Using them together">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
         Codex provides the execution sandbox; Neotoma provides the persistent state layer.
         Each sandbox starts fresh, but Neotoma carries structured memory across every task.
-      </p>
-      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        </p>
+        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
         <thead>
           <tr className="border-b border-border">
             <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
@@ -132,69 +129,25 @@ export function NeotomaWithCodexPage() {
             <td className="py-2">Shared memory graph</td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Getting started &mdash; local (stdio)
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Paste this prompt into Codex. The agent handles npm install, initialization, and MCP
-        configuration.
-      </p>
-      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
-        The agent writes to <code>.codex/config.toml</code> (project-level) or{" "}
-        <code>~/.codex/config.toml</code> (user-level). Codex discovers the MCP server from your
-        config automatically.
-      </p>
+      <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-3">Choose an integration path:</p>
+        <IntegrationLinkCard
+          title="Local setup (stdio)"
+          preview="Install and configure Neotoma directly in Codex using .codex/config.toml."
+          to="/neotoma-with-codex-connect-local-stdio"
+        />
+        <IntegrationLinkCard
+          title="Remote setup (HTTP with OAuth)"
+          preview="Connect sandboxed Codex environments to a tunneled Neotoma MCP endpoint."
+          to="/neotoma-with-codex-connect-remote-http-oauth"
+        />
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Getting started &mdash; remote (HTTP with OAuth)
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Codex sandboxes can connect to remote MCP servers over HTTP. Use this when Neotoma is not
-        installed locally in the sandbox. Start with the agentic install above on your host machine,
-        then configure remote access:
-      </p>
-      <ol className="list-decimal pl-5 space-y-4 mb-6">
-        <li className="text-[15px] leading-7">
-          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
-          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
-          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
-          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
-            The tunnel URL is printed to the console and written to{" "}
-            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
-            instead of <code>--tunnel</code>.
-          </p>
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Configure HTTP transport with OAuth</strong> in your Codex config &mdash; replace the
-          URL with your tunnel URL
-          <CopyableCodeBlock
-            code={`# .codex/config.toml
-[mcp_servers.neotoma]
-type = "http"
-url = "https://<tunnel-host>/mcp"`}
-            className="mt-2 mb-1"
-          />
-          <p className="text-[14px] leading-6 text-muted-foreground mt-2">
-            Codex handles the{" "}
-            <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
-              MCP OAuth authorization flow
-            </a>{" "}
-            automatically.
-          </p>
-        </li>
-      </ol>
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
-        When MCP is not available in the sandbox, agents can use the <code>neotoma</code> CLI
-        directly as a fallback.
-      </p>
-
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Codex documentation
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="codex-documentation" title="Codex documentation">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://developers.openai.com/codex/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
@@ -216,7 +169,8 @@ url = "https://<tunnel-host>/mcp"`}
           </a>
           <span className="text-muted-foreground">— command line options</span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}

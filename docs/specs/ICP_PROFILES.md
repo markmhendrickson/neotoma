@@ -230,6 +230,28 @@ After successfully integrating Neotoma into an agent runtime and demonstrating r
 - **Barrier:** Performance at scale concerns
 - **Solution:** Performance benchmarks, SQLite optimization, scaling documentation
 
+### Core Incentive
+
+Restoring the ability to iterate on agent state. You can't debug what you can't replay. You can't iterate on what you can't inspect. Non-reproducible runs mean the debugging cycle is log archaeology instead of tight feedback loops — and infrastructure engineers already know that tight cycles are how good systems get built. The incentive is not "state management" — it is feedback loop integrity at the platform layer.
+
+### Psychological Trigger
+
+Two runs, same inputs, different state — and no way to diff what changed. This is the moment the infrastructure engineer recognizes they're operating on narrative ("it probably works") rather than evidence. It produces the same feeling as a test suite you can't trust: you know there are failure modes you can't see, and every deployment carries unquantifiable risk. The crystallizing moment shifts every subsequent evaluation of production readiness from "the system works" to "can I prove the system works?"
+
+### Role Transformation
+
+**Escaping: Log archaeologist.** A production agent fails or produces wrong output and the debugging process is reconstructing what happened from scattered logs, guessing at state transitions, and hoping to reproduce the issue. The engineer is reverse-engineering truth from artifacts instead of querying it directly. Their observability stack watches everything except the thing that actually matters: what the agent believed and why.
+
+**Into: Platform engineer with replayable state.** Diff any entity between versions. Replay any run to a specific point in time. Trace any output back to the observation that produced it. Debugging becomes querying a timeline, not reading tea leaves. The engineer builds confidence in the system the same way they build confidence in a codebase with good tests — through reproducibility.
+
+### Lifestyle Improvement
+
+Less time writing defensive infrastructure — checkpoint logic, state serialization, custom diffing, retry handlers that try to reconstruct what was true before a failure. Less time in war rooms reconstructing state. Post-mortems take thirty minutes because provenance answers "what changed and when" directly. More time designing the platform's actual capabilities. The engineering work becomes more interesting because the boring-but-critical part is no longer hand-rolled every time. The emotional register shifts too: infrastructure engineers carry the weight of reliability, and when the state layer is opaque and non-reproducible, that weight is constant low-level anxiety. When the state layer is replayable and auditable, the anxiety has somewhere to discharge. You can verify. You can prove. You sleep better.
+
+### Interaction Pattern Shift
+
+The shift is from manual orchestration to declarative trust. The infrastructure engineer stops writing glue — the guarantees they've been hand-rolling become primitives. They declare invariants ("this entity type has these fields, this schema constraint, this merge rule") and the system enforces them. Replays work because state evolution is deterministic by construction, not because someone wrote a careful checkpoint-and-restore pipeline. The observability story shifts from "instrument everything and hope the logs line up" to "query the timeline directly." The team stops treating agent state as a black box and starts treating it like any other part of the stack they can reason about.
+
 ### Technical Requirements
 - Stable MCP and API interface
 - Deterministic state guarantees (verifiable)
@@ -354,6 +376,28 @@ After integrating Neotoma as memory backend for an agent framework or pipeline a
 - **Solution:** Schema flexibility, entity type evolution, migration guides
 - **Barrier:** Performance concerns at scale
 - **Solution:** Performance benchmarks, SQLite optimization, query optimization guides
+
+### Core Incentive
+
+Canonical state that doesn't have to be re-derived every session. Retrieval re-infers entity resolution, timelines, and relationships from scratch each time. That works until it doesn't — and when it doesn't, the builder can't trace why the agent got it wrong. The incentive is not "better retrieval" — it is the recognition that retrieval and state are different paradigms, and the builder's agents need the one they don't have.
+
+### Psychological Trigger
+
+The agent treats "Acme Corp" and "ACME CORP" as the same entity in one session and different entities in the next. Or: a multi-step pipeline silently drops context between steps and the builder can't reproduce the failure because the state wasn't versioned. This is the moment the builder realizes retrieval is approximating structure, not providing it — and the approximation is non-reproducible. It reframes every prior "it works in demos" experience as survivorship bias.
+
+### Role Transformation
+
+**Escaping: Inference babysitter.** The builder ships an agent that works in demos but silently degrades in production because entity resolution, memory, and state management are all re-derived per session by the LLM. When it gets something wrong, the builder can't trace why. When they fix it, the fix doesn't persist. They're debugging probabilistic behavior in a system that should have deterministic state — absorbing the variance their architecture doesn't handle.
+
+**Into: Builder who ships on solid ground.** Entities resolve once and persist. State evolves through versioned, auditable transitions. When something breaks, the builder traces it to a specific observation, not a vague inference. Agents get more reliable as they accumulate more data, instead of more fragile. The builder stops compensating for their memory layer and starts building on top of it.
+
+### Lifestyle Improvement
+
+The builder's engineering effort is currently split. Half goes toward the product — capabilities, UX, logic. The other half goes toward working around a memory layer that doesn't hold its shape: prompt engineering to re-inject context, deduplication hacks, retry logic for when the agent forgets. With canonical entities, versioned state, and provenance, new features compound instead of regressing. The roadmap shifts from memory regression fixes to new capabilities. Sprint planning stops allocating a third of capacity to state management workarounds. A customer reports an issue and the builder traces it to a specific observation in thirty seconds. Shipping stops feeling like hoping and starts feeling like deploying. The builder starts trusting their own system enough to build ambitiously on it.
+
+### Interaction Pattern Shift
+
+The shift is from compensating for memory to building on top of it. The builder adds a capability and it works across sessions because the state it depends on persists. They ship to more users and the entity graph gets richer, not messier, because schema constraints and merge rules handle what used to be manual cleanup. Framework switching no longer means rebuilding state management from scratch — Neotoma is portable via MCP. The builder's relationship with their own product changes from vigilance to momentum: less time watching for regressions, more time extending what works.
 
 ### Technical Requirements
 - MCP integration (primary interface)
@@ -490,12 +534,35 @@ After successfully using cross-tool memory for 1-2 weeks and seeing context pers
 - **Barrier:** Not seeing enough value (memory not queried often enough)
 - **Solution:** Proactive memory retrieval in agent instructions; periodic "did you know" prompts via CLI
 
+### Core Incentive
+
+Escape from experienced dependency. Not ideological sovereignty — the concrete daily cost of provider-bound memory that drifts, loses corrections, and can't follow you across tools. Every session that starts from scratch is time spent re-explaining what the system should already know. The incentive is not "better memory" — it is reclaiming the attention currently consumed by compensating for the absence of persistent state.
+
+### Psychological Trigger
+
+The moment you get a different answer to the same question across sessions and realize there's no way to tell which one was right. Or: the moment a correction you made last week has silently reverted because the provider compressed or discarded it. This is not a feature request. It is a trust collapse. Once experienced, it reframes every subsequent interaction with the tool as unreliable until proven otherwise. For operators who have invested heavily in building personal workflows around AI tools, this trust collapse is particularly acute — it threatens the productivity gains that justified the tool investment.
+
+### Role Transformation
+
+**Escaping: Context janitor.** Every session, the operator re-explains their projects, preferences, contacts, and commitments to a tool that should already know. They are the human sync layer between Claude, Cursor, and ChatGPT — manually carrying context that the system keeps dropping. Their job becomes maintaining the agent's memory instead of doing their actual work.
+
+**Into: Operator with continuity.** The agent accumulates what it learns. Corrections hold. Tool switches preserve context. The operator's role shifts from re-establishing context to acting on it — the difference between setting up the workspace every morning and walking in and starting.
+
+### Lifestyle Improvement
+
+The daily texture changes: less typing, fewer prompts, shorter sessions that accomplish more. The cognitive load of remembering what each tool knows and doesn't know disappears. The low-grade anxiety of not trusting that the agent actually saved what you told it resolves. You stop thinking about whether the system remembers and start thinking about what you're actually trying to do. You get back the part of your attention that was being spent on babysitting.
+
+### Interaction Pattern Shift
+
+Without persistent state, the operator must be the driver on every turn. Every prompt carries the full weight of what came before because the system won't hold it. With a persistent state layer, the interaction pattern shifts from turn-by-turn prompting to review-and-steer. The agent arrives at each session already knowing what it knew last time. The operator's role moves from composing detailed instructions to reviewing what the agent already knows and course-correcting when it's off. This is the shift from operating a tool to leading a team member who remembers last week's conversation. Less driving, more steering.
+
 ### Technical Requirements
 - Single-user (no multi-user features needed for dev release)
 - MCP integration (primary access method)
 - CLI for inspection and management
 - Local-first architecture (privacy, no cloud dependency)
 - Deterministic state (trust in stored data)
+
 # TIER 2 — Secondary ICPs (Adjacent / Later in Dev Release)
 
 ## 4. Toolchain Integrators

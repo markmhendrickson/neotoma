@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { exec, execSync, spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -1774,6 +1774,22 @@ function printSessionCommands(prog: Command, filter?: string): void {
   process.stdout.write(text);
 }
 
+function normalizeLegacyCliOptionAliases(argv: string[]): string[] {
+  if (!argv.includes("store")) {
+    return argv;
+  }
+
+  // Compatibility alias: `neotoma store --json=<entities>` maps to structured `--entities`.
+  // Keep bare `--json` untouched because it is the global output-format flag.
+  return argv.map((arg) => {
+    if (!arg.startsWith("--json=")) {
+      return arg;
+    }
+    const value = arg.slice("--json=".length);
+    return `--entities=${value}`;
+  });
+}
+
 const program = new Command();
 program
   .name("neotoma")
@@ -2291,6 +2307,21 @@ type DbMergeStats = {
   tables_scanned: number;
   rows_inserted: number;
   rows_ignored: number;
+  rows_replaced: number;
+  rows_conflicted: number;
+  dry_run: boolean;
+  mode: "safe" | "keep-target" | "keep-source";
+  conflict_samples: Array<{
+    table: string;
+    key: string;
+    differing_columns: string[];
+  }>;
+};
+
+type DbMergeMode = "safe" | "keep-target" | "keep-source";
+type DbMergeOptions = {
+  mode?: DbMergeMode;
+  dryRun?: boolean;
 };
 
 async function listExistingDbFiles(dataDir: string): Promise<Set<string>> {
@@ -2357,7 +2388,20 @@ function checkpointWal(db: SqliteDatabase): void {
   }
 }
 
-function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMergeStats {
+function stableValueSignature(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (Buffer.isBuffer(value)) return `buf:${value.toString("base64")}`;
+  if (typeof value === "object") return `obj:${JSON.stringify(value)}`;
+  return `${typeof value}:${String(value)}`;
+}
+
+function mergeSqliteDatabase(
+  sourceDbPath: string,
+  targetDbPath: string,
+  options?: DbMergeOptions
+): DbMergeStats {
+  const mode: DbMergeMode = options?.mode ?? "keep-target";
+  const dryRun = options?.dryRun === true;
   let sourceDb: SqliteDatabase | null = null;
   let targetDb: SqliteDatabase | null = null;
   let attached = false;
@@ -2367,6 +2411,11 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
     tables_scanned: 0,
     rows_inserted: 0,
     rows_ignored: 0,
+    rows_replaced: 0,
+    rows_conflicted: 0,
+    dry_run: dryRun,
+    mode,
+    conflict_samples: [],
   };
   try {
     sourceDb = new Database(sourceDbPath);
@@ -2389,6 +2438,20 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
       ).map((row) => row.name)
     );
 
+    type TablePlan = {
+      tableName: string;
+      quotedTable: string;
+      quotedCols: string;
+      sourceCount: number;
+      conflictCount: number;
+      conflictSamples: Array<{
+        table: string;
+        key: string;
+        differing_columns: string[];
+      }>;
+    };
+    const plans: TablePlan[] = [];
+
     for (const table of targetTables) {
       const tableName = table.name;
       if (!sourceTableSet.has(tableName)) continue;
@@ -2396,8 +2459,10 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
       const targetCols = (
         targetDb.prepare(`PRAGMA table_info(${quoteSqlIdent(tableName)})`).all() as Array<{
           name: string;
+          pk?: number;
         }>
-      ).map((row) => row.name);
+      );
+      const targetColNames = targetCols.map((row) => row.name);
       const sourceCols = new Set(
         (
           targetDb.prepare(`PRAGMA src.table_info(${quoteSqlIdent(tableName)})`).all() as Array<{
@@ -2405,7 +2470,7 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
           }>
         ).map((row) => row.name)
       );
-      const sharedCols = targetCols.filter((name) => sourceCols.has(name));
+      const sharedCols = targetColNames.filter((name) => sourceCols.has(name));
       if (sharedCols.length === 0) continue;
 
       const quotedCols = sharedCols.map((name) => quoteSqlIdent(name)).join(", ");
@@ -2414,17 +2479,107 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
         .prepare(`SELECT COUNT(*) as count FROM src.${quotedTable}`)
         .get() as { count?: number };
       const sourceCount = Number(sourceCountRow?.count ?? 0);
-      const insertResult = targetDb
-        .prepare(
-          `INSERT OR IGNORE INTO ${quotedTable} (${quotedCols}) SELECT ${quotedCols} FROM src.${quotedTable}`
-        )
-        .run();
-      const inserted = Number(insertResult.changes ?? 0);
-      const ignored = Math.max(0, sourceCount - inserted);
+
+      let conflictCount = 0;
+      const conflictSamples: Array<{
+        table: string;
+        key: string;
+        differing_columns: string[];
+      }> = [];
+      const pkCols = targetCols
+        .filter((row) => Number(row.pk ?? 0) > 0 && sourceCols.has(row.name))
+        .sort((a, b) => Number(a.pk ?? 0) - Number(b.pk ?? 0))
+        .map((row) => row.name);
+      if (pkCols.length > 0) {
+        const nonPkSharedCols = sharedCols.filter((col) => !pkCols.includes(col));
+        if (nonPkSharedCols.length > 0) {
+          const joinCond = pkCols
+            .map((col) => `t.${quoteSqlIdent(col)} = s.${quoteSqlIdent(col)}`)
+            .join(" AND ");
+          const diffCond = nonPkSharedCols
+            .map((col) => `NOT (t.${quoteSqlIdent(col)} IS s.${quoteSqlIdent(col)})`)
+            .join(" OR ");
+          const conflictCountRow = targetDb
+            .prepare(
+              `SELECT COUNT(*) as count FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond}`
+            )
+            .get() as { count?: number };
+          conflictCount = Number(conflictCountRow?.count ?? 0);
+          if (conflictCount > 0) {
+            const selectPk = pkCols
+              .map((col, idx) => `s.${quoteSqlIdent(col)} AS pk_${idx}`)
+              .join(", ");
+            const selectVals = nonPkSharedCols
+              .map(
+                (col) =>
+                  `s.${quoteSqlIdent(col)} AS s_${col.replace(/"/g, "_")}, t.${quoteSqlIdent(col)} AS t_${col.replace(/"/g, "_")}`
+              )
+              .join(", ");
+            const sampleRows = targetDb
+              .prepare(
+                `SELECT ${selectPk}, ${selectVals} FROM src.${quotedTable} s JOIN ${quotedTable} t ON ${joinCond} WHERE ${diffCond} LIMIT 25`
+              )
+              .all() as Array<Record<string, unknown>>;
+            for (const row of sampleRows) {
+              const differingColumns = nonPkSharedCols.filter((col) => {
+                const sKey = `s_${col.replace(/"/g, "_")}`;
+                const tKey = `t_${col.replace(/"/g, "_")}`;
+                return stableValueSignature(row[sKey]) !== stableValueSignature(row[tKey]);
+              });
+              const key = pkCols
+                .map((_, idx) => String(row[`pk_${idx}`] ?? "null"))
+                .join("|");
+              conflictSamples.push({
+                table: tableName,
+                key,
+                differing_columns: differingColumns,
+              });
+            }
+          }
+        }
+      }
 
       stats.tables_scanned += 1;
-      stats.rows_inserted += inserted;
-      stats.rows_ignored += ignored;
+      stats.rows_conflicted += conflictCount;
+      if (conflictSamples.length > 0) {
+        stats.conflict_samples.push(...conflictSamples);
+      }
+      plans.push({
+        tableName,
+        quotedTable,
+        quotedCols,
+        sourceCount,
+        conflictCount,
+        conflictSamples,
+      });
+    }
+
+    if (!dryRun && mode === "safe" && stats.rows_conflicted > 0) {
+      const example = stats.conflict_samples[0];
+      throw new Error(
+        `Safe merge detected conflicting rows (${stats.rows_conflicted}). Example: table=${example?.table ?? "unknown"} key=${example?.key ?? "unknown"}. Re-run with --mode keep-target or --mode keep-source.`
+      );
+    }
+
+    if (!dryRun) {
+      const insertPrefix = mode === "keep-source" ? "INSERT OR REPLACE" : "INSERT OR IGNORE";
+      const writeTx = targetDb.transaction((mergePlans: TablePlan[]) => {
+        for (const plan of mergePlans) {
+          const insertResult = targetDb!
+            .prepare(
+              `${insertPrefix} INTO ${plan.quotedTable} (${plan.quotedCols}) SELECT ${plan.quotedCols} FROM src.${plan.quotedTable}`
+            )
+            .run();
+          const inserted = Number(insertResult.changes ?? 0);
+          const ignored = Math.max(0, plan.sourceCount - inserted);
+          stats.rows_inserted += inserted;
+          stats.rows_ignored += mode === "keep-source" ? 0 : ignored;
+          if (mode === "keep-source") {
+            stats.rows_replaced += Math.min(plan.conflictCount, inserted);
+          }
+        }
+      });
+      writeTx(plans);
     }
   } finally {
     if (targetDb) {
@@ -2436,6 +2591,136 @@ function mergeSqliteDatabase(sourceDbPath: string, targetDbPath: string): DbMerg
       targetDb.close();
     }
     if (sourceDb) sourceDb.close();
+  }
+  return stats;
+}
+
+type DbSnapshotRecomputeStats = {
+  entity_snapshots_recomputed: number;
+  relationship_snapshots_recomputed: number;
+  entity_snapshot_recompute_errors: number;
+  relationship_snapshot_recompute_errors: number;
+};
+
+function parseJsonLike(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+async function recomputeMergedDbSnapshots(targetDbPath: string): Promise<DbSnapshotRecomputeStats> {
+  const stats: DbSnapshotRecomputeStats = {
+    entity_snapshots_recomputed: 0,
+    relationship_snapshots_recomputed: 0,
+    entity_snapshot_recompute_errors: 0,
+    relationship_snapshot_recompute_errors: 0,
+  };
+  const db = new Database(targetDbPath);
+  try {
+    const tableExists = (tableName: string): boolean => {
+      const row = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+        .get(tableName) as { name?: string } | undefined;
+      return row?.name === tableName;
+    };
+    if (!tableExists("entity_snapshots") || !tableExists("relationship_snapshots")) {
+      return stats;
+    }
+    if (!tableExists("observations") || !tableExists("relationship_observations")) {
+      return stats;
+    }
+
+    const { ObservationReducer } = await import("../reducers/observation_reducer.js");
+    const { RelationshipReducer } = await import("../reducers/relationship_reducer.js");
+    const observationReducer = new ObservationReducer();
+    const relationshipReducer = new RelationshipReducer();
+
+    const entityIds = (
+      db.prepare("SELECT DISTINCT entity_id FROM observations WHERE entity_id IS NOT NULL").all() as Array<{
+        entity_id: string;
+      }>
+    ).map((row) => row.entity_id);
+    const relationshipKeys = (
+      db.prepare(
+        "SELECT DISTINCT relationship_key FROM relationship_observations WHERE relationship_key IS NOT NULL"
+      ).all() as Array<{ relationship_key: string }>
+    ).map((row) => row.relationship_key);
+
+    db.prepare("DELETE FROM entity_snapshots").run();
+    db.prepare("DELETE FROM relationship_snapshots").run();
+
+    for (const entityId of entityIds) {
+      const observations = db
+        .prepare("SELECT * FROM observations WHERE entity_id = ? ORDER BY observed_at DESC, id ASC")
+        .all(entityId)
+        .map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("fields" in observation) {
+            observation.fields = parseJsonLike(observation.fields);
+          }
+          return observation;
+        });
+      if (observations.length === 0) continue;
+      try {
+        const snapshot = (await observationReducer.computeSnapshot(
+          entityId,
+          observations as unknown as any[]
+        )) as Record<string, unknown> | null;
+        if (!snapshot) continue;
+        const payload: Record<string, unknown> = { ...snapshot };
+        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
+        const cols = Object.keys(payload);
+        const placeholders = cols.map(() => "?").join(", ");
+        const vals = cols.map((k) => payload[k]);
+        db.prepare(
+          `INSERT OR REPLACE INTO entity_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+        ).run(vals);
+        stats.entity_snapshots_recomputed += 1;
+      } catch {
+        stats.entity_snapshot_recompute_errors += 1;
+      }
+    }
+
+    for (const relationshipKey of relationshipKeys) {
+      const relationshipObservations = db
+        .prepare(
+          "SELECT * FROM relationship_observations WHERE relationship_key = ? ORDER BY observed_at DESC, id ASC"
+        )
+        .all(relationshipKey)
+        .map((row) => {
+          const observation = row as Record<string, unknown>;
+          if ("metadata" in observation) {
+            observation.metadata = parseJsonLike(observation.metadata);
+          }
+          return observation;
+        });
+      if (relationshipObservations.length === 0) continue;
+      try {
+        const snapshot = (await relationshipReducer.computeSnapshot(
+          relationshipKey,
+          relationshipObservations as unknown as any[]
+        )) as unknown as Record<string, unknown> | null;
+        if (!snapshot) continue;
+        const payload: Record<string, unknown> = { ...snapshot };
+        if ("snapshot" in payload) payload.snapshot = JSON.stringify(payload.snapshot ?? {});
+        if ("provenance" in payload) payload.provenance = JSON.stringify(payload.provenance ?? {});
+        const cols = Object.keys(payload);
+        const placeholders = cols.map(() => "?").join(", ");
+        const vals = cols.map((k) => payload[k]);
+        db.prepare(
+          `INSERT OR REPLACE INTO relationship_snapshots (${cols.map((c) => quoteSqlIdent(c)).join(", ")}) VALUES (${placeholders})`
+        ).run(vals);
+        stats.relationship_snapshots_recomputed += 1;
+      } catch {
+        stats.relationship_snapshot_recompute_errors += 1;
+      }
+    }
+  } finally {
+    db.close();
   }
   return stats;
 }
@@ -6023,7 +6308,10 @@ program
   .action(async (opts: { yes?: boolean; interactive?: boolean }) => {
     const outputMode = resolveOutputMode();
     const interactiveRequested = Boolean(opts.interactive);
-    const applyDefaultsWithoutPrompts = Boolean(opts.yes || !interactiveRequested);
+    const isProdEnv = (process.env.NEOTOMA_ENV || "development") === "production";
+    const applyDefaultsWithoutPrompts = isProdEnv
+      ? false
+      : Boolean(opts.yes || !interactiveRequested);
     const { repoRoot } = await resolveRepoRootFromInitContext();
     const ts = backupTimestamp();
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
@@ -6071,7 +6359,13 @@ program
     }
 
     if (process.stdout.isTTY && !applyDefaultsWithoutPrompts && outputMode !== "json") {
-      process.stdout.write(heading("Neotoma reset") + nl() + nl());
+      const envLabel = isProdEnv ? " (PRODUCTION)" : "";
+      process.stdout.write(heading(`Neotoma reset${envLabel}`) + nl() + nl());
+      if (isProdEnv) {
+        process.stdout.write(
+          bold("WARNING: This will reset PRODUCTION data. -y flag is ignored for prod.") + nl() + nl()
+        );
+      }
       process.stdout.write("This will:" + nl());
       process.stdout.write(
         bullet(
@@ -7755,6 +8049,117 @@ storageCommand
     }
   );
 
+storageCommand
+  .command("merge-db")
+  .description("Merge rows from one SQLite DB file into another with explicit conflict policy")
+  .requiredOption("--source <path>", "Source SQLite DB file to merge from")
+  .requiredOption("--target <path>", "Target SQLite DB file to merge into")
+  .option(
+    "--mode <mode>",
+    "Conflict mode: safe (fail on conflicting row values), keep-target, keep-source",
+    "safe"
+  )
+  .option("--dry-run", "Analyze merge only; do not write target DB", false)
+  .option(
+    "--no-recompute-snapshots",
+    "Skip recomputing entity/relationship snapshots after merge"
+  )
+  .action(
+    async (opts: {
+      source: string;
+      target: string;
+      mode?: string;
+      dryRun?: boolean;
+      recomputeSnapshots?: boolean;
+    }) => {
+      const outputMode = resolveOutputMode();
+      const sourcePath = path.resolve(process.cwd(), opts.source);
+      const targetPath = path.resolve(process.cwd(), opts.target);
+      await fs.access(sourcePath);
+      await fs.access(targetPath);
+
+      const mode = String(opts.mode ?? "safe").trim().toLowerCase() as DbMergeMode;
+      if (mode !== "safe" && mode !== "keep-target" && mode !== "keep-source") {
+        throw new Error("Invalid --mode value. Expected one of: safe, keep-target, keep-source.");
+      }
+
+      const mergeStats = mergeSqliteDatabase(sourcePath, targetPath, {
+        mode,
+        dryRun: opts.dryRun === true,
+      });
+      let snapshotRecompute: DbSnapshotRecomputeStats | null = null;
+      if (opts.dryRun !== true && opts.recomputeSnapshots !== false) {
+        snapshotRecompute = await recomputeMergedDbSnapshots(targetPath);
+      }
+
+      const result = {
+        status: opts.dryRun ? "dry-run-complete" : "merged",
+        source_db: sourcePath,
+        target_db: targetPath,
+        mode,
+        dry_run: opts.dryRun === true,
+        merge_stats: mergeStats,
+        snapshot_recompute: snapshotRecompute,
+        notes: [
+          "This command merges SQLite rows only.",
+          "Raw source files/log directories are not copied by merge-db.",
+          "Use backup/restore or storage migration workflows when file assets must move with DB rows.",
+        ],
+      };
+
+      if (outputMode === "json") {
+        writeOutput(result, outputMode);
+        return;
+      }
+
+      process.stdout.write(heading("SQLite DB merge complete") + nl() + nl());
+      process.stdout.write(keyValue("source_db", sourcePath, true) + "\n");
+      process.stdout.write(keyValue("target_db", targetPath, true) + "\n");
+      process.stdout.write(keyValue("mode", mode) + "\n");
+      process.stdout.write(keyValue("dry_run", String(opts.dryRun === true)) + "\n");
+      process.stdout.write(
+        bullet(
+          `tables=${mergeStats.tables_scanned}, inserted=${mergeStats.rows_inserted}, ignored=${mergeStats.rows_ignored}, replaced=${mergeStats.rows_replaced}, conflicts=${mergeStats.rows_conflicted}`
+        ) + nl()
+      );
+      if (mergeStats.conflict_samples.length > 0) {
+        process.stdout.write(
+          bullet(`Conflict samples: showing ${Math.min(5, mergeStats.conflict_samples.length)}`) + nl()
+        );
+        for (const sample of mergeStats.conflict_samples.slice(0, 5)) {
+          process.stdout.write(
+            "  " +
+              dim(
+                `${sample.table} key=${sample.key} differing=[${sample.differing_columns.join(", ")}]`
+              ) +
+              "\n"
+          );
+        }
+      }
+      if (snapshotRecompute) {
+        process.stdout.write(
+          bullet(
+            `Snapshots recomputed: entity=${snapshotRecompute.entity_snapshots_recomputed}, relationship=${snapshotRecompute.relationship_snapshots_recomputed}`
+          ) + nl()
+        );
+        if (
+          snapshotRecompute.entity_snapshot_recompute_errors > 0 ||
+          snapshotRecompute.relationship_snapshot_recompute_errors > 0
+        ) {
+          process.stdout.write(
+            warn(
+              `Snapshot recompute errors: entity=${snapshotRecompute.entity_snapshot_recompute_errors}, relationship=${snapshotRecompute.relationship_snapshot_recompute_errors}`
+            ) + nl()
+          );
+        }
+      }
+      process.stdout.write(
+        bullet("Merge-db does not copy raw source files; reconcile storage dirs separately when needed.") +
+          nl()
+      );
+    }
+  );
+
 // ── Backup & Restore ──────────────────────────────────────────────────────
 
 const backupCommand = program
@@ -8888,14 +9293,21 @@ entitiesCommand
   .description("Search entity by identifier (name, email, etc.)")
   .argument("[identifier]", "Identifier to search for (or use --identifier)")
   .option("--identifier <id>", "Identifier to search for (alternative to positional argument)")
+  .option("--query <id>", "Compatibility alias for --identifier")
   .option("--entity-type <type>", "Limit search to specific entity type")
   .option("--user-id <userId>", "User ID")
   .action(
     async (
       identifierArg: string | undefined,
-      opts: { identifier?: string; entityType?: string; userId?: string }
+      opts: { identifier?: string; query?: string; entityType?: string; userId?: string }
     ) => {
-      const identifier = opts.identifier ?? identifierArg;
+      if (opts.identifier && opts.query && opts.identifier !== opts.query) {
+        throw new Error(
+          "Conflicting identifier inputs: --identifier and --query must match when both are provided."
+        );
+      }
+
+      const identifier = opts.identifier ?? opts.query ?? identifierArg;
       const outputMode = resolveOutputMode();
       const config = await readConfig();
       const token = await getCliToken();
@@ -8904,7 +9316,9 @@ entitiesCommand
         token,
       });
       if (!identifier)
-        throw new Error("identifier is required (positional argument or --identifier)");
+        throw new Error(
+          "identifier is required (use positional identifier, --identifier, or --query)"
+        );
       const { data, error } = await api.POST("/retrieve_entity_by_identifier", {
         body: {
           identifier,
@@ -9823,7 +10237,9 @@ program
     const hasUnstructured = Boolean(opts.filePath || opts.fileContent);
 
     if (!hasStructured && !hasUnstructured) {
-      throw new Error("Provide --file-path, --file-content, --entities, or --file");
+      throw new Error(
+        "Provide --file-path, --file-content, --entities, --json=<entities>, or --file"
+      );
     }
 
     let unstructuredBody: Record<string, unknown> = {};
@@ -9911,6 +10327,82 @@ program
       return;
     }
 
+    writeOutput(data, outputMode);
+  });
+
+program
+  .command("store-turn")
+  .description("Store one chat turn (conversation + message + optional entities) in one request")
+  .option("--conversation-title <title>", "Conversation title")
+  .option("--message <text>", "Turn message content")
+  .option("--role <role>", "Message role (default: user)", "user")
+  .option("--turn-key <key>", "Stable turn key (default: generated chat:<ts>)")
+  .option(
+    "--entities <json>",
+    "Optional JSON array of additional extracted entities to include in the same store request"
+  )
+  .option("--idempotency-key <key>", "Idempotency key (default: generated conversation-chat-...)")
+  .option("--user-id <id>", "User ID for the operation")
+  .action(async (opts) => {
+    const outputMode = resolveOutputMode();
+    const config = await readConfig();
+    const token = await getCliToken();
+    const api = createApiClient({
+      baseUrl: await resolveBaseUrl(program.opts().baseUrl, config),
+      token,
+    });
+
+    if (!opts.message || String(opts.message).trim() === "") {
+      throw new Error("store-turn requires --message <text>");
+    }
+
+    const timestampMs = Date.now();
+    const turnKey = opts.turnKey ?? `chat:${timestampMs}`;
+    const idempotencyKey = opts.idempotencyKey ?? `conversation-chat-${timestampMs}-${randomUUID()}`;
+
+    let extractedEntities: Array<Record<string, unknown>> = [];
+    if (opts.entities) {
+      const parsed = JSON.parse(opts.entities as string);
+      if (!Array.isArray(parsed)) {
+        throw new Error("store-turn --entities must be a JSON array");
+      }
+      extractedEntities = parsed as Array<Record<string, unknown>>;
+    }
+
+    const entities = [
+      { entity_type: "conversation", title: opts.conversationTitle ?? "Chat conversation" },
+      {
+        entity_type: "agent_message",
+        role: opts.role ?? "user",
+        content: String(opts.message),
+        turn_key: turnKey,
+      },
+      ...extractedEntities,
+    ];
+
+    const relationships: Array<{
+      relationship_type: "PART_OF" | "REFERS_TO";
+      source_index: number;
+      target_index: number;
+    }> = [
+      { relationship_type: "PART_OF", source_index: 1, target_index: 0 },
+      ...extractedEntities.map((_entity, index) => ({
+        relationship_type: "REFERS_TO" as const,
+        source_index: 1,
+        target_index: index + 2,
+      })),
+    ];
+
+    const { data, error } = await api.POST("/store", {
+      body: {
+        entities,
+        relationships,
+        idempotency_key: idempotencyKey,
+        interpret: false,
+        user_id: opts.userId,
+      },
+    });
+    if (error) throw new Error(`Failed to store turn: ${JSON.stringify(error)}`);
     writeOutput(data, outputMode);
   });
 
@@ -12265,6 +12757,7 @@ function teeToLogFile(logFilePath: string): (() => Promise<void>) | null {
 }
 
 export async function runCli(argv: string[] = process.argv): Promise<void> {
+  argv = normalizeLegacyCliOptionAliases(argv);
   const noLogFile = argv.includes("--no-log-file");
   const logFileIdx = argv.indexOf("--log-file");
   const explicitLogPath =

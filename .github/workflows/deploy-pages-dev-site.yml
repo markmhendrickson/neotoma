@@ -39,6 +39,9 @@ jobs:
           SITE_PREVIEW: "1"
         run: npm run build:pages:site
 
+      - name: Validate locale parity
+        run: npm run validate:locales
+
       - name: Set custom domain for dev Pages site
         run: echo "dev.neotoma.io" > site_pages/CNAME
 

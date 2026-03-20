@@ -24,10 +24,18 @@ import { AgenticSystemsBuildersPage } from "@/components/subpages/AgenticSystems
 import { DocsIndexPage } from "@/components/subpages/DocsIndexPage";
 import { NeotomaWithCursorPage } from "@/components/subpages/NeotomaWithCursorPage";
 import { NeotomaWithClaudePage } from "@/components/subpages/NeotomaWithClaudePage";
+import { ClaudeConnectDesktopPage } from "@/components/subpages/ClaudeConnectDesktopPage";
+import { ClaudeConnectRemoteMcpPage } from "@/components/subpages/ClaudeConnectRemoteMcpPage";
 import { NeotomaWithClaudeCodePage } from "@/components/subpages/NeotomaWithClaudeCodePage";
+import { ChatGptConnectCustomGptPage } from "@/components/subpages/ChatGptConnectCustomGptPage";
+import { ChatGptConnectRemoteMcpPage } from "@/components/subpages/ChatGptConnectRemoteMcpPage";
 import { NeotomaWithChatGPTPage } from "@/components/subpages/NeotomaWithChatGPTPage";
 import { NeotomaWithCodexPage } from "@/components/subpages/NeotomaWithCodexPage";
+import { CodexConnectLocalStdioPage } from "@/components/subpages/CodexConnectLocalStdioPage";
+import { CodexConnectRemoteHttpOauthPage } from "@/components/subpages/CodexConnectRemoteHttpOauthPage";
 import { NeotomaWithOpenClawPage } from "@/components/subpages/NeotomaWithOpenClawPage";
+import { OpenClawConnectLocalStdioPage } from "@/components/subpages/OpenClawConnectLocalStdioPage";
+import { OpenClawConnectRemoteHttpPage } from "@/components/subpages/OpenClawConnectRemoteHttpPage";
 import { MemoryGuaranteesPage } from "@/components/subpages/MemoryGuaranteesPage";
 import { MemoryModelsPage } from "@/components/subpages/MemoryModelsPage";
 import { FoundationsPage } from "@/components/subpages/FoundationsPage";
@@ -68,10 +76,18 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/docs", element: <DocsIndexPage /> },
   { path: "/neotoma-with-cursor", element: <NeotomaWithCursorPage /> },
   { path: "/neotoma-with-claude", element: <NeotomaWithClaudePage /> },
+  { path: "/neotoma-with-claude-connect-desktop", element: <ClaudeConnectDesktopPage /> },
+  { path: "/neotoma-with-claude-connect-remote-mcp", element: <ClaudeConnectRemoteMcpPage /> },
   { path: "/neotoma-with-claude-code", element: <NeotomaWithClaudeCodePage /> },
   { path: "/neotoma-with-chatgpt", element: <NeotomaWithChatGPTPage /> },
+  { path: "/neotoma-with-chatgpt-connect-remote-mcp", element: <ChatGptConnectRemoteMcpPage /> },
+  { path: "/neotoma-with-chatgpt-connect-custom-gpt", element: <ChatGptConnectCustomGptPage /> },
   { path: "/neotoma-with-codex", element: <NeotomaWithCodexPage /> },
+  { path: "/neotoma-with-codex-connect-local-stdio", element: <CodexConnectLocalStdioPage /> },
+  { path: "/neotoma-with-codex-connect-remote-http-oauth", element: <CodexConnectRemoteHttpOauthPage /> },
   { path: "/neotoma-with-openclaw", element: <NeotomaWithOpenClawPage /> },
+  { path: "/neotoma-with-openclaw-connect-local-stdio", element: <OpenClawConnectLocalStdioPage /> },
+  { path: "/neotoma-with-openclaw-connect-remote-http", element: <OpenClawConnectRemoteHttpPage /> },
   { path: "/memory-guarantees", element: <MemoryGuaranteesPage /> },
   { path: "/deterministic-state-evolution", element: <Navigate to="/memory-guarantees#deterministic-state-evolution" replace /> },
   { path: "/versioned-history", element: <Navigate to="/memory-guarantees#versioned-history" replace /> },

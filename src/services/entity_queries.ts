@@ -8,6 +8,12 @@ export interface EntityQueryOptions {
   entityType?: string;
   includeMerged?: boolean;
   includeDeleted?: boolean;
+  includeSnapshots?: boolean;
+  sortBy?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+  sortOrder?: "asc" | "desc";
+  published?: boolean;
+  publishedAfter?: string;
+  publishedBefore?: string;
   limit?: number;
   offset?: number;
   /** When provided, fetch only these entity IDs (e.g. from semantic search) */
@@ -41,6 +47,43 @@ interface EntitySnapshotRow {
   [key: string]: unknown;
 }
 
+const ENTITY_BASE_SELECT =
+  "id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at";
+
+async function getDeletedEntityIds(entityIds: string[]): Promise<Set<string>> {
+  const deletedEntityIds = new Set<string>();
+  if (entityIds.length === 0) {
+    return deletedEntityIds;
+  }
+
+  const { data: deletionObservations } = await db
+    .from("observations")
+    .select("entity_id, source_priority, observed_at, fields")
+    .in("entity_id", entityIds)
+    .order("source_priority", { ascending: false })
+    .order("observed_at", { ascending: false });
+
+  if (!deletionObservations || deletionObservations.length === 0) {
+    return deletedEntityIds;
+  }
+
+  // Result set is already sorted by priority and recency.
+  const highestByEntity = new Map<string, any>();
+  for (const obs of deletionObservations) {
+    if (!highestByEntity.has(obs.entity_id)) {
+      highestByEntity.set(obs.entity_id, obs);
+    }
+  }
+
+  for (const [entityId, obs] of highestByEntity.entries()) {
+    if (obs.fields?._deleted === true) {
+      deletedEntityIds.add(entityId);
+    }
+  }
+
+  return deletedEntityIds;
+}
+
 /**
  * Query entities with merged entity exclusion
  */
@@ -52,15 +95,19 @@ export async function queryEntities(
     entityType,
     includeMerged = false,
     includeDeleted = false,
+    includeSnapshots = true,
+    sortBy = "entity_id",
+    sortOrder = "asc",
+    published,
+    publishedAfter,
+    publishedBefore,
     limit = 100,
     offset = 0,
     entityIds: filterEntityIds,
   } = options;
 
   // Build query for entities
-  let entityQuery = db
-    .from("entities")
-    .select("id, entity_type, canonical_name, user_id, merged_to_entity_id, merged_at, created_at");
+  let entityQuery = db.from("entities").select(ENTITY_BASE_SELECT);
 
   // Filter by user if provided
   if (userId) {
@@ -82,107 +129,224 @@ export async function queryEntities(
     entityQuery = entityQuery.in("id", filterEntityIds);
   }
 
-  // Always use a deterministic order so pagination is stable across calls.
-  entityQuery = entityQuery.order("id", { ascending: true });
-
-  const { data: baseEntitiesData, error: entitiesError } = await entityQuery;
-
-  if (entitiesError) {
-    throw new Error(`Failed to query entities: ${entitiesError.message}`);
+  const ascending = sortOrder === "asc";
+  if (sortBy === "canonical_name") {
+    entityQuery = entityQuery.order("canonical_name", { ascending });
+  } else {
+    entityQuery = entityQuery.order("id", { ascending: sortBy === "entity_id" ? ascending : true });
   }
 
-  if (!baseEntitiesData || baseEntitiesData.length === 0) {
-    return [];
-  }
+  const shouldUseSnapshotDrivenScan =
+    sortBy === "observation_count" ||
+    sortBy === "last_observation_at" ||
+    published !== undefined ||
+    Boolean(publishedAfter) ||
+    Boolean(publishedBefore);
 
-  // Filter deleted entities unless explicitly requested, then paginate.
-  let entities = baseEntitiesData;
-  if (!includeDeleted) {
-    const allEntityIds = entities.map((e: any) => e.id);
-    // Check for deletion observations (highest priority with _deleted: true)
-    const { data: deletionObservations } = await db
-      .from("observations")
-      .select("entity_id, source_priority, observed_at, fields")
-      .in("entity_id", allEntityIds)
-      .order("source_priority", { ascending: false })
-      .order("observed_at", { ascending: false });
+  const fetchEntitiesByIds = async (ids: string[]) => {
+    if (ids.length === 0) return [];
+    let query = db.from("entities").select(ENTITY_BASE_SELECT).in("id", ids);
+    if (userId) {
+      query = query.eq("user_id", userId);
+    }
+    if (entityType) {
+      query = query.eq("entity_type", entityType);
+    }
+    if (!includeMerged) {
+      query = query.is("merged_to_entity_id", null);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to query entities: ${error.message}`);
+    }
+    return data || [];
+  };
 
-    // Find entities with deletion observations
-    const deletedEntityIds = new Set<string>();
-    if (deletionObservations) {
-      // Group by entity_id and get highest priority observation
-      const highestByEntity = new Map<string, any>();
-      for (const obs of deletionObservations) {
-        if (!highestByEntity.has(obs.entity_id)) {
-          highestByEntity.set(obs.entity_id, obs);
-        } else {
-          const existing = highestByEntity.get(obs.entity_id);
-          if (obs.source_priority > existing.source_priority ||
-              (obs.source_priority === existing.source_priority &&
-               new Date(obs.observed_at).getTime() > new Date(existing.observed_at).getTime())) {
-            highestByEntity.set(obs.entity_id, obs);
-          }
+  let entities: any[] = [];
+  if (shouldUseSnapshotDrivenScan) {
+    const scanChunkSize = Math.max(200, Math.min(limit * 4, 1000));
+    let scanOffset = 0;
+    let visibleSkipped = 0;
+    let exhausted = false;
+
+    while (entities.length < limit && !exhausted) {
+      let snapshotQuery = db.from("entity_snapshots").select("entity_id");
+      if (userId) {
+        snapshotQuery = snapshotQuery.eq("user_id", userId);
+      }
+      if (entityType) {
+        snapshotQuery = snapshotQuery.eq("entity_type", entityType);
+      }
+      if (filterEntityIds && filterEntityIds.length > 0) {
+        snapshotQuery = snapshotQuery.in("entity_id", filterEntityIds);
+      }
+      if (published !== undefined) {
+        snapshotQuery = snapshotQuery.eq("snapshot->>published", published ? "true" : "false");
+      }
+      if (publishedAfter) {
+        snapshotQuery = snapshotQuery.gte("snapshot->>published_date", publishedAfter);
+      }
+      if (publishedBefore) {
+        snapshotQuery = snapshotQuery.lte("snapshot->>published_date", publishedBefore);
+      }
+
+      if (sortBy === "observation_count") {
+        snapshotQuery = snapshotQuery.order("observation_count", { ascending });
+      } else if (sortBy === "last_observation_at") {
+        snapshotQuery = snapshotQuery.order("last_observation_at", { ascending });
+      } else {
+        snapshotQuery = snapshotQuery.order("entity_id", { ascending: true });
+      }
+      snapshotQuery = snapshotQuery.order("entity_id", { ascending: true }).range(
+        scanOffset,
+        scanOffset + scanChunkSize - 1
+      );
+
+      const { data: snapshotRows, error: snapshotError } = await snapshotQuery;
+      if (snapshotError) {
+        throw new Error(`Failed to query snapshot candidates: ${snapshotError.message}`);
+      }
+
+      const rows = snapshotRows || [];
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+      scanOffset += rows.length;
+
+      const orderedIds: string[] = rows.map((row: { entity_id: string }) => row.entity_id);
+      const entityRows = await fetchEntitiesByIds(orderedIds);
+      const entityById = new Map(entityRows.map((row: any) => [row.id, row]));
+
+      const candidateRows = orderedIds
+        .map((id: string) => entityById.get(id))
+        .filter((row): row is any => Boolean(row));
+      const deletedIds = includeDeleted
+        ? new Set<string>()
+        : await getDeletedEntityIds(candidateRows.map((row: any) => row.id));
+
+      for (const row of candidateRows) {
+        if (deletedIds.has(row.id)) {
+          continue;
+        }
+        if (visibleSkipped < offset) {
+          visibleSkipped += 1;
+          continue;
+        }
+        entities.push(row);
+        if (entities.length >= limit) {
+          break;
         }
       }
 
-      // Check if highest priority observation is a deletion
-      for (const [entityId, obs] of highestByEntity.entries()) {
-        if (obs.fields?._deleted === true) {
-          deletedEntityIds.add(entityId);
-        }
+      if (rows.length < scanChunkSize) {
+        exhausted = true;
       }
     }
+  } else if (includeDeleted) {
+    const { data: pagedEntities, error: entitiesError } = await entityQuery.range(
+      offset,
+      offset + limit - 1
+    );
+    if (entitiesError) {
+      throw new Error(`Failed to query entities: ${entitiesError.message}`);
+    }
+    entities = pagedEntities || [];
+  } else {
+    // Deleted-state visibility is resolved from highest-priority observations. To keep
+    // payloads bounded, scan deterministically in chunks and stop once the requested page
+    // of non-deleted entities is filled.
+    const scanChunkSize = Math.max(200, Math.min(limit * 4, 1000));
+    let scanOffset = 0;
+    let visibleSkipped = 0;
+    let exhausted = false;
 
-    // Filter out deleted entities
-    entities = entities.filter((e: any) => !deletedEntityIds.has(e.id));
+    while (entities.length < limit && !exhausted) {
+      const { data: chunk, error: chunkError } = await entityQuery.range(
+        scanOffset,
+        scanOffset + scanChunkSize - 1
+      );
+      if (chunkError) {
+        throw new Error(`Failed to query entities: ${chunkError.message}`);
+      }
+
+      const rows = chunk || [];
+      if (rows.length === 0) {
+        exhausted = true;
+        break;
+      }
+
+      scanOffset += rows.length;
+      const chunkDeletedEntityIds = await getDeletedEntityIds(rows.map((row: any) => row.id));
+
+      for (const row of rows) {
+        if (chunkDeletedEntityIds.has(row.id)) {
+          continue;
+        }
+        if (visibleSkipped < offset) {
+          visibleSkipped += 1;
+          continue;
+        }
+        entities.push(row);
+        if (entities.length >= limit) {
+          break;
+        }
+      }
+
+      if (rows.length < scanChunkSize) {
+        exhausted = true;
+      }
+    }
   }
 
-  entities = entities.slice(offset, offset + limit);
   if (entities.length === 0) {
     return [];
   }
 
-  // Get snapshots for entities on the selected page
   const entityIds = entities.map((e: any) => e.id);
   const filteredEntityIds = entityIds;
+  const snapshotSelect = includeSnapshots
+    ? "*"
+    : "entity_id, schema_version, observation_count, last_observation_at, computed_at";
   const { data: snapshots, error: snapshotsError } = await db
     .from("entity_snapshots")
-    .select("*")
+    .select(snapshotSelect)
     .in("entity_id", entityIds);
 
   if (snapshotsError) {
     throw new Error(`Failed to query snapshots: ${snapshotsError.message}`);
   }
 
-  // Combine entities with snapshots
   const snapshotMap = new Map<string, EntitySnapshotRow>(
     (snapshots || []).map((s: EntitySnapshotRow) => [s.entity_id, s])
   );
 
   // Get raw_fragments for all entities (batch query)
-  const { data: allObservations } = await db
-    .from("observations")
-    .select("entity_id, source_id, user_id")
-    .in("entity_id", filteredEntityIds)
-    .not("source_id", "is", null)
-    .limit(1000); // Reasonable limit for batch
+  let allObservations: Array<{ entity_id: string; source_id: string | null; user_id: string | null }> = [];
+  if (includeSnapshots) {
+    const { data } = await db
+      .from("observations")
+      .select("entity_id, source_id, user_id")
+      .in("entity_id", filteredEntityIds)
+      .not("source_id", "is", null)
+      .limit(1000); // Reasonable limit for batch
+    allObservations = (data as Array<{ entity_id: string; source_id: string | null; user_id: string | null }>) || [];
+  }
 
   // Group observations by entity_id to get source_ids per entity
   const entitySources = new Map<string, Set<string>>();
   const entityUserIds = new Map<string, Set<string>>();
   
-  if (allObservations) {
-    for (const obs of allObservations) {
-      if (!entitySources.has(obs.entity_id)) {
-        entitySources.set(obs.entity_id, new Set());
-        entityUserIds.set(obs.entity_id, new Set());
-      }
-      if (obs.source_id) {
-        entitySources.get(obs.entity_id)!.add(obs.source_id);
-      }
-      if (obs.user_id) {
-        entityUserIds.get(obs.entity_id)!.add(obs.user_id);
-      }
+  for (const obs of allObservations) {
+    if (!entitySources.has(obs.entity_id)) {
+      entitySources.set(obs.entity_id, new Set());
+      entityUserIds.set(obs.entity_id, new Set());
+    }
+    if (obs.source_id) {
+      entitySources.get(obs.entity_id)!.add(obs.source_id);
+    }
+    if (obs.user_id) {
+      entityUserIds.get(obs.entity_id)!.add(obs.user_id);
     }
   }
 
@@ -289,11 +453,14 @@ export async function queryEntities(
       entity_type: entity.entity_type,
       canonical_name: entity.canonical_name,
       schema_version: snapshot?.schema_version,
-      snapshot: snapshot?.snapshot || {},
-      raw_fragments: rawFragments && Object.keys(rawFragments).length > 0 ? rawFragments : undefined,
+      snapshot: includeSnapshots ? snapshot?.snapshot || {} : {},
+      raw_fragments:
+        includeSnapshots && rawFragments && Object.keys(rawFragments).length > 0
+          ? rawFragments
+          : undefined,
       observation_count: snapshot?.observation_count || 0,
       last_observation_at: snapshot?.last_observation_at || entity.created_at,
-      provenance: snapshot?.provenance || {},
+      provenance: includeSnapshots ? snapshot?.provenance || {} : {},
       computed_at: snapshot?.computed_at,
       merged_to_entity_id: entity.merged_to_entity_id,
       merged_at: entity.merged_at,

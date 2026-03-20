@@ -855,10 +855,43 @@ paths:
                   type: string
                 search:
                   type: string
+                  description: Canonical free-text query parameter for retrieval relevance.
+                query:
+                  type: string
+                  description: Compatibility alias for `search`.
+                search_query:
+                  type: string
+                  description: Compatibility alias for `search`.
                 limit:
                   type: integer
                 offset:
                   type: integer
+                sort_by:
+                  type: string
+                  enum:
+                  - entity_id
+                  - canonical_name
+                  - observation_count
+                  - last_observation_at
+                  description: "Non-default values cannot be combined with `search`."
+                sort_order:
+                  type: string
+                  enum:
+                  - asc
+                  - desc
+                  description: "`desc` cannot be combined with `search`."
+                published:
+                  type: boolean
+                  description: "Cannot be combined with `search`."
+                published_after:
+                  type: string
+                  description: "Inclusive lower bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`."
+                published_before:
+                  type: string
+                  description: "Inclusive upper bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`."
+                include_snapshots:
+                  type: boolean
+                  description: When false, omit snapshot/provenance/raw_fragments payloads for lighter responses.
                 include_merged:
                   type: boolean
                 user_id:

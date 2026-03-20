@@ -47,7 +47,7 @@ export async function semanticSearchEntities(
     return { entityIds: [], total: 0 };
   }
 
-  const entityIds = searchLocalEntityEmbeddings({
+  const { entityIds, total } = searchLocalEntityEmbeddings({
     queryEmbedding,
     userId,
     entityType: entityType ?? null,
@@ -60,5 +60,5 @@ export async function semanticSearchEntities(
   logger.info(
     `[entity_semantic_search] local userId=${userId} search="${searchText.slice(0, 40)}${searchText.length > 40 ? "..." : ""}" entityIds=${entityIds.length} backend=${config.storageBackend}`
   );
-  return { entityIds, total: entityIds.length };
+  return { entityIds, total };
 }

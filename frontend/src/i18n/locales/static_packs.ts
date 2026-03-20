@@ -7,6 +7,16 @@ export interface SeoRouteCopy {
 }
 
 export interface StaticLocalePack {
+  homeHero: {
+    titlePrefix: string;
+    titleFocus: string;
+    withoutStateLayer: string;
+    bullets: [string, string, string];
+    summary: string;
+    ctaViewGuarantees: string;
+    ctaInstall: string;
+    subcopy: string;
+  };
   siteSections: {
     intro: string;
     beforeAfter: string;
@@ -51,6 +61,22 @@ export interface StaticLocalePack {
 }
 
 const EN_PACK: StaticLocalePack = {
+  homeHero: {
+    titlePrefix: "Your production agent has",
+    titleFocus: "amnesia",
+    withoutStateLayer: "Without a state layer:",
+    bullets: [
+      "Context drifts across sessions.",
+      "Facts conflict across tools and tasks.",
+      "Decisions execute without a reproducible trail.",
+    ],
+    summary:
+      "Neotoma is the deterministic state layer for long-running agents. Every observation is versioned. Every entity snapshot is reproducible. Every decision can be replayed.",
+    ctaViewGuarantees: "View guarantees",
+    ctaInstall: "Install deterministic memory in 5 minutes",
+    subcopy:
+      "RAG retrieves documents. Platform memory personalizes chat. Neither maintains durable state. Neotoma does — with deterministic guarantees and no silent mutation.",
+  },
   siteSections: {
     intro: "Intro",
     beforeAfter: "Before / After",
@@ -89,7 +115,7 @@ const EN_PACK: StaticLocalePack = {
     home: {
       title: "Neotoma | Deterministic state layer for long-running agents",
       description:
-        "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
+        "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
     },
     docs: {
       title: "Neotoma Documentation | Setup, API, MCP, CLI References",
@@ -114,10 +140,44 @@ const EN_PACK: StaticLocalePack = {
   },
 };
 
+function buildLocalizedSeo(locale: SupportedLocale, dict: ReturnType<typeof getDictionary>): StaticLocalePack["seo"] {
+  if (locale === "en") return EN_PACK.seo;
+  return {
+    home: {
+      title: `Neotoma | ${dict.languageName}`,
+      description: `${dict.install} Neotoma. Deterministic, versioned, schema-bound, replayable, auditable state layer for long-running agents.`,
+    },
+    docs: {
+      title: `${dict.docs} | Neotoma`,
+      description: `${dict.allDocumentation} for Neotoma: ${dict.install}, API, MCP, CLI, and architecture.`,
+    },
+    install: {
+      title: `${dict.install} | Neotoma`,
+      description: `${dict.install} Neotoma in 5 minutes with agent-assisted or manual setup.`,
+    },
+    foundations: {
+      title: `Foundations | Neotoma`,
+      description: `Privacy-first local data and cross-platform memory via MCP.`,
+    },
+    memoryGuarantees: {
+      title: `Memory Guarantees | Neotoma`,
+      description: `Deterministic state evolution, versioned history, replayable timeline, auditable change log, and schema constraints.`,
+    },
+  };
+}
+
 function buildPack(locale: SupportedLocale): StaticLocalePack {
   if (locale === "en") return EN_PACK;
   const dict = getDictionary(locale);
   return {
+    homeHero: {
+      ...EN_PACK.homeHero,
+      ctaViewGuarantees: locale === "es" ? "Ver garantías" : EN_PACK.homeHero.ctaViewGuarantees,
+      ctaInstall:
+        locale === "es"
+          ? "Instalar memoria determinista en 5 minutos"
+          : EN_PACK.homeHero.ctaInstall,
+    },
     siteSections: {
       ...EN_PACK.siteSections,
       install: dict.install,
@@ -137,7 +197,7 @@ function buildPack(locale: SupportedLocale): StaticLocalePack {
       title: EN_PACK.foundations.title,
       onThisPage: EN_PACK.foundations.onThisPage,
     },
-    seo: EN_PACK.seo,
+    seo: buildLocalizedSeo(locale, dict),
   };
 }
 

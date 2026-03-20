@@ -28,6 +28,7 @@ describe("CLI command coverage guard", () => {
       "stats",
       "storage",
       "store",
+      "store-turn",
       "store-structured",
       "store-unstructured",
       "timeline",

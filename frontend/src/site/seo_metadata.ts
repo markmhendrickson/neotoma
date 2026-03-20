@@ -34,7 +34,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/": {
     title: "Neotoma | Deterministic state layer for long-running agents",
     description:
-      "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
+      "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
     robots: "index,follow",
     ogType: "website",
     jsonLdType: "WebSite",
@@ -137,7 +137,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/ai-infrastructure-engineers": {
     title: "For AI infrastructure engineers | Neotoma",
     description:
-      "How Neotoma solves agent memory drift for AI infrastructure engineers building stateful agent systems.",
+      "Two runs, same inputs, different state. Neotoma provides deterministic state evolution, replayable timelines, and full provenance for AI infrastructure teams.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -148,7 +148,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/ai-native-operators": {
     title: "For AI-native operators | Neotoma",
     description:
-      "Persistent, cross-session memory for AI-native operators who run agents across tools and platforms daily.",
+      "Your agent infers — it doesn't guarantee. Neotoma provides persistent, cross-tool memory that survives session resets and makes corrections stick.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -159,7 +159,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/agentic-systems-builders": {
     title: "For builders of agentic systems | Neotoma",
     description:
-      "Deterministic memory and provenance layer for builders of multi-agent systems and AI toolchains.",
+      "Your agent resolves entities by inference — every session, it guesses again. Neotoma provides deterministic memory, entity resolution, and provenance for shipped agents.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -180,7 +180,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/neotoma-with-claude": {
-    title: "Neotoma with Claude (Web / Mobile / Desktop) | Integration Guide",
+    title: "Neotoma with Claude | Integration Guide",
     description:
       "Pair Neotoma's deterministic structured state with Claude's platform apps for reliable cross-session context via MCP.",
     robots: "index,follow",
@@ -189,6 +189,32 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "Claude", path: "/neotoma-with-claude" },
+    ],
+  },
+  "/neotoma-with-claude-connect-desktop": {
+    title: "Claude Desktop local setup | Neotoma",
+    description:
+      "Step-by-step local setup for connecting Neotoma to Claude Desktop over stdio transport.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Claude", path: "/neotoma-with-claude" },
+      { name: "Claude Desktop local setup", path: "/neotoma-with-claude-connect-desktop" },
+    ],
+  },
+  "/neotoma-with-claude-connect-remote-mcp": {
+    title: "claude.ai remote MCP setup | Neotoma",
+    description:
+      "Step-by-step remote setup: tunnel Neotoma API and connect claude.ai to your MCP endpoint.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Claude", path: "/neotoma-with-claude" },
+      { name: "claude.ai remote MCP setup", path: "/neotoma-with-claude-connect-remote-mcp" },
     ],
   },
   "/neotoma-with-claude-code": {
@@ -215,6 +241,32 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "ChatGPT", path: "/neotoma-with-chatgpt" },
     ],
   },
+  "/neotoma-with-chatgpt-connect-remote-mcp": {
+    title: "Connect ChatGPT via remote MCP | Neotoma",
+    description:
+      "Step-by-step: tunnel, developer mode, add Neotoma MCP server URL for ChatGPT Business or Enterprise.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "ChatGPT", path: "/neotoma-with-chatgpt" },
+      { name: "Connect via remote MCP", path: "/neotoma-with-chatgpt-connect-remote-mcp" },
+    ],
+  },
+  "/neotoma-with-chatgpt-connect-custom-gpt": {
+    title: "Connect via custom GPT with OpenAPI | Neotoma",
+    description:
+      "Full setup: tunnel, Actions auth, instructions, OpenAPI paste for Neotoma in a custom GPT.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "ChatGPT", path: "/neotoma-with-chatgpt" },
+      { name: "Connect via custom GPT", path: "/neotoma-with-chatgpt-connect-custom-gpt" },
+    ],
+  },
   "/neotoma-with-codex": {
     title: "Neotoma with Codex | Integration Guide",
     description:
@@ -227,6 +279,32 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Codex", path: "/neotoma-with-codex" },
     ],
   },
+  "/neotoma-with-codex-connect-local-stdio": {
+    title: "Codex local setup (stdio) | Neotoma",
+    description:
+      "Configure Neotoma locally in Codex using stdio transport and .codex/config.toml.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Codex", path: "/neotoma-with-codex" },
+      { name: "Local setup", path: "/neotoma-with-codex-connect-local-stdio" },
+    ],
+  },
+  "/neotoma-with-codex-connect-remote-http-oauth": {
+    title: "Codex remote setup (HTTP with OAuth) | Neotoma",
+    description:
+      "Configure Codex to connect to a remote Neotoma MCP endpoint over HTTP with OAuth.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Codex", path: "/neotoma-with-codex" },
+      { name: "Remote setup", path: "/neotoma-with-codex-connect-remote-http-oauth" },
+    ],
+  },
   "/neotoma-with-openclaw": {
     title: "Neotoma with OpenClaw | Integration Guide",
     description:
@@ -237,6 +315,32 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Docs", path: "/docs" },
       { name: "OpenClaw", path: "/neotoma-with-openclaw" },
+    ],
+  },
+  "/neotoma-with-openclaw-connect-local-stdio": {
+    title: "OpenClaw local setup (stdio) | Neotoma",
+    description:
+      "Install Neotoma locally and connect OpenClaw using stdio transport on the same machine.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "OpenClaw", path: "/neotoma-with-openclaw" },
+      { name: "Local setup", path: "/neotoma-with-openclaw-connect-local-stdio" },
+    ],
+  },
+  "/neotoma-with-openclaw-connect-remote-http": {
+    title: "OpenClaw remote setup (HTTP) | Neotoma",
+    description:
+      "Set up OpenClaw with remote Neotoma access using a tunneled HTTPS endpoint and MCP OAuth.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "OpenClaw", path: "/neotoma-with-openclaw" },
+      { name: "Remote setup", path: "/neotoma-with-openclaw-connect-remote-http" },
     ],
   },
   "/deterministic-state-evolution": {

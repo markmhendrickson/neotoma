@@ -116,7 +116,7 @@ export function searchLocalEntityEmbeddings(options: {
   distanceThreshold?: number;
   limit: number;
   offset: number;
-}): string[] {
+}): { entityIds: string[]; total: number } {
   const {
     queryEmbedding,
     userId,
@@ -135,13 +135,13 @@ export function searchLocalEntityEmbeddings(options: {
     logger.warn(
       `[searchLocalEntityEmbeddings] early exit: storageBackend=${config.storageBackend} openaiApiKey=${!!config.openaiApiKey} embLen=${queryEmbedding?.length ?? 0}`
     );
-    return [];
+    return { entityIds: [], total: 0 };
   }
 
   const db = getSqliteDb();
   if (!ensureSqliteVecLoaded(db)) {
     logger.warn("[searchLocalEntityEmbeddings] sqlite-vec not loaded");
-    return [];
+    return { entityIds: [], total: 0 };
   }
   ensureVecSchema(db);
 
@@ -192,5 +192,5 @@ export function searchLocalEntityEmbeddings(options: {
       `[searchLocalEntityEmbeddings] KNN returned 0 rows despite userRows=${userRows}; userId=${userId}`
     );
   }
-  return sliced.map((r) => r.entity_id);
+  return { entityIds: sliced.map((r) => r.entity_id), total: filtered.length };
 }

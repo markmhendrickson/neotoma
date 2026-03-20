@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { getDictionary } from "@/i18n/dictionaries";
-import { AutoTranslateRuntime } from "@/i18n/AutoTranslateRuntime";
 import { getStaticLocalePack, type StaticLocalePack } from "@/i18n/locales/static_packs";
 import {
   DEFAULT_LOCALE,
@@ -10,7 +9,7 @@ import {
   LOCALE_LANGUAGE_NAME,
   type SupportedLocale,
 } from "@/i18n/config";
-import { getLocaleFromPath, stripLocaleFromPath } from "@/i18n/routing";
+import { getLocaleFromPath } from "@/i18n/routing";
 
 interface LocaleContextValue {
   locale: SupportedLocale;
@@ -43,15 +42,8 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.dir = value.direction;
   }, [locale, value.direction]);
 
-  const canonicalPath = stripLocaleFromPath(pathname);
-  const migratedStaticRoutes = new Set(["/", "/foundations", "/memory-guarantees"]);
-  const shouldRunRuntimeTranslation = !migratedStaticRoutes.has(canonicalPath);
-
   return (
     <LocaleContext.Provider value={value}>
-      {shouldRunRuntimeTranslation ? (
-        <AutoTranslateRuntime locale={locale} routeKey={pathname} />
-      ) : null}
       {children}
     </LocaleContext.Provider>
   );

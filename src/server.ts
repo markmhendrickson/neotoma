@@ -47,11 +47,6 @@ import {
   UpdateSchemaIncrementalRequestSchema,
   RegisterSchemaRequestSchema,
 } from "./shared/action_schemas.js";
-import {
-  normalizeEntityValue,
-  generateEntityId,
-  type Entity,
-} from "./services/entity_resolution.js";
 import { ensureLocalDevUser } from "./services/local_auth.js";
 import type { RelationshipType } from "./services/relationships.js";
 import {
@@ -76,10 +71,11 @@ import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
-import { semanticSearchEntities } from "./services/entity_semantic_search.js";
 import { getLatestFromRegistry, isUpdateAvailable, formatUpgradeCommand } from "./version_check.js";
+import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 
 const MCP_DOCS_SUBDIR = ["docs", "developer", "mcp"] as const;
+const TIMELINE_WIDGET_RESOURCE_URI = "neotoma://ui/timeline_widget";
 
 export class NeotomaServer {
   private server: Server;
@@ -824,13 +820,96 @@ export class NeotomaServer {
             description:
               this.toolDescriptions.get("retrieve_entities") ??
               "Query entities with filters (type, pagination). Returns entities with their snapshots.",
-            inputSchema: getOpenApiInputSchemaOrThrow("retrieve_entities"),
+            inputSchema: {
+              type: "object",
+              properties: {
+                entity_type: {
+                  type: "string",
+                  description: "Optional entity type filter (for example: post, task, contact).",
+                },
+                search: {
+                  type: "string",
+                  description:
+                    "Canonical free-text query for lexical/semantic retrieval. Cannot be combined with published filters or non-default sorting.",
+                },
+                search_query: {
+                  type: "string",
+                  description: "Compatibility alias for `search`.",
+                },
+                query: {
+                  type: "string",
+                  description: "Compatibility alias for `search`.",
+                },
+                similarity_threshold: {
+                  type: "number",
+                  description:
+                    "Semantic distance threshold when `search` is used. Lower is stricter (typical 1.0-1.05).",
+                },
+                limit: {
+                  type: "integer",
+                  minimum: 1,
+                  description: "Maximum number of entities to return (default 100).",
+                },
+                offset: {
+                  type: "integer",
+                  minimum: 0,
+                  description: "Pagination offset (default 0).",
+                },
+                sort_by: {
+                  type: "string",
+                  enum: ["entity_id", "canonical_name", "observation_count", "last_observation_at"],
+                  description: "Sort field. Non-default values cannot be combined with `search`.",
+                },
+                sort_order: {
+                  type: "string",
+                  enum: ["asc", "desc"],
+                  description: "Sort direction. `desc` cannot be combined with `search`.",
+                },
+                published: {
+                  type: "boolean",
+                  description: "Filter by snapshot.published. Cannot be combined with `search`.",
+                },
+                published_after: {
+                  type: "string",
+                  description:
+                    "Inclusive lower bound for snapshot.published_date (ISO date/datetime). Cannot be combined with `search`.",
+                },
+                published_before: {
+                  type: "string",
+                  description:
+                    "Inclusive upper bound for snapshot.published_date (ISO date/datetime). Cannot be combined with `search`.",
+                },
+                include_snapshots: {
+                  type: "boolean",
+                  description:
+                    "When false, omit snapshot/provenance/raw_fragments payloads for lightweight responses.",
+                },
+                include_merged: {
+                  type: "boolean",
+                  description: "Whether to include merged entities (default false).",
+                },
+                user_id: {
+                  type: "string",
+                  description: "Optional explicit user ID (normally inferred from auth context).",
+                },
+              },
+              required: [],
+            },
           },
           {
             name: "list_timeline_events",
             description:
               "Query timeline events with filters (type, date range, source). Returns chronological events derived from date fields in sources.",
             inputSchema: getOpenApiInputSchemaOrThrow("list_timeline_events"),
+            annotations: {
+              readOnlyHint: true,
+            },
+            _meta: {
+              ui: {
+                resourceUri: TIMELINE_WIDGET_RESOURCE_URI,
+              },
+              "openai/outputTemplate": TIMELINE_WIDGET_RESOURCE_URI,
+            },
           },
           {
             name: "retrieve_entity_by_identifier",
@@ -1813,6 +1892,13 @@ export class NeotomaServer {
           mimeType: "application/json",
         });
 
+        resources.push({
+          uri: TIMELINE_WIDGET_RESOURCE_URI,
+          name: "Timeline Widget",
+          description: "Embedded timeline widget for timeline event tool results.",
+          mimeType: "text/html;profile=mcp-app",
+        });
+
         // Get entity types count from schema registry
         try {
           const { SchemaRegistryService } = await import("./services/schema_registry.js");
@@ -1926,6 +2012,16 @@ export class NeotomaServer {
           case "entity_types":
             data = await this.handleEntityTypes();
             break;
+          case "ui_timeline_widget":
+            return {
+              contents: [
+                {
+                  uri,
+                  mimeType: "text/html;profile=mcp-app",
+                  text: this.buildTimelineWidgetHtml(),
+                },
+              ],
+            };
           default:
             throw new McpError(
               ErrorCode.InvalidRequest,
@@ -2003,6 +2099,88 @@ export class NeotomaServer {
     return {
       content: [{ type: "text", text: JSON.stringify(data, replacer) }],
     };
+  }
+
+  private buildTimelineWidgetHtml(): string {
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neotoma Timeline</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 12px;
+      background: transparent;
+    }
+    .panel {
+      border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+      border-radius: 10px;
+      padding: 12px;
+      background: color-mix(in srgb, canvas 92%, transparent);
+    }
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .meta {
+      margin: 0 0 10px 0;
+      font-size: 12px;
+      opacity: 0.75;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 10px;
+      border-radius: 8px;
+      background: color-mix(in srgb, currentColor 8%, transparent);
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <h2>Neotoma Timeline</h2>
+    <p class="meta" id="summary">Waiting for timeline results...</p>
+    <pre id="payload">{}</pre>
+  </div>
+  <script>
+    const summaryEl = document.getElementById("summary");
+    const payloadEl = document.getElementById("payload");
+
+    function renderPayload(payload) {
+      const safePayload = payload ?? {};
+      const events = Array.isArray(safePayload.events) ? safePayload.events : [];
+      const total = typeof safePayload.total === "number" ? safePayload.total : events.length;
+      summaryEl.textContent = total + " event" + (total === 1 ? "" : "s");
+      payloadEl.textContent = JSON.stringify(safePayload, null, 2);
+    }
+
+    window.addEventListener("message", (event) => {
+      const message = event.data;
+      if (!message || typeof message !== "object") return;
+
+      if (message.method === "ui/initialize") {
+        const initial = message.params?.toolResult ?? message.params?.initialToolResult;
+        if (initial) renderPayload(initial);
+        return;
+      }
+
+      if (message.method === "ui/notifications/tool-result") {
+        renderPayload(message.params?.result);
+      }
+    });
+  </script>
+</body>
+</html>`;
   }
 
   private async retrieveEntitySnapshot(
@@ -2124,11 +2302,13 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = ListObservationsRequestSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(undefined);
 
-    const { data: observations, error } = await db
+    const { data: observations, error, count } = await db
       .from("observations")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("entity_id", parsed.entity_id)
+      .eq("user_id", userId)
       .order("observed_at", { ascending: false })
       .range(parsed.offset, parsed.offset + parsed.limit - 1);
 
@@ -2138,7 +2318,7 @@ export class NeotomaServer {
 
     return this.buildTextResponse({
       observations: observations || [],
-      total: observations?.length || 0,
+      total: count || 0,
       limit: parsed.limit,
       offset: parsed.offset,
     });
@@ -2469,6 +2649,18 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntitiesRequestSchema.parse(args ?? {});
+    const rawArgs =
+      args && typeof args === "object" && !Array.isArray(args)
+        ? (args as Record<string, unknown>)
+        : {};
+    const hasSearchIntent =
+      "search" in rawArgs || "search_query" in rawArgs || "query" in rawArgs;
+    if (hasSearchIntent && typeof parsed.search === "string" && parsed.search.trim().length === 0) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        "search must be a non-empty string when search parameters are provided"
+      );
+    }
 
     // Use authenticated user_id, validate if provided
     const userId = this.getAuthenticatedUserId(parsed.user_id);
@@ -2477,6 +2669,12 @@ export class NeotomaServer {
       userId,
       entityType: parsed.entity_type,
       includeMerged: parsed.include_merged,
+      includeSnapshots: parsed.include_snapshots,
+      sortBy: parsed.sort_by,
+      sortOrder: parsed.sort_order,
+      published: parsed.published,
+      publishedAfter: parsed.published_after,
+      publishedBefore: parsed.published_before,
       search: parsed.search,
       similarityThreshold: parsed.similarity_threshold,
       limit: parsed.limit,
@@ -2566,100 +2764,17 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveEntityByIdentifierSchema.parse(args ?? {});
-
-    // Normalize the identifier
-    const normalized = parsed.entity_type
-      ? normalizeEntityValue(parsed.entity_type, parsed.identifier)
-      : parsed.identifier.trim().toLowerCase();
-
-    // Search in entities table by canonical_name or aliases
-    let query = db
-      .from("entities")
-      .select("*")
-      .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
-
-    if (parsed.entity_type) {
-      query = query.eq("entity_type", parsed.entity_type);
-    }
-
-    const { data: entities, error } = await query.limit(100);
-
-    if (error) {
-      throw new McpError(ErrorCode.InternalError, `Failed to search entities: ${error.message}`);
-    }
-
-    // If no direct match, try generating entity ID to see if it exists
-    if ((!entities || entities.length === 0) && parsed.entity_type) {
-      const possibleId = generateEntityId(parsed.entity_type, parsed.identifier);
-      const { data: entityById, error: idError } = await db
-        .from("entities")
-        .select("*")
-        .eq("id", possibleId)
-        .single();
-
-      if (!idError && entityById) {
-        return this.buildTextResponse({
-          entities: [entityById],
-          total: 1,
-        });
-      }
-    }
-
-    // If still no match, try semantic search (when keyword returns 0)
-    if (!entities || entities.length === 0) {
-      const userId = this.getAuthenticatedUserId(undefined);
-      const { entityIds } = await semanticSearchEntities({
-        searchText: parsed.identifier,
-        userId,
-        entityType: parsed.entity_type,
-        includeMerged: false,
-        limit: 100,
-        offset: 0,
-      });
-
-      if (entityIds.length > 0) {
-        const { queryEntities } = await import("./services/entity_queries.js");
-        const semanticEntities = await queryEntities({
-          userId,
-          includeMerged: false,
-          entityIds,
-          limit: 100,
-          offset: 0,
-        });
-        const entitiesWithSnapshots = semanticEntities.map((e) => ({
-          id: e.entity_id,
-          entity_type: e.entity_type,
-          canonical_name: e.canonical_name,
-          snapshot: e.snapshot,
-        }));
-        return this.buildTextResponse({
-          entities: entitiesWithSnapshots,
-          total: entitiesWithSnapshots.length,
-        });
-      }
-    }
-
-    // Optionally include snapshots for found entities
-    let entitiesWithSnapshots = entities || [];
-    if (entitiesWithSnapshots.length > 0) {
-      const entityIds = entitiesWithSnapshots.map((e: Entity) => e.id);
-      const { data: snapshots, error: snapError } = await db
-        .from("entity_snapshots")
-        .select("*")
-        .in("entity_id", entityIds);
-
-      if (!snapError && snapshots) {
-        const snapshotMap = new Map(snapshots.map((s: { entity_id: string }) => [s.entity_id, s]));
-        entitiesWithSnapshots = entitiesWithSnapshots.map((entity: Entity) => ({
-          ...entity,
-          snapshot: snapshotMap.get(entity.id) || null,
-        }));
-      }
-    }
+    const userId = this.getAuthenticatedUserId(undefined);
+    const { entities, total } = await retrieveEntityByIdentifierWithFallback({
+      identifier: parsed.identifier,
+      entityType: parsed.entity_type,
+      userId,
+      limit: 100,
+    });
 
     return this.buildTextResponse({
-      entities: entitiesWithSnapshots,
-      total: entitiesWithSnapshots.length,
+      entities,
+      total,
     });
   }
 
@@ -2667,6 +2782,7 @@ export class NeotomaServer {
     args: unknown
   ): Promise<{ content: Array<{ type: string; text: string }> }> {
     const parsed = RetrieveRelatedEntitiesSchema.parse(args ?? {});
+    const userId = this.getAuthenticatedUserId(undefined);
 
     const visited = new Set<string>([parsed.entity_id]);
     const relatedEntityIds = new Set<string>();
@@ -2683,7 +2799,9 @@ export class NeotomaServer {
           let outboundQuery = db
             .from("relationship_snapshots")
             .select("*")
-            .eq("source_entity_id", entityId);
+            .eq("source_entity_id", entityId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
 
           if (parsed.relationship_types && parsed.relationship_types.length > 0) {
             outboundQuery = outboundQuery.in("relationship_type", parsed.relationship_types);
@@ -2708,7 +2826,9 @@ export class NeotomaServer {
           let inboundQuery = db
             .from("relationship_snapshots")
             .select("*")
-            .eq("target_entity_id", entityId);
+            .eq("target_entity_id", entityId)
+            .eq("user_id", userId)
+            .order("relationship_key", { ascending: true });
 
           if (parsed.relationship_types && parsed.relationship_types.length > 0) {
             inboundQuery = inboundQuery.in("relationship_type", parsed.relationship_types);
@@ -2739,6 +2859,9 @@ export class NeotomaServer {
       const { data: entityData, error: entityError } = await db
         .from("entities")
         .select("*")
+        .eq("user_id", userId)
+        .order("canonical_name", { ascending: true })
+        .order("id", { ascending: true })
         .in("id", Array.from(relatedEntityIds));
 
       if (!entityError && entityData) {
@@ -2748,6 +2871,7 @@ export class NeotomaServer {
         const { data: snapshots, error: snapError } = await db
           .from("entity_snapshots")
           .select("*")
+          .eq("user_id", userId)
           .in("entity_id", Array.from(relatedEntityIds));
 
         if (!snapError && snapshots) {
@@ -2765,7 +2889,7 @@ export class NeotomaServer {
     return this.buildTextResponse({
       entities,
       relationships: allRelationships,
-      total_entities: relatedEntityIds.size,
+      total_entities: entities.length,
       total_relationships: allRelationships.length,
       hops_traversed: Math.min(parsed.max_hops, Array.from(visited).length > 1 ? 1 : 0),
     });
@@ -5189,6 +5313,11 @@ export class NeotomaServer {
     // entity_types
     if (first === "entity_types" && !second) {
       return { type: "entity_types" };
+    }
+
+    // ui/timeline_widget
+    if (first === "ui" && second === "timeline_widget") {
+      return { type: "ui_timeline_widget" };
     }
 
     throw new McpError(ErrorCode.InvalidRequest, `Unrecognized resource URI format: ${uri}`);

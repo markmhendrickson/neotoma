@@ -27,13 +27,15 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { SiClaude, SiOpenai } from "react-icons/si";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   LEARN_MORE_GUARANTEES_CARD,
   LEARN_MORE_POSTS,
   LEARN_MORE_REPO_CARD,
   SITE_CODE_SNIPPETS,
+  REPO_RELEASES_COUNT,
+  REPO_VERSION,
   MCP_ACTIONS_TABLE,
   CLI_COMMANDS_TABLE,
   FUNCTIONALITY_MATRIX,
@@ -82,6 +84,20 @@ const DOT_NAV_SECTIONS = [
 ];
 const DOT_NAV_SECTION_IDS = new Set(DOT_NAV_SECTIONS.map((section) => section.id));
 const SECTION_ORDER = DOT_NAV_SECTIONS.map((section) => section.id);
+
+function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
+  return [
+    { id: "intro", label: pack.siteSections.intro },
+    { id: "outcomes", label: pack.siteSections.beforeAfter },
+    { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "install", label: pack.siteSections.install },
+    { id: "inspect", label: pack.siteSections.inspect },
+    { id: "architecture", label: pack.siteSections.architecture },
+    { id: "who-is-it-for", label: pack.siteSections.whoIsItFor },
+    { id: "interfaces", label: pack.siteSections.interfaces },
+    { id: "learn-more", label: pack.siteSections.learnMore },
+  ];
+}
 
 const FOUNDATION_ICONS: Record<string, LucideIcon> = { ShieldCheck, Fingerprint, Globe2 };
 
@@ -1323,6 +1339,8 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
 }
 
 export function SitePage({ staticMode = false }: SitePageProps) {
+  const { pack } = useLocale();
+  const dotNavSections = useMemo(() => getLocalizedDotNavSections(pack), [pack]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [showAllMobileGuarantees, setShowAllMobileGuarantees] = useState(false);
   const [showAllMobileOutcomes, setShowAllMobileOutcomes] = useState(false);
@@ -1367,7 +1385,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
 
   return (
     <>
-      {!staticMode ? <SeoHead routePath="/" /> : null}
+      {!staticMode ? <SeoHead /> : null}
 
       <div
         ref={scrollContainerRef}
@@ -1375,7 +1393,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
       >
         {!staticMode && (
           <SectionDotNav
-            sections={DOT_NAV_SECTIONS}
+            sections={dotNavSections}
             scrollContainerRef={scrollContainerRef}
             onActiveSectionChange={handleActiveSectionChange}
           />
@@ -1389,22 +1407,18 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <div className="grid gap-10 lg:gap-14 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center">
                   <div className="space-y-5">
                     <h1 className="text-[28px] font-medium tracking-[-0.02em]">
-                      Your production agent has{" "}
+                      {pack.homeHero.titlePrefix}{" "}
                       <span className="intro-hero-word-wrap">
-                        <span className="text-foreground">amnesia</span>
+                        <span className="text-foreground">{pack.homeHero.titleFocus}</span>
                       </span>
                     </h1>
 
                     <div>
                       <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                        Without a state layer:
+                        {pack.homeHero.withoutStateLayer}
                       </p>
                       <ul className="list-none pl-0 space-y-1">
-                        {[
-                          "Context drifts across sessions.",
-                          "Facts conflict across tools and tasks.",
-                          "Decisions execute without a reproducible trail.",
-                        ].map((text) => (
+                        {pack.homeHero.bullets.map((text) => (
                           <li
                             key={text}
                             className="text-[14px] leading-6 text-muted-foreground flex items-center gap-2"
@@ -1419,9 +1433,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </div>
 
                     <p className="text-[15px] leading-6 font-medium text-foreground">
-                      Neotoma is the deterministic state layer for long-running agents. Every
-                      observation is versioned. Every entity snapshot is reproducible. Every
-                      decision can be replayed.
+                      {pack.homeHero.summary}
                     </p>
 
                     <div>
@@ -1478,9 +1490,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     </div>
 
                     <p className="text-[13px] leading-5 text-muted-foreground">
-                      RAG retrieves documents. Platform memory personalizes chat. Neither maintains
-                      durable state. Neotoma does&nbsp;&mdash; with deterministic guarantees and no
-                      silent mutation.
+                      {pack.homeHero.subcopy}
                     </p>
 
                     <div className="flex flex-col sm:flex-row flex-wrap gap-3">
@@ -1497,7 +1507,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         }}
                       >
                         <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
-                        View guarantees
+                        {pack.homeHero.ctaViewGuarantees}
                       </a>
                       <a
                         href="#install"
@@ -1513,7 +1523,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                       >
                         <Download className="h-4 w-4 shrink-0" aria-hidden />
                         <span className="hidden sm:inline">
-                          Install deterministic memory in 5 minutes
+                          {pack.homeHero.ctaInstall}
                         </span>
                         <span className="sm:hidden">Install in 5 minutes</span>
                       </a>
@@ -1522,9 +1532,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
                       <span>Open-source</span>
                       <span className="text-border">·</span>
-                      <span>v0.3.9</span>
+                      <span>{`v${REPO_VERSION}`}</span>
                       <span className="text-border">·</span>
-                      <span>10 releases</span>
+                      <span>{`${REPO_RELEASES_COUNT} releases`}</span>
                       <span className="text-border">·</span>
                       <span>MIT-licensed</span>
                     </div>
@@ -1770,7 +1780,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                                 <span className="text-[13px] font-medium text-foreground">
                                   Vendors
                                 </span>
-                                <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
+                                <p className="text-[11px] leading-4 text-muted-foreground break-words">
                                   Representative providers for each memory approach
                                 </p>
                               </div>
@@ -1826,7 +1836,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                                   <span className="text-[13px] font-medium text-foreground">
                                     {row.property}
                                   </span>
-                                  <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
+                                  <p className="text-[11px] leading-4 text-muted-foreground break-words">
                                     {row.tooltip}
                                   </p>
                                 </div>

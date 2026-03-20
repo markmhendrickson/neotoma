@@ -60,12 +60,19 @@ export function AiNativeOperatorsPage() {
   return (
     <IcpDetailPage
       profile={profile}
+      openingHook={
+        <p>
+          You run your work through Claude, Cursor, ChatGPT, and Codex. You've noticed that
+          nothing your agent learns in one session is guaranteed to be there in the next — and
+          when it gets something wrong, there's no way to correct it that sticks.
+        </p>
+      }
       outcomes={outcomes}
       aiNeeds={[
         { label: "Persistent memory that survives session resets and tool switches", href: "/memory-models#deterministic-memory", linkTerm: "Persistent memory" },
         { label: "A single source of truth accessible from Claude, Cursor, Codex, and ChatGPT simultaneously", href: "/cross-platform", linkTerm: "A single source of truth" },
         "Automatic extraction of commitments, tasks, and preferences from conversations",
-        { label: "Corrections that propagate deterministically — fix once, fixed everywhere", href: "/deterministic-state-evolution", linkTerm: "Corrections that propagate deterministically" },
+        { label: "Corrections that actually stick — fix once, fixed everywhere", href: "/deterministic-state-evolution", linkTerm: "Corrections that actually stick" },
         { label: "Full provenance: every stored fact traces back to the conversation or document it came from", href: "/auditable-change-log", linkTerm: "Full provenance" },
       ]}
       deepPainPoints={[
@@ -104,10 +111,10 @@ export function AiNativeOperatorsPage() {
           heading: "Your personal data in someone else's memory",
           body: (
             <p>
-              Receipts, contacts, health information, financial records — provider-hosted memory
-              ingests everything with no transparency into retention, training use, or who can
-              access it. There is no export button. There is no deletion guarantee. Your most
-              personal context lives in a system you don't control.
+              Your receipts, contacts, health information, and financial records live in
+              provider-hosted memory. There is no transparency into retention, no guarantee against
+              training use, and no delete button. The data most personal to you is stored in a
+              system you don't control.
             </p>
           ),
         },
@@ -135,13 +142,14 @@ export function AiNativeOperatorsPage() {
           ),
         },
         {
-          heading: "Deterministic corrections with provenance",
+          heading: "Corrections that stick",
           icon: "RefreshCw",
           href: "/deterministic-state-evolution",
           body: (
             <p>
-              Submit a correction once. It creates a new observation that deterministically supersedes
-              the incorrect value. The correction traces back to when and why it was made.
+              Submit a correction once. It creates a new observation that supersedes the incorrect
+              value — same question, same answer, every time. The correction traces back to when
+              and why it was made.
             </p>
           ),
         },
@@ -157,6 +165,24 @@ export function AiNativeOperatorsPage() {
           ),
         },
       ]}
+      whatChanges={
+        <>
+          <p>
+            Without persistent state, you're the driver on every turn. Every prompt carries the
+            full weight of what came before because the system won't hold it for you.
+          </p>
+          <p>
+            With Neotoma underneath, the pattern shifts. The agent arrives at each session already
+            knowing what it knew last time. Your role moves from composing detailed instructions to
+            reviewing what the agent already knows and correcting when it's off.
+          </p>
+          <p>
+            Less typing, fewer prompts, shorter sessions that accomplish more. You stop thinking
+            about whether the system remembers and start thinking about what you're actually trying
+            to do. Not "let me re-explain my situation" — "here's what changed since yesterday."
+          </p>
+        </>
+      }
       dataTypeDetails={[
         { type: "conversation", description: "Persistent chat sessions with full turn history across tools" },
         { type: "message", description: "Individual conversation turns with role, content, and extracted entities" },
@@ -167,7 +193,20 @@ export function AiNativeOperatorsPage() {
         { type: "preference", description: "User preferences and configuration that persist across sessions" },
         { type: "receipt", description: "Purchase records, invoices, and expense tracking" },
       ]}
-      closingStatement="You use more AI tools than anyone — and feel the memory gap most acutely. Neotoma closes that gap with a deterministic memory layer that works across every tool you already use."
+      scopeNote={
+        <p>
+          For one-off questions, quick summaries, or single-document analysis, your AI tools
+          already work fine. Neotoma is for when you need what you told one tool to still be true
+          when you open another — and for when you need to know that a correction you made
+          actually stuck.
+        </p>
+      }
+      credibilityBridge="Built by someone who runs every workflow — email, finance, content, tasks — through the same agentic stack."
+      blogPostLink={{
+        label: "Agentic retrieval infers. It doesn't guarantee.",
+        href: "https://markmhendrickson.com/posts/agentic-search-and-the-truth-layer",
+      }}
+      closingStatement="Each ICP is currently spending a significant portion of their effort compensating for unreliable state. Neotoma doesn't add a feature — it removes the tax. What you get back is the time, attention, and confidence that the tax was consuming."
     />
   );
 }

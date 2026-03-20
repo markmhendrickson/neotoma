@@ -64,7 +64,7 @@ export function DetailPage({ title, children }: DetailPageProps) {
             ) : null}
             {title}
           </h1>
-          <div className="post-prose [&_a]:underline [&_a]:hover:text-foreground">
+          <div className="post-prose [&_a]:underline [&_a]:hover:text-foreground [&_section[data-integration-section='getting-started']_a]:no-underline [&_section[data-integration-section='getting-started']_a]:hover:no-underline">
             {renderedChildren}
           </div>
         </div>

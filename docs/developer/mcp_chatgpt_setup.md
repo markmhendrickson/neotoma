@@ -1,6 +1,8 @@
-# ChatGPT Custom GPT Setup Guide
+# ChatGPT Custom GPT Actions Setup Guide
 
 This guide explains how to configure Neotoma as a Custom GPT Action in ChatGPT using the HTTP Actions API (OpenAPI schema).
+
+If you want ChatGPT Apps connector setup (MCP endpoint in Apps & Connectors), use `docs/developer/chatgpt_apps_setup.md`.
 
 For other integrations, see:
 - [`mcp_cursor_setup.md`](mcp_cursor_setup.md) - Cursor integration
