@@ -5,6 +5,7 @@ import { TestIdTracker } from "../helpers/cleanup_helpers.js";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { db } from "../../src/db.js";
 
 const execAsync = promisify(exec);
 
@@ -161,6 +162,98 @@ describe("CLI store commands", () => {
       expect(result.structured).toHaveProperty("entities");
       expect(result.unstructured).toHaveProperty("source_id");
       tracker.trackSource(result.unstructured.source_id);
+    });
+
+    it("should accept legacy --json=<entities> alias for structured store", async () => {
+      const entitiesJson = JSON.stringify([
+        {
+          entity_type: "task",
+          title: "Legacy json alias structured store",
+        },
+      ]).replace(/"/g, '\\"');
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} store --json="${entitiesJson}" --user-id "${TEST_USER_ID}"`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("entities");
+      expect(Array.isArray(result.entities)).toBe(true);
+      if (Array.isArray(result.entities)) {
+        for (const entity of result.entities) {
+          if (entity?.id) tracker.trackEntity(entity.id);
+          if (entity?.entity_id) tracker.trackEntity(entity.entity_id);
+        }
+      }
+    });
+  });
+
+  describe("store-turn command", () => {
+    it("should store conversation, message, and extracted entities in one call", async () => {
+      const extraEntities = JSON.stringify([
+        { entity_type: "task", title: "Follow up with vendor" },
+      ]).replace(/"/g, '\\"');
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} store-turn --conversation-title "CLI Turn Test" --message "User said hello" --entities "${extraEntities}" --user-id "${TEST_USER_ID}" --json`
+      );
+
+      const result = JSON.parse(stdout);
+      expect(result).toHaveProperty("entities");
+      expect(Array.isArray(result.entities)).toBe(true);
+      if (Array.isArray(result.entities)) {
+        for (const entity of result.entities) {
+          if (entity?.id) tracker.trackEntity(entity.id);
+          if (entity?.entity_id) tracker.trackEntity(entity.entity_id);
+        }
+      }
+    });
+
+    it("should be replay-safe with idempotency key", async () => {
+      const key = `store-turn-idem-${Date.now()}`;
+      const cmd =
+        `${CLI_PATH} store-turn --conversation-title "CLI Turn Idem" ` +
+        `--message "User said hello twice" --idempotency-key "${key}" --user-id "${TEST_USER_ID}" --json`;
+
+      const first = JSON.parse((await execAsync(cmd)).stdout);
+      const second = JSON.parse((await execAsync(cmd)).stdout);
+
+      expect(first.source_id).toBeDefined();
+      expect(second.source_id).toBe(first.source_id);
+
+      if (Array.isArray(first.entities)) {
+        for (const entity of first.entities) {
+          if (entity?.id) tracker.trackEntity(entity.id);
+          if (entity?.entity_id) tracker.trackEntity(entity.entity_id);
+        }
+      }
+    });
+
+    it("should generate default turn_key when omitted", async () => {
+      const result = JSON.parse(
+        (
+          await execAsync(
+            `${CLI_PATH} store-turn --conversation-title "CLI Turn Defaults" --message "Default turn key" --user-id "${TEST_USER_ID}" --json`
+          )
+        ).stdout
+      );
+
+      const entities = Array.isArray(result.entities) ? result.entities : [];
+      const messageEntity = entities.find((entity: any) => entity.entity_type === "agent_message");
+      const messageEntityId = messageEntity?.entity_id ?? messageEntity?.id;
+      expect(typeof messageEntityId).toBe("string");
+
+      if (typeof messageEntityId === "string") {
+        tracker.trackEntity(messageEntityId);
+        const { data: snapshot } = await db
+          .from("entity_snapshots")
+          .select("snapshot")
+          .eq("entity_id", messageEntityId)
+          .maybeSingle();
+        const turnKey = (snapshot?.snapshot as Record<string, unknown> | undefined)?.turn_key;
+        expect(typeof turnKey).toBe("string");
+        expect(String(turnKey)).toMatch(/^chat:\d+$/);
+      }
     });
   });
 

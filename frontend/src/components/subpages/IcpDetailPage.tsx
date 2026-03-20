@@ -115,6 +115,8 @@ export interface IcpOutcomeCard {
 
 interface IcpDetailPageProps {
   profile: IcpProfile;
+  /** 1-3 sentence hook inserted immediately after the title/subtitle. */
+  openingHook?: React.ReactNode;
   aiNeeds: AiNeedItem[];
   keyDifferences?: {
     comparedTo: string;
@@ -122,10 +124,24 @@ interface IcpDetailPageProps {
     comparedToHref?: string;
     points: string[];
   };
+  /** Optional competitive comparison replacing keyDifferences for builder-style pages. */
+  competitiveComparison?: React.ReactNode;
   deepPainPoints: IcpDetailSection[];
+  /** Optional narrative paragraph consolidating problems (replaces bullet list + failure mode grid when provided). */
+  problemsNarrative?: React.ReactNode;
+  /** Optional transition paragraph inserted between problems and solutions. */
+  problemsToSolutionsTransition?: React.ReactNode;
   outcomes?: IcpOutcomeCard[];
   solutions: IcpDetailSection[];
+  /** "What actually changes in your day/work" section, inserted after solutions. */
+  whatChanges?: React.ReactNode;
   dataTypeDetails: Array<{ type: string; description: string }>;
+  /** "When you don't need this" scope note before the closing CTA. */
+  scopeNote?: React.ReactNode;
+  /** Short credibility bridge line (first-person context). */
+  credibilityBridge?: React.ReactNode;
+  /** Blog post link as supporting evidence. */
+  blogPostLink?: { label: string; href: string };
   closingStatement: string;
 }
 
@@ -205,12 +221,20 @@ function OutcomeSuccessIllustration({
 
 export function IcpDetailPage({
   profile,
+  openingHook,
   aiNeeds,
   keyDifferences,
+  competitiveComparison,
   deepPainPoints,
+  problemsNarrative,
+  problemsToSolutionsTransition,
   outcomes,
   solutions,
+  whatChanges,
   dataTypeDetails,
+  scopeNote,
+  credibilityBridge,
+  blogPostLink,
   closingStatement,
 }: IcpDetailPageProps) {
   const TitleIcon = getDocPageIcon(`/${profile.slug}`);
@@ -225,50 +249,107 @@ export function IcpDetailPage({
             ) : null}
             {profile.name}
           </h1>
-          <p className="text-[17px] leading-7 text-muted-foreground mb-10">
+          <p className="text-[17px] leading-7 text-muted-foreground mb-6">
             {profile.tagline}
           </p>
 
-          {/* Problems */}
+          {/* Opening hook */}
+          {openingHook && (
+            <div className="text-[15px] leading-7 text-foreground mb-10">
+              {openingHook}
+            </div>
+          )}
+
+          {!openingHook && <div className="mb-4" />}
+
+          {/* Outcomes — before/after illustrations (moved up as primary proof) */}
+          {outcomes && outcomes.length > 0 && (
+            <section className="mb-12">
+              <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-2 flex items-center gap-2">
+                <Scale className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
+                Same question, different outcome
+              </h2>
+              <p className="text-[15px] leading-7 text-muted-foreground mb-6">
+                Without a state layer, agents return stale or wrong data. With Neotoma, every
+                response reads from versioned, schema-bound state.
+              </p>
+              <div className="grid grid-cols-1 gap-12">
+                {outcomes.map(({ category, Icon, title, description, scenario }) => (
+                  <div key={category} className="space-y-5">
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {category}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <OutcomeFailIllustration human={scenario.left} fail={scenario.fail} />
+                      <OutcomeSuccessIllustration
+                        human={scenario.left}
+                        succeed={scenario.succeed}
+                      />
+                    </div>
+                    <div className="space-y-1 px-0.5">
+                      <p className="text-[14px] font-medium leading-5 text-foreground">{title}</p>
+                      <p className="text-[13px] leading-5 text-muted-foreground">{description}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {outcomes && outcomes.length > 0 && <SectionDivider />}
+
+          {/* Problems — narrative or structured */}
           <section className="mb-12">
             <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
               <AlertTriangle className="h-4.5 w-4.5 text-rose-400" aria-hidden />
-              Problems
+              Why this happens
             </h2>
-            <div className="space-y-3">
-              {profile.painPoints.map((point) => (
-                <div
-                  key={point}
-                  className="flex items-start gap-2.5 text-[14px] leading-6"
-                >
-                  <span className="text-rose-400 shrink-0 leading-none mt-[0.2em]" aria-hidden>×</span>
-                  <span className="text-foreground">{point}</span>
-                </div>
-              ))}
-            </div>
 
-            <div className="mt-6">
-              <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-3">
-                Failure modes without a memory guarantee
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
-                {profile.failureModes.map((mode: FailureModeItem) => {
-                  const Icon = FAILURE_MODE_ICONS[mode.icon] ?? AlertTriangle;
-                  return (
-                    <div
-                      key={mode.label}
-                      className="flex items-start gap-3 rounded-lg border border-rose-500/15 bg-rose-500/5 px-4 py-2.5 text-[13px] text-rose-700 dark:text-rose-300"
-                    >
-                      <Icon
-                        className="h-4 w-4 shrink-0 mt-[0.2em] text-rose-500 dark:text-rose-400"
-                        aria-hidden
-                      />
-                      <span>{mode.label}</span>
-                    </div>
-                  );
-                })}
+            {problemsNarrative ? (
+              <div className="text-[14px] leading-7 text-muted-foreground space-y-4">
+                {problemsNarrative}
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="space-y-3">
+                  {profile.painPoints.map((point) => (
+                    <div
+                      key={point}
+                      className="flex items-start gap-2.5 text-[14px] leading-6"
+                    >
+                      <span className="text-rose-400 shrink-0 leading-none mt-[0.2em]" aria-hidden>×</span>
+                      <span className="text-foreground">{point}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6">
+                  <p className="text-[12px] font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                    Failure modes without a memory guarantee
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-stretch">
+                    {profile.failureModes.map((mode: FailureModeItem) => {
+                      const Icon = FAILURE_MODE_ICONS[mode.icon] ?? AlertTriangle;
+                      return (
+                        <div
+                          key={mode.label}
+                          className="flex items-start gap-3 rounded-lg border border-rose-500/15 bg-rose-500/5 px-4 py-2.5 text-[13px] text-rose-700 dark:text-rose-300"
+                        >
+                          <Icon
+                            className="h-4 w-4 shrink-0 mt-[0.2em] text-rose-500 dark:text-rose-400"
+                            aria-hidden
+                          />
+                          <span>{mode.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
 
             {deepPainPoints.length > 0 && (
               <div className="mt-8 space-y-6">
@@ -283,6 +364,13 @@ export function IcpDetailPage({
               </div>
             )}
           </section>
+
+          {/* Transition paragraph between problems and solutions */}
+          {problemsToSolutionsTransition && (
+            <div className="text-[15px] leading-7 text-foreground mb-8">
+              {problemsToSolutionsTransition}
+            </div>
+          )}
 
           <SectionDivider />
 
@@ -378,73 +466,64 @@ export function IcpDetailPage({
 
           <SectionDivider />
 
-          {/* Outcomes — before/after illustrations */}
-          {outcomes && outcomes.length > 0 && (
-            <section className="mb-12">
-              <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-2 flex items-center gap-2">
-                <Scale className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
-                Same question, different outcome
-              </h2>
-              <p className="text-[15px] leading-7 text-muted-foreground mb-6">
-                Without a state layer, agents return stale or wrong data. With Neotoma, every
-                response reads from versioned, schema-bound state.
-              </p>
-              <div className="grid grid-cols-1 gap-12">
-                {outcomes.map(({ category, Icon, title, description, scenario }) => (
-                  <div key={category} className="space-y-5">
-                    <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                        {category}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      <OutcomeFailIllustration human={scenario.left} fail={scenario.fail} />
-                      <OutcomeSuccessIllustration
-                        human={scenario.left}
-                        succeed={scenario.succeed}
-                      />
-                    </div>
-                    <div className="space-y-1 px-0.5">
-                      <p className="text-[14px] font-medium leading-5 text-foreground">{title}</p>
-                      <p className="text-[13px] leading-5 text-muted-foreground">{description}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {/* What actually changes */}
+          {whatChanges && (
+            <>
+              <section className="mb-12">
+                <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
+                  <Sparkles className="h-4.5 w-4.5 text-amber-500" aria-hidden />
+                  What actually changes
+                </h2>
+                <div className="text-[15px] leading-7 text-muted-foreground space-y-4">
+                  {whatChanges}
+                </div>
+              </section>
+
+              <SectionDivider />
+            </>
           )}
 
-          {outcomes && outcomes.length > 0 && <SectionDivider />}
-          {keyDifferences && keyDifferences.points.length > 0 && (
-            <section className="mb-12">
-              <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
-                <Scale className="h-4.5 w-4.5 text-indigo-500" aria-hidden />
-                Key differences
-              </h2>
-              <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-                How your needs differ from{" "}
-                {keyDifferences.comparedToHref ? (
-                  <Link
-                    to={keyDifferences.comparedToHref}
-                    className="text-foreground underline underline-offset-2 hover:no-underline"
-                  >
-                    {keyDifferences.comparedTo}
-                  </Link>
-                ) : (
-                  keyDifferences.comparedTo
-                )}
-                :
-              </p>
-              <ul className="list-disc pl-5 space-y-2">
-                {keyDifferences.points.map((point) => (
-                  <li key={point} className="text-[14px] leading-6 text-foreground">{point}</li>
-                ))}
-              </ul>
-            </section>
+          {/* Competitive comparison (replaces keyDifferences when provided) */}
+          {competitiveComparison && (
+            <>
+              <section className="mb-12">
+                {competitiveComparison}
+              </section>
+              <SectionDivider />
+            </>
           )}
 
-          {keyDifferences && keyDifferences.points.length > 0 && <SectionDivider />}
+          {/* Key differences (legacy, used when competitiveComparison is not provided) */}
+          {!competitiveComparison && keyDifferences && keyDifferences.points.length > 0 && (
+            <>
+              <section className="mb-12">
+                <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
+                  <Scale className="h-4.5 w-4.5 text-indigo-500" aria-hidden />
+                  Key differences
+                </h2>
+                <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+                  How your needs differ from{" "}
+                  {keyDifferences.comparedToHref ? (
+                    <Link
+                      to={keyDifferences.comparedToHref}
+                      className="text-foreground underline underline-offset-2 hover:no-underline"
+                    >
+                      {keyDifferences.comparedTo}
+                    </Link>
+                  ) : (
+                    keyDifferences.comparedTo
+                  )}
+                  :
+                </p>
+                <ul className="list-disc pl-5 space-y-2">
+                  {keyDifferences.points.map((point) => (
+                    <li key={point} className="text-[14px] leading-6 text-foreground">{point}</li>
+                  ))}
+                </ul>
+              </section>
+              <SectionDivider />
+            </>
+          )}
 
           {/* Data Types */}
           <section className="mb-12">
@@ -472,9 +551,44 @@ export function IcpDetailPage({
 
           <SectionDivider />
 
+          {/* Scope note */}
+          {scopeNote && (
+            <>
+              <section className="mb-12">
+                <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
+                  <Lightbulb className="h-4.5 w-4.5 text-muted-foreground" aria-hidden />
+                  When you don't need this
+                </h2>
+                <div className="text-[15px] leading-7 text-muted-foreground">
+                  {scopeNote}
+                </div>
+              </section>
+
+              <SectionDivider />
+            </>
+          )}
+
           {/* Closing */}
           <section className="mb-8 rounded-lg border border-border bg-muted/30 px-6 py-5">
             <p className="text-[15px] leading-7 text-foreground">{closingStatement}</p>
+            {credibilityBridge && (
+              <p className="text-[13px] leading-6 text-muted-foreground mt-2 italic">
+                {credibilityBridge}
+              </p>
+            )}
+            {blogPostLink && (
+              <p className="text-[13px] leading-6 text-muted-foreground mt-2">
+                Deep dive:{" "}
+                <a
+                  href={blogPostLink.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline decoration-foreground/30 underline-offset-2 hover:decoration-foreground"
+                >
+                  {blogPostLink.label}
+                </a>
+              </p>
+            )}
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 to="/install"

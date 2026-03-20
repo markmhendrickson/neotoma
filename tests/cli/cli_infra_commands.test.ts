@@ -164,6 +164,11 @@ describe("CLI infrastructure command smoke tests", () => {
       expect(out).toMatch(/set-data-dir|move-db-files|on-conflict|Usage|Options/i);
     });
 
+    it("storage merge-db --help shows usage", async () => {
+      const out = await getHelp("storage merge-db");
+      expect(out).toMatch(/merge-db|source|target|mode|dry-run|recompute-snapshots|Usage|Options/i);
+    });
+
     it("backup --help shows usage", async () => {
       const out = await getHelp("backup");
       expect(out).toMatch(/create|restore|Usage|Options/i);
@@ -487,6 +492,57 @@ describe("CLI infrastructure command smoke tests", () => {
         { id: "new_only", value: "target" },
         { id: "old_only", value: "source" },
         { id: "shared", value: "target_shared" },
+      ]);
+    });
+
+    it("storage merge-db dry-run safe should report conflicts without writing", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-merge-db-dry-run-"));
+      const sourceDb = join(root, "source.db");
+      const targetDb = join(root, "target.db");
+      createTestDb(sourceDb, [
+        { id: "shared", value: "source_shared" },
+        { id: "source_only", value: "source_only_value" },
+      ]);
+      createTestDb(targetDb, [
+        { id: "shared", value: "target_shared" },
+        { id: "target_only", value: "target_only_value" },
+      ]);
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} storage merge-db --source "${sourceDb}" --target "${targetDb}" --mode safe --dry-run --no-recompute-snapshots --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result.status).toBe("dry-run-complete");
+      expect(result.merge_stats.rows_conflicted).toBeGreaterThan(0);
+      expect(readTestDbRows(targetDb)).toEqual([
+        { id: "shared", value: "target_shared" },
+        { id: "target_only", value: "target_only_value" },
+      ]);
+    });
+
+    it("storage merge-db keep-source should replace conflicting rows", async () => {
+      const root = await mkdtemp(join(tmpdir(), "neotoma-cli-merge-db-keep-source-"));
+      const sourceDb = join(root, "source.db");
+      const targetDb = join(root, "target.db");
+      createTestDb(sourceDb, [
+        { id: "shared", value: "source_shared" },
+        { id: "source_only", value: "source_only_value" },
+      ]);
+      createTestDb(targetDb, [
+        { id: "shared", value: "target_shared" },
+        { id: "target_only", value: "target_only_value" },
+      ]);
+
+      const { stdout } = await execAsync(
+        `${CLI_PATH} storage merge-db --source "${sourceDb}" --target "${targetDb}" --mode keep-source --no-recompute-snapshots --json`
+      );
+      const result = JSON.parse(stdout);
+      expect(result.status).toBe("merged");
+      expect(result.mode).toBe("keep-source");
+      expect(readTestDbRows(targetDb)).toEqual([
+        { id: "shared", value: "source_shared" },
+        { id: "source_only", value: "source_only_value" },
+        { id: "target_only", value: "target_only_value" },
       ]);
     });
   });

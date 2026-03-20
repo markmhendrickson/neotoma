@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { SITE_CODE_SNIPPETS } from "../../site/site_data";
-import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+import { IntegrationLinkCard } from "../IntegrationLinkCard";
+import { IntegrationSection } from "../IntegrationSection";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -16,10 +16,8 @@ export function NeotomaWithOpenClawPage() {
         </p>
       </section>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        What OpenClaw provides
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-openclaw-provides" title="What OpenClaw provides" dividerBefore={false}>
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <span>
@@ -31,7 +29,9 @@ export function NeotomaWithOpenClawPage() {
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
-          Long-term conversational memory and reminders
+          <a href="https://docs.openclaw.ai/index" target="_blank" rel="noopener noreferrer" className={extLink}>
+            Long-term conversational memory and reminders
+          </a>
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
@@ -55,12 +55,11 @@ export function NeotomaWithOpenClawPage() {
             (browser, canvas, cron)
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        What OpenClaw doesn't handle
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-openclaw-does-not-handle" title="What OpenClaw doesn't handle">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
@@ -79,12 +78,11 @@ export function NeotomaWithOpenClawPage() {
             User-owned state with provenance, versioning, and audit trail
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Deterministic guarantees Neotoma provides
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="deterministic-guarantees" title="Deterministic guarantees Neotoma provides">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         {[
           "User-owned structured memory accessible from any tool or agent",
           "Deterministic entity resolution — contacts, tasks, and relationships unified by canonical IDs",
@@ -98,17 +96,16 @@ export function NeotomaWithOpenClawPage() {
             {item}
           </li>
         ))}
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Using them together
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+      <IntegrationSection sectionKey="using-them-together" title="Using them together">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
         OpenClaw is the execution layer &mdash; it gives the agent a machine and the ability to act.
         Neotoma is the state layer &mdash; it holds the user&apos;s structured memory that any agent
         can read and write. The two are complementary with no conflict.
-      </p>
-      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        </p>
+        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
         <thead>
           <tr className="border-b border-border">
             <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
@@ -148,67 +145,25 @@ export function NeotomaWithOpenClawPage() {
             <td className="py-2">Observation history</td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Getting started &mdash; local (stdio)
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        Paste this prompt into an agent tool (e.g. Claude Code, Codex, or Cursor) to install Neotoma.
-        The agent handles npm install, initialization, and MCP configuration.
-      </p>
-      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
-        After installation, add Neotoma to your OpenClaw{" "}
-        <a href="https://www.getopenclaw.ai/docs/configuration" target="_blank" rel="noopener noreferrer" className={extLink}>
-          configuration file
-        </a>{" "}
-        and restart OpenClaw to pick up the new MCP server.
-      </p>
+      <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-3">Choose an integration path:</p>
+        <IntegrationLinkCard
+          title="Local setup (stdio)"
+          preview="Install with an agent prompt and add Neotoma to OpenClaw local configuration."
+          to="/neotoma-with-openclaw-connect-local-stdio"
+        />
+        <IntegrationLinkCard
+          title="Remote setup (HTTP)"
+          preview="Expose Neotoma API with a tunnel and connect OpenClaw to remote MCP endpoints."
+          to="/neotoma-with-openclaw-connect-remote-http"
+        />
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Getting started &mdash; remote (HTTP)
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        If OpenClaw runs on a different machine or in the cloud, start with the agentic install above
-        on your host machine, then configure remote access:
-      </p>
-      <ol className="list-decimal pl-5 space-y-4 mb-6">
-        <li className="text-[15px] leading-7">
-          <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code> flag
-          auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
-          <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
-          <p className="text-[14px] leading-6 text-muted-foreground mt-1">
-            The tunnel URL is printed to the console and written to{" "}
-            <code>/tmp/ngrok-mcp-url.txt</code>. You can also use a reverse proxy or your own domain
-            instead of <code>--tunnel</code>.
-          </p>
-        </li>
-        <li className="text-[15px] leading-7">
-          <strong>Point OpenClaw at the remote endpoint</strong> &mdash; use the tunnel URL for the
-          Neotoma API&apos;s OpenAPI spec (<code>https://&lt;tunnel-host&gt;/openapi.json</code>) or
-          the remote MCP endpoint (<code>https://&lt;tunnel-host&gt;/mcp</code>). The Neotoma API
-          supports the{" "}
-          <a href="https://modelcontextprotocol.io/specification/2025-03-26/basic/authorization" target="_blank" rel="noopener noreferrer" className={extLink}>
-            MCP OAuth authorization flow
-          </a>{" "}
-          for authenticated access.
-        </li>
-      </ol>
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
-        If MCP is not yet available in your OpenClaw environment, use the Neotoma CLI directly from
-        the same machine as a fallback:
-      </p>
-      <CopyableCodeBlock
-        code={`neotoma store --json='[{"entity_type":"task","title":"Follow up","status":"open"}]'
-neotoma entities list --type task`}
-        className="mb-6"
-      />
-
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        OpenClaw documentation
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="openclaw-documentation" title="OpenClaw documentation">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://docs.openclaw.ai/index" target="_blank" rel="noopener noreferrer" className={extLink}>
@@ -237,7 +192,8 @@ neotoma entities list --type task`}
           </a>
           <span className="text-muted-foreground">— extensible skill folders and ClawHub registry</span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}

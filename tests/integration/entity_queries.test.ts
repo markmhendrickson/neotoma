@@ -441,6 +441,112 @@ describe("Entity Queries Service", () => {
         }
       }
     });
+
+    it("should support lightweight responses when includeSnapshots=false", async () => {
+      const entityId = `ent_test_lightweight_${Date.now()}`;
+      const entity = await serviceRoleClient
+        .from("entities")
+        .insert({
+          id: entityId,
+          user_id: testUserId,
+          entity_type: "company",
+          canonical_name: "lightweight snapshot company",
+        })
+        .select()
+        .single();
+
+      if (entity.data) {
+        testEntityIds.push(entity.data.id);
+      }
+
+      await serviceRoleClient.from("entity_snapshots").insert({
+        entity_id: entity.data!.id,
+        user_id: testUserId,
+        entity_type: "company",
+        snapshot: {
+          name: "Lightweight Snapshot Company",
+          note: "this should not be returned in lightweight mode",
+        },
+        observation_count: 3,
+        last_observation_at: new Date().toISOString(),
+      });
+
+      const results = await queryEntities({
+        userId: testUserId,
+        includeSnapshots: false,
+        limit: 100,
+      });
+
+      const found = results.find((e) => e.entity_id === entity.data!.id);
+      expect(found).toBeDefined();
+      expect(found!.snapshot).toEqual({});
+      expect(found!.provenance).toEqual({});
+      expect(found!.raw_fragments).toBeUndefined();
+      expect(found!.observation_count).toBeGreaterThanOrEqual(0);
+    });
+
+    it("should support snapshot-based sort and published-date filters", async () => {
+      const base = Date.now();
+      const olderEntityId = `ent_test_post_old_${base}`;
+      const newerEntityId = `ent_test_post_new_${base}`;
+
+      const olderEntity = await serviceRoleClient
+        .from("entities")
+        .insert({
+          id: olderEntityId,
+          user_id: testUserId,
+          entity_type: "post",
+          canonical_name: "old post",
+        })
+        .select()
+        .single();
+      const newerEntity = await serviceRoleClient
+        .from("entities")
+        .insert({
+          id: newerEntityId,
+          user_id: testUserId,
+          entity_type: "post",
+          canonical_name: "new post",
+        })
+        .select()
+        .single();
+
+      if (olderEntity.data) testEntityIds.push(olderEntity.data.id);
+      if (newerEntity.data) testEntityIds.push(newerEntity.data.id);
+
+      await serviceRoleClient.from("entity_snapshots").insert([
+        {
+          entity_id: olderEntity.data!.id,
+          user_id: testUserId,
+          entity_type: "post",
+          snapshot: { published: true, published_date: "2026-01-15" },
+          observation_count: 2,
+          last_observation_at: "2026-01-15T00:00:00.000Z",
+        },
+        {
+          entity_id: newerEntity.data!.id,
+          user_id: testUserId,
+          entity_type: "post",
+          snapshot: { published: true, published_date: "2026-03-15" },
+          observation_count: 10,
+          last_observation_at: "2026-03-15T00:00:00.000Z",
+        },
+      ]);
+
+      const results = await queryEntities({
+        userId: testUserId,
+        entityType: "post",
+        published: true,
+        publishedAfter: "2026-02-01",
+        sortBy: "observation_count",
+        sortOrder: "desc",
+        limit: 10,
+      });
+
+      const ids = results.map((entity) => entity.entity_id);
+      expect(ids).toContain(newerEntity.data!.id);
+      expect(ids).not.toContain(olderEntity.data!.id);
+    });
   });
 
   describe("Pagination", () => {

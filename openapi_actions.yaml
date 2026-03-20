@@ -1,0 +1,1168 @@
+openapi: 3.1.0
+info:
+  title: Neotoma API
+  version: 1.0.0
+  description: 'REST API for Neotoma. Use with any HTTP client, including ChatGPT
+    Actions, Claude, Cursor, MCP servers, CLI tools, and custom integrations.
+
+
+    This Actions-focused spec intentionally includes a curated subset of endpoints
+    to stay within GPT Actions operation limits.'
+servers:
+- url: https://mcp.neotoma.io
+  description: Set from NEOTOMA_HOST_URL when served by the API; default shown for
+    static/codegen use.
+- url: http://localhost:3080
+  description: Local development server
+security:
+- bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT or base64url
+      description: 'Supported bearer tokens:
+
+        - MCP OAuth JWT (recommended for CLI and web clients)
+
+        - base64url-encoded Ed25519 public key (legacy encrypted responses)
+
+        Optional: Include request signature in Authorization header: "Bearer <public_key>
+        Signature <signature>"
+
+        '
+  schemas:
+    FileUrlResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Signed URL for accessing the file
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+    ErrorEnvelope:
+      type: object
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+          properties: {}
+        trace_id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    Entity:
+      type: object
+      properties:
+        id:
+          type: string
+        entity_type:
+          type: string
+        canonical_name:
+          type: string
+        user_id:
+          type: string
+        merged_to_entity_id:
+          type: string
+          nullable: true
+        merged_at:
+          type: string
+          format: date-time
+          nullable: true
+    EntitySnapshot:
+      type: object
+      properties:
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        snapshot:
+          type: object
+          additionalProperties: true
+          properties: {}
+        raw_fragments:
+          type: object
+          additionalProperties: true
+          properties: {}
+        provenance:
+          type: object
+          additionalProperties: true
+          properties: {}
+        computed_at:
+          type: string
+          format: date-time
+        observation_count:
+          type: integer
+        last_observation_at:
+          type: string
+          format: date-time
+    Source:
+      type: object
+      properties:
+        id:
+          type: string
+        content_hash:
+          type: string
+        mime_type:
+          type: string
+        storage_url:
+          type: string
+        file_size:
+          type: integer
+        original_filename:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+    Observation:
+      type: object
+      properties:
+        id:
+          type: string
+        entity_id:
+          type: string
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        source_id:
+          type: string
+          nullable: true
+        interpretation_id:
+          type: string
+          nullable: true
+        observed_at:
+          type: string
+          format: date-time
+        specificity_score:
+          type: number
+        source_priority:
+          type: integer
+        fields:
+          type: object
+          additionalProperties: true
+          properties: {}
+        user_id:
+          type: string
+    RelationshipSnapshot:
+      type: object
+      properties:
+        relationship_key:
+          type: string
+        relationship_type:
+          type: string
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+        schema_version:
+          type: string
+        snapshot:
+          type: object
+          additionalProperties: true
+          properties: {}
+        computed_at:
+          type: string
+          format: date-time
+        observation_count:
+          type: integer
+        last_observation_at:
+          type: string
+          format: date-time
+        provenance:
+          type: object
+          additionalProperties: true
+          properties: {}
+        user_id:
+          type: string
+    TimelineEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        event_type:
+          type: string
+        event_timestamp:
+          type: string
+          format: date-time
+        source_id:
+          type: string
+        entity_ids:
+          type: array
+          items:
+            type: string
+        properties:
+          type: object
+          additionalProperties: true
+          properties: {}
+    EntitySchema:
+      type: object
+      properties:
+        entity_type:
+          type: string
+        schema_version:
+          type: string
+        field_names:
+          type: array
+          items:
+            type: string
+        field_summary:
+          type: object
+          additionalProperties: true
+          properties: {}
+    Interpretation:
+      type: object
+      properties:
+        id:
+          type: string
+        source_id:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    Stats:
+      type: object
+      properties:
+        entities:
+          type: integer
+        sources:
+          type: integer
+        observations:
+          type: integer
+        relationships:
+          type: integer
+        timeline_events:
+          type: integer
+    StoreRequest:
+      type: object
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: {}
+        relationships:
+          type: array
+          description: 'Optional. Create relationships between entities in this request.
+            Indices refer to the entities array (0-based).
+
+            '
+          items:
+            type: object
+            required:
+            - relationship_type
+            - source_index
+            - target_index
+            properties:
+              relationship_type:
+                type: string
+                enum:
+                - PART_OF
+                - CORRECTS
+                - REFERS_TO
+                - SETTLES
+                - DUPLICATE_OF
+                - DEPENDS_ON
+                - SUPERSEDES
+                - EMBEDS
+                - works_at
+                - owns
+                - manages
+                - part_of
+                - related_to
+                - depends_on
+                - references
+                - transacted_with
+                - member_of
+                - reports_to
+                - located_at
+                - created_by
+                - funded_by
+                - acquired_by
+                - subsidiary_of
+                - partner_of
+                - competitor_of
+                - supplies_to
+                - contracted_with
+                - invested_in
+              source_index:
+                type: integer
+                minimum: 0
+              target_index:
+                type: integer
+                minimum: 0
+        source_priority:
+          type: integer
+        idempotency_key:
+          type: string
+          description: Required for structured path, optional for unstructured-only
+            path.
+        file_idempotency_key:
+          type: string
+          description: Optional idempotency key for file path when sending structured
+            + unstructured in one call.
+        file_content:
+          type: string
+          description: Base64-encoded file content (unstructured path)
+        file_path:
+          type: string
+          description: Local file path for server-local environments
+        mime_type:
+          type: string
+          description: Required with file_content, optional with file_path
+        original_filename:
+          type: string
+        interpret:
+          type: boolean
+          default: true
+        interpretation_config:
+          type: object
+          additionalProperties: true
+          properties: {}
+        user_id:
+          type: string
+      description: Unified store payload. Supports structured only, unstructured only,
+        or both in one request.
+    StoreResponse:
+      type: object
+      properties:
+        structured:
+          $ref: '#/components/schemas/StoreStructuredResponse'
+        unstructured:
+          $ref: '#/components/schemas/StoreUnstructuredResponse'
+    StoreStructuredRequest:
+      type: object
+      required:
+      - entities
+      - idempotency_key
+      properties:
+        entities:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            properties: {}
+        relationships:
+          type: array
+          description: 'Optional. Create relationships between entities in this request.
+            Indices refer to the entities array (0-based).
+
+            Enables one-call chat persistence: store [conversation, agent_message]
+            with relationships [{ relationship_type: "PART_OF", source_index: 1, target_index:
+            0 }].
+
+            '
+          items:
+            type: object
+            required:
+            - relationship_type
+            - source_index
+            - target_index
+            properties:
+              relationship_type:
+                type: string
+                enum:
+                - PART_OF
+                - CORRECTS
+                - REFERS_TO
+                - SETTLES
+                - DUPLICATE_OF
+                - DEPENDS_ON
+                - SUPERSEDES
+                - EMBEDS
+                - works_at
+                - owns
+                - manages
+                - part_of
+                - related_to
+                - depends_on
+                - references
+                - transacted_with
+                - member_of
+                - reports_to
+                - located_at
+                - created_by
+                - funded_by
+                - acquired_by
+                - subsidiary_of
+                - partner_of
+                - competitor_of
+                - supplies_to
+                - contracted_with
+                - invested_in
+              source_index:
+                type: integer
+                minimum: 0
+                description: Index into the entities array for the source entity
+              target_index:
+                type: integer
+                minimum: 0
+                description: Index into the entities array for the target entity
+        source_priority:
+          type: integer
+        idempotency_key:
+          type: string
+        user_id:
+          type: string
+        original_filename:
+          type: string
+          description: 'Optional. For agent-provided structured data, omit so the
+            source has no filename (null).
+
+            Pass only when mirroring a real file name or when a display label is desired.
+
+            '
+    StoreStructuredResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        entities:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_id:
+                type: string
+              entity_type:
+                type: string
+              observation_id:
+                type: string
+    StoreUnstructuredRequest:
+      type: object
+      required:
+      - file_content
+      - mime_type
+      properties:
+        file_content:
+          type: string
+          description: Base64-encoded file content
+        mime_type:
+          type: string
+          description: MIME type of the file
+        idempotency_key:
+          type: string
+          description: Optional idempotency key; if omitted, content hash is used
+        original_filename:
+          type: string
+        interpret:
+          type: boolean
+          default: true
+          description: Run AI interpretation after store
+        user_id:
+          type: string
+          format: uuid
+    StoreUnstructuredResponse:
+      type: object
+      properties:
+        source_id:
+          type: string
+        content_hash:
+          type: string
+        file_size:
+          type: integer
+        deduplicated:
+          type: boolean
+        interpretation:
+          type: object
+          additionalProperties: true
+          properties: {}
+        entity_ids:
+          type: array
+          items:
+            type: string
+    GetRelationshipSnapshotRequest:
+      type: object
+      required:
+      - relationship_type
+      - source_entity_id
+      - target_entity_id
+      properties:
+        relationship_type:
+          type: string
+          enum:
+          - PART_OF
+          - CORRECTS
+          - REFERS_TO
+          - SETTLES
+          - DUPLICATE_OF
+          - DEPENDS_ON
+          - SUPERSEDES
+          - EMBEDS
+          - works_at
+          - owns
+          - manages
+          - part_of
+          - related_to
+          - depends_on
+          - references
+          - transacted_with
+          - member_of
+          - reports_to
+          - located_at
+          - created_by
+          - funded_by
+          - acquired_by
+          - subsidiary_of
+          - partner_of
+          - competitor_of
+          - supplies_to
+          - contracted_with
+          - invested_in
+        source_entity_id:
+          type: string
+        target_entity_id:
+          type: string
+    GetRelationshipSnapshotResponse:
+      type: object
+      required:
+      - snapshot
+      - observations
+      properties:
+        snapshot:
+          $ref: '#/components/schemas/RelationshipSnapshot'
+        observations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              source_id:
+                type: string
+              observed_at:
+                type: string
+              specificity_score:
+                type: number
+              source_priority:
+                type: number
+              metadata:
+                type: object
+                properties: {}
+    OAuthInitiateRequest:
+      type: object
+      required:
+      - connection_id
+      properties:
+        connection_id:
+          type: string
+        client_name:
+          type: string
+        redirect_uri:
+          type: string
+    OAuthInitiateResponse:
+      type: object
+      properties:
+        auth_url:
+          type: string
+        connection_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    OAuthStatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        connection_id:
+          type: string
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /me:
+    get:
+      summary: Get current authenticated user
+      operationId: getMe
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    type: string
+                  email:
+                    type: string
+                  storage:
+                    type: object
+                    properties:
+                      storage_backend:
+                        type: string
+                        enum:
+                        - local
+                      data_dir:
+                        type: string
+                      sqlite_db:
+                        type: string
+        '401':
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /entities/query:
+    post:
+      summary: Query entities
+      operationId: queryEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_type:
+                  type: string
+                search:
+                  type: string
+                  description: Canonical free-text query parameter for retrieval relevance.
+                query:
+                  type: string
+                  description: Compatibility alias for `search`.
+                search_query:
+                  type: string
+                  description: Compatibility alias for `search`.
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+                sort_by:
+                  type: string
+                  enum:
+                  - entity_id
+                  - canonical_name
+                  - observation_count
+                  - last_observation_at
+                  description: "Non-default values cannot be combined with `search`."
+                sort_order:
+                  type: string
+                  enum:
+                  - asc
+                  - desc
+                  description: "`desc` cannot be combined with `search`."
+                published:
+                  type: boolean
+                  description: "Cannot be combined with `search`."
+                published_after:
+                  type: string
+                  description: "Inclusive lower bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`."
+                published_before:
+                  type: string
+                  description: "Inclusive upper bound for snapshot.published_date (ISO date or datetime string). Cannot be combined with `search`."
+                include_snapshots:
+                  type: boolean
+                  description: When false, omit snapshot/provenance/raw_fragments payloads for lighter responses.
+                include_merged:
+                  type: boolean
+                user_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EntitySnapshot'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+  /entities/{id}:
+    get:
+      summary: Get entity by ID
+      operationId: getEntityById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySnapshot'
+        '404':
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /entities/{id}/observations:
+    get:
+      summary: List observations for entity
+      operationId: getEntityObservations
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+  /entities/{id}/relationships:
+    get:
+      summary: List relationships for entity
+      operationId: getEntityRelationships
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+  /timeline:
+    get:
+      summary: List timeline events
+      operationId: listTimeline
+      parameters:
+      - in: query
+        name: start_date
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: end_date
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: event_type
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          type: string
+      - in: query
+        name: limit
+        required: false
+        schema:
+          type: integer
+      - in: query
+        name: offset
+        required: false
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: Timeline events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TimelineEvent'
+  /timeline/{id}:
+    get:
+      summary: Get timeline event by ID
+      operationId: getTimelineById
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Timeline event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  event:
+                    $ref: '#/components/schemas/TimelineEvent'
+  /schemas:
+    get:
+      summary: List entity schemas
+      operationId: listSchemas
+      parameters:
+      - in: query
+        name: user_id
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Schemas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schemas:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/EntitySchema'
+  /schemas/{entity_type}:
+    get:
+      summary: Get schema by entity type
+      operationId: getSchemaByEntityType
+      parameters:
+      - in: path
+        name: entity_type
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySchema'
+  /store:
+    post:
+      summary: Store structured entities, unstructured files, or both
+      operationId: storeStructured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreRequest'
+      responses:
+        '200':
+          description: Store result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                - $ref: '#/components/schemas/StoreStructuredResponse'
+                - $ref: '#/components/schemas/StoreUnstructuredResponse'
+                - $ref: '#/components/schemas/StoreResponse'
+  /store/unstructured:
+    post:
+      summary: Store unstructured file (raw upload with optional AI interpretation)
+      operationId: storeUnstructured
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StoreUnstructuredRequest'
+      responses:
+        '200':
+          description: Store result with source_id and optional interpretation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreUnstructuredResponse'
+  /get_entity_snapshot:
+    post:
+      summary: Get entity snapshot with provenance
+      operationId: getEntitySnapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+      responses:
+        '200':
+          description: Entity snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySnapshot'
+  /list_observations:
+    post:
+      summary: List observations for entity
+      operationId: listObservationsForEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+                limit:
+                  type: integer
+                offset:
+                  type: integer
+      responses:
+        '200':
+          description: Observations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  observations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Observation'
+  /get_field_provenance:
+    post:
+      summary: Get field provenance
+      operationId: getFieldProvenance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entity_id:
+                  type: string
+                field:
+                  type: string
+      responses:
+        '200':
+          description: Provenance
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties: {}
+  /create_relationship:
+    post:
+      summary: Create relationship
+      operationId: createRelationship
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties: {}
+      responses:
+        '200':
+          description: Relationship created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RelationshipSnapshot'
+  /list_relationships:
+    post:
+      summary: List relationships
+      operationId: listRelationshipsForEntity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+              properties: {}
+      responses:
+        '200':
+          description: Relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  relationships:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RelationshipSnapshot'
+  /retrieve_entity_by_identifier:
+    post:
+      summary: Retrieve entity by identifier
+      description: Search for entity by name, email, or other identifier
+      operationId: retrieveEntityByIdentifier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - identifier
+              properties:
+                identifier:
+                  type: string
+                  description: Identifier to search for (name, email, etc.)
+                entity_type:
+                  type: string
+                  description: Optional entity type to limit search
+      responses:
+        '200':
+          description: Entity search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entity'
+                  total:
+                    type: integer
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+  /retrieve_related_entities:
+    post:
+      summary: Retrieve related entities
+      description: Get entities connected via relationships with n-hop traversal support
+      operationId: retrieveRelatedEntities
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - entity_id
+              properties:
+                entity_id:
+                  type: string
+                relationship_types:
+                  type: array
+                  items:
+                    type: string
+                direction:
+                  type: string
+                  enum:
+                  - inbound
+                  - outbound
+                  - both
+                  default: both
+                max_hops:
+                  type: integer
+                  default: 1
+                include_entities:
+                  type: boolean
+                  default: true
+      responses:
+        '200':
+          description: Related entities
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties: {}
+  /retrieve_graph_neighborhood:
+    post:
+      summary: Retrieve graph neighborhood
+      description: Get complete graph neighborhood including entities, relationships,
+        sources, and events
+      operationId: retrieveGraphNeighborhood
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - node_id
+              properties:
+                node_id:
+                  type: string
+                node_type:
+                  type: string
+                  enum:
+                  - entity
+                  - source
+                  default: entity
+                include_relationships:
+                  type: boolean
+                  default: true
+                include_sources:
+                  type: boolean
+                  default: true
+                include_events:
+                  type: boolean
+                  default: true
+                include_observations:
+                  type: boolean
+                  default: false
+      responses:
+        '200':
+          description: Graph neighborhood
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties: {}

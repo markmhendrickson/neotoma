@@ -344,6 +344,10 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
   - `--offset <n>`
   - `--include-merged`
 - `neotoma entities get <id>`
+- `neotoma entities search [identifier]`:
+  - Preferred: positional `identifier` or `--identifier <id>`
+  - Compatibility alias: `--query <id>` (equivalent to `--identifier`)
+  - If both `--identifier` and `--query` are provided, they must match
 
 ### Sources
 
@@ -398,8 +402,17 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
 ### Store
 
 - `neotoma store`:
-  - `--json=<json>`: Inline JSON array of entities. Use `--json=` (equals, no space) for reliable shell parsing.
+  - Preferred structured input: `--entities <json>` or `--file <path>`
+  - Compatibility alias: `--json=<json>` maps to structured `--entities` for backward compatibility.
+    - Use `--json=` (equals, no space) so the payload is parsed as entities input.
+    - Bare `--json` (without `=`) remains the global output-format flag.
   - `--file <path>`: Path to JSON file containing entity array. Use for long payloads.
+
+### MCP/CLI parity note
+
+For chat persistence recipes, MCP and CLI use the same underlying store contract. In CLI examples:
+- entity lookup supports positional identifier, `--identifier`, and compatibility alias `--query`
+- structured store supports preferred `--entities`/`--file` and compatibility alias `--json=<json>`
 
 ### Upload
 
@@ -442,6 +455,21 @@ See `docs/developer/agent_cli_configuration.md` for the rule text and strategy.
     - `--on-conflict <merge|overwrite|use-new>`
     - `--yes` (skip prompts)
   - `--json` output includes backup paths, copied files, conflict strategy, and merge stats.
+- `neotoma storage merge-db`: Merge one SQLite DB file into another.
+  - Required:
+    - `--source <path>`: Source DB file.
+    - `--target <path>`: Target DB file.
+  - Options:
+    - `--mode <safe|keep-target|keep-source>`:
+      - `safe` (default): fail when matching primary keys contain differing row values.
+      - `keep-target`: insert missing rows; keep target rows on conflicts (`INSERT OR IGNORE` behavior).
+      - `keep-source`: insert/replace source rows into target (`INSERT OR REPLACE` behavior).
+    - `--dry-run`: Analyze conflicts and merge impact without writing the target DB.
+    - `--no-recompute-snapshots`: Skip post-merge snapshot recomputation.
+  - Behavior notes:
+    - Default mode is safety-first (`safe`) to avoid silent row loss on conflicts.
+    - Post-merge recomputation rebuilds `entity_snapshots` and `relationship_snapshots` when those tables exist.
+    - This command merges DB rows only; it does not copy `sources/` files or log directories. Use backup/restore or storage migration workflows when file assets must move with DB content.
 
 ### Backup and restore
 

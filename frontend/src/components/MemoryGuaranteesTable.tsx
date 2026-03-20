@@ -108,10 +108,10 @@ export function MemoryGuaranteesTable() {
                   <TooltipTrigger asChild>
                     <Link
                       to="/platform-memory"
-                      className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Platform memory"
                     >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
@@ -130,10 +130,10 @@ export function MemoryGuaranteesTable() {
                   <TooltipTrigger asChild>
                     <Link
                       to="/retrieval-memory"
-                      className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Retrieval memory"
                     >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
@@ -152,10 +152,10 @@ export function MemoryGuaranteesTable() {
                   <TooltipTrigger asChild>
                     <Link
                       to="/file-based-memory"
-                      className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about File-based memory"
                     >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
@@ -174,10 +174,10 @@ export function MemoryGuaranteesTable() {
                   <TooltipTrigger asChild>
                     <Link
                       to="/deterministic-memory"
-                      className="inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      className="inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Deterministic memory"
                     >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent className="w-max min-w-[18rem] max-w-[min(36rem,calc(100vw-1.5rem))] text-[13px] leading-5 whitespace-normal">
@@ -203,10 +203,10 @@ export function MemoryGuaranteesTable() {
                   <TooltipTrigger asChild>
                     <Link
                       to="/memory-vendors"
-                      className="ml-1 inline-flex align-middle rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      className="ml-1 inline-flex shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                       aria-label="More info about Vendors"
                     >
-                      <Info className="h-3.5 w-3.5" aria-hidden />
+                      <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                     </Link>
                   </TooltipTrigger>
                   <TooltipContent
@@ -243,16 +243,17 @@ export function MemoryGuaranteesTable() {
                 scope="row"
                 className="text-left px-3 py-2.5 font-medium text-foreground min-w-0 align-top"
               >
-                <span className="inline-flex items-start gap-1 min-w-0 max-w-full">
-                  <span className="break-words whitespace-normal">{row.property}</span>
+                <span className="break-words whitespace-normal">
+                  {row.property}
+                  {"\u00A0"}
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Link
                         to={`/memory-guarantees#${row.slug}`}
-                        className="ml-1 mt-0.5 inline-flex shrink-0 rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                        className="inline-flex align-middle shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                         aria-label={`More info about ${row.property}`}
                       >
-                        <Info className="h-3.5 w-3.5" aria-hidden />
+                        <Info className="h-3.5 w-3.5 shrink-0" aria-hidden />
                       </Link>
                     </TooltipTrigger>
                     <TooltipContent

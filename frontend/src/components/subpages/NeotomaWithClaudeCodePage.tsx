@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
+import { IntegrationSection } from "../IntegrationSection";
 
 const extLink = "text-foreground underline underline-offset-2 hover:no-underline";
 
@@ -23,10 +24,8 @@ export function NeotomaWithClaudeCodePage() {
         </p>
       </section>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        What Claude Code provides
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-claude-code-provides" title="What Claude Code provides" dividerBefore={false}>
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           Local terminal agent with direct filesystem and shell access
@@ -59,12 +58,11 @@ export function NeotomaWithClaudeCodePage() {
             project context files for persistent instructions at project, user, or org scope
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        What Claude Code doesn't handle
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="what-claude-code-does-not-handle" title="What Claude Code doesn't handle">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
@@ -84,12 +82,11 @@ export function NeotomaWithClaudeCodePage() {
             Cross-tool access — session context is local to Claude Code
           </span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Deterministic guarantees Neotoma provides
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="deterministic-guarantees" title="Deterministic guarantees Neotoma provides">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         {[
           "Persistent memory graph accessible across all Claude Code sessions",
           "Deterministic state — same observations always produce the same entity snapshots",
@@ -104,12 +101,11 @@ export function NeotomaWithClaudeCodePage() {
             {item}
           </li>
         ))}
-      </ul>
+        </ul>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Using them together
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+      <IntegrationSection sectionKey="using-them-together" title="Using them together">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
         Keep{" "}
         <a href="https://code.claude.com/docs/en/memory#auto-memory" target="_blank" rel="noopener noreferrer" className={extLink}>
           auto memory
@@ -119,8 +115,8 @@ export function NeotomaWithClaudeCodePage() {
         lines of <code>MEMORY.md</code> load into every session. It&apos;s machine-local and
         per-project, so it handles what it&apos;s good at; Neotoma handles what it cannot. Both are
         active simultaneously with no conflict.
-      </p>
-      <table className="w-full text-[14px] leading-6 mb-6 border-collapse">
+        </p>
+        <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
         <thead>
           <tr className="border-b border-border">
             <th className="text-left py-2 pr-4 font-medium text-foreground">Concern</th>
@@ -160,29 +156,27 @@ export function NeotomaWithClaudeCodePage() {
             <td className="py-2">Observation history</td>
           </tr>
         </tbody>
-      </table>
+        </table>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Getting started
-      </h2>
-      <p className="text-[15px] leading-7 text-muted-foreground mb-4">
+      <IntegrationSection sectionKey="getting-started" title="Getting started">
+        <p className="text-[15px] leading-7 text-muted-foreground mb-4">
         Paste this prompt into Claude Code. The agent handles npm install, initialization, and MCP
         configuration.
-      </p>
-      <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
-      <p className="text-[14px] leading-6 text-muted-foreground mb-2">
+        </p>
+        <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         This is a local integration &mdash; Neotoma runs on the same machine via stdio. No API server
         or remote access is required. The agent writes to <code>.mcp.json</code> at your project root.
-      </p>
-      <p className="text-[14px] leading-6 text-muted-foreground mb-6">
+        </p>
+        <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         When MCP is not available, agents can use the <code>neotoma</code> CLI directly from the
         terminal as a fallback.
-      </p>
+        </p>
+      </IntegrationSection>
 
-      <h2 className="text-[20px] font-medium tracking-[-0.02em] mt-10 mb-3">
-        Claude Code documentation
-      </h2>
-      <ul className="list-none pl-0 space-y-1.5 mb-6">
+      <IntegrationSection sectionKey="claude-code-documentation" title="Claude Code documentation">
+        <ul className="list-none pl-0 space-y-1.5 mb-2">
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://code.claude.com/docs/en/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
@@ -211,7 +205,8 @@ export function NeotomaWithClaudeCodePage() {
           </a>
           <span className="text-muted-foreground">— project and user-level configuration</span>
         </li>
-      </ul>
+        </ul>
+      </IntegrationSection>
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         See{" "}

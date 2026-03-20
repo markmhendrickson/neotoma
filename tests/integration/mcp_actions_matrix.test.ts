@@ -277,6 +277,40 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
         expect(typeof responseData.total).toBe("number");
         expect(responseData.excluded_merged).toBeDefined();
       });
+
+      it("should support search_query alias for compatibility", async () => {
+        const storeResult = await (server as any).store({
+          user_id: testUserId,
+          entities: [{ entity_type: testEntityType, name: "Alias Search Query Test", amount: 450 }],
+        });
+
+        const storeData = JSON.parse(storeResult.content[0].text);
+        const entityId = storeData.entities[0].entity_id;
+        createdEntityIds.push(entityId);
+        createdSourceIds.push(storeData.source_id);
+
+        const result = await callMCPAction(server, "retrieve_entities", {
+          entity_type: testEntityType,
+          search_query: "alias search query test",
+          limit: 10,
+          offset: 0,
+        });
+
+        const responseData = JSON.parse(result.content[0].text);
+        const ids = responseData.entities.map((entity: any) => entity.entity_id);
+        expect(ids).toContain(entityId);
+      });
+
+      it("should reject blank search values when a search key is provided", async () => {
+        await expect(
+          callMCPAction(server, "retrieve_entities", {
+            entity_type: testEntityType,
+            search_query: "   ",
+            limit: 10,
+            offset: 0,
+          })
+        ).rejects.toThrow(/search must be a non-empty string/i);
+      });
     });
 
     describe("list_entity_types (MCP_SPEC.md 3.2)", () => {
@@ -369,6 +403,7 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
           expect(responseData.entities[0].canonical_name).toBeDefined();
         }
       });
+
     });
 
     describe("merge_entities (MCP_SPEC.md 3.14)", () => {
@@ -473,6 +508,7 @@ describe("MCP Actions Matrix - All 17 Actions", () => {
           expect(obs.fields).toBeDefined();
         }
       });
+
 
       it("should return ENTITY_NOT_FOUND for nonexistent entity", async () => {
         let error: any = null;

@@ -16,6 +16,7 @@ import {
   createAuthUrl,
   encryptRefreshToken,
   decryptRefreshToken,
+  isRedirectUriAllowedForTunnel,
 } from "../mcp_oauth.js";
 import { OAuthError } from "../mcp_oauth_errors.js";
 import { randomBytes } from "node:crypto";
@@ -186,6 +187,25 @@ describe("MCP OAuth Service", () => {
         return;
       }
       expect(parsedUrl.searchParams.get("client_id")).toBe("test-client-id");
+    });
+  });
+
+  describe("isRedirectUriAllowedForTunnel", () => {
+    it("allows trusted hosted callbacks and local redirects", () => {
+      expect(isRedirectUriAllowedForTunnel("cursor://auth/callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("http://localhost:5195/oauth")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://chatgpt.com/aip/g-123/oauth/callback")).toBe(
+        true
+      );
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/api/mcp/auth_callback")).toBe(true);
+      expect(isRedirectUriAllowedForTunnel("https://www.claude.ai/api/mcp/oauth/callback")).toBe(
+        true
+      );
+    });
+
+    it("rejects unrelated hosted redirects", () => {
+      expect(isRedirectUriAllowedForTunnel("https://claude.ai/other/path")).toBe(false);
+      expect(isRedirectUriAllowedForTunnel("https://example.com/oauth/callback")).toBe(false);
     });
   });
 

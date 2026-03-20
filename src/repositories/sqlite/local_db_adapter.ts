@@ -233,6 +233,18 @@ function normalizeColumnName(table: string, column: string): string {
   // Compatibility aliases used by tests and older codepaths.
   if (table === "entities" && column === "merged_into") return "merged_to_entity_id";
   if (table === "observations" && column === "priority") return "source_priority";
+  // PostgREST-style JSON path projection used in query code:
+  //   snapshot->>published_date
+  // Convert to SQLite-compatible json_extract(snapshot, '$.published_date').
+  const jsonPathMatch = column.match(/^([A-Za-z_][A-Za-z0-9_]*)->>([A-Za-z_][A-Za-z0-9_]*)$/);
+  if (jsonPathMatch) {
+    const [, jsonColumn, jsonField] = jsonPathMatch;
+    const jsonPath = `$.${jsonField}`;
+    const extracted = `json_extract(${jsonColumn}, '${jsonPath}')`;
+    // Emulate PostgREST text projection semantics for ->>:
+    // booleans become "true"/"false"; scalars become text.
+    return `CASE json_type(${jsonColumn}, '${jsonPath}') WHEN 'true' THEN 'true' WHEN 'false' THEN 'false' ELSE CAST(${extracted} AS TEXT) END`;
+  }
   return column;
 }
 

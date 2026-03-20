@@ -326,7 +326,7 @@ Agent: What is the Release name and version?
 User: MVP, v1.0.0
 
 Agent: What is the Release goal? (1-2 sentence summary)
-User: Ship deterministic State Layer with ingestion, extraction, entity resolution, timeline, and MCP access for AI tools. Support multi-user teams.
+User: Ship deterministic Truth Layer with ingestion, extraction, entity resolution, timeline, and MCP access for AI tools. Support multi-user teams.
 
 Agent: What is the target ship date?
 User: 2025-03-01

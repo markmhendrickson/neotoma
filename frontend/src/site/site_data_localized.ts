@@ -41,9 +41,19 @@ export function getLocalizedDocNavCategories(dict: LocaleDictionary) {
     External: dict.categoryExternal,
   };
 
+  const itemLabelByHref: Record<string, string> = {
+    "/docs": dict.allDocumentation,
+    "/install": dict.install,
+    "/architecture": dict.architecture,
+  };
+
   return DOC_NAV_CATEGORIES.map((category) => ({
     ...category,
     title: titleMap[category.title] ?? category.title,
+    items: category.items.map((item) => ({
+      ...item,
+      label: itemLabelByHref[item.href] ?? item.label,
+    })),
   }));
 }
 

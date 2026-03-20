@@ -60,6 +60,14 @@ export function AiInfrastructureEngineersPage() {
   return (
     <IcpDetailPage
       profile={profile}
+      openingHook={
+        <p>
+          Your observability stack watches everything except the thing that actually matters:
+          what the agent believed and why. When a production agent fails, your debugging process
+          is reconstructing what happened from scattered logs, guessing at state transitions,
+          and hoping you can reproduce the issue.
+        </p>
+      }
       outcomes={outcomes}
       aiNeeds={[
         { label: "Deterministic state evolution: same observations always produce the same entity state", href: "/deterministic-state-evolution", linkTerm: "Deterministic state evolution" },
@@ -110,6 +118,16 @@ export function AiInfrastructureEngineersPage() {
           ),
         },
         {
+          heading: "State layer locked to one vendor's runtime",
+          body: (
+            <p>
+              Each agent runtime provides its own memory abstraction — none portable, none
+              interoperable. Migrating to a new orchestration framework means rebuilding state
+              management from scratch. There is no standard state layer that works across vendors.
+            </p>
+          ),
+        },
+        {
           heading: "No data residency guarantees for agent state",
           body: (
             <p>
@@ -120,17 +138,15 @@ export function AiInfrastructureEngineersPage() {
             </p>
           ),
         },
-        {
-          heading: "State layer locked to one vendor's runtime",
-          body: (
-            <p>
-              Each agent runtime provides its own memory abstraction — none portable, none
-              interoperable. Migrating to a new orchestration framework means rebuilding state
-              management from scratch. There is no standard state layer that works across vendors.
-            </p>
-          ),
-        },
       ]}
+      problemsToSolutionsTransition={
+        <p>
+          Your application teams ship in tight cycles. Your state layer should too. If you can't
+          replay an agent run, you can't debug it. If you can't debug it, you can't iterate.
+          Neotoma makes agent state inspectable, diffable, and replayable — so your debugging
+          cycle is minutes, not days of log archaeology.
+        </p>
+      }
       solutions={[
         {
           heading: "Deterministic state evolution",
@@ -180,6 +196,24 @@ export function AiInfrastructureEngineersPage() {
           ),
         },
       ]}
+      whatChanges={
+        <>
+          <p>
+            You stop writing glue. Checkpoint logic, state serialization, custom diffing, retry
+            handlers — the guarantees you've been hand-rolling become primitives. You declare
+            invariants instead of building safety nets.
+          </p>
+          <p>
+            When something fails, you query the timeline instead of reconstructing it from logs.
+            Post-mortems take thirty minutes because provenance answers "what changed and when"
+            directly. Your team stops treating agent state as a black box and starts treating it
+            like any other part of the stack they can reason about.
+          </p>
+          <p>
+            The job shifts from reactive firefighting to proactive platform design.
+          </p>
+        </>
+      }
       dataTypeDetails={[
         { type: "agent_session", description: "Session state with versioned context windows and accumulated facts" },
         { type: "action", description: "Agent actions with inputs, outputs, timestamps, and provenance" },
@@ -190,7 +224,20 @@ export function AiInfrastructureEngineersPage() {
         { type: "entity_graph", description: "Resolved entities with typed relationships and temporal evolution" },
         { type: "runbook", description: "Operational procedures and agent behavioral rules with version history" },
       ]}
-      closingStatement="You need guarantees, not features. Neotoma provides deterministic state evolution, append-only observations, and full provenance — the invariants missing from ad-hoc agent state management."
+      scopeNote={
+        <p>
+          If your agents are stateless request-response — no accumulated context, no entity
+          tracking — standard logging and tracing are sufficient. Neotoma is for when agents
+          accumulate state across sessions and pipeline steps, and you need that state to be
+          reproducible, traceable, and auditable.
+        </p>
+      }
+      credibilityBridge="Built because I hit every failure mode on this page while running a twelve-server agentic stack against a production monorepo."
+      blogPostLink={{
+        label: "Building structural barriers that incumbents can't copy",
+        href: "https://markmhendrickson.com/posts/building-structural-barriers",
+      }}
+      closingStatement="You need guarantees, not features. Neotoma removes the tax your team pays hand-rolling state management — and gives you deterministic primitives to build on instead."
     />
   );
 }

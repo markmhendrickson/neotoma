@@ -1,4 +1,4 @@
-import { Brain, Users, GitBranch, Fingerprint } from "lucide-react";
+import { Brain, Users, GitBranch, Fingerprint, Scale } from "lucide-react";
 import { ICP_PROFILES } from "../../site/site_data";
 import { IcpDetailPage } from "./IcpDetailPage";
 import type { IcpOutcomeCard } from "./IcpDetailPage";
@@ -60,6 +60,13 @@ export function AgenticSystemsBuildersPage() {
   return (
     <IcpDetailPage
       profile={profile}
+      openingHook={
+        <p>
+          You ship agents that work in demos. In production, entity resolution drifts, memory
+          regresses, and when something goes wrong you can't trace why. Half your engineering
+          effort goes toward compensating for a memory layer that doesn't hold its shape.
+        </p>
+      }
       outcomes={outcomes}
       aiNeeds={[
         { label: "Cross-session, cross-agent state that persists beyond token windows", href: "/memory-models#deterministic-memory", linkTerm: "Cross-session, cross-agent state" },
@@ -68,16 +75,48 @@ export function AgenticSystemsBuildersPage() {
         { label: "Structured entity resolution so agents reason over canonical data, not duplicates", href: "/architecture", linkTerm: "Structured entity resolution" },
         { label: "Audit trail for eval, debugging, and compliance across pipeline steps", href: "/auditable-change-log", linkTerm: "Audit trail" },
       ]}
-      keyDifferences={{
-        comparedTo: "AI infrastructure engineers",
-        comparedToHref: "/ai-infrastructure-engineers",
-        points: [
-          "Primary layer: application workflows and shipped agent products, not platform internals",
-          "Adoption motion: integrate quickly via MCP into frameworks, then expand as more agents ship",
-          "Decision buyer: individual builders or product engineering teams with shorter cycles",
-          "Success metric: reliable cross-session execution, fewer memory regressions, and faster debugging in shipped workflows",
-        ],
-      }}
+      competitiveComparison={
+        <>
+          <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
+            <Scale className="h-4.5 w-4.5 text-indigo-500" aria-hidden />
+            How is this different from what you're already using?
+          </h2>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <p className="text-[14px] font-medium text-foreground mb-1">Framework-native memory</p>
+              <p className="text-[13px] leading-6 text-muted-foreground">
+                LangChain, CrewAI, and custom frameworks each ship their own memory abstraction. None
+                are portable. None version state. None provide provenance. Switching frameworks means
+                starting state management over.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <p className="text-[14px] font-medium text-foreground mb-1">RAG / vector retrieval</p>
+              <p className="text-[13px] leading-6 text-muted-foreground">
+                Retrieval finds things at query time by similarity. It doesn't persist canonical
+                entities, maintain provenance, or guarantee the same result twice. Retrieval and a
+                truth layer solve different problems and will coexist.
+              </p>
+            </div>
+            <div className="rounded-lg border border-border bg-card px-4 py-3">
+              <p className="text-[14px] font-medium text-foreground mb-1">Provider-hosted memory</p>
+              <p className="text-[13px] leading-6 text-muted-foreground">
+                ChatGPT memory, Claude memory — conversation-scoped, provider-bound, non-deterministic.
+                No cross-platform access, no correction mechanism, no audit trail.
+              </p>
+            </div>
+          </div>
+          <div className="mt-6 text-[14px] leading-7 text-muted-foreground">
+            <p>
+              Retrieval and state are different paradigms, not a feature gap. Embedding-based search
+              and agentic search both optimize for flexible, on-demand access. A truth layer optimizes
+              for consistency and verifiability. If your agents need to reason over canonical entities
+              across sessions — not just find relevant context within one — you need a state layer
+              underneath the retrieval.
+            </p>
+          </div>
+        </>
+      }
       deepPainPoints={[
         {
           heading: "Agents forget between sessions",
@@ -155,13 +194,14 @@ export function AgenticSystemsBuildersPage() {
           ),
         },
         {
-          heading: "MCP-native integration",
+          heading: "MCP-native, MIT-licensed, no lock-in",
           icon: "Server",
           href: "/mcp",
           body: (
             <p>
-              Neotoma exposes structured memory via MCP — the same protocol your agents already speak.
-              One memory layer for CrewAI, LangGraph, custom frameworks, and any MCP-compatible tool.
+              MIT-licensed. No token, no vendor lock-in, no proprietary memory format. Your state
+              is yours — stored locally, accessible via MCP from any compatible tool, portable
+              across frameworks by design.
             </p>
           ),
         },
@@ -178,6 +218,24 @@ export function AgenticSystemsBuildersPage() {
           ),
         },
       ]}
+      whatChanges={
+        <>
+          <p>
+            You stop compensating for memory and start building on top of it. New features compound
+            instead of regressing. You add a capability and it works across sessions because the
+            state it depends on persists.
+          </p>
+          <p>
+            You ship to more users and the entity graph gets richer, not messier, because schema
+            constraints and merge rules handle what used to be manual cleanup. Your roadmap shifts
+            from memory regression fixes to new capabilities.
+          </p>
+          <p>
+            A customer reports an issue and you trace it to a specific observation in thirty seconds.
+            You start trusting your own system enough to build ambitiously on it.
+          </p>
+        </>
+      }
       dataTypeDetails={[
         { type: "agent_session", description: "Session state, context windows, and accumulated facts across agent runs" },
         { type: "action", description: "Agent actions with inputs, outputs, and provenance links" },
@@ -188,7 +246,20 @@ export function AgenticSystemsBuildersPage() {
         { type: "entity_graph", description: "Resolved entities with typed relationships and temporal evolution" },
         { type: "runbook", description: "Operational procedures and agent behavioral rules" },
       ]}
-      closingStatement="Your agents need more than token-based memory. Neotoma provides the deterministic, provenance-backed memory substrate your frameworks and pipelines require for reliable, auditable operation."
+      scopeNote={
+        <p>
+          For single-session, stateless agent tasks — one-shot summarization, code generation,
+          document Q&A — retrieval is sufficient and simpler. Neotoma is for agents that
+          accumulate facts across sessions, resolve entities, track commitments, and need to
+          explain their reasoning after the fact.
+        </p>
+      }
+      credibilityBridge="Built because retrieval kept re-inferring entities that should have been resolved once and persisted."
+      blogPostLink={{
+        label: "Why agent memory needs more than RAG",
+        href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
+      }}
+      closingStatement="Your agents need more than token-based memory. Neotoma removes the tax your team pays compensating for unreliable state — and gives you a deterministic, provenance-backed substrate to build on."
     />
   );
 }

@@ -52,6 +52,9 @@ jobs:
       - name: Build site
         run: npm run build:pages:site
 
+      - name: Validate locale parity
+        run: npm run validate:locales
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 

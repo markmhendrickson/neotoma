@@ -285,7 +285,8 @@ function validateRedirectUri(redirectUri: string): void {
 
 /**
  * Redirect URIs allowed when the authorization request is from a tunnel (non-local Host).
- * Prevents sending the authorization code to a third-party site. Allows localhost, loopback, and known app schemes.
+ * Prevents sending the authorization code to a third-party site. Allows localhost, loopback,
+ * known app schemes, and trusted hosted OAuth callbacks (OpenAI/Claude).
  */
 export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
   if (!redirectUri || typeof redirectUri !== "string") return false;
@@ -295,7 +296,19 @@ export function isRedirectUriAllowedForTunnel(redirectUri: string): boolean {
     const host = (url.hostname || "").toLowerCase();
     if (protocol === "cursor:" || protocol === "vscode:" || protocol === "app:") return true;
     if (protocol !== "http:" && protocol !== "https:") return false;
-    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1";
+    if (host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host === "::1")
+      return true;
+    if (host === "chatgpt.com" || host === "chat.openai.com") return true;
+    if (
+      (host === "claude.ai" || host === "www.claude.ai") &&
+      (url.pathname === "/api/mcp/auth_callback" ||
+        url.pathname === "/api/mcp/auth_callback/" ||
+        url.pathname === "/api/mcp/oauth/callback" ||
+        url.pathname === "/api/mcp/oauth/callback/")
+    ) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -388,6 +401,22 @@ export function encryptRefreshToken(token: string): string {
 
   // Format: iv:authTag:encrypted
   return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
+}
+
+const PLAIN_REFRESH_PREFIX = "plain:";
+
+/**
+ * Encrypt refresh token for storage when key is configured; otherwise for local backend only store plaintext with prefix.
+ * Allows local OAuth approval to succeed without NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY.
+ */
+function encryptRefreshTokenForStorage(token: string): string {
+  if (ENCRYPTION_KEY) {
+    return encryptRefreshToken(token);
+  }
+  if (isLocalBackend) {
+    return PLAIN_REFRESH_PREFIX + token;
+  }
+  throw createOAuthError.encryptionKeyMissing();
 }
 
 /**
@@ -846,7 +875,9 @@ export async function initiateOAuthFlow(
   connectionId: string,
   clientName?: string,
   redirectUri?: string,
-  clientState?: string
+  clientState?: string,
+  /** When provided (e.g. Custom GPT flow without client PKCE), use instead of generating. */
+  serverPkce?: { codeVerifier: string; codeChallenge: string }
 ): Promise<{ authUrl: string; connectionId: string; expiresAt: string }> {
   // Validate inputs
   validateConnectionId(connectionId);
@@ -857,8 +888,11 @@ export async function initiateOAuthFlow(
   // Note: State cleanup is now handled by background job (runs every 5 minutes)
   // No need to clean up on every request
 
-  // Generate PKCE challenge
-  const { codeVerifier, codeChallenge } = generatePKCE();
+  // Generate or use provided PKCE
+  const { codeVerifier, codeChallenge } =
+    serverPkce && serverPkce.codeVerifier && serverPkce.codeChallenge
+      ? serverPkce
+      : generatePKCE();
   const state = generateState();
 
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
@@ -954,6 +988,8 @@ export async function createLocalAuthorizationRequest(params: {
   redirectUri: string;
   clientState?: string;
   codeChallenge: string;
+  /** When provided (e.g. Custom GPT flow without client PKCE), use instead of generating. Must match codeChallenge. */
+  codeVerifier?: string;
 }): Promise<{ authUrl: string; connectionId: string; state: string; expiresAt: string }> {
   if (!isLocalBackend) {
     throw createOAuthError.stateInvalid("Local authorization requests require local storage backend");
@@ -964,7 +1000,7 @@ export async function createLocalAuthorizationRequest(params: {
 
   const state = generateState();
   const expiresAt = new Date(Date.now() + STATE_TTL_MS);
-  const codeVerifier = generatePKCE().codeVerifier;
+  const codeVerifier = params.codeVerifier ?? generatePKCE().codeVerifier;
 
   insertLocalOAuthState({
     state,
@@ -1015,7 +1051,7 @@ export async function completeLocalAuthorization(
     expiresIn: 3600,
   };
 
-  const encryptedRefreshToken = encryptRefreshToken(tokens.refreshToken);
+  const encryptedRefreshToken = encryptRefreshTokenForStorage(tokens.refreshToken);
   const expiresAt = new Date(Date.now() + tokens.expiresIn * 1000);
 
   upsertLocalConnection({
@@ -1383,6 +1419,8 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
   access_token: string;
   token_type: string;
   expires_in: number;
+  refresh_token?: string;
+  scope?: string;
 }> {
   // Validate input
   validateConnectionId(connectionId);
@@ -1394,27 +1432,49 @@ export async function getTokenResponseForConnection(connectionId: string): Promi
       ? new Date(connection.access_token_expires_at).getTime()
       : Date.now() + 3600 * 1000;
     const expires_in = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-    return {
+    const response: {
+      access_token: string;
+      token_type: string;
+      expires_in: number;
+      refresh_token?: string;
+      scope?: string;
+    } = {
       access_token: accessToken,
       token_type: "Bearer",
       expires_in,
+      scope: "openid email",
     };
+    if (connection?.refresh_token) {
+      response.refresh_token = connection.refresh_token;
+    }
+    return response;
   }
 
   const { data: row } = await db
     .from("mcp_oauth_connections")
-    .select("access_token_expires_at")
+    .select("access_token_expires_at, refresh_token")
     .eq("connection_id", connectionId)
     .single();
   const expiresAt = row?.access_token_expires_at
     ? new Date(row.access_token_expires_at).getTime()
     : Date.now() + 3600 * 1000;
   const expires_in = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-  return {
+  const response: {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    refresh_token?: string;
+    scope?: string;
+  } = {
     access_token: accessToken,
     token_type: "Bearer",
     expires_in,
+    scope: "openid email",
   };
+  if (row?.refresh_token) {
+    response.refresh_token = row.refresh_token;
+  }
+  return response;
 }
 
 /**

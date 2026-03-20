@@ -70,7 +70,8 @@ describe("local_entity_embedding", () => {
         limit: 10,
         offset: 0,
       });
-      expect(result).toEqual([]);
+      expect(result.entityIds).toEqual([]);
+      expect(result.total).toBe(0);
     });
 
     it("returns stored entity after store when sqlite-vec works", () => {
@@ -91,8 +92,8 @@ describe("local_entity_embedding", () => {
       });
 
       // If sqlite-vec loaded successfully, we should find the entity
-      if (result.length > 0) {
-        expect(result).toContain("ent_search_1");
+      if (result.entityIds.length > 0) {
+        expect(result.entityIds).toContain("ent_search_1");
       }
       // If sqlite-vec failed to load, result is [] - test still passes
     });

@@ -79,31 +79,126 @@ export const TimelineEventsRequestSchema = z.object({
   offset: z.number().int().nonnegative().optional().default(0),
 });
 
-export const EntitiesQueryRequestSchema = z.object({
-  entity_type: z.string().optional(),
-  search: z.string().optional(),
-  limit: z.number().int().positive().optional().default(100),
-  offset: z.number().int().nonnegative().optional().default(0),
-  include_merged: z.boolean().optional().default(false),
-  user_id: z.string().optional(),
-});
+const EntityQuerySortBySchema = z
+  .enum(["entity_id", "canonical_name", "observation_count", "last_observation_at"])
+  .optional()
+  .default("entity_id");
+const EntityQuerySortOrderSchema = z.enum(["asc", "desc"]).optional().default("asc");
 
-export const RetrieveEntitiesRequestSchema = z.object({
-  user_id: z.string().optional(),
-  entity_type: z.string().optional(),
-  search: z.string().optional(),
+function validateEntityQueryCombinations(
+  value: {
+    search?: string;
+    sort_by?: "entity_id" | "canonical_name" | "observation_count" | "last_observation_at";
+    sort_order?: "asc" | "desc";
+    published?: boolean;
+    published_after?: string;
+    published_before?: string;
+  },
+  ctx: z.RefinementCtx
+): void {
+  const normalizedSearch = typeof value.search === "string" ? value.search.trim() : "";
+  const hasSearch = normalizedSearch.length > 0;
+  const hasPublishedFilters =
+    value.published !== undefined || Boolean(value.published_after) || Boolean(value.published_before);
+  const hasNonDefaultSort =
+    (value.sort_by && value.sort_by !== "entity_id") || (value.sort_order && value.sort_order !== "asc");
+
+  if (hasSearch && hasPublishedFilters) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "search cannot be combined with published filters (published, published_after, published_before)",
+      path: ["search"],
+    });
+  }
+
+  if (hasSearch && hasNonDefaultSort) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "search cannot be combined with non-default sorting (sort_by/sort_order)",
+      path: ["search"],
+    });
+  }
+
+  if (
+    value.published_after &&
+    value.published_before &&
+    value.published_after.localeCompare(value.published_before) > 0
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "published_after must be less than or equal to published_before",
+      path: ["published_after"],
+    });
+  }
+}
+
+const EntitiesQueryRequestBaseSchema = z
+  .object({
+    entity_type: z.string().optional(),
+    search: z.string().optional(),
+    limit: z.number().int().positive().optional().default(100),
+    offset: z.number().int().nonnegative().optional().default(0),
+    sort_by: EntityQuerySortBySchema,
+    sort_order: EntityQuerySortOrderSchema,
+    published: z.boolean().optional(),
+    published_after: z.string().optional(),
+    published_before: z.string().optional(),
+    include_snapshots: z.boolean().optional().default(true),
+    include_merged: z.boolean().optional().default(false),
+    user_id: z.string().optional(),
+  })
+  .superRefine(validateEntityQueryCombinations);
+
+export const EntitiesQueryRequestSchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const raw = input as Record<string, unknown>;
+  return {
+    ...raw,
+    // Compatibility aliases used by some MCP clients/tools.
+    search: raw.search ?? raw.search_query ?? raw.query,
+  };
+}, EntitiesQueryRequestBaseSchema);
+
+const RetrieveEntitiesRequestBaseSchema = z
+  .object({
+    user_id: z.string().optional(),
+    entity_type: z.string().optional(),
+    search: z.string().optional(),
   /**
    * Distance threshold for semantic search (L2, range ~0.9–1.5 in practice).
    * Results with distance >= threshold are dropped. Lower = stricter matching.
    * Typical values: 1.0 (very strict), 1.02 (moderate), 1.05 (loose).
    * Only applied when search is provided.
    */
-  similarity_threshold: z.number().min(0).max(2).optional(),
-  limit: z.number().int().positive().optional().default(100),
-  offset: z.number().int().nonnegative().optional().default(0),
-  include_snapshots: z.boolean().optional().default(true),
-  include_merged: z.boolean().optional().default(false),
-});
+    similarity_threshold: z.number().min(0).max(2).optional(),
+    limit: z.number().int().positive().optional().default(100),
+    offset: z.number().int().nonnegative().optional().default(0),
+    sort_by: EntityQuerySortBySchema,
+    sort_order: EntityQuerySortOrderSchema,
+    published: z.boolean().optional(),
+    published_after: z.string().optional(),
+    published_before: z.string().optional(),
+    include_snapshots: z.boolean().optional().default(true),
+    include_merged: z.boolean().optional().default(false),
+  })
+  .superRefine(validateEntityQueryCombinations);
+
+export const RetrieveEntitiesRequestSchema = z.preprocess((input) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return input;
+  }
+
+  const raw = input as Record<string, unknown>;
+  return {
+    ...raw,
+    // Compatibility aliases used by some MCP clients/tools.
+    search: raw.search ?? raw.search_query ?? raw.query,
+  };
+}, RetrieveEntitiesRequestBaseSchema);
 
 export const ObservationsQueryRequestSchema = z.object({
   observation_id: z.string().optional(),

@@ -38,6 +38,20 @@ describe("oauth_key_gate", () => {
     expect(mod.normalizeOauthNextPath("/api/admin")).toBe("/mcp/oauth/authorize");
   });
 
+  it("accepts configured bearer token as OAuth preflight credential", async () => {
+    delete process.env.NEOTOMA_KEY_FILE_PATH;
+    delete process.env.NEOTOMA_MNEMONIC;
+    delete process.env.NEOTOMA_MNEMONIC_PASSPHRASE;
+    process.env.NEOTOMA_BEARER_TOKEN = "test-shared-bearer";
+
+    const mod = await loadOauthKeyGateModule(String(Date.now() + 3));
+    const valid = mod.isOauthKeyCredentialValid({ bearerToken: "test-shared-bearer" });
+    const invalid = mod.isOauthKeyCredentialValid({ bearerToken: "wrong-bearer" });
+
+    expect(valid.ok).toBe(true);
+    expect(invalid.ok).toBe(false);
+  });
+
   it("expires key-auth sessions", async () => {
     const mod = await loadOauthKeyGateModule(String(Date.now() + 2));
     const store = new mod.OAuthKeySessionStore(10);

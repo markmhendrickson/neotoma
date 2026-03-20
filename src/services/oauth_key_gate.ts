@@ -9,6 +9,7 @@ export type OAuthKeyCredentials = {
   privateKeyHex?: string;
   mnemonic?: string;
   mnemonicPassphrase?: string;
+  bearerToken?: string;
 };
 
 export class OAuthKeySessionStore {
@@ -79,6 +80,24 @@ export function isOauthKeyCredentialValid(credentials: OAuthKeyCredentials): {
   ok: boolean;
   reason?: string;
 } {
+  const bearerToken = credentials.bearerToken?.trim() || "";
+  const configuredBearer = (process.env.NEOTOMA_BEARER_TOKEN || "").trim();
+  if (bearerToken) {
+    if (!configuredBearer) {
+      return {
+        ok: false,
+        reason:
+          "Bearer token authentication is not configured on this server. Set NEOTOMA_BEARER_TOKEN or use key credentials.",
+      };
+    }
+    const expected = Buffer.from(configuredBearer, "utf8");
+    const provided = Buffer.from(bearerToken, "utf8");
+    if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
+      return { ok: false, reason: "Provided bearer token does not match configured token" };
+    }
+    return { ok: true };
+  }
+
   const expectedToken = getConfiguredOAuthKeyToken();
   if (!expectedToken) {
     return {

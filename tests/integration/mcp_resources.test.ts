@@ -122,6 +122,12 @@ describe("MCP Resources - Integration", () => {
       expect(parsed.type).toBe("source_collection");
     });
 
+    it("should parse timeline widget UI URI", () => {
+      const uri = "neotoma://ui/timeline_widget";
+      const parsed = (server as any).parseResourceUri(uri);
+      expect(parsed.type).toBe("ui_timeline_widget");
+    });
+
     it("should reject invalid URI scheme", () => {
       const uri = "http://entities/invoice";
       expect(() => (server as any).parseResourceUri(uri)).toThrow();
@@ -424,6 +430,13 @@ describe("MCP Resources - Integration", () => {
       const result = await (server as any).handleSourceCollection();
 
       expect(result.category).toBe("sources");
+    });
+
+    it("should build timeline widget html resource", () => {
+      const html = (server as any).buildTimelineWidgetHtml();
+      expect(typeof html).toBe("string");
+      expect(html).toContain("<title>Neotoma Timeline</title>");
+      expect(html).toContain("ui/notifications/tool-result");
     });
   });
 

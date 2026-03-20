@@ -17,6 +17,8 @@ Neotoma is not retrieval memory. Retrieval memory (RAG, vector DB, LangChain-sty
 
 ## Definitions
 
+Each ICP is defined here in compact form for quick reference and routing. Tier 1 ICPs are expanded in the sections below with both structured profiles (bullet fields) and narrative sections covering core incentive, psychological trigger, role transformation, lifestyle improvement, and interaction pattern shift — the layers needed for messaging, content strategy, qualification, and onboarding.
+
 ### AI Infrastructure Engineers
 
 - **Build:** Agent runtimes, orchestration frameworks, evaluation harnesses, observability pipelines, state systems
@@ -61,6 +63,8 @@ Neotoma is not retrieval memory. Retrieval memory (RAG, vector DB, LangChain-sty
 
 The developer release directly serves these ICPs. They require no multi-user features, no enterprise controls. They experience immediate pain from non-deterministic agent state and are willing to adopt infrastructure-grade tooling.
 
+Each Tier 1 ICP below includes a structured profile (bullet fields for quick reference) followed by narrative sections (core incentive, psychological trigger, role transformation, lifestyle improvement, interaction pattern shift) that describe the adoption motion — not just who the persona is, but why they would move, what moment triggers the search, what role they're escaping, and what daily work looks like after adoption.
+
 ## AI Infrastructure Engineers
 
 - **Summary:** Engineers building the runtimes and orchestration layers that agents run on. They evaluate Neotoma as a dependency that provides state integrity guarantees their own systems lack.
@@ -73,6 +77,28 @@ The developer release directly serves these ICPs. They require no multi-user fea
 - **Comparison set:** Event sourcing frameworks, state machines, append-only logs, audit trail systems, provenance databases
 - **How to reach them:** Infrastructure and AI engineering communities (GitHub, Hacker News); agent framework Discord servers; conference talks on agent reliability; blog posts on state integrity patterns
 - **Success signals:** Evaluate Neotoma against their current state management; file issues about API surface; integrate into development or staging environments; reference Neotoma guarantees in their own docs
+
+### Core incentive
+
+Restoring the ability to iterate on agent state. You can't debug what you can't replay. You can't iterate on what you can't inspect. Non-reproducible runs mean the debugging cycle is log archaeology instead of tight feedback loops — and infrastructure engineers already know that tight cycles are how good systems get built. The incentive is not "state management" — it is feedback loop integrity at the platform layer.
+
+### Psychological trigger
+
+Two runs, same inputs, different state — and no way to diff what changed. This is the moment the infrastructure engineer recognizes they're operating on narrative ("it probably works") rather than evidence. It produces the same feeling as a test suite you can't trust: you know there are failure modes you can't see, and every deployment carries unquantifiable risk.
+
+### Role transformation
+
+**Escaping: Log archaeologist.** A production agent fails or produces wrong output and the debugging process is reconstructing what happened from scattered logs, guessing at state transitions, and hoping to reproduce the issue. The engineer is reverse-engineering truth from artifacts instead of querying it directly. Their observability stack watches everything except the thing that actually matters: what the agent believed and why.
+
+**Into: Platform engineer with replayable state.** Diff any entity between versions. Replay any run to a specific point in time. Trace any output back to the observation that produced it. Debugging becomes querying a timeline, not reading tea leaves. The engineer builds confidence in the system the same way they build confidence in a codebase with good tests — through reproducibility.
+
+### Lifestyle improvement
+
+Less time writing defensive infrastructure — checkpoint logic, state serialization, custom diffing, retry handlers that try to reconstruct what was true before a failure. Less time in war rooms reconstructing state. Post-mortems take thirty minutes because provenance answers "what changed and when" directly. More time designing the platform's actual capabilities. The engineering work becomes more interesting because the boring-but-critical part is no longer hand-rolled every time. The emotional register shifts too: infrastructure engineers carry the weight of reliability, and when the state layer is opaque and non-reproducible, that weight is constant low-level anxiety. When the state layer is replayable and auditable, the anxiety has somewhere to discharge. You can verify. You can prove. You sleep better.
+
+### Interaction pattern shift
+
+The shift is from manual orchestration to declarative trust. The infrastructure engineer stops writing glue — the guarantees they've been hand-rolling become primitives. They declare invariants ("this entity type has these fields, this schema constraint, this merge rule") and the system enforces them. Replays work because state evolution is deterministic by construction, not because someone wrote a careful checkpoint-and-restore pipeline. The observability story shifts from "instrument everything and hope the logs line up" to "query the timeline directly." The team stops treating agent state as a black box and starts treating it like any other part of the stack they can reason about.
 
 ## Agent System Builders
 
@@ -87,6 +113,28 @@ The developer release directly serves these ICPs. They require no multi-user fea
 - **How to reach them:** AI/ML developer communities (GitHub, Reddit r/LocalLLaMA, r/MachineLearning); agent framework ecosystems (LangChain, CrewAI, AutoGen communities); MCP server directories; developer content on agent architecture
 - **Success signals:** Install Neotoma as their agent's memory layer; report reduced debugging time; contribute bug reports about MCP/API edge cases; build integrations or adapters
 
+### Core incentive
+
+Canonical state that doesn't have to be re-derived every session. Retrieval re-infers entity resolution, timelines, and relationships from scratch each time. That works until it doesn't — and when it doesn't, the builder can't trace why the agent got it wrong. The incentive is not "better retrieval" — it is the recognition that retrieval and state are different paradigms, and the builder's agents need the one they don't have.
+
+### Psychological trigger
+
+The agent treats "Acme Corp" and "ACME CORP" as the same entity in one session and different entities in the next. Or: a multi-step pipeline silently drops context between steps and the builder can't reproduce the failure because the state wasn't versioned. This is the moment the builder realizes retrieval is approximating structure, not providing it — and the approximation is non-reproducible. It reframes every prior "it works in demos" experience as survivorship bias.
+
+### Role transformation
+
+**Escaping: Inference babysitter.** The builder ships an agent that works in demos but silently degrades in production because entity resolution, memory, and state management are all re-derived per session by the LLM. When it gets something wrong, the builder can't trace why. When they fix it, the fix doesn't persist. They're debugging probabilistic behavior in a system that should have deterministic state — absorbing the variance their architecture doesn't handle.
+
+**Into: Builder who ships on solid ground.** Entities resolve once and persist. State evolves through versioned, auditable transitions. When something breaks, the builder traces it to a specific observation, not a vague inference. Agents get more reliable as they accumulate more data, instead of more fragile. The builder stops compensating for their memory layer and starts building on top of it.
+
+### Lifestyle improvement
+
+The builder's engineering effort is currently split. Half goes toward the product — capabilities, UX, logic. The other half goes toward working around a memory layer that doesn't hold its shape: prompt engineering to re-inject context, deduplication hacks, retry logic for when the agent forgets. With canonical entities, versioned state, and provenance, new features compound instead of regressing. The roadmap shifts from memory regression fixes to new capabilities. Sprint planning stops allocating a third of capacity to state management workarounds. A customer reports an issue and the builder traces it to a specific observation in thirty seconds. Shipping stops feeling like hoping and starts feeling like deploying. The builder starts trusting their own system enough to build ambitiously on it.
+
+### Interaction pattern shift
+
+The shift is from compensating for memory to building on top of it. The builder adds a capability and it works across sessions because the state it depends on persists. They ship to more users and the entity graph gets richer, not messier, because schema constraints and merge rules handle what used to be manual cleanup. Framework switching no longer means rebuilding state management from scratch — Neotoma is portable via MCP. The builder's relationship with their own product changes from vigilance to momentum: less time watching for regressions, more time extending what works.
+
 ## AI-native Operators (builder-grade)
 
 - **Summary:** Power users of Claude, Cursor, ChatGPT and other AI tools who have automation habits and feel the memory gap across every tool switch. They adopt Neotoma for their own workflows, not for systems they ship.
@@ -100,12 +148,120 @@ The developer release directly serves these ICPs. They require no multi-user fea
 - **How to reach them:** AI tool communities (Reddit r/ChatGPT, r/ClaudeAI, r/Cursor, Discord servers); developer communities (Hacker News, Indie Hackers); AI productivity content; MCP server directories
 - **Success signals:** Install and configure MCP server; use across 2+ tools daily; report that context persists where it previously did not; become vocal advocates in tool communities
 
+### Core incentive
+
+Escape from experienced dependency. Not ideological sovereignty — the concrete daily cost of provider-bound memory that drifts, loses corrections, and can't follow you across tools. Every session that starts from scratch is time spent re-explaining what the system should already know. The incentive is not "better memory" — it is reclaiming the attention currently consumed by compensating for the absence of persistent state.
+
+### Psychological trigger
+
+The moment you get a different answer to the same question across sessions and realize there's no way to tell which one was right. Or: the moment a correction you made last week has silently reverted because the provider compressed or discarded it. This is not a feature request. It is a trust collapse. Once experienced, it reframes every subsequent interaction with the tool as unreliable until proven otherwise.
+
+### Role transformation
+
+**Escaping: Context janitor.** Every session, the operator re-explains their projects, preferences, contacts, and commitments to a tool that should already know. They are the human sync layer between Claude, Cursor, and ChatGPT — manually carrying context that the system keeps dropping. Their job becomes maintaining the agent's memory instead of doing their actual work.
+
+**Into: Operator with continuity.** The agent accumulates what it learns. Corrections hold. Tool switches preserve context. The operator's role shifts from re-establishing context to acting on it — the difference between setting up the workspace every morning and walking in and starting.
+
+### Lifestyle improvement
+
+The daily texture changes: less typing, fewer prompts, shorter sessions that accomplish more. The cognitive load of remembering what each tool knows and doesn't know disappears. The low-grade anxiety of not trusting that the agent actually saved what you told it resolves. You stop thinking about whether the system remembers and start thinking about what you're actually trying to do. You get back the part of your attention that was being spent on babysitting.
+
+### Interaction pattern shift
+
+Without persistent state, the operator must be the driver on every turn. Every prompt carries the full weight of what came before because the system won't hold it. With a persistent state layer, the interaction pattern shifts from turn-by-turn prompting to review-and-steer. The agent arrives at each session already knowing what it knew last time. The operator's role moves from composing detailed instructions to reviewing what the agent already knows and course-correcting when it's off. This is the shift from operating a tool to leading a team member who remembers last week's conversation. Less driving, more steering.
+
+---
+
+## Tier 1: Cross-Cutting Analysis
+
 ### Why Tier 1
 
 - Highest alignment with the developer release: deterministic state, MCP/CLI/API interfaces, local-first architecture
 - These ICPs validate the core invariants: state evolution, versioning, replayability, schema constraints
 - They generate high-signal feedback on infrastructure-grade concerns (reliability, reproducibility, debuggability)
 - Operators provide activation volume; builders and infra engineers provide depth of integration feedback
+
+### Common thread
+
+Each Tier 1 ICP is currently spending a significant portion of their effort, attention, and emotional energy compensating for the absence of reliable state. The operator compensates by re-prompting. The infrastructure engineer compensates by writing glue. The builder compensates by engineering around memory regressions.
+
+In each case, Neotoma does not add a capability — it removes the tax. What each ICP gets back is the time, attention, and confidence that the tax was consuming.
+
+This framing — removing the tax, not adding a feature — should be the through-line in all messaging, onboarding conversations, and qualification interviews. When evaluating a potential user, the diagnostic question is: "What are you currently doing to compensate for unreliable agent state?" If the answer is substantial, they are ICP-qualified. If they don't compensate because they don't feel the pain, they are not the current target.
+
+#### Tax summary
+
+| ICP | Tax they pay | What they get back |
+|-----|-------------|-------------------|
+| AI-native Operators | Re-prompting, context re-establishment, manual cross-tool sync | Attention, continuity, trust in their tools |
+| AI Infrastructure Engineers | Writing glue (checkpoint logic, custom diffing, state serialization) | Debugging speed, platform design time, sleep |
+| Agent System Builders | Prompt engineering workarounds, dedup hacks, memory regression fixes | Product velocity, shipping confidence, roadmap ambition |
+
+### Role transformation summary
+
+| ICP | Escaping | Into | Interaction pattern shift |
+|-----|----------|------|--------------------------|
+| AI-native Operators | Context janitor — human sync layer between tools | Operator with continuity — steering, not driving | Turn-by-turn prompting → review-and-steer |
+| AI Infrastructure Engineers | Log archaeologist — reverse-engineering truth from logs | Platform engineer with replayable state | Manual orchestration → declarative trust |
+| Agent System Builders | Inference babysitter — absorbing variance the architecture doesn't handle | Builder who ships on solid ground | Compensating for memory → building on top of it |
+
+### ICP ecosystem: how Tier 1 personas feed each other
+
+The three Tier 1 ICPs are not independent segments — they form an adoption ecosystem with reinforcing dynamics:
+
+- **Operators → Builders:** Operators who adopt Neotoma for personal workflows become vocal advocates in tool communities. When an operator joins or leads a team building agent products, they pull Neotoma into the builder's stack. The operator's personal experience ("context actually persists") becomes the builder's evaluation shortcut.
+
+- **Builders → Infrastructure Engineers:** Builders who integrate Neotoma as their memory backend surface the guarantees (determinism, replayability, schema constraints) in their own architecture discussions. When the builder's infrastructure team asks "how does your agent manage state?", the answer points to Neotoma. The builder's integration creates the infrastructure engineer's evaluation trigger.
+
+- **Infrastructure Engineers → Toolchain Integrators (Tier 2):** When infrastructure engineers standardize on Neotoma and reference its guarantees in their documentation, framework maintainers see adoption signal. The infrastructure engineer's recommendation creates the toolchain integrator's evaluation context.
+
+- **Aggregate effect:** Operators provide activation volume and community presence. Builders provide integration depth and production validation. Infrastructure engineers provide standardization signal and guarantee validation. Each layer feeds the next tier's adoption motion.
+
+### ICP qualification diagnostic
+
+The single question that qualifies across all three Tier 1 ICPs:
+
+> "What are you currently doing to compensate for unreliable or missing agent state?"
+
+**Strong ICP signals in the answer:**
+- Describes re-prompting, context re-establishment, or manual sync across tools (→ Operator)
+- Describes writing checkpoint logic, custom state serialization, or manual log reconstruction (→ Infrastructure)
+- Describes prompt engineering workarounds, entity deduplication, or memory regression debugging (→ Builder)
+- Expresses frustration with non-reproducible agent behavior
+- Names specific tools where state is lost between sessions
+- Describes engineering time spent on state management they wish were handled
+
+**Weak ICP signals:**
+- "AI remembering things" without concern for determinism or reproducibility
+- No agent workflows in their stack
+- Satisfied with platform memory (Claude memory, ChatGPT memory)
+- Looking for a note-taking or PKM tool
+- No debugging, tracing, or compliance needs
+
+**Routing follow-up:** Once qualified and routed to a specific ICP, the next question deepens qualification and confirms the pain is active:
+
+- **Operator →** "Which tools are you moving between, and where does context break when you switch?"
+- **Infrastructure →** "When a production agent produces wrong output, what does your debugging process look like today?"
+- **Builder →** "When your agent gets entity resolution or memory wrong, how do you trace and fix it?"
+
+### Objection-to-framing map
+
+Common objections mapped to the framing layers (core incentive, role transformation, tax removal) rather than feature comparison:
+
+**AI Infrastructure Engineers**
+
+- *"We already have event sourcing / custom state management"* → Does your current system close the feedback loop on agent state? Can you diff entities between runs and replay to a specific point? If debugging is still log archaeology, you have state management but not feedback loop integrity. (Core incentive: feedback loop integrity)
+- *"Not production-ready"* → The dev release fits the evaluation motion infrastructure engineers already follow: validate guarantees locally, then propose for staging. Local npm + SQLite is the right shape for this evaluation.
+
+**Agent System Builders**
+
+- *"How is this different from RAG memory?"* → RAG re-derives structure every session. Neotoma persists it. If "Acme Corp" and "ACME CORP" resolve differently across sessions, your memory layer is approximating entities, not holding canonical state. (Core incentive: canonical state, not re-derived)
+- *"We use LangChain/LangGraph memory"* → Can you trace a wrong answer to a specific observation? Can you replay to last Tuesday? If not, you're absorbing the variance your memory layer doesn't handle — the inference babysitter role. (Role transformation: inference babysitter → builder on solid ground)
+
+**AI-native Operators**
+
+- *"Platform memory (Claude, ChatGPT) is good enough"* → Does it follow you across tools? Can you verify a correction from last week is still held? If you're re-explaining context every session, you're paying the context-janitor tax. Platform memory is tool-specific and non-auditable. (Tax framing: attention tax)
+- *"Another tool to manage"* → Runs as an MCP server behind your existing tools — no new UI, no new workflow. The question is whether you want to keep being the human sync layer between Claude, Cursor, and ChatGPT, or let a state layer do it. (Role transformation: context janitor → operator with continuity)
 
 ---
 
@@ -261,7 +417,7 @@ Load when:
 
 - `docs/NEOTOMA_MANIFEST.md` (always)
 - `docs/specs/MVP_OVERVIEW.md` (for MVP scope alignment)
-- `docs/specs/ICP_PROFILES.md` (for detailed ICP profiles — note: needs update to add AI Infrastructure Engineers and Toolchain Integrators)
+- `docs/specs/ICP_PROFILES.md` (for detailed ICP profiles)
 
 ### Constraints Agents Must Enforce
 
@@ -271,6 +427,10 @@ Load when:
 4. Tier 4+ ICPs require Agentic Portfolio/Wallet layers (not developer-release scope)
 5. All product decisions must align with tier prioritization
 6. Language must use infrastructure/guarantees framing (deterministic, versioned, replayable, auditable, schema-bound) — not "AI memory tool"
+7. Messaging must lead with felt experience and role transformation, then ground in infrastructure/guarantees vocabulary (per constraint 6) — not the reverse
+8. The "removing the tax" framing takes priority over "adding a feature" framing in all GTM and onboarding content
+9. Qualification conversations should use the diagnostic question: "What are you currently doing to compensate for unreliable agent state?"
+10. Each ICP's interaction pattern shift (driving→steering, glue→invariants, compensating→compounding) should be referenced in onboarding and activation materials
 
 ### Validation Checklist
 
@@ -279,3 +439,7 @@ Load when:
 - [ ] Strategy/Execution layer features correctly attributed to Agentic Portfolio/Wallet
 - [ ] GTM roadmap follows tier progression
 - [ ] Messaging uses state integrity vocabulary, not consumer memory framing
+- [ ] ICP messaging includes role transformation (escaping → into)
+- [ ] ICP messaging includes interaction pattern shift, not just data layer improvement
+- [ ] Qualification criteria reference the diagnostic question and tax framework
+- [ ] Content leads with felt experience before architectural description

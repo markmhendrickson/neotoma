@@ -74,6 +74,30 @@ flowchart TD
 }
 ```
 
+### Store chat turn with batched relationships (preferred)
+```
+{
+  "action": "store",
+  "idempotency_key": "conversation-chat-12-1731680000000",
+  "entities": [
+    { "entity_type": "conversation", "title": "Inbox check" },
+    {
+      "entity_type": "agent_message",
+      "role": "user",
+      "content": "show me the emails in my inbox",
+      "turn_key": "chat:12"
+    },
+    { "entity_type": "task", "title": "Follow up on invoice", "status": "open" }
+  ],
+  "relationships": [
+    { "relationship_type": "PART_OF", "source_index": 1, "target_index": 0 },
+    { "relationship_type": "REFERS_TO", "source_index": 1, "target_index": 2 }
+  ]
+}
+```
+
+Use one `store` call with a batched `relationships` array when the linked entities are in the same request. Reserve `create_relationship` for fallback cases or links that target entities outside the request (for example, `EMBEDS` to a file interpretation entity).
+
 ### Store a file (unstructured)
 ```
 {

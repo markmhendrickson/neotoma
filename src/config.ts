@@ -114,7 +114,12 @@ const eventLogPath =
  * Auto-discover tunnel URL from file written by setup-https-tunnel.sh
  * This allows tunnels to "just work" without manually setting NEOTOMA_HOST_URL
  */
-function discoverTunnelUrl(httpPort: number): string {
+function discoverTunnelUrl(httpPort: number, allowAutoDiscovery: boolean): string {
+  if (!allowAutoDiscovery) {
+    (discoverTunnelUrl as any)._discovered = { url: `http://localhost:${httpPort}`, file: null };
+    return `http://localhost:${httpPort}`;
+  }
+
   const tunnelFiles = [
     "/tmp/ngrok-mcp-url.txt",  // Combined scripts write here
     "/tmp/cloudflared-tunnel.txt"  // Alternative for cloudflare-only
@@ -159,9 +164,16 @@ export const config = {
   ),
   httpPort,
   environment: env,
+  tunnelAutoDiscoveryEnabled:
+    env !== "production" ||
+    (process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true",
   apiBase:
     process.env.NEOTOMA_HOST_URL ||
-    discoverTunnelUrl(httpPort),
+    discoverTunnelUrl(
+      httpPort,
+      env !== "production" ||
+        (process.env.NEOTOMA_AUTO_DISCOVER_TUNNEL_URL_IN_PROD || "false").toLowerCase() === "true"
+    ),
   mcpTokenEncryptionKey:
     process.env.NEOTOMA_MCP_TOKEN_ENCRYPTION_KEY ||
     process.env.MCP_TOKEN_ENCRYPTION_KEY ||
@@ -208,6 +220,10 @@ export function logConfigInfo(): void {
 
   if (process.env.NEOTOMA_HOST_URL) {
     console.log(`[Config] Using NEOTOMA_HOST_URL from environment: ${config.apiBase}`);
+  } else if (!config.tunnelAutoDiscoveryEnabled) {
+    console.log(
+      `[Config] Tunnel URL auto-discovery disabled for ${config.environment}; using localhost:${config.httpPort}`
+    );
   } else if (discovered?.file) {
     console.log(`[Config] NEOTOMA_HOST_URL not set; auto-discovered tunnel URL from ${discovered.file}: ${discovered.url}`);
   } else {

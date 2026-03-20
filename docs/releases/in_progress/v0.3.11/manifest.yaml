@@ -1,0 +1,76 @@
+release:
+  id: v0.3.11
+  name: Outstanding Changes Consolidation
+  type: not_marketed
+  priority: P0
+  status: ready_for_deployment
+  target_ship_date: ASAP
+  owner: Mark Hendrickson
+  marketing_required: false
+  guiding_principle: "Ship all outstanding changes safely with reliability-first validation."
+  inventory_snapshot:
+    file: docs/releases/in_progress/v0.3.11/outstanding_changes_inventory.md
+    total_paths: 556
+    status_counts:
+      modified: 464
+      untracked: 91
+      deleted: 1
+
+scope:
+  included:
+    - RS-001 Retrieval reliability and transport parity hardening
+    - RS-002 CLI compatibility + atomic turn-store ergonomics
+    - RS-003 Docs/site/localization updates currently outstanding
+    - RS-004 CI/QA workflow and test updates currently outstanding
+    - Inventory-backed inclusion of all outstanding paths captured at release planning time
+  excluded:
+    - New feature-unit discovery beyond current modified files
+    - New schema redesign not already represented in outstanding changes
+    - Marketed launch activities
+
+acceptance_criteria:
+  product:
+    - Retrieval behavior improved and stable for known report/identifier use cases
+    - CLI search/store user flows remain backward-compatible
+    - Updated docs/site content renders correctly
+  technical:
+    - TypeScript build passes
+    - Reliability integration tests pass (isolation, totals, parity, idempotency)
+    - Selected CLI/retrieval regression suites pass
+    - No known user-isolation regressions in covered retrieval surfaces
+  business:
+    - Release can be deployed with documented steps and rollback path
+    - No manual ad hoc remediation required for standard retrieval/store workflows
+
+test_commands:
+  - npm run build:server
+  - npm test -- tests/cli/cli_store_commands.test.ts tests/integration/retrieval_transport_reliability.test.ts tests/integration/mcp_retrieval_reliability.test.ts
+  - npm test -- tests/cli/cli_entity_subcommands.test.ts tests/integration/entity_identifier_handler.test.ts src/services/__tests__/entity_semantic_search.test.ts src/services/__tests__/local_entity_embedding.test.ts
+  - npm run test:integration
+
+deployment:
+  strategy: staging_first
+  rollback: revert_release_commit_set_and_redeploy_previous_tag
+  post_release_checks:
+    - retrieval_endpoint_error_rate
+    - retrieval_latency
+    - cli_search_store_failures
+    - docs_site_deploy_health
+
+parallelization:
+  max_parallel_workstreams: 3
+  max_high_risk_in_parallel: 1
+
+pre_mortem:
+  - failure_mode: retrieval_parity_regression_between_mcp_and_rest
+    early_signal: integration test failures in parity suite
+    mitigation: enforce shared handler path and parity tests as gate
+    rollback: revert retrieval handler changes
+  - failure_mode: cross_user_data_leak_in_retrieval
+    early_signal: isolation tests fail or suspicious production logs
+    mitigation: user_id scoping assertions in integration tests
+    rollback: immediate revert and redeploy prior tag
+  - failure_mode: docs_site_generation_drift
+    early_signal: deploy/build failures or broken pages
+    mitigation: run integration/build validation before deployment
+    rollback: revert generated-output commit set

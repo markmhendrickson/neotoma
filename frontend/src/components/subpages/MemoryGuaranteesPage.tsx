@@ -38,7 +38,7 @@ export function MemoryGuaranteesPage() {
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <span className="text-[13px] font-medium text-foreground">{memory.vendors}</span>
-                      <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
+                      <p className="text-[11px] leading-4 text-muted-foreground break-words">
                         {memory.representativeProviders}
                       </p>
                     </div>
@@ -91,9 +91,9 @@ export function MemoryGuaranteesPage() {
                         <span className="text-[13px] font-medium text-foreground">
                           {row.property}
                         </span>
-                        <p className="text-[11px] leading-4 text-muted-foreground line-clamp-1">
-                          {row.tooltip}
-                        </p>
+<p className="text-[11px] leading-4 text-muted-foreground break-words">
+                        {row.tooltip}
+                      </p>
                       </div>
                       <ChevronDown
                         className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180"

@@ -392,6 +392,59 @@ docker exec neotoma neotoma entities list --type task`,
   cliUploadExample: `neotoma upload ./fixtures/invoice.pdf
 neotoma upload ./doc.pdf --no-interpret --mime-type application/pdf
 neotoma upload --local ./invoice.pdf   # run in-process, no API server required`,
+  chatgptCustomGptInstructions: `You are an assistant that uses Neotoma MCP actions for memory persistence and retrieval.
+
+Execution order (mandatory every turn):
+1) Run bounded retrieval for entities implied by the user message.
+   - Use retrieve_entity_by_identifier for names/emails/identifiers.
+   - Use retrieve_entities for related types (task, contact, event, etc.).
+2) Run one store call for this turn's conversation + user message (+ implied entities).
+3) Only after steps (1) and (2), continue with other tools and compose the user response.
+
+Do not respond before completing steps (1) and (2).
+
+Storage recipes:
+
+Unified store (preferred one call):
+- store with entities:
+  - index 0: { entity_type: "conversation", title? }
+  - index 1: { entity_type: "agent_message", role: "user", content: "<exact message>", turn_key: "{conversation_id}:{turn_id}" }
+  - index 2+: optional extracted entities implied by the message
+- relationships in same store call:
+  - PART_OF from source_index 1 -> target_index 0
+  - REFERS_TO from source_index 1 -> each extracted entity index (2+)
+- idempotency_key: "conversation-{conversation_id}-{turn_id}-{suffix}" or "conversation-chat-<turn>-{suffix}"
+
+Attachment/image turn:
+- Use one store call with conversation + agent_message, and file_path (or file_content + mime_type) in the same request.
+- Then create_relationship:
+  - relationship_type: "EMBEDS"
+  - source_entity_id: step1_response.structured.entities[1].entity_id
+  - target_entity_id: step1_response.unstructured.interpretation.entities[0].entityId
+- For screenshots/images, extract and store distinct visible entities, and link with REFERS_TO.
+
+Turn identity fallback:
+- If no host conversation_id/turn_id:
+  - turn_key = "chat:<turn>"
+  - idempotency_key = "conversation-chat-<turn>-<timestamp_ms>"
+
+Tool-usage constraints for chat/attachment/entity extraction flows:
+- Do NOT list, glob, or read MCP tool descriptor/schema files for these storage flows.
+- Use only:
+  - store(entities, idempotency_key, relationships, file_path | file_content+mime_type, file_idempotency_key?)
+  - create_relationship(relationship_type, source_entity_id, target_entity_id)
+
+Behavior requirements:
+- Store every turn, including greetings and short messages.
+- Use MCP actions proactively; do not wait for the user to ask to save.
+- If pulling external data (web/search/API/files/email/calendar/etc.), store relevant entities first, then answer.
+- Extract and store people, tasks, events, places, commitments, preferences, and relationships.
+- Create task entities when user expresses intent/obligation/future action (unless user explicitly says not to).
+- Use descriptive entity_type + fields implied by the message; do not block on strict schema lookup.
+
+Response style:
+- Do not mention internal storage/linking unless user asks.
+- If user asks whether something was saved, use memory-oriented wording (e.g., "stored in memory", "I can recall that").`,
 };
 
 export const GLOSSARY_ROWS: GlossaryRow[] = [
@@ -921,14 +974,14 @@ export const ICP_PROFILES: IcpProfile[] = [
     slug: "ai-infrastructure-engineers",
     name: "AI infrastructure engineers",
     shortName: "AI infrastructure engineers",
-    tagline: "Platform-layer state integrity guarantees for runtimes and orchestration",
+    tagline: "Two runs. Same inputs. Different state.",
     painPoints: [
       "Cannot reproduce agent runs — same inputs yield different state",
       "State mutations invisible to debugging and observability tooling",
       "Debugging production failures requires manual log archaeology",
       "No provenance trail for state changes across pipeline steps",
-      "Agent state routed through third-party services with no data residency or compliance guarantees",
       "No portable state layer — agent memory locked to one vendor's runtime",
+      "Agent state routed through third-party services with no data residency or compliance guarantees",
     ],
     failureModes: [
       { label: "Non-reproducible agent runs in production", icon: "Repeat" },
@@ -959,13 +1012,13 @@ export const ICP_PROFILES: IcpProfile[] = [
       "tool_config",
     ],
     solutionSummary:
-      "Deterministic state evolution, versioned history, replayable timeline, and schema constraints provide the guarantees missing from ad-hoc state management. Append-only observation log enables full state reconstruction.",
+      "Neotoma replaces the glue you've been hand-rolling — checkpoint logic, state serialization, custom diffing — with deterministic primitives. Append-only observations, versioned history, and replayable timelines become infrastructure you build on, not plumbing you maintain.",
   },
   {
     slug: "agentic-systems-builders",
     name: "Builders of agentic systems",
     shortName: "Agent system builders",
-    tagline: "Application-layer deterministic memory for shipped agents and toolchains",
+    tagline: "Your agent resolves entities by inference. Every session, it guesses again.",
     painPoints: [
       "No shared state for agents — token-based or conversation-only; no cross-session, cross-agent state",
       "No provenance — cannot trace agent decisions or outputs to source data",
@@ -1005,13 +1058,13 @@ export const ICP_PROFILES: IcpProfile[] = [
       "tool_config",
     ],
     solutionSummary:
-      "Neotoma provides a deterministic, MCP-backed state layer for agent frameworks, orchestration pipelines, and observability stacks. Same input, same output. Every fact traces to provenance. Cross-session state with full audit trail.",
+      "Neotoma removes the tax your team pays compensating for unreliable memory. Entities resolve once and persist. State evolves through versioned, auditable transitions. Every fact traces to provenance. Cross-session state with full audit trail.",
   },
   {
     slug: "ai-native-operators",
     name: "AI-native individual operators",
     shortName: "AI-native operators",
-    tagline: "State that follows you across every tool and session",
+    tagline: "The agent infers. It doesn't guarantee. Here's what that costs you.",
     painPoints: [
       "No persistent state across sessions — every AI conversation starts from zero",
       "Fragmented document sources scattered across email, drives, and screenshots",
@@ -1043,7 +1096,7 @@ export const ICP_PROFILES: IcpProfile[] = [
     ],
     schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
     solutionSummary:
-      "Neotoma persists every conversation, extracted entity, and commitment as versioned, schema-bound state. Switch between Claude, Cursor, and Codex without losing context. Corrections propagate deterministically.",
+      "Neotoma removes the tax you pay re-explaining your world to every tool. Every conversation, entity, and commitment persists as versioned state. Switch between Claude, Cursor, and Codex without losing context. Correct once — the correction sticks.",
   },
 ];
 
@@ -1052,7 +1105,7 @@ export const SITE_METADATA = {
   ogImageUrl: "https://neotoma.io/neotoma-og-1200x630.png",
   pageTitle: "Neotoma | Deterministic state layer for long-running agents",
   pageDescription:
-    "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Install with npm, connect MCP.",
+    "Deterministic agent state layer for long-running agents: deterministic state evolution, versioned, schema-bound, replayable, auditable. No silent mutation. Agents install Neotoma themselves.",
   heroImageUrl: "neotoma-hero.png",
 };
 

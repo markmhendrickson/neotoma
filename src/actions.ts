@@ -61,11 +61,12 @@ import {
   UpdateSchemaIncrementalRequestSchema,
 } from "./shared/action_schemas.js";
 import { queryEntitiesWithCount } from "./shared/action_handlers/entity_handlers.js";
+import { retrieveEntityByIdentifierWithFallback } from "./shared/action_handlers/entity_identifier_handler.js";
 import {
   prepareEntitySnapshotWithEmbedding,
   upsertEntitySnapshotWithEmbedding,
 } from "./services/entity_snapshot_embedding.js";
-import { readOpenApiFile } from "./shared/openapi_file.js";
+import { readOpenApiActionsFile, readOpenApiFile } from "./shared/openapi_file.js";
 // import { setupDocumentationRoutes } from "./routes/documentation.js";
 
 type ErrorEnvelope = {
@@ -98,10 +99,7 @@ app.use(
 );
 // Configure CORS to allow frontend origin
 const corsOptions = {
-  origin:
-    process.env.NEOTOMA_FRONTEND_URL ||
-    process.env.FRONTEND_URL ||
-    "http://localhost:5195",
+  origin: process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
@@ -161,7 +159,16 @@ app.get("/favicon.ico", (_req, res) => res.status(204).end());
 // ============================================================================
 
 app.get("/.well-known/oauth-authorization-server", (req, res) => {
-  const base = config.apiBase;
+  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.header("host");
+  const proto = forwardedProto || req.protocol || "http";
+  const base = host ? `${proto}://${host}` : config.apiBase;
+  logger.info("[MCP OAuth] Discovery request received", {
+    host: req.header("host") ?? null,
+    resolved_base: base,
+    user_agent: req.header("user-agent") ?? null,
+  });
   res.setHeader("Content-Type", "application/json");
   res.json({
     issuer: base,
@@ -177,6 +184,19 @@ app.get("/.well-known/oauth-authorization-server", (req, res) => {
 });
 
 app.get("/.well-known/oauth-protected-resource", async (req, res) => {
+  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.header("host");
+  const proto = forwardedProto || req.protocol || "http";
+  const base = host ? `${proto}://${host}` : config.apiBase;
+  logger.info("[MCP OAuth] Protected resource metadata request received", {
+    host: req.header("host") ?? null,
+    resolved_base: base,
+    has_authorization: Boolean(
+      (req.headers["authorization"] || req.headers["Authorization"]) as string | undefined
+    ),
+    has_connection_id: Boolean(req.headers["x-connection-id"] || req.headers["X-Connection-Id"]),
+  });
   // oauth-repro pattern: return 401 on protected resource endpoint when unauthenticated
   // Validate X-Connection-Id here so Cursor gets consistent invalid_token signal (helps trigger Connect prompt)
   const authHeader = (req.headers["authorization"] || req.headers["Authorization"]) as
@@ -191,7 +211,7 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
       const { getAccessTokenForConnection } = await import("./services/mcp_oauth.js");
       await getAccessTokenForConnection(connectionIdHeader as string);
     } catch {
-      const wwwAuth = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
+      const wwwAuth = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate."`;
       res.setHeader("WWW-Authenticate", wwwAuth);
       return res.status(401).json({
         error: "invalid_token",
@@ -204,7 +224,7 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
   if (!authHeader?.startsWith("Bearer ") && !connectionIdHeader) {
     res.setHeader(
       "WWW-Authenticate",
-      `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`
+      `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`
     );
     return res.status(401).json({
       error: "Unauthorized: Authentication required",
@@ -213,22 +233,16 @@ app.get("/.well-known/oauth-protected-resource", async (req, res) => {
 
   res.setHeader("Content-Type", "application/json");
   res.json({
-    authorization_servers: [config.apiBase],
+    authorization_servers: [base],
   });
 });
 
 // Server info endpoint (no-auth) - exposes server port for MCP configuration
 // When NEOTOMA_MCP_PROXY_URL or MCP_PROXY_URL is set (e.g. ngrok tunnel), mcpUrl uses it so "Add to Cursor" uses the proxy.
 app.get("/server-info", (_req, res) => {
-  const httpPortEnv =
-    process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
-  const httpPort = httpPortEnv
-    ? parseInt(httpPortEnv, 10)
-    : config.httpPort || 3080;
-  const mcpBase =
-    process.env.NEOTOMA_MCP_PROXY_URL ||
-    process.env.MCP_PROXY_URL ||
-    config.apiBase;
+  const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
+  const httpPort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
+  const mcpBase = process.env.NEOTOMA_MCP_PROXY_URL || process.env.MCP_PROXY_URL || config.apiBase;
   const base = mcpBase.replace(/\/$/, "");
   const mcpUrl = base.endsWith("/mcp") ? base : `${base}/mcp`;
   res.json({
@@ -272,6 +286,217 @@ function readCookie(req: express.Request, name: string): string | undefined {
   return undefined;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderOauthPage(params: {
+  title: string;
+  subtitle?: string;
+  contentHtml: string;
+}): string {
+  const subtitle = params.subtitle ? `<p class="subtitle">${escapeHtml(params.subtitle)}</p>` : "";
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(params.title)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --background: 38 22% 98%;
+        --foreground: 28 22% 18%;
+        --card: 35 20% 96%;
+        --card-foreground: 28 22% 18%;
+        --primary: 12 48% 38%;
+        --primary-foreground: 0 0% 100%;
+        --muted: 35 18% 94%;
+        --muted-foreground: 28 14% 44%;
+        --border: 32 18% 88%;
+        --input: 32 18% 88%;
+        --ring: 12 48% 38%;
+        --radius: 0.5rem;
+      }
+      body {
+        margin: 0;
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 0.8125rem;
+        line-height: 1.6;
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+      }
+      .wrap {
+        max-width: 860px;
+        margin: 48px auto;
+        padding: 0 16px;
+      }
+      .card {
+        background: hsl(var(--card));
+        color: hsl(var(--card-foreground));
+        border: 1px solid hsl(var(--border));
+        border-radius: var(--radius);
+        box-shadow: 0 10px 28px rgba(52, 35, 26, 0.08);
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+      }
+      .subtitle {
+        margin: 0 0 20px;
+        color: hsl(var(--muted-foreground));
+        font-size: 15px;
+      }
+      .tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+      }
+      .tab-btn {
+        border: 1px solid hsl(var(--border));
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+        border-radius: 999px;
+        padding: 8px 12px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .tab-btn.active {
+        background: hsl(var(--primary));
+        border-color: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
+      }
+      .tab-panel {
+        display: none;
+      }
+      .tab-panel.active {
+        display: block;
+      }
+      .row {
+        margin-bottom: 12px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      input, textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid hsl(var(--input));
+        border-radius: calc(var(--radius) - 2px);
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+        padding: 10px 12px;
+        font-size: 14px;
+        font-family: inherit;
+      }
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+      input:focus-visible, textarea:focus-visible, .tab-btn:focus-visible, button:focus-visible, .btn-link:focus-visible {
+        outline: 2px solid hsl(var(--ring));
+        outline-offset: 1px;
+      }
+      .help {
+        margin: 6px 0 0;
+        color: hsl(var(--muted-foreground));
+        font-size: 13px;
+      }
+      .notice {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border: 1px solid hsl(32 85% 75%);
+        background: hsl(35 20% 95%);
+        color: hsl(24 55% 32%);
+        border-radius: calc(var(--radius) - 2px);
+        font-size: 13px;
+      }
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button, .btn-link {
+        border: 0;
+        border-radius: calc(var(--radius) - 2px);
+        padding: 10px 14px;
+        font-size: 14px;
+        cursor: pointer;
+        font-weight: 600;
+        background: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
+        text-decoration: none;
+      }
+      .btn-link.secondary {
+        border: 1px solid hsl(var(--border));
+        background: hsl(var(--muted));
+        color: hsl(var(--foreground));
+      }
+      code {
+        font-family: "JetBrains Mono", "Fira Code", "Roboto Mono", "Courier New", monospace;
+        font-size: 0.8125rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --background: 222 47% 11%;
+          --foreground: 210 40% 95%;
+          --card: 217 33% 18%;
+          --card-foreground: 210 40% 95%;
+          --primary: 217 91% 60%;
+          --primary-foreground: 0 0% 100%;
+          --muted: 217 33% 25%;
+          --muted-foreground: 215 20% 65%;
+          --border: 217 33% 25%;
+          --input: 217 33% 25%;
+          --ring: 217 91% 60%;
+        }
+        body {
+          background: hsl(var(--background));
+          color: hsl(var(--foreground));
+        }
+        .card {
+          background: hsl(var(--card));
+          border-color: hsl(var(--border));
+          box-shadow: none;
+        }
+        .notice {
+          border-color: hsl(32 65% 32%);
+          background: hsl(24 34% 20%);
+          color: hsl(42 95% 72%);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="card">
+        <h1>${escapeHtml(params.title)}</h1>
+        ${subtitle}
+        ${params.contentHtml}
+      </div>
+    </div>
+  </body>
+</html>`;
+}
+
 function hasValidOAuthKeySession(req: express.Request): boolean {
   const token = readCookie(req, OAUTH_KEY_SESSION_COOKIE);
   return oauthKeySessions.isValid(token);
@@ -298,6 +523,11 @@ function setOAuthKeySessionCookie(req: express.Request, res: express.Response): 
 // This endpoint enables Cursor's "Connect" button for OAuth authentication
 app.all("/mcp", async (req, res) => {
   try {
+    const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+    const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+    const host = forwardedHost || req.header("host");
+    const proto = forwardedProto || req.protocol || "http";
+    const base = host ? `${proto}://${host}` : config.apiBase;
     const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
     // Check for authentication BEFORE processing MCP requests
@@ -347,7 +577,7 @@ app.all("/mcp", async (req, res) => {
 
     // When encryption is on, only the key-derived token is accepted
     if (config.encryption.enabled && connectionIdHeader !== "dev-local") {
-      const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`;
+      const wwwAuthHeader = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`;
       res.setHeader("WWW-Authenticate", wwwAuthHeader);
       const msg =
         "Encryption is enabled. Use MCP token from your private key: run 'neotoma auth mcp-token' and add Authorization: Bearer <token> to mcp.json.";
@@ -367,12 +597,11 @@ app.all("/mcp", async (req, res) => {
     // Fix: Changed from (!sessionId && !hasAuth) to (!hasAuth) to ensure 401 on first protected call
     // even if Cursor establishes a session first (via GET for SSE)
     if (!hasAuth) {
-      const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource"`;
+      const wwwAuthHeader = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`;
       res.setHeader("WWW-Authenticate", wwwAuthHeader);
-      const unauthMessage =
-        config.requireKeyForOauth
-          ? "Unauthorized: Authentication required (key-authenticated OAuth or Bearer token)."
-          : "Unauthorized: Authentication required";
+      const unauthMessage = config.requireKeyForOauth
+        ? "Unauthorized: Authentication required (key-authenticated OAuth or Bearer token)."
+        : "Unauthorized: Authentication required";
 
       // For POST requests with JSON-RPC body, return JSON-RPC error format
       if (req.method === "POST" && req.body && typeof req.body === "object") {
@@ -411,7 +640,7 @@ app.all("/mcp", async (req, res) => {
         // Use consistent error format so Cursor may show Connect prompt.
         const desc =
           "Connection invalid or expired. Remove X-Connection-Id from mcp.json and click Connect to re-authenticate.";
-        const wwwAuthHeader = `Bearer resource_metadata="${config.apiBase}/.well-known/oauth-protected-resource", error="invalid_token", error_description="${desc}"`;
+        const wwwAuthHeader = `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource", error="invalid_token", error_description="${desc}"`;
         res.setHeader("WWW-Authenticate", wwwAuthHeader);
         if (req.method === "POST" && req.body && typeof req.body === "object") {
           return res.status(401).json({
@@ -561,6 +790,16 @@ function logWarn(event: string, req: express.Request, extra?: Record<string, unk
   console.warn(`[WARN] ${event}`, safe);
 }
 
+function sanitizeRedirectUriForLog(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function logError(
   event: string,
   req: express.Request,
@@ -636,9 +875,7 @@ app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
 
     const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:5195";
+      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const finalRedirectUri =
       typeof redirect_uri === "string" && redirect_uri.length > 0
         ? redirect_uri
@@ -696,9 +933,7 @@ app.post("/mcp/oauth/initiate", oauthInitiateLimit, async (req, res) => {
 app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
   try {
     if (config.storageBackend === "local") {
-      return res
-        .status(400)
-        .send("Local OAuth callback is disabled. Use /mcp/oauth/local-login.");
+      return res.status(400).send("Local OAuth callback is disabled. Use /mcp/oauth/local-login.");
     }
 
     const { code, state } = req.query;
@@ -724,9 +959,7 @@ app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
 
     // Default: redirect to frontend success page
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:5195";
+      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const successUrl = `${frontendBase}/oauth?connection_id=${encodeURIComponent(connectionId)}&status=success`;
     return res.redirect(successUrl);
   } catch (error: any) {
@@ -756,9 +989,7 @@ app.get("/mcp/oauth/callback", oauthCallbackLimit, async (req, res) => {
     }
 
     const frontendBaseForError =
-      process.env.NEOTOMA_FRONTEND_URL ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:5195";
+      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const errorUrl = `${frontendBaseForError}/oauth?${params.toString()}`;
     return res.redirect(errorUrl);
   }
@@ -777,39 +1008,84 @@ app.get("/mcp/oauth/key-auth", async (req, res) => {
   }
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  return res.send(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Neotoma key authentication</title>
-  </head>
-  <body>
-    <h1>Authenticate with your key</h1>
-    <p>OAuth requires key authentication before continuing. Provide your private key hex or mnemonic.</p>
-    <form method="post" action="/mcp/oauth/key-auth">
-      <input type="hidden" name="next" value="${nextPath}" />
-      <div>
-        <label for="private_key_hex">Private key hex (optional)</label><br />
-        <input id="private_key_hex" name="private_key_hex" type="password" autocomplete="off" />
-      </div>
-      <div style="margin-top: 12px;">
-        <label for="mnemonic">Mnemonic (optional)</label><br />
-        <textarea id="mnemonic" name="mnemonic" rows="3" cols="80"></textarea>
-      </div>
-      <div style="margin-top: 12px;">
-        <label for="mnemonic_passphrase">Mnemonic passphrase (optional)</label><br />
-        <input id="mnemonic_passphrase" name="mnemonic_passphrase" type="password" autocomplete="off" />
-      </div>
-      <div style="margin-top: 14px;">
-        <button type="submit">Authenticate and continue</button>
-      </div>
-    </form>
-    <p style="margin-top: 16px;">
-      If you do not have key credentials configured for this server, OAuth is unavailable. Use
-      <code>NEOTOMA_BEARER_TOKEN</code> and configure MCP with <code>Authorization: Bearer &lt;token&gt;</code>.
-    </p>
-  </body>
-</html>`);
+  const nextPathEscaped = escapeHtml(nextPath);
+  const hasBearerFallback = Boolean((process.env.NEOTOMA_BEARER_TOKEN || "").trim());
+  const defaultCredentialMode = hasBearerFallback ? "bearer" : "private_key";
+  return res.send(
+    renderOauthPage({
+      title: "Authenticate OAuth preflight",
+      subtitle: "Choose one credential path below, then continue to complete OAuth authorization.",
+      contentHtml: `
+      <form method="post" action="/mcp/oauth/key-auth" id="oauth-key-auth-form">
+        <input type="hidden" name="next" value="${nextPathEscaped}" />
+        <input type="hidden" name="credential_mode" id="credential_mode" value="${defaultCredentialMode}" />
+        <div class="tabs" role="tablist" aria-label="Credential paths">
+          ${hasBearerFallback ? `<button type="button" class="tab-btn ${defaultCredentialMode === "bearer" ? "active" : ""}" data-tab="bearer">Bearer token</button>` : ""}
+          <button type="button" class="tab-btn ${defaultCredentialMode === "private_key" ? "active" : ""}" data-tab="private_key">Private key hex</button>
+          <button type="button" class="tab-btn" data-tab="mnemonic">Mnemonic</button>
+        </div>
+
+        <section class="tab-panel ${defaultCredentialMode === "private_key" ? "active" : ""}" data-panel="private_key">
+          <div class="row">
+            <label for="private_key_hex">Private key hex</label>
+            <input id="private_key_hex" name="private_key_hex" type="password" autocomplete="off" />
+            <p class="help">Use the same private key configured for this server.</p>
+          </div>
+        </section>
+
+        <section class="tab-panel" data-panel="mnemonic">
+          <div class="row">
+            <label for="mnemonic">Mnemonic phrase</label>
+            <textarea id="mnemonic" name="mnemonic" autocomplete="off"></textarea>
+          </div>
+          <div class="row">
+            <label for="mnemonic_passphrase">Mnemonic passphrase (optional)</label>
+            <input id="mnemonic_passphrase" name="mnemonic_passphrase" type="password" autocomplete="off" />
+          </div>
+        </section>
+
+        ${
+          hasBearerFallback
+            ? `<section class="tab-panel ${defaultCredentialMode === "bearer" ? "active" : ""}" data-panel="bearer">
+          <div class="row">
+            <label for="bearer_token">Bearer token</label>
+            <input id="bearer_token" name="bearer_token" type="password" autocomplete="off" />
+            <p class="help">Useful for default/local-user setups using <code>NEOTOMA_BEARER_TOKEN</code>.</p>
+          </div>
+        </section>`
+            : ""
+        }
+
+        <div class="notice">
+          OAuth key preflight is enabled on this server. If you cannot provide key credentials, configure
+          <code>NEOTOMA_BEARER_TOKEN</code> and use Bearer auth directly.
+        </div>
+
+        <div class="actions">
+          <button type="submit">Authenticate and continue</button>
+        </div>
+      </form>
+
+      <script>
+        (function() {
+          const form = document.getElementById('oauth-key-auth-form');
+          if (!form) return;
+          const modeInput = document.getElementById('credential_mode');
+          const buttons = Array.from(form.querySelectorAll('.tab-btn'));
+          const panels = Array.from(form.querySelectorAll('.tab-panel'));
+          function activate(tab) {
+            buttons.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === tab));
+            panels.forEach((panel) => panel.classList.toggle('active', panel.dataset.panel === tab));
+            if (modeInput) modeInput.value = tab;
+          }
+          buttons.forEach((btn) => {
+            btn.addEventListener('click', () => activate(btn.dataset.tab || 'private_key'));
+          });
+        })();
+      </script>
+      `,
+    })
+  );
 });
 
 app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (req, res) => {
@@ -819,26 +1095,38 @@ app.post("/mcp/oauth/key-auth", express.urlencoded({ extended: true }), async (r
     return res.redirect(nextPath);
   }
 
-  const result = isOauthKeyCredentialValid({
-    privateKeyHex: req.body?.private_key_hex,
-    mnemonic: req.body?.mnemonic,
-    mnemonicPassphrase: req.body?.mnemonic_passphrase,
-  });
+  const defaultCredentialMode = (process.env.NEOTOMA_BEARER_TOKEN || "").trim()
+    ? "bearer"
+    : "private_key";
+  const postedMode = ((req.body?.credential_mode as string | undefined) || "").trim();
+  const postedBearer = ((req.body?.bearer_token as string | undefined) || "").trim();
+  // Robust fallback: if a bearer token was submitted, prioritize bearer validation even if
+  // tab state/JS failed to set credential_mode.
+  const credentialMode = postedBearer.length > 0 ? "bearer" : postedMode || defaultCredentialMode;
+  const result =
+    credentialMode === "bearer"
+      ? isOauthKeyCredentialValid({ bearerToken: req.body?.bearer_token })
+      : credentialMode === "mnemonic"
+        ? isOauthKeyCredentialValid({
+            mnemonic: req.body?.mnemonic,
+            mnemonicPassphrase: req.body?.mnemonic_passphrase,
+          })
+        : isOauthKeyCredentialValid({
+            privateKeyHex: req.body?.private_key_hex,
+          });
 
   if (!result.ok) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.status(401).send(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Key authentication failed</title>
-  </head>
-  <body>
-    <h1>Key authentication failed</h1>
-    <p>${result.reason || "Unable to validate key credentials."}</p>
-    <p><a href="/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}">Try again</a></p>
-  </body>
-</html>`);
+    const retryHref = `/mcp/oauth/key-auth?next=${encodeURIComponent(nextPath)}`;
+    return res.status(401).send(
+      renderOauthPage({
+        title: "Authentication failed",
+        subtitle: result.reason || "Unable to validate credentials.",
+        contentHtml: `<div class="actions">
+          <a class="btn-link secondary" href="${escapeHtml(retryHref)}">Try again</a>
+        </div>`,
+      })
+    );
   }
 
   setOAuthKeySessionCookie(req, res);
@@ -854,15 +1142,36 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
     const code_challenge_method = req.query.code_challenge_method as string | undefined;
     const client_id = req.query.client_id as string | undefined;
     const dev_stub = req.query.dev_stub as string | undefined;
+    logger.info("[MCP OAuth] Authorize request received", {
+      client_id: client_id ?? null,
+      redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+      has_state: Boolean(state),
+      has_pkce: Boolean(code_challenge) && code_challenge_method === "S256",
+      host: req.header("host") ?? null,
+    });
 
     if (!redirect_uri) {
+      logger.warn("[MCP OAuth] Authorize rejected: missing redirect_uri");
       return res.status(400).send("redirect_uri is required");
     }
     if (!state) {
+      logger.warn("[MCP OAuth] Authorize rejected: missing state");
       return res.status(400).send("state is required");
     }
-    if (!code_challenge || code_challenge_method !== "S256") {
+    const isOpenAiCustomGptRedirect =
+      redirect_uri &&
+      (redirect_uri.includes("chatgpt.com") || redirect_uri.includes("chat.openai.com"));
+    const hasPkce = code_challenge && code_challenge_method === "S256";
+
+    if (!hasPkce && !isOpenAiCustomGptRedirect) {
+      logger.warn("[MCP OAuth] Authorize rejected: missing PKCE for non-OpenAI redirect", {
+        redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+      });
       return res.status(400).send("code_challenge and code_challenge_method=S256 are required");
+    }
+    if (!hasPkce && isOpenAiCustomGptRedirect) {
+      // Allow OAuth without client PKCE for OpenAI Custom GPT only (weaker security; see docs).
+      // Server generates PKCE for state storage; OpenAI does not send code_verifier at token exchange.
     }
     if (config.requireKeyForOauth && !hasValidOAuthKeySession(req)) {
       const nextPath = normalizeOauthNextPath(req.originalUrl);
@@ -875,45 +1184,79 @@ app.get("/mcp/oauth/authorize", async (req, res) => {
     }
 
     if (config.storageBackend === "local") {
-      // When reached via tunnel, only allow redirect_uri to localhost or known app schemes
+      // When reached via tunnel, only allow redirect_uri to localhost, app schemes, or OpenAI Custom GPT
       if (!isLocalRequest(req)) {
         const { isRedirectUriAllowedForTunnel } = await import("./services/mcp_oauth.js");
         if (!isRedirectUriAllowedForTunnel(redirect_uri)) {
-          return res.status(400).send(
-            "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, http://localhost, or http://127.0.0.1."
-          );
+          logger.warn("[MCP OAuth] Authorize rejected: redirect_uri not allowed for tunnel", {
+            redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+          });
+          return res
+            .status(400)
+            .send(
+              "redirect_uri is not allowed when connecting via a tunnel. Use cursor://, localhost, loopback, or trusted callback URLs (OpenAI/Claude)."
+            );
         }
       }
 
       const { randomUUID } = await import("node:crypto");
       const connectionId = randomUUID();
-      const { createLocalAuthorizationRequest } = await import("./services/mcp_oauth.js");
+      const { createLocalAuthorizationRequest, generatePKCE: generatePKCEFromService } =
+        await import("./services/mcp_oauth.js");
+
+      const pkce = hasPkce
+        ? undefined
+        : (() => {
+            const p = generatePKCEFromService();
+            return { codeChallenge: p.codeChallenge, codeVerifier: p.codeVerifier };
+          })();
 
       const authRequest = await createLocalAuthorizationRequest({
         connectionId,
         redirectUri: redirect_uri,
         clientState: state,
-        codeChallenge: code_challenge,
+        codeChallenge: pkce ? pkce.codeChallenge : (code_challenge as string),
+        codeVerifier: pkce?.codeVerifier,
       });
       // Keep local OAuth redirects on the current origin (tunnel or localhost) even if
       // authRequest.authUrl was built from a different absolute base URL.
       try {
         const parsed = new URL(authRequest.authUrl);
+        logger.info("[MCP OAuth] Authorize accepted (local backend)", {
+          connection_id: connectionId,
+          redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+        });
         return res.redirect(`${parsed.pathname}${parsed.search}`);
       } catch {
+        logger.info("[MCP OAuth] Authorize accepted (local backend fallback URL)", {
+          connection_id: connectionId,
+          redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+        });
         return res.redirect(authRequest.authUrl);
       }
     }
 
     const { randomUUID } = await import("node:crypto");
     const connectionId = randomUUID();
-    const { initiateOAuthFlow } = await import("./services/mcp_oauth.js");
+    const { initiateOAuthFlow, generatePKCE: generatePKCEFromService } =
+      await import("./services/mcp_oauth.js");
+    const serverPkce = hasPkce
+      ? undefined
+      : (() => {
+          const p = generatePKCEFromService();
+          return { codeVerifier: p.codeVerifier, codeChallenge: p.codeChallenge };
+        })();
     const result = await initiateOAuthFlow(
       connectionId,
       client_id ?? undefined,
       redirect_uri,
-      state
+      state,
+      serverPkce
     );
+    logger.info("[MCP OAuth] Authorize accepted (remote backend)", {
+      connection_id: connectionId,
+      redirect_uri: sanitizeRedirectUriForLog(redirect_uri),
+    });
 
     return res.redirect(result.authUrl);
   } catch (error: any) {
@@ -941,30 +1284,24 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   // When encryption is enabled: OAuth is not supported (MCP handler requires key-derived token)
   if (config.encryption.enabled) {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    return res.send(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>OAuth not supported with encryption</title>
-  </head>
-  <body>
-    <h1>OAuth not supported when encryption is enabled</h1>
-    <p>
-      When encryption is enabled (NEOTOMA_ENCRYPTION_ENABLED=true), MCP authentication 
-      uses a key-derived Bearer token instead of OAuth.
-    </p>
-    <h2>How to configure:</h2>
-    <ol>
-      <li>Run <code>neotoma auth mcp-token</code> to get your token</li>
-      <li>Add to .cursor/mcp.json under neotoma server:
-        <pre>"headers": { "Authorization": "Bearer &lt;your-token&gt;" }</pre>
-      </li>
-      <li>Remove <code>X-Connection-Id</code> if present</li>
-      <li>Restart Cursor</li>
-    </ol>
-    <p>See <a href="https://github.com/neotoma/neotoma/blob/main/docs/developer/mcp_oauth_troubleshooting.md">MCP OAuth Troubleshooting</a> for details.</p>
-  </body>
-</html>`);
+    return res.send(
+      renderOauthPage({
+        title: "OAuth unavailable with encryption",
+        subtitle:
+          "When NEOTOMA_ENCRYPTION_ENABLED=true, authenticate with a key-derived Bearer token instead of OAuth.",
+        contentHtml: `
+          <ol>
+            <li>Run <code>neotoma auth mcp-token</code> to generate your token.</li>
+            <li>Add header config (for example in <code>.cursor/mcp.json</code>):<br /><code>"headers": { "Authorization": "Bearer &lt;your-token&gt;" }</code></li>
+            <li>Remove <code>X-Connection-Id</code> if present.</li>
+            <li>Restart your MCP client.</li>
+          </ol>
+          <div class="actions">
+            <a class="btn-link secondary" href="https://github.com/neotoma/neotoma/blob/main/docs/developer/mcp_oauth_troubleshooting.md">MCP OAuth troubleshooting</a>
+          </div>
+        `,
+      })
+    );
   }
 
   // When encryption is off: local requests auto-approve; tunnel requests require explicit approval
@@ -973,19 +1310,19 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     const base = `${req.protocol}://${req.get("host") || ""}`;
     const approveUrl = `${base}${req.path}?${new URLSearchParams({ state, approve: "1" }).toString()}`;
-    return res.send(`<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Approve MCP connection</title>
-  </head>
-  <body>
-    <h1>Approve MCP connection</h1>
-    <p>A client is requesting access to Neotoma. Only approve if you started this connection (e.g. by clicking Connect in Cursor).</p>
-    <p><a href="${approveUrl}">Approve this connection</a></p>
-    <p><small>If you did not expect this, close the tab. No access will be granted.</small></p>
-  </body>
-</html>`);
+    return res.send(
+      renderOauthPage({
+        title: "Approve connection",
+        subtitle:
+          "A client requested access to Neotoma. Approve only if you initiated this connection.",
+        contentHtml: `
+          <div class="actions">
+            <a class="btn-link" href="${escapeHtml(approveUrl)}">Approve this connection</a>
+          </div>
+          <div class="notice">If you did not expect this request, close this tab. No access will be granted.</div>
+        `,
+      })
+    );
   }
 
   try {
@@ -996,9 +1333,7 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
       devUser.id
     );
     const frontendBase =
-      process.env.NEOTOMA_FRONTEND_URL ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:5195";
+      process.env.NEOTOMA_FRONTEND_URL || process.env.FRONTEND_URL || "http://localhost:5195";
     const frontendOauth = `${frontendBase}/oauth`;
     if (redirectUri) {
       if (!clientState && redirectUri.startsWith(frontendOauth)) {
@@ -1017,7 +1352,15 @@ app.get("/mcp/oauth/local-login", async (req, res) => {
   } catch (error: any) {
     logError("MCPLocalLoginDevStub", req, error);
     const status = error?.code === "OAUTH_STATE_INVALID" || error?.statusCode === 400 ? 400 : 401;
-    return res.status(status).send(error.message ?? "Dev account authorization failed");
+    return res.status(status).send(
+      renderOauthPage({
+        title: "Authorization failed",
+        subtitle: error?.message ?? "Dev account authorization failed",
+        contentHtml: `<div class="actions">
+          <a class="btn-link secondary" href="/mcp/oauth/key-auth?next=${encodeURIComponent(req.originalUrl || "/mcp/oauth/authorize")}">Back to authentication</a>
+        </div>`,
+      })
+    );
   }
 });
 
@@ -1032,14 +1375,24 @@ app.post(
     try {
       const grant_type = req.body?.grant_type;
       const code = req.body?.code;
+      logger.info("[MCP OAuth] Token request received", {
+        grant_type: grant_type ?? null,
+        has_code: typeof code === "string" && code.length > 0,
+        code_hint: typeof code === "string" ? code.slice(0, 8) : null,
+        host: req.header("host") ?? null,
+      });
 
       if (grant_type !== "authorization_code") {
+        logger.warn("[MCP OAuth] Token rejected: unsupported grant_type", {
+          grant_type: grant_type ?? null,
+        });
         return res.status(400).json({
           error: "unsupported_grant_type",
           error_description: "Only authorization_code is supported",
         });
       }
       if (!code || typeof code !== "string") {
+        logger.warn("[MCP OAuth] Token rejected: missing code");
         return res
           .status(400)
           .json({ error: "invalid_request", error_description: "code is required" });
@@ -1047,6 +1400,10 @@ app.post(
 
       const { getTokenResponseForConnection } = await import("./services/mcp_oauth.js");
       const token = await getTokenResponseForConnection(code);
+      logger.info("[MCP OAuth] Token issued", {
+        code_hint: code.slice(0, 8),
+        has_refresh_token: Boolean((token as { refresh_token?: string }).refresh_token),
+      });
 
       res.setHeader("Content-Type", "application/json");
       return res.json(token);
@@ -1237,7 +1594,10 @@ app.use(async (req, res, next) => {
   // Bypass auth only for truly public endpoints (no user data)
   if (
     req.method === "OPTIONS" ||
-    (req.method === "GET" && (req.path === "/openapi.yaml" || req.path === "/health")) ||
+    (req.method === "GET" &&
+      (req.path === "/openapi.yaml" ||
+        req.path === "/openapi_actions.yaml" ||
+        req.path === "/health")) ||
     (req.method === "POST" && req.path === "/auth/dev-signin")
   ) {
     return next();
@@ -1253,6 +1613,9 @@ app.use(async (req, res, next) => {
   ) {
     const devUser = ensureLocalDevUser();
     (req as any).authenticatedUserId = devUser.id;
+    logger.info(
+      `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
+    );
     return next();
   }
 
@@ -1264,6 +1627,9 @@ app.use(async (req, res, next) => {
       if (token === expectedToken) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=bearer_mcp_token user_id=${devUser.id}`
+        );
         return next();
       }
     }
@@ -1272,6 +1638,9 @@ app.use(async (req, res, next) => {
       if (isLocalRequest(req)) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=local_no_bearer user_id=${devUser.id}`
+        );
         return next();
       }
     }
@@ -1280,6 +1649,9 @@ app.use(async (req, res, next) => {
       if (token === process.env.NEOTOMA_BEARER_TOKEN) {
         const devUser = ensureLocalDevUser();
         (req as any).authenticatedUserId = devUser.id;
+        logger.info(
+          `[Auth] ${req.method} ${req.path} auth_method=bearer_env user_id=${devUser.id}`
+        );
         return next();
       }
     }
@@ -1316,6 +1688,9 @@ app.use(async (req, res, next) => {
     if (registeredUserId) {
       (req as any).authenticatedUserId = registeredUserId;
     }
+    logger.info(
+      `[Auth] ${req.method} ${req.path} auth_method=ed25519_bearer user_id=${(req as any).authenticatedUserId ?? "(from token)"}`
+    );
   } else {
     // Try to validate as session token
     try {
@@ -1325,6 +1700,9 @@ app.use(async (req, res, next) => {
       (req as any).authenticatedUserId = validated.userId;
       (req as any).authenticatedUserEmail = validated.email;
       (req as any).bearerToken = bearerToken;
+      logger.info(
+        `[Auth] ${req.method} ${req.path} auth_method=session_bearer user_id=${validated.userId}`
+      );
     } catch (authError) {
       // Not a valid token
       logWarn("AuthInvalidToken", req, {
@@ -1455,11 +1833,29 @@ app.post("/entities/query", async (req, res) => {
     // Get authenticated user_id (REQUIRED)
     const userId = await getAuthenticatedUserId(req, parsed.data.user_id);
 
-    const { entity_type, search, limit, offset, include_merged } = parsed.data;
+    const {
+      entity_type,
+      search,
+      limit,
+      offset,
+      sort_by,
+      sort_order,
+      published,
+      published_after,
+      published_before,
+      include_snapshots,
+      include_merged,
+    } = parsed.data;
     const { entities, total } = await queryEntitiesWithCount({
       userId,
       entityType: entity_type,
       includeMerged: include_merged,
+      includeSnapshots: include_snapshots,
+      sortBy: sort_by,
+      sortOrder: sort_order,
+      published,
+      publishedAfter: published_after,
+      publishedBefore: published_before,
       search,
       limit,
       offset,
@@ -1642,10 +2038,8 @@ app.get("/schemas", async (req, res) => {
     const filterEntityType = req.query.entity_type as string | undefined;
     const limitRaw = req.query.limit as string | undefined;
     const offsetRaw = req.query.offset as string | undefined;
-    const limit =
-      limitRaw && /^\d+$/.test(limitRaw) ? Math.max(0, parseInt(limitRaw, 10)) : 100;
-    const offset =
-      offsetRaw && /^\d+$/.test(offsetRaw) ? Math.max(0, parseInt(offsetRaw, 10)) : 0;
+    const limit = limitRaw && /^\d+$/.test(limitRaw) ? Math.max(0, parseInt(limitRaw, 10)) : 100;
+    const offset = offsetRaw && /^\d+$/.test(offsetRaw) ? Math.max(0, parseInt(offsetRaw, 10)) : 0;
 
     const { SchemaRegistryService } = await import("./services/schema_registry.js");
     const schemaRegistry = new SchemaRegistryService();
@@ -2260,10 +2654,7 @@ app.get("/interpretations", async (req, res) => {
     const offset = parseInt(req.query.offset as string) || 0;
 
     // Build query - ALWAYS filter by authenticated user_id
-    let query = db
-      .from("interpretations")
-      .select("*", { count: "exact" })
-      .eq("user_id", userId); // SECURITY: Always filter by authenticated user
+    let query = db.from("interpretations").select("*", { count: "exact" }).eq("user_id", userId); // SECURITY: Always filter by authenticated user
 
     if (sourceId) {
       query = query.eq("source_id", sourceId);
@@ -2590,9 +2981,8 @@ async function storeUnstructuredForApi(params: {
   };
 
   if (interpret && storageResult.sourceId) {
-    const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } = await import(
-      "./services/file_text_extraction.js"
-    );
+    const { extractTextFromBuffer, getPdfFirstPageImageDataUrl, getPdfWorkerDebug } =
+      await import("./services/file_text_extraction.js");
     const {
       extractWithLLM,
       extractWithLLMFromImage,
@@ -2645,9 +3035,14 @@ async function storeUnstructuredForApi(params: {
     };
     if (rawTextLength === 0 && isPdf) {
       interpretationDebug.vision_fallback_attempted = true;
-      const imageResult = await getPdfFirstPageImageDataUrl(fileBuffer, mimeType, originalFilename || "file", {
-        returnError: true,
-      });
+      const imageResult = await getPdfFirstPageImageDataUrl(
+        fileBuffer,
+        mimeType,
+        originalFilename || "file",
+        {
+          returnError: true,
+        }
+      );
       const imageDataUrl = typeof imageResult === "object" ? imageResult.dataUrl : imageResult;
       if (typeof imageResult === "object" && imageResult.error) {
         interpretationDebug.vision_fallback_image_error = imageResult.error;
@@ -2665,16 +3060,31 @@ async function storeUnstructuredForApi(params: {
         } catch (visionErr) {
           interpretationDebug.vision_fallback_error =
             visionErr instanceof Error ? visionErr.message : String(visionErr);
-          extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+          extractionResult = await extractWithLLM(
+            rawText,
+            originalFilename || "file",
+            mimeType,
+            "gpt-4o"
+          );
         }
       } else {
-        extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+        extractionResult = await extractWithLLM(
+          rawText,
+          originalFilename || "file",
+          mimeType,
+          "gpt-4o"
+        );
       }
     } else if (isCsv) {
       const { extractEntitiesFromCsvRows } = await import("./services/csv_row_extraction.js");
       extractedData = extractEntitiesFromCsvRows(fileBuffer, originalFilename || "file");
     } else {
-      extractionResult = await extractWithLLM(rawText, originalFilename || "file", mimeType, "gpt-4o");
+      extractionResult = await extractWithLLM(
+        rawText,
+        originalFilename || "file",
+        mimeType,
+        "gpt-4o"
+      );
     }
 
     if (extractedData.length === 0 && extractionResult) {
@@ -2755,7 +3165,12 @@ app.post("/store", async (req, res) => {
 
     if (hasEntities) {
       if (!parsed.data.idempotency_key) {
-        return sendError(res, 400, "VALIDATION_ERROR", "idempotency_key is required when entities are provided");
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "idempotency_key is required when entities are provided"
+        );
       }
       structuredResult = await storeStructuredForApi({
         userId,
@@ -2779,13 +3194,25 @@ app.post("/store", async (req, res) => {
         fileContent = fileBuffer.toString("base64");
         if (!mimeType) {
           const ext = path.extname(resolvedPath).toLowerCase();
-          mimeType = ext === ".pdf" ? "application/pdf" : ext === ".csv" ? "text/csv" : ext === ".json" ? "application/json" : "text/plain";
+          mimeType =
+            ext === ".pdf"
+              ? "application/pdf"
+              : ext === ".csv"
+                ? "text/csv"
+                : ext === ".json"
+                  ? "application/json"
+                  : "text/plain";
         }
         originalFilename = originalFilename || path.basename(resolvedPath);
       }
 
       if (!fileContent || !mimeType) {
-        return sendError(res, 400, "VALIDATION_ERROR", "Unstructured store requires file_content+mime_type or file_path");
+        return sendError(
+          res,
+          400,
+          "VALIDATION_ERROR",
+          "Unstructured store requires file_content+mime_type or file_path"
+        );
       }
 
       unstructuredResult = await storeUnstructuredForApi({
@@ -2938,9 +3365,8 @@ app.post("/entities/merge", async (req, res) => {
 
     return res.json(result);
   } catch (error) {
-    const { EntityNotFoundError, EntityAlreadyMergedError } = await import(
-      "./services/entity_merge.js"
-    );
+    const { EntityNotFoundError, EntityAlreadyMergedError } =
+      await import("./services/entity_merge.js");
     if (error instanceof EntityNotFoundError) {
       return sendError(res, 404, "RESOURCE_NOT_FOUND", error.message);
     }
@@ -3196,9 +3622,7 @@ app.get("/get_file_url", async (req, res) => {
   const bucket = parts[0];
   const path = parts.slice(1).join("/");
 
-  const { data, error } = await db.storage
-    .from(bucket)
-    .createSignedUrl(path, expires_in || 3600);
+  const { data, error } = await db.storage.from(bucket).createSignedUrl(path, expires_in || 3600);
   if (error || !data?.signedUrl) {
     logError("StorageError:get_file_url", req, error, { bucket, path });
     return sendError(res, 500, "DB_QUERY_FAILED", error?.message ?? "Failed to create signed URL");
@@ -3222,49 +3646,19 @@ app.post("/retrieve_entity_by_identifier", async (req, res) => {
 
   try {
     const { identifier, entity_type } = parsed.data;
+    const userId = await getAuthenticatedUserId(req, undefined);
+    const result = await retrieveEntityByIdentifierWithFallback({
+      identifier,
+      entityType: entity_type,
+      userId,
+      limit: 100,
+    });
 
-    // Import normalization and ID generation functions
-    const { normalizeEntityValue, generateEntityId } =
-      await import("./services/entity_resolution.js");
-
-    // Normalize the identifier
-    const normalized = entity_type
-      ? normalizeEntityValue(entity_type, identifier)
-      : identifier.trim().toLowerCase();
-
-    // Search in entities table
-    let query = db
-      .from("entities")
-      .select("*")
-      .or(`canonical_name.ilike.%${normalized}%,aliases.cs.["${normalized}"]`);
-
-    if (entity_type) {
-      query = query.eq("entity_type", entity_type);
-    }
-
-    const { data: entities, error } = await query.limit(100);
-
-    if (error) {
-      logError("DbError:retrieve_entity_by_identifier", req, error);
-      return sendError(res, 500, "DB_QUERY_FAILED", error.message);
-    }
-
-    // Try entity ID match if no results
-    if ((!entities || entities.length === 0) && entity_type) {
-      const possibleId = generateEntityId(entity_type, identifier);
-      const { data: entityById, error: idError } = await db
-        .from("entities")
-        .select("*")
-        .eq("id", possibleId)
-        .single();
-
-      if (!idError && entityById) {
-        return res.json({ entities: [entityById], total: 1 });
-      }
-    }
-
-    logDebug("Success:retrieve_entity_by_identifier", req, { identifier, count: entities?.length });
-    return res.json({ entities: entities || [], total: entities?.length || 0 });
+    logDebug("Success:retrieve_entity_by_identifier", req, {
+      identifier,
+      count: result.entities.length,
+    });
+    return res.json(result);
   } catch (error) {
     return handleApiError(
       req,
@@ -3295,6 +3689,7 @@ app.post("/retrieve_related_entities", async (req, res) => {
       max_hops: _max_hops = 1,
       include_entities = true,
     } = parsed.data;
+    const userId = await getAuthenticatedUserId(req, undefined);
 
     // Simple 1-hop query implementation
     const relationships: any[] = [];
@@ -3304,7 +3699,9 @@ app.post("/retrieve_related_entities", async (req, res) => {
       let query = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("source_entity_id", entity_id);
+        .eq("source_entity_id", entity_id)
+        .eq("user_id", userId)
+        .order("relationship_key", { ascending: true });
 
       if (relationship_types && relationship_types.length > 0) {
         query = query.in("relationship_type", relationship_types);
@@ -3321,7 +3718,9 @@ app.post("/retrieve_related_entities", async (req, res) => {
       let query = db
         .from("relationship_snapshots")
         .select("*")
-        .eq("target_entity_id", entity_id);
+        .eq("target_entity_id", entity_id)
+        .eq("user_id", userId)
+        .order("relationship_key", { ascending: true });
 
       if (relationship_types && relationship_types.length > 0) {
         query = query.in("relationship_type", relationship_types);
@@ -3346,6 +3745,9 @@ app.post("/retrieve_related_entities", async (req, res) => {
         const { data, error } = await db
           .from("entities")
           .select("*")
+          .eq("user_id", userId)
+          .order("canonical_name", { ascending: true })
+          .order("id", { ascending: true })
           .in("id", Array.from(relatedIds));
 
         if (!error && data) {
@@ -3672,9 +4074,7 @@ app.post("/analyze_schema_candidates", async (req, res) => {
     const { entity_type, min_frequency = 5, min_confidence = 0.8 } = parsed.data;
 
     // Query raw_fragments for field frequency analysis
-    let query = db
-      .from("raw_fragments")
-      .select("fragment_key, frequency_count, entity_type");
+    let query = db.from("raw_fragments").select("fragment_key, frequency_count, entity_type");
 
     if (entity_type) {
       query = query.eq("entity_type", entity_type);
@@ -3710,9 +4110,7 @@ app.post("/analyze_schema_candidates", async (req, res) => {
       .map(([field_name, frequency]) => {
         const confidence = Math.min(frequency / 100, 1);
         const recommendedType =
-          /\b(date|dated|dob)\b/i.test(field_name) || /_at$/i.test(field_name)
-            ? "date"
-            : "string";
+          /\b(date|dated|dob)\b/i.test(field_name) || /_at$/i.test(field_name) ? "date" : "string";
         return {
           field_name,
           frequency,
@@ -4232,7 +4630,11 @@ app.post("/correct", async (req, res) => {
     });
 
     logDebug("Success:correct", req, { entity_id, field });
-    return res.json({ success: true, observation_id: result.observation_id, snapshot: result.snapshot });
+    return res.json({
+      success: true,
+      observation_id: result.observation_id,
+      snapshot: result.snapshot,
+    });
   } catch (error) {
     return handleApiError(
       req,
@@ -4390,13 +4792,104 @@ app.post("/health_check_snapshots", async (req, res) => {
 // Chat endpoint removed - violates Application Layer constraint "MUST NOT contain conversational logic"
 // Conversational interactions should be externalized to MCP-compatible agents per architecture
 
+function isLocalHostname(hostname: string): boolean {
+  return (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  );
+}
+
+/** True if url is a non-local base URL (safe to use as public server in OpenAPI). */
+function isNonLocalBaseUrl(url: string): boolean {
+  if (!url || !url.startsWith("http")) return false;
+  try {
+    return !isLocalHostname(new URL(url.replace(/\/$/, "")).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Request base URL (protocol + host) for import-from-URL; respects X-Forwarded-* when behind a proxy. When the request host is localhost and config.apiBase is set to a non-local URL (e.g. tunnel), use apiBase so the schema lists the public URL. */
+function getRequestBaseUrl(req: express.Request): string {
+  const forwardedProto = req.header("x-forwarded-proto")?.split(",")[0]?.trim();
+  const forwardedHost = req.header("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || req.get("host") || "";
+  const proto = forwardedProto || req.protocol || "http";
+  const fromRequest = host ? `${proto}://${host}`.replace(/\/$/, "") : "";
+  if (fromRequest) {
+    try {
+      const reqHostname = new URL(fromRequest).hostname;
+      if (isLocalHostname(reqHostname)) {
+        const baseUrl = (config.apiBase || "").replace(/\/$/, "");
+        if (isNonLocalBaseUrl(baseUrl)) return baseUrl;
+      }
+    } catch {
+      // use fromRequest
+    }
+  }
+  return fromRequest;
+}
+
+/** Filter OpenAPI servers to only those with the same hostname as the request; if none match, use request origin. */
+function filterServersToRequestHost(
+  spec: { servers?: Array<{ url: string; description?: string }> },
+  req: express.Request
+): void {
+  const requestBase = getRequestBaseUrl(req);
+  if (!spec.servers?.length) return;
+  let requestHostname: string;
+  try {
+    requestHostname = requestBase ? new URL(requestBase).hostname : "";
+  } catch {
+    return;
+  }
+  if (!requestHostname) return;
+  const sameHost = spec.servers.filter((s) => {
+    try {
+      return new URL(s.url).hostname === requestHostname;
+    } catch {
+      return false;
+    }
+  });
+  if (sameHost.length > 0) {
+    spec.servers = sameHost;
+  } else if (requestBase) {
+    spec.servers = [{ url: requestBase, description: spec.servers[0]?.description }];
+  }
+}
+
+/** If the spec still has a local server URL but we have a non-local apiBase (e.g. tunnel), use apiBase so import-from-URL gets the public root. */
+function ensureNonLocalServerWhenConfigured(
+  spec: { servers?: Array<{ url: string; description?: string }> }
+): void {
+  if (!spec.servers?.length) return;
+  const baseUrl = (config.apiBase || "").replace(/\/$/, "");
+  if (!isNonLocalBaseUrl(baseUrl)) return;
+  try {
+    const first = new URL(spec.servers[0].url);
+    if (isLocalHostname(first.hostname)) {
+      spec.servers = [{ url: baseUrl, description: spec.servers[0].description }];
+    }
+  } catch {
+    // leave as-is
+  }
+}
+
 app.get("/openapi.yaml", (req, res) => {
   const openApiContent = readOpenApiFile();
-  const spec = yaml.load(openApiContent) as { servers?: Array<{ url: string; description?: string }> };
-  const baseUrl = (config.apiBase || "").replace(/\/$/, "");
-  if (spec.servers?.length && baseUrl) {
-    spec.servers[0] = { ...spec.servers[0], url: baseUrl };
-  }
+  const spec = yaml.load(openApiContent) as {
+    servers?: Array<{ url: string; description?: string }>;
+  };
+  filterServersToRequestHost(spec, req);
+  ensureNonLocalServerWhenConfigured(spec);
+  res.setHeader("Content-Type", "application/yaml");
+  res.send(yaml.dump(spec, { lineWidth: -1 }));
+});
+
+app.get("/openapi_actions.yaml", (req, res) => {
+  const content = readOpenApiActionsFile();
+  const spec = yaml.load(content) as { servers?: Array<{ url: string; description?: string }> };
+  filterServersToRequestHost(spec, req);
+  ensureNonLocalServerWhenConfigured(spec);
   res.setHeader("Content-Type", "application/yaml");
   res.send(yaml.dump(spec, { lineWidth: -1 }));
 });
@@ -4427,9 +4920,7 @@ export async function startHTTPServer() {
   await initServerKeys();
 
   const httpPortEnv = process.env.NEOTOMA_HTTP_PORT || process.env.HTTP_PORT;
-  const basePort = httpPortEnv
-    ? parseInt(httpPortEnv, 10)
-    : config.httpPort || 3080;
+  const basePort = httpPortEnv ? parseInt(httpPortEnv, 10) : config.httpPort || 3080;
   const portFile = process.env.NEOTOMA_SESSION_PORT_FILE;
   const maxTries = 20;
 
