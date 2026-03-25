@@ -20,6 +20,18 @@ import { CursorIcon } from "../../icons/CursorIcon";
 import { OpenClawIcon } from "../../icons/OpenClawIcon";
 import { sendCtaClick, sendOutboundClick, type CtaName } from "@/utils/analytics";
 
+/** Readable label for hero chips: `auth_decision` → "Auth Decision", preserves acronyms like LP in "LP commitment". */
+function formatHeroTagLabel(raw: string): string {
+  const segments = raw.includes("_") ? raw.split("_") : raw.split(/\s+/);
+  return segments
+    .filter((s) => s.length > 0)
+    .map((word) => {
+      if (/^[A-Z]{2,4}$/.test(word)) return word;
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    })
+    .join(" ");
+}
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -70,6 +82,12 @@ export interface VerticalCaseStudy {
   guarantees: string[];
   generalizesTitle: string;
   generalizesDesc: string;
+  /** When set, replaces the default "How {companyName} uses Neotoma…" heading. */
+  headline?: string;
+  /** Optional note under the heading (e.g. illustrative scenario disclaimer). */
+  disclaimer?: string;
+  /** When set, replaces "What {companyName} does" for the features column title. */
+  whatTheyDoHeading?: string;
 }
 
 export interface VerticalConfig {
@@ -122,7 +140,11 @@ export type AccentColor =
   | "cyan"
   | "teal"
   | "orange"
-  | "blue";
+  | "blue"
+  | "rose"
+  | "slate"
+  | "pink"
+  | "lime";
 
 interface VTheme {
   badgeBorderBg: string;
@@ -878,7 +900,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     {config.heroTags.map(({ tag, Icon }) => (
                       <span key={tag} className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] font-medium ${t.badgeBorderBg} ${t.text}`}>
                         <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
-                        {tag}
+                        {formatHeroTagLabel(tag)}
                       </span>
                     ))}
                   </div>
@@ -1067,12 +1089,19 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
               </div>
               <div className="grid gap-6 md:grid-cols-3">
                 {config.steps.map(({ Icon, title, desc, detail }, i) => (
-                  <div key={title} className="rounded-lg border border-border bg-card p-5 space-y-3 relative">
-                    <div className="flex items-center gap-3">
-                      <span className={`flex h-8 w-8 items-center justify-center rounded-full border text-[14px] font-medium ${t.border30} ${t.bg10} ${t.text}`}>{i + 1}</span>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-[16px] font-medium text-foreground">{title}</span>
+                  <div key={title} className="rounded-lg border border-border bg-card p-5 space-y-4 relative">
+                    <div className="flex gap-4">
+                      <div
+                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 shadow-sm ${t.border40} ${t.bg10}`}
+                        aria-hidden
+                      >
+                        <Icon className={`h-6 w-6 ${t.icon}`} strokeWidth={2.25} />
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-1 pt-0.5">
+                        <p className={`text-[11px] font-mono uppercase tracking-[0.08em] ${t.textMuted}`}>
+                          Step {i + 1}
+                        </p>
+                        <h3 className="text-[16px] font-medium text-foreground leading-snug">{title}</h3>
                       </div>
                     </div>
                     <p className="text-[14px] leading-6 text-muted-foreground">{desc}</p>
@@ -1159,8 +1188,14 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
               <div className="space-y-2">
                 <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>In practice</p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                  How {config.caseStudy.companyName} uses Neotoma as its integrity layer
+                  {config.caseStudy.headline ??
+                    `How ${config.caseStudy.companyName} uses Neotoma as its integrity layer`}
                 </h2>
+                {config.caseStudy.disclaimer ? (
+                  <p className="max-w-2xl rounded-md border border-border bg-muted/40 px-3 py-2 text-[13px] leading-5 text-muted-foreground">
+                    {config.caseStudy.disclaimer}
+                  </p>
+                ) : null}
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
                   <a
                     href={config.caseStudy.companyUrl}
@@ -1178,7 +1213,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 <div className="rounded-lg border border-border bg-card p-5 space-y-4">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-sky-500" />
-                    <span className="text-[14px] font-medium text-foreground">What {config.caseStudy.companyName} does</span>
+                    <span className="text-[14px] font-medium text-foreground">
+                      {config.caseStudy.whatTheyDoHeading ?? `What ${config.caseStudy.companyName} does`}
+                    </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {config.caseStudy.features.map((item) => (
