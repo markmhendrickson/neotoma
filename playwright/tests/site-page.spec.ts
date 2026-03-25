@@ -184,7 +184,14 @@ test.describe("sitePage coverage", () => {
     test.skip(testInfo.project.name.includes("mobile"), "Desktop-only sidebar trigger assertion");
     await page.setViewportSize({ width: 1280, height: 800 });
 
-    const paths = ["/verticals", "/verticals/", "/compliance", "/compliance/", "/crm"];
+    const paths = [
+      "/verticals",
+      "/verticals/",
+      "/compliance",
+      "/compliance/",
+      "/crm",
+      "/agent-auth",
+    ];
 
     for (const path of paths) {
       await page.goto(path);
