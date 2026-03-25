@@ -51,6 +51,10 @@ import { CasesLandingPage } from "@/components/subpages/CasesLandingPage";
 import { FinancialOpsLandingPage } from "@/components/subpages/FinancialOpsLandingPage";
 import { ProcurementLandingPage } from "@/components/subpages/ProcurementLandingPage";
 import { AgentAuthLandingPage } from "@/components/subpages/AgentAuthLandingPage";
+import { HealthcareLandingPage } from "@/components/subpages/HealthcareLandingPage";
+import { GovTechLandingPage } from "@/components/subpages/GovTechLandingPage";
+import { CustomerOpsLandingPage } from "@/components/subpages/CustomerOpsLandingPage";
+import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage";
 import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
 import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { sendPageView } from "@/utils/analytics";
@@ -126,6 +130,10 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/financial-ops", element: <FinancialOpsLandingPage /> },
   { path: "/procurement", element: <ProcurementLandingPage /> },
   { path: "/agent-auth", element: <AgentAuthLandingPage /> },
+  { path: "/healthcare", element: <HealthcareLandingPage /> },
+  { path: "/government", element: <GovTechLandingPage /> },
+  { path: "/customer-ops", element: <CustomerOpsLandingPage /> },
+  { path: "/logistics", element: <LogisticsLandingPage /> },
   { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/foundations", element: <FoundationsPage /> },
   { path: "/privacy-first", element: <Navigate to="/foundations#privacy-first" replace /> },
@@ -161,6 +169,15 @@ function LocaleSiteRedirect() {
   const { locale = DEFAULT_LOCALE } = useParams<{ locale: string }>();
   const resolvedLocale = isSupportedLocale(locale) ? locale : DEFAULT_LOCALE;
   return <Navigate to={localizePath("/", resolvedLocale)} replace />;
+}
+
+/** `/:locale` must not steal arbitrary first segments (e.g. `/missing-page` as a "locale"). */
+function LocalizedRouteGuard({ children }: { children: React.ReactNode }) {
+  const { locale } = useParams<{ locale: string }>();
+  if (!isSupportedLocale(locale)) {
+    return <NotFound />;
+  }
+  return <>{children}</>;
 }
 
 const SCROLL_POSITIONS_STORAGE_KEY = "site-scroll-positions-v1";
@@ -276,7 +293,14 @@ export function MainApp() {
         <Route path="/site" element={<Navigate to="/" replace />} />
         <Route path="/quick-start" element={<Navigate to="/install" replace />} />
         <Route path="/docker" element={<Navigate to="/install#docker" replace />} />
-        <Route path="/:locale/site" element={<LocaleSiteRedirect />} />
+        <Route
+          path="/:locale/site"
+          element={
+            <LocalizedRouteGuard>
+              <LocaleSiteRedirect />
+            </LocalizedRouteGuard>
+          }
+        />
         <Route path="/" element={getRootElement()} />
         {APP_ROUTES.filter((r) => r.path !== "/").map((route) => (
           <Route key={route.path} path={route.path} element={route.element} />
@@ -285,7 +309,11 @@ export function MainApp() {
           <Route
             key={`localized:${route.path}`}
             path={getLocalizedRoutePath(route.path)}
-            element={route.path === "/" ? getRootElement() : route.element}
+            element={
+              <LocalizedRouteGuard>
+                {route.path === "/" ? getRootElement() : route.element}
+              </LocalizedRouteGuard>
+            }
           />
         ))}
         <Route path="*" element={<NotFound />} />

@@ -40,7 +40,7 @@ const CONFIG: VerticalConfig = {
   ],
   heroFeatures: ["Open-source", "Privacy-first", "Team deployment", "No vendor lock-in"],
   analyticsPrefix: "portfolio",
-  problemTitle: "Portfolio systems optimize for \"now\"; IC and LPs ask for \"as-of\"",
+  problemTitle: 'Portfolio systems optimize for "now"; IC and LPs ask for "as-of"',
   problemDesc:
     "Valuations refresh, cap tables rebalance, and board decks contradict market data. Follow-on decisions need the mark that justified the wire. LP reporting and fund audits need the portfolio exactly as it stood on quarter end, not reconstructed from email attachments.",
   problemCards: [
@@ -56,16 +56,17 @@ const CONFIG: VerticalConfig = {
     },
     {
       Icon: ClipboardCheck,
-      title: "LP packs built from accidental \"now\"",
+      title: 'LP packs built from accidental "now"',
       desc: "Analysts pull cap tables the morning after a SAFE conversion. The Q2 deck ships with July dilution baked in because nothing pins entities to quarter close.",
     },
     {
       Icon: AlertTriangle,
       title: "Conflicting signals collapse to one story",
-      desc: "Board materials stay bullish while external comps turn cautious. Tools that keep a single \"outlook\" field drop the tension auditors and partners need to see preserved.",
+      desc: 'Board materials stay bullish while external comps turn cautious. Tools that keep a single "outlook" field drop the tension auditors and partners need to see preserved.',
     },
   ],
-  problemCallout: "LP reporting and fund audits require temporal snapshots, not a live feed mislabeled as history.",
+  problemCallout:
+    "LP reporting and fund audits require temporal snapshots, not a live feed mislabeled as history.",
   problemCalloutDesc:
     "When counsel or the admin asks what the portfolio looked like on March 31, answering with whatever the CRM shows today fails LP agreements and audit sampling. You need investment- and company-level state tied to observation time.",
   scenarios: [
@@ -73,8 +74,7 @@ const CONFIG: VerticalConfig = {
       category: "Valuation intelligence",
       human:
         "What was Northstar Analytics's last board-approved pre-money valuation when Meridian Growth Fund IV approved the $4.2M follow-on on August 14, 2024?",
-      fail:
-        "Northstar Analytics: last mark $210M post (Nov 2025 comp refresh); fully diluted cap table reflects the Oct 2025 secondaries block.",
+      fail: "Northstar Analytics: last mark $210M post (Nov 2025 comp refresh); fully diluted cap table reflects the Oct 2025 secondaries block.",
       succeed:
         "IC memo Aug 14, 2024 (Meridian Growth Fund IV): follow-on $4.2M on $118M post, implied pre-money $113.8M per valuation obs linked to investment meridian_ns_series_b_plus\u00B7v3 and portfolio_co\u00B7v14 snapshot @ 2024-08-14. Nov 2025 mark is a separate observation; the assistant returned the point-in-time figure that backed the wire, not today's comp.",
       version: "portfolio_co\u00B7v14",
@@ -87,8 +87,7 @@ const CONFIG: VerticalConfig = {
       category: "LP reporting",
       human:
         "For Aurora Capital Partners II's Q2 2025 quarterly letter, what was our fully diluted ownership and cost basis in CloudVector as of June 30, 2025?",
-      fail:
-        "CloudVector: 17.1% fully diluted, $11.4M cost basis. Reflects the July 8, 2025 SAFE conversion and updated option pool.",
+      fail: "CloudVector: 17.1% fully diluted, $11.4M cost basis. Reflects the July 8, 2025 SAFE conversion and updated option pool.",
       succeed:
         "As of 2025-06-30 23:59 UTC (portfolio_state\u00B7q2-2025): 18.4% FD, $12.1M invested basis, last mark 1.35x per valuation memo VAL-CV-2025-Q2. July SAFE and pool refresh are separate observations after the quarter close, excluded from this snapshot per LP reporting policy.",
       version: "portfolio_state\u00B7q2-2025",
@@ -101,8 +100,7 @@ const CONFIG: VerticalConfig = {
       category: "Milestone tracking",
       human:
         "Which revenue and security milestones had Helio Robotics achieved before we received the Series B term sheet on March 3, 2025?",
-      fail:
-        "Helio Robotics: ARR $9.2M (Aug 2025), SOC2 Type II complete, 42 enterprise logos, EU entity live. Aligned with current fundraising narrative.",
+      fail: "Helio Robotics: ARR $9.2M (Aug 2025), SOC2 Type II complete, 42 enterprise logos, EU entity live. Aligned with current fundraising narrative.",
       succeed:
         "Chronology through 2025-03-03: ARR crossed $4.0M (obs Jan 18, 2025), SOC2 Type II in progress (not complete until Apr 2025), 9 enterprise logos (not 42), EU entity not formed. Series B term sheet snapshot milestone_ms\u00B7pre_b shows only achievements with observation timestamps before Mar 3. Full timeline preserved for diligence.",
       version: "milestone_ms\u00B7pre_b",
@@ -115,10 +113,9 @@ const CONFIG: VerticalConfig = {
       category: "Conflicting signals",
       human:
         "For Relay API, how did the March 2025 board deck and the April 2025 external comp packet characterize 2025 revenue outlook?",
-      fail:
-        "Relay API 2025 outlook: \"Cautious. Sector multiples compressed 22% QoQ; plan to 40% YoY growth under review.\" (single consolidated field from latest analyst note)",
+      fail: 'Relay API 2025 outlook: "Cautious. Sector multiples compressed 22% QoQ; plan to 40% YoY growth under review." (single consolidated field from latest analyst note)',
       succeed:
-        "Two preserved observations: (1) Board deck Mar 12, 2025: management forecast \"re-acceleration to 85% YoY\" with pipeline coverage 3.1x. (2) External comp packet Apr 4, 2025: median SaaS forward multiple down 22% QoQ; footnote flags Relay peer group dispersion. Neotoma retains both outlook_board\u00B7v2 and outlook_market\u00B7v1 without last-write-wins collapse.",
+        'Two preserved observations: (1) Board deck Mar 12, 2025: management forecast "re-acceleration to 85% YoY" with pipeline coverage 3.1x. (2) External comp packet Apr 4, 2025: median SaaS forward multiple down 22% QoQ; footnote flags Relay peer group dispersion. Neotoma retains both outlook_board\u00B7v2 and outlook_market\u00B7v1 without last-write-wins collapse.',
       version: "outlook_relay\u00B7dual",
       Icon: AlertTriangle,
       failTitle: "Only the latest narrative survives",
@@ -171,13 +168,13 @@ const CONFIG: VerticalConfig = {
     {
       Icon: Target,
       title: "Milestone chronology for diligence",
-      desc: "Answer \"what was true before term sheet?\" with ordered achievements and evidence links. Separate pre-close facts from post-close operating metrics.",
+      desc: 'Answer "what was true before term sheet?" with ordered achievements and evidence links. Separate pre-close facts from post-close operating metrics.',
       tags: ["milestone", "diligence", "Series B"],
     },
     {
       Icon: ShieldCheck,
       title: "Multi-source narrative integrity",
-      desc: "Retain board outlook, management forecast, and external comp signals as distinct observations. No forced merge into a single \"sentiment\" field.",
+      desc: 'Retain board outlook, management forecast, and external comp signals as distinct observations. No forced merge into a single "sentiment" field.',
       tags: ["board", "market", "governance"],
     },
     {
@@ -250,7 +247,7 @@ const CONFIG: VerticalConfig = {
     ],
     generalizesTitle: "If you run multi-agent portfolio workflows, you share the same risk surface",
     generalizesDesc:
-      "Any team blending research agents, IR automation, and human partners needs the same guarantees: no silent mark overwrites, no LP letter built from the wrong day's cap table, and no single flattened \"outlook\" when board and market disagree. Neotoma generalizes the FundLens pattern to your stack.",
+      'Any team blending research agents, IR automation, and human partners needs the same guarantees: no silent mark overwrites, no LP letter built from the wrong day\'s cap table, and no single flattened "outlook" when board and market disagree. Neotoma generalizes the FundLens pattern to your stack.',
   },
   ctaHeadline: "Ship portfolio agents that can defend",
   ctaHighlight: "every mark and milestone they cite",

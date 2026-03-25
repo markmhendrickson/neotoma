@@ -19,6 +19,7 @@ import { SeoHead } from "../../SeoHead";
 import { CursorIcon } from "../../icons/CursorIcon";
 import { OpenClawIcon } from "../../icons/OpenClawIcon";
 import { sendCtaClick, sendOutboundClick, type CtaName } from "@/utils/analytics";
+import { VerticalIconTile } from "./VerticalIconTile";
 
 /** Readable label for hero chips: `auth_decision` → "Auth Decision", preserves acronyms like LP in "LP commitment". */
 function formatHeroTagLabel(raw: string): string {
@@ -328,16 +329,86 @@ const T: Record<AccentColor, VTheme> = {
     cta: "border-blue-600 bg-blue-600 shadow-blue-600/30 hover:bg-blue-500 dark:border-blue-500 dark:bg-blue-500 dark:text-blue-950",
     archBorder: "border-2 border-blue-500/40 bg-blue-500/5",
   },
+  rose: {
+    badgeBorderBg: "border-rose-500/20 bg-rose-500/5",
+    text: "text-rose-600 dark:text-rose-400",
+    textDarker: "text-rose-700 dark:text-rose-300",
+    textMuted: "text-rose-600/70 dark:text-rose-400/70",
+    textDetail: "text-rose-600/80 dark:text-rose-400/80",
+    icon: "text-rose-500",
+    borderLight: "border-rose-500/20",
+    borderMed: "border-rose-500/25",
+    border30: "border-rose-500/30",
+    border40: "border-rose-500/40",
+    bg5: "bg-rose-500/5",
+    bg10: "bg-rose-500/10",
+    bg3: "bg-rose-500/[0.03]",
+    dot: "bg-rose-500",
+    cta: "border-rose-600 bg-rose-600 shadow-rose-600/30 hover:bg-rose-500 dark:border-rose-500 dark:bg-rose-500 dark:text-rose-950",
+    archBorder: "border-2 border-rose-500/40 bg-rose-500/5",
+  },
+  slate: {
+    badgeBorderBg: "border-slate-500/20 bg-slate-500/5",
+    text: "text-slate-600 dark:text-slate-400",
+    textDarker: "text-slate-700 dark:text-slate-300",
+    textMuted: "text-slate-600/70 dark:text-slate-400/70",
+    textDetail: "text-slate-600/80 dark:text-slate-400/80",
+    icon: "text-slate-500",
+    borderLight: "border-slate-500/20",
+    borderMed: "border-slate-500/25",
+    border30: "border-slate-500/30",
+    border40: "border-slate-500/40",
+    bg5: "bg-slate-500/5",
+    bg10: "bg-slate-500/10",
+    bg3: "bg-slate-500/[0.03]",
+    dot: "bg-slate-500",
+    cta: "border-slate-600 bg-slate-600 shadow-slate-600/30 hover:bg-slate-500 dark:border-slate-500 dark:bg-slate-500 dark:text-slate-950",
+    archBorder: "border-2 border-slate-500/40 bg-slate-500/5",
+  },
+  pink: {
+    badgeBorderBg: "border-pink-500/20 bg-pink-500/5",
+    text: "text-pink-600 dark:text-pink-400",
+    textDarker: "text-pink-700 dark:text-pink-300",
+    textMuted: "text-pink-600/70 dark:text-pink-400/70",
+    textDetail: "text-pink-600/80 dark:text-pink-400/80",
+    icon: "text-pink-500",
+    borderLight: "border-pink-500/20",
+    borderMed: "border-pink-500/25",
+    border30: "border-pink-500/30",
+    border40: "border-pink-500/40",
+    bg5: "bg-pink-500/5",
+    bg10: "bg-pink-500/10",
+    bg3: "bg-pink-500/[0.03]",
+    dot: "bg-pink-500",
+    cta: "border-pink-600 bg-pink-600 shadow-pink-600/30 hover:bg-pink-500 dark:border-pink-500 dark:bg-pink-500 dark:text-pink-950",
+    archBorder: "border-2 border-pink-500/40 bg-pink-500/5",
+  },
+  lime: {
+    badgeBorderBg: "border-lime-500/20 bg-lime-500/5",
+    text: "text-lime-600 dark:text-lime-400",
+    textDarker: "text-lime-700 dark:text-lime-300",
+    textMuted: "text-lime-600/70 dark:text-lime-400/70",
+    textDetail: "text-lime-600/80 dark:text-lime-400/80",
+    icon: "text-lime-500",
+    borderLight: "border-lime-500/20",
+    borderMed: "border-lime-500/25",
+    border30: "border-lime-500/30",
+    border40: "border-lime-500/40",
+    bg5: "bg-lime-500/5",
+    bg10: "bg-lime-500/10",
+    bg3: "bg-lime-500/[0.03]",
+    dot: "bg-lime-500",
+    cta: "border-lime-600 bg-lime-600 shadow-lime-600/30 hover:bg-lime-500 dark:border-lime-500 dark:bg-lime-500 dark:text-lime-950",
+    archBorder: "border-2 border-lime-500/40 bg-lime-500/5",
+  },
 };
 
 /* ------------------------------------------------------------------ */
 /*  Layout constants                                                   */
 /* ------------------------------------------------------------------ */
 
-const SLIDE_CLASS =
-  "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER =
-  "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
 
 const LANDING_SECTIONS = [
   { id: "hero", label: "Overview" },
@@ -391,7 +462,7 @@ function buildPhaseMessages(
   scenarios: VerticalScenario[],
   phaseElapsed: number,
   fail: boolean,
-  prefix: string,
+  prefix: string
 ): IllustMsg[] {
   const msgs: IllustMsg[] = [];
   for (let i = 0; i < scenarios.length; i++) {
@@ -455,7 +526,7 @@ function AgentChatDemo({
         }
         wasInViewRef.current = nowInView;
       },
-      { threshold: 0.35 },
+      { threshold: 0.35 }
     );
     observer.observe(node);
     return () => observer.disconnect();
@@ -501,11 +572,25 @@ function AgentChatDemo({
     msgs =
       elapsed < fadeInStart
         ? buildPhaseMessages(scenarios, PHASE_MS, true, "b")
-        : [{ key: "lbl-a", role: "label", text: "with state integrity layer", thinking: false, fail: false }];
+        : [
+            {
+              key: "lbl-a",
+              role: "label",
+              text: "with state integrity layer",
+              thinking: false,
+              fail: false,
+            },
+          ];
   } else {
     const ae = Math.min(elapsed - PHASE_MS - TRANS_MS, PHASE_MS);
     msgs = [
-      { key: "lbl-a", role: "label", text: "with state integrity layer", thinking: false, fail: false },
+      {
+        key: "lbl-a",
+        role: "label",
+        text: "with state integrity layer",
+        thinking: false,
+        fail: false,
+      },
       ...buildPhaseMessages(scenarios, ae, false, "a"),
     ];
   }
@@ -539,7 +624,7 @@ function AgentChatDemo({
       prevRef.current = next;
       setElapsed(next);
     },
-    [TOTAL_MS],
+    [TOTAL_MS]
   );
 
   const onDown = useCallback(
@@ -550,14 +635,14 @@ function AgentChatDemo({
       setPlaying(false);
       seekTo(e.clientX);
     },
-    [seekTo],
+    [seekTo]
   );
   const onMove = useCallback(
     (e: React.PointerEvent) => {
       if (!dragging) return;
       seekTo(e.clientX);
     },
-    [dragging, seekTo],
+    [dragging, seekTo]
   );
   const onUp = useCallback(() => setDragging(false), []);
 
@@ -592,10 +677,16 @@ function AgentChatDemo({
       ref={viewportRef}
       className={`relative h-[400px] overflow-hidden rounded-xl p-3 transition-colors duration-500 md:h-[500px] ${borderClass} ${className}`}
     >
-      <div className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${glowClass}`} />
+      <div
+        className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${glowClass}`}
+      />
       <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:linear-gradient(to_bottom,rgba(100,116,139,0.2)_1px,transparent_1px)] [background-size:100%_10px] dark:opacity-20 dark:[background-image:linear-gradient(to_bottom,rgba(148,163,184,0.28)_1px,transparent_1px)]" />
-      <div className={`relative flex h-full flex-col overflow-hidden rounded-lg transition-colors duration-500 ${innerBorder}`}>
-        <div className={`grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b px-3 py-2 text-[10px] uppercase tracking-wide transition-colors duration-500 ${headerBorder}`}>
+      <div
+        className={`relative flex h-full flex-col overflow-hidden rounded-lg transition-colors duration-500 ${innerBorder}`}
+      >
+        <div
+          className={`grid shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b px-3 py-2 text-[10px] uppercase tracking-wide transition-colors duration-500 ${headerBorder}`}
+        >
           <div className="hidden sm:flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-rose-400/75 dark:bg-rose-500/80" />
             <span className="h-2 w-2 rounded-full bg-amber-300/75 dark:bg-amber-500/80" />
@@ -640,7 +731,9 @@ function AgentChatDemo({
                     }`}
                   >
                     {m.thinking ? (
-                      <p className={`flex items-center gap-1 leading-4 ${m.fail ? "text-rose-600/90 dark:text-rose-200/70" : "text-emerald-600/90 dark:text-emerald-200/70"}`}>
+                      <p
+                        className={`flex items-center gap-1 leading-4 ${m.fail ? "text-rose-600/90 dark:text-rose-200/70" : "text-emerald-600/90 dark:text-emerald-200/70"}`}
+                      >
                         {[0, 150, 300].map((d) => (
                           <span
                             key={d}
@@ -650,8 +743,12 @@ function AgentChatDemo({
                       </p>
                     ) : (
                       <p className="leading-4">
-                        <span>{m.role === "human" ? m.text || "\u00A0" : m.text ? null : "\u00A0"}</span>
-                        {m.role === "agent" && m.text ? <TypewriterBadge text={m.text} delayMs={18} /> : null}
+                        <span>
+                          {m.role === "human" ? m.text || "\u00A0" : m.text ? null : "\u00A0"}
+                        </span>
+                        {m.role === "agent" && m.text ? (
+                          <TypewriterBadge text={m.text} delayMs={18} />
+                        ) : null}
                       </p>
                     )}
                   </div>
@@ -662,17 +759,29 @@ function AgentChatDemo({
         </div>
         <div className="pointer-events-none absolute inset-x-0 top-9 h-10 bg-gradient-to-b from-white to-transparent dark:from-slate-950 dark:to-transparent" />
         <div className="shrink-0 px-2 pb-1 pt-1">
-          <div className={`rounded-md border p-1.5 shadow-sm transition-colors duration-500 ${composerBorder}`}>
-            <div className={`flex h-8 items-center rounded border bg-white px-2 font-mono text-[11px] leading-4 text-black dark:text-white transition-colors duration-500 dark:bg-slate-950 ${inputBorder}`}>
+          <div
+            className={`rounded-md border p-1.5 shadow-sm transition-colors duration-500 ${composerBorder}`}
+          >
+            <div
+              className={`flex h-8 items-center rounded border bg-white px-2 font-mono text-[11px] leading-4 text-black dark:text-white transition-colors duration-500 dark:bg-slate-950 ${inputBorder}`}
+            >
               <span className="mr-1 text-black/70 dark:text-white/70">$</span>
               <span className={composerText ? "" : "text-black/50 dark:text-white/50"}>
                 {composerTyping ? (
-                  <TypewriterBadge key={composerTypeKey} text={composerText} delayMs={composerDelayMs} />
+                  <TypewriterBadge
+                    key={composerTypeKey}
+                    text={composerText}
+                    delayMs={composerDelayMs}
+                  />
                 ) : (
                   composerText || "\u00A0"
                 )}
               </span>
-              {composerTyping && <span className="ml-0.5 inline-block w-[1px] animate-pulse text-black dark:text-white">|</span>}
+              {composerTyping && (
+                <span className="ml-0.5 inline-block w-[1px] animate-pulse text-black dark:text-white">
+                  |
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -703,8 +812,14 @@ function AgentChatDemo({
               onPointerUp={onUp}
             >
               <div className="pointer-events-none absolute inset-y-0 left-0 right-0 my-auto h-1.5 overflow-hidden rounded-full">
-                <div className="absolute inset-y-0 left-0 bg-rose-300/40 dark:bg-rose-500/25" style={{ width: `${BEFORE_RATIO * 100}%` }} />
-                <div className="absolute inset-y-0 right-0 bg-emerald-300/40 dark:bg-emerald-500/25" style={{ width: `${(1 - BEFORE_RATIO) * 100}%` }} />
+                <div
+                  className="absolute inset-y-0 left-0 bg-rose-300/40 dark:bg-rose-500/25"
+                  style={{ width: `${BEFORE_RATIO * 100}%` }}
+                />
+                <div
+                  className="absolute inset-y-0 right-0 bg-emerald-300/40 dark:bg-emerald-500/25"
+                  style={{ width: `${(1 - BEFORE_RATIO) * 100}%` }}
+                />
               </div>
               <div
                 className="pointer-events-none absolute inset-y-0 my-auto h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-slate-500 shadow dark:bg-slate-300"
@@ -739,10 +854,14 @@ function FailIllust({ human, fail }: { human: string; fail: string }) {
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
           <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">{human}</div>
+            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+              {human}
+            </div>
           </div>
           <div className="flex justify-start">
-            <div className="w-full border-l-2 border-rose-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 dark:border-rose-400/55 dark:text-rose-100">{fail}</div>
+            <div className="w-full border-l-2 border-rose-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-rose-900 dark:border-rose-400/55 dark:text-rose-100">
+              {fail}
+            </div>
           </div>
         </div>
       </div>
@@ -767,10 +886,14 @@ function SuccessIllust({ human, succeed }: { human: string; succeed: string }) {
         </div>
         <div className="flex flex-col gap-1.5 p-2.5">
           <div className="flex justify-end">
-            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">{human}</div>
+            <div className="max-w-[90%] rounded-md border border-slate-300 bg-slate-200 px-2 py-1 text-right font-mono text-[10px] leading-4 text-slate-800 shadow-sm dark:border-slate-600/80 dark:bg-slate-900 dark:text-slate-200">
+              {human}
+            </div>
           </div>
           <div className="flex justify-start">
-            <div className="w-full border-l-2 border-emerald-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100">{succeed}</div>
+            <div className="w-full border-l-2 border-emerald-500/45 px-2 py-1 font-mono text-[10px] leading-4 text-emerald-900 dark:border-emerald-400/55 dark:text-emerald-100">
+              {succeed}
+            </div>
           </div>
         </div>
       </div>
@@ -787,7 +910,9 @@ function ArchDiagram({ config, t }: { config: VerticalArchConfig; t: VTheme }) {
     <div className="rounded-xl border border-border bg-card p-6 space-y-4">
       <div className="space-y-3">
         <div className="rounded-lg border-2 border-sky-500/30 bg-sky-500/5 px-4 py-3 text-center">
-          <p className="text-[13px] font-medium text-sky-700 dark:text-sky-300">{config.topLabel}</p>
+          <p className="text-[13px] font-medium text-sky-700 dark:text-sky-300">
+            {config.topLabel}
+          </p>
           <p className="text-[11px] text-sky-600/70 dark:text-sky-400/70">{config.topDesc}</p>
         </div>
         <div className="flex justify-center">
@@ -798,12 +923,22 @@ function ArchDiagram({ config, t }: { config: VerticalArchConfig; t: VTheme }) {
         </div>
         <div className={`rounded-lg px-4 py-3 ${t.archBorder}`}>
           <div className="text-center">
-            <p className={`text-[13px] font-medium ${t.textDarker}`}>Neotoma State Integrity Layer</p>
+            <p className={`text-[13px] font-medium ${t.textDarker}`}>
+              Neotoma State Integrity Layer
+            </p>
             <p className={`text-[11px] ${t.textMuted}`}>Versioned, deterministic, auditable</p>
           </div>
-          <div className={`mt-3 grid gap-2`} style={{ gridTemplateColumns: `repeat(${Math.min(config.interfaces.length, 4)}, minmax(0, 1fr))` }}>
+          <div
+            className={`mt-3 grid gap-2`}
+            style={{
+              gridTemplateColumns: `repeat(${Math.min(config.interfaces.length, 4)}, minmax(0, 1fr))`,
+            }}
+          >
             {config.interfaces.map(({ label, Icon }) => (
-              <div key={label} className={`flex items-center justify-center gap-1 rounded border ${t.borderLight} ${t.bg5} px-2 py-1.5`}>
+              <div
+                key={label}
+                className={`flex items-center justify-center gap-1 rounded border ${t.borderLight} ${t.bg5} px-2 py-1.5`}
+              >
                 <Icon className={`h-3 w-3 ${t.text}`} />
                 <span className={`text-[10px] font-mono ${t.textDarker}`}>{label}</span>
               </div>
@@ -816,9 +951,17 @@ function ArchDiagram({ config, t }: { config: VerticalArchConfig; t: VTheme }) {
             <ChevronDown className="h-3 w-3" />
           </div>
         </div>
-        <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${Math.min(config.dataSources.length, 3)}, minmax(0, 1fr))` }}>
+        <div
+          className={`grid gap-2`}
+          style={{
+            gridTemplateColumns: `repeat(${Math.min(config.dataSources.length, 3)}, minmax(0, 1fr))`,
+          }}
+        >
           {config.dataSources.map((source) => (
-            <div key={source} className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center">
+            <div
+              key={source}
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center"
+            >
               <p className="text-[10px] font-mono text-muted-foreground">{source}</p>
             </div>
           ))}
@@ -849,7 +992,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           if (entry.isIntersecting) setActiveSection(entry.target.id);
         }
       },
-      { root: container, threshold: 0.5 },
+      { root: container, threshold: 0.5 }
     );
     for (const section of LANDING_SECTIONS) {
       const el = document.getElementById(section.id);
@@ -861,9 +1004,15 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
   return (
     <>
       <SeoHead />
-      <div ref={scrollContainerRef} className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory">
+      <div
+        ref={scrollContainerRef}
+        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
+      >
         {/* Dot nav */}
-        <nav className="fixed right-4 top-1/2 z-50 hidden -translate-y-1/2 flex-col gap-2 md:flex" aria-label="Page sections">
+        <nav
+          className="fixed right-4 top-1/2 z-50 hidden -translate-y-1/2 flex-col gap-2 md:flex"
+          aria-label="Page sections"
+        >
           {LANDING_SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -872,8 +1021,12 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
               onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth" })}
               aria-label={s.label}
             >
-              <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap text-[10px] font-mono text-muted-foreground group-hover:block">{s.label}</span>
-              <span className={`h-2 w-2 rounded-full transition-colors ${activeSection === s.id ? t.dot : "bg-muted-foreground/30"}`} />
+              <span className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap text-[10px] font-mono text-muted-foreground group-hover:block">
+                {s.label}
+              </span>
+              <span
+                className={`h-2 w-2 rounded-full transition-colors ${activeSection === s.id ? t.dot : "bg-muted-foreground/30"}`}
+              />
             </button>
           ))}
         </nav>
@@ -883,22 +1036,28 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="grid gap-10 lg:gap-14 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center">
               <div className="space-y-6 pt-0 md:pt-12">
-                <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${t.badgeBorderBg}`}>
+                <div
+                  className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${t.badgeBorderBg}`}
+                >
                   <BadgeIcon className={`h-3.5 w-3.5 ${t.icon}`} />
                   <span className={`text-[12px] font-medium ${t.text}`}>{config.badgeText}</span>
                 </div>
                 <h1 className="text-[28px] md:text-[36px] font-medium tracking-[-0.02em] leading-tight">
-                  {config.heroTitle}{" "}
-                  <span className={t.text}>{config.heroHighlight}</span>
+                  {config.heroTitle} <span className={t.text}>{config.heroHighlight}</span>
                 </h1>
-                <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl">{config.heroDesc}</p>
+                <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl">
+                  {config.heroDesc}
+                </p>
                 <div className="space-y-2">
                   <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
                     Key data to store
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {config.heroTags.map(({ tag, Icon }) => (
-                      <span key={tag} className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] font-medium ${t.badgeBorderBg} ${t.text}`}>
+                      <span
+                        key={tag}
+                        className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] font-medium ${t.badgeBorderBg} ${t.text}`}
+                      >
                         <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
                         {formatHeroTagLabel(tag)}
                       </span>
@@ -909,7 +1068,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   <Link
                     to="/install"
                     className={`inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border px-5 py-2.5 text-[14px] font-medium text-white no-underline shadow-sm transition-colors ${t.cta}`}
-                    onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma` as CtaName)}
+                    onClick={() =>
+                      sendCtaClick(`${config.analyticsPrefix}_install_neotoma` as CtaName)
+                    }
                   >
                     Install Neotoma
                   </Link>
@@ -918,7 +1079,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     className="inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
                     onClick={(e) => {
                       e.preventDefault();
-                      document.getElementById("architecture")?.scrollIntoView({ behavior: "smooth" });
+                      document
+                        .getElementById("architecture")
+                        ?.scrollIntoView({ behavior: "smooth" });
                     }}
                   >
                     See the architecture
@@ -1010,13 +1173,22 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>The problem</p>
-                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">{config.problemTitle}</h2>
-                <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">{config.problemDesc}</p>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  The problem
+                </p>
+                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                  {config.problemTitle}
+                </h2>
+                <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
+                  {config.problemDesc}
+                </p>
               </div>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {config.problemCards.map(({ Icon, title, desc }) => (
-                  <div key={title} className="rounded-lg border border-rose-500/15 bg-rose-500/[0.03] p-4 space-y-2">
+                  <div
+                    key={title}
+                    className="rounded-lg border border-rose-500/15 bg-rose-500/[0.03] p-4 space-y-2"
+                  >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-rose-500/70" />
                       <span className="text-[13px] font-medium text-foreground">{title}</span>
@@ -1030,7 +1202,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
                   {config.problemCallout}
                 </p>
-                <p className="text-[13px] leading-6 text-muted-foreground">{config.problemCalloutDesc}</p>
+                <p className="text-[13px] leading-6 text-muted-foreground">
+                  {config.problemCalloutDesc}
+                </p>
               </div>
             </div>
           </div>
@@ -1041,30 +1215,45 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-5 md:space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>Before &amp; after</p>
-                <h2 className="text-[24px] font-medium tracking-[-0.02em]">{config.outcomeTitle}</h2>
-                <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">{config.outcomeDesc}</p>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  Before &amp; after
+                </p>
+                <h2 className="text-[24px] font-medium tracking-[-0.02em]">
+                  {config.outcomeTitle}
+                </h2>
+                <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
+                  {config.outcomeDesc}
+                </p>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
-                {config.scenarios.map(({ category, human, fail, succeed, failTitle, failDesc, Icon }, idx) => {
-                  const hidden = !showAllMobileOutcomes && idx >= MOBILE_OUTCOME_PREVIEW_COUNT;
-                  return (
-                    <div key={category} className={`space-y-3${hidden ? " hidden lg:block" : ""}`}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{category}</span>
+                {config.scenarios.map(
+                  ({ category, human, fail, succeed, failTitle, failDesc, Icon }, idx) => {
+                    const hidden = !showAllMobileOutcomes && idx >= MOBILE_OUTCOME_PREVIEW_COUNT;
+                    return (
+                      <div
+                        key={category}
+                        className={`space-y-3${hidden ? " hidden lg:block" : ""}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                            {category}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                          <FailIllust human={human} fail={fail} />
+                          <SuccessIllust human={human} succeed={succeed} />
+                        </div>
+                        <div className="space-y-1 px-0.5">
+                          <p className="text-[14px] font-medium leading-5 text-foreground">
+                            {failTitle}
+                          </p>
+                          <p className="text-[13px] leading-5 text-muted-foreground">{failDesc}</p>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                        <FailIllust human={human} fail={fail} />
-                        <SuccessIllust human={human} succeed={succeed} />
-                      </div>
-                      <div className="space-y-1 px-0.5">
-                        <p className="text-[14px] font-medium leading-5 text-foreground">{failTitle}</p>
-                        <p className="text-[13px] leading-5 text-muted-foreground">{failDesc}</p>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  }
+                )}
               </div>
               {config.scenarios.length > MOBILE_OUTCOME_PREVIEW_COUNT && (
                 <button
@@ -1072,7 +1261,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   className="w-full lg:hidden rounded-lg border border-border bg-card px-3 py-2.5 text-[13px] font-medium text-foreground hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
                   onClick={() => setShowAllMobileOutcomes(!showAllMobileOutcomes)}
                 >
-                  {showAllMobileOutcomes ? "Show fewer" : `Show all ${config.scenarios.length} examples`}
+                  {showAllMobileOutcomes
+                    ? "Show fewer"
+                    : `Show all ${config.scenarios.length} examples`}
                 </button>
               )}
             </div>
@@ -1084,24 +1275,30 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>How it works</p>
-                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">{config.howTitle}</h2>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  How it works
+                </p>
+                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                  {config.howTitle}
+                </h2>
               </div>
               <div className="grid gap-6 md:grid-cols-3">
                 {config.steps.map(({ Icon, title, desc, detail }, i) => (
-                  <div key={title} className="rounded-lg border border-border bg-card p-5 space-y-4 relative">
+                  <div
+                    key={title}
+                    className="rounded-lg border border-border bg-card p-5 space-y-4 relative"
+                  >
                     <div className="flex gap-4">
-                      <div
-                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border-2 shadow-sm ${t.border40} ${t.bg10}`}
-                        aria-hidden
-                      >
-                        <Icon className={`h-6 w-6 ${t.icon}`} strokeWidth={2.25} />
-                      </div>
+                      <VerticalIconTile Icon={Icon} borderClass={t.border40} bgClass={t.bg10} iconClass={t.icon} />
                       <div className="min-w-0 flex-1 space-y-1 pt-0.5">
-                        <p className={`text-[11px] font-mono uppercase tracking-[0.08em] ${t.textMuted}`}>
+                        <p
+                          className={`text-[11px] font-mono uppercase tracking-[0.08em] ${t.textMuted}`}
+                        >
                           Step {i + 1}
                         </p>
-                        <h3 className="text-[16px] font-medium text-foreground leading-snug">{title}</h3>
+                        <h3 className="text-[16px] font-medium text-foreground leading-snug">
+                          {title}
+                        </h3>
                       </div>
                     </div>
                     <p className="text-[14px] leading-6 text-muted-foreground">{desc}</p>
@@ -1118,13 +1315,22 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>{config.capSubtitle}</p>
-                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">{config.capTitle}</h2>
-                <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">{config.capDesc}</p>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  {config.capSubtitle}
+                </p>
+                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                  {config.capTitle}
+                </h2>
+                <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
+                  {config.capDesc}
+                </p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {config.capabilities.map(({ Icon, title, desc, tags }) => (
-                  <div key={title} className="rounded-lg border border-border bg-card p-5 space-y-3">
+                  <div
+                    key={title}
+                    className="rounded-lg border border-border bg-card p-5 space-y-3"
+                  >
                     <div className="flex items-center gap-2">
                       <Icon className={`h-4 w-4 ${t.icon}`} />
                       <span className="text-[15px] font-medium text-foreground">{title}</span>
@@ -1132,7 +1338,12 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     <p className="text-[13px] leading-6 text-muted-foreground">{desc}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {tags.map((tag) => (
-                        <span key={tag} className={`rounded border px-2 py-0.5 text-[10px] font-mono ${t.borderLight} ${t.bg5} ${t.text}`}>{tag}</span>
+                        <span
+                          key={tag}
+                          className={`rounded border px-2 py-0.5 text-[10px] font-mono ${t.borderLight} ${t.bg5} ${t.text}`}
+                        >
+                          {tag}
+                        </span>
                       ))}
                     </div>
                   </div>
@@ -1147,8 +1358,12 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>Architecture</p>
-                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">{config.archHeadline}</h2>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  Architecture
+                </p>
+                <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
+                  {config.archHeadline}
+                </h2>
               </div>
               <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] lg:items-start">
                 <ArchDiagram config={config.archConfig} t={t} />
@@ -1166,11 +1381,17 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     ))}
                   </ul>
                   <div className="flex flex-wrap gap-3">
-                    <Link to="/architecture" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors">
+                    <Link
+                      to="/architecture"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    >
                       <Network className="h-4 w-4" />
                       Full architecture
                     </Link>
-                    <Link to="/mcp" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors">
+                    <Link
+                      to="/mcp"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                    >
                       <Layers className="h-4 w-4" />
                       MCP reference
                     </Link>
@@ -1186,7 +1407,9 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="space-y-8 max-w-5xl mx-auto">
               <div className="space-y-2">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>In practice</p>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  In practice
+                </p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
                   {config.caseStudy.headline ??
                     `How ${config.caseStudy.companyName} uses Neotoma as its integrity layer`}
@@ -1202,7 +1425,12 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
-                    onClick={() => sendOutboundClick(config.caseStudy.companyUrl, `${config.caseStudy.companyName} case study`)}
+                    onClick={() =>
+                      sendOutboundClick(
+                        config.caseStudy.companyUrl,
+                        `${config.caseStudy.companyName} case study`
+                      )
+                    }
                   >
                     {config.caseStudy.companyName}
                   </a>{" "}
@@ -1214,12 +1442,16 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-sky-500" />
                     <span className="text-[14px] font-medium text-foreground">
-                      {config.caseStudy.whatTheyDoHeading ?? `What ${config.caseStudy.companyName} does`}
+                      {config.caseStudy.whatTheyDoHeading ??
+                        `What ${config.caseStudy.companyName} does`}
                     </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {config.caseStudy.features.map((item) => (
-                      <li key={item} className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+                      <li
+                        key={item}
+                        className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground"
+                      >
                         <Check className="h-3.5 w-3.5 mt-0.5 shrink-0 text-sky-500" />
                         <span>{item}</span>
                       </li>
@@ -1229,11 +1461,16 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 <div className={`rounded-lg border p-5 space-y-4 ${t.borderMed} ${t.bg3}`}>
                   <div className="flex items-center gap-2">
                     <Check className={`h-4 w-4 ${t.icon}`} />
-                    <span className="text-[14px] font-medium text-foreground">What Neotoma guarantees underneath</span>
+                    <span className="text-[14px] font-medium text-foreground">
+                      What Neotoma guarantees underneath
+                    </span>
                   </div>
                   <ul className="list-none pl-0 space-y-2.5">
                     {config.caseStudy.guarantees.map((item) => (
-                      <li key={item} className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground">
+                      <li
+                        key={item}
+                        className="flex items-start gap-2 text-[13px] leading-5 text-muted-foreground"
+                      >
                         <Check className={`h-3.5 w-3.5 mt-0.5 shrink-0 ${t.icon}`} />
                         <span>{item}</span>
                       </li>
@@ -1247,8 +1484,12 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     <Building2 className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                   </div>
                   <div className="space-y-1">
-                    <p className="text-[14px] font-medium text-foreground">{config.caseStudy.generalizesTitle}</p>
-                    <p className="text-[13px] leading-6 text-muted-foreground">{config.caseStudy.generalizesDesc}</p>
+                    <p className="text-[14px] font-medium text-foreground">
+                      {config.caseStudy.generalizesTitle}
+                    </p>
+                    <p className="text-[13px] leading-6 text-muted-foreground">
+                      {config.caseStudy.generalizesDesc}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -1258,12 +1499,20 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  onClick={() => sendOutboundClick(config.caseStudy.companyUrl, `${config.caseStudy.companyName} visit`)}
+                  onClick={() =>
+                    sendOutboundClick(
+                      config.caseStudy.companyUrl,
+                      `${config.caseStudy.companyName} visit`
+                    )
+                  }
                 >
                   Visit {config.caseStudy.companyName}
                   <ArrowRight className="h-4 w-4" />
                 </a>
-                <Link to="/memory-guarantees" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors">
+                <Link
+                  to="/memory-guarantees"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                >
                   Memory guarantees
                 </Link>
               </div>
@@ -1276,22 +1525,30 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
           <div className={SLIDE_INNER}>
             <div className="max-w-3xl mx-auto text-center space-y-8">
               <div className="space-y-4">
-                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>Get started</p>
+                <p className={`text-[11px] font-mono uppercase tracking-widest ${t.text}`}>
+                  Get started
+                </p>
                 <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
-                  {config.ctaHeadline}{" "}
-                  <span className={t.text}>{config.ctaHighlight}</span>
+                  {config.ctaHeadline} <span className={t.text}>{config.ctaHighlight}</span>
                 </h2>
-                <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto">{config.ctaDesc}</p>
+                <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto">
+                  {config.ctaDesc}
+                </p>
               </div>
               <div className="flex flex-col sm:flex-row justify-center gap-3">
                 <Link
                   to="/install"
                   className={`inline-flex justify-center items-center gap-1.5 rounded-md border px-6 py-2.5 text-[14px] font-medium text-white no-underline shadow-sm transition-colors ${t.cta}`}
-                  onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma_bottom` as CtaName)}
+                  onClick={() =>
+                    sendCtaClick(`${config.analyticsPrefix}_install_neotoma_bottom` as CtaName)
+                  }
                 >
                   Install Neotoma
                 </Link>
-                <Link to="/docs" className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors">
+                <Link
+                  to="/docs"
+                  className="inline-flex justify-center items-center gap-1.5 rounded-md border border-border bg-card px-6 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                >
                   Read the docs
                 </Link>
               </div>
@@ -1304,9 +1561,24 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 ))}
               </div>
               <div className="flex flex-wrap justify-center gap-3 pt-2">
-                <Link to="/" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors">Neotoma home</Link>
-                <Link to="/architecture" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors">Architecture</Link>
-                <Link to="/memory-guarantees" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors">Memory guarantees</Link>
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                >
+                  Neotoma home
+                </Link>
+                <Link
+                  to="/architecture"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                >
+                  Architecture
+                </Link>
+                <Link
+                  to="/memory-guarantees"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[13px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+                >
+                  Memory guarantees
+                </Link>
               </div>
             </div>
           </div>
