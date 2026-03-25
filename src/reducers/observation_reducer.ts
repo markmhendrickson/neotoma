@@ -116,10 +116,17 @@ export class ObservationReducer {
     const snapshot: Record<string, unknown> = {};
     const provenance: Record<string, string> = {};
 
-    // Get all unique fields from observations
+    // Get unique fields from observations, projected through the active schema.
+    // Only fields defined in the schema appear in the snapshot; observation data
+    // for removed fields is preserved but not surfaced until re-added.
+    const schemaFields = new Set(Object.keys(schemaDef.fields));
     const allFields = new Set<string>();
     for (const obs of sortedObservations) {
-      Object.keys(obs.fields).forEach((field) => allFields.add(field));
+      for (const field of Object.keys(obs.fields)) {
+        if (schemaFields.has(field)) {
+          allFields.add(field);
+        }
+      }
     }
 
     // Apply merge strategy for each field

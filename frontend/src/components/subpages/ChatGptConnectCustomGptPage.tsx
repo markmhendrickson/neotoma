@@ -160,7 +160,7 @@ export function ChatGptConnectCustomGptPage() {
         </p>
         <ol className="list-decimal pl-5 space-y-4 mb-2">
           <li className="text-[15px] leading-7">
-            <strong>Install a tunnel provider</strong> &mdash; Neotoma&apos;s <code>--tunnel</code>{" "}
+            <strong>Install a tunnel provider:</strong> Neotoma&apos;s <code>--tunnel</code>{" "}
             flag needs either{" "}
             <a
               href="https://ngrok.com/download"
@@ -181,7 +181,7 @@ export function ChatGptConnectCustomGptPage() {
             </a>{" "}
             installed on your machine. Install one:
             <CopyableCodeBlock
-              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# — or Cloudflare Tunnel —\nbrew install cloudflared`}
+              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# or Cloudflare Tunnel\nbrew install cloudflared`}
               className="mt-2 mb-1"
             />
             <p className="text-[14px] leading-6 text-muted-foreground mt-1">
@@ -260,7 +260,7 @@ export function ChatGptConnectCustomGptPage() {
             </div>
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Create or edit a custom GPT</strong> &mdash; go to{" "}
+            <strong>Create or edit a custom GPT:</strong> go to{" "}
             <a
               href="https://chatgpt.com/gpts/editor"
               target="_blank"
@@ -272,7 +272,7 @@ export function ChatGptConnectCustomGptPage() {
             and open the <strong>Configure</strong> tab.
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Add a new action</strong> &mdash; under Actions, click &ldquo;Create new
+            <strong>Add a new action:</strong> under Actions, click &ldquo;Create new
             action&rdquo;, then click <strong>Import from URL</strong>. Enter your Neotoma
             API&apos;s actions spec URL (reduced spec that stays within GPT Actions operation
             limits):
@@ -293,7 +293,7 @@ export function ChatGptConnectCustomGptPage() {
             field (optional but recommended so the assistant identifies as Neotoma).
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Configure authentication</strong> &mdash; set auth type to{" "}
+            <strong>Configure authentication:</strong> set auth type to{" "}
             <strong>API Key</strong> (Bearer) in the GPT Actions UI and pass{" "}
             <code>Authorization: Bearer &lt;token&gt;</code>. Neotoma&apos;s OpenAPI spec includes{" "}
             <code>bearerAuth</code>. No OAuth client ID or secret needed.             Your API base (from the
@@ -309,7 +309,7 @@ export function ChatGptConnectCustomGptPage() {
             <OAuthDetails apiBase={apiBase} />
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Save and publish</strong> &mdash; the custom GPT now has full read/write access
+            <strong>Save and publish:</strong> the custom GPT now has full read/write access
             to your Neotoma memory graph via the API&apos;s REST endpoints.
           </li>
         </ol>

@@ -32,7 +32,7 @@ export function NeotomaWithCodexPage() {
             <a href="https://developers.openai.com/codex/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
               MCP server support
             </a>{" "}
-            via <code>.codex/config.toml</code> — stdio and HTTP transports with OAuth
+            via <code>.codex/config.toml</code> (stdio and HTTP transports with OAuth)
           </span>
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -53,7 +53,7 @@ export function NeotomaWithCodexPage() {
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
-            Memory that persists across task executions — each sandbox starts fresh
+            Memory that persists across task executions; each sandbox starts fresh
           </span>
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -65,7 +65,7 @@ export function NeotomaWithCodexPage() {
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
-            Cross-tool access — sandbox state is isolated per task
+            Cross-tool access; sandbox state is isolated per task
           </span>
         </li>
         </ul>
@@ -75,7 +75,7 @@ export function NeotomaWithCodexPage() {
         <ul className="list-none pl-0 space-y-1.5 mb-2">
         {[
           "Persistent memory graph accessible across all Codex tasks",
-          "Deterministic state — same observations always produce the same entity snapshots",
+          "Deterministic state: same observations always produce the same entity snapshots",
           "Provenance trail for every stored fact",
           "CLI fallback for direct terminal access when MCP is not configured",
         ].map((item) => (
@@ -153,21 +153,21 @@ export function NeotomaWithCodexPage() {
           <a href="https://developers.openai.com/codex/mcp" target="_blank" rel="noopener noreferrer" className={extLink}>
             MCP in Codex
           </a>
-          <span className="text-muted-foreground">— connecting tools via config.toml</span>
+          <span className="text-muted-foreground"> (connecting tools via config.toml)</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://developers.openai.com/codex/config-basic/" target="_blank" rel="noopener noreferrer" className={extLink}>
             Config basics
           </a>
-          <span className="text-muted-foreground">— configuration fundamentals</span>
+          <span className="text-muted-foreground"> (configuration fundamentals)</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://developers.openai.com/codex/cli/reference/" target="_blank" rel="noopener noreferrer" className={extLink}>
             CLI reference
           </a>
-          <span className="text-muted-foreground">— command line options</span>
+          <span className="text-muted-foreground"> (command line options)</span>
         </li>
         </ul>
       </IntegrationSection>

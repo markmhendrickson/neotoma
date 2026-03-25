@@ -47,19 +47,19 @@ export function TerminologyPage() {
           <Link to="/architecture" className="text-foreground underline underline-offset-2 hover:no-underline">
             Architecture
           </Link>{" "}
-          — deterministic state pipeline and guarantees
+          · deterministic state pipeline and guarantees
         </li>
         <li className="text-[15px] leading-7">
           <Link to="/mcp" className="text-foreground underline underline-offset-2 hover:no-underline">
             MCP reference
           </Link>{" "}
-          — actions that operate on entities, observations, and relationships
+          · actions that operate on entities, observations, and relationships
         </li>
         <li className="text-[15px] leading-7">
           <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
             CLI reference
           </Link>{" "}
-          — command-level access to snapshots, observations, and graph operations
+          · command-level access to snapshots, observations, and graph operations
         </li>
       </ul>
     </DetailPage>

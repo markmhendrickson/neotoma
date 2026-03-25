@@ -25,7 +25,7 @@ export function ChangelogPage() {
           >
             GitHub releases
           </a>{" "}
-          — canonical tagged release history
+          · canonical tagged release history
         </li>
         <li className="text-[15px] leading-7">
           <a
@@ -36,7 +36,7 @@ export function ChangelogPage() {
           >
             In-repo release docs
           </a>{" "}
-          — implementation notes and status docs
+          · implementation notes and status docs
         </li>
       </ul>
 

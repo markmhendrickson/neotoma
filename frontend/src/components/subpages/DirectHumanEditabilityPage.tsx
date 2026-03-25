@@ -5,8 +5,8 @@ export function DirectHumanEditabilityPage() {
   return (
     <DetailPage title="Direct human editability">
       <p className="text-[15px] leading-7 mb-4">
-        Direct human editability means a person can open the memory store in a standard editor — VS Code,
-        Notepad, vim — and modify it directly. File-based memory systems use plain text formats like Markdown
+        Direct human editability means a person can open the memory store in a standard editor (VS Code,
+        Notepad, vim) and modify it directly. File-based memory systems use plain text formats like Markdown
         or JSON that any tool can read and write without a runtime or API layer.
       </p>
       <h2 className="text-[18px] font-medium tracking-[-0.01em] mt-8 mb-3">Trade-offs</h2>

@@ -25,7 +25,7 @@ export function ClaudeConnectDesktopPage() {
         </p>
         <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
-          Claude Desktop uses local stdio &mdash; Neotoma runs on the same machine. No API server
+          Claude Desktop uses local stdio. Neotoma runs on the same machine. No API server
           or remote access is required. The agent writes to{" "}
           <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> and you
           restart Claude Desktop to pick up the new MCP server.

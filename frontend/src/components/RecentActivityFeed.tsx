@@ -1,6 +1,6 @@
 /**
  * Recent Activity Feed Component
- * 
+ *
  * Displays last 10 timeline events on the home page
  */
 

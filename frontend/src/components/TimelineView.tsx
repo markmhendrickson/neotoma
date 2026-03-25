@@ -1,6 +1,6 @@
 /**
  * Timeline View Component (FU-303)
- * 
+ *
  * Chronological display of timeline events with filtering
  */
 
@@ -86,10 +86,10 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
         if (error) {
           throw new Error("Failed to fetch timeline events");
         }
-        
+
         setFetchedEvents(data.events || []);
         setTotalCount(data.total || 0);
-        
+
         // Extract unique event types
         const types = Array.from(
           new Set((data.events || []).map((e: TimelineEvent) => e.event_type))
@@ -103,7 +103,17 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
     }
 
     fetchTimeline();
-  }, [startDate, endDate, selectedEventType, offset, bearerToken, user?.id, keysLoading, sessionToken, settings.bearerToken]);
+  }, [
+    startDate,
+    endDate,
+    selectedEventType,
+    offset,
+    bearerToken,
+    user?.id,
+    keysLoading,
+    sessionToken,
+    settings.bearerToken,
+  ]);
 
   // Add real-time subscription
   const events = useRealtimeTimeline(fetchedEvents, {
@@ -300,19 +310,13 @@ export function TimelineView({ onNavigateToSource, onNavigateToEntity }: Timelin
 
       {/* Pagination */}
       <div className="flex justify-between items-center pt-2 border-t">
-        <Button
-          onClick={() => setOffset(Math.max(0, offset - limit))}
-          disabled={offset === 0}
-        >
+        <Button onClick={() => setOffset(Math.max(0, offset - limit))} disabled={offset === 0}>
           Previous
         </Button>
         <span className="text-sm text-muted-foreground">
           Showing {offset + 1}-{Math.min(offset + limit, totalCount)} of {totalCount}
         </span>
-        <Button
-          onClick={() => setOffset(offset + limit)}
-          disabled={offset + limit >= totalCount}
-        >
+        <Button onClick={() => setOffset(offset + limit)} disabled={offset + limit >= totalCount}>
           Next
         </Button>
       </div>

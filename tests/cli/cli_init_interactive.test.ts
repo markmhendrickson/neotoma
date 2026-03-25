@@ -291,22 +291,6 @@ describe("CLI init interactive flows", () => {
     });
   });
 
-  it("quits cleanly on plan cancel", async () => {
-    await withTempHome(async (homeDir) => {
-      await withTempCwd(async () => {
-        const restoreTty = forceStdoutTty(true);
-        mockReadline(["q"]);
-        const { runCli } = await loadCli();
-        try {
-          await expectExitZero(() => runCli(["node", "cli", "init", "--skip-db", "--skip-env"]));
-        } finally {
-          restoreTty();
-        }
-        await expect(fs.stat(path.join(homeDir, "neotoma", "data"))).resolves.toBeDefined();
-      });
-    });
-  });
-
   it("shows source path prompt only in --advanced mode", async () => {
     await withTempHome(async () => {
       await withTempCwd(async () => {

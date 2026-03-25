@@ -12,7 +12,7 @@ export function FoundationsPage() {
       <p className="text-[15px] leading-7 mb-4">
         Neotoma is built on three architectural commitments: your data stays on your machine, the
         same input always produces the same output, and your memory works across every AI tool you
-        connect. These are not feature flags — they are structural properties of the system.
+        connect. These are not feature flags; they are structural properties of the system.
       </p>
 
       <nav className="rounded-lg border toc-panel p-4 mb-8">
@@ -43,19 +43,19 @@ export function FoundationsPage() {
           <span>{foundations.privacyFirst}</span>
         </h2>
         <p className="text-[15px] leading-7 mb-4">
-          Your data stays on your machine. Neotoma runs locally — no cloud sync, no remote telemetry,
+          Your data stays on your machine. Neotoma runs locally: no cloud sync, no remote telemetry,
           no training on your data. The server is a process on your hardware, the database is a file
           on your disk, and the MCP interface exposes only what you choose to connect.
         </p>
         <p className="text-[15px] leading-7 mb-4">
-          Storage is user-controlled at every level. You decide what goes in — nothing is stored
+          Storage is user-controlled at every level. You decide what goes in; nothing is stored
           implicitly. Observations are append-only and encrypted at rest when configured. Every entity
           traces to a source and timestamp, so you can audit exactly what the system knows and where
           it came from.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           Full export and deletion are first-class operations. You can export your entire memory graph
-          at any time, and deletion removes data — it does not mark it inactive or hide it behind a
+          at any time, and deletion removes data. It does not mark it inactive or hide it behind a
           flag. There is no retention period and no "soft delete" that preserves data server-side.
         </p>
         <p className="text-[15px] leading-7 mb-4">
@@ -95,7 +95,7 @@ export function FoundationsPage() {
         </p>
         <p className="text-[15px] leading-7 mb-4">
           Schema-first extraction enforces structure at the boundary. Extraction rules derive from
-          schema types, not heuristics. Fields are extracted from what is present in the source —
+          schema types, not heuristics. Fields are extracted from what is present in the source;
           nothing is inferred, predicted, or synthesized. Corrections add new observations rather
           than editing existing ones.
         </p>
@@ -126,7 +126,7 @@ export function FoundationsPage() {
         <p className="text-[15px] leading-7 mb-4">
           Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex,
           Claude Code, and OpenClaw all access the same state graph through Model Context Protocol
-          (MCP). Facts stored by one agent are immediately available to every other connected agent —
+          (MCP). Facts stored by one agent are immediately available to every other connected agent:
           no sync step, no export/import, no duplicate data.
         </p>
         <p className="text-[15px] leading-7 mb-4">
@@ -136,15 +136,15 @@ export function FoundationsPage() {
           truth regardless of the interface.
         </p>
         <p className="text-[15px] leading-7 mb-4">
-          Neotoma works alongside native memory features — ChatGPT's memory, Claude's project
-          knowledge, Cursor's context. It does not replace them or require disabling them. When you
+          Neotoma works alongside native memory features (ChatGPT's memory, Claude's project
+          knowledge, Cursor's context). It does not replace them or require disabling them. When you
           stop using Neotoma, there is nothing to uninstall from the AI tool itself; you simply
           disconnect the MCP server.
         </p>
         <p className="text-[15px] leading-7 mb-4">
           No platform lock-in. Your memory graph is a local SQLite database. You own the file, you
           control what connects to it, and you can export or migrate at any time. Switching AI tools
-          does not mean starting over — the same structured memory is available to the next tool you
+          does not mean starting over. The same structured memory is available to the next tool you
           connect.
         </p>
         <p className="text-[15px] leading-7">

@@ -42,6 +42,8 @@ import { FoundationsPage } from "@/components/subpages/FoundationsPage";
 import { SchemaManagementPage } from "@/components/subpages/SchemaManagementPage";
 import { TroubleshootingPage } from "@/components/subpages/TroubleshootingPage";
 import { ChangelogPage } from "@/components/subpages/ChangelogPage";
+import { CrmLandingPage } from "@/components/subpages/CrmLandingPage";
+import { ComplianceLandingPage } from "@/components/subpages/ComplianceLandingPage";
 import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { sendPageView } from "@/utils/analytics";
 import { DEFAULT_LOCALE, isSupportedLocale } from "@/i18n/config";
@@ -107,6 +109,8 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/file-based-memory", element: <Navigate to="/memory-models#file-based-memory" replace /> },
   { path: "/deterministic-memory", element: <Navigate to="/memory-models#deterministic-memory" replace /> },
   { path: "/memory-vendors", element: <Navigate to="/memory-models#memory-model-comparison" replace /> },
+  { path: "/crm", element: <CrmLandingPage /> },
+  { path: "/compliance", element: <ComplianceLandingPage /> },
   { path: "/foundations", element: <FoundationsPage /> },
   { path: "/privacy-first", element: <Navigate to="/foundations#privacy-first" replace /> },
   { path: "/cross-platform", element: <Navigate to="/foundations#cross-platform" replace /> },

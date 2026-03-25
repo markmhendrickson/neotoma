@@ -82,9 +82,9 @@ describe("fixture replay snapshots", () => {
         specificity_score: 1.0,
         source_priority: 100,
         fields: {
-          amount: 42.5,
-          currency: "USD",
-          merchant: "Example Market",
+          amount_original: 42.5,
+          bank_provider: "Example Market",
+          posting_date: "2024-01-03T00:00:00.000Z",
         },
         created_at: "2024-01-03T00:00:00Z",
         user_id: "usr_test",
@@ -99,7 +99,7 @@ describe("fixture replay snapshots", () => {
         specificity_score: 1.0,
         source_priority: 100,
         fields: {
-          status: "posted",
+          category: "posted",
         },
         created_at: "2024-01-01T00:00:00Z",
         user_id: "usr_test",

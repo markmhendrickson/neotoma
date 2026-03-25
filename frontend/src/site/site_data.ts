@@ -952,7 +952,7 @@ export const LEARN_MORE_POSTS: LearnMoreCardItem[] = [
 /** A failure mode with a label and Lucide icon name for the component to render. */
 export interface FailureModeItem {
   label: string;
-  /** Lucide icon name (e.g. "BookmarkX", "Unlink") — should symbolize this failure. */
+  /** Lucide icon name (e.g. "BookmarkX", "Unlink"); should symbolize this failure. */
   icon: string;
 }
 
@@ -976,11 +976,11 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "AI infrastructure engineers",
     tagline: "Two runs. Same inputs. Different state.",
     painPoints: [
-      "Cannot reproduce agent runs — same inputs yield different state",
+      "Cannot reproduce agent runs: same inputs yield different state",
       "State mutations invisible to debugging and observability tooling",
       "Debugging production failures requires manual log archaeology",
       "No provenance trail for state changes across pipeline steps",
-      "No portable state layer — agent memory locked to one vendor's runtime",
+      "No portable state layer; agent memory locked to one vendor's runtime",
       "Agent state routed through third-party services with no data residency or compliance guarantees",
     ],
     failureModes: [
@@ -989,7 +989,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       { label: "No provenance linking outputs to source data", icon: "LinkOff" },
       { label: "Ordering-sensitive state drift across orchestration steps", icon: "GitBranch" },
       { label: "No proof of data residency or access control for compliance", icon: "ShieldAlert" },
-      { label: "State layer locked to one vendor — no portability across runtimes", icon: "Lock" },
+      { label: "State layer locked to one vendor; no portability across runtimes", icon: "Lock" },
     ],
     dataTypes: [
       "session state",
@@ -1012,7 +1012,7 @@ export const ICP_PROFILES: IcpProfile[] = [
       "tool_config",
     ],
     solutionSummary:
-      "Neotoma replaces the glue you've been hand-rolling — checkpoint logic, state serialization, custom diffing — with deterministic primitives. Append-only observations, versioned history, and replayable timelines become infrastructure you build on, not plumbing you maintain.",
+      "Neotoma replaces the glue you've been hand-rolling (checkpoint logic, state serialization, custom diffing) with deterministic primitives. Append-only observations, versioned history, and replayable timelines become infrastructure you build on, not plumbing you maintain.",
   },
   {
     slug: "agentic-systems-builders",
@@ -1020,22 +1020,22 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "Agent system builders",
     tagline: "Your agent resolves entities by inference. Every session, it guesses again.",
     painPoints: [
-      "No shared state for agents — token-based or conversation-only; no cross-session, cross-agent state",
-      "No provenance — cannot trace agent decisions or outputs to source data",
-      "No deterministic layer — need reproducible, explainable state for eval, debug, and compliance",
+      "No shared state for agents: token-based or conversation-only; no cross-session, cross-agent state",
+      "No provenance: cannot trace agent decisions or outputs to source data",
+      "No deterministic layer: need reproducible, explainable state for eval, debug, and compliance",
       "Fragmented context across orchestration steps and multi-agent workflows",
       "Sensitive client data flows through external memory services with no storage or access audit",
     ],
     failureModes: [
       { label: "Silent state mutation between agent sessions", icon: "ZapOff" },
-      { label: "Non-replayable pipelines — can't reconstruct agent reasoning", icon: "RotateCcw" },
+      { label: "Non-replayable pipelines; can't reconstruct agent reasoning", icon: "RotateCcw" },
       { label: "Context loss across orchestration steps and agent handoffs", icon: "Hand" },
       {
-        label: "Evaluation gaps — no audit trail linking outputs to source facts",
+        label: "Evaluation gaps; no audit trail linking outputs to source facts",
         icon: "FileText",
       },
       { label: "Client data in third-party memory with no access audit", icon: "ShieldAlert" },
-      { label: "Framework-specific memory — no portability across agent tools", icon: "Lock" },
+      { label: "Framework-specific memory; no portability across agent tools", icon: "Lock" },
     ],
     dataTypes: [
       "session state",
@@ -1066,17 +1066,17 @@ export const ICP_PROFILES: IcpProfile[] = [
     shortName: "AI-native operators",
     tagline: "The agent infers. It doesn't guarantee. Here's what that costs you.",
     painPoints: [
-      "No persistent state across sessions — every AI conversation starts from zero",
+      "No persistent state across sessions; every AI conversation starts from zero",
       "Fragmented document sources scattered across email, drives, and screenshots",
       "Repetitive context-setting in every new AI interaction",
       "Lost commitments and forgotten action items between sessions",
-      "Personal data — receipts, contacts, preferences — stored in provider memory with no control over retention or training use",
+      "Personal data (receipts, contacts, preferences) stored in provider memory with no control over retention or training use",
     ],
     failureModes: [
       { label: "Lost commitments across tools", icon: "BookmarkX" },
       { label: "Tool-to-tool context loss", icon: "Unlink" },
       { label: "Silent state drift over time", icon: "Activity" },
-      { label: "Weak correction loop — no way to fix what the agent got wrong", icon: "RefreshCw" },
+      { label: "Weak correction loop; no way to fix what the agent got wrong", icon: "RefreshCw" },
       {
         label: "Personal data in opaque provider memory with no deletion control",
         icon: "ShieldAlert",
@@ -1096,7 +1096,7 @@ export const ICP_PROFILES: IcpProfile[] = [
     ],
     schemaHotSpots: ["conversation", "message", "agent_message", "note", "task"],
     solutionSummary:
-      "Neotoma removes the tax you pay re-explaining your world to every tool. Every conversation, entity, and commitment persists as versioned state. Switch between Claude, Cursor, and Codex without losing context. Correct once — the correction sticks.",
+      "Neotoma removes the tax you pay re-explaining your world to every tool. Every conversation, entity, and commitment persists as versioned state. Switch between Claude, Cursor, and Codex without losing context. Correct once and the correction sticks.",
   },
 ];
 

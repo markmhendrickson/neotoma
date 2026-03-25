@@ -135,14 +135,19 @@ This example demonstrates how an entity snapshot is reconciled when a breaking s
    ];
    ```
 
-3. **Extract All Unique Fields from Observations** (not from schema):
+3. **Extract Fields Projected Through Active Schema**:
    ```typescript
+   const schemaFields = new Set(Object.keys(schemaDef.fields));
    const allFields = new Set<string>();
    for (const obs of observations) {
-     Object.keys(obs.fields).forEach((field) => allFields.add(field));
+     for (const field of Object.keys(obs.fields)) {
+       if (schemaFields.has(field)) {
+         allFields.add(field);
+       }
+     }
    }
-   // Result: ["invoice_number", "vendor_name", "amount_due", "old_field"]
-   // Note: old_field is included because it exists in obs_001
+   // Result: ["invoice_number", "vendor_name", "amount_due"]
+   // Note: old_field is EXCLUDED because it is not in schema 2.0.0
    ```
 
 4. **Apply Merge Strategy for Each Field**:
@@ -162,10 +167,7 @@ This example demonstrates how an entity snapshot is reconciled when a breaking s
    - Merge policy: `last_write`
    - Result: `1200.00` from obs_002 (most recent)
 
-   **Field: `old_field`** (removed from schema but exists in old observation)
-   - Observations with field: [obs_001] (obs_002 doesn't have it)
-   - Merge policy: `last_write` (default, since not in schema 2.0.0)
-   - Result: `"deprecated_value"` from obs_001
+   **Field: `old_field`** — excluded by schema-projection filtering (not in schema 2.0.0)
 
 5. **Create Snapshot**:
 
@@ -178,14 +180,13 @@ This example demonstrates how an entity snapshot is reconciled when a breaking s
   "snapshot": {
     "invoice_number": "INV-001",
     "vendor_name": "Acme Corporation",
-    "amount_due": 1200.00,
-    "old_field": "deprecated_value"  // ← Still included! (exists in old observation)
+    "amount_due": 1200.00
+    // old_field excluded — not in active schema (schema-projection filtering)
   },
   "provenance": {
     "invoice_number": "obs_002",
     "vendor_name": "obs_002",
-    "amount_due": "obs_002",
-    "old_field": "obs_001"  // ← From old observation
+    "amount_due": "obs_002"
   },
   "observation_count": 2,
   "last_observation_at": "2025-01-20T14:00:00Z"
@@ -201,53 +202,25 @@ This example demonstrates how an entity snapshot is reconciled when a breaking s
 - `obs_002` uses `schema_version: "2.0.0"`
 - Both coexist in the database
 
-### 2. Snapshot Uses Active Schema
+### 2. Snapshot Uses Active Schema (Schema-Projection Filtering)
 - Snapshot's `schema_version` is `"2.0.0"` (the active schema)
-- But snapshot can include fields from old observations
+- The reducer uses **schema-projection filtering**: only fields defined in the active schema appear in snapshots
+- Fields removed from the schema are excluded from snapshots, even if they exist in old observations
 
 ### 3. Field Inclusion Logic
-- **Reducer collects fields from observations**, not from schema
-- If a field exists in any observation, it can appear in the snapshot
-- Removed fields from schema don't prevent them from appearing in snapshots
+- **Reducer projects observation fields through the active schema's field list**
+- Only fields that are both (a) present in at least one observation AND (b) defined in the active schema appear in the snapshot
+- Removed fields' data is preserved in observations but not surfaced in snapshots
 
-### 4. Merge Policy Fallback
-- If a field is removed from schema, it has no merge policy
-- Reducer uses default `"last_write"` strategy (line 93 in `observation_reducer.ts`)
+### 4. Zero Data Loss and Reversibility
+- Observation data for removed fields is never deleted
+- Re-adding a previously removed field to the schema restores it in snapshots — old observation data resurfaces through the reducer
+- Schema version history provides a full audit trail of field additions and removals
 
 ### 5. Backward Compatibility
 - Old observations remain readable
 - New schema must handle missing fields gracefully (optional fields)
-- Removed fields from old observations still appear in snapshots
-
----
-
-## Alternative: Field Completely Disappears
-
-If you want `old_field` to disappear from snapshots, you have two options:
-
-### Option 1: Filter in Application Layer
-```typescript
-// When reading snapshots, filter out deprecated fields
-const snapshot = await getEntitySnapshot(entityId);
-const filteredSnapshot = Object.fromEntries(
-  Object.entries(snapshot.snapshot).filter(
-    ([key]) => !DEPRECATED_FIELDS.includes(key)
-  )
-);
-```
-
-### Option 2: Create New Observation with Explicit Null
-```json
-{
-  "id": "obs_003",
-  "schema_version": "2.0.0",
-  "fields": {
-    "old_field": null  // Explicitly null to override old value
-  }
-}
-```
-
-However, this violates immutability principles - you shouldn't modify old observations.
+- The `computeSnapshotWithDefaults` path (no schema) still collects all observation fields
 
 ---
 
@@ -501,10 +474,10 @@ This example demonstrates how an entity snapshot is reconciled when a field's ty
 
 **Breaking changes work because:**
 1. Observations are immutable (keep their original `schema_version`)
-2. Reducer collects fields from observations, not schema
-3. Old fields can still appear in snapshots if they exist in old observations
-4. New schema must be backward-compatible (handle missing fields)
-5. Removed fields use default merge policy (`last_write`)
+2. Reducer uses **schema-projection filtering**: only fields defined in the active schema appear in snapshots
+3. Removed fields are excluded from snapshots but their observation data is preserved
+4. Re-adding a removed field restores it in snapshots — observation data resurfaces
+5. New schema must be backward-compatible (handle missing fields)
 6. **Type changes**: 
    - Reducer applies converters during snapshot computation to ensure type consistency
    - If old observation wins merge strategy, its value is converted to match active schema type
@@ -512,4 +485,4 @@ This example demonstrates how an entity snapshot is reconciled when a field's ty
    - **Snapshot always conforms to active schema type** - type mismatches are resolved
 7. **Required status changes**: Old observations without required fields are still valid
 
-**The snapshot reflects the "current truth" using the active schema, but includes all data from all observations regardless of their schema version.**
+**The snapshot reflects the "current truth" using the active schema as a projection filter over all observation data. Fields not in the active schema are preserved in observations but excluded from the snapshot.**

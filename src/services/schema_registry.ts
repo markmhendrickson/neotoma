@@ -355,6 +355,7 @@ export class SchemaRegistryService {
         | "most_specific"
         | "merge_array";
     }>;
+    fields_to_remove?: string[];
     converters_to_add?: Array<{
       field_name: string;
       converter: {
@@ -387,6 +388,7 @@ export class SchemaRegistryService {
     // 2. Determine change type and increment version
     const changeType = this.determineChangeType({
       fields_to_add: options.fields_to_add,
+      fields_to_remove: options.fields_to_remove,
       converters_to_add: options.converters_to_add,
     });
     const newVersion =
@@ -414,6 +416,25 @@ export class SchemaRegistryService {
       };
     }
 
+    // Remove fields (schema-projection: data preserved in observations, just
+    // excluded from future snapshots via reducer projection filtering)
+    for (const fieldName of options.fields_to_remove || []) {
+      if (!mergedFields[fieldName]) {
+        logSchemaRegistryInfo(
+          `[SCHEMA_REGISTRY] Field ${fieldName} not found in schema, skipping removal`,
+        );
+        continue;
+      }
+      delete mergedFields[fieldName];
+    }
+
+    // Validate that at least one field remains after removal
+    if (Object.keys(mergedFields).length === 0) {
+      throw new Error(
+        `Cannot remove all fields from schema for entity type: ${options.entity_type}. At least one field must remain.`,
+      );
+    }
+
     // 4. Merge reducer configs
     const mergedReducerPolicies = {
       ...currentSchema.reducer_config.merge_policies,
@@ -427,6 +448,11 @@ export class SchemaRegistryService {
           tie_breaker: "observed_at",
         };
       }
+    }
+
+    // Remove reducer policies for removed fields
+    for (const fieldName of options.fields_to_remove || []) {
+      delete mergedReducerPolicies[fieldName];
     }
 
     // Handle default user ID: convert to undefined for optional parameter

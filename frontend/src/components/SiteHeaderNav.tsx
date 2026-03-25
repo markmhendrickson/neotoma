@@ -582,23 +582,25 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         >
           Neotoma
         </a>
-        <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
-          <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
-          <a
-            href="https://markmhendrickson.com/posts/neotoma-developer-release"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
-            onClick={() =>
-              sendOutboundClick(
-                "https://markmhendrickson.com/posts/neotoma-developer-release",
-                dict.developerPreview
-              )
-            }
-          >
-            {dict.developerPreview}
-          </a>
-        </span>
+        {stripLocaleFromPath(pathname) !== "/crm" && stripLocaleFromPath(pathname) !== "/compliance" && (
+          <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
+            <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
+            <a
+              href="https://markmhendrickson.com/posts/neotoma-developer-release"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="min-w-0 truncate text-sidebar-foreground/80 no-underline hover:text-sidebar-accent-foreground transition-colors"
+              onClick={() =>
+                sendOutboundClick(
+                  "https://markmhendrickson.com/posts/neotoma-developer-release",
+                  dict.developerPreview
+                )
+              }
+            >
+              {dict.developerPreview}
+            </a>
+          </span>
+        )}
       </div>
 
       {/* Mobile: Install + Architecture in header */}

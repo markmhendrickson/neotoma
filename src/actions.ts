@@ -4193,7 +4193,7 @@ app.post("/get_schema_recommendations", async (req, res) => {
   }
 });
 
-// POST /update_schema_incremental - Incrementally update schema with new fields
+// POST /update_schema_incremental - Incrementally update schema by adding or removing fields
 app.post("/update_schema_incremental", async (req, res) => {
   const parsed = UpdateSchemaIncrementalRequestSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -4208,6 +4208,7 @@ app.post("/update_schema_incremental", async (req, res) => {
     const {
       entity_type,
       fields_to_add,
+      fields_to_remove,
       schema_version,
       user_specific = false,
       activate = true,
@@ -4237,7 +4238,7 @@ app.post("/update_schema_incremental", async (req, res) => {
     const baseSchema = currentSchema?.schema_definition || { fields: {} };
     const newFields: Record<string, any> = {};
 
-    fields_to_add.forEach((field: any) => {
+    (fields_to_add || []).forEach((field: any) => {
       newFields[field.field_name] = {
         type: field.field_type,
         required: field.required || false,
@@ -4245,17 +4246,37 @@ app.post("/update_schema_incremental", async (req, res) => {
       };
     });
 
+    const mergedFields = { ...baseSchema.fields, ...newFields };
+
+    // Remove fields (data preserved in observations, excluded from snapshots via reducer projection)
+    const removedFields: string[] = [];
+    for (const fieldName of fields_to_remove || []) {
+      if (mergedFields[fieldName]) {
+        delete mergedFields[fieldName];
+        removedFields.push(fieldName);
+      }
+    }
+
     const updatedSchema = {
       ...baseSchema,
-      fields: { ...baseSchema.fields, ...newFields },
+      fields: mergedFields,
     };
+
+    // Determine version bump: major for removals, minor for additions only
+    const hasRemovals = removedFields.length > 0;
+    const defaultVersion = hasRemovals
+      ? (() => {
+          const parts = (currentSchema?.schema_version || "1.0.0").split(".");
+          return `${parseInt(parts[0] || "1") + 1}.0.0`;
+        })()
+      : `${parseInt(currentSchema?.schema_version || "1") + 1}`;
 
     // Insert new schema version
     const { data: newSchemaVersion, error: insertError } = await db
       .from("schema_registry")
       .insert({
         entity_type,
-        schema_version: schema_version || `${parseInt(currentSchema?.schema_version || "1") + 1}`,
+        schema_version: schema_version || defaultVersion,
         schema_definition: updatedSchema,
         reducer_config: currentSchema?.reducer_config || {},
         user_id: user_specific ? userId : null,
@@ -4277,12 +4298,14 @@ app.post("/update_schema_incremental", async (req, res) => {
 
     logDebug("Success:update_schema_incremental", req, {
       entity_type,
-      fields_added: fields_to_add.length,
+      fields_added: (fields_to_add || []).length,
+      fields_removed: removedFields.length,
     });
     return res.json({
       success: true,
       schema: newSchemaVersion,
       schema_version: newSchemaVersion.schema_version,
+      fields_removed: removedFields,
     });
   } catch (error) {
     return handleApiError(
@@ -4793,9 +4816,7 @@ app.post("/health_check_snapshots", async (req, res) => {
 // Conversational interactions should be externalized to MCP-compatible agents per architecture
 
 function isLocalHostname(hostname: string): boolean {
-  return (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
-  );
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
 /** True if url is a non-local base URL (safe to use as public server in OpenAPI). */
@@ -4858,9 +4879,9 @@ function filterServersToRequestHost(
 }
 
 /** If the spec still has a local server URL but we have a non-local apiBase (e.g. tunnel), use apiBase so import-from-URL gets the public root. */
-function ensureNonLocalServerWhenConfigured(
-  spec: { servers?: Array<{ url: string; description?: string }> }
-): void {
+function ensureNonLocalServerWhenConfigured(spec: {
+  servers?: Array<{ url: string; description?: string }>;
+}): void {
   if (!spec.servers?.length) return;
   const baseUrl = (config.apiBase || "").replace(/\/$/, "");
   if (!isNonLocalBaseUrl(baseUrl)) return;

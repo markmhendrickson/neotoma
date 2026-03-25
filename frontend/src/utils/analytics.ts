@@ -54,7 +54,11 @@ export type CtaName =
   | "view_guarantees"
   | "view_architecture"
   | "view_docs"
-  | "view_repo";
+  | "view_repo"
+  | "crm_install_neotoma"
+  | "crm_install_neotoma_bottom"
+  | "compliance_install_neotoma"
+  | "compliance_install_neotoma_bottom";
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {

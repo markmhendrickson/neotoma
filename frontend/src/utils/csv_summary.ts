@@ -129,7 +129,7 @@ export function summarizeCsvRowRecord(params: RowSummaryParams): string {
 
   const prefix = label ? '' : `${humanizeType(type)} ${rowIndex + 1}`;
   const assembled = prefix ? [prefix, ...parts] : parts;
-  const summary = assembled.join(parts.length ? ' — ' : '');
+  const summary = assembled.join(parts.length ? " · " : "");
   if (summary.trim().length === 0) {
     return `${humanizeType(type)} ${rowIndex + 1}`;
   }

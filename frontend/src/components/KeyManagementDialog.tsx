@@ -105,7 +105,7 @@ export function KeyManagementDialog({
       await navigator.clipboard.writeText(privateKey);
       toast({
         title: 'Private key copied',
-        description: 'Store it securely—anyone with this key can decrypt your data.',
+        description: "Store it securely. Anyone with this key can decrypt your data.",
       });
     } catch (error) {
       toast({

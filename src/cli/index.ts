@@ -7778,20 +7778,25 @@ storageCommand
         ? path.join(process.env.NEOTOMA_EVENT_LOG_DIR, eventLogFileName)
         : path.join(dataDir, "logs", eventLogFileName));
 
+    const cwd = process.cwd();
+    const abs = (p: string) => resolvePathInput(p, cwd);
+    const envLabel = isProd ? "production" : "development";
+
     const info: Record<string, unknown> = {
       config_file: CONFIG_PATH,
       config_description: "CLI credentials and base URL (local only)",
       server_url: baseUrl,
       server_description: "API base URL (your data is served from this backend).",
       storage_backend: storageBackend,
+      environment: envLabel,
       storage_paths: {
-        data_dir: dataDir,
-        sqlite_db: sqlitePath,
-        raw_sources: rawStorageDir,
-        event_log: eventLogPath,
-        logs: logsDir,
+        data_dir: abs(dataDir),
+        sqlite_db: abs(sqlitePath),
+        raw_sources: abs(rawStorageDir),
+        event_log: abs(eventLogPath),
+        logs: abs(logsDir),
         description:
-          "Local backend: SQLite DB and raw files under data/. Defaults are env-specific (dev: data/sources, data/logs, neotoma.db; prod: data/sources_prod, data/logs_prod, neotoma.prod.db). Event log: data/logs/events.log (dev), data/logs/events.prod.log (prod). Override with NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_PATH, NEOTOMA_LOGS_DIR, NEOTOMA_PROJECT_ROOT.",
+          "Local SQLite + files under the resolved data directory. Dev vs prod differ (DB name, sources/logs subdirs, event log filename). Override: NEOTOMA_DATA_DIR, NEOTOMA_SQLITE_PATH, NEOTOMA_RAW_STORAGE_DIR, NEOTOMA_EVENT_LOG_PATH, NEOTOMA_LOGS_DIR, NEOTOMA_PROJECT_ROOT.",
       },
     };
 
@@ -7800,24 +7805,36 @@ storageCommand
       return;
     }
 
-    process.stdout.write(heading("Storage and configuration locations") + nl() + nl());
-    process.stdout.write(keyValue("Config file (CLI)", String(info.config_file), true) + "\n");
-    process.stdout.write(bullet(String(info.config_description)) + nl());
-    process.stdout.write(keyValue("Server", String(info.server_url), true) + "\n");
-    process.stdout.write(bullet(String(info.server_description)) + nl());
-    process.stdout.write(keyValue("Backend", storageBackend) + "\n");
+    process.stdout.write(heading("Storage") + "\n\n");
+    process.stdout.write(subHeading("CLI") + "\n");
+    process.stdout.write(keyValue("Config", String(info.config_file), true) + "\n\n");
+
+    process.stdout.write(subHeading("API") + "\n");
+    process.stdout.write(keyValue("Base URL", String(info.server_url), true) + "\n");
+    process.stdout.write(keyValue("Backend", storageBackend) + "\n\n");
+
     if (info.storage_paths && typeof info.storage_paths === "object") {
       const paths = info.storage_paths as Record<string, unknown>;
+      process.stdout.write(subHeading(`Local data (${envLabel})`) + "\n");
       if (paths.data_dir)
-        process.stdout.write(keyValue("data_dir", String(paths.data_dir), true) + "\n");
+        process.stdout.write(keyValue("Data directory", String(paths.data_dir), true) + "\n");
       if (paths.sqlite_db)
-        process.stdout.write(keyValue("sqlite_db", String(paths.sqlite_db), true) + "\n");
+        process.stdout.write(keyValue("SQLite database", String(paths.sqlite_db), true) + "\n");
       if (paths.raw_sources)
-        process.stdout.write(keyValue("raw_sources", String(paths.raw_sources), true) + "\n");
+        process.stdout.write(keyValue("Raw sources", String(paths.raw_sources), true) + "\n");
       if (paths.event_log)
-        process.stdout.write(keyValue("event_log", String(paths.event_log), true) + "\n");
-      if (paths.logs) process.stdout.write(keyValue("logs", String(paths.logs), true) + "\n");
-      if (paths.description) process.stdout.write(bullet(String(paths.description)) + "\n");
+        process.stdout.write(keyValue("Event log", String(paths.event_log), true) + "\n");
+      if (paths.logs) process.stdout.write(keyValue("Logs directory", String(paths.logs), true) + "\n");
+      process.stdout.write(
+        "\n" +
+          dim(
+            "Paths follow NEOTOMA_ENV. Override with NEOTOMA_DATA_DIR and related env vars. " +
+              "Use " +
+              pathStyle("neotoma storage info --json") +
+              " for machine-readable output."
+          ) +
+          "\n"
+      );
     }
   });
 
@@ -12664,6 +12681,29 @@ export function getSessionCommandNames(): string[] {
   return getSessionCommands(program).map((c) => c.name);
 }
 
+/**
+ * User argv tokens after the runtime + script prefix (same convention as Commander `from: 'node'`).
+ * When argv is already user-only (e.g. `["storage", "info"]`), returns argv unchanged — `argv.slice(2)`
+ * would wrongly yield [] and force interactive session mode on a TTY.
+ */
+export function extractUserCliArgs(argv: string[]): string[] {
+  if (argv.length >= 2) {
+    const exeBase = path.basename(argv[0] ?? "").toLowerCase();
+    const isNodeLikeRuntime =
+      exeBase === "node" ||
+      exeBase === "node.exe" ||
+      exeBase === "bun" ||
+      exeBase === "bun.exe" ||
+      exeBase === "deno" ||
+      exeBase === "deno.exe";
+    const script = argv[1] ?? "";
+    if (isNodeLikeRuntime && script.length > 0 && !script.startsWith("-")) {
+      return argv.slice(2);
+    }
+  }
+  return argv;
+}
+
 /** True when argv has no command (only global options or empty). */
 function hasNoCommand(args: string[]): boolean {
   if (args.length === 0) return true;
@@ -12785,12 +12825,12 @@ export async function runCli(argv: string[] = process.argv): Promise<void> {
     let version: string | null = null;
 
   program.parseOptions(argv);
-  const args = program.args && program.args.length > 0 ? program.args : argv.slice(2);
+  const userArgsForCommandDetection = extractUserCliArgs(argv);
   const noSession = argv.includes("--no-session");
   const noServers = argv.includes("--no-servers");
   const serversOpt = (program.opts() as { servers?: string }).servers;
   const tunnel = argv.includes("--tunnel");
-  const noArgs = hasNoCommand(args);
+  const noArgs = hasNoCommand(userArgsForCommandDetection);
 
   // `neotoma --help` and `neotoma --version` must never enter interactive/session mode.
   // This is required for scripting and piping (e.g. `neotoma --help | head`).

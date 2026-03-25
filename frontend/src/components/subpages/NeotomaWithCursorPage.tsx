@@ -55,7 +55,7 @@ export function NeotomaWithCursorPage() {
               >
                 .cursor/rules/
               </a>{" "}
-              — always-apply, glob-scoped, or agent-invoked rule files
+              (always-apply, glob-scoped, or agent-invoked rule files)
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -72,7 +72,7 @@ export function NeotomaWithCursorPage() {
               >
                 MCP integration
               </a>{" "}
-              — 30+ built-in servers and support for custom stdio, SSE, and HTTP servers
+              (30+ built-in servers and support for custom stdio, SSE, and HTTP servers)
             </span>
           </li>
         </ul>
@@ -85,7 +85,7 @@ export function NeotomaWithCursorPage() {
               &times;
             </span>
             <span className="text-muted-foreground">
-              Memory that persists across projects or after session ends — rules carry forward
+              Memory that persists across projects or after session ends. Rules carry forward
               instructions, not data
             </span>
           </li>
@@ -112,9 +112,9 @@ export function NeotomaWithCursorPage() {
         <ul className="list-none pl-0 space-y-1.5 mb-2">
           {[
             "Persistent memory across all projects, sessions, and tools",
-            "Deterministic entity resolution — contacts, tasks, and relationships unified by canonical IDs",
-            "Versioned state with full provenance — every fact traces to its source",
-            "Cross-tool continuity — data stored from Cursor is available in Claude and Codex",
+            "Deterministic entity resolution: contacts, tasks, and relationships unified by canonical IDs",
+            "Versioned state with full provenance: every fact traces to its source",
+            "Cross-tool continuity: data stored from Cursor is available in Claude and Codex",
           ].map((item) => (
             <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
@@ -128,7 +128,7 @@ export function NeotomaWithCursorPage() {
 
       <IntegrationSection sectionKey="using-them-together" title="Using them together">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-          Keep rules and notepads for what they do well &mdash; project instructions and reusable
+          Keep rules and notepads for what they do well: project instructions and reusable
           context snippets. Neotoma handles structured data that persists across projects and tools.
           Both are active simultaneously with no conflict.
         </p>
@@ -182,7 +182,7 @@ export function NeotomaWithCursorPage() {
         </p>
         <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
-          This is a local integration &mdash; Neotoma runs on the same machine via stdio. No API
+          This is a local integration. Neotoma runs on the same machine via stdio. No API
           server or remote access is required. The agent writes to <code>.cursor/mcp.json</code>{" "}
           (project-level) or <code>~/.cursor/mcp.json</code> (global) and restarts MCP
           automatically.
@@ -203,7 +203,7 @@ export function NeotomaWithCursorPage() {
             >
               MCP integrations
             </a>
-            <span className="text-muted-foreground">— connecting external tools via MCP</span>
+            <span className="text-muted-foreground"> (connecting external tools via MCP)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -218,7 +218,8 @@ export function NeotomaWithCursorPage() {
               Rules
             </a>
             <span className="text-muted-foreground">
-              — persistent AI instructions via .cursor/rules/
+              {" "}
+              (persistent AI instructions via .cursor/rules/)
             </span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
@@ -233,7 +234,7 @@ export function NeotomaWithCursorPage() {
             >
               Notepads
             </a>
-            <span className="text-muted-foreground">— reusable context shared across sessions</span>
+            <span className="text-muted-foreground"> (reusable context shared across sessions)</span>
           </li>
         </ul>
       </IntegrationSection>

@@ -50,7 +50,7 @@ To verify global and non-global behavior **without** publishing to npm:
 
 1. From repo root: `npm run build:server && npm pack` → creates `neotoma-<version>.tgz`.
 2. Install that tarball globally: `npm install -g ./neotoma-<version>.tgz`.
-   - Gate: install output must not include `deprecated q@...` or `deprecated prebuild-install@...` warnings.
+   - Gate: install output must not include `deprecated q@...` warnings.
 3. Run from a directory that is **not** the repo (e.g. `cd ~` or `mkdir /tmp/neotoma-test && cd /tmp/neotoma-test`).
 4. **To test user-env-only (no project):** Clear any saved project root so the CLI does not reuse it: remove or rename `~/.config/neotoma/config.json` (or delete only the `project_root` / `repo_root` keys). Unset `NEOTOMA_REPO_ROOT` if set. Then run `neotoma init`. You should see "User env configured" and env at `~/.config/neotoma/.env`, data at `~/neotoma/data`, with no source-checkout prompt in the default flow.
 5. Run `neotoma init` (and optionally `neotoma --no-session` to check status). If config still has a valid project root, init will use **project** env (e.g. repo `.env`); that is expected when you have used Neotoma from the repo before.
