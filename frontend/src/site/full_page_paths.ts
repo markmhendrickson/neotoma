@@ -13,6 +13,7 @@ const MARKETING_FULL_PAGE_FIRST_SEGMENTS = new Set([
   "cases",
   "financial-ops",
   "procurement",
+  "agent-auth",
 ]);
 
 /**
