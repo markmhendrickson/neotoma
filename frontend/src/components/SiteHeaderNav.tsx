@@ -44,7 +44,14 @@ import { SiClaude, SiGithub, SiNpm, SiOpenai } from "react-icons/si";
 import { useTheme } from "@/hooks/useTheme";
 import { useLocale } from "@/i18n/LocaleContext";
 import { LOCALE_LANGUAGE_NAME, SUPPORTED_LOCALES, type SupportedLocale } from "@/i18n/config";
-import { localizeHashHref, localizePath, saveLocale, stripLocaleFromPath } from "@/i18n/routing";
+import {
+  localizeHashHref,
+  localizePath,
+  normalizeToDefaultRoute,
+  saveLocale,
+  stripLocaleFromPath,
+} from "@/i18n/routing";
+import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -535,6 +542,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const { showSidebarTrigger } = props;
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const routeBase = normalizeToDefaultRoute(pathname);
   const { locale, dict } = useLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
@@ -582,7 +590,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
         >
           Neotoma
         </a>
-        {stripLocaleFromPath(pathname) !== "/crm" && stripLocaleFromPath(pathname) !== "/compliance" && (
+        {!isMarketingFullPageRoute(routeBase) && (
           <span className="hidden md:inline-flex min-w-0 max-w-[140px] items-center gap-1 overflow-hidden rounded border border-sidebar-border bg-sidebar-accent/40 px-1.5 py-0.5 text-[11px] text-sidebar-foreground/80">
             <FlaskConical className="h-3 w-3 shrink-0" aria-hidden />
             <a

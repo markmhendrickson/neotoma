@@ -44,6 +44,14 @@ import { TroubleshootingPage } from "@/components/subpages/TroubleshootingPage";
 import { ChangelogPage } from "@/components/subpages/ChangelogPage";
 import { CrmLandingPage } from "@/components/subpages/CrmLandingPage";
 import { ComplianceLandingPage } from "@/components/subpages/ComplianceLandingPage";
+import { ContractsLandingPage } from "@/components/subpages/ContractsLandingPage";
+import { DiligenceLandingPage } from "@/components/subpages/DiligenceLandingPage";
+import { PortfolioLandingPage } from "@/components/subpages/PortfolioLandingPage";
+import { CasesLandingPage } from "@/components/subpages/CasesLandingPage";
+import { FinancialOpsLandingPage } from "@/components/subpages/FinancialOpsLandingPage";
+import { ProcurementLandingPage } from "@/components/subpages/ProcurementLandingPage";
+import { AgentAuthLandingPage } from "@/components/subpages/AgentAuthLandingPage";
+import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
 import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { sendPageView } from "@/utils/analytics";
 import { DEFAULT_LOCALE, isSupportedLocale } from "@/i18n/config";
@@ -111,6 +119,14 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/memory-vendors", element: <Navigate to="/memory-models#memory-model-comparison" replace /> },
   { path: "/crm", element: <CrmLandingPage /> },
   { path: "/compliance", element: <ComplianceLandingPage /> },
+  { path: "/contracts", element: <ContractsLandingPage /> },
+  { path: "/diligence", element: <DiligenceLandingPage /> },
+  { path: "/portfolio", element: <PortfolioLandingPage /> },
+  { path: "/cases", element: <CasesLandingPage /> },
+  { path: "/financial-ops", element: <FinancialOpsLandingPage /> },
+  { path: "/procurement", element: <ProcurementLandingPage /> },
+  { path: "/agent-auth", element: <AgentAuthLandingPage /> },
+  { path: "/verticals", element: <VerticalsIndexPage /> },
   { path: "/foundations", element: <FoundationsPage /> },
   { path: "/privacy-first", element: <Navigate to="/foundations#privacy-first" replace /> },
   { path: "/cross-platform", element: <Navigate to="/foundations#cross-platform" replace /> },

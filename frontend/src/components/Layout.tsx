@@ -3,7 +3,8 @@ import { useLocation } from "react-router-dom";
 import { SiteHeaderNav } from "@/components/SiteHeaderNav";
 import { DocsSidebar } from "@/components/DocsSidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { stripLocaleFromPath } from "@/i18n/routing";
+import { normalizeToDefaultRoute } from "@/i18n/routing";
+import { isMarketingFullPageRoute } from "@/site/full_page_paths";
 
 /** True when the app is served under a product path (e.g. /neotoma-with-claude-code). */
 function isProductBasePath(): boolean {
@@ -11,8 +12,6 @@ function isProductBasePath(): boolean {
   const segment = window.location.pathname.replace(/^\//, "").split("/")[0] ?? "";
   return segment.toLowerCase().startsWith("neotoma-with-");
 }
-
-const FULL_PAGE_PATHS = new Set(["/crm", "/compliance"]);
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -23,9 +22,10 @@ const DEFAULT_SITE_NAME = "Neotoma";
 
 export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) {
   const { pathname } = useLocation();
-  const stripped = stripLocaleFromPath(pathname);
+  /** Normalize trailing slashes (e.g. static hosting /compliance/) so full-page routes match. */
+  const stripped = normalizeToDefaultRoute(pathname);
   const isRouteHome = stripped === "/";
-  const isFullPageLanding = FULL_PAGE_PATHS.has(stripped);
+  const isFullPageLanding = isMarketingFullPageRoute(stripped);
   const isHome = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
 
   return (

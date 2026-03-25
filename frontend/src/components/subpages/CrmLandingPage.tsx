@@ -29,6 +29,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { SeoHead } from "../SeoHead";
 import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
+import { SiClaude, SiOpenai } from "react-icons/si";
+import { CursorIcon } from "../icons/CursorIcon";
+import { OpenClawIcon } from "../icons/OpenClawIcon";
 
 const PROSPECT_CRM_URL = "https://preview--debut-domicile.lovable.app/";
 
@@ -742,36 +745,30 @@ export function CrmLandingPage() {
                   schema-bound, auditable, and never silently wrong.
                 </p>
 
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    {
-                      tag: "Versioned entities",
-                      Icon: GitBranch,
-                    },
-                    {
-                      tag: "Schema-bound records",
-                      Icon: FileCode,
-                    },
-                    {
-                      tag: "Auditable history",
-                      Icon: Eye,
-                    },
-                    {
-                      tag: "Replayable state",
-                      Icon: RotateCcw,
-                    },
-                  ].map(({ tag, Icon }) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400"
-                    >
-                      <Icon
-                        className="h-3.5 w-3.5 shrink-0 stroke-[2.5]"
-                        aria-hidden
-                      />
-                      {tag}
-                    </span>
-                  ))}
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                    Key data to store
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { tag: "Contacts", Icon: Users },
+                      { tag: "Accounts", Icon: Building2 },
+                      { tag: "Deals", Icon: Handshake },
+                      { tag: "Activities", Icon: History },
+                      { tag: "Relationships", Icon: Network },
+                    ].map(({ tag, Icon }) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400"
+                      >
+                        <Icon
+                          className="h-3.5 w-3.5 shrink-0 stroke-[2.5]"
+                          aria-hidden
+                        />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -797,14 +794,77 @@ export function CrmLandingPage() {
                   </a>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
-                  <span>Open-source</span>
-                  <span className="text-border">&middot;</span>
-                  <span>MIT-licensed</span>
-                  <span className="text-border">&middot;</span>
-                  <span>Privacy-first</span>
-                  <span className="text-border">&middot;</span>
-                  <span>No vendor lock-in</span>
+                <div className="pt-1 grid gap-4 md:grid-cols-2 md:items-start">
+                  <div className="space-y-2">
+                    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                      Works with
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to="/neotoma-with-claude-code"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiClaude className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Claude Code
+                      </Link>
+                      <Link
+                        to="/neotoma-with-claude"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiClaude className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Claude
+                      </Link>
+                      <Link
+                        to="/neotoma-with-chatgpt"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        ChatGPT
+                      </Link>
+                      <Link
+                        to="/neotoma-with-codex"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Codex
+                      </Link>
+                      <Link
+                        to="/neotoma-with-cursor"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <CursorIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Cursor
+                      </Link>
+                      <Link
+                        to="/neotoma-with-openclaw"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <OpenClawIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        OpenClaw
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:text-right">
+                    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                      Guarantees
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                      {[
+                        { tag: "Versioned", Icon: GitBranch },
+                        { tag: "Schema-bound", Icon: FileCode },
+                        { tag: "Auditable", Icon: Eye },
+                        { tag: "Replayable", Icon: RotateCcw },
+                      ].map(({ tag, Icon }) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90"
+                        >
+                          <Icon className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div>

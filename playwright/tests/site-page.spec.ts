@@ -177,4 +177,30 @@ test.describe("sitePage coverage", () => {
 
     await expect.poll(() => page.url()).toContain("/de");
   });
+
+  test("vertical marketing routes omit docs sidebar trigger and developer preview", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "Desktop-only sidebar trigger assertion");
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    const paths = ["/verticals", "/verticals/", "/compliance", "/compliance/", "/crm"];
+
+    for (const path of paths) {
+      await page.goto(path);
+      await page.waitForLoadState("networkidle");
+
+      await expect(page.getByRole("button", { name: /toggle sidebar/i })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: /developer preview/i })).toHaveCount(0);
+    }
+  });
+
+  test("docs index shows sidebar trigger for doc layout", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name.includes("mobile"), "Desktop-only sidebar trigger assertion");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/docs");
+    await page.waitForLoadState("networkidle");
+
+    await expect(page.getByRole("button", { name: /toggle sidebar/i })).toBeVisible();
+  });
 });

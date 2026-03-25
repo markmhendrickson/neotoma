@@ -554,7 +554,103 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     jsonLdType: "WebPage",
     breadcrumb: [
       { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
       { name: "Compliance", path: "/compliance" },
+    ],
+  },
+  "/contracts": {
+    title: "Neotoma for Contracts | State Integrity for Contract Lifecycle Management",
+    description:
+      "Version control for every clause, amendment, and obligation. Neotoma ensures contract state is versioned, conflicts between review agents are surfaced, and every approval traces to specific evidence.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Contracts", path: "/contracts" },
+    ],
+  },
+  "/diligence": {
+    title: "Neotoma for Due Diligence | State Integrity for M&A and Investment Diligence",
+    description:
+      "Know exactly what was known when the decision was made. Neotoma provides versioned findings, conflict detection between diligence agents, and temporal state queries for investment committees and regulators.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Due Diligence", path: "/diligence" },
+    ],
+  },
+  "/portfolio": {
+    title: "Neotoma for Portfolio Monitoring | State Integrity for VC/PE Portfolio Intelligence",
+    description:
+      "Versioned state for every portfolio company, valuation, and LP commitment. Neotoma provides temporal snapshots for fund audits, LP reporting, and follow-on investment decisions.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Portfolio", path: "/portfolio" },
+    ],
+  },
+  "/cases": {
+    title: "Neotoma for Case Management | State Integrity for Legal and Investigation Cases",
+    description:
+      "Reconstruct what was known at any point in a case timeline. Neotoma provides versioned evidence, temporal state queries for litigation, and auditable provenance for every filing and assessment.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Case Management", path: "/cases" },
+    ],
+  },
+  "/financial-ops": {
+    title: "Neotoma for Financial Ops | State Integrity for Reconciliation and Audit",
+    description:
+      "Deterministic state for every ledger entry, reconciliation, and month-end close. Neotoma provides point-in-time snapshots for SOX compliance, audit verification, and transaction provenance.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Financial Ops", path: "/financial-ops" },
+    ],
+  },
+  "/procurement": {
+    title: "Neotoma for Procurement | State Integrity for Sourcing and Supplier Management",
+    description:
+      "Full audit trail for bids, approvals, and supplier decisions. Neotoma provides versioned supplier profiles, bid comparison history, and approval chain provenance for enterprise procurement.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Procurement", path: "/procurement" },
+    ],
+  },
+  "/agent-auth": {
+    title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
+    description:
+      "Reconstruct who authorized what, when, and under which policy state. Neotoma provides versioned authorization decisions, consent timelines, and delegation chain provenance for production agent systems.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Agent Authorization", path: "/agent-auth" },
+    ],
+  },
+  "/verticals": {
+    title: "Use Cases | Neotoma — State Integrity for AI-Driven Verticals",
+    description:
+      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, and agent authorization.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
     ],
   },
   "/memory-guarantees": {
