@@ -35,7 +35,7 @@ const CONFIG: VerticalConfig = {
   ],
   heroFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "SOC 2 compatible"],
   analyticsPrefix: "diligence",
-  problemTitle: "Diligence stacks collapse weeks of work into one \"current\" view",
+  problemTitle: 'Diligence stacks collapse weeks of work into one "current" view',
   problemDesc:
     "Multiple agents scrape filings, model revenue, interview customers, and log red flags in parallel. Traditional stores keep the last write on each field: a superseded legal finding disappears, a resolved red flag vanishes from dashboards, and nobody can reconstruct the belief state on the morning of the IC vote.",
   problemCards: [
@@ -52,21 +52,23 @@ const CONFIG: VerticalConfig = {
     {
       Icon: Flag,
       title: "Red flag timelines truncated",
-      desc: "Resolved issues drop out of reports, so later reviewers never see that customer concentration was a P0 on April 3, only that it is \"closed\" in May.",
+      desc: 'Resolved issues drop out of reports, so later reviewers never see that customer concentration was a P0 on April 3, only that it is "closed" in May.',
     },
     {
       Icon: ShieldAlert,
       title: "Unattributed assessments",
-      desc: "IC packs cite \"management quality: strong\" with no link to which agent, which interview notes, or which version of the assessment entity backed that claim.",
+      desc: 'IC packs cite "management quality: strong" with no link to which agent, which interview notes, or which version of the assessment entity backed that claim.',
     },
   ],
-  problemCallout: "A billion-dollar go/no-go deserves a timestamped evidence graph, not a slide deck export.",
+  problemCallout:
+    "A billion-dollar go/no-go deserves a timestamped evidence graph, not a slide deck export.",
   problemCalloutDesc:
     "Neotoma preserves every observation, supersession, and relationship across diligence agents. You can diff belief between any two dates, list red flags as they existed on a given Monday, and bind IC materials to the exact entity versions that were live when the vote closed.",
   scenarios: [
     {
       category: "Investment committee readiness",
-      human: "What did we know about Horizon Semiconductor when the IC voted yes on April 17, 2025?",
+      human:
+        "What did we know about Horizon Semiconductor when the IC voted yes on April 17, 2025?",
       fail: "Horizon Semiconductor: ARR $94M (management case), gross margin 61%, top-3 customer concentration 28%, legal clean, proceed to docs.",
       succeed:
         "IC vote Apr 17, 2025 4:12pm PT (deal\u00B7v9 snapshot): ARR case $94M with diligence-agent range $88\u2013102M; gross margin 61% per FP&A model v3 (Mar 28). Customer concentration 34% in legal-agent finding fin\u00B7v6 (Apr 2), not yet reconciled with sales-agent 28% figure from Mar 22. One open P1 red flag (supply sole-source) documented in red_flag\u00B7v4, accepted with board-level mitigation plan attached. Post-vote work (May 1\u20139) is excluded from this snapshot.",
@@ -78,10 +80,11 @@ const CONFIG: VerticalConfig = {
     },
     {
       category: "Conflicting findings",
-      human: "Did we ever believe Meridian Bio's Phase II readout was negative before we signed the Series E?",
+      human:
+        "Did we ever believe Meridian Bio's Phase II readout was negative before we signed the Series E?",
       fail: "Meridian Bio Phase II: positive efficacy signal; proceed with $45M Series E at $1.1B pre.",
       succeed:
-        "Two concurrent findings: clinical-agent Mar 6 9:41am, \"primary endpoint missed in ITT; signal in pre-specified subgroup\" (finding\u00B7v3). research-agent Mar 8 2:15pm, \"trend favors drug; await full CSR\" (finding\u00B7v5). IC materials Mar 14 cited finding\u00B7v5 with explicit footnote that finding\u00B7v3 remains on record. Series E term sheet signed Mar 21 preserved both observations with timestamps; neither was deleted when the bull case won internally.",
+        'Two concurrent findings: clinical-agent Mar 6 9:41am, "primary endpoint missed in ITT; signal in pre-specified subgroup" (finding\u00B7v3). research-agent Mar 8 2:15pm, "trend favors drug; await full CSR" (finding\u00B7v5). IC materials Mar 14 cited finding\u00B7v5 with explicit footnote that finding\u00B7v3 remains on record. Series E term sheet signed Mar 21 preserved both observations with timestamps; neither was deleted when the bull case won internally.',
       version: "finding\u00B7v5",
       Icon: GitBranch,
       failTitle: "Latest narrative only, dissent erased",
@@ -90,7 +93,8 @@ const CONFIG: VerticalConfig = {
     },
     {
       category: "Red flag tracking",
-      human: "Show every red flag we logged on the Blackwood Logistics acquisition, including ones we cleared.",
+      human:
+        "Show every red flag we logged on the Blackwood Logistics acquisition, including ones we cleared.",
       fail: "Blackwood Logistics: 2 active red flags, customs broker licensing gap, ERP integration delay.",
       succeed:
         "Full timeline: (1) Feb 4 P0 revenue recognition policy mismatch, cleared Feb 19 after EY memo. (2) Feb 11 P1 environmental notice on Indianapolis facility, open at signing, escrow $3.2M. (3) Mar 2 P2 key-man risk on COO, cleared Mar 20 with retention agreement. (4) Mar 9 P1 customs broker gap, still open in latest red_flag\u00B7v11. Each row links to assessment and evidence observations; nothing removed when status flipped to resolved.",
@@ -116,20 +120,21 @@ const CONFIG: VerticalConfig = {
   outcomeTitle: "From fragile memos to defensible diligence state",
   outcomeSubtitle: "Before and after Neotoma",
   outcomeDesc:
-    "Each scenario asks the same question twice: once against a stack that only knows \"now,\" and once against versioned entities where version strings like target\u00B7v14 tie answers to evidence you can replay.",
+    'Each scenario asks the same question twice: once against a stack that only knows "now," and once against versioned entities where version strings like target\u00B7v14 tie answers to evidence you can replay.',
   howTitle: "How Neotoma anchors multi-agent diligence",
   steps: [
     {
       Icon: Upload,
       title: "Ingest every agent output as an observation",
       desc: "Financial models, legal memos, expert calls, and chat transcripts become structured observations on target company, finding, assessment, red flag, and deal entities. No silent overwrite when a newer agent disagrees.",
-      detail: "Supersession is explicit: old findings remain queryable with timestamps and source attribution.",
+      detail:
+        "Supersession is explicit: old findings remain queryable with timestamps and source attribution.",
     },
     {
       Icon: Layers,
       title: "Project snapshots for votes, signings, and audits",
       desc: "Materialize the belief graph as it existed when the IC voted, when exclusivity dropped, or when the board deck was finalized. Diff any two snapshots to explain what changed and why.",
-      detail: "Same API for \"today\" and \"2025-04-17 4:12pm PT.\" No one-off spreadsheets.",
+      detail: 'Same API for "today" and "2025-04-17 4:12pm PT." No one-off spreadsheets.',
     },
     {
       Icon: Search,
@@ -146,7 +151,7 @@ const CONFIG: VerticalConfig = {
     {
       Icon: Target,
       title: "Vote- and signing-time snapshots",
-      desc: "Bind IC decks, fairness opinions, and disclosure schedules to exact versions of target and deal entities. Answer \"what did we know when?\" without reconstructing Slack exports.",
+      desc: 'Bind IC decks, fairness opinions, and disclosure schedules to exact versions of target and deal entities. Answer "what did we know when?" without reconstructing Slack exports.',
       tags: ["deal", "target", "snapshot"],
     },
     {
@@ -170,7 +175,7 @@ const CONFIG: VerticalConfig = {
     {
       Icon: Building2,
       title: "Target company identity & subsidiary graph",
-      desc: "Normalize entities across filings, data rooms, and agent extractions so \"Horizon Semi\" and \"Horizon Semiconductor Ltd.\" share one canonical target with versioned attributes.",
+      desc: 'Normalize entities across filings, data rooms, and agent extractions so "Horizon Semi" and "Horizon Semiconductor Ltd." share one canonical target with versioned attributes.',
       tags: ["target", "entity", "graph"],
     },
     {
@@ -242,7 +247,12 @@ const CONFIG: VerticalConfig = {
   ctaHighlight: "what the IC actually knew",
   ctaDesc:
     "Install Neotoma, connect your data room and agent mesh, and stop treating the latest memo as the system of record.",
-  ctaFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "API compatibility guarantees"],
+  ctaFeatures: [
+    "Open-source",
+    "Enterprise SSO & RBAC",
+    "Team deployment",
+    "API compatibility guarantees",
+  ],
   agentLabel: "diligence agent",
 };
 

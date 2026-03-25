@@ -42,7 +42,8 @@ export default defineConfig({
       port: parseInt(process.env.VITE_PORT || process.env.PORT || "5173", 10),
     },
     proxy: {
-      "/health": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
+      // Exact match only: "/health" would also match SPA routes like /healthcare
+      "^/health$": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/openapi.yaml": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/server-info": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },
       "/mcp": { target: `http://localhost:${process.env.HTTP_PORT || "3080"}`, changeOrigin: true, secure: false },

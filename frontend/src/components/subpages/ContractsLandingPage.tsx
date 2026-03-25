@@ -59,16 +59,17 @@ const CONFIG: VerticalConfig = {
     {
       Icon: ShieldAlert,
       title: "Unexplainable approvals",
-      desc: "Workflows record \"approved\" with a timestamp but drop reviewer rationale, model confidence, and the multi-stage review path regulators expect under SOX.",
+      desc: 'Workflows record "approved" with a timestamp but drop reviewer rationale, model confidence, and the multi-stage review path regulators expect under SOX.',
     },
   ],
-  problemCallout: "Regulators and finance do not accept \"we have the latest PDF.\"",
+  problemCallout: 'Regulators and finance do not accept "we have the latest PDF."',
   problemCalloutDesc:
     "Material contracts drive revenue recognition, vendor spend, and risk disclosures. When an audit asks what was in effect on March 14, or whether Amendment No. 3 changed the payment schedule, you need clause-level diffs and provenance, not a search over email attachments.",
   scenarios: [
     {
       category: "Amendment tracking",
-      human: "What changed in the latest amendment to our Harbor Ridge master services agreement with Vertex Cloud?",
+      human:
+        "What changed in the latest amendment to our Harbor Ridge master services agreement with Vertex Cloud?",
       fail: "Harbor Ridge MSA with Vertex Cloud: payment net-45, liability cap $2.5M, auto-renewal 12 months, governing law Delaware.",
       succeed:
         "Amendment No. 3 (executed Apr 9, 2025) modified clause 7.3 (payment): net-45 to net-30 effective May 1; added carve-out for pass-through cloud fees in Exhibit B; left liability cap at $2.5M unchanged. Diff vs. contract\u00B7v11: \u00A77.3 lines 112\u2013118 replaced; Exhibit B rows 14\u201319 appended. Prior state preserved at contract\u00B7v11 @ 2025-04-08.",
@@ -92,7 +93,8 @@ const CONFIG: VerticalConfig = {
     },
     {
       category: "Decision explainability",
-      human: "Why was clause 9.4 (data residency) approved as written in the Northwind procurement agreement?",
+      human:
+        "Why was clause 9.4 (data residency) approved as written in the Northwind procurement agreement?",
       fail: "Clause 9.4 was approved on March 1, 2025.",
       succeed:
         "Three-stage review Mar 1: (1) drafting agent flagged EU-only processing vs. proposed US region (risk: medium). (2) Compliance reviewer Jordan Okonkwo approved with condition: UK SCCs + DPA Exhibit C attached (11:04am). (3) VP Legal Priya Nandakumar signed off 4:47pm after confirming Exhibit C matched template v2025.01. Each step linked to clause\u00B7v6 snapshot and reviewer identity.",
@@ -100,11 +102,12 @@ const CONFIG: VerticalConfig = {
       Icon: Users,
       failTitle: "Approval date without reviewers or rationale",
       failDesc:
-        "A timestamp proves something happened, not why it was acceptable. Under audit, \"approved March 1\" forces counsel to rebuild Slack threads and ticket IDs.",
+        'A timestamp proves something happened, not why it was acceptable. Under audit, "approved March 1" forces counsel to rebuild Slack threads and ticket IDs.',
     },
     {
       category: "Temporal state",
-      human: "What were the payment terms for the Sterling Logistics order form on February 15, 2025?",
+      human:
+        "What were the payment terms for the Sterling Logistics order form on February 15, 2025?",
       fail: "Sterling Logistics order form: payment net-30, 1.5% monthly late fee, cap on late fees at 5% of invoice.",
       succeed:
         "As of 2025-02-15, Sterling order form OF-884 showed net-60 and no late-fee cap (clause 3.2 per contract\u00B7v7 snapshot). Amendment No. 2 (effective Feb 28) moved to net-30 and introduced the 1.5%/5% cap language you see today in contract\u00B7v9. The assistant returned the historical snapshot, not the post-amendment text.",
@@ -125,7 +128,8 @@ const CONFIG: VerticalConfig = {
       Icon: Upload,
       title: "Ingest every touch as an observation",
       desc: "Redlines, amendments, emails, CLM exports, and agent outputs become structured observations on contract, clause, amendment, obligation, and counterparty entities. Nothing overwrites prior state.",
-      detail: "Immutable history by default. Snapshots are computed, not hand-curated spreadsheets.",
+      detail:
+        "Immutable history by default. Snapshots are computed, not hand-curated spreadsheets.",
     },
     {
       Icon: Layers,
@@ -137,7 +141,8 @@ const CONFIG: VerticalConfig = {
       Icon: Search,
       title: "Let agents answer with provenance",
       desc: "Drafting, review, and compliance agents read the same versioned graph. Responses cite observation IDs, reviewer roles, and amendment numbers so Legal and Finance can defend answers to auditors.",
-      detail: "Built for SOX-style control narratives: who approved what, when, and under which clause snapshot.",
+      detail:
+        "Built for SOX-style control narratives: who approved what, when, and under which clause snapshot.",
     },
   ],
   capTitle: "Capabilities built for contract risk and velocity",
@@ -172,7 +177,7 @@ const CONFIG: VerticalConfig = {
     {
       Icon: FileText,
       title: "As-of and point-in-time queries",
-      desc: "Answer \"what were the terms when we signed?\" and \"what changed in amendment 3?\" with the same API. Finance, legal, and agents share one temporal model.",
+      desc: 'Answer "what were the terms when we signed?" and "what changed in amendment 3?" with the same API. Finance, legal, and agents share one temporal model.',
       tags: ["contract", "temporal", "reporting"],
     },
     {
@@ -228,7 +233,7 @@ const CONFIG: VerticalConfig = {
     features: [
       "Parallel drafting and risk agents that propose clause edits across hundreds of active MSAs",
       "Continuous obligation extraction from amendments and order forms",
-      "Customer-facing \"explain this clause\" experiences backed by live negotiation history",
+      'Customer-facing "explain this clause" experiences backed by live negotiation history',
     ],
     guarantees: [
       "Immutable observations for every model- or human-generated clause change",
@@ -244,7 +249,12 @@ const CONFIG: VerticalConfig = {
   ctaHighlight: "every answer they give",
   ctaDesc:
     "Install Neotoma, connect your CLM and agent mesh, and stop treating the latest PDF as the database of record.",
-  ctaFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "API compatibility guarantees"],
+  ctaFeatures: [
+    "Open-source",
+    "Enterprise SSO & RBAC",
+    "Team deployment",
+    "API compatibility guarantees",
+  ],
   agentLabel: "contract agent",
 };
 

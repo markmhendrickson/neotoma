@@ -34,10 +34,8 @@ import { OpenClawIcon } from "../icons/OpenClawIcon";
 
 const DAYDREAM_URL = "https://daydream.co/";
 
-const SLIDE_CLASS =
-  "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER =
-  "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
 
 const COMPLIANCE_SCENARIOS = [
   {
@@ -123,11 +121,7 @@ function TypewriterBadge({ text, delayMs = 35 }: { text: string; delayMs?: numbe
   return <>{visible}</>;
 }
 
-function buildPhaseMessages(
-  phaseElapsed: number,
-  fail: boolean,
-  prefix: string
-): IllustMsg[] {
+function buildPhaseMessages(phaseElapsed: number, fail: boolean, prefix: string): IllustMsg[] {
   const msgs: IllustMsg[] = [];
   for (let i = 0; i < COMPLIANCE_SCENARIOS.length; i++) {
     const se = phaseElapsed - i * SCENE_MS;
@@ -223,13 +217,25 @@ function AgentChatDemo({ className = "" }: { className?: string }) {
       msgs = [...buildPhaseMessages(PHASE_MS, true, "b")];
     } else {
       msgs = [
-        { key: "lbl-a", role: "label", text: "with state integrity layer", thinking: false, fail: false },
+        {
+          key: "lbl-a",
+          role: "label",
+          text: "with state integrity layer",
+          thinking: false,
+          fail: false,
+        },
       ];
     }
   } else {
     const afterElapsed = Math.min(elapsed - PHASE_MS - TRANS_MS, PHASE_MS);
     msgs = [
-      { key: "lbl-a", role: "label", text: "with state integrity layer", thinking: false, fail: false },
+      {
+        key: "lbl-a",
+        role: "label",
+        text: "with state integrity layer",
+        thinking: false,
+        fail: false,
+      },
       ...buildPhaseMessages(afterElapsed, false, "a"),
     ];
   }
@@ -563,9 +569,7 @@ function SuccessIllustration({ human, succeed }: { human: string; succeed: strin
 
 function ArchitectureDiagram({ className = "" }: { className?: string }) {
   return (
-    <div
-      className={`rounded-xl border border-border bg-card p-6 space-y-4 ${className}`}
-    >
+    <div className={`rounded-xl border border-border bg-card p-6 space-y-4 ${className}`}>
       <div className="space-y-3">
         <div className="rounded-lg border-2 border-sky-500/30 bg-sky-500/5 px-4 py-3 text-center">
           <p className="text-[13px] font-medium text-sky-700 dark:text-sky-300">
@@ -620,18 +624,14 @@ function ArchitectureDiagram({ className = "" }: { className?: string }) {
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          {["Sanctions / PEP Lists", "Questionnaires / Docs", "Monitoring Feeds"].map(
-            (source) => (
-              <div
-                key={source}
-                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center"
-              >
-                <p className="text-[10px] font-mono text-muted-foreground">
-                  {source}
-                </p>
-              </div>
-            )
-          )}
+          {["Sanctions / PEP Lists", "Questionnaires / Docs", "Monitoring Feeds"].map((source) => (
+            <div
+              key={source}
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center"
+            >
+              <p className="text-[10px] font-mono text-muted-foreground">{source}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -697,9 +697,7 @@ export function ComplianceLandingPage() {
                 activeSection === section.id ? "opacity-100" : "opacity-50"
               } hover:opacity-100 transition-opacity`}
               onClick={() =>
-                document
-                  .getElementById(section.id)
-                  ?.scrollIntoView({ behavior: "smooth" })
+                document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth" })
               }
               aria-label={section.label}
             >
@@ -708,9 +706,7 @@ export function ComplianceLandingPage() {
               </span>
               <span
                 className={`h-2 w-2 rounded-full transition-colors ${
-                  activeSection === section.id
-                    ? "bg-amber-500"
-                    : "bg-muted-foreground/30"
+                  activeSection === section.id ? "bg-amber-500" : "bg-muted-foreground/30"
                 }`}
               />
             </button>
@@ -731,17 +727,14 @@ export function ComplianceLandingPage() {
 
                 <h1 className="text-[28px] md:text-[36px] font-medium tracking-[-0.02em] leading-tight">
                   Version control for{" "}
-                  <span className="text-amber-600 dark:text-amber-400">
-                    vendor risk profiles
-                  </span>
+                  <span className="text-amber-600 dark:text-amber-400">vendor risk profiles</span>
                 </h1>
 
                 <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl">
-                  Your AI compliance system updates vendor risk profiles
-                  continuously. Neotoma ensures every change is versioned,
-                  every conflict is surfaced, and every decision is
-                  explainable to regulators, with full team access,
-                  enterprise auth, and deployment guarantees.
+                  Your AI compliance system updates vendor risk profiles continuously. Neotoma
+                  ensures every change is versioned, every conflict is surfaced, and every decision
+                  is explainable to regulators, with full team access, enterprise auth, and
+                  deployment guarantees.
                 </p>
 
                 <div className="space-y-2">
@@ -760,10 +753,7 @@ export function ComplianceLandingPage() {
                         key={tag}
                         className="inline-flex items-center gap-1.5 rounded border border-amber-500/20 bg-amber-500/5 px-2.5 py-1 text-[12px] font-medium text-amber-600 dark:text-amber-400"
                       >
-                        <Icon
-                          className="h-3.5 w-3.5 shrink-0 stroke-[2.5]"
-                          aria-hidden
-                        />
+                        <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
                         {tag}
                       </span>
                     ))}
@@ -882,13 +872,13 @@ export function ComplianceLandingPage() {
                   The problem
                 </p>
                 <h2 className="text-[24px] md:text-[28px] font-medium tracking-[-0.02em]">
-                  AI agents update vendor risk continuously. Your database wasn&apos;t built for that.
+                  AI agents update vendor risk continuously. Your database wasn&apos;t built for
+                  that.
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  When screening agents, monitoring agents, and diligence
-                  agents all update the same vendor record, silent overwrites
-                  become systemic risk. The database captures the last write.
-                  Neotoma captures the full story.
+                  When screening agents, monitoring agents, and diligence agents all update the same
+                  vendor record, silent overwrites become systemic risk. The database captures the
+                  last write. Neotoma captures the full story.
                 </p>
               </div>
 
@@ -921,13 +911,9 @@ export function ComplianceLandingPage() {
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-rose-500/70" />
-                      <span className="text-[13px] font-medium text-foreground">
-                        {title}
-                      </span>
+                      <span className="text-[13px] font-medium text-foreground">{title}</span>
                     </div>
-                    <p className="text-[13px] leading-5 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[13px] leading-5 text-muted-foreground">{desc}</p>
                   </div>
                 ))}
               </div>
@@ -935,14 +921,13 @@ export function ComplianceLandingPage() {
               <div className="rounded-lg border border-border bg-card p-5 space-y-3">
                 <p className="flex items-center gap-2 text-[14px] font-medium text-foreground">
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
-                  This is not an edge case. It is the default failure mode of
-                  multi-agent compliance systems.
+                  This is not an edge case. It is the default failure mode of multi-agent compliance
+                  systems.
                 </p>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  As your system moves from single-workflow screening to
-                  continuous, multi-agent monitoring, the database becomes the
-                  weakest link. Neotoma provides the state integrity layer
-                  purpose-built for this transition.
+                  As your system moves from single-workflow screening to continuous, multi-agent
+                  monitoring, the database becomes the weakest link. Neotoma provides the state
+                  integrity layer purpose-built for this transition.
                 </p>
               </div>
             </div>
@@ -965,10 +950,9 @@ export function ComplianceLandingPage() {
                   <span>Same question, different answer</span>
                 </h2>
                 <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
-                  Without a state integrity layer, your compliance AI returns
-                  stale scores, lost conflict history, and unexplainable
-                  decisions. With Neotoma, every response reads from versioned,
-                  schema-bound state with full provenance.
+                  Without a state integrity layer, your compliance AI returns stale scores, lost
+                  conflict history, and unexplainable decisions. With Neotoma, every response reads
+                  from versioned, schema-bound state with full provenance.
                 </p>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
@@ -996,9 +980,7 @@ export function ComplianceLandingPage() {
                           <p className="text-[14px] font-medium leading-5 text-foreground">
                             {failTitle}
                           </p>
-                          <p className="text-[13px] leading-5 text-muted-foreground">
-                            {failDesc}
-                          </p>
+                          <p className="text-[13px] leading-5 text-muted-foreground">{failDesc}</p>
                         </div>
                       </div>
                     );
@@ -1047,16 +1029,14 @@ export function ComplianceLandingPage() {
                     Icon: Database,
                     title: "Reduce",
                     desc: "Neotoma's deterministic reducers merge observations into versioned entity snapshots. Conflicting inputs are detected and surfaced, not silently resolved. Merge policies are configurable per field.",
-                    detail:
-                      "Same observations + same rules = same state. Always.",
+                    detail: "Same observations + same rules = same state. Always.",
                   },
                   {
                     step: "3",
                     Icon: Brain,
                     title: "Query",
                     desc: "Your platform queries Neotoma for current state, historical state, or the full observation trail. Every field in every snapshot traces to specific evidence. Regulators get answers, not approximations.",
-                    detail:
-                      "Temporal queries, provenance chains, conflict reports.",
+                    detail: "Temporal queries, provenance chains, conflict reports.",
                   },
                 ].map(({ step, Icon, title, desc, detail }) => (
                   <div
@@ -1069,14 +1049,10 @@ export function ComplianceLandingPage() {
                       </span>
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-[16px] font-medium text-foreground">
-                          {title}
-                        </span>
+                        <span className="text-[16px] font-medium text-foreground">{title}</span>
                       </div>
                     </div>
-                    <p className="text-[14px] leading-6 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[14px] leading-6 text-muted-foreground">{desc}</p>
                     <p className="text-[12px] text-amber-600/80 dark:text-amber-400/80 font-medium">
                       {detail}
                     </p>
@@ -1099,9 +1075,8 @@ export function ComplianceLandingPage() {
                   What your compliance database can&apos;t do
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  Postgres stores the last write. Neotoma stores every
-                  observation, every conflict, every version, with
-                  enterprise-grade deployment and governance built in.
+                  Postgres stores the last write. Neotoma stores every observation, every conflict,
+                  every version, with enterprise-grade deployment and governance built in.
                 </p>
               </div>
 
@@ -1150,13 +1125,9 @@ export function ComplianceLandingPage() {
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-amber-500" />
-                      <span className="text-[15px] font-medium text-foreground">
-                        {title}
-                      </span>
+                      <span className="text-[15px] font-medium text-foreground">{title}</span>
                     </div>
-                    <p className="text-[13px] leading-6 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[13px] leading-6 text-muted-foreground">{desc}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {tags.map((tag) => (
                         <span
@@ -1191,10 +1162,9 @@ export function ComplianceLandingPage() {
                 <ArchitectureDiagram className="w-full" />
                 <div className="space-y-5">
                   <p className="text-[15px] leading-7 text-muted-foreground">
-                    Neotoma sits between your compliance platform and its data
-                    sources as the state integrity layer. Agents write
-                    observations. The reducer computes versioned truth. Your
-                    platform reads deterministic state with full provenance.
+                    Neotoma sits between your compliance platform and its data sources as the state
+                    integrity layer. Agents write observations. The reducer computes versioned
+                    truth. Your platform reads deterministic state with full provenance.
                   </p>
                   <ul className="list-none pl-0 space-y-3">
                     {[
@@ -1215,18 +1185,11 @@ export function ComplianceLandingPage() {
                         desc: "Team-wide deployment with SSO, role-based access, and audit logging. API versioning with semantic compatibility guarantees.",
                       },
                     ].map((item) => (
-                      <li
-                        key={item.label}
-                        className="flex items-start gap-2.5"
-                      >
+                      <li key={item.label} className="flex items-start gap-2.5">
                         <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
                         <span className="text-[14px] leading-6">
-                          <span className="font-medium text-foreground">
-                            {item.label}.
-                          </span>{" "}
-                          <span className="text-muted-foreground">
-                            {item.desc}
-                          </span>
+                          <span className="font-medium text-foreground">{item.label}.</span>{" "}
+                          <span className="text-muted-foreground">{item.desc}</span>
                         </span>
                       </li>
                     ))}
@@ -1270,16 +1233,13 @@ export function ComplianceLandingPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-foreground underline underline-offset-2 hover:no-underline"
-                    onClick={() =>
-                      sendOutboundClick(DAYDREAM_URL, "Daydream case study link")
-                    }
+                    onClick={() => sendOutboundClick(DAYDREAM_URL, "Daydream case study link")}
                   >
                     Daydream
                   </a>{" "}
-                  is an AI-native compliance platform for third-party and vendor
-                  risk. It runs diligence from intake through screening,
-                  analysis, and continuous monitoring, all backed by
-                  Neotoma&apos;s deterministic state integrity layer.
+                  is an AI-native compliance platform for third-party and vendor risk. It runs
+                  diligence from intake through screening, analysis, and continuous monitoring, all
+                  backed by Neotoma&apos;s deterministic state integrity layer.
                 </p>
               </div>
 
@@ -1345,13 +1305,12 @@ export function ComplianceLandingPage() {
                       The pattern generalizes
                     </p>
                     <p className="text-[13px] leading-6 text-muted-foreground">
-                      Daydream is one example of a next-generation compliance
-                      product built on a deterministic integrity layer. The
-                      same architecture applies to KYC/AML, contract lifecycle,
-                      regulatory change tracking, and any workflow where
-                      multiple agents update the same regulated entities.
-                      Replace &ldquo;vendor risk profile&rdquo; with &ldquo;customer
-                      risk assessment&rdquo; and the guarantees are identical.
+                      Daydream is one example of a next-generation compliance product built on a
+                      deterministic integrity layer. The same architecture applies to KYC/AML,
+                      contract lifecycle, regulatory change tracking, and any workflow where
+                      multiple agents update the same regulated entities. Replace &ldquo;vendor risk
+                      profile&rdquo; with &ldquo;customer risk assessment&rdquo; and the guarantees
+                      are identical.
                     </p>
                   </div>
                 </div>
@@ -1363,9 +1322,7 @@ export function ComplianceLandingPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  onClick={() =>
-                    sendOutboundClick(DAYDREAM_URL, "Daydream visit")
-                  }
+                  onClick={() => sendOutboundClick(DAYDREAM_URL, "Daydream visit")}
                 >
                   Visit Daydream
                   <ArrowRight className="h-4 w-4" />
@@ -1392,15 +1349,12 @@ export function ComplianceLandingPage() {
                 </p>
                 <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
                   Build compliant AI on{" "}
-                  <span className="text-amber-600 dark:text-amber-400">
-                    trustworthy state
-                  </span>
+                  <span className="text-amber-600 dark:text-amber-400">trustworthy state</span>
                 </h2>
                 <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto">
-                  Neotoma is open-source, deploys to your infrastructure,
-                  and provides the state integrity guarantees that regulated
-                  AI systems require. Install in minutes. Enterprise features
-                  included.
+                  Neotoma is open-source, deploys to your infrastructure, and provides the state
+                  integrity guarantees that regulated AI systems require. Install in minutes.
+                  Enterprise features included.
                 </p>
               </div>
 

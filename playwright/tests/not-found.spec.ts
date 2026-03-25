@@ -8,12 +8,13 @@ import { expect } from "@playwright/test";
 import { test } from "../fixtures/servers.js";
 
 test.describe("Unknown route handling", () => {
-  test("unknown routes still render site shell", async ({ page }) => {
+  test("unknown routes show 404 with site header", async ({ page }) => {
     await page.goto("/nonexistent-route");
     await page.waitForLoadState("networkidle");
 
     await expect(page.getByRole("link", { name: /neotoma home/i })).toBeVisible();
-    await expect(page.locator("#intro")).toBeVisible();
+    await expect(page.getByRole("heading", { name: /page not found/i })).toBeVisible();
+    await expect(page.locator("#intro")).toHaveCount(0);
   });
 
   test("header home link navigates to root", async ({ page }) => {

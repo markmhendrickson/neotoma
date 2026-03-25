@@ -35,10 +35,8 @@ import { OpenClawIcon } from "../icons/OpenClawIcon";
 
 const PROSPECT_CRM_URL = "https://preview--debut-domicile.lovable.app/";
 
-const SLIDE_CLASS =
-  "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER =
-  "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
+const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-20 md:py-12";
 
 const CRM_SCENARIOS = [
   {
@@ -564,9 +562,7 @@ function CrmSuccessIllustration({ human, succeed }: { human: string; succeed: st
 
 function ArchitectureDiagram({ className = "" }: { className?: string }) {
   return (
-    <div
-      className={`rounded-xl border border-border bg-card p-6 space-y-4 ${className}`}
-    >
+    <div className={`rounded-xl border border-border bg-card p-6 space-y-4 ${className}`}>
       <div className="space-y-3">
         <div className="rounded-lg border-2 border-sky-500/30 bg-sky-500/5 px-4 py-3 text-center">
           <p className="text-[13px] font-medium text-sky-700 dark:text-sky-300">
@@ -620,18 +616,14 @@ function ArchitectureDiagram({ className = "" }: { className?: string }) {
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          {["Email / Calendar", "Social / Enrichment", "Legacy Systems"].map(
-            (source) => (
-              <div
-                key={source}
-                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center"
-              >
-                <p className="text-[10px] font-mono text-muted-foreground">
-                  {source}
-                </p>
-              </div>
-            )
-          )}
+          {["Email / Calendar", "Social / Enrichment", "Legacy Systems"].map((source) => (
+            <div
+              key={source}
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-center"
+            >
+              <p className="text-[10px] font-mono text-muted-foreground">{source}</p>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -698,9 +690,7 @@ export function CrmLandingPage() {
                 activeSection === section.id ? "opacity-100" : "opacity-50"
               } hover:opacity-100 transition-opacity`}
               onClick={() =>
-                document
-                  .getElementById(section.id)
-                  ?.scrollIntoView({ behavior: "smooth" })
+                document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth" })
               }
               aria-label={section.label}
             >
@@ -709,9 +699,7 @@ export function CrmLandingPage() {
               </span>
               <span
                 className={`h-2 w-2 rounded-full transition-colors ${
-                  activeSection === section.id
-                    ? "bg-emerald-500"
-                    : "bg-muted-foreground/30"
+                  activeSection === section.id ? "bg-emerald-500" : "bg-muted-foreground/30"
                 }`}
               />
             </button>
@@ -738,11 +726,10 @@ export function CrmLandingPage() {
                 </h1>
 
                 <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl">
-                  The next wave of CRM platforms will be AI-native from day
-                  one, but intelligence is only as good as the state
-                  underneath. Neotoma provides the deterministic foundation
-                  where every contact, deal, and relationship is versioned,
-                  schema-bound, auditable, and never silently wrong.
+                  The next wave of CRM platforms will be AI-native from day one, but intelligence is
+                  only as good as the state underneath. Neotoma provides the deterministic
+                  foundation where every contact, deal, and relationship is versioned, schema-bound,
+                  auditable, and never silently wrong.
                 </p>
 
                 <div className="space-y-2">
@@ -761,10 +748,7 @@ export function CrmLandingPage() {
                         key={tag}
                         className="inline-flex items-center gap-1.5 rounded border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1 text-[12px] font-medium text-emerald-600 dark:text-emerald-400"
                       >
-                        <Icon
-                          className="h-3.5 w-3.5 shrink-0 stroke-[2.5]"
-                          aria-hidden
-                        />
+                        <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
                         {tag}
                       </span>
                     ))}
@@ -886,11 +870,10 @@ export function CrmLandingPage() {
                   Legacy CRMs weren&apos;t built for AI. The next ones need to be.
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  Traditional CRMs store records in flat tables with no
-                  versioning, no provenance, and no schema enforcement. When
-                  AI tries to reason over that data, it inherits every
-                  inconsistency. The next generation of CRM needs a
-                  fundamentally different state architecture.
+                  Traditional CRMs store records in flat tables with no versioning, no provenance,
+                  and no schema enforcement. When AI tries to reason over that data, it inherits
+                  every inconsistency. The next generation of CRM needs a fundamentally different
+                  state architecture.
                 </p>
               </div>
 
@@ -923,13 +906,9 @@ export function CrmLandingPage() {
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-rose-500/70" />
-                      <span className="text-[13px] font-medium text-foreground">
-                        {title}
-                      </span>
+                      <span className="text-[13px] font-medium text-foreground">{title}</span>
                     </div>
-                    <p className="text-[13px] leading-5 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[13px] leading-5 text-muted-foreground">{desc}</p>
                   </div>
                 ))}
               </div>
@@ -937,15 +916,13 @@ export function CrmLandingPage() {
               <div className="rounded-lg border border-border bg-card p-5 space-y-3">
                 <p className="flex items-center gap-2 text-[14px] font-medium text-foreground">
                   <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" aria-hidden />
-                  Building AI-native CRM on legacy data infrastructure is a
-                  dead end.
+                  Building AI-native CRM on legacy data infrastructure is a dead end.
                 </p>
                 <p className="text-[13px] leading-6 text-muted-foreground">
-                  The next generation of CRM platforms needs a state layer
-                  designed for AI from the ground up: versioned entities,
-                  schema enforcement, full provenance, and deterministic
-                  resolution. Neotoma provides that foundation so you can
-                  build intelligent CRM features on data you can trust.
+                  The next generation of CRM platforms needs a state layer designed for AI from the
+                  ground up: versioned entities, schema enforcement, full provenance, and
+                  deterministic resolution. Neotoma provides that foundation so you can build
+                  intelligent CRM features on data you can trust.
                 </p>
               </div>
             </div>
@@ -968,9 +945,9 @@ export function CrmLandingPage() {
                   <span>Same question, different outcome</span>
                 </h2>
                 <p className="text-[15px] leading-7 text-foreground/90 max-w-2xl">
-                  Without a state layer, your CRM&apos;s AI returns stale contacts,
-                  lost deal history, and invisible activity. With Neotoma, every
-                  response reads from versioned, schema-bound state.
+                  Without a state layer, your CRM&apos;s AI returns stale contacts, lost deal
+                  history, and invisible activity. With Neotoma, every response reads from
+                  versioned, schema-bound state.
                 </p>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-10">
@@ -998,9 +975,7 @@ export function CrmLandingPage() {
                           <p className="text-[14px] font-medium leading-5 text-foreground">
                             {failTitle}
                           </p>
-                          <p className="text-[13px] leading-5 text-muted-foreground">
-                            {failDesc}
-                          </p>
+                          <p className="text-[13px] leading-5 text-muted-foreground">{failDesc}</p>
                         </div>
                       </div>
                     );
@@ -1049,16 +1024,14 @@ export function CrmLandingPage() {
                     Icon: Database,
                     title: "Resolve",
                     desc: "Neotoma deduplicates, merges, and schema-validates every entity. Conflicting records are flagged, not silently overwritten. Each contact, account, and opportunity gets a canonical, versioned identity.",
-                    detail:
-                      "Deterministic entity resolution. Same inputs, same state.",
+                    detail: "Deterministic entity resolution. Same inputs, same state.",
                   },
                   {
                     step: "3",
                     Icon: Brain,
                     title: "Serve",
                     desc: "Your platform's AI features read from Neotoma's state layer via MCP or REST API. Every recommendation, score, and summary traces back to versioned facts, not inference.",
-                    detail:
-                      "Answers grounded in auditable state, not approximation.",
+                    detail: "Answers grounded in auditable state, not approximation.",
                   },
                 ].map(({ step, Icon, title, desc, detail }) => (
                   <div
@@ -1071,14 +1044,10 @@ export function CrmLandingPage() {
                       </span>
                       <div className="flex items-center gap-2">
                         <Icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-[16px] font-medium text-foreground">
-                          {title}
-                        </span>
+                        <span className="text-[16px] font-medium text-foreground">{title}</span>
                       </div>
                     </div>
-                    <p className="text-[14px] leading-6 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[14px] leading-6 text-muted-foreground">{desc}</p>
                     <p className="text-[12px] text-emerald-600/80 dark:text-emerald-400/80 font-medium">
                       {detail}
                     </p>
@@ -1101,9 +1070,9 @@ export function CrmLandingPage() {
                   Guarantees that legacy CRMs can&apos;t offer
                 </h2>
                 <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl">
-                  Traditional CRM databases store the latest value and discard
-                  the rest. Neotoma gives your platform state guarantees
-                  that make AI features trustworthy from day one.
+                  Traditional CRM databases store the latest value and discard the rest. Neotoma
+                  gives your platform state guarantees that make AI features trustworthy from day
+                  one.
                 </p>
               </div>
 
@@ -1152,13 +1121,9 @@ export function CrmLandingPage() {
                   >
                     <div className="flex items-center gap-2">
                       <Icon className="h-4 w-4 text-emerald-500" />
-                      <span className="text-[15px] font-medium text-foreground">
-                        {title}
-                      </span>
+                      <span className="text-[15px] font-medium text-foreground">{title}</span>
                     </div>
-                    <p className="text-[13px] leading-6 text-muted-foreground">
-                      {desc}
-                    </p>
+                    <p className="text-[13px] leading-6 text-muted-foreground">{desc}</p>
                     <div className="flex flex-wrap gap-1.5">
                       {tags.map((tag) => (
                         <span
@@ -1193,10 +1158,9 @@ export function CrmLandingPage() {
                 <ArchitectureDiagram className="w-full" />
                 <div className="space-y-5">
                   <p className="text-[15px] leading-7 text-muted-foreground">
-                    Neotoma sits beneath your CRM platform as its state
-                    foundation. It ingests raw data as immutable observations,
-                    resolves entities deterministically, and serves a versioned
-                    state graph that your AI features read from.
+                    Neotoma sits beneath your CRM platform as its state foundation. It ingests raw
+                    data as immutable observations, resolves entities deterministically, and serves
+                    a versioned state graph that your AI features read from.
                   </p>
                   <ul className="list-none pl-0 space-y-3">
                     {[
@@ -1217,18 +1181,11 @@ export function CrmLandingPage() {
                         desc: "Inspect any entity at any version. Diff states between dates. Replay the observation log to reconstruct historical state.",
                       },
                     ].map((item) => (
-                      <li
-                        key={item.label}
-                        className="flex items-start gap-2.5"
-                      >
+                      <li key={item.label} className="flex items-start gap-2.5">
                         <span className="mt-[9px] h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
                         <span className="text-[14px] leading-6">
-                          <span className="font-medium text-foreground">
-                            {item.label}.
-                          </span>{" "}
-                          <span className="text-muted-foreground">
-                            {item.desc}
-                          </span>
+                          <span className="font-medium text-foreground">{item.label}.</span>{" "}
+                          <span className="text-muted-foreground">{item.desc}</span>
                         </span>
                       </li>
                     ))}
@@ -1278,10 +1235,9 @@ export function CrmLandingPage() {
                   >
                     ProspectCRM
                   </a>{" "}
-                  is an AI relationship intelligence platform built for venture
-                  capital firms. It surfaces warm intros, tracks deal
-                  diligence, and flags LP re-up windows, all backed by
-                  Neotoma&apos;s deterministic state layer.
+                  is an AI relationship intelligence platform built for venture capital firms. It
+                  surfaces warm intros, tracks deal diligence, and flags LP re-up windows, all
+                  backed by Neotoma&apos;s deterministic state layer.
                 </p>
               </div>
 
@@ -1347,13 +1303,11 @@ export function CrmLandingPage() {
                       The pattern generalizes
                     </p>
                     <p className="text-[13px] leading-6 text-muted-foreground">
-                      ProspectCRM is one example of a next-generation CRM built
-                      on a deterministic state layer. The same architecture
-                      applies to enterprise sales, customer success, recruiting,
-                      and any domain where relationship data drives AI-native
-                      features. Replace &ldquo;LP commitments&rdquo; with
-                      &ldquo;enterprise renewals&rdquo; and the guarantees are
-                      identical.
+                      ProspectCRM is one example of a next-generation CRM built on a deterministic
+                      state layer. The same architecture applies to enterprise sales, customer
+                      success, recruiting, and any domain where relationship data drives AI-native
+                      features. Replace &ldquo;LP commitments&rdquo; with &ldquo;enterprise
+                      renewals&rdquo; and the guarantees are identical.
                     </p>
                   </div>
                 </div>
@@ -1365,9 +1319,7 @@ export function CrmLandingPage() {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
-                  onClick={() =>
-                    sendOutboundClick(PROSPECT_CRM_URL, "ProspectCRM visit")
-                  }
+                  onClick={() => sendOutboundClick(PROSPECT_CRM_URL, "ProspectCRM visit")}
                 >
                   Visit ProspectCRM
                   <ArrowRight className="h-4 w-4" />
@@ -1394,15 +1346,12 @@ export function CrmLandingPage() {
                 </p>
                 <h2 className="text-[28px] md:text-[32px] font-medium tracking-[-0.02em]">
                   Build the next CRM on{" "}
-                  <span className="text-emerald-600 dark:text-emerald-400">
-                    reliable state
-                  </span>
+                  <span className="text-emerald-600 dark:text-emerald-400">reliable state</span>
                 </h2>
                 <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl mx-auto">
-                  Neotoma is open-source, installs in 5 minutes, and runs
-                  locally. Use it as the state foundation for your AI-native
-                  CRM platform, so every feature you ship is grounded
-                  in data you can trust.
+                  Neotoma is open-source, installs in 5 minutes, and runs locally. Use it as the
+                  state foundation for your AI-native CRM platform, so every feature you ship is
+                  grounded in data you can trust.
                 </p>
               </div>
 
@@ -1423,17 +1372,14 @@ export function CrmLandingPage() {
               </div>
 
               <div className="flex flex-wrap items-center justify-center gap-4 text-[12px] text-muted-foreground">
-                {[
-                  "Open-source",
-                  "Privacy-first",
-                  "No cloud sync required",
-                  "MIT-licensed",
-                ].map((label) => (
-                  <div key={label} className="flex items-center gap-1.5">
-                    <Check className="h-3.5 w-3.5 text-emerald-500" />
-                    <span>{label}</span>
-                  </div>
-                ))}
+                {["Open-source", "Privacy-first", "No cloud sync required", "MIT-licensed"].map(
+                  (label) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <Check className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>{label}</span>
+                    </div>
+                  )
+                )}
               </div>
 
               <div className="flex flex-wrap justify-center gap-3 pt-2">

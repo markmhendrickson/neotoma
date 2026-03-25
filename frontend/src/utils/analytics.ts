@@ -72,7 +72,15 @@ export type CtaName =
   | "procurement_install_neotoma"
   | "procurement_install_neotoma_bottom"
   | "agent_auth_install_neotoma"
-  | "agent_auth_install_neotoma_bottom";
+  | "agent_auth_install_neotoma_bottom"
+  | "healthcare_install_neotoma"
+  | "healthcare_install_neotoma_bottom"
+  | "govtech_install_neotoma"
+  | "govtech_install_neotoma_bottom"
+  | "customer_ops_install_neotoma"
+  | "customer_ops_install_neotoma_bottom"
+  | "logistics_install_neotoma"
+  | "logistics_install_neotoma_bottom";
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {

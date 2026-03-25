@@ -330,6 +330,10 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Financial Ops", href: "/financial-ops", icon: "DollarSign" },
       { label: "Procurement", href: "/procurement", icon: "Briefcase" },
       { label: "Agent Auth", href: "/agent-auth", icon: "Shield" },
+      { label: "Healthcare", href: "/healthcare", icon: "Heart" },
+      { label: "Government", href: "/government", icon: "Landmark" },
+      { label: "Customer Ops", href: "/customer-ops", icon: "Headphones" },
+      { label: "Logistics", href: "/logistics", icon: "Truck" },
     ],
   },
   {

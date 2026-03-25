@@ -39,7 +39,7 @@ const CONFIG: VerticalConfig = {
   analyticsPrefix: "procurement",
   problemTitle: "P2P and sourcing tools store artifacts; they do not preserve award-time truth",
   problemDesc:
-    "Suppliers change risk profiles mid-contract. Specs drift between engineering releases and PO line items. Bid tabs rot in spreadsheets. Approvals collapse to \"approved\" in workflow logs. Without temporal snapshots, \"what did we actually select and why?\" becomes a reconstruction project.",
+    'Suppliers change risk profiles mid-contract. Specs drift between engineering releases and PO line items. Bid tabs rot in spreadsheets. Approvals collapse to "approved" in workflow logs. Without temporal snapshots, "what did we actually select and why?" becomes a reconstruction project.',
   problemCards: [
     {
       Icon: History,
@@ -54,15 +54,16 @@ const CONFIG: VerticalConfig = {
     {
       Icon: Link2,
       title: "No approval provenance",
-      desc: "Workflows stamp \"approved\" without binding approvers to the bid packet, spec hash, or delegation chain. When Legal asks who had authority for a $1.2M award, the answer is a name in email.",
+      desc: 'Workflows stamp "approved" without binding approvers to the bid packet, spec hash, or delegation chain. When Legal asks who had authority for a $1.2M award, the answer is a name in email.',
     },
     {
       Icon: ShieldAlert,
       title: "Invisible supplier risk changes",
-      desc: "Onboarding cleared Apex Components at \"low\" financial risk, but a mid-contract credit downgrade and sanctions-screen hit never flow back to the PO or category owner.",
+      desc: 'Onboarding cleared Apex Components at "low" financial risk, but a mid-contract credit downgrade and sanctions-screen hit never flow back to the PO or category owner.',
     },
   ],
-  problemCallout: "Public sector and enterprise procurement do not accept \"we picked the best vendor\" without evidence.",
+  problemCallout:
+    'Public sector and enterprise procurement do not accept "we picked the best vendor" without evidence.',
   problemCalloutDesc:
     "Bid protests, SOX-style controls, and AI-driven sourcing all need the same thing: competing offers, specification versions, and approvals frozen at decision time. Neotoma preserves that graph so agents and humans can explain awards without rebuilding folders.",
   scenarios: [
@@ -70,8 +71,7 @@ const CONFIG: VerticalConfig = {
       category: "Bid comparison",
       human:
         "What were the competing bids when we selected Meridian Steel for the Q2 structural steel package, and what spec did the approval reference?",
-      fail:
-        "Meridian Steel was awarded the structural steel package at $1,184,000 with 14-week delivery; approval status: completed.",
+      fail: "Meridian Steel was awarded the structural steel package at $1,184,000 with 14-week delivery; approval status: completed.",
       succeed:
         "At award snapshot 2025-03-18 16:02 UTC: (1) Meridian Steel bid\u00B7v3, $1,184,000, score 87.4, submitted Mar 12 9:41am; (2) Harbor Forge bid\u00B7v2, $1,205,500, score 82.1, Mar 11 4:18pm; (3) Summit Alloys bid\u00B7v4, $1,098,000, score 78.6 (penalized for 18-week lead), Mar 13 11:05am. Approval approval\u00B7v5 linked specification\u00B7v7 (Rev C, hash a3f9\u20262c1) and explicitly cited Exhibit B tensile requirements, not today's Rev D.",
       version: "award\u00B7snapshot\u00B72025-03-18",
@@ -82,9 +82,9 @@ const CONFIG: VerticalConfig = {
     },
     {
       category: "Specification drift",
-      human: "What spec version was PO-2025-4418 for Apex Components based on when it was approved?",
-      fail:
-        "Current specification for custom bracket assembly: Rev D (effective Apr 2, 2025), torque test 45 N\u00B7m, coating Class III.",
+      human:
+        "What spec version was PO-2025-4418 for Apex Components based on when it was approved?",
+      fail: "Current specification for custom bracket assembly: Rev D (effective Apr 2, 2025), torque test 45 N\u00B7m, coating Class III.",
       succeed:
         "PO-2025-4418 was approved Mar 21, 2025 against specification\u00B7v6 (Rev B): torque test 40 N\u00B7m, coating Class II. Rev C and Rev D landed Apr 2 and Apr 18 respectively; purchase_order\u00B7v4 observation binds lines 3\u20136 to spec\u00B7v6, not spec\u00B7v9. Drift vs. current Rev D is explicit in the graph.",
       version: "purchase_order\u00B7v4",
@@ -95,13 +95,14 @@ const CONFIG: VerticalConfig = {
     },
     {
       category: "Supplier risk change",
-      human: "Has supplier risk for Apex Components changed since we onboarded them for PO-2025-4418?",
+      human:
+        "Has supplier risk for Apex Components changed since we onboarded them for PO-2025-4418?",
       fail: "Apex Components was approved for procurement spend on March 21, 2025.",
       succeed:
-        "Onboarding (Jan 8, 2025): supplier\u00B7v2 risk tier \"low,\" D&B 2A1, no sanctions hits. Timeline: Feb 26, credit watch (supplier\u00B7v5); Mar 14, mid-contract flag \"review required\" after OFAC secondary-screen match cleared with false positive (supplier\u00B7v6); Apr 9, tier raised to \"medium,\" covenant breach noted in 8-K (supplier\u00B7v8). PO-2025-4418 still references onboarding snapshot unless a formal re-approval observation exists. None linked.",
+        'Onboarding (Jan 8, 2025): supplier\u00B7v2 risk tier "low," D&B 2A1, no sanctions hits. Timeline: Feb 26, credit watch (supplier\u00B7v5); Mar 14, mid-contract flag "review required" after OFAC secondary-screen match cleared with false positive (supplier\u00B7v6); Apr 9, tier raised to "medium," covenant breach noted in 8-K (supplier\u00B7v8). PO-2025-4418 still references onboarding snapshot unless a formal re-approval observation exists. None linked.',
       version: "supplier\u00B7v8",
       Icon: TrendingUp,
-      failTitle: "Static \"approved,\" no risk trajectory",
+      failTitle: 'Static "approved," no risk trajectory',
       failDesc:
         "Stakeholders need to see risk motion across the contract life, not a binary onboarding flag. Missing timeline data hides the mid-contract alert that should have been escalated.",
     },
@@ -128,7 +129,8 @@ const CONFIG: VerticalConfig = {
       Icon: Upload,
       title: "Ingest every sourcing touch as an observation",
       desc: "RFP responses, score models, spec releases, PO amendments, and agent-generated comparisons become structured observations on supplier, bid, specification, purchase order, and approval entities.",
-      detail: "Immutable history by default. Award-time snapshots are computed, not recreated from email attachments.",
+      detail:
+        "Immutable history by default. Award-time snapshots are computed, not recreated from email attachments.",
     },
     {
       Icon: Layers,
@@ -140,7 +142,8 @@ const CONFIG: VerticalConfig = {
       Icon: Search,
       title: "Let procurement agents answer with provenance",
       desc: "Sourcing and policy agents read the same versioned graph. Responses cite observation IDs, bid versions, and delegation edges so reviewers can defend awards.",
-      detail: "Built for protest defense and control narratives: who approved what, against which spec and competing offers.",
+      detail:
+        "Built for protest defense and control narratives: who approved what, against which spec and competing offers.",
     },
   ],
   capTitle: "Capabilities built for sourcing velocity and audit defense",
@@ -247,7 +250,12 @@ const CONFIG: VerticalConfig = {
   ctaHighlight: "every award they support",
   ctaDesc:
     "Install Neotoma, connect sourcing systems and agents, and stop treating the latest PO PDF as the database of record.",
-  ctaFeatures: ["Open-source", "Enterprise SSO & RBAC", "Team deployment", "API compatibility guarantees"],
+  ctaFeatures: [
+    "Open-source",
+    "Enterprise SSO & RBAC",
+    "Team deployment",
+    "API compatibility guarantees",
+  ],
   agentLabel: "procurement agent",
 };
 

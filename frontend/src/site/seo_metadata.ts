@@ -630,6 +630,54 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Procurement", path: "/procurement" },
     ],
   },
+  "/healthcare": {
+    title: "Neotoma for Healthcare | Versioned Clinical State and Decision Provenance",
+    description:
+      "Reconstruct what was known about a patient at any point in their care timeline. Neotoma provides versioned clinical decisions, authorization lifecycles, and care plan lineage for healthcare operations.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Healthcare", path: "/healthcare" },
+    ],
+  },
+  "/government": {
+    title: "Neotoma for Public Sector | Versioned Policy State and Determination Provenance",
+    description:
+      "Reconstruct which policy version and evidence governed a government decision on any date. Neotoma provides versioned eligibility determinations, inter-agency data provenance, and rule-bound decision state.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Government", path: "/government" },
+    ],
+  },
+  "/customer-ops": {
+    title: "Neotoma for Customer Ops | Versioned Support State and Routing Provenance",
+    description:
+      "Reconstruct why a ticket was routed, escalated, or resolved the way it was. Neotoma provides versioned routing decisions, escalation chains, and interaction-level provenance for customer operations.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Customer Ops", path: "/customer-ops" },
+    ],
+  },
+  "/logistics": {
+    title: "Neotoma for Logistics | Versioned Routing State and Constraint Provenance",
+    description:
+      "Reconstruct what the system knew when a routing or fulfillment decision was made. Neotoma provides versioned routing decisions, inventory position timelines, and carrier constraint snapshots for supply chain operations.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Logistics", path: "/logistics" },
+    ],
+  },
   "/agent-auth": {
     title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
     description:
@@ -645,7 +693,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/verticals": {
     title: "Use Cases | Neotoma — State Integrity for AI-Driven Verticals",
     description:
-      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, and agent authorization.",
+      "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, and logistics.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
