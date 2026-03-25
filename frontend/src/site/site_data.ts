@@ -318,6 +318,21 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     ],
   },
   {
+    title: "Verticals",
+    items: [
+      { label: "All verticals", href: "/verticals", icon: "LayoutGrid" },
+      { label: "Compliance", href: "/compliance", icon: "ShieldCheck" },
+      { label: "CRM", href: "/crm", icon: "Building2" },
+      { label: "Contracts", href: "/contracts", icon: "FileText" },
+      { label: "Due Diligence", href: "/diligence", icon: "Search" },
+      { label: "Portfolio", href: "/portfolio", icon: "TrendingUp" },
+      { label: "Case Management", href: "/cases", icon: "Gavel" },
+      { label: "Financial Ops", href: "/financial-ops", icon: "DollarSign" },
+      { label: "Procurement", href: "/procurement", icon: "Briefcase" },
+      { label: "Agent Auth", href: "/agent-auth", icon: "Shield" },
+    ],
+  },
+  {
     title: "External",
     items: [
       { label: "GitHub", href: "https://github.com/markmhendrickson/neotoma", icon: "Github" },

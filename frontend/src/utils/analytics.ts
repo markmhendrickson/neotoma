@@ -58,7 +58,21 @@ export type CtaName =
   | "crm_install_neotoma"
   | "crm_install_neotoma_bottom"
   | "compliance_install_neotoma"
-  | "compliance_install_neotoma_bottom";
+  | "compliance_install_neotoma_bottom"
+  | "contracts_install_neotoma"
+  | "contracts_install_neotoma_bottom"
+  | "diligence_install_neotoma"
+  | "diligence_install_neotoma_bottom"
+  | "portfolio_install_neotoma"
+  | "portfolio_install_neotoma_bottom"
+  | "cases_install_neotoma"
+  | "cases_install_neotoma_bottom"
+  | "financial_ops_install_neotoma"
+  | "financial_ops_install_neotoma_bottom"
+  | "procurement_install_neotoma"
+  | "procurement_install_neotoma_bottom"
+  | "agent_auth_install_neotoma"
+  | "agent_auth_install_neotoma_bottom";
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {

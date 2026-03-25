@@ -67,8 +67,11 @@
   },
   "sitePage": {
     "description": "Public site landing page coverage.",
-    "components": ["SitePage"],
-    "states": ["render hero and install guidance"],
+    "components": ["SitePage", "Layout", "SiteHeaderNav", "VerticalsIndexPage"],
+    "states": [
+      "render hero and install guidance",
+      "vertical marketing full-page shell without docs sidebar"
+    ],
     "specFile": "site-page.spec.ts"
   },
   "oauthFlow": {

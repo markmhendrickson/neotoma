@@ -5,13 +5,20 @@ import {
   Building2,
   Check,
   ChevronDown,
+  Eye,
+  FileCode,
+  GitBranch,
   Layers,
   Network,
+  RotateCcw,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { SiClaude, SiOpenai } from "react-icons/si";
 import { SeoHead } from "../../SeoHead";
-import { sendCtaClick, sendOutboundClick } from "@/utils/analytics";
+import { CursorIcon } from "../../icons/CursorIcon";
+import { OpenClawIcon } from "../../icons/OpenClawIcon";
+import { sendCtaClick, sendOutboundClick, type CtaName } from "@/utils/analytics";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -73,7 +80,7 @@ export interface VerticalConfig {
   heroHighlight: string;
   heroDesc: string;
   heroTags: { tag: string; Icon: LucideIcon }[];
-  heroFeatures: string[];
+  heroFeatures?: string[];
   analyticsPrefix: string;
   problemTitle: string;
   problemDesc: string;
@@ -114,7 +121,8 @@ export type AccentColor =
   | "violet"
   | "cyan"
   | "teal"
-  | "orange";
+  | "orange"
+  | "blue";
 
 interface VTheme {
   badgeBorderBg: string;
@@ -279,6 +287,24 @@ const T: Record<AccentColor, VTheme> = {
     dot: "bg-orange-500",
     cta: "border-orange-600 bg-orange-600 shadow-orange-600/30 hover:bg-orange-500 dark:border-orange-500 dark:bg-orange-500 dark:text-orange-950",
     archBorder: "border-2 border-orange-500/40 bg-orange-500/5",
+  },
+  blue: {
+    badgeBorderBg: "border-blue-500/20 bg-blue-500/5",
+    text: "text-blue-600 dark:text-blue-400",
+    textDarker: "text-blue-700 dark:text-blue-300",
+    textMuted: "text-blue-600/70 dark:text-blue-400/70",
+    textDetail: "text-blue-600/80 dark:text-blue-400/80",
+    icon: "text-blue-500",
+    borderLight: "border-blue-500/20",
+    borderMed: "border-blue-500/25",
+    border30: "border-blue-500/30",
+    border40: "border-blue-500/40",
+    bg5: "bg-blue-500/5",
+    bg10: "bg-blue-500/10",
+    bg3: "bg-blue-500/[0.03]",
+    dot: "bg-blue-500",
+    cta: "border-blue-600 bg-blue-600 shadow-blue-600/30 hover:bg-blue-500 dark:border-blue-500 dark:bg-blue-500 dark:text-blue-950",
+    archBorder: "border-2 border-blue-500/40 bg-blue-500/5",
   },
 };
 
@@ -844,19 +870,24 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                   <span className={t.text}>{config.heroHighlight}</span>
                 </h1>
                 <p className="text-[15px] md:text-[17px] leading-7 text-muted-foreground max-w-xl">{config.heroDesc}</p>
-                <div className="flex flex-wrap gap-2">
-                  {config.heroTags.map(({ tag, Icon }) => (
-                    <span key={tag} className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] font-medium ${t.badgeBorderBg} ${t.text}`}>
-                      <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
-                      {tag}
-                    </span>
-                  ))}
+                <div className="space-y-2">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                    Key data to store
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {config.heroTags.map(({ tag, Icon }) => (
+                      <span key={tag} className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] font-medium ${t.badgeBorderBg} ${t.text}`}>
+                        <Icon className="h-3.5 w-3.5 shrink-0 stroke-[2.5]" aria-hidden />
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Link
                     to="/install"
                     className={`inline-flex w-full sm:w-auto justify-center items-center gap-1.5 rounded-md border px-5 py-2.5 text-[14px] font-medium text-white no-underline shadow-sm transition-colors ${t.cta}`}
-                    onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma`)}
+                    onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma` as CtaName)}
                   >
                     Install Neotoma
                   </Link>
@@ -872,13 +903,77 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                     <ArrowRight className="h-4 w-4" />
                   </a>
                 </div>
-                <div className="flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
-                  {config.heroFeatures.map((f, i) => (
-                    <span key={f}>
-                      {i > 0 && <span className="text-border mr-3">&middot;</span>}
-                      {f}
-                    </span>
-                  ))}
+                <div className="pt-1 grid gap-4 md:grid-cols-2 md:items-start">
+                  <div className="space-y-2">
+                    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                      Works with
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to="/neotoma-with-claude-code"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiClaude className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Claude Code
+                      </Link>
+                      <Link
+                        to="/neotoma-with-claude"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiClaude className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Claude
+                      </Link>
+                      <Link
+                        to="/neotoma-with-chatgpt"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        ChatGPT
+                      </Link>
+                      <Link
+                        to="/neotoma-with-codex"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <SiOpenai className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Codex
+                      </Link>
+                      <Link
+                        to="/neotoma-with-cursor"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <CursorIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Cursor
+                      </Link>
+                      <Link
+                        to="/neotoma-with-openclaw"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90 no-underline transition-colors hover:bg-muted hover:border-border"
+                      >
+                        <OpenClawIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        OpenClaw
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="space-y-2 md:text-right">
+                    <p className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground/80">
+                      Guarantees
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                      {[
+                        { tag: "Versioned", Icon: GitBranch },
+                        { tag: "Schema-bound", Icon: FileCode },
+                        { tag: "Auditable", Icon: Eye },
+                        { tag: "Replayable", Icon: RotateCcw },
+                      ].map(({ tag, Icon }) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] text-foreground/90"
+                        >
+                          <Icon className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
               <div>
@@ -1155,7 +1250,7 @@ export function VerticalLandingShell({ config }: { config: VerticalConfig }) {
                 <Link
                   to="/install"
                   className={`inline-flex justify-center items-center gap-1.5 rounded-md border px-6 py-2.5 text-[14px] font-medium text-white no-underline shadow-sm transition-colors ${t.cta}`}
-                  onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma_bottom`)}
+                  onClick={() => sendCtaClick(`${config.analyticsPrefix}_install_neotoma_bottom` as CtaName)}
                 >
                   Install Neotoma
                 </Link>
