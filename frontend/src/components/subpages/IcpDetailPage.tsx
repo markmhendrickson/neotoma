@@ -262,7 +262,7 @@ export function IcpDetailPage({
 
           {!openingHook && <div className="mb-4" />}
 
-          {/* Outcomes — before/after illustrations (moved up as primary proof) */}
+          {/* Outcomes: before/after illustrations (moved up as primary proof) */}
           {outcomes && outcomes.length > 0 && (
             <section className="mb-12">
               <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-2 flex items-center gap-2">
@@ -301,7 +301,7 @@ export function IcpDetailPage({
 
           {outcomes && outcomes.length > 0 && <SectionDivider />}
 
-          {/* Problems — narrative or structured */}
+          {/* Problems: narrative or structured */}
           <section className="mb-12">
             <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-4 flex items-center gap-2">
               <AlertTriangle className="h-4.5 w-4.5 text-rose-400" aria-hidden />
@@ -381,7 +381,7 @@ export function IcpDetailPage({
               AI needs
             </h2>
             <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-              What you need from your AI tools — and what current tools don't provide.
+              What you need from your AI tools, and what current tools don't provide.
             </p>
             <ul className="list-disc pl-5 space-y-2">
               {aiNeeds.map((need) => {

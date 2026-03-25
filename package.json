@@ -114,9 +114,12 @@
     "debug:errors:cli": "node scripts/trigger_error_debug_cli.js",
     "monitor:snapshots": "tsx scripts/monitor_and_fix_snapshots.ts",
     "check:snapshots": "tsx scripts/check_stale_snapshots.ts",
+    "check:timeline": "tsx scripts/check_timeline_health.ts",
+    "backfill:timeline": "tsx scripts/backfill_timeline_via_recompute.ts",
     "simulate:install": "node scripts/simulate_npm_install.js",
     "check:bundlephobia": "node scripts/check_bundlephobia.js",
-    "validate:locales": "tsx --tsconfig frontend/tsconfig.json scripts/validate_locale_parity.ts"
+    "validate:locales": "tsx --tsconfig frontend/tsconfig.json scripts/validate_locale_parity.ts",
+    "release-notes:render": "tsx scripts/render_github_release_notes.ts"
   },
   "keywords": [
     "mcp",
@@ -171,7 +174,7 @@
     "csv-parse": "^6.1.0",
     "dotenv": "^16.4.1",
     "express": "^4.21.2",
-    "express-rate-limit": "^8.2.1",
+    "express-rate-limit": "^8.3.0",
     "helmet": "^7.2.0",
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
@@ -182,7 +185,6 @@
     "papaparse": "^5.5.3",
     "parquet-wasm": "^0.7.1",
     "pdf-parse": "^2.4.5",
-    "prebuild-install": "github:prebuild/prebuild-install#v7.1.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-helmet-async": "^2.0.5",
@@ -200,8 +202,10 @@
     "zod": "^3.22.4"
   },
   "overrides": {
-    "hono": "^4.12.2",
+    "hono": "^4.12.7",
+    "@hono/node-server": "^1.19.10",
     "fast-xml-parser": "^5.4.1",
+    "flatted": "^3.4.2",
     "qs": "^6.15.0"
   },
   "devDependencies": {

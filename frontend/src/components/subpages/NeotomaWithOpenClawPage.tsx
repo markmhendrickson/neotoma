@@ -11,7 +11,7 @@ export function NeotomaWithOpenClawPage() {
       <section className="mb-8">
         <p className="text-[15px] leading-7 text-foreground mb-4">
           OpenClaw gives agents their own machine, long-term memory, and persistent execution.
-          Neotoma adds user-owned, structured state that any agent can query — across platforms,
+          Neotoma adds user-owned, structured state that any agent can query across platforms,
           sessions, and tools.
         </p>
       </section>
@@ -39,7 +39,7 @@ export function NeotomaWithOpenClawPage() {
             <a href="https://docs.openclaw.ai/index" target="_blank" rel="noopener noreferrer" className={extLink}>
               Multi-channel gateway
             </a>{" "}
-            — WhatsApp, Telegram, Discord, iMessage via a single process
+            (WhatsApp, Telegram, Discord, iMessage via a single process)
           </span>
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -63,7 +63,7 @@ export function NeotomaWithOpenClawPage() {
         <li className="text-[15px] leading-7 flex items-start gap-2">
           <span className="text-rose-400 shrink-0" aria-hidden>&times;</span>
           <span className="text-muted-foreground">
-            Cross-platform memory — data stays inside one agent instance
+            Cross-platform memory; data stays inside one agent instance
           </span>
         </li>
         <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -85,9 +85,9 @@ export function NeotomaWithOpenClawPage() {
         <ul className="list-none pl-0 space-y-1.5 mb-2">
         {[
           "User-owned structured memory accessible from any tool or agent",
-          "Deterministic entity resolution — contacts, tasks, and relationships unified by canonical IDs",
-          "Versioned state with full provenance — every fact traces to its source",
-          "Cross-tool continuity — data stored from OpenClaw is available in Cursor, Claude, and Codex",
+          "Deterministic entity resolution: contacts, tasks, and relationships unified by canonical IDs",
+          "Versioned state with full provenance: every fact traces to its source",
+          "Cross-tool continuity: data stored from OpenClaw is available in Cursor, Claude, and Codex",
         ].map((item) => (
           <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
             <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
@@ -101,8 +101,8 @@ export function NeotomaWithOpenClawPage() {
 
       <IntegrationSection sectionKey="using-them-together" title="Using them together">
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">
-        OpenClaw is the execution layer &mdash; it gives the agent a machine and the ability to act.
-        Neotoma is the state layer &mdash; it holds the user&apos;s structured memory that any agent
+        OpenClaw is the execution layer: it gives the agent a machine and the ability to act.
+        Neotoma is the state layer: it holds the user&apos;s structured memory that any agent
         can read and write. The two are complementary with no conflict.
         </p>
         <table className="w-full text-[14px] leading-6 mb-2 border-collapse">
@@ -169,28 +169,28 @@ export function NeotomaWithOpenClawPage() {
           <a href="https://docs.openclaw.ai/index" target="_blank" rel="noopener noreferrer" className={extLink}>
             Overview
           </a>
-          <span className="text-muted-foreground">— self-hosted agent gateway</span>
+          <span className="text-muted-foreground"> (self-hosted agent gateway)</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://www.getopenclaw.ai/docs/configuration" target="_blank" rel="noopener noreferrer" className={extLink}>
             Configuration
           </a>
-          <span className="text-muted-foreground">— setup wizard and settings reference</span>
+          <span className="text-muted-foreground"> (setup wizard and settings reference)</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://openclaw-ai.com/en/docs/tools/index" target="_blank" rel="noopener noreferrer" className={extLink}>
             Tools
           </a>
-          <span className="text-muted-foreground">— browser, canvas, cron, and access control</span>
+          <span className="text-muted-foreground"> (browser, canvas, cron, and access control)</span>
         </li>
         <li className="text-[14px] leading-6 flex items-start gap-2">
           <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>&rarr;</span>
           <a href="https://docs.openclaw.ai/skills" target="_blank" rel="noopener noreferrer" className={extLink}>
             Skills
           </a>
-          <span className="text-muted-foreground">— extensible skill folders and ClawHub registry</span>
+          <span className="text-muted-foreground"> (extensible skill folders and ClawHub registry)</span>
         </li>
         </ul>
       </IntegrationSection>

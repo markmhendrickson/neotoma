@@ -373,7 +373,7 @@ This minimizes round-trips for common cases and keeps discovery for ambiguous or
 | ---------------------------- | ------------------------------------------------------------- | ----------- | ------------- | --------- |
 | `analyze_schema_candidates`  | Analyze raw_fragments to identify fields for schema promotion | Strong      | Yes           | Available |
 | `get_schema_recommendations` | Retrieve stored schema update recommendations                 | Strong      | Yes           | Available |
-| `update_schema_incremental`  | Incrementally update schema by adding fields                  | Strong      | Yes           | Available |
+| `update_schema_incremental`  | Incrementally update schema by adding or removing fields      | Strong      | Yes           | Available |
 | `register_schema`            | Register new schema or schema version                         | Strong      | Yes           | Available |
 
 **Note:** These actions enable automatic schema evolution based on actual data usage patterns. Fields in `raw_fragments` can be analyzed and promoted to schema fields either automatically (via auto-enhancement) or manually (via recommendations). Schema updates apply immediately to new data without requiring migration (migration is only needed for backfilling historical data).
@@ -1700,19 +1700,20 @@ This enables full explainability: for any fact in the system, you can trace it b
 
 ### 3.20 `update_schema_incremental`
 
-**Purpose:** Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.
+**Purpose:** Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering in the reducer, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill.
 
 **Request Schema:**
 
 ```typescript
 {
   entity_type: string; // Required: Entity type to update
-  fields_to_add: Array<{ // Required: Fields to add to schema
+  fields_to_add?: Array<{ // Optional: Fields to add to schema
     field_name: string; // Required
     field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object'; // Required
     required?: boolean; // Optional (default: false)
     reducer_strategy?: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array'; // Optional
   }>;
+  fields_to_remove?: string[]; // Optional: Field names to remove (triggers major version bump)
   schema_version?: string; // Optional: New schema version (auto-increments if not provided)
   user_specific?: boolean; // Optional: Create user-specific schema variant (default: false)
   user_id?: string; // Optional: User ID (UUID) - inferred from authentication if omitted (required if user_specific=true)
@@ -1720,6 +1721,8 @@ This enables full explainability: for any fact in the system, you can trace it b
   migrate_existing?: boolean; // Optional: Migrate existing raw_fragments (default: false)
 }
 ```
+
+At least one of `fields_to_add` or `fields_to_remove` must be provided and non-empty.
 
 **Response Schema:**
 
@@ -1729,6 +1732,7 @@ This enables full explainability: for any fact in the system, you can trace it b
   entity_type: string;
   schema_version: string; // New schema version
   fields_added: string[]; // List of field names added
+  fields_removed: string[]; // List of field names removed
   activated: boolean; // Whether schema was activated
   migrated_existing: boolean; // Whether historical data was migrated
   scope: 'global' | 'user';
@@ -1738,18 +1742,20 @@ This enables full explainability: for any fact in the system, you can trace it b
 **Errors:**
 | Code | HTTP | Meaning | Retry? |
 | ---- | ---- | ------- | ------ |
-| `VALIDATION_ERROR` | 400 | Invalid field definition | No |
+| `VALIDATION_ERROR` | 400 | Invalid field definition or empty add/remove | No |
 | `SCHEMA_NOT_FOUND` | 404 | No active schema found for entity type | No |
 | `USER_ID_REQUIRED` | 400 | user_id required when user_specific=true | No |
 
 **Consistency:** Strong (schema updates are atomic)
-**Determinism:** Yes (same fields → same schema version)
+**Determinism:** Yes (same fields + same schema version → same snapshot)
 
-**IMPORTANT:** Schema updates apply **immediately** to new data. When you call this action with `activate=true` (default), all subsequent `store` calls will automatically use the updated schema. The `migrate_existing` option is only for backfilling historical data that was stored before the schema update.
+**IMPORTANT:** Schema updates apply **immediately** to new data. When you call this action with `activate=true` (default), all subsequent `store` calls will automatically use the updated schema. The `migrate_existing` option is only for backfilling historical data that was stored before the schema update. Removed fields stop appearing in snapshots immediately upon activation due to schema-projection filtering in the reducer, but observation data for those fields is preserved indefinitely and can be restored by re-adding the field.
 
 **When to Use:**
 
 - Add new fields discovered from raw_fragments analysis
+- Remove noisy or inappropriate fields accumulated via auto-enhancement or early inference
+- Prune schema fields that don't represent the entity type's current meaning
 - Extend schemas based on actual data usage
 - Create user-specific schema customizations
 - Apply approved recommendations

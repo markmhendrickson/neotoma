@@ -7,7 +7,7 @@ export function CrossPlatformPage() {
       <p className="text-[15px] leading-7 mb-4">
         Neotoma provides one memory system across AI tools. Claude, ChatGPT, Cursor, Codex,
         Claude Code, and OpenClaw all access the same state graph through Model Context Protocol
-        (MCP). Facts stored by one agent are immediately available to every other connected agent —
+        (MCP). Facts stored by one agent are immediately available to every other connected agent:
         no sync step, no export/import, no duplicate data.
       </p>
       <p className="text-[15px] leading-7 mb-4">
@@ -17,15 +17,15 @@ export function CrossPlatformPage() {
         truth regardless of the interface.
       </p>
       <p className="text-[15px] leading-7 mb-4">
-        Neotoma works alongside native memory features — ChatGPT's memory, Claude's project
-        knowledge, Cursor's context. It does not replace them or require disabling them. When you
+        Neotoma works alongside native memory features (ChatGPT's memory, Claude's project
+        knowledge, Cursor's context). It does not replace them or require disabling them. When you
         stop using Neotoma, there is nothing to uninstall from the AI tool itself; you simply
         disconnect the MCP server.
       </p>
       <p className="text-[15px] leading-7 mb-4">
         No platform lock-in. Your memory graph is a local SQLite database. You own the file, you
         control what connects to it, and you can export or migrate at any time. Switching AI tools
-        does not mean starting over — the same structured memory is available to the next tool you
+        does not mean starting over. The same structured memory is available to the next tool you
         connect.
       </p>
       <p className="text-[15px] leading-7">

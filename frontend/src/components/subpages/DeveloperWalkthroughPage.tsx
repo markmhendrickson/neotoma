@@ -92,7 +92,7 @@ export function DeveloperWalkthroughPage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         The decision is now a versioned entity with provenance: who stored it, when, and from
-        which session. The structured path runs &mdash; no LLM, no interpretation. The agent
+        which session. The structured path runs without an LLM or interpretation. The agent
         authored the data; Neotoma validated and recorded it.
       </p>
 
@@ -190,7 +190,7 @@ export function DeveloperWalkthroughPage() {
   identifier: "Use PostgreSQL for the data layer"
 })`}</CodeBlock>
 
-      <p className="text-[13px] font-mono text-muted-foreground mb-2">Response &mdash; versioned snapshot</p>
+      <p className="text-[13px] font-mono text-muted-foreground mb-2">Response (versioned snapshot)</p>
       <CodeBlock>{`{
   entity_id: "ent_84f2a1bc09e3d7...",
   entity_type: "architectural_decision",
@@ -205,8 +205,8 @@ export function DeveloperWalkthroughPage() {
 }`}</CodeBlock>
 
       <p className="text-[14px] leading-6 text-muted-foreground mb-2">
-        The snapshot reflects the latest state. The previous observation is preserved &mdash;
-        the agent (or a human) can inspect the full trail to understand what changed and why.
+        The snapshot reflects the latest state. The previous observation is preserved, so the
+        agent (or a human) can inspect the full trail to understand what changed and why.
       </p>
 
       <SectionDivider />

@@ -7,6 +7,7 @@
 
 import { db } from "../db.js";
 import { observationReducer } from "../reducers/observation_reducer.js";
+import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
 export interface SnapshotRecord {
   entity_id: string;
@@ -74,6 +75,20 @@ export async function recomputeSnapshot(
     .upsert({ ...computed } as Record<string, unknown>);
 
   if (upsertError) throw new Error(`Failed to upsert snapshot: ${upsertError.message}`);
+
+  const sourceId =
+    typeof (observations[0] as { source_id?: string | null }).source_id === "string"
+      ? ((observations[0] as { source_id: string }).source_id || "")
+      : "";
+  await upsertTimelineEventsForEntitySnapshot({
+    entityType: computed.entity_type,
+    entityId: computed.entity_id,
+    sourceId,
+    userId: computed.user_id || userId,
+    snapshot: (computed.snapshot as Record<string, unknown>) || {},
+    // Skip raw_fragments: recomputation is per-entity; shared source+type fragments could mis-attach.
+    sameTypeInSourceBatch: 2,
+  });
 
   return computed as SnapshotRecord;
 }

@@ -148,7 +148,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/ai-native-operators": {
     title: "For AI-native operators | Neotoma",
     description:
-      "Your agent infers — it doesn't guarantee. Neotoma provides persistent, cross-tool memory that survives session resets and makes corrections stick.",
+      "Your agent infers; it doesn't guarantee. Neotoma provides persistent, cross-tool memory that survives session resets and makes corrections stick.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -159,7 +159,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/agentic-systems-builders": {
     title: "For builders of agentic systems | Neotoma",
     description:
-      "Your agent resolves entities by inference — every session, it guesses again. Neotoma provides deterministic memory, entity resolution, and provenance for shipped agents.",
+      "Your agent resolves entities by inference, so every session it guesses again. Neotoma provides deterministic memory, entity resolution, and provenance for shipped agents.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -406,7 +406,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/silent-mutation-risk": {
     title: "Silent Mutation Risk | Neotoma",
     description:
-      "How Neotoma prevents data changes without explicit user awareness — no overwrites, merges, or drops without a trace.",
+      "How Neotoma prevents data changes without explicit user awareness: no overwrites, merges, or drops without a trace.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -430,7 +430,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/reproducible-state-reconstruction": {
     title: "Reproducible State Reconstruction | Neotoma",
     description:
-      "Rebuild complete current state from raw inputs alone — like a ledger that balances to zero from its entries.",
+      "Rebuild complete current state from raw inputs alone, like a ledger that balances to zero from its entries.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -466,7 +466,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
   "/semantic-similarity-search": {
     title: "Semantic Similarity Search | Neotoma",
     description:
-      "Find relevant prior context by meaning, not exact match — applied to structured entity snapshots with type and relationship scoping.",
+      "Find relevant prior context by meaning, not exact match, applied to structured entity snapshots with type and relationship scoping.",
     robots: "index,follow",
     jsonLdType: "WebPage",
     breadcrumb: [
@@ -533,6 +533,28 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Home", path: "/" },
       { name: "Memory Models", path: "/#memory-guarantees" },
       { name: "Deterministic Memory", path: "/deterministic-memory" },
+    ],
+  },
+  "/crm": {
+    title: "Neotoma for CRM | State Layer for Next-Generation CRM Platforms",
+    description:
+      "Build next-generation AI-native CRM on a deterministic state layer. Neotoma provides versioned, schema-bound, auditable state for contacts, deals, and relationships, so every AI feature is grounded in truth.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "CRM", path: "/crm" },
+    ],
+  },
+  "/compliance": {
+    title: "Neotoma for Compliance | State Integrity for AI-Driven Vendor Risk",
+    description:
+      "Version control for vendor risk profiles. Neotoma ensures every AI-driven risk assessment is versioned, every conflict between agents is surfaced, and every decision is explainable to regulators, with team deployment, enterprise auth, and API compatibility guarantees.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Compliance", path: "/compliance" },
     ],
   },
   "/memory-guarantees": {

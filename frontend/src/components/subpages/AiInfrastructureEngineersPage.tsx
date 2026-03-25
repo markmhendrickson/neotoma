@@ -11,7 +11,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: GitBranch,
     title: "Same pipeline, different results",
     description:
-      "Two runs of the same pipeline with identical inputs returned different entity states. Without content-addressed versioning, there was no way to detect — or prevent — the drift.",
+      "Two runs of the same pipeline with identical inputs returned different entity states. Without content-addressed versioning, there was no way to detect or prevent the drift.",
     scenario: {
       left: "Replay yesterday's ingestion pipeline.",
       fail: "Pipeline completed. 3 entity conflicts unresolved.",
@@ -92,7 +92,7 @@ export function AiInfrastructureEngineersPage() {
           body: (
             <p>
               Two runs of the same agent with identical inputs produce different results. State
-              mutations between sessions are invisible — there is no versioned history to compare,
+              mutations between sessions are invisible; there is no versioned history to compare,
               no observation log to replay. Debugging means reading logs and guessing.
             </p>
           ),
@@ -121,7 +121,7 @@ export function AiInfrastructureEngineersPage() {
           heading: "State layer locked to one vendor's runtime",
           body: (
             <p>
-              Each agent runtime provides its own memory abstraction — none portable, none
+              Each agent runtime provides its own memory abstraction: none portable, none
               interoperable. Migrating to a new orchestration framework means rebuilding state
               management from scratch. There is no standard state layer that works across vendors.
             </p>
@@ -143,7 +143,7 @@ export function AiInfrastructureEngineersPage() {
         <p>
           Your application teams ship in tight cycles. Your state layer should too. If you can't
           replay an agent run, you can't debug it. If you can't debug it, you can't iterate.
-          Neotoma makes agent state inspectable, diffable, and replayable — so your debugging
+          Neotoma makes agent state inspectable, diffable, and replayable, so your debugging
           cycle is minutes, not days of log archaeology.
         </p>
       }
@@ -155,7 +155,7 @@ export function AiInfrastructureEngineersPage() {
           body: (
             <p>
               Every state transition is content-addressed and versioned. Same observations always
-              produce the same entity state — no ordering sensitivity, no silent drift. Agent
+              produce the same entity state: no ordering sensitivity, no silent drift. Agent
               runs become reproducible by construction.
             </p>
           ),
@@ -166,7 +166,7 @@ export function AiInfrastructureEngineersPage() {
           href: "/reproducible-state-reconstruction",
           body: (
             <p>
-              Observations are immutable. Corrections add new data — they never overwrite.
+              Observations are immutable. Corrections add new data; they never overwrite.
               The full state can be reconstructed from the observation log at any point in time.
             </p>
           ),
@@ -190,7 +190,7 @@ export function AiInfrastructureEngineersPage() {
           body: (
             <p>
               Entity types enforce schema constraints at write time. Malformed or invalid data
-              is rejected before it enters the memory graph — preventing garbage-in-garbage-out
+              is rejected before it enters the memory graph, preventing garbage-in-garbage-out
               failures across agent runtimes and orchestration layers.
             </p>
           ),
@@ -200,7 +200,7 @@ export function AiInfrastructureEngineersPage() {
         <>
           <p>
             You stop writing glue. Checkpoint logic, state serialization, custom diffing, retry
-            handlers — the guarantees you've been hand-rolling become primitives. You declare
+            handlers. The guarantees you've been hand-rolling become primitives. You declare
             invariants instead of building safety nets.
           </p>
           <p>
@@ -226,8 +226,8 @@ export function AiInfrastructureEngineersPage() {
       ]}
       scopeNote={
         <p>
-          If your agents are stateless request-response — no accumulated context, no entity
-          tracking — standard logging and tracing are sufficient. Neotoma is for when agents
+          If your agents are stateless request-response (no accumulated context, no entity
+          tracking), standard logging and tracing are sufficient. Neotoma is for when agents
           accumulate state across sessions and pipeline steps, and you need that state to be
           reproducible, traceable, and auditable.
         </p>
@@ -237,7 +237,7 @@ export function AiInfrastructureEngineersPage() {
         label: "Building structural barriers that incumbents can't copy",
         href: "https://markmhendrickson.com/posts/building-structural-barriers",
       }}
-      closingStatement="You need guarantees, not features. Neotoma removes the tax your team pays hand-rolling state management — and gives you deterministic primitives to build on instead."
+      closingStatement="You need guarantees, not features. Neotoma removes the tax your team pays hand-rolling state management and gives you deterministic primitives to build on instead."
     />
   );
 }

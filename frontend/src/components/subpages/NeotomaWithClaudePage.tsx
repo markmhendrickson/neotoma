@@ -21,8 +21,8 @@ export function NeotomaWithClaudePage() {
     <DetailPage title="Neotoma with Claude">
       <section className="mb-8">
         <p className="text-[15px] leading-7 text-foreground mb-4">
-          Claude's platform apps — claude.ai on web, the iOS/Android apps, and the desktop app —
-          offer conversation memory and project-scoped files within Anthropic's ecosystem. Neotoma
+          Claude&apos;s platform apps (claude.ai on web, the iOS/Android apps, and the desktop app)
+          offer conversation memory and project-scoped files within Anthropic&apos;s ecosystem. Neotoma
           adds structured, deterministic memory that persists across all your tools and sessions.
         </p>
         <p className="text-[14px] leading-6 text-muted-foreground">
@@ -123,7 +123,7 @@ export function NeotomaWithClaudePage() {
             Name it something like <strong>Neotoma workspace</strong> (or whatever fits your
             use case)
           </li>
-          <li>Open the project — all new chats started inside it will inherit its instructions</li>
+          <li>Open the project. All new chats started inside it will inherit its instructions</li>
         </ol>
         <div className="mt-3 p-4 rounded-lg border border-amber-500/40 bg-amber-500/10 text-[14px] leading-6">
           <strong className="text-foreground">Why a Project?</strong>{" "}
@@ -146,9 +146,9 @@ export function NeotomaWithClaudePage() {
         </p>
         <ul className="list-none pl-0 space-y-1.5 mb-2">
           {[
-            "Tool-first — Neotoma is called before composing a response",
-            "No silent fallback — Claude does not substitute its own memory",
-            "Grounded output — every fact traces to a tool call in the current turn",
+            "Tool-first: Neotoma is called before composing a response",
+            "No silent fallback: Claude does not substitute its own memory",
+            "Grounded output: every fact traces to a tool call in the current turn",
           ].map((item) => (
             <li key={item} className="text-[14px] leading-6 flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
@@ -202,7 +202,7 @@ export function NeotomaWithClaudePage() {
               >
                 Conversation memory
               </a>{" "}
-              — saved memories and chat history that persist across sessions on all plans
+              (saved memories and chat history that persist across sessions on all plans)
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -218,7 +218,7 @@ export function NeotomaWithClaudePage() {
               >
                 Projects
               </a>{" "}
-              — organize chats with scoped documents and custom instructions (200K context window)
+              (organize chats with scoped documents and custom instructions, 200K context window)
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -262,7 +262,7 @@ export function NeotomaWithClaudePage() {
               &times;
             </span>
             <span className="text-muted-foreground">
-              Persistent memory that survives session resets and model updates — Claude's{" "}
+              Persistent memory that survives session resets and model updates. Claude&apos;s{" "}
               <a
                 href="https://support.anthropic.com/en/articles/11817273-how-does-claude-s-memory-work"
                 target="_blank"
@@ -279,7 +279,7 @@ export function NeotomaWithClaudePage() {
               &times;
             </span>
             <span className="text-muted-foreground">
-              Cross-tool access — data stays inside Claude's ecosystem
+              Cross-tool access; data stays inside Claude&apos;s ecosystem
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -297,9 +297,9 @@ export function NeotomaWithClaudePage() {
         <ul className="list-none pl-0 space-y-1.5 mb-2">
           {[
             "Structured entities with canonical IDs that persist across all sessions",
-            "Deterministic state evolution — same observations always produce the same result",
+            "Deterministic state evolution: same observations always produce the same result",
             "Full provenance and audit trail for every stored fact",
-            "Cross-tool continuity — memory is shared with Claude Code, Cursor, Codex, and ChatGPT",
+            "Cross-tool continuity: memory is shared with Claude Code, Cursor, Codex, and ChatGPT",
           ].map((item) => (
             <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
@@ -369,7 +369,7 @@ export function NeotomaWithClaudePage() {
             >
               Memory in Claude
             </a>
-            <span className="text-muted-foreground">— saved memories and chat history</span>
+            <span className="text-muted-foreground"> (saved memories and chat history)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -384,7 +384,8 @@ export function NeotomaWithClaudePage() {
               Projects
             </a>
             <span className="text-muted-foreground">
-              — scoped documents and custom instructions
+              {" "}
+              (scoped documents and custom instructions)
             </span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
@@ -399,7 +400,7 @@ export function NeotomaWithClaudePage() {
             >
               MCP in Claude Desktop
             </a>
-            <span className="text-muted-foreground">— connecting local MCP servers</span>
+            <span className="text-muted-foreground"> (connecting local MCP servers)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -413,7 +414,7 @@ export function NeotomaWithClaudePage() {
             >
               Context management
             </a>
-            <span className="text-muted-foreground">— developer platform memory tool</span>
+            <span className="text-muted-foreground"> (developer platform memory tool)</span>
           </li>
         </ul>
       </IntegrationSection>

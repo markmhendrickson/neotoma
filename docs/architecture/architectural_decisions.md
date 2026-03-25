@@ -194,7 +194,9 @@ interface MergePolicy {
 
 **Implications:**
 - [Entity schema](../vocabulary/canonical_terms.md#entity-schema) changes don't require code deployments
-- New fields can be added via registry updates
+- New fields can be added via registry updates; fields can also be removed to prune schema noise
+- Both additive (minor bump) and removal (major bump) changes are deterministic and versioned
+- The [reducer](../vocabulary/canonical_terms.md#reducer) uses **schema-projection filtering**: only fields defined in the active schema appear in [entity snapshots](../vocabulary/canonical_terms.md#entity-snapshot). Removed fields' data is preserved in [observations](../vocabulary/canonical_terms.md#observation) and can be restored by re-adding the field.
 - [Entity schema](../vocabulary/canonical_terms.md#entity-schema) versions enable backward compatibility
 - Automated schema promotion discovers new fields from raw_fragments
 

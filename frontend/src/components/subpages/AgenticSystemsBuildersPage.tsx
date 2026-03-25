@@ -11,7 +11,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: Brain,
     title: "Agent starts from zero every session",
     description:
-      "The agent accumulated context across a multi-turn workflow, then the session ended. Next session, everything was gone — no accumulated facts, no entity history, no continuity.",
+      "The agent accumulated context across a multi-turn workflow, then the session ended. Next session, everything was gone: no accumulated facts, no entity history, no continuity.",
     scenario: {
       left: "Continue the onboarding workflow for Acme Corp.",
       fail: "No onboarding workflow found. Starting fresh.",
@@ -23,7 +23,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: Users,
     title: "Two agents, conflicting state",
     description:
-      "A research agent and a writing agent both updated the same entity. Without versioned writes, one silently overwrote the other — and the final output mixed stale and current data.",
+      "A research agent and a writing agent both updated the same entity. Without versioned writes, one silently overwrote the other, and the final output mixed stale and current data.",
     scenario: {
       left: "What's the latest company summary for Apex?",
       fail: "Apex: 12 employees, Series A. (stale from research agent)",
@@ -70,7 +70,7 @@ export function AgenticSystemsBuildersPage() {
       outcomes={outcomes}
       aiNeeds={[
         { label: "Cross-session, cross-agent state that persists beyond token windows", href: "/memory-models#deterministic-memory", linkTerm: "Cross-session, cross-agent state" },
-        { label: "Deterministic memory: same input, same output — no silent mutation", href: "/deterministic-state-evolution", linkTerm: "Deterministic memory" },
+        { label: "Deterministic memory: same input, same output; no silent mutation", href: "/deterministic-state-evolution", linkTerm: "Deterministic memory" },
         { label: "Full provenance linking every agent output to its source facts", href: "/auditable-change-log", linkTerm: "Full provenance" },
         { label: "Structured entity resolution so agents reason over canonical data, not duplicates", href: "/architecture", linkTerm: "Structured entity resolution" },
         { label: "Audit trail for eval, debugging, and compliance across pipeline steps", href: "/auditable-change-log", linkTerm: "Audit trail" },
@@ -101,7 +101,7 @@ export function AgenticSystemsBuildersPage() {
             <div className="rounded-lg border border-border bg-card px-4 py-3">
               <p className="text-[14px] font-medium text-foreground mb-1">Provider-hosted memory</p>
               <p className="text-[13px] leading-6 text-muted-foreground">
-                ChatGPT memory, Claude memory — conversation-scoped, provider-bound, non-deterministic.
+                ChatGPT memory, Claude memory: conversation-scoped, provider-bound, non-deterministic.
                 No cross-platform access, no correction mechanism, no audit trail.
               </p>
             </div>
@@ -111,7 +111,7 @@ export function AgenticSystemsBuildersPage() {
               Retrieval and state are different paradigms, not a feature gap. Embedding-based search
               and agentic search both optimize for flexible, on-demand access. A truth layer optimizes
               for consistency and verifiability. If your agents need to reason over canonical entities
-              across sessions — not just find relevant context within one — you need a state layer
+              across sessions, not just find relevant context within one, you need a state layer
               underneath the retrieval.
             </p>
           </div>
@@ -134,7 +134,7 @@ export function AgenticSystemsBuildersPage() {
             <p>
               When an agent produces an output, there's no way to trace it back to the source data
               that informed it. Debugging, evaluation, and compliance all require knowing <em>why</em>{" "}
-              the agent said what it said — and most memory systems can't answer that.
+              the agent said what it said, and most memory systems can't answer that.
             </p>
           ),
         },
@@ -178,7 +178,7 @@ export function AgenticSystemsBuildersPage() {
           body: (
             <p>
               Every state transition is content-addressed and versioned. Same input always produces
-              the same output. No silent mutation — agents and pipelines can be replayed and audited.
+              the same output. No silent mutation; agents and pipelines can be replayed and audited.
             </p>
           ),
         },
@@ -200,7 +200,7 @@ export function AgenticSystemsBuildersPage() {
           body: (
             <p>
               MIT-licensed. No token, no vendor lock-in, no proprietary memory format. Your state
-              is yours — stored locally, accessible via MCP from any compatible tool, portable
+              is yours: stored locally, accessible via MCP from any compatible tool, portable
               across frameworks by design.
             </p>
           ),
@@ -248,8 +248,8 @@ export function AgenticSystemsBuildersPage() {
       ]}
       scopeNote={
         <p>
-          For single-session, stateless agent tasks — one-shot summarization, code generation,
-          document Q&A — retrieval is sufficient and simpler. Neotoma is for agents that
+          For single-session, stateless agent tasks (one-shot summarization, code generation,
+          document Q&A), retrieval is sufficient and simpler. Neotoma is for agents that
           accumulate facts across sessions, resolve entities, track commitments, and need to
           explain their reasoning after the fact.
         </p>
@@ -259,7 +259,7 @@ export function AgenticSystemsBuildersPage() {
         label: "Why agent memory needs more than RAG",
         href: "https://markmhendrickson.com/posts/why-agent-memory-needs-more-than-rag",
       }}
-      closingStatement="Your agents need more than token-based memory. Neotoma removes the tax your team pays compensating for unreliable state — and gives you a deterministic, provenance-backed substrate to build on."
+      closingStatement="Your agents need more than token-based memory. Neotoma removes the tax your team pays compensating for unreliable state and gives you a deterministic, provenance-backed substrate to build on."
     />
   );
 }

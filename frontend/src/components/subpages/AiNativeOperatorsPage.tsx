@@ -11,7 +11,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: ListChecks,
     title: "Task created in Claude, invisible in Cursor",
     description:
-      "You told Claude to track a deadline. Later you asked Cursor for open tasks. The deadline didn't exist — each tool maintains its own disposable context with no shared state.",
+      "You told Claude to track a deadline. Later you asked Cursor for open tasks. The deadline didn't exist because each tool maintains its own disposable context with no shared state.",
     scenario: {
       left: "What are my open tasks?",
       fail: "No tasks found.",
@@ -23,7 +23,7 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: Users,
     title: "Stale contact, wrong email sent",
     description:
-      "You updated a contact's email in one conversation. The next session used the old address — because provider memory silently compressed or discarded the correction.",
+      "You updated a contact's email in one conversation. The next session used the old address because provider memory silently compressed or discarded the correction.",
     scenario: {
       left: "Email the latest draft to Priya.",
       fail: "Sent to priya@oldco.com.",
@@ -35,11 +35,11 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: Receipt,
     title: "Receipt stored, then lost",
     description:
-      "You shared a receipt in a chat session. Weeks later, you needed it for an expense report. The AI had no record of it — conversation-scoped memory doesn't persist documents.",
+      "You shared a receipt in a chat session. Weeks later, you needed it for an expense report. The AI had no record of it; conversation-scoped memory doesn't persist documents.",
     scenario: {
       left: "Find the Whole Foods receipt from Feb 8.",
       fail: "No receipts found matching that query.",
-      succeed: "Whole Foods, Feb 8 — $47.32. Stored from conversation on Feb 8.",
+      succeed: "Whole Foods, Feb 8 ($47.32). Stored from conversation on Feb 8.",
     },
   },
   {
@@ -47,11 +47,11 @@ const outcomes: IcpOutcomeCard[] = [
     Icon: CalendarClock,
     title: "Commitment forgotten between sessions",
     description:
-      "You told your AI you'd follow up with a client by Thursday. By Wednesday, neither tool remembered — the commitment was locked in a prior session's expired context.",
+      "You told your AI you'd follow up with a client by Thursday. By Wednesday, neither tool remembered; the commitment was locked in a prior session's expired context.",
     scenario: {
       left: "Do I have anything due this week?",
       fail: "Nothing scheduled.",
-      succeed: "Follow up with Kenji re: proposal — due Thursday.",
+      succeed: "Follow up with Kenji re: proposal, due Thursday.",
     },
   },
 ];
@@ -63,7 +63,7 @@ export function AiNativeOperatorsPage() {
       openingHook={
         <p>
           You run your work through Claude, Cursor, ChatGPT, and Codex. You've noticed that
-          nothing your agent learns in one session is guaranteed to be there in the next — and
+          nothing your agent learns in one session is guaranteed to be there in the next, and
           when it gets something wrong, there's no way to correct it that sticks.
         </p>
       }
@@ -72,7 +72,7 @@ export function AiNativeOperatorsPage() {
         { label: "Persistent memory that survives session resets and tool switches", href: "/memory-models#deterministic-memory", linkTerm: "Persistent memory" },
         { label: "A single source of truth accessible from Claude, Cursor, Codex, and ChatGPT simultaneously", href: "/cross-platform", linkTerm: "A single source of truth" },
         "Automatic extraction of commitments, tasks, and preferences from conversations",
-        { label: "Corrections that actually stick — fix once, fixed everywhere", href: "/deterministic-state-evolution", linkTerm: "Corrections that actually stick" },
+        { label: "Corrections that actually stick: fix once, fixed everywhere", href: "/deterministic-state-evolution", linkTerm: "Corrections that actually stick" },
         { label: "Full provenance: every stored fact traces back to the conversation or document it came from", href: "/auditable-change-log", linkTerm: "Full provenance" },
       ]}
       deepPainPoints={[
@@ -81,7 +81,7 @@ export function AiNativeOperatorsPage() {
           body: (
             <p>
               You explain the same project context, preferences, and constraints in every new
-              conversation. Provider-side memory is conversation-scoped at best — it doesn't follow
+              conversation. Provider-side memory is conversation-scoped at best; it doesn't follow
               you across tools, and it silently drifts as models compress or discard context.
             </p>
           ),
@@ -91,7 +91,7 @@ export function AiNativeOperatorsPage() {
           body: (
             <p>
               You tell Claude to remind you about a deadline. Later you ask Cursor for your open
-              tasks. The deadline doesn't exist — because each tool maintains its own disposable
+              tasks. The deadline doesn't exist because each tool maintains its own disposable
               context. Action items created in one session have no guarantee of surviving to the
               next.
             </p>
@@ -127,7 +127,7 @@ export function AiNativeOperatorsPage() {
           body: (
             <p>
               Every agent connected to Neotoma reads from and writes to the same memory substrate.
-              Store a task in Claude — retrieve it from Cursor. State is shared, not siloed.
+              Store a task in Claude and retrieve it from Cursor. State is shared, not siloed.
             </p>
           ),
         },
@@ -148,7 +148,7 @@ export function AiNativeOperatorsPage() {
           body: (
             <p>
               Submit a correction once. It creates a new observation that supersedes the incorrect
-              value — same question, same answer, every time. The correction traces back to when
+              value. Same question, same answer, every time. The correction traces back to when
               and why it was made.
             </p>
           ),
@@ -179,7 +179,7 @@ export function AiNativeOperatorsPage() {
           <p>
             Less typing, fewer prompts, shorter sessions that accomplish more. You stop thinking
             about whether the system remembers and start thinking about what you're actually trying
-            to do. Not "let me re-explain my situation" — "here's what changed since yesterday."
+            to do. Not "let me re-explain my situation"; "here's what changed since yesterday."
           </p>
         </>
       }
@@ -188,7 +188,7 @@ export function AiNativeOperatorsPage() {
         { type: "message", description: "Individual conversation turns with role, content, and extracted entities" },
         { type: "task", description: "Commitments, reminders, and action items with status and deadlines" },
         { type: "note", description: "Captured thoughts, observations, and reference material" },
-        { type: "contact", description: "People and their details — email, role, organization, preferences" },
+        { type: "contact", description: "People and their details (email, role, organization, preferences)" },
         { type: "event", description: "Calendar events, deadlines, and temporal commitments" },
         { type: "preference", description: "User preferences and configuration that persist across sessions" },
         { type: "receipt", description: "Purchase records, invoices, and expense tracking" },
@@ -197,16 +197,16 @@ export function AiNativeOperatorsPage() {
         <p>
           For one-off questions, quick summaries, or single-document analysis, your AI tools
           already work fine. Neotoma is for when you need what you told one tool to still be true
-          when you open another — and for when you need to know that a correction you made
+          when you open another, and for when you need to know that a correction you made
           actually stuck.
         </p>
       }
-      credibilityBridge="Built by someone who runs every workflow — email, finance, content, tasks — through the same agentic stack."
+      credibilityBridge="Built by someone who runs every workflow (email, finance, content, tasks) through the same agentic stack."
       blogPostLink={{
         label: "Agentic retrieval infers. It doesn't guarantee.",
         href: "https://markmhendrickson.com/posts/agentic-search-and-the-truth-layer",
       }}
-      closingStatement="Each ICP is currently spending a significant portion of their effort compensating for unreliable state. Neotoma doesn't add a feature — it removes the tax. What you get back is the time, attention, and confidence that the tax was consuming."
+      closingStatement="Each ICP is currently spending a significant portion of their effort compensating for unreliable state. Neotoma doesn't add a feature; it removes the tax. What you get back is the time, attention, and confidence that the tax was consuming."
     />
   );
 }

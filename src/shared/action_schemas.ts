@@ -393,13 +393,19 @@ export const UpdateSchemaIncrementalRequestSchema = z.object({
         .enum(["last_write", "highest_priority", "most_specific", "merge_array"])
         .optional(),
     })
-  ),
+  ).optional(),
+  fields_to_remove: z.array(z.string()).optional(),
   schema_version: z.string().optional(),
   user_specific: z.boolean().default(false),
   user_id: z.string().optional(),
   activate: z.boolean().default(true),
   migrate_existing: z.boolean().default(false),
-});
+}).refine(
+  (data) =>
+    (data.fields_to_add && data.fields_to_add.length > 0) ||
+    (data.fields_to_remove && data.fields_to_remove.length > 0),
+  { message: "At least one of fields_to_add or fields_to_remove must be provided and non-empty" },
+);
 
 export const RegisterSchemaRequestSchema = z.object({
   entity_type: z.string(),

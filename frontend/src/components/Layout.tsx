@@ -12,6 +12,8 @@ function isProductBasePath(): boolean {
   return segment.toLowerCase().startsWith("neotoma-with-");
 }
 
+const FULL_PAGE_PATHS = new Set(["/crm", "/compliance"]);
+
 interface LayoutProps {
   children: React.ReactNode;
   siteName?: string;
@@ -21,8 +23,10 @@ const DEFAULT_SITE_NAME = "Neotoma";
 
 export function Layout({ children, siteName = DEFAULT_SITE_NAME }: LayoutProps) {
   const { pathname } = useLocation();
-  const isRouteHome = stripLocaleFromPath(pathname) === "/";
-  const isHome = isRouteHome && !isProductBasePath();
+  const stripped = stripLocaleFromPath(pathname);
+  const isRouteHome = stripped === "/";
+  const isFullPageLanding = FULL_PAGE_PATHS.has(stripped);
+  const isHome = (isRouteHome && !isProductBasePath()) || isFullPageLanding;
 
   return (
     <SidebarProvider defaultOpen={true} className="flex-col">

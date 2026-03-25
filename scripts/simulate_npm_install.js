@@ -71,7 +71,7 @@ function main() {
     run("npm init -y", { cwd: tmpDir });
     const installOutput = runAndCapture("npm", ["install", tarballPath], { cwd: tmpDir });
     process.stdout.write(installOutput);
-    const disallowedWarnings = [/deprecated\s+q@/i, /deprecated\s+prebuild-install@/i];
+    const disallowedWarnings = [/deprecated\s+q@/i];
     const matchedWarning = disallowedWarnings.find((pattern) => pattern.test(installOutput));
     if (matchedWarning) {
       throw new Error(

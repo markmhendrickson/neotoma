@@ -67,7 +67,7 @@ export function DockerPage() {
         <TabsContent value="human">
           <p className="text-[15px] leading-7 mb-4">
             If you prefer not to install directly on your host machine, you can run the full
-            Neotoma stack&mdash;API server, CLI, and MCP server&mdash;inside a Docker
+            Neotoma stack (API server, CLI, and MCP server) inside a Docker
             container. Clone the Neotoma repository and build the image:
           </p>
           <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} />

@@ -1416,7 +1416,7 @@ export class NeotomaServer {
             name: "update_schema_incremental",
             description:
               this.toolDescriptions.get("update_schema_incremental") ??
-              "Incrementally update a schema by adding new fields from raw_fragments or agent recommendations. Creates new schema version and activates it immediately, so all new data stored after this call will use the updated schema. Optionally migrates existing raw_fragments to observations for historical data backfill.",
+              "Incrementally update a schema by adding or removing fields. Adding fields creates a minor version bump; removing fields creates a major version bump. Removed fields are excluded from future snapshots via schema-projection filtering, but all observation data is preserved and can be restored by re-adding the field. Optionally migrates existing raw_fragments to observations for historical data backfill.",
             inputSchema: {
               type: "object",
               properties: {
@@ -1444,6 +1444,11 @@ export class NeotomaServer {
                     required: ["field_name", "field_type"],
                   },
                 },
+                fields_to_remove: {
+                  type: "array",
+                  description: "Field names to remove from schema (triggers major version bump). Observation data is preserved; fields can be restored by re-adding them later.",
+                  items: { type: "string" },
+                },
                 schema_version: {
                   type: "string",
                   description: "New schema version (auto-increments if not provided)",
@@ -1470,7 +1475,7 @@ export class NeotomaServer {
                   default: false,
                 },
               },
-              required: ["entity_type", "fields_to_add"],
+              required: ["entity_type"],
             },
           },
           {
@@ -3203,7 +3208,7 @@ export class NeotomaServer {
   }
 
   /**
-   * Incrementally update schema by adding fields
+   * Incrementally update schema by adding or removing fields
    */
   private async updateSchemaIncremental(
     args: unknown
@@ -3220,9 +3225,10 @@ export class NeotomaServer {
       const updatedSchema = await schemaRegistry.updateSchemaIncremental({
         entity_type: parsed.entity_type,
         fields_to_add: parsed.fields_to_add,
+        fields_to_remove: parsed.fields_to_remove,
         schema_version: parsed.schema_version,
         user_specific: parsed.user_specific,
-        user_id: parsed.user_specific ? userId : undefined, // Only set user_id if user_specific
+        user_id: parsed.user_specific ? userId : undefined,
         activate: parsed.activate,
         migrate_existing: parsed.migrate_existing,
       });
@@ -3231,7 +3237,8 @@ export class NeotomaServer {
         success: true,
         entity_type: parsed.entity_type,
         schema_version: updatedSchema.schema_version,
-        fields_added: parsed.fields_to_add.map((f) => f.field_name),
+        fields_added: (parsed.fields_to_add || []).map((f) => f.field_name),
+        fields_removed: parsed.fields_to_remove || [],
         activated: parsed.activate,
         migrated_existing: parsed.migrate_existing,
         scope: parsed.user_specific ? "user" : "global",
@@ -4544,62 +4551,20 @@ export class NeotomaServer {
           });
           await upsertEntitySnapshotWithEmbedding(rowWithEmbedding);
 
-          // Derive and insert timeline events from date fields in snapshot
-          const { deriveTimelineEventsFromSnapshot, deriveTimelineEventsFromRawFragments } =
-            await import("./services/timeline_events.js");
-          const snapshotFields = (snapshot.snapshot as Record<string, unknown>) || {};
-          let timelineRows = deriveTimelineEventsFromSnapshot(
-            snapshot.entity_type,
-            snapshot.entity_id,
-            storageResult.sourceId,
-            snapshot.user_id || userId,
-            snapshotFields
-          );
-
-          // Fallback: when exactly one entity of this type in this batch, also derive from
-          // raw_fragments so date fields that didn't make it into the observation still get events.
           const sameTypeInBatch = createdEntities.filter(
             (e) => e.entityType === createdEntity.entityType
           ).length;
-          if (sameTypeInBatch === 1) {
-            const { data: fragments } = await db
-              .from("raw_fragments")
-              .select("fragment_key, fragment_value")
-              .eq("source_id", storageResult.sourceId)
-              .eq("entity_type", createdEntity.entityType)
-              .eq("user_id", userId);
-            if (fragments && fragments.length > 0) {
-              const snapshotKeys = new Set(Object.keys(snapshotFields));
-              const fromFragments = deriveTimelineEventsFromRawFragments(
-                fragments,
-                snapshot.entity_type,
-                snapshot.entity_id,
-                storageResult.sourceId,
-                snapshot.user_id || userId,
-                snapshotKeys
-              );
-              timelineRows = timelineRows.concat(fromFragments);
-            }
-          }
-
-          for (const row of timelineRows) {
-            const { error: evtError } = await db.from("timeline_events").upsert(
-              {
-                id: row.id,
-                event_type: row.event_type,
-                event_timestamp: row.event_timestamp,
-                source_id: row.source_id,
-                source_field: row.source_field,
-                entity_id: row.entity_id,
-                created_at: row.created_at,
-                user_id: row.user_id,
-              },
-              { onConflict: "id" }
-            );
-            if (evtError) {
-              logger.warn(`Failed to upsert timeline event ${row.id}:`, evtError.message);
-            }
-          }
+          const { upsertTimelineEventsForEntitySnapshot } = await import(
+            "./services/timeline_events.js"
+          );
+          await upsertTimelineEventsForEntitySnapshot({
+            entityType: snapshot.entity_type,
+            entityId: snapshot.entity_id,
+            sourceId: storageResult.sourceId,
+            userId: snapshot.user_id || userId,
+            snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+            sameTypeInSourceBatch: sameTypeInBatch,
+          });
         }
       } catch (error) {
         logger.error(

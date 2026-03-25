@@ -23,7 +23,7 @@ export function ClaudeConnectRemoteMcpPage() {
         </p>
         <ol className="list-decimal pl-5 space-y-4 mb-2">
           <li className="text-[15px] leading-7">
-            <strong>Install a tunnel provider</strong> &mdash; Neotoma&apos;s <code>--tunnel</code>{" "}
+            <strong>Install a tunnel provider:</strong> Neotoma&apos;s <code>--tunnel</code>{" "}
             flag needs either{" "}
             <a href="https://ngrok.com/download" target="_blank" rel="noopener noreferrer" className={extLink}>
               ngrok
@@ -34,7 +34,7 @@ export function ClaudeConnectRemoteMcpPage() {
             </a>{" "}
             installed on your machine. Install one:
             <CopyableCodeBlock
-              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# — or Cloudflare Tunnel —\nbrew install cloudflared`}
+              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# or Cloudflare Tunnel\nbrew install cloudflared`}
               className="mt-2 mb-1"
             />
             <p className="text-[14px] leading-6 text-muted-foreground mt-1">
@@ -57,7 +57,7 @@ export function ClaudeConnectRemoteMcpPage() {
             </p>
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code>{" "}
+            <strong>Start the API server with a tunnel:</strong> the <code>--tunnel</code>{" "}
             flag auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
             <CopyableCodeBlock code={`neotoma api start --env prod --tunnel`} className="mt-2 mb-1" />
             <p className="text-[14px] leading-6 text-muted-foreground mt-1">
@@ -67,7 +67,7 @@ export function ClaudeConnectRemoteMcpPage() {
             </p>
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Connect in claude.ai</strong> &mdash; go to Settings &rarr; MCP Servers and add
+            <strong>Connect in claude.ai:</strong> go to Settings &rarr; MCP Servers and add
             your tunnel URL (for example <code>https://&lt;tunnel-host&gt;/mcp</code>). Claude
             authenticates via OAuth; the Neotoma API supports the{" "}
             <a

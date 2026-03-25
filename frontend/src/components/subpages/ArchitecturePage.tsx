@@ -86,10 +86,10 @@ const GUARANTEES = [
 ];
 
 const PREVIEW_GUARANTEED = [
-  "No silent data loss — operations either succeed and are recorded or fail with explicit errors.",
-  "Explicit, inspectable state mutations — every change is a named operation with visible inputs; state is reconstructable from the audit trail.",
-  "Auditable operations — full provenance; CLI and MCP map to the same underlying contract.",
-  "Same contract for CLI and MCP — both use the same OpenAPI-backed operations.",
+  "No silent data loss: operations either succeed and are recorded or fail with explicit errors.",
+  "Explicit, inspectable state mutations: every change is a named operation with visible inputs; state is reconstructable from the audit trail.",
+  "Auditable operations: full provenance; CLI and MCP map to the same underlying contract.",
+  "Same contract for CLI and MCP: both use the same OpenAPI-backed operations.",
 ];
 
 const PREVIEW_NOT_GUARANTEED = [

@@ -105,7 +105,7 @@ const LEARN_MORE_DOCUMENTATION_CARD: LearnMoreCardItem = {
   label: "Documentation",
   title: "All documentation",
   description:
-    "Reference, integration guides, use cases, and architecture — organized by category.",
+    "Reference, integration guides, use cases, and architecture, organized by category.",
   href: "/docs",
   imageUrl: learnMoreDocumentationImage,
   ctaLabel: "Browse docs →",
@@ -541,7 +541,7 @@ function GetStartedSimulationVisual({ className = "" }: { className?: string }) 
   );
 }
 
-/** Agent memory scenarios — failure (without Neotoma) and success (with Neotoma) variants.
+/** Agent memory scenarios: failure (without Neotoma) and success (with Neotoma) variants.
  *  First 4 map to Tier 1 data types from what_to_store.md:
  *  [0] Financial facts, [1] People & relationships, [2] Commitments & tasks, [3] Events & decisions */
 const SCENARIOS = [
@@ -633,7 +633,7 @@ const FAILURE_CARDS: {
     Icon: Users,
     title: "Stale contact, wrong recipient",
     description:
-      "The agent used an outdated org chart. The message went to someone who left the project weeks ago — and no versioned record flagged the change.",
+      "The agent used an outdated org chart. The message went to someone who left the project weeks ago, and no versioned record flagged the change.",
     scenarioIndex: 1,
   },
   {
@@ -641,7 +641,7 @@ const FAILURE_CARDS: {
     Icon: ListChecks,
     title: "Forgotten deadline, missed obligation",
     description:
-      "A commitment from a prior session was never durably recorded. The agent set a reminder against an old task — wrong date, wrong deliverable.",
+      "A commitment from a prior session was never durably recorded. The agent set a reminder against an old task: wrong date, wrong deliverable.",
     scenarioIndex: 2,
   },
   {
@@ -649,7 +649,7 @@ const FAILURE_CARDS: {
     Icon: CalendarClock,
     title: "Irreproducible decision, no audit trail",
     description:
-      "A decision was made based on specific inputs. When the same question came up later, the agent produced a different answer — and no one could explain why.",
+      "A decision was made based on specific inputs. When the same question came up later, the agent produced a different answer, and no one could explain why.",
     scenarioIndex: 3,
   },
 ];
@@ -909,7 +909,7 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
             <span className="h-2 w-2 rounded-full bg-emerald-400/75 dark:bg-emerald-500/80" />
           </div>
           <span className="col-span-3 sm:col-span-1 text-center">
-            agent session — {failMode ? "without state layer" : "with state layer"}
+            agent session · {failMode ? "without state layer" : "with state layer"}
           </span>
           <div className="hidden sm:block" />
         </div>
@@ -933,7 +933,7 @@ function ForgetfulAgentIllustration({ className = "" }: { className?: string }) 
                           : "text-emerald-500/60 dark:text-emerald-400/60"
                       }`}
                     >
-                      &mdash; {m.text} &mdash;
+                      · {m.text} ·
                     </span>
                   </div>
                 );
@@ -2145,7 +2145,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         },
                         {
                           label: "Immutable",
-                          desc: "Append-only observations. Corrections add new data — they never erase.",
+                          desc: "Append-only observations. Corrections add new data; they never erase.",
                         },
                         {
                           label: "Replayable",
@@ -2191,7 +2191,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
           </FadeSection>
         </section>
 
-        {/* === Who's it for — world snapshots (Option B) with generated images === */}
+        {/* === Who's it for: world snapshots (Option B) with generated images === */}
         <section id="who-is-it-for" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>

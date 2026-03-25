@@ -10,7 +10,7 @@ export function NeotomaWithChatGPTPage() {
       <section className="mb-8">
         <p className="text-[15px] leading-7 text-foreground mb-4">
           ChatGPT offers conversation history and custom GPTs with persistent instructions. Neotoma
-          adds structured, deterministic memory with entity resolution and cross-tool continuity —
+          adds structured, deterministic memory with entity resolution and cross-tool continuity,
           accessible from ChatGPT and every other tool in your stack.
         </p>
       </section>
@@ -36,8 +36,8 @@ export function NeotomaWithChatGPTPage() {
               >
                 Memory
               </a>{" "}
-              — saved memories and chat history references that persist across conversations on all
-              plans
+              (saved memories and chat history references that persist across conversations on all
+              plans)
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -78,7 +78,7 @@ export function NeotomaWithChatGPTPage() {
               >
                 developer mode
               </a>{" "}
-              — full read/write tool access for Business and Enterprise accounts
+              (full read/write tool access for Business and Enterprise accounts)
             </span>
           </li>
         </ul>
@@ -94,7 +94,7 @@ export function NeotomaWithChatGPTPage() {
               &times;
             </span>
             <span className="text-muted-foreground">
-              Structured entity resolution with typed schemas — ChatGPT's{" "}
+              Structured entity resolution with typed schemas. ChatGPT's{" "}
               <a
                 href="https://help.openai.com/en/articles/8590148-memory-in-chatgpt-remembering-what-you-chat-about"
                 target="_blank"
@@ -119,7 +119,7 @@ export function NeotomaWithChatGPTPage() {
               &times;
             </span>
             <span className="text-muted-foreground">
-              Cross-tool access — memory stays inside ChatGPT's ecosystem
+              Cross-tool access; memory stays inside ChatGPT's ecosystem
             </span>
           </li>
           <li className="text-[15px] leading-7 flex items-start gap-2">
@@ -140,9 +140,9 @@ export function NeotomaWithChatGPTPage() {
         <ul className="list-none pl-0 space-y-1.5 mb-2">
           {[
             "Structured entities with canonical IDs that persist across all sessions",
-            "Deterministic state evolution — same observations always produce the same result",
+            "Deterministic state evolution: same observations always produce the same result",
             "Full provenance and audit trail for every stored fact",
-            "Cross-tool continuity — memory is shared with Claude, Claude Code, Cursor, and Codex",
+            "Cross-tool continuity: memory is shared with Claude, Claude Code, Cursor, and Codex",
           ].map((item) => (
             <li key={item} className="text-[15px] leading-7 flex items-start gap-2">
               <span className="text-emerald-500 mt-0.5 shrink-0" aria-hidden>
@@ -247,7 +247,7 @@ export function NeotomaWithChatGPTPage() {
             >
               Memory FAQ
             </a>
-            <span className="text-muted-foreground">— saved memories and chat history</span>
+            <span className="text-muted-foreground"> (saved memories and chat history)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -261,7 +261,7 @@ export function NeotomaWithChatGPTPage() {
             >
               Building MCP servers
             </a>
-            <span className="text-muted-foreground">— connecting tools to ChatGPT</span>
+            <span className="text-muted-foreground"> (connecting tools to ChatGPT)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -275,7 +275,7 @@ export function NeotomaWithChatGPTPage() {
             >
               Developer mode
             </a>
-            <span className="text-muted-foreground">— MCP apps in ChatGPT</span>
+            <span className="text-muted-foreground"> (MCP apps in ChatGPT)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -289,7 +289,7 @@ export function NeotomaWithChatGPTPage() {
             >
               Apps in custom GPTs
             </a>
-            <span className="text-muted-foreground">— integrating tools into custom GPTs</span>
+            <span className="text-muted-foreground"> (integrating tools into custom GPTs)</span>
           </li>
           <li className="text-[14px] leading-6 flex items-start gap-2">
             <span className="text-muted-foreground mt-0.5 shrink-0" aria-hidden>
@@ -304,7 +304,8 @@ export function NeotomaWithChatGPTPage() {
               ChatGPT integration instructions
             </a>
             <span className="text-muted-foreground">
-              — copy-paste instructions and Actions OpenAPI spec
+              {" "}
+              (copy-paste instructions and Actions OpenAPI spec)
             </span>
           </li>
         </ul>

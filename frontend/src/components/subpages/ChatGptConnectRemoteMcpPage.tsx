@@ -43,7 +43,7 @@ export function ChatGptConnectRemoteMcpPage() {
         </p>
         <ol className="list-decimal pl-5 space-y-4 mb-2">
           <li className="text-[15px] leading-7">
-            <strong>Install a tunnel provider</strong> &mdash; Neotoma&apos;s <code>--tunnel</code>{" "}
+            <strong>Install a tunnel provider:</strong> Neotoma&apos;s <code>--tunnel</code>{" "}
             flag needs either{" "}
             <a href="https://ngrok.com/download" target="_blank" rel="noopener noreferrer" className={extLink}>
               ngrok
@@ -54,7 +54,7 @@ export function ChatGptConnectRemoteMcpPage() {
             </a>{" "}
             installed on your machine. Install one:
             <CopyableCodeBlock
-              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# — or Cloudflare Tunnel —\nbrew install cloudflared`}
+              code={`# ngrok (via Homebrew)\nbrew install ngrok\nngrok config add-authtoken <YOUR_NGROK_TOKEN>\n\n# or Cloudflare Tunnel\nbrew install cloudflared`}
               className="mt-2 mb-1"
             />
             <p className="text-[14px] leading-6 text-muted-foreground mt-1">
@@ -77,7 +77,7 @@ export function ChatGptConnectRemoteMcpPage() {
             </p>
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Start the API server with a tunnel</strong> &mdash; the <code>--tunnel</code>{" "}
+            <strong>Start the API server with a tunnel:</strong> the <code>--tunnel</code>{" "}
             flag auto-provisions a public HTTPS URL via ngrok or Cloudflare (whichever is installed)
             <CopyableCodeBlock
               code={`neotoma api start --env prod --tunnel`}
@@ -118,7 +118,7 @@ export function ChatGptConnectRemoteMcpPage() {
             </div>
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Enable developer mode</strong> in ChatGPT &mdash; go to{" "}
+            <strong>Enable developer mode</strong> in ChatGPT, then go to{" "}
             <a
               href="https://help.openai.com/en/articles/12584461"
               target="_blank"
@@ -130,7 +130,7 @@ export function ChatGptConnectRemoteMcpPage() {
             . On Business plans only admins/owners can enable it; you can also enable it when creating an app via Workspace settings &rarr; Apps &rarr; Create.
           </li>
           <li className="text-[15px] leading-7">
-            <strong>Add Neotoma as a remote MCP server</strong> &mdash; in ChatGPT&apos;s developer
+            <strong>Add Neotoma as a remote MCP server</strong> in ChatGPT&apos;s developer
             mode settings, add your tunnel URL (e.g. <code>{apiBase}/mcp</code>).
             ChatGPT authenticates via OAuth; the Neotoma API supports the{" "}
             <a

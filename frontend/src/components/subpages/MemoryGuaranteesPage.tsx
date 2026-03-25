@@ -654,8 +654,8 @@ neotoma entities search --query "design review" --type event`}</pre>
           Direct human editability
         </h2>
         <p className="text-[15px] leading-7 mb-4">
-          Direct human editability means a person can open the memory store in a standard editor —
-          VS Code, Notepad, vim — and modify it directly. File-based memory systems use plain text
+          Direct human editability means a person can open the memory store in a standard editor
+          (VS Code, Notepad, vim) and modify it directly. File-based memory systems use plain text
           formats like Markdown or JSON that any tool can read and write without a runtime or API
           layer.
         </p>

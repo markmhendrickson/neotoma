@@ -27,6 +27,7 @@ import {
 } from "./entity_snapshot_embedding.js";
 import { logger } from "../utils/logger.js";
 import { config } from "../config.js";
+import { upsertTimelineEventsForEntitySnapshot } from "./timeline_events.js";
 
 
 export interface InterpretationConfig {
@@ -595,6 +596,16 @@ export async function runInterpretation(
               onConflict: "entity_id",
             }
           );
+
+          const sameTypeInBatch = entities.filter((e) => e.entityType === entity.entityType).length;
+          await upsertTimelineEventsForEntitySnapshot({
+            entityType: snapshot.entity_type,
+            entityId: snapshot.entity_id,
+            sourceId,
+            userId: snapshot.user_id || userId,
+            snapshot: (snapshot.snapshot as Record<string, unknown>) || {},
+            sameTypeInSourceBatch: sameTypeInBatch,
+          });
         }
       } catch (error) {
         console.error(

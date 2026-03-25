@@ -1,6 +1,6 @@
 /**
  * Entity Detail Component (FU-601)
- * 
+ *
  * Display entity snapshot with provenance, observations, and relationships
  */
 
@@ -73,10 +73,13 @@ interface SchemaInfo {
   entity_type: string;
   schema_version: string;
   schema_definition: {
-    fields: Record<string, {
-      type: string;
-      required?: boolean;
-    }>;
+    fields: Record<
+      string,
+      {
+        type: string;
+        required?: boolean;
+      }
+    >;
   };
   metadata?: SchemaMetadata;
 }
@@ -88,11 +91,11 @@ interface EntityDetailProps {
   onNavigateToEntity?: (entityId: string) => void;
 }
 
-export function EntityDetail({ 
-  entityId, 
-  onClose, 
+export function EntityDetail({
+  entityId,
+  onClose,
   onNavigateToSource,
-  onNavigateToEntity 
+  onNavigateToEntity,
 }: EntityDetailProps) {
   const [entity, setEntity] = useState<EntitySnapshot | null>(null);
   const [observations, setObservations] = useState<Observation[]>([]);
@@ -110,7 +113,7 @@ export function EntityDetail({
   const { settings } = useSettings();
   const { bearerToken: keysBearerToken, loading: keysLoading } = useKeys();
   const { sessionToken, user } = useAuth();
-  
+
   // Prefer bearer token from keys, fallback to session token, then settings
   const bearerToken = sessionToken || keysBearerToken || settings.bearerToken;
 
@@ -126,7 +129,7 @@ export function EntityDetail({
         const headers: HeadersInit = {
           "Content-Type": "application/json",
         };
-        
+
         // Include bearer token if available
         if (bearerToken) {
           headers["Authorization"] = `Bearer ${bearerToken}`;
@@ -134,7 +137,7 @@ export function EntityDetail({
 
         // Use relative URL to go through Vite proxy (which routes to correct backend port)
         // The Vite proxy in vite.config.ts forwards API endpoints to HTTP_PORT.
-        
+
         // Fetch entity with provenance
         const entityResponse = await fetch(`/entities/${entityId}`, { headers });
         if (!entityResponse.ok) {
@@ -148,23 +151,23 @@ export function EntityDetail({
         setEntity(entityData);
 
         // Fetch observations
-        const observationsResponse = await fetch(
-          `/entities/${entityId}/observations`,
-          { headers }
-        );
+        const observationsResponse = await fetch(`/entities/${entityId}/observations`, { headers });
         if (!observationsResponse.ok) {
-          throw new Error(`HTTP ${observationsResponse.status}: ${observationsResponse.statusText}`);
+          throw new Error(
+            `HTTP ${observationsResponse.status}: ${observationsResponse.statusText}`
+          );
         }
         const observationsData = await observationsResponse.json();
         setObservations(observationsData.observations || []);
 
         // Fetch relationships
-        const relationshipsResponse = await fetch(
-          `/entities/${entityId}/relationships`,
-          { headers }
-        );
+        const relationshipsResponse = await fetch(`/entities/${entityId}/relationships`, {
+          headers,
+        });
         if (!relationshipsResponse.ok) {
-          throw new Error(`HTTP ${relationshipsResponse.status}: ${relationshipsResponse.statusText}`);
+          throw new Error(
+            `HTTP ${relationshipsResponse.status}: ${relationshipsResponse.statusText}`
+          );
         }
         const relationshipsData = await relationshipsResponse.json();
         setRelationships({
@@ -175,9 +178,7 @@ export function EntityDetail({
         // Fetch related sources (from observations)
         const uniqueSourceIds = Array.from(
           new Set(
-            observations
-              .map((obs) => obs.source_id)
-              .filter((id): id is string => id !== null)
+            observations.map((obs) => obs.source_id).filter((id): id is string => id !== null)
           )
         );
 
@@ -211,10 +212,9 @@ export function EntityDetail({
           try {
             // Get interpretations by source_id
             const interpretationPromises = uniqueSourceIds.map(async (sourceId) => {
-              const interpretationResponse = await fetch(
-                `/interpretations?source_id=${sourceId}`,
-                { headers }
-              );
+              const interpretationResponse = await fetch(`/interpretations?source_id=${sourceId}`, {
+                headers,
+              });
               if (interpretationResponse.ok) {
                 const data = await interpretationResponse.json();
                 return data.interpretations || [];
@@ -237,26 +237,25 @@ export function EntityDetail({
         // Get source IDs from observations to find related events
         const observationSourceIds = Array.from(
           new Set(
-            observations
-              .map((obs) => obs.source_id)
-              .filter((id): id is string => id !== null)
+            observations.map((obs) => obs.source_id).filter((id): id is string => id !== null)
           )
         );
 
         if (observationSourceIds.length > 0) {
           try {
             // Fetch recent timeline events and filter for this entity
-            const timelineResponse = await fetch(
-              `/timeline?limit=200`,
-              { headers }
-            );
+            const timelineResponse = await fetch(`/timeline?limit=200`, { headers });
             if (timelineResponse.ok) {
               const timelineData = await timelineResponse.json();
               const allEvents = timelineData.events || [];
               // Filter events related to this entity
               const entityEvents = allEvents.filter((event: TimelineEvent) => {
                 // Check if event has entity_ids array containing our entity
-                if (event.entity_ids && Array.isArray(event.entity_ids) && event.entity_ids.includes(entityId)) {
+                if (
+                  event.entity_ids &&
+                  Array.isArray(event.entity_ids) &&
+                  event.entity_ids.includes(entityId)
+                ) {
                   return true;
                 }
                 // Check if event's source_id matches any source that has observations for this entity
@@ -280,10 +279,9 @@ export function EntityDetail({
             if (user?.id) {
               schemaParams.append("user_id", user.id);
             }
-            const schemaIndexResponse = await fetch(
-              `/schemas?${schemaParams.toString()}`,
-              { headers }
-            );
+            const schemaIndexResponse = await fetch(`/schemas?${schemaParams.toString()}`, {
+              headers,
+            });
 
             if (schemaIndexResponse.ok) {
               const schemaIndex = await schemaIndexResponse.json();
@@ -388,21 +386,22 @@ export function EntityDetail({
             )}
           </div>
           <h1 className="text-2xl font-semibold">{entityName}</h1>
-          <p className="text-xs font-mono text-muted-foreground mt-1">
-            {entity.entity_id}
-          </p>
+          <p className="text-xs font-mono text-muted-foreground mt-1">{entity.entity_id}</p>
           <div className="grid grid-cols-2 gap-4 mt-4 text-sm">
             <div>
-              <span className="text-muted-foreground">Observations:</span> {entity.observation_count}
+              <span className="text-muted-foreground">Observations:</span>{" "}
+              {entity.observation_count}
             </div>
             <div>
               <span className="text-muted-foreground">Sources:</span> {sources.length}
             </div>
             <div>
-              <span className="text-muted-foreground">Interpretations:</span> {interpretations.length}
+              <span className="text-muted-foreground">Interpretations:</span>{" "}
+              {interpretations.length}
             </div>
             <div>
-              <span className="text-muted-foreground">Timeline events:</span> {timelineEvents.length}
+              <span className="text-muted-foreground">Timeline events:</span>{" "}
+              {timelineEvents.length}
             </div>
             <div className="col-span-2">
               <span className="text-muted-foreground">Last updated:</span>{" "}
@@ -424,9 +423,7 @@ export function EntityDetail({
               {visibleSnapshotEntries.map(([key, value]) => (
                 <div key={key} className="flex justify-between gap-4 text-sm">
                   <span className="text-muted-foreground">{key}:</span>
-                  <span className="font-mono text-xs truncate">
-                    {JSON.stringify(value)}
-                  </span>
+                  <span className="font-mono text-xs truncate">{JSON.stringify(value)}</span>
                 </div>
               ))}
               {hasMoreProperties && (
@@ -446,16 +443,12 @@ export function EntityDetail({
         {entity.raw_fragments && Object.keys(entity.raw_fragments).length > 0 && (
           <section>
             <h2 className="text-lg font-semibold mb-2">Raw fragments (unvalidated)</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Fields not yet in schema
-            </p>
+            <p className="text-sm text-muted-foreground mb-4">Fields not yet in schema</p>
             <div className="space-y-2">
               {Object.entries(entity.raw_fragments).map(([key, value]) => (
                 <div key={key} className="flex justify-between gap-4 text-sm">
                   <span className="text-muted-foreground">{key}:</span>
-                  <span className="font-mono text-xs truncate">
-                    {JSON.stringify(value)}
-                  </span>
+                  <span className="font-mono text-xs truncate">{JSON.stringify(value)}</span>
                 </div>
               ))}
             </div>
@@ -466,7 +459,9 @@ export function EntityDetail({
         <section>
           <h2 className="text-lg font-semibold mb-2">Schema definition</h2>
           <p className="text-sm text-muted-foreground mb-4">
-            {schema ? `Entity type: ${schema.entity_type} (v${schema.schema_version})` : "Schema information"}
+            {schema
+              ? `Entity type: ${schema.entity_type} (v${schema.schema_version})`
+              : "Schema information"}
           </p>
           {schema ? (
             <div className="space-y-3">
@@ -480,29 +475,31 @@ export function EntityDetail({
                   </div>
                 )}
               </div>
-              {Object.entries(schema.schema_definition.fields || {}).map(([fieldName, fieldDef]) => (
-                <div key={fieldName} className="flex items-start gap-4 text-sm border-b pb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{fieldName}</span>
-                      {fieldDef.required && (
-                        <Badge variant="outline" className="text-xs">Required</Badge>
-                      )}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      Type: {fieldDef.type}
+              {Object.entries(schema.schema_definition.fields || {}).map(
+                ([fieldName, fieldDef]) => (
+                  <div key={fieldName} className="flex items-start gap-4 text-sm border-b pb-2">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{fieldName}</span>
+                        {fieldDef.required && (
+                          <Badge variant="outline" className="text-xs">
+                            Required
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Type: {fieldDef.type}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              )}
               {Object.keys(schema.schema_definition.fields || {}).length === 0 && (
                 <p className="text-sm text-muted-foreground">No fields defined</p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
-              Schema not found
-            </p>
+            <p className="text-sm text-muted-foreground">Schema not found</p>
           )}
         </section>
 
@@ -513,9 +510,7 @@ export function EntityDetail({
             Source files that contributed observations to this entity
           </p>
           {sources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No sources found
-            </p>
+            <p className="text-sm text-muted-foreground">No sources found</p>
           ) : (
             <div className="space-y-4">
               {sources.map((source) => (
@@ -564,19 +559,18 @@ export function EntityDetail({
             AI interpretations that extracted data for this entity
           </p>
           {interpretations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No interpretations found
-            </p>
+            <p className="text-sm text-muted-foreground">No interpretations found</p>
           ) : (
             <div className="space-y-4">
               {interpretations.map((interp) => (
                 <div key={interp.id} className="border rounded-lg p-4 space-y-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="text-xs font-mono text-muted-foreground">
-                        {interp.id}
-                      </div>
-                      <Badge variant={interp.status === "completed" ? "default" : "secondary"} className="mt-2">
+                      <div className="text-xs font-mono text-muted-foreground">{interp.id}</div>
+                      <Badge
+                        variant={interp.status === "completed" ? "default" : "secondary"}
+                        className="mt-2"
+                      >
                         {interp.status}
                       </Badge>
                     </div>
@@ -616,9 +610,7 @@ export function EntityDetail({
             Timeline events related to this entity
           </p>
           {timelineEvents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No timeline events found
-            </p>
+            <p className="text-sm text-muted-foreground">No timeline events found</p>
           ) : (
             <div className="space-y-4">
               {timelineEvents.map((event) => (
@@ -626,9 +618,7 @@ export function EntityDetail({
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-medium text-sm">{event.event_type}</div>
-                      <div className="text-xs font-mono text-muted-foreground mt-1">
-                        {event.id}
-                      </div>
+                      <div className="text-xs font-mono text-muted-foreground mt-1">{event.id}</div>
                     </div>
                     <Badge variant="outline">
                       {new Date(event.event_timestamp).toLocaleString()}
@@ -643,7 +633,8 @@ export function EntityDetail({
                     )}
                     {event.entity_ids && event.entity_ids.length > 0 && (
                       <div>
-                        <span className="text-muted-foreground">Entities:</span> {event.entity_ids.length}
+                        <span className="text-muted-foreground">Entities:</span>{" "}
+                        {event.entity_ids.length}
                       </div>
                     )}
                   </div>
@@ -660,17 +651,13 @@ export function EntityDetail({
             Individual observations that contribute to the entity snapshot
           </p>
           {observations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No observations
-            </p>
+            <p className="text-sm text-muted-foreground">No observations</p>
           ) : (
             <div className="space-y-4">
               {observations.map((obs) => (
                 <div key={obs.id} className="border rounded-lg p-4 space-y-3">
                   <div className="flex justify-between items-start">
-                    <div className="text-xs font-mono text-muted-foreground">
-                      {obs.id}
-                    </div>
+                    <div className="text-xs font-mono text-muted-foreground">{obs.id}</div>
                     <Badge variant={obs.source_priority === 1000 ? "destructive" : "secondary"}>
                       Priority: {obs.source_priority}
                     </Badge>
@@ -718,9 +705,7 @@ export function EntityDetail({
                     {Object.entries(obs.fields).map(([key, value]) => (
                       <div key={key} className="flex justify-between gap-4">
                         <span className="text-muted-foreground">{key}:</span>
-                        <span className="font-mono text-xs truncate">
-                          {JSON.stringify(value)}
-                        </span>
+                        <span className="font-mono text-xs truncate">{JSON.stringify(value)}</span>
                       </div>
                     ))}
                   </div>
@@ -738,7 +723,9 @@ export function EntityDetail({
           </p>
           {relationships.outgoing.length > 0 && (
             <div className="space-y-3 mb-4">
-              <div className="text-sm font-medium text-muted-foreground">Outgoing relationships</div>
+              <div className="text-sm font-medium text-muted-foreground">
+                Outgoing relationships
+              </div>
               <p className="text-xs text-muted-foreground mb-2">
                 Relationships where this entity is the source
               </p>
@@ -764,7 +751,9 @@ export function EntityDetail({
 
           {relationships.incoming.length > 0 && (
             <div className="space-y-3">
-              <div className="text-sm font-medium text-muted-foreground">Incoming relationships</div>
+              <div className="text-sm font-medium text-muted-foreground">
+                Incoming relationships
+              </div>
               <p className="text-xs text-muted-foreground mb-2">
                 Relationships where this entity is the target
               </p>
@@ -790,9 +779,7 @@ export function EntityDetail({
           )}
 
           {totalRelationships === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No relationships
-            </p>
+            <p className="text-sm text-muted-foreground">No relationships</p>
           )}
         </section>
       </div>

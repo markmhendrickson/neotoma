@@ -3,19 +3,19 @@
   "entity_type": "transaction",
   "schema_version": "1.0",
   "snapshot": {
-    "amount": 42.5,
-    "currency": "USD",
-    "merchant": "Example Market",
-    "status": "posted"
+    "amount_original": 42.5,
+    "bank_provider": "Example Market",
+    "category": "posted",
+    "posting_date": "2024-01-03T00:00:00.000Z"
   },
   "computed_at": "2024-01-03T00:00:00Z",
   "observation_count": 2,
   "last_observation_at": "2024-01-03T00:00:00Z",
   "provenance": {
-    "amount": "obs_tx_20240103",
-    "currency": "obs_tx_20240103",
-    "merchant": "obs_tx_20240103",
-    "status": "obs_tx_20240101"
+    "amount_original": "obs_tx_20240103",
+    "bank_provider": "obs_tx_20240103",
+    "category": "obs_tx_20240101",
+    "posting_date": "obs_tx_20240103"
   },
   "user_id": "usr_test"
 }

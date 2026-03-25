@@ -643,6 +643,273 @@ describe("SchemaRegistryService - Incremental Updates", () => {
     });
   });
 
+  describe("fields_to_remove", () => {
+    it("should remove specified fields from schema definition", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            keep_field: { type: "string", required: true },
+            remove_field: { type: "string", required: false },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            keep_field: { strategy: "last_write" },
+            remove_field: { strategy: "last_write" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "2.0.0" },
+        }),
+      });
+
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "transaction",
+        fields_to_remove: ["remove_field"],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.schema_definition.fields.keep_field).toBeDefined();
+      expect(insertedData.schema_definition.fields.remove_field).toBeUndefined();
+    });
+
+    it("should remove corresponding merge policies", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            keep_field: { type: "string" },
+            remove_field: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            keep_field: { strategy: "last_write" },
+            remove_field: { strategy: "highest_priority" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "2.0.0" },
+        }),
+      });
+
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "transaction",
+        fields_to_remove: ["remove_field"],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.reducer_config.merge_policies.keep_field).toBeDefined();
+      expect(insertedData.reducer_config.merge_policies.remove_field).toBeUndefined();
+    });
+
+    it("should trigger major version bump", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.2.0",
+        schema_definition: {
+          fields: {
+            field_a: { type: "string" },
+            field_b: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            field_a: { strategy: "last_write" },
+            field_b: { strategy: "last_write" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "2.0.0" },
+        }),
+      });
+
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      const result = await service.updateSchemaIncremental({
+        entity_type: "transaction",
+        fields_to_remove: ["field_b"],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.schema_version).toBe("2.0.0");
+    });
+
+    it("should skip removal of non-existent fields gracefully", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            existing_field: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            existing_field: { strategy: "last_write" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "2.0.0" },
+        }),
+      });
+
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+
+      await service.updateSchemaIncremental({
+        entity_type: "transaction",
+        fields_to_remove: ["nonexistent_field"],
+      });
+
+      expect(stderrSpy).toHaveBeenCalledWith(
+        expect.stringContaining("not found in schema"),
+      );
+
+      stderrSpy.mockRestore();
+    });
+
+    it("should reject removal of all fields", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            only_field: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            only_field: { strategy: "last_write" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      await expect(
+        service.updateSchemaIncremental({
+          entity_type: "transaction",
+          fields_to_remove: ["only_field"],
+        }),
+      ).rejects.toThrow("Cannot remove all fields");
+    });
+
+    it("should work alongside fields_to_add in the same call", async () => {
+      const currentSchema = {
+        id: "schema-id",
+        entity_type: "transaction",
+        schema_version: "1.0",
+        schema_definition: {
+          fields: {
+            keep_field: { type: "string" },
+            old_field: { type: "string" },
+          },
+        },
+        reducer_config: {
+          merge_policies: {
+            keep_field: { strategy: "last_write" },
+            old_field: { strategy: "last_write" },
+          },
+        },
+        active: true,
+      };
+
+      vi.spyOn(service, "loadActiveSchema").mockResolvedValue(currentSchema as any);
+
+      const mockInsert = createChainableQuery({
+        single: vi.fn().mockResolvedValue({
+          data: { ...currentSchema, schema_version: "2.0.0" },
+        }),
+      });
+
+      const { mockSelect, mockUpdateDeactivate, mockUpdateActivate } = mockActivateCalls();
+
+      mockFrom
+        .mockReturnValueOnce(mockInsert)
+        .mockReturnValueOnce(mockSelect)
+        .mockReturnValueOnce(mockUpdateDeactivate)
+        .mockReturnValueOnce(mockUpdateActivate);
+
+      await service.updateSchemaIncremental({
+        entity_type: "transaction",
+        fields_to_add: [
+          { field_name: "new_field", field_type: "number" },
+        ],
+        fields_to_remove: ["old_field"],
+      });
+
+      const insertedData = mockInsert.insert.mock.calls[0][0];
+      expect(insertedData.schema_definition.fields.keep_field).toBeDefined();
+      expect(insertedData.schema_definition.fields.new_field).toBeDefined();
+      expect(insertedData.schema_definition.fields.old_field).toBeUndefined();
+      expect(insertedData.reducer_config.merge_policies.new_field).toBeDefined();
+      expect(insertedData.reducer_config.merge_policies.old_field).toBeUndefined();
+    });
+  });
+
   describe("migrateRawFragmentsToObservations", () => {
     it("should process raw_fragments in batches", async () => {
       // Mock batch 1 - range() returns mock, mock is awaitable

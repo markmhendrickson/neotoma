@@ -75,7 +75,7 @@ const EN_PACK: StaticLocalePack = {
     ctaViewGuarantees: "View guarantees",
     ctaInstall: "Install deterministic memory in 5 minutes",
     subcopy:
-      "RAG retrieves documents. Platform memory personalizes chat. Neither maintains durable state. Neotoma does — with deterministic guarantees and no silent mutation.",
+      "RAG retrieves documents. Platform memory personalizes chat. Neither maintains durable state. Neotoma does, with deterministic guarantees and no silent mutation.",
   },
   siteSections: {
     intro: "Intro",

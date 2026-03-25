@@ -406,18 +406,19 @@ Schemas MUST be validated before registration:
 
 ### 4.3 Incremental Schema Updates
 
-The schema registry supports incremental schema updates without full schema replacement:
+The schema registry supports incremental schema updates without full schema replacement, including both adding and removing fields:
 
 ```typescript
 class SchemaRegistry {
   async updateSchemaIncremental(options: {
     entity_type: string;
-    fields_to_add: Array<{
+    fields_to_add?: Array<{
       field_name: string;
       field_type: 'string' | 'number' | 'date' | 'boolean' | 'array' | 'object';
       required?: boolean;
       reducer_strategy?: 'last_write' | 'highest_priority' | 'most_specific' | 'merge_array';
     }>;
+    fields_to_remove?: string[]; // Field names to remove from schema
     schema_version?: string; // Auto-increments if not provided
     user_specific?: boolean; // Create user-specific schema variant
     user_id?: string; // Required if user_specific=true
@@ -429,19 +430,27 @@ class SchemaRegistry {
 
 **Key Features:**
 - **Add fields without full replacement**: Merge new fields with existing schema
+- **Remove fields with data preservation**: Removed fields are excluded from snapshots via reducer schema-projection filtering, but all observation data is preserved. Re-adding a field restores its data in snapshots.
 - **Immediate application**: New schema applies to all new data immediately after activation
 - **Optional migration**: Backfill historical data only if needed (not required for new data)
 - **Semantic versioning**: Automatically increments version based on change type:
   - `1.0.0` → `1.1.0` (adding optional field - minor)
   - `1.1.0` → `1.1.1` (patch change)
-  - `1.1.1` → `2.0.0` (breaking change - major)
+  - `1.1.1` → `2.0.0` (removing fields - major)
 
-**Example Workflow:**
+**Example Workflow (adding fields):**
 1. Store data with unknown fields → fields go to `raw_fragments`
 2. Analyze `raw_fragments` to identify candidates
 3. Call `updateSchemaIncremental` to add approved fields
 4. New data automatically uses updated schema (no migration needed)
 5. Optionally backfill historical data via `migrate_existing=true`
+
+**Example Workflow (removing fields):**
+1. Identify noisy or inappropriate fields accumulated via auto-enhancement or early inference
+2. Call `updateSchemaIncremental` with `fields_to_remove` to prune them
+3. Major version bump is created automatically
+4. Snapshots recomputed without the removed fields
+5. Observation data retained; fields can be restored by re-adding them
 
 ### 4.4 User-Specific Schemas
 
@@ -570,19 +579,22 @@ Load `docs/subsystems/schema_registry.md` when:
 ### Constraints Agents Must Enforce
 1. **Schemas MUST be versioned** (no unversioned schemas)
 2. **Only one active schema per entity_type** (version switching required)
-3. **Schema changes MUST be additive** (no breaking changes)
+3. **Schema changes MUST be versioned** (additive changes = minor bump, field removal = major bump)
 4. **Merge policies MUST be configured** (no ad-hoc merge logic)
+5. **At least one field MUST remain** after removal (cannot remove all fields)
 ### Forbidden Patterns
 - ❌ Unversioned schemas
 - ❌ Multiple active schemas per entity_type
-- ❌ Breaking schema changes
+- ❌ Unversioned schema changes (all changes must go through `updateSchemaIncremental` or `register`)
 - ❌ Ad-hoc merge policies (must use schema registry)
+- ❌ Removing all fields from a schema
 ### Validation Checklist
 - [ ] Schemas are versioned (semantic versioning)
 - [ ] Only one active schema per entity_type
-- [ ] Schema changes are additive (no breaking changes)
+- [ ] Schema changes are versioned (minor for additions, major for removals)
 - [ ] Merge policies configured for all fields
 - [ ] Schema registry integrated with observation creation
 - [ ] Schema registry integrated with reducer execution
-- [ ] Tests verify schema versioning and migration
+- [ ] Reducer uses schema-projection filtering (only schema-defined fields appear in snapshots)
+- [ ] Tests verify schema versioning, migration, and field removal
 - [ ] Documentation updated for new schema versions
