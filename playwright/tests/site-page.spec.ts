@@ -178,6 +178,7 @@ test.describe("sitePage coverage", () => {
     await expect.poll(() => page.url()).toContain("/de");
   });
 
+  // Regression: marketing verticals use full-page shell (Layout + SiteHeaderNav), not docs sidebar.
   test("vertical marketing routes omit docs sidebar trigger and developer preview", async ({
     page,
   }, testInfo) => {
