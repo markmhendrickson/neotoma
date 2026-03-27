@@ -190,6 +190,11 @@ const DOC_CATEGORIES = [
         href: "/changelog",
         desc: "Release history and documentation updates",
       },
+      {
+        label: "All pages (Markdown)",
+        href: "/site-markdown",
+        desc: "Every indexable route as Markdown (SEO summaries)",
+      },
     ],
   },
   {

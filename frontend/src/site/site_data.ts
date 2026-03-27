@@ -251,10 +251,11 @@ export const SITE_SECTIONS: SiteSection[] = [
   { id: "intro", label: "Intro", shortLabel: "Intro", icon: "Zap" },
   { id: "outcomes", label: "Before / After", shortLabel: "Before / After", icon: "AlertTriangle" },
   { id: "memory-guarantees", label: "Guarantees", shortLabel: "Guarantees", icon: "ShieldCheck" },
+  { id: "evaluate", label: "Evaluate", shortLabel: "Evaluate", icon: "MessageSquare" },
   { id: "install", label: "Install", shortLabel: "Install", icon: "Rocket" },
   { id: "inspect", label: "Inspect", shortLabel: "Inspect", icon: "Search" },
   { id: "architecture", label: "Architecture", shortLabel: "Architecture", icon: "Layers" },
-  { id: "who-is-it-for", label: "Who is it for", shortLabel: "Who is it for", icon: "Users" },
+  { id: "use-cases", label: "Use cases", shortLabel: "Use cases", icon: "Network" },
   { id: "interfaces", label: "Interfaces", shortLabel: "Interfaces", icon: "SatelliteDish" },
   { id: "learn-more", label: "Learn more", shortLabel: "Resources", icon: "GraduationCap" },
 ];
@@ -307,6 +308,11 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
       { label: "Schema management", href: "/schema-management", icon: "Database" },
       { label: "Troubleshooting", href: "/troubleshooting", icon: "Bug" },
       { label: "Changelog", href: "/changelog", icon: "History" },
+      {
+        label: "All pages (Markdown)",
+        href: "/site-markdown",
+        icon: "FileText",
+      },
     ],
   },
   {
@@ -400,6 +406,9 @@ docker build -t neotoma .`,
     }
   }
 }`,
+  agentEvaluationPrompt: `Review https://neotoma.io and tell me whether it would solve a real problem for me. Based on what you know about my workflow, what data would I benefit from persisting across our sessions? Give me a specific, honest assessment — not a generic summary of the product.`,
+  agentEvaluationShareEmail: "mark@neotoma.io",
+  agentEvaluationShareSubject: "Agent evaluation of Neotoma",
   dockerCliExample: `# Store an entity
 docker exec neotoma neotoma store \\
   --json='[{"entity_type":"task","title":"Submit expense report","status":"open"}]'

@@ -80,7 +80,9 @@ export type CtaName =
   | "customer_ops_install_neotoma"
   | "customer_ops_install_neotoma_bottom"
   | "logistics_install_neotoma"
-  | "logistics_install_neotoma_bottom";
+  | "logistics_install_neotoma_bottom"
+  | "evaluate_copy_prompt"
+  | "evaluate_share_results";
 
 /** Track a CTA button/link click with the CTA name and current page. */
 export function sendCtaClick(ctaName: CtaName, pagePath?: string): void {

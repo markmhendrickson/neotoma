@@ -31,6 +31,14 @@ export interface LocaleDictionary {
   noResults: string;
   copied: string;
   copy: string;
+  /** Header / nav: open raw Markdown for the current indexable page. */
+  viewPageMarkdown: string;
+  /** Raw Markdown view: link back to the HTML page. */
+  backToHtmlPage: string;
+  /** Raw Markdown view: link to the Markdown index hub. */
+  allPagesMarkdown: string;
+  /** Hub list / preview: link to minimal /raw view. */
+  rawMarkdownDirect: string;
 }
 
 const en: LocaleDictionary = {
@@ -65,6 +73,10 @@ const en: LocaleDictionary = {
   noResults: "No results",
   copied: "Copied",
   copy: "Copy",
+  viewPageMarkdown: "Markdown",
+  backToHtmlPage: "HTML page",
+  allPagesMarkdown: "All pages",
+  rawMarkdownDirect: "Raw view",
 };
 
 const dictionaries: Record<SupportedLocale, LocaleDictionary> = {

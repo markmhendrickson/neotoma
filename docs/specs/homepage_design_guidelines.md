@@ -355,7 +355,7 @@ At that point, Neotoma becomes the reference implementation for **deterministic 
 2. Memory Guarantees (#memory-guarantees) — 9-row comparison table (retrieval vs file vs Neotoma)
 3. Architecture + Foundations (#architecture) — three foundations cards (privacy, deterministic, cross-platform) + pipeline diagram
 4. Quick Start (#quick-start) — merged install prompt + post-install simulation
-5. Who Is It For (#who-is-it-for) — 3 ICP cards
+5. Use Cases (#use-cases) — 6 curated vertical cards + "See all" link
 6. Interfaces (#interfaces) — MCP/CLI/API summary cards with links
 7. Learn More (#learn-more) — repo, docs index, blog posts
 

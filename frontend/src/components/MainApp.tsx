@@ -55,7 +55,11 @@ import { HealthcareLandingPage } from "@/components/subpages/HealthcareLandingPa
 import { GovTechLandingPage } from "@/components/subpages/GovTechLandingPage";
 import { CustomerOpsLandingPage } from "@/components/subpages/CustomerOpsLandingPage";
 import { LogisticsLandingPage } from "@/components/subpages/LogisticsLandingPage";
+import { PersonalDataLandingPage } from "@/components/subpages/PersonalDataLandingPage";
 import { VerticalsIndexPage } from "@/components/subpages/VerticalsIndexPage";
+import { BuildVsBuyPage } from "@/components/subpages/BuildVsBuyPage";
+import { RawSiteMarkdownPage } from "@/components/subpages/RawSiteMarkdownPage";
+import { SiteMarkdownHubPage } from "@/components/subpages/SiteMarkdownHubPage";
 import { DeveloperWalkthroughPage } from "@/components/subpages/DeveloperWalkthroughPage";
 import { sendPageView } from "@/utils/analytics";
 import { DEFAULT_LOCALE, isSupportedLocale } from "@/i18n/config";
@@ -134,8 +138,12 @@ const APP_ROUTES: readonly AppRoute[] = [
   { path: "/government", element: <GovTechLandingPage /> },
   { path: "/customer-ops", element: <CustomerOpsLandingPage /> },
   { path: "/logistics", element: <LogisticsLandingPage /> },
+  { path: "/personal-data", element: <PersonalDataLandingPage /> },
   { path: "/verticals", element: <VerticalsIndexPage /> },
+  { path: "/build-vs-buy", element: <BuildVsBuyPage /> },
   { path: "/foundations", element: <FoundationsPage /> },
+  { path: "/site-markdown", element: <SiteMarkdownHubPage /> },
+  { path: "/raw", element: <RawSiteMarkdownPage /> },
   { path: "/privacy-first", element: <Navigate to="/foundations#privacy-first" replace /> },
   { path: "/cross-platform", element: <Navigate to="/foundations#cross-platform" replace /> },
 ];

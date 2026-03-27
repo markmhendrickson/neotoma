@@ -22,7 +22,7 @@ test.describe("sitePage coverage", () => {
 
     const pageSections = page.getByRole("navigation", { name: /page sections/i });
     await expect(pageSections).toBeVisible();
-    await expect(pageSections.getByRole("button")).toHaveCount(9);
+    await expect(pageSections.getByRole("button")).toHaveCount(10);
   });
 
   test("renders learn more links", async ({ page }) => {
@@ -51,9 +51,9 @@ test.describe("sitePage coverage", () => {
     await page.goto("/");
     await page.waitForLoadState("networkidle");
 
-    await page.locator("#who-is-it-for").scrollIntoViewIfNeeded();
+    await page.locator("#use-cases").scrollIntoViewIfNeeded();
 
-    await expect.poll(() => page.url()).toContain("#who-is-it-for");
+    await expect.poll(() => page.url()).toContain("#use-cases");
   });
 
   test("subpage routes render with back-to-home link", async ({ page }) => {

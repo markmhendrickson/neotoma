@@ -9,6 +9,9 @@ npm run type-check || exit 1
 echo "Running linter..."
 npm run lint || exit 1
 
+echo "Running site copy style lint (writing_style_guide)..."
+npm run lint:site-copy || exit 1
+
 if [ "$SKIP_TESTS" = "1" ] || [ "$NEOTOMA_SKIP_TESTS" = "1" ]; then
   echo "Skipping tests (SKIP_TESTS=1 or NEOTOMA_SKIP_TESTS=1)"
 else

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCanonicalUrl,
+  buildDefaultOgImageAlt,
+  buildKeywords,
   buildRobotsTxt,
   buildSitemapXml,
   getSeoMetadataForPath,
@@ -58,6 +60,30 @@ describe("seo_metadata", () => {
     expect(metadata.title).toContain("Neotoma");
     expect(metadata.canonicalUrl).toBe("https://neotoma.io/");
     expect(metadata.robots).toBe("index,follow");
+    expect(metadata.ogImageAlt.length).toBeGreaterThan(10);
+    expect(metadata.keywords).toContain("Neotoma");
+    expect(metadata.twitterCard).toBe("summary_large_image");
+    const primary = metadata.jsonLd[0] as Record<string, unknown>;
+    expect(primary.image).toBeDefined();
+  });
+
+  it("buildDefaultOgImageAlt truncates long descriptions", () => {
+    const long = "x".repeat(300);
+    const alt = buildDefaultOgImageAlt("Title", long);
+    expect(alt.length).toBeLessThanOrEqual(203);
+    expect(alt.startsWith("Title.")).toBe(true);
+  });
+
+  it("buildKeywords merges route keywords with defaults", () => {
+    const k = buildKeywords({
+      title: "Install | Neotoma",
+      description: "Install steps.",
+      robots: "index,follow",
+      keywords: ["Docker"],
+    });
+    expect(k).toContain("Neotoma");
+    expect(k).toContain("Docker");
+    expect(k).toContain("MCP");
   });
 
   it("maps docs child routes to docs metadata", () => {
@@ -181,11 +207,22 @@ describe("seo_metadata", () => {
       '<meta name="description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<meta name="robots" content="index,follow" />',
       '<link rel="canonical" href="https://neotoma.io/" />',
+      '<meta property="og:type" content="website" />',
       '<meta property="og:title" content="Neotoma | The state layer for persistent AI agent memory" />',
       '<meta property="og:description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
       '<meta property="og:url" content="https://neotoma.io/" />',
+      '<meta property="og:image" content="https://neotoma.io/neotoma-og-1200x630.png" />',
+      '<meta property="og:image:width" content="1200" />',
+      '<meta property="og:image:height" content="630" />',
+      '<meta property="og:image:alt" content="placeholder" />',
+      '<meta name="keywords" content="placeholder" />',
+      '<meta name="twitter:card" content="summary_large_image" />',
       '<meta name="twitter:title" content="Neotoma | The state layer for persistent AI agent memory" />',
       '<meta name="twitter:description" content="Truth layer for persistent AI agent memory: deterministic, inspectable state. Install with npm, connect MCP, query memory." />',
+      '<meta name="twitter:image" content="https://neotoma.io/neotoma-og-1200x630.png" />',
+      '<meta name="twitter:image:width" content="1200" />',
+      '<meta name="twitter:image:height" content="630" />',
+      '<meta name="twitter:image:alt" content="placeholder" />',
       '<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage"}</script>',
       '</head><body><div id="root"></div></body></html>',
     ].join("\n");
@@ -212,6 +249,9 @@ describe("seo_metadata", () => {
       expect(result).toContain('og:title" content="CLI Reference | Neotoma"');
       expect(result).toContain('twitter:title" content="CLI Reference | Neotoma"');
       expect(result).toContain('og:url" content="https://neotoma.io/cli"');
+      expect(result).toContain('og:image:alt" content="');
+      expect(result).toContain('twitter:image:alt" content="');
+      expect(result).toContain('name="keywords" content="');
     });
 
     it("replaces JSON-LD with route-specific structured data", () => {

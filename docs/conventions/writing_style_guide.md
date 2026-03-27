@@ -196,6 +196,29 @@ When writing or editing documentation, verify:
 - [ ] No immediate repetition of proper nouns in consecutive sentences
 - [ ] Lists used for 3+ related items or concepts
 - [ ] Formatting techniques applied where appropriate (lists, subheadings)
+## Automated checks (site copy)
+
+A subset of this guide is enforced automatically on marketing and SEO surfaces:
+
+- **Command:** `npm run lint:site-copy`
+- **Script:** `scripts/lint_site_copy_style.ts`
+- **Scope:** `frontend/src/components/subpages/**/*.tsx`, `SitePage.tsx`, `SeoHead.tsx`, `frontend/src/site/seo_metadata.ts`
+- **When:** Husky pre-commit (after ESLint)
+
+Checks include disallowed em/en dashes and HTML entities (`&mdash;`, `&ndash;`) in user-facing copy, with exemptions for table empty-cell placeholders and API default cells. It also flags common AI and hype phrases from `foundation/conventions/writing_style_guide.md` (for example "Furthermore", "leverage", "seamless", "Try it now!"). It does not yet enforce sentence length or passive voice; those remain manual and agent review.
+
+### Site SEO metadata (automatic)
+
+For public routes, `resolveSeoMetadata()` in `frontend/src/site/seo_metadata.ts` always supplies:
+
+- Per-route **title**, **description**, **canonical**, **robots**, **hreflang alternates**, **JSON-LD** (including **WebPage/WebSite image** via `ImageObject`)
+- **og:image** (default site asset or optional per-route `ogImageUrl` on `SeoRouteMetadata`)
+- **og:image:alt** and **twitter:image:alt** (from `ogImageAlt` or auto-generated from title + description)
+- **meta keywords** (defaults plus optional `keywords[]` on the route, plus hints from the title)
+- **twitter:card** (default `summary_large_image`, overridable per route)
+
+`SeoHead` renders these on every page that includes it. Static HTML export uses `injectRouteMetaIntoHtml()` so the same fields are present for crawlers. In **development only**, `SeoDevMetaFooter` (in `Layout`) lists the resolved values for the current URL.
+
 ## Integration with Documentation Standards
 This style guide complements `docs/conventions/documentation_standards.md`. Apply both:
 - **Documentation Standards**: Structure, format, required sections, diagrams

@@ -22,6 +22,8 @@ import {
   Receipt,
   RotateCcw,
   ShieldCheck,
+  Mail,
+  MessageSquare,
   Users,
   Waypoints,
 } from "lucide-react";
@@ -39,7 +41,6 @@ import {
   MCP_ACTIONS_TABLE,
   CLI_COMMANDS_TABLE,
   FUNCTIONALITY_MATRIX,
-  ICP_PROFILES,
   MEMORY_GUARANTEE_ROWS,
   MEMORY_MODEL_VENDORS,
   THREE_FOUNDATIONS,
@@ -57,9 +58,7 @@ import { SectionDotNav } from "./SectionDotNav";
 import { CursorIcon } from "./icons/CursorIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { StateFlowDiagram } from "./illustrations/StateFlowDiagram";
-import icpOptionBInfra from "@/assets/images/icp/icp-option-b-infra.png";
-import icpOptionBBuilders from "@/assets/images/icp/icp-option-b-builders.png";
-import icpOptionBOperators from "@/assets/images/icp/icp-option-b-operators.png";
+import { VERTICALS } from "./subpages/VerticalsIndexPage";
 import interfacesOptionBRest from "@/assets/images/interfaces/interfaces-option-b-rest.png";
 import interfacesOptionBMcp from "@/assets/images/interfaces/interfaces-option-b-mcp.png";
 import interfacesOptionBCli from "@/assets/images/interfaces/interfaces-option-b-cli.png";
@@ -75,10 +74,11 @@ const DOT_NAV_SECTIONS = [
   { id: "intro", label: "Intro" },
   { id: "outcomes", label: "Before / After" },
   { id: "memory-guarantees", label: "Guarantees" },
+  { id: "evaluate", label: "Evaluate" },
   { id: "install", label: "Install" },
   { id: "inspect", label: "Inspect" },
   { id: "architecture", label: "Architecture" },
-  { id: "who-is-it-for", label: "Who's it for" },
+  { id: "use-cases", label: "Use cases" },
   { id: "interfaces", label: "Interfaces" },
   { id: "learn-more", label: "Learn More" },
 ];
@@ -90,10 +90,11 @@ function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) 
     { id: "intro", label: pack.siteSections.intro },
     { id: "outcomes", label: pack.siteSections.beforeAfter },
     { id: "memory-guarantees", label: pack.siteSections.guarantees },
+    { id: "evaluate", label: pack.siteSections.evaluate },
     { id: "install", label: pack.siteSections.install },
     { id: "inspect", label: pack.siteSections.inspect },
     { id: "architecture", label: pack.siteSections.architecture },
-    { id: "who-is-it-for", label: pack.siteSections.whoIsItFor },
+    { id: "use-cases", label: pack.siteSections.useCases },
     { id: "interfaces", label: pack.siteSections.interfaces },
     { id: "learn-more", label: pack.siteSections.learnMore },
   ];
@@ -1896,6 +1897,73 @@ export function SitePage({ staticMode = false }: SitePageProps) {
           </FadeSection>
         </section>
 
+        {/* Slide 3b: Agent evaluation prompt */}
+        <section id="evaluate" className={SLIDE_CLASS}>
+          <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
+            <div className={SLIDE_INNER}>
+              <div className="space-y-8 max-w-5xl mx-auto">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    Ask your agent
+                  </p>
+                  <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
+                    <MessageSquare
+                      className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <span>Let your AI decide if Neotoma is worth it</span>
+                  </h2>
+                </div>
+                <div className={SECTION_WITH_VISUAL_GRID}>
+                  <div className="min-w-0 space-y-4">
+                    <p className="text-[15px] leading-7 text-foreground/90">
+                      Paste this into Claude, ChatGPT, Cursor, or any agent you already use.
+                      It will evaluate Neotoma against your actual workflow and give you a
+                      specific recommendation.
+                    </p>
+                    <CodeBlock
+                      code={SITE_CODE_SNIPPETS.agentEvaluationPrompt}
+                      staticMode={staticMode}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Works in any AI tool
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded border border-border bg-muted px-2.5 py-1 text-[12px] font-medium text-muted-foreground">
+                        <Bot className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        Personalized to your context
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border bg-card p-6 sm:p-8 space-y-5">
+                    <div className="space-y-2">
+                      <h3 className="text-[16px] font-medium">Share your results</h3>
+                      <p className="text-[14px] leading-6 text-muted-foreground">
+                        If the evaluation looks interesting, send it over. I&rsquo;ll
+                        review what your agent found and help you get set up with a
+                        hands-on walkthrough.
+                      </p>
+                    </div>
+                    <a
+                      href={`mailto:${SITE_CODE_SNIPPETS.agentEvaluationShareEmail}?subject=${encodeURIComponent(SITE_CODE_SNIPPETS.agentEvaluationShareSubject)}&body=${encodeURIComponent("Here's what my agent said:\n\n[Paste your agent's evaluation here]\n\n---\nOptional: what tools/workflows do you use day-to-day?\n")}`}
+                      className="inline-flex items-center gap-2 rounded-lg border border-emerald-600 bg-emerald-600 px-4 py-2.5 text-[14px] font-medium text-white shadow-sm shadow-emerald-600/30 hover:border-emerald-500 hover:bg-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950 dark:shadow-emerald-500/30 dark:hover:border-emerald-400 dark:hover:bg-emerald-400"
+                      onClick={() => sendCtaClick("evaluate_share_results")}
+                    >
+                      <Mail className="h-4 w-4 shrink-0" aria-hidden />
+                      Email your evaluation
+                    </a>
+                    <p className="text-[12px] text-muted-foreground">
+                      No obligation. Just a way to start a conversation if the fit is there.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <SectionEdgeIndicators sectionId="evaluate" />
+          </FadeSection>
+        </section>
+
         {/* Slide 4: Install */}
         <section id="install" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
@@ -2191,104 +2259,80 @@ export function SitePage({ staticMode = false }: SitePageProps) {
           </FadeSection>
         </section>
 
-        {/* === Who's it for: world snapshots (Option B) with generated images === */}
-        <section id="who-is-it-for" className={SLIDE_CLASS}>
+        {/* === Use cases: curated verticals grid === */}
+        <section id="use-cases" className={SLIDE_CLASS}>
           <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
             <div className={SLIDE_INNER}>
               <div className="space-y-8">
                 <div className="space-y-2">
                   <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
-                    Built for
+                    Use cases
                   </p>
                   <h2 className="flex items-center gap-2 text-[24px] font-medium tracking-[-0.02em]">
-                    <Users
+                    <Network
                       className="hidden md:block h-5 w-5 shrink-0 text-muted-foreground"
                       aria-hidden
                     />
-                    <span>Who&apos;s it for</span>
+                    <span>Any workflow where provenance matters</span>
                   </h2>
                   <p className="text-[14px] md:text-[15px] text-muted-foreground max-w-2xl leading-6">
-                    One memory layer. Three worlds: infrastructure pipelines, agent systems, and the
-                    tools you use every day. Pick your lens.
+                    Replace &ldquo;vendor&rdquo; with &ldquo;contract&rdquo;,
+                    &ldquo;patient&rdquo;, or &ldquo;shipment&rdquo; and the
+                    guarantees are identical. Same state layer, different domain.
                   </p>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {ICP_PROFILES.slice(0, 3).map((icp) => {
-                    const imageSrc =
-                      icp.slug === "ai-infrastructure-engineers"
-                        ? icpOptionBInfra
-                        : icp.slug === "agentic-systems-builders"
-                          ? icpOptionBBuilders
-                          : icpOptionBOperators;
-                    const imageZoneBg =
-                      icp.slug === "ai-infrastructure-engineers"
-                        ? "bg-[#f8f1d5]"
-                        : icp.slug === "agentic-systems-builders"
-                          ? "bg-[#ebf5ec]"
-                          : "bg-[#eef4fc]";
-                    const contentZoneClass =
-                      icp.slug === "ai-infrastructure-engineers"
-                        ? "bg-[#f8f1d5] dark:bg-[#2d2a1f] border-[#e6dfbd] dark:border-[#4a4538]"
-                        : icp.slug === "agentic-systems-builders"
-                          ? "bg-[#ebf5ec] dark:bg-[#1e2a22] border-[#cce5cf] dark:border-[#2d4a3a]"
-                          : "bg-[#eef4fc] dark:bg-[#1e2433] border-[#d4e2f5] dark:border-[#2d3a52]";
-                    const pillClass =
-                      icp.slug === "ai-infrastructure-engineers"
-                        ? "rounded border border-amber-500/25 bg-transparent px-2 py-0.5 text-[11px] font-mono text-amber-700 dark:text-amber-400"
-                        : icp.slug === "agentic-systems-builders"
-                          ? "rounded border border-emerald-500/25 bg-transparent px-2 py-0.5 text-[11px] font-mono text-emerald-600 dark:text-emerald-400"
-                          : "rounded border border-blue-500/25 bg-transparent px-2 py-0.5 text-[11px] font-mono text-blue-600 dark:text-blue-400";
+                <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                  {VERTICALS.filter((v) =>
+                    ["/compliance", "/crm", "/healthcare", "/financial-ops", "/contracts", "/logistics"].includes(v.href)
+                  ).map((v) => {
+                    const Icon = v.icon;
                     return (
                       <Link
-                        key={icp.slug}
-                        to={`/${icp.slug}`}
-                        className={`flex flex-row md:flex-col overflow-hidden rounded-lg border no-underline transition-[transform,color,border-color] duration-200 ease-out group hover:scale-[1.03] hover:border-opacity-80 ${contentZoneClass}`}
-                        onClick={(e) => {
-                          if (isModifiedClick(e)) e.stopPropagation();
-                        }}
+                        key={v.href}
+                        to={v.href}
+                        className={`group relative flex flex-col rounded-xl border p-5 no-underline transition-all hover:shadow-lg hover:shadow-black/5 dark:hover:shadow-black/20 ${v.accentBorder} ${v.accentBg}`}
                       >
-                        <div
-                          className={`hidden md:flex w-[116px] shrink-0 items-center justify-center rounded-l-lg p-2 md:w-auto md:rounded-l-none md:rounded-t-lg md:pt-4 md:px-5 md:pb-3 ${imageZoneBg}`}
-                        >
-                          <img
-                            src={imageSrc}
-                            alt=""
-                            width={280}
-                            height={280}
-                            className="aspect-square size-[96px] object-contain object-center md:size-[280px]"
-                            loading="lazy"
-                          />
-                        </div>
-                        <div className="flex flex-1 flex-col min-h-0 px-3 py-3 md:px-5 md:py-4">
-                          <p className="text-[16px] md:text-[18px] font-medium text-foreground mb-1">
-                            {icp.shortName}
-                          </p>
-                          <p className="text-[14px] md:text-[15px] text-muted-foreground leading-6 mb-3 flex-1">
-                            {icp.tagline}
-                          </p>
-                          <div className="hidden md:flex flex-wrap gap-1.5 mb-3">
-                            {icp.dataTypes.slice(0, 4).map((tag) => (
-                              <span key={tag} className={pillClass}>
-                                {tag}
-                              </span>
-                            ))}
-                            {icp.dataTypes.length > 4 && (
-                              <span className="rounded border border-border px-2 py-0.5 text-[11px] font-mono text-muted-foreground">
-                                +{icp.dataTypes.length - 4} more
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[12px] font-medium text-muted-foreground group-hover:text-foreground transition-colors mt-auto">
-                            See full profile →
+                        <div className="flex items-center gap-2 mb-2">
+                          <Icon className={`h-4 w-4 ${v.accent}`} />
+                          <span className={`text-[13px] font-medium ${v.accent}`}>
+                            {v.label}
                           </span>
                         </div>
+                        <p className="text-[15px] font-medium text-foreground mb-1.5">
+                          {v.title}
+                        </p>
+                        <p className="text-[13px] leading-5 text-muted-foreground mb-3 flex-1">
+                          {v.tagline}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {v.entityExamples.slice(0, 3).map((e) => (
+                            <span
+                              key={e}
+                              className="rounded border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-mono text-muted-foreground"
+                            >
+                              {e}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-[12px] italic leading-4 text-muted-foreground/80">
+                          &ldquo;{v.thenQuestion}&rdquo;
+                        </p>
                       </Link>
                     );
                   })}
                 </div>
+                <div className="text-center pt-1">
+                  <Link
+                    to="/verticals"
+                    className="inline-flex items-center gap-1.5 text-[14px] font-medium text-foreground no-underline hover:text-foreground/80 transition-colors"
+                  >
+                    See all {VERTICALS.length} verticals
+                    <span aria-hidden className="transition-transform group-hover:translate-x-0.5">&rarr;</span>
+                  </Link>
+                </div>
               </div>
             </div>
-            <SectionEdgeIndicators sectionId="who-is-it-for" />
+            <SectionEdgeIndicators sectionId="use-cases" />
           </FadeSection>
         </section>
 
