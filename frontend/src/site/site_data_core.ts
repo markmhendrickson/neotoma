@@ -10,7 +10,7 @@ export const SITE_SECTION_CORE: SiteSectionCore[] = [
   { id: "install", icon: "Rocket" },
   { id: "inspect", icon: "Search" },
   { id: "architecture", icon: "Layers" },
-  { id: "who-is-it-for", icon: "Users" },
+  { id: "use-cases", icon: "Network" },
   { id: "interfaces", icon: "SatelliteDish" },
   { id: "learn-more", icon: "GraduationCap" },
 ];

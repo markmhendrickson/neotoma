@@ -19,7 +19,7 @@ export function getLocalizedSiteSections(pack: StaticLocalePack): LocalizedSiteS
     install: { label: labels.install, shortLabel: labels.install },
     inspect: { label: labels.inspect, shortLabel: labels.inspect },
     architecture: { label: labels.architecture, shortLabel: labels.architecture },
-    "who-is-it-for": { label: labels.whoIsItFor, shortLabel: labels.whoIsItFor },
+    "use-cases": { label: labels.useCases, shortLabel: labels.useCases },
     interfaces: { label: labels.interfaces, shortLabel: labels.interfaces },
     "learn-more": { label: labels.learnMore, shortLabel: labels.resources },
   };

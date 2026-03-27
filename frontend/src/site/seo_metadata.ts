@@ -16,6 +16,14 @@ export interface SeoRouteMetadata {
   ogType?: "website" | "article";
   jsonLdType?: "WebPage" | "WebSite" | "SoftwareApplication";
   breadcrumb?: { name: string; path: string }[];
+  /** Override default OG/Twitter image URL (defaults to site-wide asset). */
+  ogImageUrl?: string;
+  /** Social preview image description; defaults from title + description. */
+  ogImageAlt?: string;
+  /** Extra keywords merged with product defaults for meta keywords. */
+  keywords?: string[];
+  /** Twitter card layout (default summary_large_image). */
+  twitterCard?: "summary" | "summary_large_image";
 }
 
 export const SEO_DEFAULTS = {
@@ -25,7 +33,7 @@ export const SEO_DEFAULTS = {
   ogImageUrl: SITE_METADATA.ogImageUrl,
   ogImageWidth: 1200,
   ogImageHeight: 630,
-  twitterCard: "summary_large_image",
+  twitterCard: "summary_large_image" as const,
   twitterSite: "@markmhendrickson",
   author: "Neotoma",
 };
@@ -678,6 +686,18 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Logistics", path: "/logistics" },
     ],
   },
+  "/personal-data": {
+    title: "Neotoma for Personal Data | Versioned Memory for Health, Finance, and Life Data",
+    description:
+      "Give your personal AI agents versioned, queryable memory across health, finance, habits, and goals. Neotoma provides entity resolution, temporal queries, and cross-domain correlations for your personal data, with the same state integrity guarantees used in enterprise systems.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Verticals", path: "/verticals" },
+      { name: "Personal Data", path: "/personal-data" },
+    ],
+  },
   "/agent-auth": {
     title: "Neotoma for Agent Authorization | Versioned Policy State and Delegation Provenance",
     description:
@@ -691,7 +711,7 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     ],
   },
   "/verticals": {
-    title: "Use Cases | Neotoma — State Integrity for AI-Driven Verticals",
+    title: "Use Cases | State Integrity for AI-Driven Verticals | Neotoma",
     description:
       "Neotoma fits any workflow where 'what did the agent know then?' matters. Explore vertical use cases: compliance, CRM, contracts, due diligence, portfolio monitoring, case management, financial ops, procurement, agent authorization, healthcare, government, customer ops, and logistics.",
     robots: "index,follow",
@@ -699,6 +719,17 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
     breadcrumb: [
       { name: "Home", path: "/" },
       { name: "Verticals", path: "/verticals" },
+    ],
+  },
+  "/build-vs-buy": {
+    title: "Build vs Buy | When to Build Your Own State Layer | Neotoma",
+    description:
+      "Honest assessment of when to build your own audit trail and state layer versus using Neotoma. Self-qualification scorecard for teams deploying AI agents in production with multi-writer entities, temporal queries, and provenance requirements.",
+    robots: "index,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Build vs Buy", path: "/build-vs-buy" },
     ],
   },
   "/memory-guarantees": {
@@ -758,6 +789,24 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Memory Vendors", path: "/memory-vendors" },
     ],
   },
+  "/site-markdown": {
+    title: "Site pages (Markdown) | Neotoma",
+    description:
+      "Browse every indexable site route as Markdown summaries (title, description, canonical URL, breadcrumbs). Full page copy remains on the HTML routes.",
+    robots: "noindex,follow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Docs", path: "/docs" },
+      { name: "Site pages (Markdown)", path: "/site-markdown" },
+    ],
+  },
+  "/raw": {
+    title: "Raw Markdown | Neotoma",
+    description: "Plain Markdown export for a single indexable site route (SEO metadata fields).",
+    robots: "noindex,nofollow",
+    jsonLdType: "WebPage",
+  },
   "/404": {
     title: "Page Not Found | Neotoma",
     description: "The requested page could not be found.",
@@ -771,6 +820,9 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
 const INDEXABLE_DEFAULT_LOCALE_PATHS: readonly string[] = Object.entries(ROUTE_METADATA)
   .filter(([, meta]) => meta.robots === "index,follow")
   .map(([path]) => path);
+
+/** Default-locale paths included in the sitemap; use for Markdown export and audits. */
+export const INDEXABLE_SITE_PAGE_PATHS: readonly string[] = INDEXABLE_DEFAULT_LOCALE_PATHS;
 
 /** Includes default locale paths and prefixed paths for non-default locales. */
 export const SITEMAP_PATHS: readonly string[] = [
@@ -817,7 +869,46 @@ export function getSeoMetadataForPath(pathname: string): SeoRouteMetadata {
   return ROUTE_METADATA["/404"];
 }
 
-function buildJsonLd(pathname: string, metadata: SeoRouteMetadata): Record<string, unknown>[] {
+const DEFAULT_SEO_KEYWORDS = [
+  "Neotoma",
+  "MCP",
+  "Model Context Protocol",
+  "AI agents",
+  "agent memory",
+  "deterministic state",
+] as const;
+
+/** Alt text for Open Graph / Twitter images (keep concise for screen readers and previews). */
+export function buildDefaultOgImageAlt(title: string, description: string): string {
+  const snippet =
+    description.length > 140 ? `${description.slice(0, 137).trimEnd()}...` : description;
+  const combined = `${title}. ${snippet}`.trim();
+  return combined.length > 200 ? `${combined.slice(0, 197)}...` : combined;
+}
+
+/** Comma-separated keywords: route-specific terms plus product defaults, deduped. */
+export function buildKeywords(metadata: SeoRouteMetadata): string {
+  const fromTitle = titleToKeywordHints(metadata.title);
+  const extra = metadata.keywords ?? [];
+  const merged = [...extra, ...fromTitle, ...DEFAULT_SEO_KEYWORDS]
+    .map((k) => k.trim())
+    .filter(Boolean);
+  return [...new Set(merged)].join(", ");
+}
+
+function titleToKeywordHints(title: string): string[] {
+  const parts = title
+    .split(/[|\u2013\u2014-]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.filter((p) => p.length > 2 && p.toLowerCase() !== "neotoma");
+}
+
+function buildJsonLd(
+  pathname: string,
+  metadata: SeoRouteMetadata,
+  image: { url: string; alt: string }
+): Record<string, unknown>[] {
   const canonicalUrl = buildCanonicalUrl(pathname);
   const type = metadata.jsonLdType ?? "WebPage";
   const publisher = { "@type": "Organization", name: SEO_DEFAULTS.siteName };
@@ -829,6 +920,13 @@ function buildJsonLd(pathname: string, metadata: SeoRouteMetadata): Record<strin
     description: metadata.description,
     url: canonicalUrl,
     publisher,
+    image: {
+      "@type": "ImageObject",
+      url: image.url,
+      width: SEO_DEFAULTS.ogImageWidth,
+      height: SEO_DEFAULTS.ogImageHeight,
+      caption: image.alt,
+    },
   };
 
   if (type === "WebSite") {
@@ -867,6 +965,9 @@ export interface ResolvedSeoMetadata {
   locale: SupportedLocale;
   alternates: { hrefLang: string; href: string }[];
   ogImageUrl: string;
+  ogImageAlt: string;
+  keywords: string;
+  twitterCard: "summary" | "summary_large_image";
   jsonLd: Record<string, unknown>[];
 }
 
@@ -901,6 +1002,17 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
     typeof process !== "undefined" && process.env?.SITE_PREVIEW === "1"
       ? "noindex,follow"
       : resolvedRouteMetadata.robots;
+  const ogImageUrl =
+    resolvedRouteMetadata.ogImageUrl ?? SEO_DEFAULTS.ogImageUrl;
+  const ogImageAlt =
+    resolvedRouteMetadata.ogImageAlt ??
+    buildDefaultOgImageAlt(
+      resolvedRouteMetadata.title,
+      resolvedRouteMetadata.description
+    );
+  const keywords = buildKeywords(resolvedRouteMetadata);
+  const twitterCard =
+    resolvedRouteMetadata.twitterCard ?? SEO_DEFAULTS.twitterCard;
   return {
     title: resolvedRouteMetadata.title,
     description: resolvedRouteMetadata.description,
@@ -910,8 +1022,14 @@ export function resolveSeoMetadata(pathname: string): ResolvedSeoMetadata {
     locale,
     ogLocale: LOCALE_TO_OG[locale],
     alternates: buildAlternates(pathname),
-    ogImageUrl: SEO_DEFAULTS.ogImageUrl,
-    jsonLd: buildJsonLd(pathname, resolvedRouteMetadata),
+    ogImageUrl,
+    ogImageAlt,
+    keywords,
+    twitterCard,
+    jsonLd: buildJsonLd(pathname, resolvedRouteMetadata, {
+      url: ogImageUrl,
+      alt: ogImageAlt,
+    }),
   };
 }
 
@@ -985,6 +1103,99 @@ export function injectRouteMetaIntoHtml(html: string, routePath: string): string
     /<meta property="og:url" content="[^"]*"/,
     `<meta property="og:url" content="${escapeHtml(meta.canonicalUrl)}"`
   );
+
+  out = out.replace(
+    /<meta property="og:type" content="[^"]*"/,
+    `<meta property="og:type" content="${escapeHtml(meta.ogType)}"`
+  );
+
+  if (/<meta property="og:image" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta property="og:image" content="[^"]*"/,
+      `<meta property="og:image" content="${escapeHtml(meta.ogImageUrl)}"`
+    );
+  } else {
+    out = out.replace(
+      "</head>",
+      `    <meta property="og:image" content="${escapeHtml(meta.ogImageUrl)}" />\n  </head>`
+    );
+  }
+  if (/<meta property="og:image:width" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta property="og:image:width" content="[^"]*"/,
+      `<meta property="og:image:width" content="${String(SEO_DEFAULTS.ogImageWidth)}"`
+    );
+  }
+  if (/<meta property="og:image:height" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta property="og:image:height" content="[^"]*"/,
+      `<meta property="og:image:height" content="${String(SEO_DEFAULTS.ogImageHeight)}"`
+    );
+  }
+  if (/<meta property="og:image:alt" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta property="og:image:alt" content="[^"]*"/,
+      `<meta property="og:image:alt" content="${escapeHtml(meta.ogImageAlt)}"`
+    );
+  } else {
+    out = out.replace(
+      "</head>",
+      `    <meta property="og:image:alt" content="${escapeHtml(meta.ogImageAlt)}" />\n  </head>`
+    );
+  }
+
+  if (/<meta name="keywords" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="keywords" content="[^"]*"/,
+      `<meta name="keywords" content="${escapeHtml(meta.keywords)}"`
+    );
+  } else {
+    out = out.replace(
+      "</head>",
+      `    <meta name="keywords" content="${escapeHtml(meta.keywords)}" />\n  </head>`
+    );
+  }
+
+  if (/<meta name="twitter:card" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="twitter:card" content="[^"]*"/,
+      `<meta name="twitter:card" content="${escapeHtml(meta.twitterCard)}"`
+    );
+  }
+  if (/<meta name="twitter:image" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="twitter:image" content="[^"]*"/,
+      `<meta name="twitter:image" content="${escapeHtml(meta.ogImageUrl)}"`
+    );
+  } else {
+    out = out.replace(
+      "</head>",
+      `    <meta name="twitter:image" content="${escapeHtml(meta.ogImageUrl)}" />\n  </head>`
+    );
+  }
+  if (/<meta name="twitter:image:width" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="twitter:image:width" content="[^"]*"/,
+      `<meta name="twitter:image:width" content="${String(SEO_DEFAULTS.ogImageWidth)}"`
+    );
+  }
+  if (/<meta name="twitter:image:height" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="twitter:image:height" content="[^"]*"/,
+      `<meta name="twitter:image:height" content="${String(SEO_DEFAULTS.ogImageHeight)}"`
+    );
+  }
+  if (/<meta name="twitter:image:alt" content="[^"]*"/.test(out)) {
+    out = out.replace(
+      /<meta name="twitter:image:alt" content="[^"]*"/,
+      `<meta name="twitter:image:alt" content="${escapeHtml(meta.ogImageAlt)}"`
+    );
+  } else {
+    out = out.replace(
+      "</head>",
+      `    <meta name="twitter:image:alt" content="${escapeHtml(meta.ogImageAlt)}" />\n  </head>`
+    );
+  }
 
   out = out.replace(
     /<meta name="twitter:title" content="[^"]*"/,

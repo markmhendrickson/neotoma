@@ -13,6 +13,7 @@ import {
   Container,
   Cpu,
   Database,
+  FileText,
   FlaskConical,
   Github,
   Globe,
@@ -73,6 +74,8 @@ import { Input } from "@/components/ui/input";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { getLocalizedDocNavCategories } from "@/site/site_data_localized";
+import { useIndexableMarkdownSourcePath } from "@/hooks/useIndexableMarkdownSourcePath";
+import { rawMarkdownTo } from "@/site/site_page_markdown";
 import { sendOutboundClick, sendDocsNavClick } from "@/utils/analytics";
 
 const sidebarNavItemClass =
@@ -544,6 +547,7 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
   const { pathname } = useLocation();
   const routeBase = normalizeToDefaultRoute(pathname);
   const { locale, dict } = useLocale();
+  const markdownSourcePath = useIndexableMarkdownSourcePath();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const localizedDocCategories = useMemo(() => getLocalizedDocNavCategories(dict), [dict]);
 
@@ -774,6 +778,24 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               <span className="sr-only">npm</span>
             </NavLink>
           </NavigationMenuItem>
+          {markdownSourcePath ? (
+            <NavigationMenuItem>
+              <NavigationMenuLink
+                asChild
+                className={`${navigationMenuTriggerStyle()} ${sidebarNavItemClass}`}
+              >
+                <Link
+                  to={rawMarkdownTo(markdownSourcePath, locale)}
+                  title={dict.viewPageMarkdown}
+                  aria-label={dict.viewPageMarkdown}
+                  className="inline-flex h-9 max-w-[11rem] items-center gap-1.5 rounded-md px-2 lg:px-2.5"
+                >
+                  <FileText className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="hidden truncate text-[13px] lg:inline">{dict.viewPageMarkdown}</span>
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          ) : null}
           <NavigationMenuItem>
             <LanguageNavButton />
           </NavigationMenuItem>
@@ -829,6 +851,18 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
               className="mt-auto border-t border-sidebar-border p-2 flex flex-col gap-1"
               style={{ paddingBottom: "max(5.75rem, 1.5rem, env(safe-area-inset-bottom, 0px))" }}
             >
+              {markdownSourcePath ? (
+                <div className="border-b border-sidebar-border pb-2">
+                  <Link
+                    to={rawMarkdownTo(markdownSourcePath, locale)}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-[14px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <FileText className="h-4 w-4 shrink-0" aria-hidden />
+                    {dict.viewPageMarkdown}
+                  </Link>
+                </div>
+              ) : null}
               <div className="border-b border-sidebar-border pb-2 flex flex-col gap-1">
                 <LanguageNavButton mobile onSelect={() => setMobileMenuOpen(false)} />
                 <ThemeToggleNavButton mobile />

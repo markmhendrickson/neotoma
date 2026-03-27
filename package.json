@@ -54,6 +54,7 @@
     "migrate:plans": "tsx scripts/migrate_plans.ts",
     "migrate:plans:dry-run": "tsx scripts/migrate_plans.ts --dry-run",
     "lint": "eslint src --ext .ts",
+    "lint:site-copy": "tsx scripts/lint_site_copy_style.ts",
     "type-check": "tsc --noEmit",
     "start:api": "node dist/actions.js",
     "start:api:prod": "npm run build:server && node scripts/pick-port.js 3180 -- cross-env NEOTOMA_ENV=production node dist/actions.js",

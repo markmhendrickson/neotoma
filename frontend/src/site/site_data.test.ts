@@ -16,10 +16,11 @@ describe("site_data", () => {
       "intro",
       "outcomes",
       "memory-guarantees",
+      "evaluate",
       "install",
       "inspect",
       "architecture",
-      "who-is-it-for",
+      "use-cases",
       "interfaces",
       "learn-more",
     ]);

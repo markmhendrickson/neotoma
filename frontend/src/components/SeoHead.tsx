@@ -27,13 +27,16 @@ export function SeoHead({ routePath }: SeoHeadProps) {
       <meta property="og:image" content={metadata.ogImageUrl} />
       <meta property="og:image:width" content={String(SEO_DEFAULTS.ogImageWidth)} />
       <meta property="og:image:height" content={String(SEO_DEFAULTS.ogImageHeight)} />
-      <meta name="twitter:card" content={SEO_DEFAULTS.twitterCard} />
+      <meta property="og:image:alt" content={metadata.ogImageAlt} />
+      <meta name="keywords" content={metadata.keywords} />
+      <meta name="twitter:card" content={metadata.twitterCard} />
       <meta name="twitter:site" content={SEO_DEFAULTS.twitterSite} />
       <meta name="twitter:title" content={metadata.title} />
       <meta name="twitter:description" content={metadata.description} />
       <meta name="twitter:image" content={metadata.ogImageUrl} />
       <meta name="twitter:image:width" content={String(SEO_DEFAULTS.ogImageWidth)} />
       <meta name="twitter:image:height" content={String(SEO_DEFAULTS.ogImageHeight)} />
+      <meta name="twitter:image:alt" content={metadata.ogImageAlt} />
       {metadata.alternates.map((alternate) => (
         <link key={`${alternate.hrefLang}:${alternate.href}`} rel="alternate" hrefLang={alternate.hrefLang} href={alternate.href} />
       ))}

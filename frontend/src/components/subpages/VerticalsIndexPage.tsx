@@ -13,11 +13,12 @@ import {
   ShieldCheck,
   TrendingUp,
   Truck,
+  User,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { SeoHead } from "../SeoHead";
 
-interface VerticalCard {
+export interface VerticalCard {
   href: string;
   icon: typeof ShieldCheck;
   label: string;
@@ -30,7 +31,7 @@ interface VerticalCard {
   accentBorder: string;
 }
 
-const VERTICALS: VerticalCard[] = [
+export const VERTICALS: VerticalCard[] = [
   {
     href: "/compliance",
     icon: ShieldCheck,
@@ -187,6 +188,18 @@ const VERTICALS: VerticalCard[] = [
     accentBg: "bg-lime-500/5",
     accentBorder: "border-lime-500/20",
   },
+  {
+    href: "/personal-data",
+    icon: User,
+    label: "Personal Data",
+    title: "Personal agent state",
+    tagline: "Versioned memory for health, finance, habits, and goals across every AI tool",
+    entityExamples: ["workout", "transaction", "health_metric", "habit", "goal"],
+    thenQuestion: "How has my bench press progressed, and what was my spending rate when I bought the car?",
+    accent: "text-violet-600 dark:text-violet-400",
+    accentBg: "bg-violet-500/5",
+    accentBorder: "border-violet-500/20",
+  },
 ];
 
 export function VerticalsIndexPage() {
@@ -280,6 +293,12 @@ export function VerticalsIndexPage() {
                 className="inline-flex items-center gap-1.5 rounded-md border border-foreground bg-foreground px-5 py-2.5 text-[14px] font-medium text-background no-underline hover:opacity-90 transition-opacity"
               >
                 Install Neotoma
+              </Link>
+              <Link
+                to="/build-vs-buy"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"
+              >
+                Build vs Buy
               </Link>
               <Link
                 to="/architecture"

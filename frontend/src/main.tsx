@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import * as ReactHelmetAsync from "react-helmet-async";
 import App from "./App";
+import { getSpaBasename } from "./site/spa_path";
 import { initGoogleAnalytics } from "./utils/analytics";
 import { installViteChunkRecovery } from "./utils/vite_chunk_recovery";
 import { LocaleProvider } from "./i18n/LocaleContext";
@@ -31,10 +32,8 @@ const { HelmetProvider } = ReactHelmetAsync;
 
 // GitHub Pages at /neotoma/; custom domain (neotoma.io) at /; Cursor/IDE at /neotoma-with-claude-code. One build for all.
 function getRouterBasename(): string | undefined {
-  const p = typeof window !== "undefined" ? window.location.pathname : "";
-  if (!p || p === "/") return undefined;
-  const firstSegment = p.replace(/^\//, "").split("/")[0] ?? "";
-  return firstSegment.toLowerCase().startsWith("neotoma") ? `/${firstSegment}` : undefined;
+  const b = getSpaBasename();
+  return b || undefined;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -21,10 +21,11 @@ export interface StaticLocalePack {
     intro: string;
     beforeAfter: string;
     guarantees: string;
+    evaluate: string;
     install: string;
     inspect: string;
     architecture: string;
-    whoIsItFor: string;
+    useCases: string;
     interfaces: string;
     learnMore: string;
     resources: string;
@@ -81,10 +82,11 @@ const EN_PACK: StaticLocalePack = {
     intro: "Intro",
     beforeAfter: "Before / After",
     guarantees: "Guarantees",
+    evaluate: "Evaluate",
     install: "Install",
     inspect: "Inspect",
     architecture: "Architecture",
-    whoIsItFor: "Who is it for",
+    useCases: "Use cases",
     interfaces: "Interfaces",
     learnMore: "Learn more",
     resources: "Resources",
