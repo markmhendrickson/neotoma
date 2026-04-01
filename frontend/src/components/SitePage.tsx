@@ -36,6 +36,7 @@ import { SiteTailpiece } from "./SiteTailpiece";
 import { CursorIcon } from "./icons/CursorIcon";
 import { OpenClawIcon } from "./icons/OpenClawIcon";
 import { StateFlowDiagram } from "./illustrations/StateFlowDiagram";
+import { ScrollRevealOnce } from "./ScrollRevealOnce";
 import { WhoProfileCardVisual } from "./WhoProfileCardVisual";
 import guaranteeDeterministicStateIllus from "@/assets/images/guarantees/guarantee_sym_deterministic_square.png";
 import guaranteeVersionedHistoryIllus from "@/assets/images/guarantees/guarantee_sym_versioned_square.png";
@@ -968,8 +969,7 @@ function OutcomesSlide({
 
 const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
 /** Extra md+ vertical padding so SectionEdgeIndicators (absolute top-6/bottom-6) do not overlap copy. */
-const SLIDE_INNER =
-  "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12 md:pt-16 md:pb-16";
+const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12 md:pt-16 md:pb-16";
 
 const ICP_ICON_MAP: Record<string, LucideIcon> = {
   Server,
@@ -985,6 +985,13 @@ const HERO_TITLE_TOOLS_EMPHASIS_CLASS = "text-emerald-600 dark:text-emerald-400"
 
 // Keep fade-in permissive so very tall sections never stay fully hidden.
 const IN_VIEW_THRESHOLD = 0.01;
+/** Hero must be at least this visible before we treat it as "on the intro slide" (hides evaluate banner). */
+const HERO_IN_VIEW_RATIO_FOR_BANNER = 0.12;
+/** Space reserved at bottom of scroll root when the evaluate banner is shown (bar + breathing room). */
+const EVALUATE_BANNER_SCROLL_PADDING_BOTTOM =
+  "max(5.75rem, calc(4.5rem + env(safe-area-inset-bottom, 0px)))";
+/** Stagger for homepage illustration reveals (aligned with StateFlowDiagram STAGGER_MS). */
+const ILLUS_REVEAL_STAGGER_MS = 120;
 
 function isModifiedClick(event: React.MouseEvent<HTMLElement>) {
   return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
@@ -1131,7 +1138,9 @@ function HeroProofStrip() {
   );
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-2 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-3 lg:py-1.5 lg:justify-start">
-      <span className={heroProofStripItemClass}>Cross-tool memory for AI agents</span>
+      <span className={`${heroProofStripItemClass} hidden sm:inline-flex`}>
+        Cross-tool memory for AI agents
+      </span>
       {dot}
       <a
         href="https://github.com/markmhendrickson/neotoma"
@@ -1156,15 +1165,8 @@ function HeroStatePreview() {
     <div className="mx-auto w-full max-w-[420px] lg:max-w-none">
       <StateFlowDiagram variant="hero" className="shadow-[0_18px_48px_-28px_rgba(15,23,42,0.45)]" />
       <p className="mt-3 text-center text-[12px] leading-5 text-muted-foreground lg:text-left">
-        Facts are stored under your control. Any agent can retrieve exactly what it needs, with
-        full versioning and provenance.{" "}
-        <Link
-          to="/architecture"
-          className="font-medium text-foreground underline decoration-muted-foreground/70 underline-offset-2 transition-colors hover:decoration-foreground"
-        >
-          See architecture
-        </Link>
-        .
+        Facts are stored privately under your control. Any agent can retrieve exactly what it needs,
+        with full versioning and provenance.
       </p>
     </div>
   );
@@ -1181,7 +1183,17 @@ function EvaluateSectionCta() {
   );
 }
 
-function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
+function SectionEdgeIndicators({
+  sectionId,
+  hidePrevious,
+  hideNext,
+}: {
+  sectionId: string;
+  /** Omit the up chevron (e.g. FAQ strip is not a formal “slide”). */
+  hidePrevious?: boolean;
+  /** Omit the down chevron (e.g. no chevron from Evaluate into FAQ before footer). */
+  hideNext?: boolean;
+}) {
   const sectionIndex = SECTION_ORDER.indexOf(sectionId);
   if (sectionIndex === -1) return null;
 
@@ -1195,7 +1207,7 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
 
   return (
     <>
-      {previousId ? (
+      {previousId && !hidePrevious ? (
         <a
           href={previousId === "intro" ? "/" : `#${previousId}`}
           className="absolute top-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
@@ -1210,7 +1222,7 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
         </a>
       ) : null}
 
-      {nextId ? (
+      {nextId && !hideNext ? (
         <a
           href={`#${nextId}`}
           className="absolute bottom-6 left-1/2 -translate-x-1/2 hidden md:inline-flex items-center justify-center rounded-full border border-border bg-background/80 p-1.5 text-muted-foreground backdrop-blur-sm no-underline hover:text-foreground hover:bg-background transition"
@@ -1326,16 +1338,16 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   const navigate = useNavigate();
   const dotNavSections = useMemo(() => getLocalizedDotNavSections(pack), [pack]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const heroEvaluateCtaRowRef = useRef<HTMLDivElement>(null);
+  const heroSectionRef = useRef<HTMLElement>(null);
   const evaluateSectionRef = useRef<HTMLElement>(null);
   /** While true, ignore SectionDotNav-driven hash updates so initial /#section is not cleared by intro. */
   const suppressDotNavHashSyncRef = useRef(false);
-  /** Hero evaluate row visible in the scroll container - hide fixed banner while in hero. */
-  const [heroEvaluateCtaInView, setHeroEvaluateCtaInView] = useState(true);
+  /** Intro/hero slide intersects scrollport (not just the CTA row: on mobile the CTA is often below the fold). */
+  const [heroSectionInView, setHeroSectionInView] = useState(true);
   /** Evaluate section visible - hide banner when user is already looking at the evaluate CTA. */
   const [evaluateSectionInView, setEvaluateSectionInView] = useState(false);
 
-  const showEvaluateScrollBanner = !heroEvaluateCtaInView && !evaluateSectionInView;
+  const showEvaluateScrollBanner = !heroSectionInView && !evaluateSectionInView;
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
@@ -1379,34 +1391,63 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   useLayoutEffect(() => {
     if (staticMode || typeof window === "undefined") return;
     const scrollEl = scrollContainerRef.current;
-    const ctaRow = heroEvaluateCtaRowRef.current;
-    if (!scrollEl || !ctaRow) return;
+    const heroSection = heroSectionRef.current;
+    if (!scrollEl || !heroSection) return;
 
     const evalSection = evaluateSectionRef.current;
 
-    const observer = new IntersectionObserver(
+    const setHeroFromEntry = (entry: IntersectionObserverEntry) => {
+      setHeroSectionInView(
+        entry.isIntersecting && entry.intersectionRatio >= HERO_IN_VIEW_RATIO_FOR_BANNER
+      );
+    };
+
+    const heroObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          if (entry.target === ctaRow) {
-            setHeroEvaluateCtaInView(entry.isIntersecting);
-          } else if (entry.target === evalSection) {
+          if (entry.target === heroSection) setHeroFromEntry(entry);
+        }
+      },
+      {
+        root: scrollEl,
+        rootMargin: "0px",
+        threshold: [0, 0.04, HERO_IN_VIEW_RATIO_FOR_BANNER, 0.25, 0.5, 0.75, 1],
+      }
+    );
+
+    const evaluateObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.target === evalSection) {
             setEvaluateSectionInView(entry.isIntersecting);
           }
         }
       },
       { root: scrollEl, threshold: 0, rootMargin: "0px" }
     );
-    observer.observe(ctaRow);
-    if (evalSection) observer.observe(evalSection);
+
+    heroObserver.observe(heroSection);
+    if (evalSection) evaluateObserver.observe(evalSection);
 
     return () => {
-      observer.disconnect();
+      heroObserver.disconnect();
+      evaluateObserver.disconnect();
     };
   }, [staticMode]);
 
-  const handleActiveSectionChange = (sectionId: string) => {
+  const handleActiveSectionChange = useCallback((sectionId: string | null) => {
     if (typeof window === "undefined") return;
     if (suppressDotNavHashSyncRef.current) return;
+
+    if (sectionId === null) {
+      const baseUrl = `${window.location.pathname}${window.location.search}`;
+      const h = window.location.hash.replace(/^#/, "");
+      if (h === "common-questions") return;
+      if (DOT_NAV_SECTION_IDS.has(h) && h !== "intro") {
+        window.history.replaceState(null, "", baseUrl);
+      }
+      return;
+    }
 
     if (!DOT_NAV_SECTION_IDS.has(sectionId)) return;
     const baseUrl = `${window.location.pathname}${window.location.search}`;
@@ -1417,7 +1458,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
     }
     if (window.location.hash === `#${sectionId}`) return;
     window.history.replaceState(null, "", `${baseUrl}#${sectionId}`);
-  };
+  }, []);
 
   return (
     <>
@@ -1426,18 +1467,24 @@ export function SitePage({ staticMode = false }: SitePageProps) {
       <div
         ref={scrollContainerRef}
         data-site-header-scroll-root
-        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-mandatory"
+        className="h-screen overflow-y-auto scroll-smooth md:snap-y md:snap-proximity"
+        style={
+          !staticMode && showEvaluateScrollBanner
+            ? { scrollPaddingBottom: EVALUATE_BANNER_SCROLL_PADDING_BOTTOM }
+            : undefined
+        }
       >
         {!staticMode && (
           <SectionDotNav
             sections={dotNavSections}
             scrollContainerRef={scrollContainerRef}
+            neutralZoneSectionId="common-questions"
             onActiveSectionChange={handleActiveSectionChange}
           />
         )}
 
         {/* Slide 1: Hero */}
-        <section id="intro" className={SLIDE_CLASS}>
+        <section id="intro" ref={heroSectionRef} className={SLIDE_CLASS}>
           <div className="relative z-10 w-full min-w-0">
             <FadeSection scrollContainerRef={scrollContainerRef} staticMode={staticMode}>
               <div className={SLIDE_INNER}>
@@ -1471,10 +1518,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         })()}
                       </p>
 
-                      <div
-                        ref={heroEvaluateCtaRowRef}
-                        className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start"
-                      >
+                      <div className="flex flex-col sm:flex-row sm:flex-wrap justify-center gap-3 pt-1 lg:justify-start">
                         <a
                           href="/evaluate"
                           className={`${HOME_EVALUATE_CTA_CLASS} w-full sm:w-auto`}
@@ -1542,7 +1586,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {ICP_PROFILES.map((profile) => {
+                  {ICP_PROFILES.map((profile, index) => {
                     const Icon = ICP_ICON_MAP[profile.iconName] ?? Server;
                     return (
                       <Link
@@ -1550,11 +1594,17 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                         to={`/${profile.slug}`}
                         className="group flex flex-col rounded-xl border border-border bg-card/50 p-4 no-underline transition-colors hover:bg-muted/60 hover:border-border/80 sm:p-5"
                       >
-                        <WhoProfileCardVisual
-                          profileSlug={profile.slug}
-                          modeLabel={profile.modeLabel}
-                          Icon={Icon}
-                        />
+                        <ScrollRevealOnce
+                          scrollContainerRef={scrollContainerRef}
+                          staticMode={staticMode}
+                          staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                        >
+                          <WhoProfileCardVisual
+                            profileSlug={profile.slug}
+                            modeLabel={profile.modeLabel}
+                            Icon={Icon}
+                          />
+                        </ScrollRevealOnce>
                         <div className="flex min-h-0 flex-1 flex-col px-1 pt-4">
                           <p className="text-[15px] font-medium text-foreground">{profile.name}</p>
                           <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
@@ -1584,19 +1634,24 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     Neotoma provides state integrity, not just storage
                   </h2>
                   <p className="text-[15px] leading-7 text-muted-foreground max-w-2xl mx-auto">
-                    Most AI memory optimizes retrieval. Neotoma enforces guarantees other systems
-                    don&rsquo;t provide.
+                    Systems like Mem0, Zep, Claude memory, and ChatGPT memory optimize retrieval.
+                    Neotoma enforces guarantees those systems don&rsquo;t provide.
                   </p>
                 </div>
 
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {GUARANTEE_PREVIEW_CARDS.map((card) => (
+                  {GUARANTEE_PREVIEW_CARDS.map((card, index) => (
                     <Link
                       key={card.slug}
                       to={`/memory-guarantees#${card.slug}`}
                       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card/50 no-underline transition-colors hover:bg-muted/60 hover:border-border/80"
                     >
-                      <div className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent">
+                      <ScrollRevealOnce
+                        scrollContainerRef={scrollContainerRef}
+                        staticMode={staticMode}
+                        staggerMs={index * ILLUS_REVEAL_STAGGER_MS}
+                        className="relative mx-auto w-full max-w-[104px] sm:max-w-[120px] aspect-square bg-gradient-to-b from-muted/30 to-transparent"
+                      >
                         <img
                           src={card.illus}
                           alt=""
@@ -1606,7 +1661,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                           loading="lazy"
                           decoding="async"
                         />
-                      </div>
+                      </ScrollRevealOnce>
                       <div className="flex min-h-0 items-start gap-3 p-4">
                         <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
                           <Check className="h-3 w-3 stroke-[2.5]" aria-hidden />
@@ -1725,7 +1780,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                 <EvaluateSectionCta />
               </div>
             </div>
-            <SectionEdgeIndicators sectionId="evaluate" />
+            <SectionEdgeIndicators sectionId="evaluate" hideNext />
           </FadeSection>
         </section>
 
@@ -1733,7 +1788,7 @@ export function SitePage({ staticMode = false }: SitePageProps) {
         <section id="common-questions" className="relative w-full shrink-0 scroll-mt-12">
           <div className={SLIDE_INNER}>
             <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
-              <h2 className={`${HOME_SECTION_H2_CLASS} text-center`}>
+              <h2 className="text-center text-[20px] sm:text-[21px] md:text-[22px] font-medium tracking-[-0.02em] leading-snug text-foreground">
                 {pack.siteSections.frequentlyAskedQuestions ?? "Frequently asked questions"}
               </h2>
               <div className="max-w-2xl mx-auto">
@@ -1764,10 +1819,9 @@ export function SitePage({ staticMode = false }: SitePageProps) {
               </div>
             </div>
           </div>
-          <SectionEdgeIndicators sectionId="common-questions" />
         </section>
 
-        {/* Mandatory scroll snap only applies to snap-aligned children; without this, the footer is unreachable on md+. */}
+        {/* Proximity snap (not mandatory) so expanded FAQ can scroll without snapping to the previous slide; footer snap still aids landing at the tail. */}
         <div id="site-footer" className="w-full shrink-0 scroll-mt-12 md:snap-start md:snap-always">
           <SiteTailpiece />
         </div>

@@ -7,6 +7,7 @@ import { useLocale } from "@/i18n/LocaleContext";
 import { REPO_RELEASES_COUNT, REPO_STARS_COUNT, REPO_VERSION } from "@/site/site_data";
 import { rawMarkdownTo } from "@/site/site_page_markdown";
 import { LanguageNavButton, ThemeToggleNavButton } from "@/components/SiteChromeControls";
+import { sendCtaClick } from "@/utils/analytics";
 
 const PRODUCT_LINKS = [
   { label: "Install", href: "/install" },
@@ -55,7 +56,15 @@ export function SiteFooterUtilities() {
   );
 }
 
-function FooterLink({ href, label }: { href: string; label: string }) {
+function FooterLink({
+  href,
+  label,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  onNavigate?: () => void;
+}) {
   const isExternal = href.startsWith("http://") || href.startsWith("https://");
   const linkClassName =
     "text-[13px] text-muted-foreground no-underline transition-colors hover:text-foreground";
@@ -74,7 +83,7 @@ function FooterLink({ href, label }: { href: string; label: string }) {
   }
 
   return (
-    <Link to={href} className={linkClassName}>
+    <Link to={href} className={linkClassName} onClick={() => onNavigate?.()}>
       {label}
     </Link>
   );
@@ -117,7 +126,14 @@ export function SiteTailpiece() {
             </p>
             <div className="mt-3 flex flex-col gap-2">
               {PRODUCT_LINKS.map((link) => (
-                <FooterLink key={link.href} href={link.href} label={link.label} />
+                <FooterLink
+                  key={link.href}
+                  href={link.href}
+                  label={link.label}
+                  onNavigate={
+                    link.href === "/install" ? () => sendCtaClick("footer_install") : undefined
+                  }
+                />
               ))}
             </div>
           </div>

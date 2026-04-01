@@ -6,9 +6,11 @@ import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
 import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
 import {
+  PRODUCT_NAV_SOURCES,
   sendFunnelInstallPromptCopy,
   type InstallPromptCopyBlock,
 } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { CODE_BLOCK_COPY_BUTTON_ABSOLUTE } from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
@@ -130,12 +132,14 @@ export function InstallPage() {
           agent install if needed, activate Neotoma with your data, and configure
           the tool you are in.
         </p>
-        <Link
+        <TrackedProductLink
           to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.installPageEvaluateCta}
           className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground !no-underline hover:!no-underline hover:bg-muted transition-colors"
         >
           Start with evaluation →
-        </Link>
+        </TrackedProductLink>
       </div>
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mb-3">Agent-assisted install</h2>
@@ -157,9 +161,14 @@ export function InstallPage() {
       <p className="text-[15px] leading-7 mb-3">
         Use this path only when the user already wants to proceed with Neotoma
         and does not need the broader fit-assessment flow on{" "}
-        <Link to="/evaluate" className="underline underline-offset-2 hover:no-underline">
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.installPageInlineEvaluate}
+          className="underline underline-offset-2 hover:no-underline"
+        >
           /evaluate
-        </Link>
+        </TrackedProductLink>
         .
       </p>
       <ol className="list-decimal pl-5 space-y-2 mb-4">
@@ -214,9 +223,14 @@ export function InstallPage() {
           install.md
         </a>
         . If the user wants the broader qualification flow first, send them to{" "}
-        <Link to="/evaluate" className="underline underline-offset-2 hover:no-underline">
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.installPageInlineEvaluate}
+          className="underline underline-offset-2 hover:no-underline"
+        >
           /evaluate
-        </Link>
+        </TrackedProductLink>
         .
       </p>
 
@@ -231,9 +245,14 @@ export function InstallPage() {
           Manual install
         </a>
         {" · "}
-        <Link to="/install#docker" className="text-foreground underline underline-offset-2 hover:no-underline">
+        <TrackedProductLink
+          to="/install#docker"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.installPageDockerHash}
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
           Docker
-        </Link>
+        </TrackedProductLink>
         {" · "}
         <Link to="/cli" className="text-foreground underline underline-offset-2 hover:no-underline">
           CLI reference

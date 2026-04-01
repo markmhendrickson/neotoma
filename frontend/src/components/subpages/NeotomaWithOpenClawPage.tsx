@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { GettingStartedEvaluateInstallLinks } from "../GettingStartedEvaluateInstallLinks";
 import { IntegrationLinkCard } from "../IntegrationLinkCard";
@@ -205,13 +207,23 @@ export function NeotomaWithOpenClawPage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}
-        <Link to="/evaluate" className={extLink}>
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithOpenclawTailEvaluate}
+          className={extLink}
+        >
           evaluation
-        </Link>
+        </TrackedProductLink>
         , see the{" "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithOpenclawTailInstall}
+          className={extLink}
+        >
           install guide
-        </Link>{" "}
+        </TrackedProductLink>{" "}
         for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference

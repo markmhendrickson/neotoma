@@ -16,7 +16,9 @@ import {
   User,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { SeoHead } from "../SeoHead";
+import { TrackedProductLink } from "../TrackedProductNav";
 
 export interface VerticalCard {
   href: string;
@@ -288,12 +290,14 @@ export function VerticalsIndexPage() {
               the state integrity layer underneath.
             </p>
             <div className="flex flex-wrap justify-center gap-3 pt-2">
-              <Link
+              <TrackedProductLink
                 to="/install"
+                navTarget="install"
+                navSource={PRODUCT_NAV_SOURCES.verticalsIndexInstall}
                 className="inline-flex items-center gap-1.5 rounded-md border border-foreground bg-foreground px-5 py-2.5 text-[14px] font-medium text-background no-underline hover:opacity-90 transition-opacity"
               >
                 Install Neotoma
-              </Link>
+              </TrackedProductLink>
               <Link
                 to="/build-vs-buy"
                 className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-5 py-2.5 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"

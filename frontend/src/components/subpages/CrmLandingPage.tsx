@@ -1306,7 +1306,7 @@ export function CrmLandingPage() {
                 <Link
                   to="/install"
                   className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600 bg-emerald-600 px-4 py-2 text-[14px] font-medium text-white no-underline shadow-sm shadow-emerald-600/30 transition-colors hover:bg-emerald-500 dark:border-emerald-500 dark:bg-emerald-500 dark:text-emerald-950"
-                  onClick={() => sendCtaClick("crm_case_study_install" as CtaName)}
+                  onClick={() => sendCtaClick("crm_case_study_install")}
                 >
                   Install Neotoma
                 </Link>

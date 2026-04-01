@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { useNeotomaApiHost } from "../../hooks/useNeotomaApiHost";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
@@ -327,9 +329,14 @@ export function ChatGptConnectCustomGptPage() {
           Back to Neotoma with ChatGPT
         </Link>
         {" · "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.chatgptConnectCustomGptInstall}
+          className={extLink}
+        >
           Install guide
-        </Link>
+        </TrackedProductLink>
         {" · "}
         <Link to="/mcp" className={extLink}>
           MCP reference

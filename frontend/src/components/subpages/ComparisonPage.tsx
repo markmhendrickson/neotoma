@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Check, X, Minus } from "lucide-react";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage, detailPageCtaLinkProps } from "../DetailPage";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { TableScrollWrapper } from "../ui/table-scroll-wrapper";
 import { MEMORY_GUARANTEE_ROWS, type GuaranteeLevel } from "../../site/site_data";
 
@@ -154,13 +156,15 @@ export function ComparisonPage({
       )}
 
       <div className="flex flex-col sm:flex-row gap-3 mt-10 pt-6 border-t border-border">
-        <Link
+        <TrackedProductLink
           {...detailPageCtaLinkProps}
           to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.comparisonPageInstall}
           className="inline-flex justify-center items-center rounded-md border border-foreground bg-foreground px-5 py-2 text-[14px] font-medium text-background no-underline transition-colors hover:bg-foreground/90"
         >
           Install Neotoma
-        </Link>
+        </TrackedProductLink>
         <Link
           {...detailPageCtaLinkProps}
           to="/memory-models"

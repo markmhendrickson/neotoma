@@ -1,5 +1,7 @@
 import { Link, useParams, Navigate } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
+import { TrackedProductLink } from "../TrackedProductNav";
 
 interface EntityTypeGuide {
   slug: string;
@@ -681,12 +683,14 @@ function EntityTypeGuideContent({ guide }: { guide: EntityTypeGuide }) {
       <SectionHeading id="next-steps">Next steps</SectionHeading>
       <ul className="list-none space-y-2">
         <li>
-          <Link
+          <TrackedProductLink
             to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.entityTypeGuideInstall}
             className="text-[15px] text-foreground underline underline-offset-2 hover:no-underline"
           >
             Install Neotoma
-          </Link>{" "}
+          </TrackedProductLink>{" "}
           <span className="text-muted-foreground text-[14px]">
             - get started in 5 minutes
           </span>

@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { IntegrationSection } from "../IntegrationSection";
 
@@ -110,9 +112,14 @@ url = "https://<tunnel-host>/mcp"`}
           Back to Neotoma with Codex
         </Link>
         {" · "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.codexConnectRemoteOauthInstall}
+          className={extLink}
+        >
           Install guide
-        </Link>
+        </TrackedProductLink>
         {" · "}
         <Link to="/mcp" className={extLink}>
           MCP reference

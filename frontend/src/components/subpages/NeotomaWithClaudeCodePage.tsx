@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES, sendFunnelInstallPromptCopy } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
@@ -170,7 +172,11 @@ export function NeotomaWithClaudeCodePage() {
         agent handles evaluation, installation if needed, activation, and local
         MCP configuration.
         </p>
-        <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+        <CopyableCodeBlock
+          code={SITE_CODE_SNIPPETS.agentInstallPrompt}
+          className="mb-4"
+          onAfterCopy={() => sendFunnelInstallPromptCopy("doc_neotoma_with_claude_code")}
+        />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
         This is a local integration. Neotoma runs on the same machine via stdio. No API server
         or remote access is required. The agent writes to <code>.mcp.json</code> at your project root.
@@ -223,13 +229,23 @@ export function NeotomaWithClaudeCodePage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}
-        <Link to="/evaluate" className={extLink}>
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithClaudeCodeTailEvaluate}
+          className={extLink}
+        >
           evaluation
-        </Link>
+        </TrackedProductLink>
         , see the{" "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithClaudeCodeTailInstall}
+          className={extLink}
+        >
           install guide
-        </Link>{" "}
+        </TrackedProductLink>{" "}
         for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference

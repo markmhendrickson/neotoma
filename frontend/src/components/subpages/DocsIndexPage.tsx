@@ -40,6 +40,16 @@ import { CodexIcon } from "@/components/icons/CodexIcon";
 import { CursorIcon } from "@/components/icons/CursorIcon";
 import { OpenClawIcon } from "@/components/icons/OpenClawIcon";
 import { DOC_NAV_CATEGORIES } from "@/site/site_data";
+import { sendCtaClick, type CtaName } from "@/utils/analytics";
+
+function docsHubCta(itemHref: string, categoryTitle: string): CtaName | null {
+  if (itemHref === "/evaluate") return "docs_evaluate_getting_started";
+  if (itemHref === "/install") {
+    if (categoryTitle === "Getting started") return "docs_install_getting_started";
+    if (categoryTitle === "Reference") return "docs_install_reference";
+  }
+  return null;
+}
 
 /** Same branded icons as DocsSidebar for integration hrefs. */
 const INTEGRATION_BRAND_ICONS: Record<
@@ -327,6 +337,10 @@ export function DocsIndexPage() {
                     : DOC_NAV_ICONS.BookOpen;
                   const Icon = BrandIcon ?? LucideIconComponent;
                   const desc = "desc" in item ? item.desc : null;
+                  const trackDocsHub = () => {
+                    const cta = docsHubCta(item.href, cat.title);
+                    if (cta) sendCtaClick(cta);
+                  };
 
                   const linkContent = (
                     <Card className="h-full transition-colors hover:bg-muted/50 border border-border [&_a]:no-underline [&_a]:hover:no-underline">
@@ -369,6 +383,7 @@ export function DocsIndexPage() {
                         <a
                           href={localizePath(item.href, locale)}
                           className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+                          onClick={trackDocsHub}
                         >
                           {linkContent}
                         </a>
@@ -376,6 +391,7 @@ export function DocsIndexPage() {
                         <Link
                           to={localizePath(item.href, locale)}
                           className="block h-full no-underline hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
+                          onClick={trackDocsHub}
                         >
                           {linkContent}
                         </Link>

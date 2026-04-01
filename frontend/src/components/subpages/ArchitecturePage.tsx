@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 import { Check } from "lucide-react";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { GLOSSARY_ROWS } from "../../site/site_data";
 import { DetailPage } from "../DetailPage";
 import { StateFlowDiagram } from "../illustrations/StateFlowDiagram";
@@ -506,12 +508,14 @@ export function ArchitecturePage() {
           {" \u2014 full glossary"}
         </li>
         <li>
-          <Link
+          <TrackedProductLink
             to="/install#docker"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.architectureDockerInstall}
             className="text-foreground underline underline-offset-2 hover:no-underline"
           >
             Docker
-          </Link>
+          </TrackedProductLink>
           {" \u2014 run Neotoma in Docker"}
         </li>
         <li>

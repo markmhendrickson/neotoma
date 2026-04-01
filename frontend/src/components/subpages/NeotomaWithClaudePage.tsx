@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 import { IntegrationLinkCard } from "../IntegrationLinkCard";
 import { IntegrationSection } from "../IntegrationSection";
@@ -38,9 +40,14 @@ export function NeotomaWithClaudePage() {
       <IntegrationSection sectionKey="setup-overview" title="Setup overview" dividerBefore={false}>
         <p className="text-[15px] leading-7 text-muted-foreground mb-4">
           Start with{" "}
-          <Link to="/evaluate" className={extLink}>
+          <TrackedProductLink
+            to="/evaluate"
+            navTarget="evaluate"
+            navSource={PRODUCT_NAV_SOURCES.neotomaWithClaudeSetupEvaluate}
+            className={extLink}
+          >
             evaluation
-          </Link>
+          </TrackedProductLink>
           . Once Neotoma has been evaluated, installed if needed, and activated
           with your first stored data, reliable Claude usage requires four more
           steps: connect the MCP server, set tool permissions, create a Project,
@@ -429,13 +436,23 @@ export function NeotomaWithClaudePage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}
-        <Link to="/evaluate" className={extLink}>
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithClaudeTailEvaluate}
+          className={extLink}
+        >
           evaluation
-        </Link>
+        </TrackedProductLink>
         , see the{" "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithClaudeTailInstall}
+          className={extLink}
+        >
           install guide
-        </Link>{" "}
+        </TrackedProductLink>{" "}
         for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference

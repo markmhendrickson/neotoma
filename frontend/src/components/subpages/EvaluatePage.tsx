@@ -1,7 +1,8 @@
 import heroEvaluatePageIllus from "@/assets/images/hero/hero_illus_evaluate_agent_page.png";
+import { PRODUCT_NAV_SOURCES, sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
-import { sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { DetailPage } from "../DetailPage";
 
 const EVALUATE_AGENT_PROMPT = SITE_CODE_SNIPPETS.agentEvaluationPrompt;
@@ -190,9 +191,14 @@ export function EvaluatePage() {
           If you assessed a <strong>strong</strong> or <strong>moderate</strong>{" "}
           fit, ask the user directly whether they'd like to proceed now. The
           sequence is{" "}
-          <a href="/install" className="underline">
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+            className="underline"
+          >
             <strong>{ONBOARDING_SEQUENCE}</strong>
-          </a>
+          </TrackedProductLink>
           .
         </p>
         <blockquote className="border-l-2 border-muted-foreground/30 pl-4 italic text-[15px] leading-7 mb-4 text-muted-foreground">
@@ -207,7 +213,14 @@ export function EvaluatePage() {
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
           <li>
             Read the{" "}
-            <a href="/install" className="underline">installation guide</a>{" "}
+            <TrackedProductLink
+              to="/install"
+              navTarget="install"
+              navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+              className="underline"
+            >
+              installation guide
+            </TrackedProductLink>{" "}
             at <code className="text-sm bg-muted px-1.5 py-0.5 rounded">neotoma.io/install</code>{" "}
             for the canonical end-to-end workflow.
           </li>
@@ -225,9 +238,14 @@ export function EvaluatePage() {
           </li>
           <li>
             Run activation using the sequence{" "}
-            <a href="/install" className="underline">
+            <TrackedProductLink
+              to="/install"
+              navTarget="install"
+              navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+              className="underline"
+            >
               <strong>{ACTIVATION_SEQUENCE}</strong>
-            </a>{" "}
+            </TrackedProductLink>{" "}
             - discover candidates, preview them, ingest confirmed sources,
             reconstruct a timeline, then query and correct. The user should not
             need to run the onboarding steps manually; you handle the process.
@@ -275,7 +293,14 @@ export function EvaluatePage() {
           </li>
           <li>
             <strong>Execution and install options:</strong>{" "}
-            <a href="/install" className="underline">/install</a>
+            <TrackedProductLink
+              to="/install"
+              navTarget="install"
+              navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+              className="underline"
+            >
+              /install
+            </TrackedProductLink>
           </li>
           <li>
             <strong>Tooling config after activation:</strong>{" "}
@@ -440,13 +465,23 @@ export function EvaluatePage() {
         <h2 className="text-xl font-medium mb-4">Next steps</h2>
         <p className="text-[15px] leading-7 mb-3">
           The onboarding sequence is{" "}
-          <a href="/install" className="underline">
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+            className="underline"
+          >
             <strong>{ONBOARDING_SEQUENCE}</strong>
-          </a>
+          </TrackedProductLink>
           . Inside activation, the agent runs{" "}
-          <a href="/install" className="underline">
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+            className="underline"
+          >
             <strong>{ACTIVATION_SEQUENCE}</strong>
-          </a>
+          </TrackedProductLink>
           .
         </p>
         <ol className="list-decimal pl-6 space-y-2 text-[15px] leading-7 mb-4">
@@ -474,7 +509,14 @@ export function EvaluatePage() {
         </ol>
         <p className="text-[15px] leading-7 mb-3">
           See the full{" "}
-          <a href="/install" className="underline">installation guide</a>{" "}
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.evaluatePageBodyInstall}
+            className="underline"
+          >
+            installation guide
+          </TrackedProductLink>{" "}
           for details, or explore{" "}
           <a href="/architecture" className="underline">architecture</a>{" "}
           and{" "}

@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import {
   Activity,
   AlertTriangle,
@@ -659,12 +661,14 @@ export function IcpDetailPage({
               </p>
             )}
             <div className="mt-4 flex flex-wrap gap-3">
-              <Link
+              <TrackedProductLink
                 to="/install"
+                navTarget="install"
+                navSource={PRODUCT_NAV_SOURCES.icpDetailInstall}
                 className="inline-flex items-center rounded-md border border-foreground bg-foreground px-4 py-2 text-[14px] font-medium text-background no-underline hover:bg-foreground/90 transition-colors"
               >
                 Install in 5 minutes
-              </Link>
+              </TrackedProductLink>
               <Link
                 to="/architecture"
                 className="inline-flex items-center rounded-md border border-border bg-card px-4 py-2 text-[14px] font-medium text-foreground no-underline hover:bg-muted transition-colors"

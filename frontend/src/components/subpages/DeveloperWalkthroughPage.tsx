@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { SectionDivider } from "../ui/section_divider";
 
 function SectionHeading({ id, children }: { id: string; children: string }) {
@@ -430,9 +432,14 @@ obs_c8e6b2f4...                 2025-04-07T11:30:00Z    agent:chatgpt-session-7d
       <SectionHeading id="go-deeper">Go deeper</SectionHeading>
       <ul className="list-none pl-0 space-y-2 text-[15px] leading-7">
         <li>
-          <Link to="/install" className="text-foreground underline underline-offset-2 hover:no-underline">
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.developerWalkthroughInstall}
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
             Install
-          </Link>
+          </TrackedProductLink>
           {" \u2014 get started in under a minute"}
         </li>
         <li>

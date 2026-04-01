@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES, sendFunnelInstallPromptCopy } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
@@ -29,7 +31,11 @@ export function OpenClawConnectLocalStdioPage() {
           Paste this prompt into an agent tool (for example Claude Code, Codex, or Cursor) to
           install Neotoma. The agent handles npm install, initialization, and MCP configuration.
         </p>
-        <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+        <CopyableCodeBlock
+          code={SITE_CODE_SNIPPETS.agentInstallPrompt}
+          className="mb-4"
+          onAfterCopy={() => sendFunnelInstallPromptCopy("doc_openclaw_connect_local_stdio")}
+        />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
           After installation, add Neotoma to your OpenClaw{" "}
           <a
@@ -49,9 +55,14 @@ export function OpenClawConnectLocalStdioPage() {
           Back to Neotoma with OpenClaw
         </Link>
         {" · "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.openclawConnectLocalStdioFooterInstall}
+          className={extLink}
+        >
           Install guide
-        </Link>
+        </TrackedProductLink>
         {" · "}
         <Link to="/mcp" className={extLink}>
           MCP reference

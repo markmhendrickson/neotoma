@@ -15,7 +15,9 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { GuaranteeCell, MemoryGuaranteesTable } from "../MemoryGuaranteesTable";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../ui/collapsible";
 import { TooltipProvider } from "../ui/tooltip";
@@ -626,9 +628,14 @@ neotoma observations list --entity-id <entity_id>`}</pre>
         </h3>
         <p className="text-[15px] leading-7 mb-4">
           While Neotoma is not zero-setup, the install process is minimal. See the{" "}
-          <Link to="/install" className="text-foreground underline hover:text-foreground">
+          <TrackedProductLink
+            to="/install"
+            navTarget="install"
+            navSource={PRODUCT_NAV_SOURCES.memoryGuaranteesInstall}
+            className="text-foreground underline hover:text-foreground"
+          >
             install guide
-          </Link>{" "}
+          </TrackedProductLink>{" "}
           for step-by-step instructions.
         </p>
         <pre className="rounded-lg border code-block-palette p-4 overflow-x-auto font-mono text-[14px] whitespace-pre-wrap break-words mb-6">{`npm install -g neotoma

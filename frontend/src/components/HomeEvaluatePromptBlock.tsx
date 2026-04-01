@@ -84,18 +84,7 @@ export function HomeEvaluatePromptBlock({
           className="font-medium text-foreground underline underline-offset-2 decoration-muted-foreground/50 hover:decoration-foreground/70 transition-colors"
           onClick={() => sendCtaClick("section_evaluate")}
         >
-          Evaluation page
-        </Link>
-        <span className="mx-2 select-none text-border" aria-hidden>
-          ·
-        </span>
-        <Link
-          to="/install"
-          {...detailPageCtaLinkProps}
-          className="font-medium text-foreground underline underline-offset-2 decoration-muted-foreground/50 hover:decoration-foreground/70 transition-colors"
-          onClick={() => sendCtaClick("evaluate_prompt_install")}
-        >
-          Install
+          View evaluation page
         </Link>
       </p>
     </div>

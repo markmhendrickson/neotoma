@@ -8,59 +8,101 @@ interface DotNavSection {
 interface SectionDotNavProps {
   sections: DotNavSection[];
   scrollContainerRef: React.RefObject<HTMLElement | null>;
-  onActiveSectionChange?: (sectionId: string) => void;
+  onActiveSectionChange?: (sectionId: string | null) => void;
+  /**
+   * When this section intersects the middle focal band of the scrollport (not a dot target),
+   * no dot is shown as active — avoids highlighting a slide while reading FAQ / tail content.
+   */
+  neutralZoneSectionId?: string;
 }
 
 export function SectionDotNav({
   sections,
   scrollContainerRef,
   onActiveSectionChange,
+  neutralZoneSectionId,
 }: SectionDotNavProps) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const observerRef = useRef<IntersectionObserver | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const activeSectionIdRef = useRef<string | null>(null);
+  const ratiosRef = useRef(new Map<string, number>());
+  const neutralRef = useRef(false);
+  const lastReportedIdRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
-    const ratios = new Map<string, number>();
+    const report = (id: string | null) => {
+      if (lastReportedIdRef.current === id) return;
+      lastReportedIdRef.current = id;
+      onActiveSectionChange?.(id);
+    };
 
-    observerRef.current = new IntersectionObserver(
+    const apply = () => {
+      if (neutralRef.current) {
+        setActiveIndex(-1);
+        report(null);
+        return;
+      }
+
+      const ratios = ratiosRef.current;
+      let bestId = sections[0]?.id;
+      let bestRatio = 0;
+      for (const [id, ratio] of ratios) {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          bestId = id;
+        }
+      }
+      const idx = sections.findIndex((s) => s.id === bestId);
+      if (idx >= 0) {
+        setActiveIndex(idx);
+        if (bestId) report(bestId);
+      }
+    };
+
+    const navObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
-          ratios.set(entry.target.id, entry.intersectionRatio);
+          ratiosRef.current.set(entry.target.id, entry.intersectionRatio);
         }
-        let bestId = sections[0]?.id;
-        let bestRatio = 0;
-        for (const [id, ratio] of ratios) {
-          if (ratio > bestRatio) {
-            bestRatio = ratio;
-            bestId = id;
-          }
-        }
-        const idx = sections.findIndex((s) => s.id === bestId);
-        if (idx >= 0) {
-          setActiveIndex(idx);
-          if (bestId && activeSectionIdRef.current !== bestId) {
-            activeSectionIdRef.current = bestId;
-            onActiveSectionChange?.(bestId);
-          }
-        }
+        apply();
       },
-      { root: container, threshold: [0, 0.25, 0.5, 0.75, 1] },
+      { root: container, threshold: [0, 0.25, 0.5, 0.75, 1] }
     );
 
     for (const section of sections) {
       const el = document.getElementById(section.id);
-      if (el) observerRef.current.observe(el);
+      if (el) navObserver.observe(el);
     }
 
+    const neutralEl =
+      neutralZoneSectionId != null ? document.getElementById(neutralZoneSectionId) : null;
+    const neutralObserver =
+      neutralEl != null
+        ? new IntersectionObserver(
+            (entries) => {
+              for (const entry of entries) {
+                neutralRef.current = entry.isIntersecting;
+              }
+              apply();
+            },
+            {
+              root: container,
+              // Middle ~36% of the scrollport: user is reading FAQ, not a full-bleed slide.
+              rootMargin: "-32% 0px -32% 0px",
+              threshold: 0,
+            }
+          )
+        : null;
+
+    if (neutralObserver && neutralEl) neutralObserver.observe(neutralEl);
+
     return () => {
-      observerRef.current?.disconnect();
+      navObserver.disconnect();
+      neutralObserver?.disconnect();
     };
-  }, [onActiveSectionChange, sections, scrollContainerRef]);
+  }, [neutralZoneSectionId, onActiveSectionChange, sections, scrollContainerRef]);
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);

@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { useNeotomaApiHost } from "../../hooks/useNeotomaApiHost";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 import { IntegrationSection } from "../IntegrationSection";
@@ -158,9 +160,14 @@ export function ChatGptConnectRemoteMcpPage() {
           Back to Neotoma with ChatGPT
         </Link>
         {" · "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.chatgptConnectRemoteMcpInstall}
+          className={extLink}
+        >
           Install guide
-        </Link>
+        </TrackedProductLink>
         {" · "}
         <Link to="/mcp" className={extLink}>
           MCP reference

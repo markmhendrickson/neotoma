@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES } from "@/utils/analytics";
 import { DetailPage } from "../DetailPage";
+import { TrackedProductLink } from "../TrackedProductNav";
 
 export interface FaqItem {
   question: string;
@@ -144,14 +146,24 @@ export function FaqPage() {
               {item.detail}
             </p>
           )}
-          {item.link && (
-            <Link
-              to={item.link.href}
-              className="text-[14px] text-foreground underline underline-offset-2 hover:no-underline"
-            >
-              {item.link.label} &rarr;
-            </Link>
-          )}
+          {item.link &&
+            (item.link.href === "/install" ? (
+              <TrackedProductLink
+                to="/install"
+                navTarget="install"
+                navSource={PRODUCT_NAV_SOURCES.faqInstallGuide}
+                className="text-[14px] text-foreground underline underline-offset-2 hover:no-underline"
+              >
+                {item.link.label} &rarr;
+              </TrackedProductLink>
+            ) : (
+              <Link
+                to={item.link.href}
+                className="text-[14px] text-foreground underline underline-offset-2 hover:no-underline"
+              >
+                {item.link.label} &rarr;
+              </Link>
+            ))}
         </section>
       ))}
     </DetailPage>

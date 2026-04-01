@@ -1,4 +1,6 @@
 import { Link } from "react-router-dom";
+import { PRODUCT_NAV_SOURCES, sendFunnelInstallPromptCopy } from "@/utils/analytics";
+import { TrackedProductLink } from "../TrackedProductNav";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
@@ -186,7 +188,11 @@ export function NeotomaWithCursorPage() {
           The agent handles evaluation, installation if needed, activation, and
           local MCP configuration.
         </p>
-        <CopyableCodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} className="mb-4" />
+        <CopyableCodeBlock
+          code={SITE_CODE_SNIPPETS.agentInstallPrompt}
+          className="mb-4"
+          onAfterCopy={() => sendFunnelInstallPromptCopy("doc_neotoma_with_cursor")}
+        />
         <p className="text-[14px] leading-6 text-muted-foreground mb-2">
           This is a local integration. Neotoma runs on the same machine via stdio. No API
           server or remote access is required. The agent writes to <code>.cursor/mcp.json</code>{" "}
@@ -251,13 +257,23 @@ export function NeotomaWithCursorPage() {
 
       <p className="text-[14px] leading-6 text-muted-foreground">
         Start with{" "}
-        <Link to="/evaluate" className={extLink}>
+        <TrackedProductLink
+          to="/evaluate"
+          navTarget="evaluate"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithCursorTailEvaluate}
+          className={extLink}
+        >
           evaluation
-        </Link>
+        </TrackedProductLink>
         , see the{" "}
-        <Link to="/install" className={extLink}>
+        <TrackedProductLink
+          to="/install"
+          navTarget="install"
+          navSource={PRODUCT_NAV_SOURCES.neotomaWithCursorTailInstall}
+          className={extLink}
+        >
           install guide
-        </Link>{" "}
+        </TrackedProductLink>{" "}
         for more options,{" "}
         <Link to="/mcp" className={extLink}>
           MCP reference
