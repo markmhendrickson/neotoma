@@ -31,6 +31,7 @@
 - The website now pushes a clearer evaluation-first path: users are expected to evaluate fit before install or tool-specific setup.
 - The docs and marketing surface expand further into vertical-specific entry points such as CRM, compliance, healthcare, government, logistics, and customer operations.
 - Header navigation and related page flows are being simplified so key routes such as Evaluate, Install, and Architecture stay consistently reachable.
+- Homepage polish continues in this release candidate: intro edge indicators now anchor to the true section bottom, and dark-surface supporting copy is easier to read across the FAQ, footer, and shared code-block treatments.
 - If the remaining runtime refactors ship in this release, some server-side behavior may change even where the public surface area looks similar.
 
 ## Docs site & CI / tooling
@@ -44,17 +45,20 @@
 
 - This release train includes broader refactoring across `src/server.ts`, `src/actions.ts`, and `src/cli/index.ts`.
 - The current `dev` work also removes the older `llm_extraction` path and reshapes related tests and docs.
-- Test coverage is being updated to reflect navigation, schema, MCP, and CLI changes, including the new header-navigation assertion added during release prep.
+- Test coverage is being updated to reflect navigation, schema, MCP, and CLI changes, including the new header-navigation assertion and targeted site regressions for intro layout and dark-surface readability added during release prep.
+- Repo-root cleanup also landed in the release branch so tracked branch-port state and old local pack artifacts do not ride along with future public release prep.
 
 ## Fixes
 
 - The known `AgentAuthLandingPage` / `/agent-auth` Vite build regression was fixed.
 - Navigation and section-flow cleanup continues across the site experience.
+- Additional site fixes now keep hero edge indicators visually aligned and improve muted-text contrast on dark surfaces.
 - The release-prep flow itself is now better documented for skipped npm versions, so GitHub release compare ranges can match the real npm upgrade path.
 
 ## Tests and validation
 
 - Release prep has already passed typecheck, lint, site copy lint, unit/integration suites, Playwright site coverage, Playwright coverage validation, and doc dependency validation for the committed release-prep changes.
+- The final public-release candidate also passed the same pre-commit gate after adding focused Playwright checks for intro-section layout, themed code-block backgrounds, and footer label contrast.
 - Before tagging `v0.4.0`, run the full release checks against the final committed tree: `npm run build:server`, `npm test`, and any route/site-export validation needed for the final site content.
 - If the remaining outstanding runtime work is included, validate CLI workflows, MCP/OpenAPI consumers, and timeline behavior against real data before publish.
 
