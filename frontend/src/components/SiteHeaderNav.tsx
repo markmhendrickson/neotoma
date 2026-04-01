@@ -16,6 +16,7 @@ import {
   Cpu,
   Database,
   DollarSign,
+  Download,
   FileText,
   Fingerprint,
   FlaskConical,
@@ -38,7 +39,6 @@ import {
   PanelRight,
   PanelRightClose,
   Play,
-  Rocket,
   SatelliteDish,
   Scale,
   Search,
@@ -137,6 +137,7 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Cpu,
   Database,
   DollarSign,
+  Download,
   FileText,
   Fingerprint,
   Github,
@@ -154,7 +155,6 @@ const DOC_NAV_ICONS: Record<string, LucideIcon> = {
   Package,
   PanelRight,
   Play,
-  Rocket,
   SatelliteDish,
   Scale,
   Search,
@@ -537,7 +537,11 @@ export function SiteHeaderNav(props: SiteHeaderNavProps) {
     effectivePath === "/" && !isProductBasePath();
   const { locale, dict } = useLocale();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const headerScrollVisible = useSiteHeaderScrollVisibility(pathname, mobileMenuOpen);
+  /** Hide-on-scroll is for the long marketing home only; keep bar visible on 404, subpages, and docs. */
+  const headerScrollVisible = useSiteHeaderScrollVisibility(
+    pathname,
+    mobileMenuOpen || !isMarketingHomeChrome,
+  );
   const setAppNavBarVisible = useSiteAppNavBarVisibleSetter();
   useEffect(() => {
     setAppNavBarVisible(headerScrollVisible);

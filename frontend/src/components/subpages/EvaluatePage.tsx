@@ -1,5 +1,6 @@
 import heroEvaluatePageIllus from "@/assets/images/hero/hero_illus_evaluate_agent_page.png";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
+import { sendFunnelEvaluatePromptCopy } from "@/utils/analytics";
 import { CopyableCodeBlock } from "../CopyableCodeBlock";
 import { DetailPage } from "../DetailPage";
 
@@ -24,7 +25,12 @@ export function EvaluatePage() {
         <p className="text-[15px] leading-7 mb-2 text-muted-foreground">
           <strong>Prompt to use</strong>
         </p>
-        <CopyableCodeBlock code={EVALUATE_AGENT_PROMPT} className="mb-0" variant="emerald" />
+        <CopyableCodeBlock
+          code={EVALUATE_AGENT_PROMPT}
+          className="mb-0"
+          variant="emerald"
+          onAfterCopy={() => sendFunnelEvaluatePromptCopy("evaluate_page")}
+        />
       </div>
 
       <section>

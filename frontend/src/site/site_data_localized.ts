@@ -19,6 +19,10 @@ export function getLocalizedSiteSections(pack: StaticLocalePack): LocalizedSiteS
     "memory-guarantees": { label: labels.guarantees, shortLabel: labels.guarantees },
     "record-types": { label: labels.recordTypes ?? "Record types", shortLabel: labels.recordTypes ?? "Types" },
     evaluate: { label: labels.evaluate ?? "Evaluate", shortLabel: labels.evaluate ?? "Evaluate" },
+    "common-questions": {
+      label: labels.commonQuestions ?? "Common questions",
+      shortLabel: "Questions",
+    },
   };
 
   return SITE_SECTION_CORE.map((section) => ({

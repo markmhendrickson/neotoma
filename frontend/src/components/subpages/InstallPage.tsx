@@ -5,6 +5,10 @@ import { SiClaude, SiOpenai } from "react-icons/si";
 import { SITE_CODE_SNIPPETS } from "../../site/site_data";
 import { useCopyFeedback } from "../../lib/copy_feedback";
 import { copyTextToClipboard } from "../../lib/copy_to_clipboard";
+import {
+  sendFunnelInstallPromptCopy,
+  type InstallPromptCopyBlock,
+} from "@/utils/analytics";
 import { CODE_BLOCK_COPY_BUTTON_ABSOLUTE } from "../code_block_copy_button_classes";
 import { DetailPage } from "../DetailPage";
 import { Button } from "../ui/button";
@@ -68,12 +72,22 @@ function sanitizeCodeForCopy(rawCode: string): string {
     .join("\n");
 }
 
-function CodeBlock({ code }: { code: string }) {
-  const [copied, markCopied] = useCopyFeedback("install-copy-feedback", 0);
+function CodeBlock({
+  code,
+  copyFeedbackId,
+  installBlock,
+}: {
+  code: string;
+  copyFeedbackId: string;
+  installBlock: InstallPromptCopyBlock;
+}) {
+  const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
 
   const onCopy = async () => {
+    const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
+    if (!ok) return;
     markCopied();
-    await copyTextToClipboard(sanitizeCodeForCopy(code));
+    sendFunnelInstallPromptCopy(installBlock);
   };
 
   return (
@@ -131,7 +145,11 @@ export function InstallPage() {
         agent. The prompt is concise; this page contains the full install-first
         sequence the agent should follow.
       </p>
-      <CodeBlock code={SITE_CODE_SNIPPETS.agentInstallPrompt} />
+      <CodeBlock
+        code={SITE_CODE_SNIPPETS.agentInstallPrompt}
+        copyFeedbackId="install-copy-agent-assisted"
+        installBlock="agent_assisted"
+      />
 
       <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">
         Agent: install-first instructions
@@ -259,7 +277,11 @@ export function InstallPage() {
       <p className="text-[15px] leading-7 mb-4">
         If you prefer to run the commands yourself:
       </p>
-      <CodeBlock code={SITE_CODE_SNIPPETS.installCommands} />
+      <CodeBlock
+        code={SITE_CODE_SNIPPETS.installCommands}
+        copyFeedbackId="install-copy-manual-commands"
+        installBlock="manual_commands"
+      />
 
       <h3 className="text-[17px] font-medium tracking-[-0.01em] mt-6 mb-3">After installation</h3>
       <p className="text-[15px] leading-7 text-muted-foreground mb-3">
@@ -311,13 +333,21 @@ export function InstallPage() {
       <p className="text-[15px] leading-7 mb-4">
         The API server provides the HTTP interface that MCP and the CLI communicate through.
       </p>
-      <CodeBlock code={SITE_CODE_SNIPPETS.postInstallCommands} />
+      <CodeBlock
+        code={SITE_CODE_SNIPPETS.postInstallCommands}
+        copyFeedbackId="install-copy-post-install"
+        installBlock="post_install_commands"
+      />
 
       <h2 className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">Connect MCP</h2>
       <p className="text-[15px] leading-7 mb-4">
         Add Neotoma to your MCP client configuration (Cursor, Claude, or Codex):
       </p>
-      <CodeBlock code={SITE_CODE_SNIPPETS.stdioConfigJson} />
+      <CodeBlock
+        code={SITE_CODE_SNIPPETS.stdioConfigJson}
+        copyFeedbackId="install-copy-stdio-mcp"
+        installBlock="stdio_mcp"
+      />
 
       <h2 id="docker" className="text-[20px] font-medium tracking-[-0.01em] mt-10 mb-3">
         Docker
@@ -331,7 +361,11 @@ export function InstallPage() {
           <p className="text-[15px] leading-7 mb-4">
             If you want your assistant to handle Docker setup, use a prompt like this:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerAgentPrompt} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerAgentPrompt}
+            copyFeedbackId="install-copy-docker-agent"
+            installBlock="docker_agent_prompt"
+          />
         </TabsContent>
         <TabsContent value="human">
           <p className="text-[15px] leading-7 mb-4">
@@ -339,15 +373,27 @@ export function InstallPage() {
             Neotoma stack (API server, CLI, and MCP server) inside a Docker
             container. Clone the Neotoma repository and build the image:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerBuild} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerBuild}
+            copyFeedbackId="install-copy-docker-build"
+            installBlock="docker_build"
+          />
           <p className="text-[15px] leading-7 mb-4">
             Start a container with a persistent volume so your data survives restarts:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerRun} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerRun}
+            copyFeedbackId="install-copy-docker-run"
+            installBlock="docker_run"
+          />
           <p className="text-[15px] leading-7 mb-4">
             Initialize the data directory inside the container:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerInit} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerInit}
+            copyFeedbackId="install-copy-docker-init"
+            installBlock="docker_init"
+          />
           <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
             Connect MCP from Docker
           </h3>
@@ -355,7 +401,11 @@ export function InstallPage() {
             To connect an MCP client (Cursor, Claude, Codex) to the containerized server,
             add this to your MCP configuration:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerMcpConfig} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerMcpConfig}
+            copyFeedbackId="install-copy-docker-mcp"
+            installBlock="docker_mcp"
+          />
           <h3 className="text-[16px] font-medium tracking-[-0.01em] mt-8 mb-2">
             Use the CLI from Docker
           </h3>
@@ -363,7 +413,11 @@ export function InstallPage() {
             The <code>neotoma</code> CLI is available inside the container. Prefix commands
             with <code>docker exec</code>:
           </p>
-          <CodeBlock code={SITE_CODE_SNIPPETS.dockerCliExample} />
+          <CodeBlock
+            code={SITE_CODE_SNIPPETS.dockerCliExample}
+            copyFeedbackId="install-copy-docker-cli"
+            installBlock="docker_cli_example"
+          />
           <p className="text-[15px] leading-7 mb-4">
             The API is also available at <code>http://localhost:3080</code> for direct HTTP
             access.

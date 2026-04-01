@@ -3,14 +3,13 @@ import {
   GITHUB_REPO_NAME,
   GITHUB_REPO_OWNER,
   NPM_PACKAGE_NAME,
-  fetchGitHubPublishedReleasesCount,
   fetchGitHubStarsCount,
   fetchNpmLatestVersion,
 } from "@/site/repo_meta_client";
 
 /**
- * Loads latest npm version, GitHub release count, and stars in the browser.
- * Starts from bundled fallbacks (repo_info.json) then refreshes when network calls succeed.
+ * Loads latest npm version and star count in the browser.
+ * Release count stays on bundled repo_info.json (build script); avoids GitHub REST 403 in embedded browsers.
  */
 export function useRepoMetaClient(
   fallbackVersion: string,
@@ -20,10 +19,13 @@ export function useRepoMetaClient(
   version: string;
   releasesCount: number;
   starsCount: number;
+  /** True only after a successful live star-count fetch (avoids showing bundled `0` when data never loaded). */
+  starsResolved: boolean;
 } {
   const [version, setVersion] = useState(fallbackVersion);
   const [releasesCount, setReleasesCount] = useState(fallbackReleasesCount);
   const [starsCount, setStarsCount] = useState(fallbackStarsCount);
+  const [starsResolved, setStarsResolved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -31,7 +33,6 @@ export function useRepoMetaClient(
     void (async () => {
       const settled = await Promise.allSettled([
         fetchNpmLatestVersion(NPM_PACKAGE_NAME),
-        fetchGitHubPublishedReleasesCount(GITHUB_REPO_OWNER, GITHUB_REPO_NAME),
         fetchGitHubStarsCount(GITHUB_REPO_OWNER, GITHUB_REPO_NAME),
       ]);
       if (cancelled) return;
@@ -39,10 +40,8 @@ export function useRepoMetaClient(
         setVersion(settled[0].value);
       }
       if (settled[1].status === "fulfilled") {
-        setReleasesCount(settled[1].value);
-      }
-      if (settled[2].status === "fulfilled") {
-        setStarsCount(settled[2].value);
+        setStarsCount(settled[1].value);
+        setStarsResolved(true);
       }
     })();
 
@@ -51,5 +50,5 @@ export function useRepoMetaClient(
     };
   }, []);
 
-  return { version, releasesCount, starsCount };
+  return { version, releasesCount, starsCount, starsResolved };
 }

@@ -1,5 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchGitHubPublishedReleasesCount, fetchNpmLatestVersion } from "./repo_meta_client";
+import {
+  fetchGitHubStarsCount,
+  fetchNpmLatestVersion,
+  parseShieldsCountMessage,
+} from "./repo_meta_client";
+
+describe("parseShieldsCountMessage", () => {
+  it("parses plain integers", () => {
+    expect(parseShieldsCountMessage("9")).toBe(9);
+    expect(parseShieldsCountMessage("1,234")).toBe(1234);
+  });
+
+  it("parses compact suffixes", () => {
+    expect(parseShieldsCountMessage("1.2k")).toBe(1200);
+    expect(parseShieldsCountMessage("3M")).toBe(3_000_000);
+  });
+
+  it("rejects invalid strings", () => {
+    expect(() => parseShieldsCountMessage("")).toThrow();
+    expect(() => parseShieldsCountMessage("n/a")).toThrow();
+  });
+});
 
 describe("fetchNpmLatestVersion", () => {
   beforeEach(() => {
@@ -27,7 +48,7 @@ describe("fetchNpmLatestVersion", () => {
   });
 });
 
-describe("fetchGitHubPublishedReleasesCount", () => {
+describe("fetchGitHubStarsCount", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
   });
@@ -36,31 +57,27 @@ describe("fetchGitHubPublishedReleasesCount", () => {
     vi.unstubAllGlobals();
   });
 
-  it("counts non-draft releases on one page", async () => {
+  it("returns count from shields message field", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
-      json: async () => [
-        { draft: false },
-        { draft: true },
-        { draft: false },
-      ],
+      json: async () => ({ message: "42", value: "42" }),
     });
-    await expect(
-      fetchGitHubPublishedReleasesCount("owner", "repo")
-    ).resolves.toBe(2);
+    await expect(fetchGitHubStarsCount("owner", "repo")).resolves.toBe(42);
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      "https://img.shields.io/github/stars/owner/repo.json"
+    );
   });
 
-  it("paginates until a short page", async () => {
-    const fullPage = Array.from({ length: 100 }, () => ({ draft: false }));
-    vi.mocked(fetch)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => fullPage,
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [{ draft: false }],
-      });
-    await expect(fetchGitHubPublishedReleasesCount("o", "r")).resolves.toBe(101);
+  it("falls back to value field", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ value: "7" }),
+    });
+    await expect(fetchGitHubStarsCount("a", "b")).resolves.toBe(7);
+  });
+
+  it("throws on non-ok response", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({ ok: false, status: 503 });
+    await expect(fetchGitHubStarsCount("o", "r")).rejects.toThrow("shields.io 503");
   });
 });

@@ -5,7 +5,10 @@ export const REPO_VERSION: string = repoInfo.version;
 /** Published GitHub releases count (updated by scripts/repo_info.ts). */
 export const REPO_RELEASES_COUNT: number = repoInfo.releasesCount;
 /** GitHub stargazers count (build-time fallback, refreshed client-side). */
-export const REPO_STARS_COUNT: number = repoInfo.starsCount;
+export const REPO_STARS_COUNT: number =
+  typeof repoInfo.starsCount === "number" && Number.isFinite(repoInfo.starsCount)
+    ? repoInfo.starsCount
+    : 0;
 
 export interface SiteSection {
   id: string;
@@ -271,12 +274,18 @@ export const SITE_SECTIONS: SiteSection[] = [
   { id: "memory-guarantees", label: "Guarantees", shortLabel: "Guarantees", icon: "ShieldCheck" },
   { id: "record-types", label: "Record types", shortLabel: "Types", icon: "BookOpen" },
   { id: "evaluate", label: "Evaluate", shortLabel: "Evaluate", icon: "ClipboardCheck" },
+  {
+    id: "common-questions",
+    label: "Common questions",
+    shortLabel: "Questions",
+    icon: "HelpCircle",
+  },
 ];
 
 export interface DocNavItem {
   label: string;
   href: string;
-  /** Lucide icon name for collapsed sidebar (e.g. "Rocket", "Terminal"). */
+  /** Lucide icon name for collapsed sidebar (e.g. "Download", "Terminal"). */
   icon?: string;
 }
 
@@ -313,7 +322,7 @@ export const DOC_NAV_CATEGORIES: DocNavCategory[] = [
     items: [
       { label: "Documentation", href: "/docs", icon: "Home" },
       { label: "Evaluate", href: "/evaluate", icon: "ClipboardCheck" },
-      { label: "Install", href: "/install", icon: "Rocket" },
+      { label: "Install", href: "/install", icon: "Download" },
       { label: "Walkthrough", href: "/developer-walkthrough", icon: "Waypoints" },
     ],
   },

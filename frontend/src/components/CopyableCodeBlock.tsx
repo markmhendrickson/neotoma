@@ -27,6 +27,8 @@ type CopyableCodeBlockProps = {
   previewLineCount?: number;
   /** Emerald-tinted shell to match the home evaluate prompt. */
   variant?: "default" | "emerald";
+  /** Fires after a successful clipboard write (not on failure). */
+  onAfterCopy?: () => void;
 };
 
 export function CopyableCodeBlock({
@@ -34,6 +36,7 @@ export function CopyableCodeBlock({
   className = "mb-4",
   previewLineCount,
   variant = "default",
+  onAfterCopy,
 }: CopyableCodeBlockProps) {
   const { dict } = useLocale();
   const [copied, markCopied] = useCopyFeedback(`copyable:${code}`);
@@ -45,8 +48,10 @@ export function CopyableCodeBlock({
     canExpand && !showFullCode ? `${lines.slice(0, previewLineCount).join("\n")}\n...` : code;
 
   const onCopy = async () => {
+    const ok = await copyTextToClipboard(sanitizeCodeForCopy(code));
+    if (!ok) return;
     markCopied();
-    await copyTextToClipboard(sanitizeCodeForCopy(code));
+    onAfterCopy?.();
   };
 
   const paletteClass = variant === "emerald" ? CODE_BLOCK_EMERALD_PANEL : "code-block-palette";

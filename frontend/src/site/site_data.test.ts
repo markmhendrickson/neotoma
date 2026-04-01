@@ -5,6 +5,7 @@ import {
   LEARN_MORE_POSTS,
   MCP_ACTIONS_TABLE,
   REPO_RELEASES_COUNT,
+  REPO_STARS_COUNT,
   REPO_VERSION,
   SITE_CODE_SNIPPETS,
   SITE_SECTIONS,
@@ -19,6 +20,7 @@ describe("site_data", () => {
       "memory-guarantees",
       "record-types",
       "evaluate",
+      "common-questions",
     ]);
   });
 
@@ -36,12 +38,14 @@ describe("site_data", () => {
     expect(SITE_CODE_SNIPPETS.cliUploadExample).toContain("neotoma upload");
   });
 
-  it("exposes repo version and releases count from repo_info", () => {
+  it("exposes repo version, releases count, and stars fallback from repo_info", () => {
     expect(typeof REPO_VERSION).toBe("string");
     expect(REPO_VERSION.length).toBeGreaterThan(0);
     expect(REPO_VERSION).toMatch(/^\d+\.\d+\.\d+/);
     expect(typeof REPO_RELEASES_COUNT).toBe("number");
     expect(REPO_RELEASES_COUNT).toBeGreaterThanOrEqual(0);
+    expect(typeof REPO_STARS_COUNT).toBe("number");
+    expect(REPO_STARS_COUNT).toBeGreaterThanOrEqual(0);
   });
 
   it("keeps learn-more card ordering stable", () => {

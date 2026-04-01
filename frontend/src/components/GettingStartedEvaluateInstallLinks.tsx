@@ -12,6 +12,7 @@ export function GettingStartedEvaluateInstallLinks({ agentTargetPhrase }: Gettin
       copyFeedbackId="getting-started-evaluate-prompt"
       className="mb-4"
       agentTargetPhrase={agentTargetPhrase}
+      evaluatePromptCopySurface="integration_doc"
     />
   );
 }

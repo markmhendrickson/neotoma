@@ -4,7 +4,11 @@ import { useCopyFeedback } from "../lib/copy_feedback";
 import { copyTextToClipboard } from "../lib/copy_to_clipboard";
 import { SITE_CODE_SNIPPETS } from "../site/site_data";
 import { cn } from "@/lib/utils";
-import { sendCtaClick } from "@/utils/analytics";
+import {
+  sendCtaClick,
+  sendFunnelEvaluatePromptCopy,
+  type EvaluatePromptCopySurface,
+} from "@/utils/analytics";
 import { detailPageCtaLinkProps } from "./DetailPage";
 import {
   CODE_BLOCK_EMERALD_PANEL,
@@ -20,6 +24,8 @@ type HomeEvaluatePromptBlockProps = {
    * integration pages pass the specific agent or surface (e.g. "Claude Code", "a Cursor agent chat").
    */
   agentTargetPhrase?: string;
+  /** Funnel analytics: marketing home evaluate section vs integration doc pages. */
+  evaluatePromptCopySurface?: EvaluatePromptCopySurface;
 };
 
 /**
@@ -29,6 +35,7 @@ export function HomeEvaluatePromptBlock({
   copyFeedbackId = "evaluate-section-prompt",
   className = "",
   agentTargetPhrase,
+  evaluatePromptCopySurface = "home",
 }: HomeEvaluatePromptBlockProps) {
   const [copied, markCopied] = useCopyFeedback(copyFeedbackId, 0);
   const prompt = SITE_CODE_SNIPPETS.homeEvaluatePrompt;
@@ -49,10 +56,12 @@ export function HomeEvaluatePromptBlock({
         <button
           type="button"
           className={`${HOME_EVALUATE_CTA_CLASS} absolute right-2 top-2 !px-3 !py-1.5 text-xs`}
-          onClick={() => {
-            copyTextToClipboard(prompt);
+          onClick={async () => {
+            const ok = await copyTextToClipboard(prompt);
+            if (!ok) return;
             markCopied();
             sendCtaClick("evaluate_copy_prompt");
+            sendFunnelEvaluatePromptCopy(evaluatePromptCopySurface);
           }}
         >
           {copied ? (

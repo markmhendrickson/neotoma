@@ -239,6 +239,39 @@ const ROUTE_METADATA: Record<string, SeoRouteMetadata> = {
       { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
     ],
   },
+  "/ai-native-operators": {
+    title: "AI-native operators | Neotoma",
+    description:
+      "Legacy path; redirects to operating across tools. Persistent cross-session memory for operators running agents in production.",
+    robots: "noindex,nofollow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Operating across tools", path: "/operating" },
+    ],
+  },
+  "/agentic-systems-builders": {
+    title: "Agentic systems builders | Neotoma",
+    description:
+      "Legacy path; redirects to building pipelines. Deterministic state and entity resolution for teams shipping agent features.",
+    robots: "noindex,nofollow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Building pipelines", path: "/building-pipelines" },
+    ],
+  },
+  "/ai-infrastructure-engineers": {
+    title: "AI infrastructure engineers | Neotoma",
+    description:
+      "Legacy path; redirects to debugging infrastructure. Replayable timelines and provenance for infra teams debugging agent state.",
+    robots: "noindex,nofollow",
+    jsonLdType: "WebPage",
+    breadcrumb: [
+      { name: "Home", path: "/" },
+      { name: "Debugging infrastructure", path: "/debugging-infrastructure" },
+    ],
+  },
   "/neotoma-with-cursor": {
     title: "Neotoma with Cursor | Integration Guide",
     description:

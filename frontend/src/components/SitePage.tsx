@@ -7,8 +7,8 @@ import {
   ChevronUp,
   Eye,
   ListChecks,
+  Download,
   Receipt,
-  Rocket,
   Scale,
   Server,
   MessageSquare,
@@ -51,16 +51,22 @@ interface SitePageProps {
   staticMode?: boolean;
 }
 
-const DOT_NAV_SECTIONS = [
-  { id: "intro", label: "Intro" },
-  { id: "outcomes", label: "Before / After" },
-  { id: "who", label: "Who" },
-  { id: "memory-guarantees", label: "Guarantees" },
-  { id: "record-types", label: "Record types" },
-  { id: "evaluate", label: "Evaluate" },
+/** Full home scroll order (edge indicators, sidebar hash targets). FAQ block is not a dot-nav stop. */
+const SECTION_ORDER: readonly string[] = [
+  "intro",
+  "outcomes",
+  "who",
+  "memory-guarantees",
+  "record-types",
+  "evaluate",
+  "common-questions",
 ];
-const DOT_NAV_SECTION_IDS = new Set(DOT_NAV_SECTIONS.map((section) => section.id));
-const SECTION_ORDER = DOT_NAV_SECTIONS.map((section) => section.id);
+
+const HOME_HASH_SECTION_IDS = new Set<string>(SECTION_ORDER);
+/** Right rail dots only: excludes `common-questions` (natural flow before footer). */
+const DOT_NAV_SECTION_IDS = new Set<string>(
+  SECTION_ORDER.filter((id) => id !== "common-questions")
+);
 
 function getLocalizedDotNavSections(pack: ReturnType<typeof useLocale>["pack"]) {
   return [
@@ -136,6 +142,19 @@ const GUARANTEE_QA: { q: string; a: string }[] = [
   {
     q: "Is this production-ready?",
     a: "Neotoma is in developer preview - used daily by real agent workflows. The core guarantees (deterministic state, versioned history, append-only log) are stable. Install in 5 minutes and let your agent evaluate the fit.",
+  },
+];
+
+/** Home FAQ accordion (before footer); superset of guarantee-focused Q&A plus common install/privacy topics. */
+const HOME_FAQ_PREVIEW_ITEMS: { q: string; a: string }[] = [
+  ...GUARANTEE_QA,
+  {
+    q: "Does Neotoma send my data to the cloud?",
+    a: "No. Neotoma runs locally by default. Your data stays on your machine in a local SQLite database. There is no cloud sync, no telemetry, and no training on your data unless you choose to expose the API (for example for remote MCP clients).",
+  },
+  {
+    q: "What's the difference between RAG memory and deterministic memory?",
+    a: "RAG stores text chunks and retrieves them by similarity for prompts. Neotoma stores structured observations and composes entity state with reducers; the same observations always yield the same snapshot. RAG optimizes relevance; deterministic memory optimizes integrity, versioning, and auditability.",
   },
 ];
 
@@ -948,7 +967,9 @@ function OutcomesSlide({
 }
 
 const SLIDE_CLASS = "min-h-[100svh] md:snap-start flex items-center justify-center relative";
-const SLIDE_INNER = "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12";
+/** Extra md+ vertical padding so SectionEdgeIndicators (absolute top-6/bottom-6) do not overlap copy. */
+const SLIDE_INNER =
+  "w-full max-w-6xl mx-auto px-6 md:px-12 lg:px-16 py-12 md:pt-16 md:pb-16";
 
 const ICP_ICON_MAP: Record<string, LucideIcon> = {
   Server,
@@ -1096,11 +1117,13 @@ const heroProofStripItemClass =
   "rounded-full border border-border/80 bg-background/80 px-3 py-1.5 text-[11px] font-medium text-muted-foreground lg:rounded-none lg:border-0 lg:bg-transparent lg:px-0 lg:py-0";
 
 function HeroProofStrip() {
-  const { starsCount: liveStars } = useRepoMetaClient(
+  const { starsCount: liveStars, starsResolved } = useRepoMetaClient(
     REPO_VERSION,
     REPO_RELEASES_COUNT,
     REPO_STARS_COUNT
   );
+  const showStarCount = starsResolved || liveStars > 0;
+  const githubLinkLabel = showStarCount ? `${liveStars.toLocaleString()} on GitHub` : "GitHub";
   const dot = (
     <span aria-hidden="true" className="hidden text-border lg:inline">
       ·
@@ -1108,16 +1131,19 @@ function HeroProofStrip() {
   );
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 text-[11px] font-medium text-muted-foreground lg:inline-flex lg:gap-x-2 lg:gap-y-1 lg:rounded-full lg:border lg:border-border/80 lg:bg-background/80 lg:px-3 lg:py-1.5 lg:justify-start">
+      <span className={heroProofStripItemClass}>Cross-tool memory for AI agents</span>
+      {dot}
       <a
         href="https://github.com/markmhendrickson/neotoma"
         target="_blank"
         rel="noopener noreferrer"
         className={`${heroProofStripItemClass} inline-flex items-center gap-1 no-underline hover:text-foreground transition-colors`}
+        aria-label={showStarCount ? undefined : "Neotoma on GitHub"}
       >
         <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
           <path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z" />
         </svg>
-        {liveStars} on GitHub
+        {githubLinkLabel}
       </a>
       {dot}
       <span className={heroProofStripItemClass}>{REPO_RELEASES_COUNT} releases shipped</span>
@@ -1130,8 +1156,8 @@ function HeroStatePreview() {
     <div className="mx-auto w-full max-w-[420px] lg:max-w-none">
       <StateFlowDiagram variant="hero" className="shadow-[0_18px_48px_-28px_rgba(15,23,42,0.45)]" />
       <p className="mt-3 text-center text-[12px] leading-5 text-muted-foreground lg:text-left">
-        Stop being the human sync layer between tools. Store facts once on your machine, keep state
-        consistent across sessions, and replay what changed when something breaks.{" "}
+        Facts are stored under your control. Any agent can retrieve exactly what it needs, with
+        full versioning and provenance.{" "}
         <Link
           to="/architecture"
           className="font-medium text-foreground underline decoration-muted-foreground/70 underline-offset-2 transition-colors hover:decoration-foreground"
@@ -1202,6 +1228,64 @@ function SectionEdgeIndicators({ sectionId }: { sectionId: string }) {
   );
 }
 
+/**
+ * Lines trace to docs/foundation/field_validation.md; attributions are anonymized for the public site.
+ */
+const HERO_QUOTES: { text: string; attribution: string }[] = [
+  {
+    text: "State integrity, not retrieval quality.",
+    attribution: "Agentic app builder",
+  },
+  {
+    text: "Very relevant problem, most people rolling their own.",
+    attribution: "Developer tooling founder",
+  },
+  {
+    text: "Genuinely useful for production agents, overkill for hobbyist chatbots.",
+    attribution: "Production agent evaluator",
+  },
+  {
+    text: "CI/CD for agent state.",
+    attribution: "Infrastructure engineer",
+  },
+];
+
+const QUOTE_ROTATE_INTERVAL_MS = 7000;
+
+function RotatingHeroQuote({ quotes }: { quotes: typeof HERO_QUOTES }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    if (quotes.length <= 1) return;
+    const id = window.setInterval(
+      () => setIndex((prev) => (prev + 1) % quotes.length),
+      QUOTE_ROTATE_INTERVAL_MS
+    );
+    return () => window.clearInterval(id);
+  }, [quotes]);
+
+  if (quotes.length === 0) return null;
+
+  return (
+    <div
+      className="relative h-[3.25em] sm:h-[2.5em] max-w-xl mx-auto lg:mx-0"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {quotes.map((q, i) => (
+        <p
+          key={i}
+          className={`absolute inset-0 text-[13px] leading-5 italic text-muted-foreground transition-opacity duration-500 ${
+            i === index ? "opacity-100" : "opacity-0"
+          }`}
+        >
+          &ldquo;{q.text}&rdquo;
+          <span className="not-italic text-muted-foreground/60"> - {q.attribution}</span>
+        </p>
+      ))}
+    </div>
+  );
+}
+
 const RECORD_ROTATE_INTERVAL_MS = 2400;
 
 function RotatingRecordType({ words }: { words: string[] }) {
@@ -1244,39 +1328,52 @@ export function SitePage({ staticMode = false }: SitePageProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const heroEvaluateCtaRowRef = useRef<HTMLDivElement>(null);
   const evaluateSectionRef = useRef<HTMLElement>(null);
+  /** While true, ignore SectionDotNav-driven hash updates so initial /#section is not cleared by intro. */
+  const suppressDotNavHashSyncRef = useRef(false);
   /** Hero evaluate row visible in the scroll container - hide fixed banner while in hero. */
   const [heroEvaluateCtaInView, setHeroEvaluateCtaInView] = useState(true);
   /** Evaluate section visible - hide banner when user is already looking at the evaluate CTA. */
   const [evaluateSectionInView, setEvaluateSectionInView] = useState(false);
-  /** While true (user scrolled up), keep banner hidden even when past hero. Cleared on scroll down. */
-  const [suppressEvaluateBannerFromScrollUp, setSuppressEvaluateBannerFromScrollUp] =
-    useState(false);
-  const lastScrollTopRef = useRef(0);
 
-  const showEvaluateScrollBanner =
-    !heroEvaluateCtaInView && !evaluateSectionInView && !suppressEvaluateBannerFromScrollUp;
+  const showEvaluateScrollBanner = !heroEvaluateCtaInView && !evaluateSectionInView;
 
   useEffect(() => {
     if (staticMode || typeof window === "undefined") return;
 
     const hashId = window.location.hash.replace(/^#/, "");
-    if (!hashId || !DOT_NAV_SECTION_IDS.has(hashId)) return;
+    if (!hashId || !HOME_HASH_SECTION_IDS.has(hashId)) return;
 
-    // Wait one frame so layout/scroll container is ready before jumping.
-    window.requestAnimationFrame(() => {
+    suppressDotNavHashSyncRef.current = true;
+
+    const applyHashScroll = () => {
       const target = document.getElementById(hashId);
       if (target) {
-        target.scrollIntoView({ behavior: "auto" });
+        target.scrollIntoView({ behavior: "auto", block: "start" });
       }
-      // Top section: no hash in URL; lack of anchor signifies intro.
-      if (hashId === "intro") {
+    };
+
+    // Wait for layout: inner scroll root + mobile WebKit often need more than one frame.
+    window.requestAnimationFrame(() => {
+      applyHashScroll();
+      window.requestAnimationFrame(() => {
+        applyHashScroll();
+        window.setTimeout(() => {
+          applyHashScroll();
+          suppressDotNavHashSyncRef.current = false;
+        }, 160);
+      });
+    });
+
+    // Top section: no hash in URL; lack of anchor signifies intro.
+    if (hashId === "intro") {
+      window.requestAnimationFrame(() => {
         window.history.replaceState(
           null,
           "",
           `${window.location.pathname}${window.location.search}`
         );
-      }
-    });
+      });
+    }
   }, [staticMode]);
 
   useLayoutEffect(() => {
@@ -1284,8 +1381,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
     const scrollEl = scrollContainerRef.current;
     const ctaRow = heroEvaluateCtaRowRef.current;
     if (!scrollEl || !ctaRow) return;
-
-    lastScrollTopRef.current = scrollEl.scrollTop;
 
     const evalSection = evaluateSectionRef.current;
 
@@ -1304,28 +1399,14 @@ export function SitePage({ staticMode = false }: SitePageProps) {
     observer.observe(ctaRow);
     if (evalSection) observer.observe(evalSection);
 
-    const SCROLL_DIR_EPS = 4;
-    const onScroll = () => {
-      const st = scrollEl.scrollTop;
-      const delta = st - lastScrollTopRef.current;
-      lastScrollTopRef.current = st;
-      if (Math.abs(delta) < SCROLL_DIR_EPS) return;
-      if (delta < 0) {
-        setSuppressEvaluateBannerFromScrollUp(true);
-      } else {
-        setSuppressEvaluateBannerFromScrollUp(false);
-      }
-    };
-
-    scrollEl.addEventListener("scroll", onScroll, { passive: true });
     return () => {
       observer.disconnect();
-      scrollEl.removeEventListener("scroll", onScroll);
     };
   }, [staticMode]);
 
   const handleActiveSectionChange = (sectionId: string) => {
     if (typeof window === "undefined") return;
+    if (suppressDotNavHashSyncRef.current) return;
 
     if (!DOT_NAV_SECTION_IDS.has(sectionId)) return;
     const baseUrl = `${window.location.pathname}${window.location.search}`;
@@ -1417,11 +1498,13 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                             navigate("/install");
                           }}
                         >
-                          <Rocket className="h-4 w-4 shrink-0" aria-hidden />
+                          <Download className="h-4 w-4 shrink-0" aria-hidden />
                           {pack.homeHero.ctaInstall}
                         </a>
                       </div>
 
+                      <RotatingHeroQuote quotes={HERO_QUOTES} />
+                      <HomeAgentToolChips align="start" />
                     </div>
 
                     <HeroStatePreview />
@@ -1550,36 +1633,6 @@ export function SitePage({ staticMode = false }: SitePageProps) {
                     See all {MEMORY_GUARANTEE_ROWS.length} guarantees compared
                   </Link>
                 </div>
-
-                <div className="mt-8 pt-6 max-w-2xl mx-auto border-t border-border/40">
-                  <p className="mb-3 text-center text-[10px] font-mono uppercase tracking-widest text-muted-foreground/70">
-                    Common questions
-                  </p>
-                  <div className="divide-y divide-border/40">
-                    {GUARANTEE_QA.map((qa) => (
-                      <details key={qa.q} className="group py-3 text-left first:pt-0">
-                        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
-                          {qa.q}
-                          <ChevronDown
-                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180"
-                            aria-hidden
-                          />
-                        </summary>
-                        <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground/90">
-                          {qa.a}
-                        </p>
-                      </details>
-                    ))}
-                  </div>
-                  <p className="mt-4 text-center text-[12px] text-muted-foreground/80">
-                    <Link
-                      to="/faq"
-                      className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"
-                    >
-                      More questions? See the FAQ
-                    </Link>
-                  </p>
-                </div>
               </div>
             </div>
             <SectionEdgeIndicators sectionId="memory-guarantees" />
@@ -1674,6 +1727,44 @@ export function SitePage({ staticMode = false }: SitePageProps) {
             </div>
             <SectionEdgeIndicators sectionId="evaluate" />
           </FadeSection>
+        </section>
+
+        {/* FAQ preview before footer: natural-height block, no viewport snap (unlike full slides). */}
+        <section id="common-questions" className="relative w-full shrink-0 scroll-mt-12">
+          <div className={SLIDE_INNER}>
+            <div className="space-y-6 md:space-y-8 max-w-5xl mx-auto">
+              <h2 className={`${HOME_SECTION_H2_CLASS} text-center`}>
+                {pack.siteSections.frequentlyAskedQuestions ?? "Frequently asked questions"}
+              </h2>
+              <div className="max-w-2xl mx-auto">
+                <div className="divide-y divide-border/40 rounded-xl border border-border/60 bg-card/30 px-4 py-1 sm:px-5">
+                  {HOME_FAQ_PREVIEW_ITEMS.map((qa) => (
+                    <details key={qa.q} className="group py-3 text-left first:pt-2">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[13px] font-normal leading-snug text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+                        {qa.q}
+                        <ChevronDown
+                          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180"
+                          aria-hidden
+                        />
+                      </summary>
+                      <p className="mt-2.5 pl-0 text-[12px] leading-6 text-muted-foreground/90">
+                        {qa.a}
+                      </p>
+                    </details>
+                  ))}
+                </div>
+                <p className="mt-6 text-center text-[12px] text-muted-foreground/80">
+                  <Link
+                    to="/faq"
+                    className="text-muted-foreground underline decoration-border/50 underline-offset-[3px] transition-colors hover:text-foreground hover:decoration-foreground/30"
+                  >
+                    More questions? See the FAQ
+                  </Link>
+                </p>
+              </div>
+            </div>
+          </div>
+          <SectionEdgeIndicators sectionId="common-questions" />
         </section>
 
         {/* Mandatory scroll snap only applies to snap-aligned children; without this, the footer is unreachable on md+. */}

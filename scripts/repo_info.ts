@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * Writes frontend/src/site/repo_info.json with version (from package.json) and
- * releasesCount (from GitHub API). Used by the landing page so version and
- * "N releases" stay in sync with the repo. Run on npm run dev (watch:ui) and
- * before build:ui / build:pages:site.
+ * Writes frontend/src/site/repo_info.json with version (from package.json),
+ * releasesCount, and starsCount (from GitHub API). Used by the landing page so
+ * version, "N releases", and star count stay in sync. Run on npm run dev
+ * (watch:ui) and before build:ui / build:pages:site.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -17,6 +17,7 @@ const outPath = path.join(repoRoot, "frontend", "src", "site", "repo_info.json")
 interface RepoInfo {
   version: string;
   releasesCount: number;
+  starsCount: number;
 }
 
 function getRepoSlug(): string {
@@ -32,21 +33,37 @@ function getVersion(): string {
   return (pkg.version as string) ?? "0.0.0";
 }
 
-async function fetchReleasesCount(repoSlug: string): Promise<number> {
+function ghHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github.v3+json",
     "User-Agent": "neotoma-repo-info",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
 
+async function fetchStarsCount(repoSlug: string): Promise<number> {
+  const url = `https://api.github.com/repos/${repoSlug}`;
+  const res = await fetch(url, { headers: ghHeaders() });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
+  }
+  const data = (await res.json()) as { stargazers_count?: number };
+  if (typeof data.stargazers_count !== "number") {
+    throw new Error("GitHub API: missing stargazers_count");
+  }
+  return data.stargazers_count;
+}
+
+async function fetchReleasesCount(repoSlug: string): Promise<number> {
   let total = 0;
   let page = 1;
   const perPage = 100;
 
   while (true) {
     const url = `https://api.github.com/repos/${repoSlug}/releases?per_page=${perPage}&page=${page}`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers: ghHeaders() });
     if (!res.ok) {
       throw new Error(`GitHub API ${res.status}: ${res.statusText}`);
     }
@@ -81,10 +98,20 @@ async function main(): Promise<void> {
     releasesCount = existing?.releasesCount ?? 0;
   }
 
-  const info: RepoInfo = { version, releasesCount };
+  let starsCount: number;
+  try {
+    starsCount = await fetchStarsCount(repoSlug);
+  } catch (err) {
+    console.warn("repo_info: could not fetch stars count:", (err as Error).message);
+    starsCount = existing?.starsCount ?? 0;
+  }
+
+  const info: RepoInfo = { version, releasesCount, starsCount };
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(info, null, 2) + "\n", "utf-8");
-  console.log(`repo_info: wrote v${info.version} · ${info.releasesCount} releases`);
+  console.log(
+    `repo_info: wrote v${info.version} · ${info.releasesCount} releases · ${info.starsCount} stars`
+  );
 }
 
 main().catch((err) => {

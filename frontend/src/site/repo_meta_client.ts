@@ -4,9 +4,30 @@ export const NPM_PACKAGE_NAME = "neotoma";
 export const GITHUB_REPO_OWNER = "markmhendrickson";
 export const GITHUB_REPO_NAME = "neotoma";
 
-const ghHeaders = {
-  Accept: "application/vnd.github.v3+json",
-};
+/**
+ * Browser star counts use shields.io (img.shields.io), which proxies GitHub with a valid
+ * User-Agent. Direct calls to api.github.com return 403 in some embedded browsers (no UA).
+ *
+ * Published release counts are not fetched in the browser; use bundled `repo_info.json`
+ * (updated by `scripts/repo_info.ts` at build) to avoid the same 403 noise.
+ */
+
+/** Shields badge `message` / `value` for numeric badges (e.g. "9", "1.2k", "3M"). */
+export function parseShieldsCountMessage(message: string): number {
+  const t = message.trim().toLowerCase().replace(/,/g, "");
+  const m = t.match(/^([\d.]+)\s*([kmb])?$/i);
+  if (!m) {
+    throw new Error(`shields.io: unrecognized count message: ${JSON.stringify(message)}`);
+  }
+  const n = parseFloat(m[1]);
+  if (!Number.isFinite(n)) {
+    throw new Error(`shields.io: invalid count: ${JSON.stringify(message)}`);
+  }
+  const suffix = (m[2] ?? "").toLowerCase();
+  const mult =
+    suffix === "k" ? 1e3 : suffix === "m" ? 1e6 : suffix === "b" ? 1e9 : 1;
+  return Math.round(n * mult);
+}
 
 export async function fetchNpmLatestVersion(packageName: string): Promise<string> {
   const res = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`);
@@ -21,46 +42,25 @@ export async function fetchNpmLatestVersion(packageName: string): Promise<string
   return v;
 }
 
-/** GitHub stargazers count (single API call, no pagination needed). */
+/** Star count via shields.io (avoids GitHub REST 403 when the browser sends no User-Agent). */
 export async function fetchGitHubStarsCount(
   owner: string,
   repo: string
 ): Promise<number> {
-  const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-  const res = await fetch(url, { headers: ghHeaders });
+  const url = `https://img.shields.io/github/stars/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}.json`;
+  const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`GitHub API ${res.status}`);
+    throw new Error(`shields.io ${res.status}`);
   }
-  const data = (await res.json()) as { stargazers_count?: number };
-  if (typeof data.stargazers_count !== "number") {
-    throw new Error("GitHub API: missing stargazers_count");
+  const data = (await res.json()) as { message?: unknown; value?: unknown };
+  const raw =
+    typeof data.message === "string"
+      ? data.message
+      : typeof data.value === "string"
+        ? data.value
+        : null;
+  if (raw == null) {
+    throw new Error("shields.io: missing stars message");
   }
-  return data.stargazers_count;
-}
-
-/** Published (non-draft) GitHub releases count; paginates like scripts/repo_info.ts. */
-export async function fetchGitHubPublishedReleasesCount(
-  owner: string,
-  repo: string
-): Promise<number> {
-  let total = 0;
-  let page = 1;
-  const perPage = 100;
-
-  while (true) {
-    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/releases?per_page=${perPage}&page=${page}`;
-    const res = await fetch(url, { headers: ghHeaders });
-    if (!res.ok) {
-      throw new Error(`GitHub API ${res.status}`);
-    }
-    const data = (await res.json()) as { draft?: boolean }[];
-    if (!Array.isArray(data)) {
-      throw new Error("GitHub API: unexpected releases payload");
-    }
-    const count = data.filter((r) => !r.draft).length;
-    total += count;
-    if (count < perPage) break;
-    page++;
-  }
-  return total;
+  return parseShieldsCountMessage(raw);
 }

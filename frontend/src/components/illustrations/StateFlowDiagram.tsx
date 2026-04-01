@@ -1,3 +1,4 @@
+import { Database, Lightbulb } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 interface StateFlowDiagramProps {
@@ -15,16 +16,48 @@ const TECHNICAL_LAYERS = [
 const TECHNICAL_OPERATIONS = ["record", "reduce", "relate"] as const;
 
 const HERO_LAYERS = [
-  { label: "Facts saved", sub: "contacts · tasks · decisions" },
-  { label: "State stays consistent", sub: "versioned, traceable, cross-tool" },
-  { label: "Same answer in every tool", sub: "Claude · Cursor · ChatGPT" },
+  {
+    label: "Stored in invoices",
+    sub: "entity_type: invoice · amount: $3,200 · due_date: 2026-12-15 · status: unpaid · REFERS_TO company: Acme",
+  },
 ] as const;
-
-const HERO_OPERATIONS = ["store", "sync"] as const;
 
 const STAGGER_MS = 120;
 
+function HeroVerticalArrow({ visible, delay }: { visible: boolean; delay: string }) {
+  return (
+    <div
+      className="flex justify-center py-0 transition-opacity duration-400 ease-out"
+      style={{
+        opacity: visible ? 1 : 0,
+        transitionDelay: delay,
+      }}
+      aria-hidden
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 12 12"
+        className="shrink-0 text-violet-600/45 dark:text-violet-400/55"
+      >
+        <path
+          d="M6 1 L6 7 M2.5 5.5 L6 9.5 L9.5 5.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
+
 function HeroStateFlow({ visible }: { visible: boolean }) {
+  const arrowAfterStoreDelay = `${2 * STAGGER_MS}ms`;
+  const arrowAfterStoredDelay = `${5 * STAGGER_MS}ms`;
+  const arrowAfterAsksDelay = `${HERO_LAYERS.length * 2 * STAGGER_MS + 60}ms`;
+
   return (
     <div className="relative flex flex-col gap-3">
       <div
@@ -36,16 +69,17 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
         }}
       >
         <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-sky-700 dark:text-sky-300">
-          one tool stores
+          You tell OpenClaw
         </p>
         <p className="mt-2 font-mono text-[13px] leading-6 text-slate-800 dark:text-slate-100">
-          "Invoice for Acme: $3,200 unpaid"
+          &rdquo;I've issued Acme $3,200 invoice due Dec 15.&rdquo;
         </p>
       </div>
 
+      <HeroVerticalArrow visible={visible} delay={arrowAfterStoreDelay} />
+
       {HERO_LAYERS.map((layer, index) => {
         const layerDelay = `${(index + 1) * 2 * STAGGER_MS}ms`;
-        const connectorDelay = `${((index + 1) * 2 + 1) * STAGGER_MS}ms`;
 
         return (
           <div key={layer.label}>
@@ -57,8 +91,8 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
                 transitionDelay: layerDelay,
               }}
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet-600/50 bg-violet-100 font-mono text-[10px] font-bold text-violet-700 dark:border-violet-400/40 dark:bg-violet-500/10 dark:text-violet-300">
-                {index + 1}
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-violet-600/50 bg-violet-100 text-violet-700 dark:border-violet-400/40 dark:bg-violet-500/10 dark:text-violet-300">
+                <Database className="h-3.5 w-3.5 shrink-0" strokeWidth={1.65} aria-hidden />
               </div>
               <div className="min-w-0">
                 <p className="font-mono text-[13px] font-medium text-slate-800 dark:text-slate-100">
@@ -69,37 +103,11 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
                 </p>
               </div>
             </div>
-            {index < HERO_LAYERS.length - 1 && (
-              <div
-                className="flex items-center gap-2 py-1.5 pl-8 transition-opacity duration-400 ease-out"
-                style={{
-                  opacity: visible ? 1 : 0,
-                  transitionDelay: connectorDelay,
-                }}
-              >
-                <svg
-                  width="12"
-                  height="16"
-                  viewBox="0 0 12 16"
-                  className="shrink-0 text-violet-600/40 dark:text-violet-400/50"
-                >
-                  <path
-                    d="M6 0 L6 12 M2 8 L6 13 L10 8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                <span className="font-mono text-[10px] text-slate-400/80 dark:text-slate-500/70">
-                  {HERO_OPERATIONS[index]}
-                </span>
-              </div>
-            )}
           </div>
         );
       })}
+
+      <HeroVerticalArrow visible={visible} delay={arrowAfterStoredDelay} />
 
       <div
         className="mt-1 flex items-center gap-2 rounded-lg border border-dashed border-slate-300/60 bg-slate-50/80 px-3 py-2 transition-[opacity,transform] duration-500 ease-out dark:border-slate-700/50 dark:bg-slate-900/40"
@@ -109,9 +117,40 @@ function HeroStateFlow({ visible }: { visible: boolean }) {
           transitionDelay: `${HERO_LAYERS.length * 2 * STAGGER_MS + 120}ms`,
         }}
       >
-        <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400/80">
-          exact state · timeline · provenance on retrieval
-        </span>
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400/80">
+            You ask Claude later
+          </p>
+          <p className="mt-1 font-mono text-[12px] leading-5 text-slate-700 dark:text-slate-200">
+            &ldquo;What&apos;s my total outstanding balance?&rdquo;
+          </p>
+        </div>
+      </div>
+
+      <HeroVerticalArrow visible={visible} delay={arrowAfterAsksDelay} />
+
+      <div
+        className="rounded-xl border border-emerald-300/60 bg-emerald-50/80 px-3 py-3 transition-[opacity,transform] duration-500 ease-out dark:border-emerald-500/30 dark:bg-emerald-500/10"
+        style={{
+          opacity: visible ? 1 : 0,
+          transform: visible ? "translateY(0)" : "translateY(12px)",
+          transitionDelay: `${HERO_LAYERS.length * 2 * STAGGER_MS + 240}ms`,
+        }}
+      >
+        <div className="flex items-start gap-2.5">
+          <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-600/35 bg-white/80 text-emerald-700 dark:border-emerald-400/30 dark:bg-slate-950/60 dark:text-emerald-300">
+            <Lightbulb className="h-3.5 w-3.5 shrink-0" strokeWidth={1.65} aria-hidden />
+          </div>
+          <div className="min-w-0">
+            <p className="font-mono text-[14px] leading-snug text-emerald-900 dark:text-emerald-100">
+              <span className="font-semibold">$16,302</span>
+              <span className="font-medium"> from 4 unpaid invoices, 2 past due</span>
+            </p>
+            <p className="mt-0.5 font-mono text-[10px] leading-5 text-emerald-800/80 dark:text-emerald-200/80">
+              Retrieved from stored invoices and relationships
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

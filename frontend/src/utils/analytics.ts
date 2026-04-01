@@ -244,3 +244,75 @@ export function sendDocsNavClick(destination: string, source?: string): void {
     flushUmamiQueue();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Funnel events (Umami goals: same event name + filter on custom properties)
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the evaluate prompt was copied from — one Umami event `funnel_evaluate_prompt_copy`; segment by this.
+ * Joint “any evaluate prompt copy”: count the event; for the two marketing paths use `home` vs `evaluate_page`.
+ */
+export type EvaluatePromptCopySurface = "home" | "evaluate_page" | "integration_doc";
+
+/**
+ * Evaluate prompt copy (home #evaluate section vs /evaluate page).
+ * Joint conversion: count all `funnel_evaluate_prompt_copy`. Per-path: filter `copy_surface`.
+ */
+export function sendFunnelEvaluatePromptCopy(surface: EvaluatePromptCopySurface): void {
+  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (isGaReady()) {
+    window.gtag!("event", "funnel_evaluate_prompt_copy", {
+      funnel: "evaluate_prompt",
+      copy_surface: surface,
+      page_path,
+    });
+  }
+  if (isUmamiConfigured()) {
+    runWhenUmamiReady(() => {
+      window.umami!.track("funnel_evaluate_prompt_copy", {
+        funnel: "evaluate_prompt",
+        copy_surface: surface,
+        page_path,
+      });
+    });
+    flushUmamiQueue();
+  }
+}
+
+/** Which install page code block was copied — filter `funnel_install_prompt_copy` in Umami by this. */
+export type InstallPromptCopyBlock =
+  | "agent_assisted"
+  | "manual_commands"
+  | "post_install_commands"
+  | "stdio_mcp"
+  | "docker_agent_prompt"
+  | "docker_build"
+  | "docker_run"
+  | "docker_init"
+  | "docker_mcp"
+  | "docker_cli_example";
+
+/**
+ * Install page prompt/command copy. Funnel: pageview `/` → pageview `/install` → this event (filter `install_block: agent_assisted` for the main agent prompt).
+ */
+export function sendFunnelInstallPromptCopy(block: InstallPromptCopyBlock): void {
+  const page_path = typeof window !== "undefined" ? window.location.pathname : "/";
+  if (isGaReady()) {
+    window.gtag!("event", "funnel_install_prompt_copy", {
+      funnel: "install_prompt",
+      install_block: block,
+      page_path,
+    });
+  }
+  if (isUmamiConfigured()) {
+    runWhenUmamiReady(() => {
+      window.umami!.track("funnel_install_prompt_copy", {
+        funnel: "install_prompt",
+        install_block: block,
+        page_path,
+      });
+    });
+    flushUmamiQueue();
+  }
+}

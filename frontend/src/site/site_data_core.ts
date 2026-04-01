@@ -10,5 +10,6 @@ export const SITE_SECTION_CORE: SiteSectionCore[] = [
   { id: "memory-guarantees", icon: "ShieldCheck" },
   { id: "record-types", icon: "BookOpen" },
   { id: "evaluate", icon: "ClipboardCheck" },
+  { id: "common-questions", icon: "HelpCircle" },
 ];
 

@@ -29,6 +29,10 @@ export interface StaticLocalePack {
     recordTypes?: string;
     guarantees: string;
     evaluate?: string;
+    /** Home slide before footer; accordion + FAQ link */
+    commonQuestions?: string;
+    /** Home FAQ block heading */
+    frequentlyAskedQuestions?: string;
     inspect: string;
     architecture: string;
     useCases: string;
@@ -109,6 +113,8 @@ const EN_PACK: StaticLocalePack = {
     recordTypes: "Record types",
     guarantees: "Guarantees",
     evaluate: "Evaluate",
+    commonQuestions: "Common questions",
+    frequentlyAskedQuestions: "Frequently asked questions",
     inspect: "Inspect",
     architecture: "Architecture",
     useCases: "Use cases",
