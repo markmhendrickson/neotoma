@@ -29,7 +29,11 @@ function CollapseSidebarOnEvaluateInstallRoutes() {
     if (!shouldCollapseDocsSidebarForRoute(stripped)) return;
     setOpen(false);
     setOpenMobile(false);
-  }, [stripped, setOpen, setOpenMobile]);
+    // Depend only on `stripped`. `setOpen` from SidebarProvider is recreated whenever `open`
+    // changes (its useCallback lists `open`), so listing it in deps re-ran after every toggle
+    // and forced the sidebar closed on /evaluate and /install.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- collapse on route change only
+  }, [stripped]);
 
   return null;
 }

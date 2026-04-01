@@ -1240,9 +1240,9 @@ function SectionEdgeIndicators({
 }
 
 /**
- * Lines trace to docs/foundation/field_validation.md; attributions are mostly role labels on the public site (Laurie Voss named).
+ * Lines trace to docs/foundation/field_validation.md; attributions are mostly role labels on the public site (Laurie Voss and Tycho Onnasch named).
  */
-const HERO_QUOTES: { text: string; attribution: string }[] = [
+const HERO_QUOTES: { text: string; attribution: string; attributionHref?: string }[] = [
   {
     text: "State integrity, not retrieval quality.",
     attribution: "Agentic app builder",
@@ -1257,7 +1257,8 @@ const HERO_QUOTES: { text: string; attribution: string }[] = [
   },
   {
     text: "CI/CD for agent state.",
-    attribution: "Infrastructure engineer",
+    attribution: "Tycho Onnasch, co-founder, Zest Protocol",
+    attributionHref: "https://x.com/TychoOnnasch",
   },
 ];
 
@@ -1290,7 +1291,22 @@ function RotatingHeroQuote({ quotes }: { quotes: typeof HERO_QUOTES }) {
           }`}
         >
           &ldquo;{q.text}&rdquo;
-          <span className="not-italic text-muted-foreground">, {q.attribution}</span>
+          <span className="not-italic text-muted-foreground">
+            ,{" "}
+            {q.attributionHref ? (
+              <a
+                href={q.attributionHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-2 hover:underline text-muted-foreground"
+                aria-label={`${q.attribution} (opens in new tab)`}
+              >
+                {q.attribution}
+              </a>
+            ) : (
+              q.attribution
+            )}
+          </span>
         </p>
       ))}
     </div>
